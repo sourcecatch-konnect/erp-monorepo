@@ -1,18 +1,19 @@
 {
-  "name": "@repo/ui",
+  "name": "@skerp/ui",
   "version": "0.0.0",
   "private": true,
   "exports": {
     "./*": "./src/*.tsx"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
+    "@skerp/eslint-config": "workspace:*",
+    "@skerp/typescript-config": "workspace:*",
     "@types/node": "^22.15.3",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",

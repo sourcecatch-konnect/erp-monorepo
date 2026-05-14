@@ -1,0 +1,40 @@
+{
+  "name": "@skerp/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.9.0",
+    "@skerp/config": "workspace:*",
+    "@skerp/types": "workspace:*",
+    "@skerp/validators": "workspace:*",
+    "cors": "^2.8.5",
+    "dotenv": "^17.0.1",
+    "express": "^5.1.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@skerp/eslint-config": "workspace:*",
+    "@skerp/typescript-config": "workspace:*",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/node": "^22.15.3",
+    "eslint": "^9.39.1",
+    "prisma": "^6.9.0",
+    "tsx": "^4.20.6",
+    "typescript": "5.9.2"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  }
+}
