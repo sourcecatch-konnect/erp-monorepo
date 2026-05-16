@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { db } from "../../../prisma/prisma.js";
 import { InvalidCredentialsError } from "../../lib/error.js";
-import { generateAccessToken, generateRefreshToken } from "../../util/auth.util.js";
+import { generateAccessToken, generateRefreshToken, ROLES } from "../../util/auth.util.js";
 import { AuthUser,AppKind } from "@skerp/types";
 export const createSession = async (
   user: AuthUser,
@@ -21,27 +21,52 @@ const payload = {
 
   return { accessToken, refreshToken };
 };
-export const adminLoginService = async (email: string, password: string) => {
+export const adminLoginService = async (
+  email: string,
+  password: string
+) => {
+  const user = await db.user.findUnique({
+    where: { email },
+    include: {
+      role: true,
+    },
+  });
 
-const user = await db.user.findUnique({
-  where: { email },
-  include: {
-    role: true
+  if (!user) {
+    throw new InvalidCredentialsError(
+      "Invalid email or password"
+    );
   }
-});
-if (!user) {
-  throw new InvalidCredentialsError("User not found");
-}
 
-if (!user.password) {
-  throw new InvalidCredentialsError("Password not set");
-}
-  const valid = await bcrypt.compare(password, user.password!);
-  if (!valid) throw new InvalidCredentialsError("Invalid password");
+  if (user.role?.name !== ROLES.ADMIN) {
+    throw new InvalidCredentialsError(
+      "Unauthorized access"
+    );
+  }
+
+  if (!user.password) {
+    throw new InvalidCredentialsError(
+      "Password not set"
+    );
+  }
+
+  const valid = await bcrypt.compare(
+    password,
+    user.password
+  );
+
+  if (!valid) {
+    throw new InvalidCredentialsError(
+      "Invalid email or password"
+    );
+  }
 
   const { password: _, ...safeUser } = user;
 
-  const session = await createSession(user, "admin");
+  const session = await createSession(
+    user,
+    "admin"
+  );
 
   return {
     user: safeUser,
@@ -49,10 +74,17 @@ if (!user.password) {
   };
 };
 export const employeeLoginService = async (email: string, password: string) => {
-  const user = await db.user.findUnique({ where: { email } });
+  const user = await db.user.findUnique({
+  where: { email },
+  include: {
+    role: true,
+  },
+});
 
-if (!user || user.role.name !== "EMPLOYEE") {
-  throw new InvalidCredentialsError("Invalid employee credentials");
+if (!user || user.role?.name !== ROLES.EMPLOYEE) {
+  throw new InvalidCredentialsError(
+    "Invalid employee credentials"
+  );
 }
 if (!user.password) {
   throw new InvalidCredentialsError("Password not set");
