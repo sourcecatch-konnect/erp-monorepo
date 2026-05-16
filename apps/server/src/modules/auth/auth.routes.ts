@@ -1,5 +1,4 @@
 import { Router, type Router as ExpressRouter } from "express";
-
 import { loginSchema } from "@skerp/validators";
 
 export const authRouter: ExpressRouter = Router();

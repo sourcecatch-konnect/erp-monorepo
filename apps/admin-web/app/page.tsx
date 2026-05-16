@@ -1,4 +1,4 @@
-import { Button } from "@skerp/ui/button";
+import { Button } from "@skerp/ui/components/button";
 
 const modules = [
   "Employees",

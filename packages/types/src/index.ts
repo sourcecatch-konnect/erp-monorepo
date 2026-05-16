@@ -29,3 +29,30 @@ export interface ApiEnvelope<T> {
   data: T;
   message?: string;
 }
+
+export interface LoginBody {
+  email: string;
+  password: string;
+}
+export type JwtPayload = {
+  userId: string;
+  email: string;
+  role: string;
+  appKind: "admin" | "employee";
+};
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: {
+  id: string;
+  name: string;
+};
+}
+
+export interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
+}
+
+
