@@ -14,20 +14,28 @@
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^6.9.0",
     "@skerp/config": "workspace:*",
     "@skerp/types": "workspace:*",
     "@skerp/validators": "workspace:*",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.20.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "@skerp/eslint-config": "workspace:*",
     "@skerp/typescript-config": "workspace:*",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.3",
     "eslint": "^9.39.1",
     "prisma": "^6.9.0",
