@@ -11,7 +11,6 @@
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@skerp/api-client": "workspace:*",
     "@skerp/types": "workspace:*",
     "@skerp/ui": "workspace:*",
     "next": "16.2.0",
