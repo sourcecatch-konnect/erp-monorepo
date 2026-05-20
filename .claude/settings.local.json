@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/Work/erp/erp-backend/src/controller/**)",
+      "Read(//d/Work/erp/erp-backend/src/schema/**)",
+      "Read(//d/Work/erp/erp-backend/src/routes/**)",
+      "Bash(wc -l \"d:/Work/erp/erp-backend/src/controller/master.controller.js\" \"d:/Work/erp/erp-backend/src/schema/masterSchemas.js\" \"d:/Work/erp/erp-backend/src/routes/master.route.js\" \"d:/Work/erp/erp-frontend/src/services/masterService.js\")",
+      "Read(//d/Work/erp/erp-frontend/src/services/**)",
+      "Read(//d/Work/erp/erp-backend/src/config/form/**)",
+      "Read(//d/Work/erp/erp-backend/src/services/**)",
+      "Bash(wc -l \"d:/Work/erp/erp-backend/src/services/master.service.js\" \"d:/Work/erp/erp-backend/src/config/masterConfig.js\" \"d:/Work/erp/erp-backend/src/config/form/masterFormConfig.js\")",
+      "Read(//d/Work/erp/erp-backend/src/config/**)"
+    ]
+  }
+}
