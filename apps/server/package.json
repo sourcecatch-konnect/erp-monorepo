@@ -14,8 +14,9 @@
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.700.0",
     "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^6.9.0",
+    "@prisma/client": "^7.8.0",
     "@skerp/config": "workspace:*",
     "@skerp/types": "workspace:*",
     "@skerp/validators": "workspace:*",
@@ -38,11 +39,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.3",
     "eslint": "^9.39.1",
-    "prisma": "^6.9.0",
+    "prisma": "^7.8.0",
     "tsx": "^4.20.6",
     "typescript": "5.9.2"
-  },
-  "prisma": {
-    "schema": "prisma/schema.prisma"
   }
 }

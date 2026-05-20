@@ -8,6 +8,7 @@
     "outDir": "dist",
     "strictNullChecks": true,
     "types": ["vite/client"],
+    "module": "ESNext",
     "moduleResolution": "Bundler",
     "allowArbitraryExtensions": true
   },

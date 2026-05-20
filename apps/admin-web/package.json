@@ -11,14 +11,17 @@
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.5.1",
     "@skerp/types": "workspace:*",
+    "@tabler/icons-react": "^3.34.0",
     "@skerp/ui": "workspace:*",
     "@tanstack/react-query": "^5.100.10",
     "axios": "^1.16.1",
     "next": "16.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-hook-form": "^7.76.0"
+    "react-hook-form": "^7.76.0",
+    "react-redux": "^9.2.0"
   },
   "devDependencies": {
     "@skerp/eslint-config": "workspace:*",

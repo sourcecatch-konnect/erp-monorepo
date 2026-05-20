@@ -16,7 +16,7 @@ authRouter.post("/login", (req, res) => {
   return res.status(501).json({
     message: "Auth implementation pending",
     data: {
-      app: result.data.app,
+      app: result.data.appKind,
     },
   });
 });

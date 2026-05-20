@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/create-next-app).
+# Admin Web (`@skerp/admin-web`)
+
+Admin frontend for the SKERP logistics ERP. Next.js (App Router) + Redux Toolkit +
+TanStack React Query + Tailwind, consuming `@skerp/ui` and the `@skerp/server` API.
 
 ## Getting Started
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```sh
+pnpm --filter @skerp/admin-web dev      # http://localhost:3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires the API server running (`pnpm --filter @skerp/server dev`).
+Set `NEXT_PUBLIC_API_URL` in `.env` (see `.env.example`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load Inter, a custom Google Font.
+`app/` is **routing only** — thin pages that compose feature code. Domain logic
+lives in `features/`.
 
-## Learn More
+```
+app/                  routing: route groups, layouts, thin pages
+  (auth)/             unauthenticated pages (login, signup)
+  (dashboard)/        authenticated pages — gated + wrapped in the app shell
+features/             one self-contained folder per domain feature
+  <feature>/
+    components/  hooks/  services/  store/  types.ts  index.ts (public API)
+components/layout/    app shell — AppShell, Sidebar, Topbar
+config/               route constants, sidebar navigation
+store/                root Redux store + typed hooks
+lib/                  axios instance (api.ts), helpers (utils.ts)
+hooks/                app-wide hooks
+types/                app-wide shared types
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Conventions
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Import with the `@/` alias (`@/features/auth`, `@/lib/api`). No deep relative
+  paths across folders.
+- Import a feature only via its barrel: `@/features/<feature>`.
+- The root store composes feature slices; each feature owns its slice.
+- Follow [`llm-guideline/`](../../llm-guideline/) — `design.md` (visual system)
+  and `frontend.md` (architecture).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Adding a module
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. `features/<module>/` with `components/ hooks/ services/ store/ types.ts index.ts`.
+2. Register its reducer in `store/store.ts`.
+3. Add a route under `app/(dashboard)/<module>/`.
+4. Enable its item in `config/navigation.ts`.

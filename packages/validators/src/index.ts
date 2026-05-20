@@ -16,3 +16,48 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Employee management                                                */
+/* ------------------------------------------------------------------ */
+
+const employeePasswordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters");
+
+export const createEmployeeSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  middleName: z.string().optional(),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Invalid email format"),
+  password: employeePasswordSchema,
+  companyId: z.string().min(1, "Company is required"),
+  branchId: z.string().min(1, "Branch is required"),
+});
+
+export const updateEmployeeSchema = z.object({
+  firstName: z.string().min(1).optional(),
+  middleName: z.string().optional(),
+  lastName: z.string().min(1).optional(),
+  email: z.string().email("Invalid email format").optional(),
+});
+
+export const resetEmployeePasswordSchema = z.object({
+  password: employeePasswordSchema,
+});
+
+export const updateEmployeeStatusSchema = z.object({
+  status: z.boolean(),
+});
+
+export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
+export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
+export type ResetEmployeePasswordInput = z.infer<
+  typeof resetEmployeePasswordSchema
+>;
+export type UpdateEmployeeStatusInput = z.infer<
+  typeof updateEmployeeStatusSchema
+>;

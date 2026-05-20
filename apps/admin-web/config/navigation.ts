@@ -1,0 +1,135 @@
+import {
+  IconActivity,
+  IconClipboardList,
+  IconDatabase,
+  IconLayoutDashboard,
+  IconReceipt2,
+  IconSettings,
+  IconTruckDelivery,
+  IconWallet,
+  type Icon,
+} from "@tabler/icons-react";
+
+/** A Tabler icon component. */
+export type NavIcon = Icon;
+
+/** A direct, navigable link. */
+export type NavLeaf = {
+  title: string;
+  href: string;
+  /** Module not built yet — rendered greyed out and non-clickable. */
+  disabled?: boolean;
+};
+
+/** A top-level sidebar link (carries its own icon). */
+export type NavLink = NavLeaf & { icon: NavIcon };
+
+/** A collapsible group that expands to reveal child links (the "dropdown" menu type). */
+export type NavGroup = {
+  title: string;
+  icon: NavIcon;
+  items: NavLeaf[];
+};
+
+export type NavItem = NavLink | NavGroup;
+
+/** A labelled section — the visual "break point" between menu blocks. */
+export type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+/** Narrows a NavItem to a collapsible group. */
+export const isNavGroup = (item: NavItem): item is NavGroup =>
+  "items" in item;
+
+/**
+ * Sidebar navigation. `disabled` leaves are modules not built yet.
+ * As a module ships: remove its `disabled` flag and add its route.
+ */
+export const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Overview",
+    items: [
+      {
+        title: "Dashboard",
+        href: "/dashboard",
+        icon: IconLayoutDashboard,
+      },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      {
+        title: "Orders",
+        href: "/orders",
+        icon: IconClipboardList,
+        disabled: true,
+      },
+      {
+        title: "Lorry Receipts",
+        href: "/lorry-receipts",
+        icon: IconReceipt2,
+        disabled: true,
+      },
+      {
+        title: "Trips",
+        href: "/trips",
+        icon: IconTruckDelivery,
+        disabled: true,
+      },
+      {
+        title: "Operations",
+        href: "/operations",
+        icon: IconActivity,
+        disabled: true,
+      },
+    ],
+  },
+  {
+    label: "Master Data",
+    items: [
+      {
+        title: "Masters",
+        icon: IconDatabase,
+        items: [
+          { title: "Customers", href: "/masters/customers", disabled: true },
+          { title: "Vehicles", href: "/masters/vehicles", disabled: true },
+          { title: "Drivers", href: "/masters/drivers", disabled: true },
+          { title: "Routes", href: "/masters/routes", disabled: true },
+          { title: "Branches", href: "/masters/branches", disabled: true },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      {
+        title: "Accounts",
+        href: "/accounts",
+        icon: IconWallet,
+        disabled: true,
+      },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      {
+        title: "Settings",
+        icon: IconSettings,
+        items: [
+          { title: "Users", href: "/settings/users" },
+          { title: "Roles", href: "/settings/roles", disabled: true },
+          {
+            title: "Permissions",
+            href: "/settings/permissions",
+            disabled: true,
+          },
+        ],
+      },
+    ],
+  },
+];

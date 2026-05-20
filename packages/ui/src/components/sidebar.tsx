@@ -35,6 +35,7 @@ import { Skeleton } from "./skeleton"
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "./tooltip"
 
@@ -156,7 +157,7 @@ function SidebarProvider({
         )}
         {...props}
       >
-        {children}
+        <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
       </div>
     </SidebarContext.Provider>
   )

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { adminLoginService, employeeLoginService } from "../../Services/auth/auth.services.js";
+import { adminLoginService, employeeLoginService, getMeService } from "../../Services/auth/auth.services.js";
 import { accessCookieOptions, generateAccessToken, refreshCookieOptions, verifyRefreshToken } from "../../util/auth.util.js";
 
 export const adminLoginController = async (req: Request, res: Response) => {
@@ -88,6 +88,39 @@ export const refreshTokenController = async (
     return res.status(401).json({
       success: false,
       message: "Invalid refresh token"
+    });
+  }
+};
+
+export const meController = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authenticated",
+      });
+    }
+
+    const user = await getMeService(req.user.userId);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User no longer exists",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: user,
+    });
+  } catch {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load user",
     });
   }
 };

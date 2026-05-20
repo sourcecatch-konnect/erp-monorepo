@@ -12,7 +12,7 @@ export const generateAccessToken = (
     payload,
     ACCESS_TOKEN_SECRET,
     {
-      expiresIn: "20s", // temporarily
+      expiresIn: "15m",
     }
   );
 };

@@ -36,6 +36,7 @@
     "storybook": "^10.4.0",
     "tailwindcss": "^4.3.0",
     "typescript": "5.9.2",
+    "vite": "8.0.12",
     "vitest": "^4.1.6"
   },
   "dependencies": {

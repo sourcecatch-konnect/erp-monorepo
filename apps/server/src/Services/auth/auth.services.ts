@@ -61,6 +61,12 @@ export const adminLoginService = async (
     );
   }
 
+  if (!user.status) {
+    throw new InvalidCredentialsError(
+      "Account is deactivated"
+    );
+  }
+
   const { password: _, ...safeUser } = user;
 
   const session = await createSession(
@@ -73,6 +79,22 @@ export const adminLoginService = async (
     ...session,
   };
 };
+export const getMeService = async (userId: string) => {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: {
+      role: true,
+    },
+  });
+
+  if (!user) {
+    return null;
+  }
+
+  const { password: _, ...safeUser } = user;
+  return safeUser;
+};
+
 export const employeeLoginService = async (email: string, password: string) => {
   const user = await db.user.findUnique({
   where: { email },
@@ -92,6 +114,10 @@ if (!user.password) {
 
   const valid = await bcrypt.compare(password, user.password!);
   if (!valid) throw new InvalidCredentialsError("Invalid password");
+
+  if (!user.status) {
+    throw new InvalidCredentialsError("Account is deactivated");
+  }
 
   const session = await createSession(user, "employee");
 

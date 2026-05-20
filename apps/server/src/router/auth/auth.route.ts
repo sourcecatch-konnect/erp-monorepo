@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { employeeLoginController, adminLoginController, logout, refreshTokenController } from "../../controllers/auth/auth.controller.js";
+import { employeeLoginController, adminLoginController, logout, refreshTokenController, meController } from "../../controllers/auth/auth.controller.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 
 const router = Router();
@@ -13,14 +13,5 @@ router.post(
   "/refresh",
   refreshTokenController
 );
-router.get(
-  "/me",
-  authMiddleware,
-  (req, res) => {
-    res.json({
-      success: true,
-      message: "Protected route working"
-    });
-  }
-);
+router.get("/me", authMiddleware, meController);
 export default router;
