@@ -11,6 +11,7 @@ export function unwrapResponse<T>(res: any): T {
 export const cityApi = {
   list: async () => {
     const res = await api.get("/cities");
+    console.log(res)
 return res.data.data;
   },
 

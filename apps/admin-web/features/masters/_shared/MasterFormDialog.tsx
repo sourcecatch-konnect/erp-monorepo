@@ -3,11 +3,11 @@
 import * as React from "react";
 import {
   Dialog,
-  DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@skerp/ui/components/dialog";
 
 import { Input } from "@skerp/ui/components/input";
@@ -22,9 +22,8 @@ import {
 
 import { masterRegistry, MasterKey } from "@/features/masters/registry";
 
-/* ---------------- FORM TYPE ---------------- */
-
 type FormState = Record<string, string>;
+
 type Props = {
   master: MasterKey;
   open: boolean;
@@ -33,6 +32,7 @@ type Props = {
   onSubmit: (data: any) => Promise<void>;
   options?: Record<string, any[]>;
 };
+
 export default function MasterFormDialog({
   master,
   open,
@@ -40,49 +40,65 @@ export default function MasterFormDialog({
   defaultValues,
   onSubmit,
   options = {},
-}: Props){
+}: Props) {
   const config = masterRegistry[master];
 
   const [form, setForm] = React.useState<FormState>({});
+  const [loading, setLoading] = React.useState(false);
 
-  /* reset form when open */
-React.useEffect(() => {
-  if (!open) return;
+  React.useEffect(() => {
+    if (!open) return;
 
-  if (defaultValues) {
-    setForm(defaultValues);
-    return;
-  }
+    if (defaultValues) {
+      setForm(defaultValues);
+      return;
+    }
 
-  const empty: FormState = {};
-  config.fields.forEach((f) => {
-    empty[f.name] = "";
-  });
+    const empty: FormState = {};
+    config.fields.forEach((f) => (empty[f.name] = ""));
+    setForm(empty);
+  }, [open, defaultValues, config.fields]);
 
-  setForm(empty);
-}, [open, defaultValues, config.fields]);
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      await onSubmit(form);
+      setOpen(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-
-const handleSubmit = async () => {
-  await onSubmit(form);
-  setOpen(false);
-};
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create {config.label}</DialogTitle>
+      <DialogContent className="sm:max-w-lg">
+        
+        {/* HEADER */}
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="text-lg font-semibold">
+            {defaultValues ? "Update" : "Create"} {config.label}
+          </DialogTitle>
+
+          <DialogDescription>
+            Fill in the details below to continue.
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          {config.fields.map((field) => {
-            /* ---------------- TEXT ---------------- */
-            if (field.type === "text") {
-              return (
+        {/* FORM BODY */}
+        <div className="grid gap-4 py-4">
+          {config.fields.map((field) => (
+            <div key={field.name} className="grid gap-1.5">
+              
+              {/* LABEL */}
+              <label className="text-xs font-medium text-muted-foreground">
+                {field.label}
+              </label>
+
+              {/* INPUT */}
+              {field.type === "text" && (
                 <Input
-                  key={field.name}
-                  placeholder={field.label}
                   value={form[field.name] ?? ""}
+                  placeholder={`Enter ${field.label}`}
                   onChange={(e) =>
                     setForm((p) => ({
                       ...p,
@@ -90,49 +106,49 @@ const handleSubmit = async () => {
                     }))
                   }
                 />
-              );
-            }
+              )}
 
-            /* ---------------- SELECT ---------------- */
-       if (field.type === "select") {
-  const selectOptions = options?.[field.optionsSource] ?? [];
+              {/* SELECT */}
+              {field.type === "select" && (
+                <Select
+                  value={form[field.name] ?? ""}
+                  onValueChange={(value) =>
+                    setForm((p) => ({
+                      ...p,
+                      [field.name]: value,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={`Select ${field.label}`} />
+                  </SelectTrigger>
 
-  return (
-    <Select
-      key={field.name}
-      value={form[field.name] ?? ""}
-      onValueChange={(value) =>
-        setForm((p) => ({
-          ...p,
-          [field.name]: value,
-        }))
-      }
-    >
-      <SelectTrigger>
-        <SelectValue placeholder={field.label} />
-      </SelectTrigger>
-
-      <SelectContent>
-        {selectOptions.map((opt) => (
-          <SelectItem key={opt.id} value={opt.id}>
-            {opt.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-            return null;
-          })}
+                  <SelectContent>
+                    {(options?.[field.optionsSource] ?? []).map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          ))}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+        {/* FOOTER */}
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={loading}
+          >
             Cancel
           </Button>
 
-          <Button onClick={handleSubmit}>Save</Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading ? "Saving..." : "Save"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
