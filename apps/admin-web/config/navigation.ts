@@ -88,21 +88,24 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Master Data",
-    items: [
-      {
-        title: "Masters",
-        icon: IconDatabase,
-        items: [
-          { title: "Customers", href: "/masters/customers", disabled: true },
-          { title: "Vehicles", href: "/masters/vehicles", disabled: true },
-          { title: "Drivers", href: "/masters/drivers", disabled: true },
-          { title: "Routes", href: "/masters/routes", disabled: true },
-          { title: "Branches", href: "/masters/branches", disabled: true },
-        ],
-      },
-    ],
-  },
+  label: "Master Data",
+  items: [
+    {
+      title: "Masters",
+      icon: IconDatabase,
+      items: [
+        { title: "States", href: "/masters/state" },
+        { title: "Cities", href: "/masters/city" },
+
+        { title: "Customers", href: "/masters/customer", disabled: true },
+        { title: "Vehicles", href: "/masters/vehicle", disabled: true },
+        { title: "Drivers", href: "/masters/driver", disabled: true },
+        { title: "Routes", href: "/masters/route", disabled: true },
+        { title: "Branches", href: "/masters/branch", disabled: true },
+      ],
+    },
+  ],
+},
   {
     label: "Finance",
     items: [

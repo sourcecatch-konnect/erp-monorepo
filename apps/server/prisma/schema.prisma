@@ -85,8 +85,10 @@ model Company {
   name              String      @unique
   address           String?
   country           String
-  state             String
-  city              String
+  stateId           String?
+  cityId            String?
+
+
   contactPhone      String?
   establishmentYear DateTime
   companyPAN        String?
@@ -95,7 +97,8 @@ model Company {
   branches          Branch[]
   users             User[]
   agreements        Agreement[]
-
+  state             State?       @relation(fields: [stateId], references: [id])
+  city   City? @relation("CityCompanies", fields: [cityId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -105,7 +108,7 @@ model Branch {
   branchCode   String  @unique
   shortCode    String  @unique
   name         String
-  city         String
+  cityId       String?
   address      String?
   contactName  String?
   contactPhone String?
@@ -127,7 +130,7 @@ model Branch {
   workers    Labour[]    @relation("WorkerBranch")
 
   users User[]
-
+  city       City?        @relation(fields: [cityId], references: [id])
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
   fromOrders OrderBooking[] @relation("FromBranch")
@@ -140,8 +143,10 @@ model Warehouse {
   type     String // Can later be enum if needed
   address  String?
   country  String
-  state    String
-  city     String
+  stateId  String
+  cityId   String
+
+
   branchId String
 
   contactName  String?
@@ -160,7 +165,8 @@ model Warehouse {
   storageCapacity Float?
 
   branch Branch @relation("BranchWarehouses", fields: [branchId], references: [id])
-
+  state          State @relation(fields: [stateId], references: [id])
+  city           City  @relation(fields: [cityId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -263,8 +269,11 @@ model Customer {
 
   address      String?
   country      String?
-  state        String?
-  city         String?
+  stateId      String
+  cityId       String
+
+  
+
   contactPhone String?
   primaryEmail String?
 
@@ -273,7 +282,8 @@ model Customer {
   website       String?
 
   agreements Agreement[] @relation("CustomerAgreements")
-
+  state        State @relation(fields: [stateId], references: [id])
+  city         City  @relation(fields: [cityId], references: [id])
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   OrderBooking OrderBooking[]
@@ -285,7 +295,7 @@ model Agreement {
   id            String   @id @default(cuid())
   companyId     String
   clientId      String
-  city          String
+  cityId        String
   startDate     DateTime
   agreementDate DateTime
   expiryDate    DateTime
@@ -296,7 +306,7 @@ model Agreement {
   company Company  @relation(fields: [companyId], references: [id])
   client  Customer @relation("CustomerAgreements", fields: [clientId], references: [id])
   branch  Branch   @relation("BranchAgreement", fields: [leadGeneratedByBranchId], references: [id])
-
+  city    City     @relation(fields: [cityId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -424,7 +434,7 @@ model Labour {
   name         String
   photoPath    String? // For uploaded file
   address      String?
-  city         String?
+  cityId       String
   contactName  String?
   contactPhone String?
   mobileNo     String?
@@ -441,7 +451,7 @@ model Labour {
   branchId String
 
   branch Branch @relation("WorkerBranch", fields: [branchId], references: [id])
-
+  city   City  @relation(fields: [cityId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -462,6 +472,13 @@ model City {
   sourceRoute      Route[]        @relation("SourceRoute")
   destinationRoute Route[]        @relation("DestinationRoute")
   areas            Area[]
+  companies        Company[]      @relation("CityCompanies")
+  branches         Branch[]
+  warehouses       Warehouse[]
+  customers        Customer[]
+  agreements       Agreement[]
+  labours          Labour[]
+  transports       Transport[]
 }
 
 model Area {
@@ -474,14 +491,25 @@ model Area {
 model State {
   id     String @id @default(cuid())
   name   String @unique
+
   cities City[]
+
+  companies Company[]
+  warehouses Warehouse[]
+  customers Customer[]
+  transports Transport[]
+  pumps Pump[]
 }
 
 model Transport {
   id      String @id @default(cuid())
   name    String
-  city    String
-  state   String
+  stateId String
+  cityId  String
+
+  state   State @relation(fields: [stateId], references: [id])
+  city    City  @relation(fields: [cityId], references: [id])
+
   country String
   phoneNo String @unique
 }
@@ -514,7 +542,7 @@ model Pump {
   name    String
   address String?
   cityId  String
-  state   String
+  stateId String
   country String
 
   contactName  String?
@@ -534,7 +562,7 @@ model Pump {
   isBlackListed Boolean @default(false)
 
   city City @relation("PumpCity", fields: [cityId], references: [id])
-
+  state State @relation(fields: [stateId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

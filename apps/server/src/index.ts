@@ -7,8 +7,8 @@ import employeeRoute from "./router/employee/employee.route.js"
 import lookupRoute from "./router/lookup/lookup.route.js"
 import { healthRouter } from "./modules/health/health.routes.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
-
-
+import stateRoute from "./modules/state/state.route.js"
+import cityRoute from "./modules/city/city.route.js"
 const app = express();
 
 // Dev origins for the admin (3001) and employee (3002) web apps.
@@ -30,7 +30,8 @@ app.use("/health", healthRouter);
 app.use("/auth", authRoute);
 app.use("/employees", employeeRoute);
 app.use("/", lookupRoute);
-
+app.use("/states", stateRoute);
+app.use("/cities",cityRoute)
 app.use(errorMiddleware);
 const PORT = 5000;
 
