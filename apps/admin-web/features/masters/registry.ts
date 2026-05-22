@@ -1,60 +1,34 @@
-import { cityApi } from "./city/city.service";
-import { stateApi } from "./state/state.service";
-import {
-  CreateCityBody,
-  CreateStateBody,
-  UpdateCityBody,
-  UpdateStateBody,
-} from "@skerp/types";
+import { ComponentType } from "react";
+import { IconMapPin, IconProps, IconWorld } from "@tabler/icons-react";
 
-/* ---------------- FIELD TYPES ---------------- */
+export type MasterCategory = "Location";
 
-type Field =
-  | { name: string; label: string; type: "text" }
-  | { name: string; label: string; type: "select"; optionsSource: string };
-
-/* ---------------- MASTER CONFIG ---------------- */
-
-type MasterConfig<TCreate, TUpdate> = {
-  api: {
-    create: (body: TCreate) => Promise<any>;
-    update: (id: string, body: TUpdate) => Promise<any>;
-    remove: (id: string) => Promise<void>;
-  };
-  queryKey: readonly string[];
+export type MasterEntry = {
+  slug: string;
   label: string;
-  fields: Field[];
+  icon: ComponentType<IconProps>;
+  category: MasterCategory;
+  permissionKey: "masters.state" | "masters.city";
+  page: () => Promise<{ default: ComponentType }>;
 };
 
-/* ---------------- REGISTRY ---------------- */
-
-export const masterRegistry = {
-  city: {
-    api: cityApi,
-    queryKey: ["cities"],
-    label: "City",
-    fields: [
-      { name: "name", label: "City Name", type: "text" },
-      {
-        name: "stateId",
-        label: "State",
-        type: "select",
-        optionsSource: "states",
-      },
-    ],
-  },
-
-  state: {
-    api: stateApi,
-    queryKey: ["states"],
+export const masterRegistry = [
+  {
+    slug: "state",
     label: "State",
-    fields: [{ name: "name", label: "State Name", type: "text" }],
+    icon: IconWorld,
+    category: "Location",
+    permissionKey: "masters.state",
+    page: () => import("./state/page"),
   },
-} satisfies {
-  city: MasterConfig<CreateCityBody, UpdateCityBody>;
-  state: MasterConfig<CreateStateBody, UpdateStateBody>;
-};
+  {
+    slug: "city",
+    label: "City",
+    icon: IconMapPin,
+    category: "Location",
+    permissionKey: "masters.city",
+    page: () => import("./city/page"),
+  },
+] satisfies MasterEntry[];
 
-/* ---------------- TYPES DERIVED FROM REGISTRY ---------------- */
-
-export type MasterKey = keyof typeof masterRegistry;
+export type MasterKey = (typeof masterRegistry)[number]["slug"];

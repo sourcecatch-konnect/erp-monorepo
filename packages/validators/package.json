@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./master/state": "./src/master/state.schema.ts",
+    "./master/city": "./src/master/city.schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

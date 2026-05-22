@@ -2,6 +2,12 @@
 
 import * as React from "react";
 import {
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
   Table,
   TableHeader,
   TableBody,
@@ -11,31 +17,26 @@ import {
 } from "@skerp/ui/components/table";
 
 import { Button } from "@skerp/ui/components/button";
-import { IconEdit, IconTrash } from "@tabler/icons-react";
-
-type AccessorColumn<T> = {
-  type: "accessor";
-  header: string;
-  accessor: keyof T;
-  align?: "left" | "center" | "right";
-};
-
-type RenderColumn<T> = {
-  type: "render";
-  header: string;
-  render: (row: T) => React.ReactNode;
-  align?: "left" | "center" | "right";
-};
-
-type Column<T> = AccessorColumn<T> | RenderColumn<T>;
+import { Checkbox } from "@skerp/ui/components/checkbox";
+import { Skeleton } from "@skerp/ui/components/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@skerp/ui/components/tooltip";
+import { IconDatabaseOff, IconEdit, IconTrash } from "@tabler/icons-react";
 
 type Props<T extends { id: string }> = {
   title?: string;
   data: T[];
-  columns: Column<T>[];
+  columns: ColumnDef<T>[];
   onEdit?: (row: T) => void;
   onDelete?: (id: string) => void;
   onAddNew?: () => void;
+  selectedIds?: string[];
+  onSelectedIdsChange?: (ids: string[]) => void;
+  isLoading?: boolean;
 };
 
 export default function MasterTable<T extends { id: string }>({
@@ -44,33 +45,65 @@ export default function MasterTable<T extends { id: string }>({
   columns,
   onEdit,
   onDelete,
-  onAddNew
+  onAddNew,
+  selectedIds = [],
+  onSelectedIdsChange,
+  isLoading,
 }: Props<T>) {
   const hasActions = Boolean(onEdit || onDelete);
+  const hasSelection = Boolean(onSelectedIdsChange);
+  const selectedSet = React.useMemo(
+    () => new Set(selectedIds),
+    [selectedIds]
+  );
+  const visibleIds = data.map((row) => row.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedSet.has(id));
 
-  const renderCell = (column: Column<T>, row: T) => {
-    if (column.type === "accessor") {
-      return String(row[column.accessor] ?? "");
+  const setSelected = (id: string, selected: boolean) => {
+    if (!onSelectedIdsChange) {
+      return;
     }
-    return column.render(row);
+
+    const next = new Set(selectedIds);
+
+    if (selected) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+
+    onSelectedIdsChange([...next]);
   };
 
-  const getAlignClass = (align?: string) => {
-    switch (align) {
-      case "center":
-        return "text-center";
-      case "right":
-        return "text-right";
-      default:
-        return "text-left";
+  const setAllVisible = (selected: boolean) => {
+    if (!onSelectedIdsChange) {
+      return;
     }
+
+    const next = new Set(selectedIds);
+
+    visibleIds.forEach((id) => {
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+    });
+
+    onSelectedIdsChange([...next]);
   };
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-      {/* HEADER */}
-      <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
-        <h2 className="text-sm font-semibold tracking-wide text-foreground">
+    <TooltipProvider>
+      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="flex min-h-11 items-center justify-between border-b bg-muted/20 px-4">
+        <h2 className="text-sm font-semibold text-foreground">
           {title}
         </h2>
 
@@ -85,75 +118,168 @@ export default function MasterTable<T extends { id: string }>({
 )}
       </div>
 
-      {/* TABLE */}
-      <Table>
+      <div className="overflow-x-auto">
+      <Table className="min-w-full">
         <TableHeader>
-          <TableRow className="bg-muted/20">
-            {columns.map((col, i) => (
-              <TableHead
-                key={i}
-                className={getAlignClass(col.align)}
-              >
-                {col.header}
-              </TableHead>
-            ))}
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow
+              key={headerGroup.id}
+              className="border-b bg-muted/40 hover:bg-muted/40"
+            >
+              {hasSelection ? (
+                <TableHead className="w-11 px-4">
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    onCheckedChange={(value) => setAllVisible(Boolean(value))}
+                    aria-label="Select all rows"
+                  />
+                </TableHead>
+              ) : null}
 
-            {hasActions && (
-              <TableHead className="text-right pr-4">
-                Actions
-              </TableHead>
-            )}
-          </TableRow>
+              {headerGroup.headers.map((header) => (
+                <TableHead
+                  key={header.id}
+                  className="h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                </TableHead>
+              ))}
+
+              {hasActions && (
+                <TableHead className="h-10 w-[104px] pr-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Actions
+                </TableHead>
+              )}
+            </TableRow>
+          ))}
         </TableHeader>
 
         <TableBody>
-          {data.length === 0 ? (
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, rowIndex) => (
+              <TableRow key={rowIndex} className="border-b">
+                {hasSelection ? (
+                  <TableCell className="w-11 px-4">
+                    <Skeleton className="size-4 rounded-[4px]" />
+                  </TableCell>
+                ) : null}
+
+                {columns.map((_, columnIndex) => (
+                  <TableCell
+                    key={columnIndex}
+                    className="h-12 whitespace-nowrap"
+                  >
+                    <Skeleton
+                      className={
+                        columnIndex === 0
+                          ? "h-4 w-40"
+                          : columnIndex % 2 === 0
+                            ? "h-4 w-28"
+                            : "h-4 w-24"
+                      }
+                    />
+                  </TableCell>
+                ))}
+
+                {hasActions ? (
+                  <TableCell className="w-[104px] pr-4">
+                    <div className="flex justify-end gap-2">
+                      <Skeleton className="size-7 rounded-md" />
+                      <Skeleton className="size-7 rounded-md" />
+                    </div>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            ))
+          ) : table.getRowModel().rows.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={columns.length + (hasActions ? 1 : 0)}
-                className="text-center py-10 text-muted-foreground"
+                colSpan={
+                  columns.length +
+                  (hasActions ? 1 : 0) +
+                  (hasSelection ? 1 : 0)
+                }
+                className="py-14 text-center text-muted-foreground"
               >
-                No data available
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                    <IconDatabaseOff size={18} />
+                  </div>
+                  <span className="text-sm font-medium">No records found</span>
+                </div>
               </TableCell>
             </TableRow>
           ) : (
-            data.map((row) => (
+            table.getRowModel().rows.map((row) => (
               <TableRow
                 key={row.id}
-                className="hover:bg-muted/40 transition"
+                data-selected={selectedSet.has(row.original.id)}
+                className="border-b transition-colors hover:bg-muted/30 data-[selected=true]:bg-primary/5"
               >
-                {columns.map((col, i) => (
-                <TableCell className={getAlignClass(col.align)}>
-  <span className="text-sm font-medium text-foreground">
-    {renderCell(col, row)}
-  </span>
-</TableCell>
+                {hasSelection ? (
+                  <TableCell className="w-11 px-4">
+                    <Checkbox
+                      checked={selectedSet.has(row.original.id)}
+                      onCheckedChange={(value) =>
+                        setSelected(row.original.id, Boolean(value))
+                      }
+                      aria-label="Select row"
+                    />
+                  </TableCell>
+                ) : null}
+
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id} className="h-12 whitespace-nowrap">
+                    <span className="text-sm text-foreground">
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </span>
+                  </TableCell>
                 ))}
 
      {hasActions && (
-  <TableCell className="text-right w-[120px]">
+  <TableCell className="w-[104px] pr-4 text-right">
     <div className="flex justify-end items-center gap-1">
       
       {onEdit && (
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8"
-          onClick={() => onEdit(row)}
-        >
-          <IconEdit size={16} />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className="text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={() => onEdit(row.original)}
+              aria-label="Edit row"
+            >
+              <IconEdit size={16} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Edit</TooltipContent>
+        </Tooltip>
       )}
 
       {onDelete && (
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 text-red-600 hover:bg-red-50"
-          onClick={() => onDelete(row.id)}
-        >
-          <IconTrash size={16} />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
+              onClick={() => onDelete(row.original.id)}
+              aria-label="Delete row"
+            >
+              <IconTrash size={16} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Delete</TooltipContent>
+        </Tooltip>
       )}
 
     </div>
@@ -164,6 +290,8 @@ export default function MasterTable<T extends { id: string }>({
           )}
         </TableBody>
       </Table>
+      </div>
     </div>
+    </TooltipProvider>
   );
 }

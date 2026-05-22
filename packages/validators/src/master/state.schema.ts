@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const stateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
 export const createStateSchema = z.object({
   name: z
     .string()

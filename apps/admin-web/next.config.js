@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  transpilePackages: ["@skerp/types", "@skerp/validators"],
+};
 
 export default nextConfig;

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { FieldValues, FormProvider, UseFormReturn } from "react-hook-form";
 import {
   Dialog,
   DialogContent,
@@ -10,73 +11,33 @@ import {
   DialogDescription,
 } from "@skerp/ui/components/dialog";
 
-import { Input } from "@skerp/ui/components/input";
 import { Button } from "@skerp/ui/components/button";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@skerp/ui/components/select";
 
-import { masterRegistry, MasterKey } from "@/features/masters/registry";
-
-type FormState = Record<string, string>;
-
-type Props = {
-  master: MasterKey;
+type Props<TFormValues extends FieldValues> = {
   open: boolean;
-  setOpen: (v: boolean) => void;
-  defaultValues?: Record<string, any> | null;
-  onSubmit: (data: any) => Promise<void>;
-  options?: Record<string, any[]>;
+  onOpenChange: (value: boolean) => void;
+  title: string;
+  form: UseFormReturn<TFormValues>;
+  onSubmit: (data: TFormValues) => Promise<void>;
+  isSubmitting?: boolean;
+  children: React.ReactNode;
 };
 
-export default function MasterFormDialog({
-  master,
+export default function MasterFormDialog<TFormValues extends FieldValues>({
   open,
-  setOpen,
-  defaultValues,
+  onOpenChange,
+  title,
+  form,
   onSubmit,
-  options = {},
-}: Props) {
-  const config = masterRegistry[master];
-
-  const [form, setForm] = React.useState<FormState>({});
-  const [loading, setLoading] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!open) return;
-
-    if (defaultValues) {
-      setForm(defaultValues);
-      return;
-    }
-
-    const empty: FormState = {};
-    config.fields.forEach((f) => (empty[f.name] = ""));
-    setForm(empty);
-  }, [open, defaultValues, config.fields]);
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      await onSubmit(form);
-      setOpen(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  isSubmitting,
+  children,
+}: Props<TFormValues>) {
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        
-        {/* HEADER */}
         <DialogHeader className="space-y-1">
           <DialogTitle className="text-lg font-semibold">
-            {defaultValues ? "Update" : "Create"} {config.label}
+            {title}
           </DialogTitle>
 
           <DialogDescription>
@@ -84,72 +45,29 @@ export default function MasterFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* FORM BODY */}
-        <div className="grid gap-4 py-4">
-          {config.fields.map((field) => (
-            <div key={field.name} className="grid gap-1.5">
-              
-              {/* LABEL */}
-              <label className="text-xs font-medium text-muted-foreground">
-                {field.label}
-              </label>
-
-              {/* INPUT */}
-              {field.type === "text" && (
-                <Input
-                  value={form[field.name] ?? ""}
-                  placeholder={`Enter ${field.label}`}
-                  onChange={(e) =>
-                    setForm((p) => ({
-                      ...p,
-                      [field.name]: e.target.value,
-                    }))
-                  }
-                />
-              )}
-
-              {/* SELECT */}
-              {field.type === "select" && (
-                <Select
-                  value={form[field.name] ?? ""}
-                  onValueChange={(value) =>
-                    setForm((p) => ({
-                      ...p,
-                      [field.name]: value,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={`Select ${field.label}`} />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {(options?.[field.optionsSource] ?? []).map((opt) => (
-                      <SelectItem key={opt.id} value={opt.id}>
-                        {opt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* FOOTER */}
-        <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setOpen(false)}
-            disabled={loading}
+        <FormProvider {...form}>
+          <form
+            className="grid gap-4"
+            onSubmit={form.handleSubmit(onSubmit)}
           >
-            Cancel
-          </Button>
+            <div className="grid gap-4 py-2">{children}</div>
 
-          <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </FormProvider>
       </DialogContent>
     </Dialog>
   );

@@ -8,6 +8,8 @@ export type PermissionModule =
   | "roles"
   | "permissions"
   | "masters"
+  | "masters.state"
+  | "masters.city"
   | "orders"
   | "lorry_receipts"
   | "trips"

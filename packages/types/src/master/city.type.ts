@@ -1,20 +1,10 @@
-export interface City {
-  id: string;
-  name: string;
-  stateId: string;
-   state?: {
-    id: string;
-    name: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
-export type CreateCityBody = {
-  name: string;
-  stateId: string;
-};
+import { z } from "zod";
+import {
+  citySchema,
+  createCitySchema,
+  updateCitySchema,
+} from "@skerp/validators";
 
-export type UpdateCityBody = {
-  name?: string;
-  stateId?: string;
-};
+export type City = z.infer<typeof citySchema>;
+export type CreateCityBody = z.infer<typeof createCitySchema>;
+export type UpdateCityBody = z.infer<typeof updateCitySchema>;

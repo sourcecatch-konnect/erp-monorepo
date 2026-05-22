@@ -1,28 +1,25 @@
 import { Router } from "express";
+import { createCitySchema, updateCitySchema } from "@skerp/validators";
+import { db } from "../../../prisma/prisma.js";
+import { createCrudRouter } from "../_shared/crud.factory.js";
 
-import {
-  createCityController,
-  getCitiesController,
-  getCityByIdController,
-  updateCityController,
-  deleteCityController,
-} from "./city.controller.js";
-
-const router = Router();
-
-// CREATE
-router.post("/", createCityController);
-
-// LIST
-router.get("/", getCitiesController);
-
-// GET BY ID
-router.get("/:id", getCityByIdController);
-
-// UPDATE
-router.patch("/:id", updateCityController);
-
-// DELETE
-router.delete("/:id", deleteCityController);
+const router: Router = createCrudRouter({
+  model: db.city,
+  createSchema: createCitySchema,
+  updateSchema: updateCitySchema,
+  permissionKey: "masters.city",
+  listOptions: {
+    searchableFields: ["name"],
+    defaultInclude: {
+      state: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    defaultOrderBy: { name: "asc" },
+  },
+});
 
 export default router;

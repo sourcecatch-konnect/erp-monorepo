@@ -1,28 +1,17 @@
 import { Router } from "express";
+import { createStateSchema, updateStateSchema } from "@skerp/validators";
+import { db } from "../../../prisma/prisma.js";
+import { createCrudRouter } from "../_shared/crud.factory.js";
 
-import {
-  createStateController,
-  getStatesController,
-  getStateByIdController,
-  updateStateController,
-  deleteStateController,
-} from "./state.controller.js";
-
-const router = Router();
-
-// CREATE
-router.post("/", createStateController);
-
-// LIST
-router.get("/", getStatesController);
-
-// GET BY ID
-router.get("/:id", getStateByIdController);
-
-// UPDATE
-router.patch("/:id", updateStateController);
-
-// DELETE
-router.delete("/:id", deleteStateController);
+const router: Router = createCrudRouter({
+  model: db.state,
+  createSchema: createStateSchema,
+  updateSchema: updateStateSchema,
+  permissionKey: "masters.state",
+  listOptions: {
+    searchableFields: ["name"],
+    defaultOrderBy: { name: "asc" },
+  },
+});
 
 export default router;

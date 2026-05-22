@@ -1,9 +1,9 @@
 import { api } from "@/lib/api";
 import type {
   ApiResponse,
-  City,
-  CreateCityBody,
-  UpdateCityBody,
+  CreateStateBody,
+  State,
+  UpdateStateBody,
 } from "@skerp/types";
 import {
   ListQuery,
@@ -13,54 +13,57 @@ import {
   unwrapListResponse,
 } from "../_shared/master-api";
 
-export const cityApi = {
-  list: async (query?: ListQuery): Promise<ListResult<City>> => {
-    const res = await api.get<ApiResponse<City[]>>("/cities", {
+export const stateApi = {
+  list: async (query?: ListQuery): Promise<ListResult<State>> => {
+    const res = await api.get<ApiResponse<State[]>>("/states", {
       params: query,
     });
 
     return unwrapListResponse(res);
   },
 
-  detail: async (id: string): Promise<City> => {
-    const res = await api.get<ApiResponse<City>>(`/cities/${id}`);
+  detail: async (id: string): Promise<State> => {
+    const res = await api.get<ApiResponse<State>>(`/states/${id}`);
 
     return unwrapApiResponse(res);
   },
 
-  create: async (body: CreateCityBody): Promise<City> => {
-    const res = await api.post<ApiResponse<City>>("/cities", body);
+  create: async (body: CreateStateBody): Promise<State> => {
+    const res = await api.post<ApiResponse<State>>("/states", body);
 
     return unwrapApiResponse(res);
   },
 
   update: async (
     id: string,
-    body: UpdateCityBody
-  ): Promise<City> => {
-    const res = await api.patch<ApiResponse<City>>(`/cities/${id}`, body);
+    body: UpdateStateBody
+  ): Promise<State> => {
+    const res = await api.patch<ApiResponse<State>>(
+      `/states/${id}`,
+      body
+    );
 
     return unwrapApiResponse(res);
   },
 
   remove: async (id: string): Promise<void> => {
-    const res = await api.delete<ApiResponse<null>>(`/cities/${id}`);
+    const res = await api.delete<ApiResponse<null>>(`/states/${id}`);
 
     unwrapApiResponse(res);
   },
 
   bulkRemove: async (ids: string[]) => {
     const res = await api.post<ApiResponse<{ count: number }>>(
-      "/cities/bulk-delete",
+      "/states/bulk-delete",
       { ids }
     );
 
     return unwrapApiResponse(res);
   },
 
-  bulkImport: async (rows: CreateCityBody[]): Promise<BulkImportResult> => {
+  bulkImport: async (rows: CreateStateBody[]): Promise<BulkImportResult> => {
     const res = await api.post<ApiResponse<BulkImportResult>>(
-      "/cities/bulk-import",
+      "/states/bulk-import",
       { rows }
     );
 
@@ -68,7 +71,7 @@ export const cityApi = {
   },
 
   export: async (query?: ListQuery): Promise<Blob> => {
-    const res = await api.get<Blob>("/cities/export", {
+    const res = await api.get<Blob>("/states/export", {
       params: query,
       responseType: "blob",
     });
@@ -76,8 +79,8 @@ export const cityApi = {
     return res.data;
   },
 
-  search: async (q: string): Promise<City[]> => {
-    const res = await api.get<ApiResponse<City[]>>("/cities/search", {
+  search: async (q: string): Promise<State[]> => {
+    const res = await api.get<ApiResponse<State[]>>("/states/search", {
       params: { q },
     });
 
