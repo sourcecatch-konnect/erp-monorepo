@@ -3,10 +3,25 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./master/state": "./src/master/state.schema.ts",
-    "./master/city": "./src/master/city.schema.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./master/state": {
+      "types": "./dist/master/state.schema.d.ts",
+      "import": "./dist/master/state.schema.js"
+    },
+    "./master/city": {
+      "types": "./dist/master/city.schema.d.ts",
+      "import": "./dist/master/city.schema.js"
+    },
+    "./master/area": {
+      "types": "./dist/master/area.schema.d.ts",
+      "import": "./dist/master/area.schema.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

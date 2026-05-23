@@ -96,7 +96,9 @@ export const NAV_SECTIONS: NavSection[] = [
       items: [
         { title: "States", href: "/masters/state" },
         { title: "Cities", href: "/masters/city" },
-
+        { title: "Areas", href: "/masters/area" },
+        { title: "Transports", href: "/masters/transport" },
+        { title: "Vehicles", href: "/masters/vehicle" },
         { title: "Customers", href: "/masters/customer", disabled: true },
         { title: "Vehicles", href: "/masters/vehicle", disabled: true },
         { title: "Drivers", href: "/masters/driver", disabled: true },

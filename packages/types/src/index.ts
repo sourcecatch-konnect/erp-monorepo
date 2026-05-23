@@ -58,6 +58,8 @@ export interface TokenPair {
 }
 export * from "./master/state.type.js"
 export * from "./master/city.type.js"
+export * from "./master/area.type.js"
 export * from "./master/api.type.js"
+export * from "./master/transport.type.js"
 export * from "./shared/index.js"
-
+export * from "./master/vehicle.type.js"

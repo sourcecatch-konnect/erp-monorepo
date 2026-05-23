@@ -1,5 +1,5 @@
 import { ComponentType } from "react";
-import { IconMapPin, IconProps, IconWorld } from "@tabler/icons-react";
+import { IconMapPin, IconMapPins, IconProps, IconTruck, IconTruckDelivery, IconWorld } from "@tabler/icons-react";
 
 export type MasterCategory = "Location";
 
@@ -8,7 +8,12 @@ export type MasterEntry = {
   label: string;
   icon: ComponentType<IconProps>;
   category: MasterCategory;
-  permissionKey: "masters.state" | "masters.city";
+permissionKey:
+  | "masters.state"
+  | "masters.city"
+  | "masters.area"
+  | "masters.transport"
+  | "masters.vehicle";
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -28,7 +33,29 @@ export const masterRegistry = [
     category: "Location",
     permissionKey: "masters.city",
     page: () => import("./city/page"),
+  },{
+    slug: "area",
+    label: "Area",
+    icon: IconMapPins,
+    category: "Location",
+    permissionKey: "masters.area",
+    page: () => import("./area/page"),
   },
+  {
+    slug: "transport",
+    label: "Transport",
+    icon: IconTruckDelivery,
+    category: "Location",
+    permissionKey: "masters.transport",
+    page: () => import("./transport/page"),
+  },{
+  slug: "vehicle",
+  label: "Vehicle",
+  icon: IconTruck,
+  category: "Location",
+  permissionKey: "masters.vehicle",
+  page: () => import("./vehicle/page"),
+},
 ] satisfies MasterEntry[];
 
 export type MasterKey = (typeof masterRegistry)[number]["slug"];

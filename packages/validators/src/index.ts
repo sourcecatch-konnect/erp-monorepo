@@ -61,5 +61,8 @@ export type ResetEmployeePasswordInput = z.infer<
 export type UpdateEmployeeStatusInput = z.infer<
   typeof updateEmployeeStatusSchema
 >;
-export * from "./master/state.schema.js"
-export * from "./master/city.schema.js"
+export * from "./master/state.schema.js";
+export * from "./master/city.schema.js";
+export * from "./master/area.schema.js";
+export * from "./master/trasnport.schema.js"
+export * from "./master/vehicle.schema.js"
