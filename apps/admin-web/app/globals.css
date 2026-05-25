@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-
 /*
  * Tailwind v4 auto-detects content but does NOT scan node_modules.
  * Explicitly include the shared @skerp/ui package source so its

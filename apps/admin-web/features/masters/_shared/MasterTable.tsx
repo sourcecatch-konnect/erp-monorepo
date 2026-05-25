@@ -6,6 +6,7 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -25,6 +26,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@skerp/ui/components/tooltip";
+import { DropdownMenu,
+   DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger, } from "@skerp/ui/components/dropdown";
 import { IconDatabaseOff, IconEdit, IconTrash } from "@tabler/icons-react";
 
 type Props<T extends { id: string }> = {
@@ -37,6 +42,7 @@ type Props<T extends { id: string }> = {
   selectedIds?: string[];
   onSelectedIdsChange?: (ids: string[]) => void;
   isLoading?: boolean;
+  defaultHiddenColumns?: string[];
 };
 
 export default function MasterTable<T extends { id: string }>({
@@ -49,12 +55,19 @@ export default function MasterTable<T extends { id: string }>({
   selectedIds = [],
   onSelectedIdsChange,
   isLoading,
+  defaultHiddenColumns
 }: Props<T>) {
   const hasActions = Boolean(onEdit || onDelete);
   const hasSelection = Boolean(onSelectedIdsChange);
   const selectedSet = React.useMemo(
     () => new Set(selectedIds),
     [selectedIds]
+  );
+const [columnVisibility, setColumnVisibility] =
+  React.useState<VisibilityState>(() =>
+    Object.fromEntries(
+      (defaultHiddenColumns ?? []).map((column) => [column, false])
+    )
   );
   const visibleIds = data.map((row) => row.id);
   const allVisibleSelected =
@@ -93,15 +106,19 @@ export default function MasterTable<T extends { id: string }>({
 
     onSelectedIdsChange([...next]);
   };
-  const table = useReactTable({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
+ const table = useReactTable({
+  data,
+  columns,
+  state: {
+    columnVisibility,
+  },
+  onColumnVisibilityChange: setColumnVisibility,
+  getCoreRowModel: getCoreRowModel(),
+});
 
   return (
     <TooltipProvider>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+    <div className="w-full min-w-0 overflow-hidden rounded-lg border bg-white shadow-sm">
       <div className="flex min-h-11 items-center justify-between border-b bg-muted/20 px-4">
         <h2 className="text-sm font-semibold text-foreground">
           {title}
@@ -116,10 +133,32 @@ export default function MasterTable<T extends { id: string }>({
     + Add New
   </Button>
 )}
+<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button size="sm" variant="outline">
+      Columns
+    </Button>
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent align="end">
+    {table
+  .getAllColumns()
+  .filter((column) => column.getCanHide())
+  .map((column) => (
+    <DropdownMenuCheckboxItem
+      key={column.id}
+      checked={column.getIsVisible()}
+      onCheckedChange={(value) => column.toggleVisibility(!!value)}
+    >
+      {String(column.columnDef.header ?? column.id)}
+    </DropdownMenuCheckboxItem>
+  ))}
+  </DropdownMenuContent>
+</DropdownMenu>
       </div>
 
-      <div className="overflow-x-auto">
-      <Table className="min-w-full">
+       <div className="w-full min-w-0 overflow-x-auto">
+      <Table className="w-max min-w-full table-auto">
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow
@@ -139,7 +178,7 @@ export default function MasterTable<T extends { id: string }>({
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
-                  className="h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  className="h-10 min-w-[150px] whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   {header.isPlaceholder
                     ? null
@@ -151,7 +190,7 @@ export default function MasterTable<T extends { id: string }>({
               ))}
 
               {hasActions && (
-                <TableHead className="h-10 w-[104px] pr-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <TableHead className="sticky right-0 h-10 w-[104px] bg-muted/40 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Actions
                 </TableHead>
               )}
@@ -234,7 +273,7 @@ export default function MasterTable<T extends { id: string }>({
                 ) : null}
 
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="h-12 whitespace-nowrap">
+                  <TableCell key={cell.id} className="h-12 min-w-[150px] whitespace-nowrap">
                     <span className="text-sm text-foreground">
                       {flexRender(
                         cell.column.columnDef.cell,
@@ -245,7 +284,7 @@ export default function MasterTable<T extends { id: string }>({
                 ))}
 
      {hasActions && (
-  <TableCell className="w-[104px] pr-4 text-right">
+ <TableCell className="sticky right-0 w-[104px] bg-white pr-4 text-right">
     <div className="flex justify-end items-center gap-1">
       
       {onEdit && (

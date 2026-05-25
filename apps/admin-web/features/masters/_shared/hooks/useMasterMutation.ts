@@ -5,9 +5,15 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 
+import { toast } from "sonner";
+
 type MasterApi<TCreate, TUpdate, TResult> = {
   create: (body: TCreate) => Promise<TResult>;
-  update: (id: string, body: TUpdate) => Promise<TResult>;
+  update: (
+    id: string,
+    body: TUpdate
+  ) => Promise<TResult>;
+
   remove: (id: string) => Promise<void>;
 };
 
@@ -20,28 +26,53 @@ export function useMasterMutations<
   TCreate,
   TUpdate,
   TResult
->({ api, queryKey }: Props<TCreate, TUpdate, TResult>) {
+>({
+  api,
+  queryKey,
+}: Props<TCreate, TUpdate, TResult>) {
   const queryClient = useQueryClient();
 
-  const create = useMutation<TResult, Error, TCreate>({
+  const commonMutationOptions = {
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey,
+      });
+    },
+
+    onError: (error: Error) => {
+      toast.error(
+        error.message || "Something went wrong"
+      );
+    },
+  };
+
+  const create = useMutation<
+    TResult,
+    Error,
+    TCreate
+  >({
     mutationFn: api.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
-    },
+    ...commonMutationOptions,
   });
 
-  const update = useMutation<TResult, Error, { id: string; data: TUpdate }>({
-    mutationFn: ({ id, data }) => api.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
-    },
+  const update = useMutation<
+    TResult,
+    Error,
+    { id: string; data: TUpdate }
+  >({
+    mutationFn: ({ id, data }) =>
+      api.update(id, data),
+
+    ...commonMutationOptions,
   });
 
-  const remove = useMutation<void, Error, string>({
+  const remove = useMutation<
+    void,
+    Error,
+    string
+  >({
     mutationFn: api.remove,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
-    },
+    ...commonMutationOptions,
   });
 
   return { create, update, remove };

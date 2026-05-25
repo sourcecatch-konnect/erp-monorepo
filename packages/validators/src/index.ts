@@ -66,3 +66,10 @@ export * from "./master/city.schema.js";
 export * from "./master/area.schema.js";
 export * from "./master/trasnport.schema.js"
 export * from "./master/vehicle.schema.js"
+export * from "./master/spare-category.schema.js"
+export * from "./master/spare-parts.schema.js"
+export * from "./master/spare-partSuplier.schema.js"
+export * from "./master/customer.schema.js"
+export * from "./master/company.schema.js"
+export * from "./master/branch.schema.js"
+export * from "./master/route.schema.js"

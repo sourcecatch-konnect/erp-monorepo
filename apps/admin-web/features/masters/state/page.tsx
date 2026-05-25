@@ -14,6 +14,7 @@ import StateForm from "./StateForm";
 import { stateColumns } from "./StateTable";
 import { stateKeys } from "./state.keys";
 import { stateApi } from "./state.service";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 export default function StatePage() {
   const queryClient = useQueryClient();
@@ -45,27 +46,10 @@ export default function StatePage() {
     queryFn: () => stateApi.list(listQuery),
   });
 
-  const create = useMutation({
-    mutationFn: stateApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: stateKeys.all });
-    },
-  });
-
-  const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: CreateStateBody }) =>
-      stateApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: stateKeys.all });
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: stateApi.remove,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: stateKeys.all });
-    },
-  });
+  const { create, update, remove } = useMasterMutations({
+   api: stateApi,
+   queryKey: stateKeys.all,
+ });
 
   const bulkRemove = useMutation({
     mutationFn: stateApi.bulkRemove,

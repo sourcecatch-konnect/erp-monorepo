@@ -25,15 +25,28 @@ type CrudOptions<Create, Update> = {
   createSchema: ZodType<Create>;
   updateSchema: ZodType<Update>;
   permissionKey: string;
-  listOptions?: {
-    searchableFields?: string[];
-    defaultInclude?: object;
-    defaultOrderBy?: object;
-    softDelete?: boolean;
-  };
+
+ listOptions?: {
+  searchableFields?: string[];
+  defaultInclude?: object;
+  defaultOrderBy?: object;
+  softDelete?: boolean;
+
+  blockDeleteIfExists?: {
+    model: any;
+    label: string;
+    where: (id: string) => object;
+  }[];
+};
+
   hooks?: {
     beforeCreate?: (data: Create) => Promise<Create>;
-    beforeUpdate?: (data: Update, row: unknown) => Promise<Update>;
+    beforeUpdate?: (
+      data: Update,
+      row: unknown
+    ) => Promise<Update>;
+
+    beforeDelete?: (id: string) => Promise<void>;
   };
 };
 
@@ -137,7 +150,9 @@ export function createCrudRouter<Create, Update>({
         }),
         model.count({ where }),
       ]);
-
+      console.log(
+  JSON.stringify(data, null, 2)
+);
       return sendOk(res, data, {
         page: query.page,
         size: query.size,
@@ -260,16 +275,36 @@ export function createCrudRouter<Create, Update>({
       return sendOk(res, row);
     }
   );
+router.delete(
+  "/:id",
+  requirePermission(permissionKey, actionPermission("delete")),
+  async (req, res) => {
+    const id = getParamId(req);
 
-  router.delete(
-    "/:id",
-    requirePermission(permissionKey, actionPermission("delete")),
-    async (req, res) => {
-      await model.delete({ where: { id: getParamId(req) } });
+    // 🔥 DEPENDENCY CHECK HERE
+    if (listOptions?.blockDeleteIfExists?.length) {
+      for (const dep of listOptions.blockDeleteIfExists) {
+        const count = await dep.model.count({
+          where: dep.where(id),
+        });
 
-      return sendOk(res, null);
+        if (count > 0) {
+          throw new BadRequestError(
+            `Cannot delete. ${dep.label} exists for this record.`
+          );
+        }
+      }
     }
-  );
+
+    if (hooks?.beforeDelete) {
+      await hooks.beforeDelete(id);
+    }
+
+    await model.delete({ where: { id } });
+
+    return sendOk(res, null);
+  }
+);
 
   router.post(
     "/bulk-delete",

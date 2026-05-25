@@ -16,6 +16,7 @@ import CityForm from "./CityForm";
 import { cityColumns } from "./CityTable";
 import { cityKeys } from "./city.keys";
 import { cityApi } from "./city.service";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 export default function CityPage() {
   const queryClient = useQueryClient();
@@ -52,49 +53,32 @@ export default function CityPage() {
     queryFn: () => stateApi.list(),
   });
 
-  const create = useMutation({
-    mutationFn: cityApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cityKeys.all });
-    },
-  });
+ const { create, update, remove } = useMasterMutations({
+  api: cityApi,
+  queryKey: cityKeys.all,
+});
 
-  const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: CreateCityBody }) =>
-      cityApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cityKeys.all });
-    },
-  });
+const bulkRemove = useMutation({
+  mutationFn: cityApi.bulkRemove,
+  onSuccess: () => {
+    setSelectedIds([]);
+    queryClient.invalidateQueries({ queryKey: cityKeys.all });
+  },
+});
 
-  const remove = useMutation({
-    mutationFn: cityApi.remove,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cityKeys.all });
-    },
-  });
+const bulkImport = useMutation({
+  mutationFn: cityApi.bulkImport,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: cityKeys.all });
+  },
+});
 
-  const bulkRemove = useMutation({
-    mutationFn: cityApi.bulkRemove,
-    onSuccess: () => {
-      setSelectedIds([]);
-      queryClient.invalidateQueries({ queryKey: cityKeys.all });
-    },
-  });
-
-  const bulkImport = useMutation({
-    mutationFn: cityApi.bulkImport,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cityKeys.all });
-    },
-  });
-
-  const exportCities = useMutation({
-    mutationFn: cityApi.export,
-    onSuccess: (blob) => {
-      downloadBlob(blob, "cities.csv");
-    },
-  });
+const exportCities = useMutation({
+  mutationFn: cityApi.export,
+  onSuccess: (blob) => {
+    downloadBlob(blob, "cities.csv");
+  },
+});
 
   const handleSubmit = async (data: CreateCityBody) => {
     if (selected) {

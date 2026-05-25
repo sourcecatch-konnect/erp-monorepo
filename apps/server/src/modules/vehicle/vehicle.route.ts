@@ -6,10 +6,11 @@ import {
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
+import { ZodTypeAny } from "zod";
 
 const router: Router = createCrudRouter({
   model: db.vehicle,
-  createSchema: createVehicleSchema,
+  createSchema: createVehicleSchema as ZodTypeAny,
   updateSchema: updateVehicleSchema,
   permissionKey: "masters.vehicle",
   listOptions: {

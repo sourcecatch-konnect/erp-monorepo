@@ -1,5 +1,5 @@
 import { ComponentType } from "react";
-import { IconMapPin, IconMapPins, IconProps, IconTruck, IconTruckDelivery, IconWorld } from "@tabler/icons-react";
+import { IconBuilding, IconCategory, IconGitBranch, IconMapPin, IconMapPins, IconProps, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld } from "@tabler/icons-react";
 
 export type MasterCategory = "Location";
 
@@ -13,7 +13,14 @@ permissionKey:
   | "masters.city"
   | "masters.area"
   | "masters.transport"
-  | "masters.vehicle";
+  | "masters.company"
+  | "masters.vehicle"
+  | "masters.spare-category"
+  | "masters.spare-part"
+  | "masters.spare-part-supplier"
+  | "masters.customer"
+  | "masters.route"
+  | "masters.branch";
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -55,6 +62,59 @@ export const masterRegistry = [
   category: "Location",
   permissionKey: "masters.vehicle",
   page: () => import("./vehicle/page"),
+},{
+  slug: "spare-category",
+  label: "Spare Category",
+  icon: IconCategory,
+  category: "Location",
+  permissionKey: "masters.spare-category",
+  page: () => import("./spare-category/page"),
+},{
+  slug: "spare-parts",
+  label: "Spare Part",
+  icon: IconTool,
+  category: "Location",
+  permissionKey: "masters.spare-part",
+  page: () => import("./spare-parts/page"),
+},{
+  slug: "spare-part-supplier",
+  label: "Spare Part Supplier",
+  icon: IconTool,
+  category: "Location",
+  permissionKey: "masters.spare-part-supplier",
+  page: () => import("./spare-partSuppiler/page"),
+},
+{
+  slug: "customer",
+  label: "Customer",
+  icon: IconUsers,
+  category: "Location",
+  permissionKey: "masters.customer",
+  page: () => import("./Customer/page"),
+},
+{
+  slug: "company",
+  label: "Company",
+  icon: IconBuilding,
+  category: "Location",
+  permissionKey: "masters.company",
+  page: () => import("./Company/page"),
+},
+{
+  slug: "branch",
+  label: "Branch",
+  icon: IconGitBranch,
+  category: "Location",
+  permissionKey: "masters.branch",
+  page: () => import("./branch/page"),
+},
+{
+  slug: "route",
+  label: "Route",
+  icon: IconMapPins,
+  category: "Location",
+  permissionKey: "masters.route",
+  page: () => import("./routes/page"),
 },
 ] satisfies MasterEntry[];
 

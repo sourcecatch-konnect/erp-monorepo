@@ -38,6 +38,7 @@ type Props<T extends { id: string }> = {
   isImporting?: boolean;
   isExporting?: boolean;
   children?: React.ReactNode;
+  defaultHiddenColumns?: string[];
 };
 
 export default function MasterListPage<T extends { id: string }>({
@@ -51,6 +52,7 @@ export default function MasterListPage<T extends { id: string }>({
   size,
   total,
   onPageChange,
+  defaultHiddenColumns,
   selectedIds,
   onSelectedIdsChange,
   onAdd,
@@ -70,7 +72,7 @@ export default function MasterListPage<T extends { id: string }>({
   const isLastPage = page >= pageCount - 1;
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
@@ -161,6 +163,7 @@ export default function MasterListPage<T extends { id: string }>({
         columns={columns}
         onEdit={onEdit}
         onDelete={onDelete}
+        defaultHiddenColumns={defaultHiddenColumns}
         selectedIds={selectedIds}
         onSelectedIdsChange={onSelectedIdsChange}
         isLoading={isLoading}
