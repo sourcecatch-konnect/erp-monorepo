@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   FieldValues,
   FormProvider,
+  Path,
   SubmitHandler,
   UseFormReturn,
 } from "react-hook-form";
@@ -44,6 +45,30 @@ const widthClassByColumns = {
   3: "sm:max-w-5xl",
 };
 
+type ServerValidationDetails = {
+  fieldErrors?: Record<string, string[] | undefined>;
+  formErrors?: string[];
+};
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Something went wrong";
+
+const getValidationDetails = (
+  error: unknown
+): ServerValidationDetails | undefined => {
+  if (!error || typeof error !== "object" || !("details" in error)) {
+    return undefined;
+  }
+
+  const details = (error as { details?: unknown }).details;
+
+  if (!details || typeof details !== "object") {
+    return undefined;
+  }
+
+  return details as ServerValidationDetails;
+};
+
 export default function MasterFormDialog<
   TFieldValues extends FieldValues,
   TSubmitValues extends FieldValues = TFieldValues
@@ -57,6 +82,40 @@ export default function MasterFormDialog<
   children,
   columns = 1,
 }: Props<TFieldValues, TSubmitValues>) {
+  const rootError = form.formState.errors.root?.message;
+
+  const handleValidSubmit: SubmitHandler<TSubmitValues> = async (values) => {
+    form.clearErrors("root");
+
+    try {
+      await onSubmit(values);
+    } catch (error) {
+      const details = getValidationDetails(error);
+
+      for (const [name, messages] of Object.entries(
+        details?.fieldErrors ?? {}
+      )) {
+        const message = messages?.[0];
+
+        if (message) {
+          form.setError(name as Path<TFieldValues>, {
+            type: "server",
+            message,
+          });
+        }
+      }
+
+      const message =
+        details?.formErrors?.[0] ||
+        getErrorMessage(error);
+
+      form.setError("root", {
+        type: "server",
+        message,
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -73,7 +132,7 @@ export default function MasterFormDialog<
         <FormProvider {...form}>
           <form
             className="flex max-h-[calc(90vh-120px)] flex-col"
-            onSubmit={form.handleSubmit(onSubmit)}
+            onSubmit={form.handleSubmit(handleValidSubmit)}
           >
             <div
               className={`grid ${gridClassByColumns[columns]} gap-4 overflow-y-auto px-1 py-3 pr-2`}
@@ -82,6 +141,10 @@ export default function MasterFormDialog<
             </div>
 
             <DialogFooter className="mt-4 gap-2 border-t pt-4">
+              {typeof rootError === "string" ? (
+                <p className="mr-auto text-sm text-red-600">{rootError}</p>
+              ) : null}
+
               <Button
                 type="button"
                 variant="outline"

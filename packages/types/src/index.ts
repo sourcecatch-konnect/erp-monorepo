@@ -10,6 +10,10 @@ export type PermissionModule =
   | "masters"
   | "masters.state"
   | "masters.city"
+  | "masters.area"
+  | "masters.transport"
+  | "masters.vehicle"
+  | "masters.driver"
   | "orders"
   | "lorry_receipts"
   | "trips"
@@ -47,9 +51,9 @@ export interface AuthUser {
   id: string;
   email: string;
   role: {
-  id: string;
-  name: string;
-};
+    id: string;
+    name: string;
+  };
 }
 
 export interface TokenPair {
@@ -71,3 +75,4 @@ export * from "./master/company.type.js"
 export * from "./master/branch.type.js"
 export * from "./master/route.type.js"
 export * from "./master/warehouse.type.js"
+export * from "./master/driver.type.js"

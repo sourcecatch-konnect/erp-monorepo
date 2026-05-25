@@ -40,8 +40,7 @@ export type NavSection = {
 };
 
 /** Narrows a NavItem to a collapsible group. */
-export const isNavGroup = (item: NavItem): item is NavGroup =>
-  "items" in item;
+export const isNavGroup = (item: NavItem): item is NavGroup => "items" in item;
 
 /**
  * Sidebar navigation. `disabled` leaves are modules not built yet.
