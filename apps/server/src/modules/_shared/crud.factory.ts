@@ -28,7 +28,7 @@ type CrudOptions<Create, Update> = {
 
  listOptions?: {
   searchableFields?: string[];
-  defaultInclude?: object;
+  defaultInclude?: Record<string, unknown>;
   defaultOrderBy?: object;
   softDelete?: boolean;
 

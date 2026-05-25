@@ -1,5 +1,5 @@
 import { ComponentType } from "react";
-import { IconBuilding, IconCategory, IconGitBranch, IconMapPin, IconMapPins, IconProps, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld } from "@tabler/icons-react";
+import { IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch, IconMapPin, IconMapPins, IconProps, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld } from "@tabler/icons-react";
 
 export type MasterCategory = "Location";
 
@@ -20,7 +20,8 @@ permissionKey:
   | "masters.spare-part-supplier"
   | "masters.customer"
   | "masters.route"
-  | "masters.branch";
+  | "masters.branch"
+  | "masters.warehouse";
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -115,6 +116,14 @@ export const masterRegistry = [
   category: "Location",
   permissionKey: "masters.route",
   page: () => import("./routes/page"),
+},
+{
+  slug: "warehouse",
+  label: "Warehouse",
+  icon: IconBuildingWarehouse,
+  category: "Location",
+  permissionKey: "masters.warehouse",
+  page: () => import("./warehouse/page"),
 },
 ] satisfies MasterEntry[];
 

@@ -106,6 +106,7 @@ export const NAV_SECTIONS: NavSection[] = [
         { title: "Company", href: "/masters/company" },
         { title: "Branches", href: "/masters/branch" },
         { title: "Routes", href: "/masters/route" },
+        { title: "Warehouses", href: "/masters/warehouse" },
       ],
     },
   ],

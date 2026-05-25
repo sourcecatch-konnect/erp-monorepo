@@ -19,6 +19,7 @@ import CustomerRoute from "./modules/customer/customer.route.js"
 import CompanyRoute from "./modules/company/company.route.js"
 import BranchRoute from "./modules/branch/branch.route.js"
 import Routes from "./modules/route/route.routes.js"
+import WarehousesRoute from "./modules/warehouse/warehouse.route.js"
 const app = express();
 
 // Dev origins for the admin (3001) and employee (3002) web apps.
@@ -51,6 +52,7 @@ app.use("/customers",CustomerRoute)
 app.use("/companies",CompanyRoute)
 app.use("/branches", BranchRoute)
 app.use("/routes",Routes)
+app.use("/warehouses",WarehousesRoute)
 app.use(errorMiddleware);
 const PORT = 5000;
 
