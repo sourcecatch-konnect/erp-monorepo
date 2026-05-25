@@ -23,6 +23,7 @@ import { transportApi } from "./transport.service";
 import { transportKeys } from "./transport.key";
 import TransportForm from "./transportForm";
 import { transportColumns } from "./transportTable";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 export default function TransportPage() {
   const queryClient = useQueryClient();
@@ -67,32 +68,10 @@ export default function TransportPage() {
     queryFn: () => cityApi.list(),
   });
 
-  const create = useMutation({
-    mutationFn: transportApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: transportKeys.all });
-    },
-  });
-
-  const update = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: CreateTransportBody;
-    }) => transportApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: transportKeys.all });
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: transportApi.remove,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: transportKeys.all });
-    },
-  });
+  const { create, update, remove } = useMasterMutations({
+   api: transportApi,
+   queryKey: transportKeys.all,
+ });
 
   const bulkRemove = useMutation({
     mutationFn: transportApi.bulkRemove,

@@ -2,15 +2,15 @@
 
 import {
   Controller,
-  type Control,
   type FieldValues,
   type Path,
+  type Control,
 } from "react-hook-form";
 import { Input } from "@skerp/ui/components/input";
 import { Label } from "@skerp/ui/components/lable";
 
 type NumberFieldProps<T extends FieldValues> = {
-  control: Control<T>;
+  control: Control<T, unknown, any>;
   name: Path<T>;
   label: string;
   placeholder?: string;

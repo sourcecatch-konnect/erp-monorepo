@@ -15,7 +15,8 @@ import MasterFormDialog from "../_shared/MasterFormDialog";
 import SelectField from "../_shared/fields/SelectField";
 import TextField from "../_shared/fields/TextField";
 import { createVehicleSchema } from "@skerp/validators";
-
+import NumberField from "../_shared/fields/NumberField";
+import VehicleNumberField from "../_shared/fields/vehicleNumberField";
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
@@ -28,7 +29,26 @@ const ownershipOptions = [
   { label: "Own Vehicle", value: "Own_Vehicle" },
   { label: "Market Vehicle", value: "Market_Vehicle" },
 ];
+const wheelOptions = [
+  { label: "2 Wheel", value: "2" },
+  { label: "4 Wheel", value: "4" },
+  { label: "6 Wheel", value: "6" },
+  { label: "10 Wheel", value: "10" },
+  { label: "12 Wheel", value: "12" },
+  { label: "14 Wheel", value: "14" },
+  { label: "16 Wheel", value: "16" },
+  { label: "18 Wheel", value: "18" },
+  { label: "22 Wheel", value: "22" },
+];
+const wheelValues = ["2", "4", "6", "10", "12", "14", "16", "18", "22"] as const;
 
+const toWheelInput = (value?: string | null) => {
+  if (!value) return undefined;
+
+  return wheelValues.includes(value as (typeof wheelValues)[number])
+    ? (value as (typeof wheelValues)[number])
+    : undefined;
+};
 const vehicleTypeOptions = [
   { label: "Container", value: "Container" },
   { label: "Open Body", value: "Open_Body" },
@@ -57,6 +77,8 @@ export default function VehicleForm({
 }: Props) {
   const form = useForm<CreateVehicleFormInput, unknown, CreateVehicleBody>({
     resolver: zodResolver(createVehicleSchema),
+    mode: "onChange",
+  reValidateMode: "onChange",
     defaultValues: {
       vehicleNumber: "",
       chasisNumber: "",
@@ -64,7 +86,7 @@ export default function VehicleForm({
       ownershipType: "Own_Vehicle",
       vehicleType: "Container",
       capacityMT: "",
-      wheels: "",
+      wheels: undefined,
       bodyType: "",
       lengthFeet: "",
       openingKM: "",
@@ -88,7 +110,7 @@ export default function VehicleForm({
       ownershipType: row?.ownershipType ?? "Own_Vehicle",
       vehicleType: row?.vehicleType ?? "Container",
       capacityMT: row?.capacityMT != null ? String(row.capacityMT) : "",
-      wheels: row?.wheels ?? "",
+      wheels: toWheelInput(row?.wheels),
       bodyType: row?.bodyType ?? "",
       lengthFeet: row?.lengthFeet ?? "",
       openingKM: row?.openingKM != null ? String(row.openingKM) : "",
@@ -112,12 +134,11 @@ export default function VehicleForm({
   isSubmitting={isSubmitting}
   columns={3}
 >
-      <TextField<CreateVehicleFormInput>
-        name="vehicleNumber"
-        label="Vehicle Number"
-        placeholder="Enter vehicle number"
-        required
-      />
+ <VehicleNumberField<CreateVehicleFormInput>
+  control={form.control}
+  name="vehicleNumber"
+  required
+/>
 
       <TextField<CreateVehicleFormInput>
         name="chasisNumber"
@@ -147,18 +168,22 @@ export default function VehicleForm({
         required
       />
 
-      <TextField<CreateVehicleFormInput>
-        name="capacityMT"
-        label="Capacity MT"
-        placeholder="Enter capacity"
-        required
-      />
+    <NumberField<CreateVehicleFormInput>
+  control={form.control}
+  name="capacityMT"
+  label="Capacity MT"
+  placeholder="Enter capacity"
+  min={0.1}
+  max={100}
+  step="0.1"
+  required
+/>
 
-      <TextField<CreateVehicleFormInput>
-        name="wheels"
-        label="Wheels"
-        placeholder="Enter wheels"
-      />
+    <SelectField<CreateVehicleFormInput>
+  name="wheels"
+  label="Wheels"
+  options={wheelOptions}
+/>
 
       <TextField<CreateVehicleFormInput>
         name="bodyType"
@@ -166,26 +191,34 @@ export default function VehicleForm({
         placeholder="Enter body type"
       />
 
-      <TextField<CreateVehicleFormInput>
-        name="lengthFeet"
-        label="Length Feet"
-        placeholder="Enter length"
-      />
+    <NumberField<CreateVehicleFormInput>
+  control={form.control}
+  name="lengthFeet"
+  label="Length Feet"
+  placeholder="Enter length"
+  min={1}
+  max={100}
+/>
 
-      <TextField<CreateVehicleFormInput>
-        name="openingKM"
-        label="Opening KM"
-        placeholder="Enter opening KM"
-        required
-      />
 
-      <TextField<CreateVehicleFormInput>
-        name="currentKM"
-        label="Current KM"
-        placeholder="Enter current KM"
-        required
-      />
-
+    <NumberField<CreateVehicleFormInput>
+  control={form.control}
+  name="openingKM"
+  label="Opening KM"
+  placeholder="Enter opening KM"
+  min={0}
+  max={9999999}
+  required
+/>
+   <NumberField<CreateVehicleFormInput>
+  control={form.control}
+  name="currentKM"
+  label="Current KM"
+  placeholder="Enter current KM"
+  min={0}
+  max={9999999}
+  required
+/>
 <Controller
   control={form.control}
   name="purchaseDate"

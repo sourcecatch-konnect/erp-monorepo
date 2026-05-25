@@ -17,6 +17,7 @@ import { vehicleKeys } from "./vehicle.key";
 import { vehicleColumns } from "./vehicleTable";
 import VehicleForm from "./vehicleForm";
 import { createVehicleSchema } from "@skerp/validators";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 type VehicleCsvRow = Record<
   | "vehicleNumber"
   | "chasisNumber"
@@ -70,32 +71,10 @@ export default function VehiclePage() {
     queryFn: () => vehicleApi.list(listQuery),
   });
 
-  const create = useMutation({
-    mutationFn: vehicleApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: vehicleKeys.all });
-    },
-  });
-
-  const update = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: CreateVehicleBody;
-    }) => vehicleApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: vehicleKeys.all });
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: vehicleApi.remove,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: vehicleKeys.all });
-    },
-  });
+    const { create, update, remove } = useMasterMutations({
+     api: vehicleApi,
+     queryKey: vehicleKeys.all,
+   });
 
   const bulkRemove = useMutation({
     mutationFn: vehicleApi.bulkRemove,
@@ -136,6 +115,20 @@ export default function VehiclePage() {
       data={vehicles.data?.data ?? []}
       columns={vehicleColumns}
       isLoading={vehicles.isLoading}
+      defaultHiddenColumns={[
+    "currentKM",
+    "chasisNumber",
+    "engineNumber",
+    "wheels",
+    "bodyType",
+    "lengthFeet",
+    "openingKM",
+    "purchaseDate",
+    "insuranceNumber",
+    "insuranceCompany",
+    "insuranceIssueDate",
+    "insuranceDueDate",
+  ]}
       search={search}
       onSearchChange={setSearch}
       page={page}

@@ -51,20 +51,27 @@ export interface AuthUser {
   id: string;
   email: string;
   role: {
-  id: string;
-  name: string;
-};
+    id: string;
+    name: string;
+  };
 }
 
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
 }
-export * from "./master/state.type.js"
-export * from "./master/city.type.js"
-export * from "./master/area.type.js"
-export * from "./master/api.type.js"
-export * from "./master/transport.type.js"
-export * from "./shared/index.js"
-export * from "./master/vehicle.type.js"
-export * from "./master/driver.type.js"
+export * from "./master/state.type.js";
+export * from "./master/city.type.js";
+export * from "./master/area.type.js";
+export * from "./master/api.type.js";
+export * from "./master/transport.type.js";
+export * from "./shared/index.js";
+export * from "./master/vehicle.type.js";
+export * from "./master/driver.type.js";
+export * from "./master/spare-category.type.js";
+export * from "./master/spare-part.type.js";
+export * from "./master/spare-partsSuppiler.type.js";
+export * from "./master/customer.type.js";
+export * from "./master/company.type.js";
+export * from "./master/branch.type.js";
+export * from "./master/route.type.js";

@@ -1,5 +1,19 @@
 import { z } from "zod";
+const optionalNumberField = (message: string) =>
+  z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((value) => {
+      if (value === "" || value === undefined || value === null) {
+        return undefined;
+      }
 
+      return Number(value);
+    })
+    .refine(
+      (value) => value === undefined || !Number.isNaN(value),
+      message
+    );
 const optionalString = z
   .string()
   .trim()
@@ -44,8 +58,8 @@ export const vehicleSchema = z.object({
   ownershipType: ownershipTypeSchema,
   vehicleType: vehicleTypeSchema,
   capacityMT: z.number(),
-  wheels: z.string().nullable().optional(),
   bodyType: z.string().nullable().optional(),
+  wheels: z.string().nullable().optional(),
   lengthFeet: z.string().nullable().optional(),
   openingKM: z.number(),
   currentKM: z.number(),
@@ -98,12 +112,16 @@ export const createVehicleSchema = z.object({
   vehicleType: vehicleTypeSchema,
 
 
-  wheels: intField("Wheels must be a valid number")
-  .refine((value) => value >= 2, "Wheels must be at least 2")
-  .refine((value) => value <= 22, "Wheels cannot exceed 22")
+  wheels: z
+  .enum(["2", "4", "6", "10", "12", "14", "16", "18", "22"])
   .optional(),
   bodyType: optionalString,
-  lengthFeet: optionalString,
+  lengthFeet: optionalString.refine(
+    (value) =>
+      value === undefined ||
+      (!Number.isNaN(Number(value)) && Number(value) >= 1 && Number(value) <= 100),
+    "Length must be between 1 and 100 feet"
+  ),
 
   capacityMT: numberField("Capacity is required")
   .refine((value) => value > 0, "Capacity must be greater than 0")
