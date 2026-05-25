@@ -10,8 +10,9 @@ import { errorMiddleware } from "./middlewares/error.middleware.js";
 import stateRoute from "./modules/state/state.route.js"
 import cityRoute from "./modules/city/city.route.js"
 import areaRoute from "./modules/area/area.route.js"
-import transportRoute from "./modules/trasnport/transport.route.js"
+import transportRoute from "./modules/transport/transport.route.js"
 import vehicleRoute from "./modules/vehicle/vehicle.route.js"
+import driverRoute from "./modules/driver/driver.route.js"
 const app = express();
 
 // Dev origins for the admin (3001) and employee (3002) web apps.
@@ -38,6 +39,7 @@ app.use("/cities",cityRoute)
 app.use("/areas",areaRoute)
 app.use("/transports",transportRoute)
 app.use("/vehicles",vehicleRoute)
+app.use("/drivers",driverRoute)
 app.use(errorMiddleware);
 const PORT = 5000;
 

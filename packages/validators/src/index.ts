@@ -64,5 +64,6 @@ export type UpdateEmployeeStatusInput = z.infer<
 export * from "./master/state.schema.js";
 export * from "./master/city.schema.js";
 export * from "./master/area.schema.js";
-export * from "./master/trasnport.schema.js"
+export * from "./master/transport.schema.js"
 export * from "./master/vehicle.schema.js"
+export * from "./master/driver.schema.js"

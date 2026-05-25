@@ -11,6 +11,13 @@ import { db } from "./prisma.js";
  */
 const ADMIN_EMAIL = "admin@sktranslines.com";
 const ADMIN_PASSWORD = "Admin@123";
+const MASTER_MODULES = [
+  { code: "masters.state", name: "State Master" },
+  { code: "masters.city", name: "City Master" },
+  { code: "masters.area", name: "Area Master" },
+  { code: "masters.transport", name: "Transport Master" },
+  { code: "masters.vehicle", name: "Vehicle Master" },
+];
 
 async function main() {
   // 1. Company
@@ -29,12 +36,8 @@ let city = await db.city.findFirst({
   data: {
     name: "SK Translines",
     country: "India",
-    state: {
-      connect: { id: state!.id },
-    },
-    city: {
-      connect: { id: city!.id },
-    },
+    stateId: state!.id,
+    cityId: city!.id,
     establishmentYear: new Date("2010-01-01"),
   },
 });
@@ -51,14 +54,8 @@ let city = await db.city.findFirst({
     branchCode: "HO",
     shortCode: "HO",
     name: "Head Office",
-
-    city: {
-      connect: { id: city!.id },
-    },
-
-    company: {
-      connect: { id: company.id },
-    },
+    cityId: city!.id,
+    companyId: company.id,
   },
 });
     console.log("Created branch:", branch.name);
@@ -69,6 +66,37 @@ let city = await db.city.findFirst({
   if (!role) {
     role = await db.role.create({ data: { name: "Admin" } });
     console.log("Created role:", role.name);
+  }
+
+  for (const moduleDef of MASTER_MODULES) {
+    const module = await db.module.upsert({
+      where: { code: moduleDef.code },
+      update: { name: moduleDef.name },
+      create: moduleDef,
+    });
+
+    await db.permission.upsert({
+      where: {
+        roleId_moduleId: {
+          roleId: role.id,
+          moduleId: module.id,
+        },
+      },
+      update: {
+        canView: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+      },
+      create: {
+        roleId: role.id,
+        moduleId: module.id,
+        canView: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+      },
+    });
   }
 
   // 4. Admin user

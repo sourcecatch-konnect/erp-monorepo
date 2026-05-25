@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ZodType } from "zod";
+import { ZodType, ZodTypeDef } from "zod";
 import { PermissionAction } from "@skerp/types";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
@@ -22,8 +22,8 @@ type CrudAction = Exclude<PermissionAction, "view"> | "view";
 
 type CrudOptions<Create, Update> = {
   model: PrismaDelegate;
-  createSchema: ZodType<Create>;
-  updateSchema: ZodType<Update>;
+  createSchema: ZodType<Create, ZodTypeDef, unknown>;
+  updateSchema: ZodType<Update, ZodTypeDef, unknown>;
   permissionKey: string;
   listOptions?: {
     searchableFields?: string[];
