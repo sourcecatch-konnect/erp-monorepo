@@ -90,6 +90,7 @@ const companyDetail = useQuery({
   queryFn: () => companyApi.detail(detailId!),
   enabled: Boolean(detailOpen && detailId),
 });
+console.log(companyDetail.data,"detail COmapany")
 const { create, update, remove } = useMasterMutations({
   api: companyApi,
   queryKey: companyKeys.all,

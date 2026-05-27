@@ -1,7 +1,9 @@
 "use client";
 
 import { ColumnDef } from "@tanstack/react-table";
-import type { RailwayFreightMatrix } from "@skerp/types";
+import type {
+  RailwayFreightMatrixWithRelations,
+} from "@skerp/types";
 
 import {
   IconTrain,
@@ -25,7 +27,8 @@ const formatCurrency = (value?: number | null) => {
   }).format(value);
 };
 
-export const railwayFreightColumns: ColumnDef<RailwayFreightMatrix>[] = [
+export const railwayFreightColumns:
+ColumnDef<RailwayFreightMatrixWithRelations>[] = [
   {
     accessorKey: "wagonType",
     header: "Wagon Type",

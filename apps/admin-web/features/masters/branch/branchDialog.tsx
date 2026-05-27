@@ -2,14 +2,21 @@
 
 import * as React from "react";
 import type { Branch } from "@skerp/types";
+
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
+
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  PartyCard,
+  formatDate,
+} from "../_shared/dialog-parts";
+
 import {
   IconBuildingStore,
   IconBuilding,
@@ -20,6 +27,8 @@ import {
   IconClock,
   IconCalendar,
   IconHome,
+  IconCircleCheckFilled,
+  IconClockEdit,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -29,32 +38,21 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-  wide = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-  wide?: boolean;
-}) {
+function SkeletonBody() {
   return (
-    <div
-      className={
-        wide
-          ? "grid gap-1 border-b py-4 md:col-span-2 xl:col-span-3"
-          : "grid gap-1 border-b py-4"
-      }
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
+    <div className="space-y-6 p-6">
+      <div>
+        <Skeleton className="mb-3 h-4 w-28" />
+        <Skeleton className="h-16 rounded-xl" />
       </div>
 
-      <div className="break-words text-sm font-semibold leading-6 text-foreground">
-        {value || "-"}
+      <div>
+        <Skeleton className="mb-3 h-4 w-28" />
+        <div className="grid grid-cols-3 gap-4">
+          {Array.from({ length: 9 }).map((_, index) => (
+            <Skeleton key={index} className="h-14 rounded-xl" />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -68,129 +66,148 @@ export default function BranchDetailDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1000px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconBuildingStore size={22} />
-              </span>
+      <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconBuildingStore size={20} />
+            </span>
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Branch Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete branch profile and operational information
-                </DialogDescription>
-              </div>
+            <div>
+              <p className="text-sm font-semibold">Branch Details</p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10} />
+                  Active Branch
+                </div>
+              )}
             </div>
-          </DialogHeader>
+          </div>
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 12 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-md" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
-              <DetailItem
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="h-[calc(95vh-120px)] overflow-y-auto">
+            {/* Branch Summary */}
+            <div className="px-5 py-5">
+              <SectionLabel>Branch Overview</SectionLabel>
+
+              <PartyCard
+                label="Branch"
+                name={data?.name}
+                subtitle={data?.company?.name}
+                colorClass="bg-violet-100 text-violet-700"
                 icon={<IconBuildingStore size={15} />}
-                label="Branch Name"
-                value={data?.name}
-              />
-
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="Branch Code"
-                value={data?.branchCode ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="Short Code"
-                value={data?.shortCode ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconBuilding size={15} />}
-                label="Company"
-                value={data?.company?.name ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconMapPin size={15} />}
-                label="City"
-                value={data?.city?.name ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Contact Name"
-                value={data?.contactName ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Contact Phone"
-                value={data?.contactPhone ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconMail size={15} />}
-                label="Email"
-                value={data?.email ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Weekly Off Day"
-                value={data?.weeklyOffDay ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="GST No"
-                value={data?.gstNo ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconClock size={15} />}
-                label="Working Hours"
-                value={data?.workingHours ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Created At"
-                value={
-                  data?.createdAt
-                    ? new Date(data.createdAt).toLocaleDateString()
-                    : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Updated At"
-                value={
-                  data?.updatedAt
-                    ? new Date(data.updatedAt).toLocaleDateString()
-                    : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconHome size={15} />}
-                label="Address"
-                value={data?.address ?? "-"}
-                wide
               />
             </div>
-          )}
+
+            <div className="mx-5 border-t" />
+
+            {/* Branch Information */}
+            <div className="px-5 py-5">
+              <SectionLabel>Branch Information</SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <Field
+                  label="Branch Code"
+                  value={data?.branchCode}
+                  icon={<IconId size={12} />}
+                />
+
+                <Field
+                  label="Short Code"
+                  value={data?.shortCode}
+                  icon={<IconId size={12} />}
+                />
+
+                <Field
+                  label="Company"
+                  value={data?.company?.name}
+                  icon={<IconBuilding size={12} />}
+                />
+
+                <Field
+                  label="City"
+                  value={data?.city?.name}
+                  icon={<IconMapPin size={12} />}
+                />
+
+                <Field
+                  label="Contact Name"
+                  value={data?.contactName}
+                  icon={<IconPhone size={12} />}
+                />
+
+                <Field
+                  label="Contact Phone"
+                  value={data?.contactPhone}
+                  icon={<IconPhone size={12} />}
+                />
+
+                <Field
+                  label="Email"
+                  value={data?.email}
+                  icon={<IconMail size={12} />}
+                />
+
+                <Field
+                  label="Weekly Off Day"
+                  value={data?.weeklyOffDay}
+                  icon={<IconCalendar size={12} />}
+                />
+
+                <Field
+                  label="GST No"
+                  value={data?.gstNo}
+                  icon={<IconId size={12} />}
+                />
+
+                <Field
+                  label="Working Hours"
+                  value={data?.workingHours}
+                  icon={<IconClock size={12} />}
+                />
+
+                <Field
+                  label="Created At"
+                  value={formatDate(data?.createdAt)}
+                  icon={<IconCalendar size={12} />}
+                />
+
+                <Field
+                  label="Updated At"
+                  value={formatDate(data?.updatedAt)}
+                  icon={<IconCalendar size={12} />}
+                />
+
+                <div className="col-span-3">
+                  <Field
+                    label="Address"
+                    value={data?.address}
+                    icon={<IconHome size={12} />}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12} />
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
         </div>
       </DialogContent>
     </Dialog>

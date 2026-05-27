@@ -1,17 +1,17 @@
 "use client";
 
+import * as React from "react";
 import type { City } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   IconBuildingCommunity,
   IconMapPin,
+  IconCircleCheckFilled,
+  IconClockEdit,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -21,6 +21,34 @@ type Props = {
   isLoading?: boolean;
 };
 
+function DetailItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value?: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-1 border-b py-4">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="text-primary">{icon}</span>
+        {label}
+      </div>
+
+      <div className="break-words text-sm font-semibold leading-6 text-foreground">
+        {value || "-"}
+      </div>
+    </div>
+  );
+}
+
+function formatDate(value?: string | Date | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString();
+}
+
 export default function CityDetailDialog({
   open,
   onOpenChange,
@@ -29,57 +57,62 @@ export default function CityDetailDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl overflow-hidden p-0">
-        <div className="border-b bg-muted/20 px-5 py-4">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <IconBuildingCommunity size={20} />
-              </span>
+      <DialogContent className="w-[92vw] !max-w-[620px] max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconBuildingCommunity size={20} />
+            </span>
 
-              <div>
-                <DialogTitle className="text-base font-semibold">
-                  City Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete information about selected city
-                </DialogDescription>
-              </div>
+            <div>
+              <p className="text-sm font-semibold">City Details</p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10} />
+                  Active City
+                </div>
+              )}
             </div>
-          </DialogHeader>
+          </div>
         </div>
 
-        <div className="space-y-4 p-5">
+        <div className="max-h-[calc(90vh-112px)] overflow-y-auto px-5 py-5">
           {isLoading ? (
-            <>
-              <Skeleton className="h-16 w-full rounded-lg" />
-              <Skeleton className="h-16 w-full rounded-lg" />
-            </>
+            <div className="grid gap-4">
+              {Array.from({ length: 2 }).map((_, index) => (
+                <Skeleton key={index} className="h-16 rounded-xl" />
+              ))}
+            </div>
           ) : (
-            <>
-             <div className="rounded-lg border bg-white p-4 shadow-sm">
-  <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-    <IconBuildingCommunity size={14} />
-    City Name
-  </div>
+            <div className="grid gap-x-8 gap-y-0 sm:grid-cols-2">
+              <DetailItem
+                icon={<IconBuildingCommunity size={14} />}
+                label="City Name"
+                value={data?.name}
+              />
 
-  <p className="text-sm font-semibold text-foreground">
-    {data?.name ?? "-"}
-  </p>
-</div>
-
-<div className="rounded-lg border bg-white p-4 shadow-sm">
-  <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-    <IconMapPin size={14} />
-    State
-  </div>
-
-  <p className="text-sm font-semibold text-foreground">
-    {data?.state?.name ?? "-"}
-  </p>
-</div>
-            </>
+              <DetailItem
+                icon={<IconMapPin size={14} />}
+                label="State"
+                value={data?.state?.name}
+              />
+            </div>
           )}
+        </div>
+
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12} />
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
         </div>
       </DialogContent>
     </Dialog>

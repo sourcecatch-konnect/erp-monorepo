@@ -2,22 +2,31 @@
 
 import * as React from "react";
 import type { Goods } from "@skerp/types";
+
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
+
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  PartyCard,
+  formatDate,
+} from "../_shared/dialog-parts";
+
 import {
   IconBox,
   IconCategory,
   IconRulerMeasure,
   IconWeight,
-  IconCalendar,
-  IconHome,
   IconStack,
+  IconCalendar,
+  IconClockEdit,
+  IconAlignBoxBottomCenter,
+  IconCircleCheckFilled,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -27,33 +36,23 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-  wide = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-  wide?: boolean;
-}) {
+function SkeletonBody() {
   return (
-    <div
-      className={
-        wide
-          ? "grid gap-1 border-b py-4 md:col-span-2 xl:col-span-3"
-          : "grid gap-1 border-b py-4"
-      }
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
-      </div>
+    <div className="space-y-6 p-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i}>
+          <Skeleton className="mb-3 h-4 w-28" />
 
-      <div className="break-words text-sm font-semibold leading-6 text-foreground">
-        {value || "-"}
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, x) => (
+              <Skeleton
+                key={x}
+                className="h-14 rounded-xl"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -65,115 +64,180 @@ export default function GoodsDetailDialog({
   isLoading,
 }: Props) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1100px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconBox size={22} />
-              </span>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <DialogContent
+        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+      >
+        {/* Header */}
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Goods Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete goods information, dimensions and storage details
-                </DialogDescription>
+        <div className="flex items-center justify-between border-b px-5 py-4">
+
+          <div className="flex items-center gap-3">
+
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconBox size={20}/>
+            </span>
+
+            <div>
+              <p className="text-sm font-semibold">
+                Goods Details
+              </p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10}/>
+                  Active Goods
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+
+            {/* Overview */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Goods Overview
+              </SectionLabel>
+
+              <PartyCard
+                label="Goods"
+                name={data?.name}
+                subtitle={data?.category}
+                colorClass="bg-blue-100 text-blue-700"
+                icon={<IconBox size={15}/>}
+              />
+
+            </div>
+
+            <div className="mx-5 border-t"/>
+
+            {/* Goods Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Goods Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Category"
+                  value={data?.category}
+                  icon={<IconCategory size={12}/>}
+                />
+
+                <Field
+                  label="Weight"
+                  value={
+                    data?.weight != null
+                      ? `${data.weight} kg`
+                      : "-"
+                  }
+                  icon={<IconWeight size={12}/>}
+                />
+
+                <Field
+                  label="Dimensions"
+                  value={
+                    `${data?.length ?? "-"} × ${data?.width ?? "-"} × ${data?.height ?? "-"}`
+                  }
+                  icon={<IconRulerMeasure size={12}/>}
+                />
+
+                <Field
+                  label="Storage Position"
+                  value={data?.storagePosition}
+                  icon={<IconStack size={12}/>}
+                />
+
+                <Field
+                  label="Storage Layer"
+                  value={data?.storageLayer}
+                  icon={<IconAlignBoxBottomCenter size={12}/>}
+                />
+
+                <Field
+                  label="Stacking Allowed"
+                  value={
+                    data?.isStackingAllowed
+                      ? "Yes"
+                      : "No"
+                  }
+                  icon={<IconStack size={12}/>}
+                />
+
+                <Field
+                  label="Description"
+                  value={data?.description}
+                  icon={<IconBox size={12}/>}
+                />
+
               </div>
+
             </div>
-          </DialogHeader>
+
+            <div className="mx-5 border-t"/>
+
+            {/* System */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                System Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Created At"
+                  value={formatDate(data?.createdAt)}
+                  icon={<IconCalendar size={12}/>}
+                />
+
+                <Field
+                  label="Updated At"
+                  value={formatDate(data?.updatedAt)}
+                  icon={<IconClockEdit size={12}/>}
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* Footer */}
+
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12}/>
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
+
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 15 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-md" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
-              <DetailItem
-                icon={<IconBox size={15} />}
-                label="Goods Name"
-                value={data?.name}
-              />
-
-              <DetailItem
-                icon={<IconCategory size={15} />}
-                label="Category"
-                value={data?.category}
-              />
-
-              <DetailItem
-                icon={<IconWeight size={15} />}
-                label="Weight"
-                value={
-                  data?.weight != null ? `${data.weight} kg` : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconRulerMeasure size={15} />}
-                label="Dimensions (L × W × H)"
-                value={
-                  data?.length != null ||
-                  data?.width != null ||
-                  data?.height != null
-                    ? `${data.length ?? "-"} × ${data.width ?? "-"} × ${data.height ?? "-"}`
-                    : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconStack size={15} />}
-                label="Storage Position"
-                value={data?.storagePosition ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconStack size={15} />}
-                label="Storage Layer"
-                value={data?.storageLayer ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconStack size={15} />}
-                label="Stacking Allowed"
-                value={data?.isStackingAllowed ? "Yes" : "No"}
-              />
-
-              <DetailItem
-                icon={<IconHome size={15} />}
-                label="Description"
-                value={data?.description ?? "-"}
-                wide
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Created At"
-                value={
-                  data?.createdAt
-                    ? new Date(data.createdAt).toLocaleDateString()
-                    : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Updated At"
-                value={
-                  data?.updatedAt
-                    ? new Date(data.updatedAt).toLocaleDateString()
-                    : "-"
-                }
-              />
-            </div>
-          )}
-        </div>
       </DialogContent>
     </Dialog>
   );

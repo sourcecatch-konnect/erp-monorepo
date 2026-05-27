@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { RailwayFreightMatrix } from "@skerp/types";
+import type {  RailwayFreightMatrixWithRelations } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
@@ -19,11 +19,12 @@ import {
   IconId,
   IconCalendar,
 } from "@tabler/icons-react";
+import { formatCurrency } from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: RailwayFreightMatrix;
+  data?: RailwayFreightMatrixWithRelations;
   isLoading?: boolean;
 };
 
@@ -58,15 +59,6 @@ function DetailItem({
   );
 }
 
-const formatCurrency = (value?: number | null) => {
-  if (value == null) return "-";
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
-};
 
 export default function RailwayFreightDetailDialog({
   open,

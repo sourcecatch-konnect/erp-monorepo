@@ -6,12 +6,17 @@ import type { WarehouseWithRelations } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  PartyCard,
+  formatDate,
+  formatCurrency,
+} from "../_shared/dialog-parts";
 
 import {
   IconBuildingWarehouse,
@@ -22,6 +27,9 @@ import {
   IconRuler,
   IconCash,
   IconDoor,
+  IconCircleCheckFilled,
+  IconClockEdit,
+  IconCalendarCheck,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -31,52 +39,27 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-  wide = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-  wide?: boolean;
-}) {
+function SkeletonBody() {
   return (
-    <div
-      className={
-        wide
-          ? "grid gap-1 border-b py-4 md:col-span-2 xl:col-span-3"
-          : "grid gap-1 border-b py-4"
-      }
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">
-          {icon}
-        </span>
-        {label}
-      </div>
+    <div className="space-y-6 p-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i}>
+          <Skeleton className="mb-3 h-4 w-28" />
 
-      <div className="break-words text-sm font-semibold text-foreground">
-        {value || "-"}
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, x) => (
+              <Skeleton
+                key={x}
+                className="h-14 rounded-xl"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-const formatCurrency = (
-  value?: number | null
-) => {
-  if (value == null) return "-";
-
-  return new Intl.NumberFormat(
-    "en-IN",
-    {
-      style: "currency",
-      currency: "INR",
-    }
-  ).format(value);
-};
 
 export default function WarehouseDetailDialog({
   open,
@@ -84,180 +67,234 @@ export default function WarehouseDetailDialog({
   data,
   isLoading,
 }: Props) {
+  console.log(data,"warehouse")
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
     >
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1100px]">
+      <DialogContent
+        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+      >
 
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
+        {/* Header */}
 
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconBuildingWarehouse
-                  size={22}
+        <div className="flex items-center justify-between border-b px-5 py-4">
+
+          <div className="flex items-center gap-3">
+
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconBuildingWarehouse size={20}/>
+            </span>
+
+            <div>
+              <p className="text-sm font-semibold">
+                Warehouse Details
+              </p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10}/>
+                  Active Warehouse
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+
+            {/* Overview */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Warehouse Overview
+              </SectionLabel>
+
+              <PartyCard
+                label="Warehouse"
+                name={data?.name}
+                subtitle={data?.branch?.name}
+                colorClass="bg-orange-100 text-orange-700"
+                icon={
+                  <IconBuildingWarehouse
+                    size={15}
+                  />
+                }
+              />
+
+            </div>
+
+            <div className="mx-5 border-t"/>
+
+            {/* Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Warehouse Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Type"
+                  value={data?.type}
+                  icon={<IconBuildingWarehouse size={12}/>}
                 />
-              </span>
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Warehouse Detail
-                </DialogTitle>
+                <Field
+                  label="Branch"
+                  value={data?.branch?.name}
+                  icon={<IconBuildingWarehouse size={12}/>}
+                />
 
-                <DialogDescription>
-                  Complete warehouse information
-                </DialogDescription>
+                <Field
+                  label="City"
+                  value={data?.city?.name}
+                  icon={<IconMapPin size={12}/>}
+                />
+
+                <Field
+                  label="State"
+                  value={data?.state?.name}
+                  icon={<IconMapPin size={12}/>}
+                />
+
+                <Field
+                  label="Country"
+                  value={data?.country}
+                  icon={<IconMapPin size={12}/>}
+                />
+
+                <Field
+                  label="Contact Person"
+                  value={data?.contactName}
+                  icon={<IconUser size={12}/>}
+                />
+
+                <Field
+                  label="Contact Phone"
+                  value={data?.contactPhone}
+                  icon={<IconPhone size={12}/>}
+                />
+
+                <Field
+                  label="Monthly Rent"
+                  value={formatCurrency(
+                    data?.monthlyRent
+                  )}
+                  icon={<IconCash size={12}/>}
+                />
+
+                <Field
+                  label="Security Deposit"
+                  value={formatCurrency(
+                    data?.securityDeposit
+                  )}
+                  icon={<IconCash size={12}/>}
+                />
+
+                <Field
+                  label="Length"
+                  value={data?.length}
+                  icon={<IconRuler size={12}/>}
+                />
+
+                <Field
+                  label="Width"
+                  value={data?.width}
+                  icon={<IconRuler size={12}/>}
+                />
+
+                <Field
+                  label="Breadth"
+                  value={data?.breadth}
+                  icon={<IconRuler size={12}/>}
+                />
+
+                <Field
+                  label="Gate No"
+                  value={data?.gateNo}
+                  icon={<IconDoor size={12}/>}
+                />
+
+                <Field
+                  label="Storage Capacity"
+                  value={data?.storageCapacity}
+                  icon={<IconBuildingWarehouse size={12}/>}
+                />
+
+                <Field
+                  label="Address"
+                  value={data?.address}
+                  icon={<IconMapPin size={12}/>}
+                />
+
               </div>
 
             </div>
-          </DialogHeader>
-        </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
+            <div className="mx-5 border-t"/>
 
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {/* System */}
 
-              {Array.from({
-                length: 16,
-              }).map((_, index) => (
-                <Skeleton
-                  key={index}
-                  className="h-20 w-full rounded-md"
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                System Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Created At"
+                  value={formatDate(
+                    data?.createdAt
+                  )}
+                  icon={<IconCalendar size={12}/>}
                 />
-              ))}
+
+                <Field
+                  label="Updated At"
+                  value={formatDate(
+                    data?.updatedAt
+                  )}
+                  icon={<IconClockEdit size={12}/>}
+                />
+
+              </div>
 
             </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
 
-              <DetailItem
-                icon={
-                  <IconBuildingWarehouse size={15} />
-                }
-                label="Warehouse Name"
-                value={data?.name}
-              />
+          </div>
+        )}
 
-              <DetailItem
-                icon={
-                  <IconBuildingWarehouse size={15} />
-                }
-                label="Type"
-                value={data?.type}
-              />
+        {/* Footer */}
 
-              <DetailItem
-                icon={
-                  <IconBuildingWarehouse size={15} />
-                }
-                label="Branch"
-                value={data?.branch?.name}
-              />
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
 
-              <DetailItem
-                icon={<IconMapPin size={15} />}
-                label="City"
-                value={data?.city?.name}
-              />
+ 
+ <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <IconCalendarCheck size={12} />
+            Updated {formatDate(data?.updatedAt)}
+          </span>
 
-              <DetailItem
-                icon={<IconMapPin size={15} />}
-                label="State"
-                value={data?.state?.name}
-              />
-
-              <DetailItem
-                icon={<IconMapPin size={15} />}
-                label="Country"
-                value={data?.country}
-              />
-
-              <DetailItem
-                icon={<IconUser size={15} />}
-                label="Contact Person"
-                value={data?.contactName}
-              />
-
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Contact Phone"
-                value={data?.contactPhone}
-              />
-
-              <DetailItem
-                icon={<IconCash size={15} />}
-                label="Monthly Rent"
-                value={formatCurrency(
-                  data?.monthlyRent
-                )}
-              />
-
-              <DetailItem
-                icon={<IconCash size={15} />}
-                label="Security Deposit"
-                value={formatCurrency(
-                  data?.securityDeposit
-                )}
-              />
-
-              <DetailItem
-                icon={<IconRuler size={15} />}
-                label="Length"
-                value={data?.length}
-              />
-
-              <DetailItem
-                icon={<IconRuler size={15} />}
-                label="Width"
-                value={data?.width}
-              />
-
-              <DetailItem
-                icon={<IconRuler size={15} />}
-                label="Breadth"
-                value={data?.breadth}
-              />
-
-              <DetailItem
-                icon={<IconDoor size={15} />}
-                label="Gate No"
-                value={data?.gateNo}
-              />
-
-              <DetailItem
-                icon={
-                  <IconBuildingWarehouse size={15} />
-                }
-                label="Storage Capacity"
-                value={data?.storageCapacity}
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Created At"
-                value={
-                  data?.createdAt
-                    ? new Date(
-                        data.createdAt
-                      ).toLocaleDateString()
-                    : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconMapPin size={15} />}
-                label="Address"
-                value={data?.address}
-                wide
-              />
-
-            </div>
-          )}
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
 
         </div>
+
       </DialogContent>
     </Dialog>
   );

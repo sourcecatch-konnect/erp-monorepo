@@ -6,16 +6,24 @@ import type { Wagon } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
+
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  formatDate,
+} from "../_shared/dialog-parts";
 
 import {
   IconTrain,
   IconRulerMeasure,
   IconScale,
+  IconCircleCheckFilled,
+  IconCalendar,
+  IconClockEdit,
+  IconCalendarCheck,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -25,25 +33,23 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-}) {
+function SkeletonBody() {
   return (
-    <div className="grid gap-1 border-b py-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
-      </div>
+    <div className="space-y-6 p-6">
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i}>
+          <Skeleton className="mb-3 h-4 w-28" />
 
-      <div className="break-words text-sm font-semibold leading-6 text-foreground">
-        {value || "-"}
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: 4 }).map((_, x) => (
+              <Skeleton
+                key={x}
+                className="h-14 rounded-xl"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -55,62 +61,114 @@ export default function WagonDetailDialog({
   isLoading,
 }: Props) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[850px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconTrain size={22} />
-              </span>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <DialogContent
+        className="w-[92vw] !max-w-[1000px] h-[50vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+      >
+        {/* Header */}
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Wagon Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete wagon profile, dimensions and weight information
-                </DialogDescription>
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconTrain size={20} />
+            </span>
+
+            <div>
+              <p className="text-sm font-semibold">
+                Wagon Details
+              </p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10} />
+                  Active Wagon
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+
+            {/* Wagon Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Wagon Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Wagon Name"
+                  value={data?.name}
+                  icon={<IconTrain size={12} />}
+                />
+
+                <Field
+                  label="Height"
+                  value={
+                    data?.height != null
+                      ? `${data.height} ft`
+                      : "-"
+                  }
+                  icon={<IconRulerMeasure size={12} />}
+                />
+
+                <Field
+                  label="Width"
+                  value={
+                    data?.width != null
+                      ? `${data.width} ft`
+                      : "-"
+                  }
+                  icon={<IconRulerMeasure size={12} />}
+                />
+
+                <Field
+                  label="Weight"
+                  value={
+                    data?.weight != null
+                      ? `${data.weight} kg`
+                      : "-"
+                  }
+                  icon={<IconScale size={12} />}
+                />
+
               </div>
+
             </div>
-          </DialogHeader>
+
+            <div className="mx-5 border-t" />
+
+            {/* System Information */}
+
+       
+          </div>
+        )}
+
+        {/* Footer */}
+
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+
+    
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
+
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-md" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
-              <DetailItem
-                icon={<IconTrain size={15} />}
-                label="Wagon Name"
-                value={data?.name}
-              />
-
-              <DetailItem
-                icon={<IconRulerMeasure size={15} />}
-                label="Height"
-                value={data?.height}
-              />
-
-              <DetailItem
-                icon={<IconRulerMeasure size={15} />}
-                label="Width"
-                value={data?.width}
-              />
-
-              <DetailItem
-                icon={<IconScale size={15} />}
-                label="Weight"
-                value={data?.weight}
-              />
-            </div>
-          )}
-        </div>
       </DialogContent>
     </Dialog>
   );

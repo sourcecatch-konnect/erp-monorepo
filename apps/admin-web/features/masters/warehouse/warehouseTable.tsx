@@ -57,26 +57,33 @@ export const warehouseColumns: ColumnDef<WarehouseWithRelations>[] = [
     enableHiding: false,
   },
 
-  {
-    id: "location",
-    header: "Location",
-    cell: ({ row }) => (
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
-          <IconMapPin size={12} />
-          {row.original.state?.name ?? "-"}
+ {
+  id: "location",
+  header: "Location",
+  cell: ({ row }) => {
+    const city = row.original.city?.name ?? "-";
+    const state = row.original.state?.name ?? "-";
+    const country = row.original.country ?? "-";
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className="flex size-8 items-center justify-center rounded-full bg-sky-50 text-sky-700">
+          <IconMapPin size={15} />
         </span>
 
-        <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
-          {row.original.city?.name ?? "-"}
-        </span>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-foreground">
+            {city}
+          </span>
 
-        <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-          {row.original.country ?? "-"}
-        </span>
+          <span className="text-xs text-muted-foreground">
+            {state}, {country}
+          </span>
+        </div>
       </div>
-    ),
+    );
   },
+},
 
   {
     id: "contact",
@@ -102,7 +109,7 @@ export const warehouseColumns: ColumnDef<WarehouseWithRelations>[] = [
     cell: ({ row }) => (
       <div className="flex flex-col text-xs">
         <span className="inline-flex items-center gap-1">
-          <IconCurrencyRupee size={12} />
+
           Rent: {formatCurrency(row.original.monthlyRent)}
         </span>
 
@@ -116,15 +123,17 @@ export const warehouseColumns: ColumnDef<WarehouseWithRelations>[] = [
     ),
   },
 
-  {
-    accessorKey: "storageCapacity",
-    header: "Capacity",
-    cell: ({ row }) => (
-      <span className="font-medium">
-        {row.original.storageCapacity ?? "-"}
-      </span>
-    ),
-  },
+{
+  accessorKey: "storageCapacity",
+  header: "Capacity",
+  cell: ({ row }) => (
+    <span className="font-medium">
+      {row.original.storageCapacity != null
+        ? `${row.original.storageCapacity} cubic ft.`
+        : "-"}
+    </span>
+  ),
+},
 
   {
     id: "dimensions",

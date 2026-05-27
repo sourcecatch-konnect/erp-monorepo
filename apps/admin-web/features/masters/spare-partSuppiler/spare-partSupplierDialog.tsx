@@ -6,12 +6,15 @@ import type { SparePartSupplier } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  formatDate,
+} from "../_shared/dialog-parts";
 
 import {
   IconTruck,
@@ -23,6 +26,8 @@ import {
   IconId,
   IconCalendar,
   IconHome,
+  IconCircleCheckFilled,
+  IconClockEdit,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -32,35 +37,23 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-  wide = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-  wide?: boolean;
-}) {
+function SkeletonBody() {
   return (
-    <div
-      className={
-        wide
-          ? "grid gap-1 border-b py-4 md:col-span-2 xl:col-span-3"
-          : "grid gap-1 border-b py-4"
-      }
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">
-          {icon}
-        </span>
-        {label}
-      </div>
+    <div className="space-y-6 p-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i}>
+          <Skeleton className="mb-3 h-4 w-28" />
 
-      <div className="break-words text-sm font-semibold text-foreground">
-        {value || "-"}
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, x) => (
+              <Skeleton
+                key={x}
+                className="h-14 rounded-xl"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -76,137 +69,205 @@ export default function SparePartSupplierDetailDialog({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1100px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconTruck size={22} />
-              </span>
+      <DialogContent
+        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+      >
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Spare Part Supplier Detail
-                </DialogTitle>
+        {/* Header */}
 
-                <DialogDescription>
-                  Complete supplier information
-                </DialogDescription>
+        <div className="flex items-center justify-between border-b px-5 py-4">
+
+          <div className="flex items-center gap-3">
+
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconTruck size={20}/>
+            </span>
+
+            <div>
+              <p className="text-sm font-semibold">
+                Spare Part Supplier Details
+              </p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10}/>
+                  Active Supplier
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+        {isLoading ? (
+          <SkeletonBody/>
+        ) : (
+          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+
+            {/* Overview */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Supplier Overview
+              </SectionLabel>
+
+              <div className="rounded-xl border p-4">
+
+                <div className="flex items-center gap-3">
+
+                  <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <IconTruck size={18}/>
+                  </span>
+
+                  <div>
+                    <p className="font-medium">
+                      {data?.name ?? "-"}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+                      {data?.shopName ?? "-"}
+                    </p>
+                  </div>
+
+                </div>
+
               </div>
-            </div>
-          </DialogHeader>
-        </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({
-                length: 15,
-              }).map((_, index) => (
-                <Skeleton
-                  key={index}
-                  className="h-20 w-full rounded-md"
+            </div>
+
+            <div className="mx-5 border-t"/>
+
+            {/* Supplier Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Supplier Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Supplier Name"
+                  value={data?.name}
+                  icon={<IconTruck size={12}/>}
                 />
-              ))}
+
+                <Field
+                  label="Supplier Type"
+                  value={data?.type}
+                  icon={<IconId size={12}/>}
+                />
+
+                <Field
+                  label="Shop Name"
+                  value={data?.shopName}
+                  icon={<IconBuildingStore size={12}/>}
+                />
+
+                <Field
+                  label="City"
+                  value={data?.city?.name}
+                  icon={<IconMapPin size={12}/>}
+                />
+
+                <Field
+                  label="Contact Person"
+                  value={data?.contactPerson}
+                  icon={<IconUser size={12}/>}
+                />
+
+                <Field
+                  label="Contact Phone"
+                  value={data?.contactPhone}
+                  icon={<IconPhone size={12}/>}
+                />
+
+                <Field
+                  label="Mobile No"
+                  value={data?.mobileNo}
+                  icon={<IconPhone size={12}/>}
+                />
+
+                <Field
+                  label="Email"
+                  value={data?.email}
+                  icon={<IconMail size={12}/>}
+                />
+
+                <Field
+                  label="PAN Number"
+                  value={data?.panNo}
+                  icon={<IconId size={12}/>}
+                />
+
+                <Field
+                  label="GSTIN"
+                  value={data?.gstin}
+                  icon={<IconId size={12}/>}
+                />
+
+                <Field
+                  label="Address"
+                  value={data?.address}
+                  icon={<IconHome size={12}/>}
+                />
+
+              </div>
+
             </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
 
-              <DetailItem
-                icon={<IconTruck size={15} />}
-                label="Supplier Name"
-                value={data?.name}
-              />
+            <div className="mx-5 border-t"/>
 
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="Type"
-                value={data?.type}
-              />
+            {/* System Information */}
 
-              <DetailItem
-                icon={
-                  <IconBuildingStore size={15} />
-                }
-                label="Shop Name"
-                value={data?.shopName}
-              />
+            <div className="px-5 py-5">
 
-              <DetailItem
-                icon={<IconMapPin size={15} />}
-                label="City"
-                value={data?.city?.name}
-              />
+              <SectionLabel>
+                System Information
+              </SectionLabel>
 
-              <DetailItem
-                icon={<IconUser size={15} />}
-                label="Contact Person"
-                value={data?.contactPerson}
-              />
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
 
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Contact Phone"
-                value={data?.contactPhone}
-              />
+                <Field
+                  label="Created At"
+                  value={formatDate(data?.createdAt)}
+                  icon={<IconCalendar size={12}/>}
+                />
 
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Mobile No"
-                value={data?.mobileNo}
-              />
+                <Field
+                  label="Updated At"
+                  value={formatDate(data?.updatedAt)}
+                  icon={<IconClockEdit size={12}/>}
+                />
 
-              <DetailItem
-                icon={<IconMail size={15} />}
-                label="Email"
-                value={data?.email}
-              />
+              </div>
 
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="PAN No"
-                value={data?.panNo}
-              />
-
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="GSTIN"
-                value={data?.gstin}
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Created At"
-                value={
-                  data?.createdAt
-                    ? new Date(
-                        data.createdAt
-                      ).toLocaleDateString()
-                    : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Updated At"
-                value={
-                  data?.updatedAt
-                    ? new Date(
-                        data.updatedAt
-                      ).toLocaleDateString()
-                    : "-"
-                }
-              />
-
-              <DetailItem
-                icon={<IconHome size={15} />}
-                label="Address"
-                value={data?.address}
-                wide
-              />
             </div>
-          )}
+
+          </div>
+        )}
+
+        {/* Footer */}
+
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12}/>
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
+
         </div>
+
       </DialogContent>
     </Dialog>
   );

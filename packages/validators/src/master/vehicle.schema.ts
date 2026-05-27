@@ -54,6 +54,8 @@ export const vehicleSchema = z.object({
   insuranceIssueDate: z.string().nullable().optional(),
   insuranceDueDate: z.string().nullable().optional(),
   status: vehicleStatusSchema,
+    createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 });
 
 export const createVehicleSchema = z.object({

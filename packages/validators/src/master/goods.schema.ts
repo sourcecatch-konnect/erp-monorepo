@@ -50,7 +50,10 @@ height: z.coerce.number().positive().optional(),
 
   isStackingAllowed: z.boolean().default(false),
 
-  lorryReceiptId: z.string().optional(),
+  lorryReceiptId: z.preprocess(
+  (v) => v === "" ? undefined : v,
+  z.string().optional()
+)
 });
 
 /* -----------------------------

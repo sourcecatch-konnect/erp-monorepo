@@ -2,18 +2,27 @@
 
 import * as React from "react";
 import type { SpareCategory } from "@skerp/types";
+
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
+
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  formatDate,
+} from "../_shared/dialog-parts";
+
 import {
   IconCategory,
   IconTag,
   IconFileInvoice,
+  IconCircleCheckFilled,
+  IconClockEdit,
+  IconCalendar,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -23,25 +32,23 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-}) {
+function SkeletonBody() {
   return (
-    <div className="grid gap-1 border-b py-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
-      </div>
+    <div className="space-y-6 p-6">
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i}>
+          <Skeleton className="mb-3 h-4 w-28" />
 
-      <div className="break-words text-sm font-semibold leading-6 text-foreground">
-        {value || "-"}
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, x) => (
+              <Skeleton
+                key={x}
+                className="h-14 rounded-xl"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -53,56 +60,127 @@ export default function SpareCategoryDetailDialog({
   isLoading,
 }: Props) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[850px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconCategory size={22} />
-              </span>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <DialogContent
+        className="w-[92vw] !max-w-[850px] h-[75vh] !max-h-[75vh] gap-0 overflow-hidden rounded-2xl p-0"
+      >
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Spare Category Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete spare category and ledger information
-                </DialogDescription>
+        {/* Header */}
+
+        <div className="flex items-center justify-between border-b px-5 py-4">
+
+          <div className="flex items-center gap-3">
+
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconCategory size={20}/>
+            </span>
+
+            <div>
+              <p className="text-sm font-semibold">
+                Spare Category Details
+              </p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10}/>
+                  Active Category
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+        {isLoading ? (
+          <SkeletonBody/>
+        ) : (
+          <div className="h-[calc(75vh-120px)] overflow-y-auto">
+
+            {/* Category Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Category Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Category Name"
+                  value={data?.name}
+                  icon={<IconCategory size={12}/>}
+                />
+
+                <Field
+                  label="Category Type"
+                  value={data?.type}
+                  icon={<IconTag size={12}/>}
+                />
+
+                <Field
+                  label="Ledger Name"
+                  value={data?.ledgerName}
+                  icon={<IconFileInvoice size={12}/>}
+                />
+
               </div>
+
             </div>
-          </DialogHeader>
+
+            <div className="mx-5 border-t"/>
+
+            {/* System Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                System Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Created At"
+                  value={formatDate(data?.createdAt)}
+                  icon={<IconCalendar size={12}/>}
+                />
+
+                <Field
+                  label="Updated At"
+                  value={formatDate(data?.updatedAt)}
+                  icon={<IconClockEdit size={12}/>}
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* Footer */}
+
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12}/>
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
+
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-md" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
-              <DetailItem
-                icon={<IconCategory size={15} />}
-                label="Name"
-                value={data?.name}
-              />
-
-              <DetailItem
-                icon={<IconTag size={15} />}
-                label="Type"
-                value={data?.type}
-              />
-
-              <DetailItem
-                icon={<IconFileInvoice size={15} />}
-                label="Ledger Name"
-                value={data?.ledgerName ?? "-"}
-              />
-            </div>
-          )}
-        </div>
       </DialogContent>
     </Dialog>
   );

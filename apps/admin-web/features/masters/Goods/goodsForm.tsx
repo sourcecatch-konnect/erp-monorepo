@@ -31,19 +31,18 @@ type Props = {
   onSubmit: (data: CreateGoodsBody) => Promise<void>;
   isSubmitting?: boolean;
 };
-
 const defaultValues: CreateGoodsFormInput = {
   name: "",
   description: "",
-  weight: "",
-  length: "",
-  width: "",
-  height: "",
+  weight: undefined,
+  length: undefined,
+  width: undefined,
+  height: undefined,
   category: "Heavy",
   storagePosition: "Any",
-  storageLayer: "Single",
+  storageLayer: "Both",
   isStackingAllowed: false,
-  lorryReceiptId: "",
+  lorryReceiptId: undefined,
 };
 
 export default function GoodsForm({
@@ -62,19 +61,19 @@ export default function GoodsForm({
   React.useEffect(() => {
     if (!open) return;
 
-    form.reset({
-      name: row?.name ?? "",
-      description: row?.description ?? "",
-      weight: row?.weight?.toString() ?? "",
-      length: row?.length?.toString() ?? "",
-      width: row?.width?.toString() ?? "",
-      height: row?.height?.toString() ?? "",
-      category: row?.category ?? "Heavy",
-      storagePosition: row?.storagePosition ?? "Any",
-      storageLayer: row?.storageLayer ?? "Single",
-      isStackingAllowed: row?.isStackingAllowed ?? false,
-      lorryReceiptId: row?.lorryReceiptId ?? "",
-    });
+form.reset({
+  name: row?.name ?? "",
+  description: row?.description ?? "",
+  weight: row?.weight ?? undefined,
+  length: row?.length ?? undefined,
+  width: row?.width ?? undefined,
+  height: row?.height ?? undefined,
+  category: row?.category ?? "Heavy",
+  storagePosition: row?.storagePosition ?? "Any",
+  storageLayer: row?.storageLayer ?? "Both",
+  isStackingAllowed: row?.isStackingAllowed ?? false,
+  lorryReceiptId: row?.lorryReceiptId ?? undefined,
+});
   }, [open, row]);
 
   return (
@@ -88,18 +87,63 @@ export default function GoodsForm({
       columns={3}
     >
       {/* BASIC */}
-      <FormSection icon={<IconBox size={18} />} title="Goods Info">
-        <IconTextField name="name" label="Name" required />
-        <IconTextField name="description" label="Description" />
-      </FormSection>
+  <FormSection icon={<IconBox size={18} />} title="Goods Info">
+  <IconTextField
+    name="name"
+    label="Goods Name"
+    placeholder="Enter goods name"
+    required
+  />
+
+  <IconTextField
+    name="description"
+    label="Description"
+    placeholder="Enter goods description"
+  />
+</FormSection>
 
       {/* DIMENSIONS */}
-      <FormSection icon={<IconRuler size={18} />} title="Dimensions">
-        <IconTextField name="weight" label="Weight" type="number" />
-        <IconTextField name="length" label="Length" type="number" />
-        <IconTextField name="width" label="Width" type="number" />
-        <IconTextField name="height" label="Height" type="number" />
-      </FormSection>
+    <FormSection icon={<IconRuler size={18} />} title="Dimensions">
+  <IconTextField
+    name="weight"
+    label="Weight"
+    type="number"
+    suffix="kg"
+    placeholder="Enter weight"
+    min={0}
+    step="0.01"
+  />
+
+  <IconTextField
+    name="length"
+    label="Length"
+    type="number"
+    suffix="ft"
+    placeholder="Enter length"
+    min={0}
+    step="0.01"
+  />
+
+  <IconTextField
+    name="width"
+    label="Width"
+    type="number"
+    suffix="ft"
+    placeholder="Enter width"
+    min={0}
+    step="0.01"
+  />
+
+  <IconTextField
+    name="height"
+    label="Height"
+    type="number"
+    suffix="ft"
+    placeholder="Enter height"
+    min={0}
+    step="0.01"
+  />
+</FormSection>
 
       {/* STORAGE */}
       <FormSection icon={<IconLayersIntersect size={18} />} title="Storage">

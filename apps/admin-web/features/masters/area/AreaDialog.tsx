@@ -1,17 +1,26 @@
 "use client";
 
 import type { Area } from "@skerp/types";
+
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  PartyCard,
+  formatDate,
+} from "../_shared/dialog-parts";
+
 import {
   IconMapPin,
   IconBuildingCommunity,
+  IconCircleCheckFilled,
+  IconClockEdit,
+  IconId,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -21,6 +30,26 @@ type Props = {
   isLoading?: boolean;
 };
 
+function SkeletonBody() {
+  return (
+    <div className="space-y-6 p-6">
+      <div>
+        <Skeleton className="mb-3 h-4 w-28" />
+        <Skeleton className="h-20 rounded-xl" />
+      </div>
+
+      <div>
+        <Skeleton className="mb-3 h-4 w-28" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="h-14 rounded-xl" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AreaDetailDialog({
   open,
   onOpenChange,
@@ -29,58 +58,68 @@ export default function AreaDetailDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl overflow-hidden p-0">
-        <div className="border-b bg-muted/20 px-5 py-4">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <IconMapPin size={20} />
-              </span>
+      <DialogContent className="w-[92vw] !max-w-[700px] max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconMapPin size={20} />
+            </span>
 
-              <div>
-                <DialogTitle className="text-base font-semibold">
-                  Area Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete information about selected area
-                </DialogDescription>
-              </div>
+            <div>
+              <p className="text-sm font-semibold">Area Details</p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10} />
+                  Active Area
+                </div>
+              )}
             </div>
-          </DialogHeader>
+          </div>
         </div>
 
-        <div className="space-y-4 p-5">
-          {isLoading ? (
-            <>
-              <Skeleton className="h-16 w-full rounded-lg" />
-              <Skeleton className="h-16 w-full rounded-lg" />
-            </>
-          ) : (
-            <>
-              <div className="rounded-lg border bg-white p-4 shadow-sm">
-                <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <IconMapPin size={14} />
-                  Area Name
-                </div>
+        {/* Body */}
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="max-h-[calc(90vh-120px)] overflow-y-auto">
 
-                <p className="text-sm font-semibold text-foreground">
-                  {data?.name ?? "-"}
-                </p>
+
+            <div className="mx-5 border-t" />
+
+            <div className="px-5 py-5">
+              <SectionLabel>Area Information</SectionLabel>
+
+              <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                <Field
+                  label="Area Name"
+                  value={data?.name}
+                  icon={<IconMapPin size={12} />}
+                />
+
+                <Field
+                  label="City"
+                  value={data?.city?.name}
+                  icon={<IconBuildingCommunity size={12} />}
+                />
+
+     
               </div>
+            </div>
+          </div>
+        )}
 
-              <div className="rounded-lg border bg-white p-4 shadow-sm">
-                <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <IconBuildingCommunity size={14} />
-                  City
-                </div>
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
 
-                <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
-                  <IconBuildingCommunity size={13} />
-                  {data?.city?.name ?? "-"}
-                </span>
-              </div>
-            </>
-          )}
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs hover:bg-muted"
+          >
+            Close
+          </button>
         </div>
       </DialogContent>
     </Dialog>
