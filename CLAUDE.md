@@ -85,8 +85,20 @@ When adding a master, follow `modules/`. Don't move old routers preemptively.
 
 - Tokens are **httpOnly cookies** (`accessToken` ~15m, `refreshToken` 7d) set by the server. Frontend never reads or stores tokens — relies on `axios` with `withCredentials: true`.
 - On 401, the axios interceptor in `apps/admin-web/lib/api.ts` calls `/auth/refresh` once and retries (concurrent 401s share one refresh).
-- App-load bootstrap: `AuthBootstrap` dispatches `fetchMe` (`GET /auth/me`). Session lives in the Redux `auth` slice: `{ user, status, error }` with status `idle | loading | authenticated | unauthenticated`.
-- `ProtectedRoute` wraps `(dashboard)` routes. No signup UI in admin-web — admins are provisioned server-side.
+- App-load bootstrap: `AuthBootstrap` dispatches `fetchMe` (`GET /auth/me`). Session lives in the Redux `auth` slice: `{ user, status, error }` with status `idle | loading | authenticated | unauthenticated`. The user object carries `permissions: string[]`, `branchScope`, `branchIds`.
+- `ProtectedRoute` wraps `(dashboard)` routes. Accepts an optional `permission` prop for permission-gated pages. No signup UI in admin-web — admins are provisioned server-side.
+
+### RBAC
+
+- Permission keys are typed `resource.action` strings — registry lives in `packages/types/src/permissions.ts` (`PERMS.MASTERS.CUSTOMER.VIEW`, etc.) and is the single source of truth. Adding a permission = adding a constant there and re-running the seed.
+- **Server gating:**
+  - Bespoke routes: `can(PERMS....)` from `apps/server/src/auth/can.middleware.ts` — typed against the registry.
+  - Master CRUD: the factory's `requirePermission(moduleKey, action)` composes `<moduleKey>.<action>` and checks the same hydrated set.
+  - `authMiddleware` hydrates `req.ctx = { permissions: Set<string>, branchScope, branchIds }` from a 5-min in-memory cache, so checks are zero-DB after the first hit per user. Invalidate via `apps/server/src/auth/permission-cache.ts` on role/permission/user-branch mutations.
+- **Branch scoping:** `branchFilter(req)` from `apps/server/src/auth/branch-scope.ts` returns a Prisma `where` fragment based on `req.ctx.branchScope` / `branchIds`. Apply to every query on a branch-scoped model. On writes, `assertBranchAccess(req, body.branchId)` before insert/update.
+- **Frontend gating:** `useCan(PERMS....)` / `<Can permission={...}>` from `@/features/auth`. Server is the source of truth — these only hide UI.
+- **Admin surface:** `/settings/roles`, `/settings/access`, `/settings/audit-log` (all gated by `admin.rbac.manage` except audit which uses `admin.audit_log.view`). Seed canonical roles: Admin (`isSystem`, all perms), Branch Manager, Operations, Accounts, Read-Only Auditor.
+- Plan: `docs/RBAC_PLAN.md`. Don't reintroduce CRUD bool columns or name-match admin bypasses.
 
 ### Frontend state ownership
 
@@ -108,6 +120,17 @@ Source: `llm-guideline/design.md`. Both web apps must look identical.
 4. **Use `@skerp/ui`** for buttons, inputs, dialogs, tables. Need a variant? Add it to the shared component — don't fork into an app. New reusable thing? Add to `packages/ui` so both apps benefit.
 5. Forms use react-hook-form + `@hookform/resolvers/zod` with the shared schema from `@skerp/validators`. Don't redefine field rules in the app.
 6. One primary button per view. Flat surfaces (1px border, no shadows except floating layers from `@skerp/ui`).
+
+### Reusable primitives — non-negotiable
+
+These get violated quickly by ad-hoc code. If you find yourself writing a `<table>`, a "Loading…" string, or a Prev/Next pair, stop and use the primitive instead.
+
+- **Tables** — `Table` / `TableHeader` / `TableBody` / `TableRow` / `TableHead` / `TableCell` from `@skerp/ui/components/table`. Never a raw `<table>` element. For full master CRUD tables (selection, hidden columns, edit/delete column), use `features/masters/_shared/MasterTable.tsx`.
+- **Loading states** — `Skeleton` from `@skerp/ui/components/skeleton`. Never the string "Loading…" or a spinner-in-a-cell. For table rows, render N `<TableRow>`s each with `<Skeleton className="h-4 w-..." />` per column.
+- **Pagination** — `Pagination` / `PaginationContent` / `PaginationItem` / `PaginationPrevious` / `PaginationNext` from `@skerp/ui/components/pagination`. Never hand-rolled "Previous / Next" buttons.
+- **Forms** — `useForm` + `zodResolver(<schema from @skerp/validators>)` + `FormProvider`. Field components live in `features/masters/_shared/fields/*` (TextField, SelectField, CheckboxField, NumberField, …). They read from `useFormContext`. Use `Controller` from react-hook-form only for fields that aren't in the shared field library.
+- **API services** — every feature has `<feature>.service.ts` calling `api` (the shared axios instance from `@/lib/api`). Unwrap responses with `unwrapApiResponse` / `unwrapListResponse` from `features/masters/_shared/master-api.ts` — never define a local `Envelope<T>` or call `res.data.data` directly.
+- **Service Zod schemas live in `@skerp/validators`**, not inline in route handlers. Both server (`.parse(req.body)`) and admin-web (`zodResolver(schema)`) consume the same schema. New surface? Add the file under `packages/validators/src/<area>/` plus a subpath export in its `package.json`.
 
 ## Adding a master (the 6-step path)
 

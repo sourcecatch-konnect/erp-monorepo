@@ -146,12 +146,9 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: IconSettings,
         items: [
           { title: "Users", href: "/settings/users" },
-          { title: "Roles", href: "/settings/roles", disabled: true },
-          {
-            title: "Permissions",
-            href: "/settings/permissions",
-            disabled: true,
-          },
+          { title: "User access", href: "/settings/access" },
+          { title: "Roles", href: "/settings/roles" },
+          { title: "Audit log", href: "/settings/audit-log" },
         ],
       },
     ],

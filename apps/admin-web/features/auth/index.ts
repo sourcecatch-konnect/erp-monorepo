@@ -3,8 +3,10 @@
  * import auth pieces from here ("@/features/auth"), not from internal paths.
  */
 export { useAuth } from "./hooks/useAuth";
+export { useCan, useCanAny } from "./hooks/useCan";
 export { AuthBootstrap } from "./components/AuthBootstrap";
 export { ProtectedRoute } from "./components/ProtectedRoute";
+export { Can } from "./components/Can";
 export { LoginForm } from "./components/LoginForm";
 export {
   login,

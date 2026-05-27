@@ -1,103 +1,263 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
+import { ALL_PERMISSION_KEYS, PERMS, moduleCodeOf, type PermissionKey } from "@skerp/types";
 import { db } from "./prisma.js";
 
 /**
- * Idempotent admin seed.
- * A User requires a Company, Branch and Role, so this creates the minimal
- * chain (Company -> Branch -> Role -> User) needed for admin login.
+ * Idempotent admin + RBAC seed.
+ *
+ * Creates the minimum chain (Company -> Branch -> Role -> User) plus the
+ * Phase 1 RBAC catalog:
+ *   - PermissionDef rows synced from ALL_PERMISSION_KEYS
+ *   - Canonical roles (Admin / Branch Manager / Operations / Accounts /
+ *     Read-Only Auditor) with their RolePermission grants
+ *   - Admin is marked isSystem so the UI can prevent edits/deletes
+ *   - Existing users get a UserBranch row mirroring their primary branchId
  *
  * Run from apps/server:  pnpm exec tsx prisma/seed-admin.ts
  */
 const ADMIN_EMAIL = "admin@sktranslines.com";
 const ADMIN_PASSWORD = "Admin@123";
-const MASTER_MODULES = [
-  { code: "masters.state", name: "State Master" },
-  { code: "masters.city", name: "City Master" },
-  { code: "masters.area", name: "Area Master" },
-  { code: "masters.transport", name: "Transport Master" },
-  { code: "masters.vehicle", name: "Vehicle Master" },
+
+const RM = PERMS.MASTERS;
+
+const allMasterKeys = (m: typeof RM[keyof typeof RM]): PermissionKey[] => [
+  m.VIEW,
+  m.CREATE,
+  m.UPDATE,
+  m.DELETE,
+  m.BULK_IMPORT,
+  m.EXPORT,
 ];
+
+const masterViewKeys = (m: typeof RM[keyof typeof RM]): PermissionKey[] => [m.VIEW];
+
+const ALL_MASTER_KEYS_FLAT: PermissionKey[] = Object.values(RM).flatMap(allMasterKeys);
+const ALL_MASTER_VIEW_KEYS: PermissionKey[] = Object.values(RM).flatMap(masterViewKeys);
+
+/**
+ * Canonical roles. Permission set is computed against the registry, so as
+ * new permission keys are added the seed automatically grants them to the
+ * Admin role (and any other role explicitly opting into "*").
+ */
+const CANONICAL_ROLES: {
+  name: string;
+  isSystem: boolean;
+  permissions: PermissionKey[] | "*";
+}[] = [
+  { name: "Admin", isSystem: true, permissions: "*" },
+  {
+    name: "Branch Manager",
+    isSystem: false,
+    permissions: [
+      ...ALL_MASTER_KEYS_FLAT,
+      PERMS.LORRY_RECEIPT.VIEW,
+      PERMS.LORRY_RECEIPT.CREATE,
+      PERMS.LORRY_RECEIPT.UPDATE,
+      PERMS.LORRY_RECEIPT.APPROVE,
+      PERMS.LORRY_RECEIPT.CANCEL,
+      PERMS.TRIP.VIEW,
+      PERMS.TRIP.CREATE,
+      PERMS.TRIP.UPDATE,
+      PERMS.TRIP.CLOSE,
+      PERMS.TRIP.CANCEL,
+      PERMS.ORDER.VIEW,
+      PERMS.ORDER.CREATE,
+      PERMS.ORDER.UPDATE,
+      PERMS.ORDER.APPROVE,
+      PERMS.ORDER.REJECT,
+      PERMS.EWAYBILL.VIEW,
+      PERMS.EWAYBILL.CREATE,
+      PERMS.EWAYBILL.UPDATE,
+      PERMS.EWAYBILL.EXTEND,
+      PERMS.EWAYBILL.CANCEL,
+    ],
+  },
+  {
+    name: "Operations",
+    isSystem: false,
+    permissions: [
+      ...ALL_MASTER_VIEW_KEYS,
+      PERMS.LORRY_RECEIPT.VIEW,
+      PERMS.LORRY_RECEIPT.CREATE,
+      PERMS.LORRY_RECEIPT.UPDATE,
+      PERMS.TRIP.VIEW,
+      PERMS.TRIP.CREATE,
+      PERMS.TRIP.UPDATE,
+      PERMS.ORDER.VIEW,
+      PERMS.ORDER.CREATE,
+      PERMS.ORDER.UPDATE,
+      PERMS.EWAYBILL.VIEW,
+      PERMS.EWAYBILL.CREATE,
+      PERMS.EWAYBILL.UPDATE,
+    ],
+  },
+  {
+    name: "Accounts",
+    isSystem: false,
+    permissions: [
+      ...ALL_MASTER_VIEW_KEYS,
+      PERMS.LORRY_RECEIPT.VIEW,
+      PERMS.LORRY_RECEIPT.GENERATE_INVOICE,
+      PERMS.TRIP.VIEW,
+      PERMS.ORDER.VIEW,
+      PERMS.EWAYBILL.VIEW,
+    ],
+  },
+  {
+    name: "Read-Only Auditor",
+    isSystem: false,
+    permissions: [
+      ...ALL_MASTER_VIEW_KEYS,
+      PERMS.LORRY_RECEIPT.VIEW,
+      PERMS.TRIP.VIEW,
+      PERMS.ORDER.VIEW,
+      PERMS.EWAYBILL.VIEW,
+      PERMS.ADMIN.AUDIT_LOG_VIEW,
+    ],
+  },
+];
+
+async function syncPermissionCatalog(): Promise<Map<string, string>> {
+  const keyToId = new Map<string, string>();
+  for (const key of ALL_PERMISSION_KEYS) {
+    const moduleCode = moduleCodeOf(key);
+    const row = await db.permissionDef.upsert({
+      where: { key },
+      update: { moduleCode },
+      create: { key, moduleCode, description: null, isSystem: false },
+    });
+    keyToId.set(key, row.id);
+  }
+  // Mark admin.* permissions as isSystem so the UI can render them as
+  // protected (admins still grant them, but a typo seed pass won't unmark).
+  await db.permissionDef.updateMany({
+    where: { key: { startsWith: "admin." } },
+    data: { isSystem: true },
+  });
+  console.log(`Synced ${keyToId.size} permission keys.`);
+  return keyToId;
+}
+
+async function syncCanonicalRoles(keyToId: Map<string, string>) {
+  for (const r of CANONICAL_ROLES) {
+    let role = await db.role.findFirst({ where: { name: r.name } });
+    if (!role) {
+      role = await db.role.create({
+        data: { name: r.name, isSystem: r.isSystem },
+      });
+      console.log(`Created role: ${role.name}`);
+    } else if (role.isSystem !== r.isSystem) {
+      role = await db.role.update({
+        where: { id: role.id },
+        data: { isSystem: r.isSystem },
+      });
+    }
+
+    const desiredKeys =
+      r.permissions === "*" ? Array.from(keyToId.keys()) : r.permissions;
+
+    const desiredIds = new Set(
+      desiredKeys
+        .map((k) => keyToId.get(k))
+        .filter((v): v is string => Boolean(v))
+    );
+
+    const existing = await db.rolePermission.findMany({
+      where: { roleId: role.id },
+      select: { permissionId: true },
+    });
+    const existingIds = new Set(existing.map((e) => e.permissionId));
+
+    const toCreate = [...desiredIds].filter((id) => !existingIds.has(id));
+    const toDelete = [...existingIds].filter((id) => !desiredIds.has(id));
+
+    if (toCreate.length) {
+      await db.rolePermission.createMany({
+        data: toCreate.map((permissionId) => ({
+          roleId: role!.id,
+          permissionId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+    if (toDelete.length && !r.isSystem) {
+      // Never strip permissions from a system role implicitly — only add.
+      await db.rolePermission.deleteMany({
+        where: { roleId: role.id, permissionId: { in: toDelete } },
+      });
+    }
+
+    console.log(
+      `Role ${role.name}: +${toCreate.length} permissions, ` +
+        `${r.isSystem ? "(system, no removals)" : `-${toDelete.length}`}`
+    );
+  }
+}
+
+async function backfillUserBranches() {
+  // Mirror User.branchId into UserBranch for existing users so branch-scoped
+  // queries continue to work after Phase 3 lands.
+  const users = await db.user.findMany({
+    select: { id: true, branchId: true },
+  });
+  for (const u of users) {
+    if (!u.branchId) continue;
+    await db.userBranch.upsert({
+      where: { userId_branchId: { userId: u.id, branchId: u.branchId } },
+      update: {},
+      create: { userId: u.id, branchId: u.branchId },
+    });
+  }
+  if (users.length) {
+    console.log(`Mirrored ${users.length} user(s) into UserBranch.`);
+  }
+}
 
 async function main() {
   // 1. Company
   let company = await db.company.findFirst({
     where: { name: "SK Translines" },
   });
-  let state = await db.state.findFirst({
-  where: { name: "Maharashtra" },
-});
-
-let city = await db.city.findFirst({
-  where: { name: "Mumbai" },
-});
+  const state = await db.state.findFirst({
+    where: { name: "Maharashtra" },
+  });
+  const city = await db.city.findFirst({
+    where: { name: "Mumbai" },
+  });
   if (!company) {
     company = await db.company.create({
-  data: {
-    name: "SK Translines",
-    country: "India",
-    stateId: state!.id,
-    cityId: city!.id,
-    establishmentYear: new Date("2010-01-01"),
-  },
-});
+      data: {
+        name: "SK Translines",
+        country: "India",
+        stateId: state!.id,
+        cityId: city!.id,
+        establishmentYear: new Date("2010-01-01"),
+      },
+    });
     console.log("Created company:", company.name);
   }
 
   // 2. Branch
-  let branch = await db.branch.findFirst({
-    where: { branchCode: "HO" },
-  });
+  let branch = await db.branch.findFirst({ where: { branchCode: "HO" } });
   if (!branch) {
-   branch = await db.branch.create({
-  data: {
-    branchCode: "HO",
-    shortCode: "HO",
-    name: "Head Office",
-    cityId: city!.id,
-    companyId: company.id,
-  },
-});
+    branch = await db.branch.create({
+      data: {
+        branchCode: "HO",
+        shortCode: "HO",
+        name: "Head Office",
+        cityId: city!.id,
+        companyId: company.id,
+      },
+    });
     console.log("Created branch:", branch.name);
   }
 
-  // 3. Role (Role.name is not unique, so look it up explicitly)
-  let role = await db.role.findFirst({ where: { name: "Admin" } });
-  if (!role) {
-    role = await db.role.create({ data: { name: "Admin" } });
-    console.log("Created role:", role.name);
-  }
+  // 3. Permission catalog + canonical roles
+  const keyToId = await syncPermissionCatalog();
+  await syncCanonicalRoles(keyToId);
 
-  for (const moduleDef of MASTER_MODULES) {
-    const module = await db.module.upsert({
-      where: { code: moduleDef.code },
-      update: { name: moduleDef.name },
-      create: moduleDef,
-    });
-
-    await db.permission.upsert({
-      where: {
-        roleId_moduleId: {
-          roleId: role.id,
-          moduleId: module.id,
-        },
-      },
-      update: {
-        canView: true,
-        canCreate: true,
-        canUpdate: true,
-        canDelete: true,
-      },
-      create: {
-        roleId: role.id,
-        moduleId: module.id,
-        canView: true,
-        canCreate: true,
-        canUpdate: true,
-        canDelete: true,
-      },
-    });
-  }
+  const adminRole = await db.role.findFirstOrThrow({ where: { name: "Admin" } });
 
   // 4. Admin user
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
@@ -108,7 +268,12 @@ let city = await db.city.findFirst({
   if (existing) {
     await db.user.update({
       where: { email: ADMIN_EMAIL },
-      data: { password: passwordHash, roleId: role.id, status: true },
+      data: {
+        password: passwordHash,
+        roleId: adminRole.id,
+        status: true,
+        branchScope: "ALL",
+      },
     });
     console.log("Updated existing admin user.");
   } else {
@@ -120,13 +285,17 @@ let city = await db.city.findFirst({
         email: ADMIN_EMAIL,
         companyId: company.id,
         branchId: branch.id,
-        roleId: role.id,
+        roleId: adminRole.id,
         status: true,
         password: passwordHash,
+        branchScope: "ALL",
       },
     });
     console.log("Created admin user.");
   }
+
+  // 5. UserBranch backfill
+  await backfillUserBranches();
 
   console.log("\n=== Admin credentials ===");
   console.log("  Email:    " + ADMIN_EMAIL);

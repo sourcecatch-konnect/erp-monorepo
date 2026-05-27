@@ -22,6 +22,13 @@ export type AuthUser = {
     id: string;
     name: string;
   };
+  /**
+   * Flat list of permission keys the user holds. Populated from /auth/me;
+   * empty for login responses (call fetchMe after login to refresh).
+   */
+  permissions?: string[];
+  branchScope?: "ALL" | "ASSIGNED";
+  branchIds?: string[];
 };
 
 /**
