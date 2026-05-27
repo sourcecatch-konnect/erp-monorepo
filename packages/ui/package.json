@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
+    "./lib/util": "./src/lib/util.ts",
     "./*": "./src/*.tsx"
   },
   "scripts": {

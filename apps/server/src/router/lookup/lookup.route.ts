@@ -13,7 +13,7 @@ const router = Router();
 
 router.use(authMiddleware, requireRole(ROLES.ADMIN));
 
-router.get("/companies", listCompaniesController);
-router.get("/branches", listBranchesController);
+// router.get("/companies", listCompaniesController);
+// router.get("/branches", listBranchesController);
 
 export default router;

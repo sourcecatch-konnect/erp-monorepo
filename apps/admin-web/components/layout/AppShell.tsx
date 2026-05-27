@@ -17,7 +17,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+
+      <SidebarInset className="min-w-0 overflow-x-hidden">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator
@@ -26,7 +27,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <AppBreadcrumb />
         </header>
-        <div className="flex-1 p-6">{children}</div>
+
+        <main className="min-w-0 flex-1 overflow-x-hidden p-6">
+          <div className="min-w-0 w-full max-w-full overflow-x-hidden">
+            {children}
+          </div>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -40,11 +40,33 @@ const refreshSession = (): Promise<void> => {
   return refreshPromise;
 };
 
-const toError = (error: AxiosError): Error => {
-  const data = error.response?.data as { message?: string } | undefined;
-  return new Error(
-    data?.message || error.message || "Something went wrong"
-  );
+type ApiErrorResponse = {
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+  message?: string;
+};
+
+export type ApiRequestError = Error & {
+  status?: number;
+  code?: string;
+  details?: unknown;
+};
+
+const toError = (error: AxiosError): ApiRequestError => {
+  const data = error.response?.data as ApiErrorResponse | undefined;
+  const apiError = data?.error;
+  const normalized = new Error(
+    apiError?.message || data?.message || error.message || "Something went wrong"
+  ) as ApiRequestError;
+
+  normalized.status = error.response?.status;
+  normalized.code = apiError?.code;
+  normalized.details = apiError?.details;
+
+  return normalized;
 };
 
 type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };

@@ -39,17 +39,22 @@ export const verifyRefreshToken = (
     REFRESH_TOKEN_SECRET
   ) as JwtPayload;
 };
+// Cross-site (e.g. ngrok demo where frontend and API are on different origins)
+// requires SameSite=None + Secure. Toggle with COOKIE_CROSS_SITE=true in .env.
+const crossSite = process.env.COOKIE_CROSS_SITE === "true";
+const isProd = process.env.NODE_ENV === "production";
+
 export const accessCookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict" as const,
+  secure: crossSite || isProd,
+  sameSite: (crossSite ? "none" : "strict") as "none" | "strict",
   maxAge: 15 * 60 * 1000,
 };
 
 export const refreshCookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict" as const,
+  secure: crossSite || isProd,
+  sameSite: (crossSite ? "none" : "strict") as "none" | "strict",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 export const ROLES = {

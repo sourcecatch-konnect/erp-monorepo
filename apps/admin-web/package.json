@@ -11,17 +11,25 @@
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
     "@reduxjs/toolkit": "^2.5.1",
     "@skerp/types": "workspace:*",
-    "@tabler/icons-react": "^3.34.0",
     "@skerp/ui": "workspace:*",
+    "@skerp/validators": "workspace:^",
+    "@tabler/icons-react": "^3.34.0",
     "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-table": "^8.21.3",
     "axios": "^1.16.1",
+    "date-fns": "^4.1.0",
     "next": "16.2.0",
     "react": "^19.2.0",
+    "react-day-picker": "^10.0.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.76.0",
-    "react-redux": "^9.2.0"
+    "react-redux": "^9.2.0",
+    "sonner": "^2.0.7",
+    "sooner": "^1.1.4",
+    "zod": "^3.24.4"
   },
   "devDependencies": {
     "@skerp/eslint-config": "workspace:*",

@@ -1,9 +1,10 @@
 {
   "extends": "@skerp/typescript-config/react-library.json",
   "compilerOptions": {
+    "rootDir": "src",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"]
     },
     "outDir": "dist",
     "strictNullChecks": true,
@@ -12,6 +13,6 @@
     "moduleResolution": "Bundler",
     "allowArbitraryExtensions": true
   },
-  "include": ["src", ".storybook"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", ".storybook"]
 }

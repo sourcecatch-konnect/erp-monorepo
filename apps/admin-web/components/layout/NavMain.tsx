@@ -26,13 +26,7 @@ import {
 } from "@/config/navigation";
 
 /** Top-level link item with an icon. */
-function NavLinkItem({
-  link,
-  pathname,
-}: {
-  link: NavLink;
-  pathname: string;
-}) {
+function NavLinkItem({ link, pathname }: { link: NavLink; pathname: string }) {
   const Icon = link.icon;
 
   if (link.disabled) {
@@ -71,9 +65,7 @@ function NavGroupItem({
   pathname: string;
 }) {
   const Icon = group.icon;
-  const hasActiveChild = group.items.some(
-    (child) => pathname === child.href
-  );
+  const hasActiveChild = group.items.some((child) => pathname === child.href);
 
   return (
     <Collapsible
@@ -92,7 +84,7 @@ function NavGroupItem({
         <CollapsibleContent>
           <SidebarMenuSub>
             {group.items.map((sub) => (
-              <SidebarMenuSubItem key={sub.title}>
+              <SidebarMenuSubItem key={`${sub.title}`}>
                 {sub.disabled ? (
                   <SidebarMenuSubButton
                     aria-disabled
@@ -132,17 +124,17 @@ export function NavMain() {
             {section.items.map((item) =>
               isNavGroup(item) ? (
                 <NavGroupItem
-                  key={item.title}
+                  key={`group:${item.title}`}
                   group={item}
                   pathname={pathname}
                 />
               ) : (
                 <NavLinkItem
-                  key={item.title}
+                  key={`link:${item.href}:${item.title}`}
                   link={item}
                   pathname={pathname}
                 />
-              )
+              ),
             )}
           </SidebarMenu>
         </SidebarGroup>

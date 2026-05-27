@@ -2,6 +2,7 @@ import {
   IconActivity,
   IconClipboardList,
   IconDatabase,
+  IconFileBarcode,
   IconLayoutDashboard,
   IconReceipt2,
   IconSettings,
@@ -40,8 +41,7 @@ export type NavSection = {
 };
 
 /** Narrows a NavItem to a collapsible group. */
-export const isNavGroup = (item: NavItem): item is NavGroup =>
-  "items" in item;
+export const isNavGroup = (item: NavItem): item is NavGroup => "items" in item;
 
 /**
  * Sidebar navigation. `disabled` leaves are modules not built yet.
@@ -85,24 +85,48 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: IconActivity,
         disabled: true,
       },
-    ],
-  },
-  {
-    label: "Master Data",
-    items: [
       {
-        title: "Masters",
-        icon: IconDatabase,
+        title: "E-Way Bills",
+        icon: IconFileBarcode,
         items: [
-          { title: "Customers", href: "/masters/customers", disabled: true },
-          { title: "Vehicles", href: "/masters/vehicles", disabled: true },
-          { title: "Drivers", href: "/masters/drivers", disabled: true },
-          { title: "Routes", href: "/masters/routes", disabled: true },
-          { title: "Branches", href: "/masters/branches", disabled: true },
+          { title: "Dashboard", href: "/ewaybills" },
+          { title: "Inbox", href: "/ewaybills/inbox" },
         ],
       },
     ],
   },
+  {
+  label: "Master Data",
+  items: [
+    {
+      title: "Masters",
+      icon: IconDatabase,
+      items: [
+        { title: "States", href: "/masters/state" },
+        { title: "Cities", href: "/masters/city" },
+        { title: "Areas", href: "/masters/area" },
+        { title: "Drivers", href: "/masters/driver" },
+        { title: "Transports", href: "/masters/transport" },
+        { title: "Vehicles", href: "/masters/vehicle" },
+        { title: "Spare Parts", href: "/masters/spare-parts" },
+        { title: "Spare Categories", href: "/masters/spare-category" },
+        { title: "Spare Part Supplier", href: "/masters/spare-part-supplier" },
+        { title: "Customer", href: "/masters/customer" },
+        { title: "Company", href: "/masters/company" },
+        { title: "Branches", href: "/masters/branch" },
+        { title: "Routes", href: "/masters/route" },
+        { title: "Warehouses", href: "/masters/warehouse" },
+        { title: "Labours", href: "/masters/labour" },
+        { title: "Goods", href: "/masters/goods" },
+        { title: "Pumps", href: "/masters/pumps" },
+        { title: "Wagons", href: "/masters/wagons" },
+        { title: "Railway Freight", href: "/masters/railway-freight" },
+         { title: "Agreements", href: "/masters/agreement" },
+         { title: "Rate Matrix", href: "/masters/rate-matrix" }
+      ],
+    },
+  ],
+},
   {
     label: "Finance",
     items: [

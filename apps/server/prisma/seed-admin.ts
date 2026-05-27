@@ -11,22 +11,36 @@ import { db } from "./prisma.js";
  */
 const ADMIN_EMAIL = "admin@sktranslines.com";
 const ADMIN_PASSWORD = "Admin@123";
+const MASTER_MODULES = [
+  { code: "masters.state", name: "State Master" },
+  { code: "masters.city", name: "City Master" },
+  { code: "masters.area", name: "Area Master" },
+  { code: "masters.transport", name: "Transport Master" },
+  { code: "masters.vehicle", name: "Vehicle Master" },
+];
 
 async function main() {
   // 1. Company
   let company = await db.company.findFirst({
     where: { name: "SK Translines" },
   });
+  let state = await db.state.findFirst({
+  where: { name: "Maharashtra" },
+});
+
+let city = await db.city.findFirst({
+  where: { name: "Mumbai" },
+});
   if (!company) {
     company = await db.company.create({
-      data: {
-        name: "SK Translines",
-        country: "India",
-        state: "Maharashtra",
-        city: "Mumbai",
-        establishmentYear: new Date("2010-01-01"),
-      },
-    });
+  data: {
+    name: "SK Translines",
+    country: "India",
+    stateId: state!.id,
+    cityId: city!.id,
+    establishmentYear: new Date("2010-01-01"),
+  },
+});
     console.log("Created company:", company.name);
   }
 
@@ -35,15 +49,15 @@ async function main() {
     where: { branchCode: "HO" },
   });
   if (!branch) {
-    branch = await db.branch.create({
-      data: {
-        branchCode: "HO",
-        shortCode: "HO",
-        name: "Head Office",
-        city: "Mumbai",
-        companyId: company.id,
-      },
-    });
+   branch = await db.branch.create({
+  data: {
+    branchCode: "HO",
+    shortCode: "HO",
+    name: "Head Office",
+    cityId: city!.id,
+    companyId: company.id,
+  },
+});
     console.log("Created branch:", branch.name);
   }
 
@@ -52,6 +66,37 @@ async function main() {
   if (!role) {
     role = await db.role.create({ data: { name: "Admin" } });
     console.log("Created role:", role.name);
+  }
+
+  for (const moduleDef of MASTER_MODULES) {
+    const module = await db.module.upsert({
+      where: { code: moduleDef.code },
+      update: { name: moduleDef.name },
+      create: moduleDef,
+    });
+
+    await db.permission.upsert({
+      where: {
+        roleId_moduleId: {
+          roleId: role.id,
+          moduleId: module.id,
+        },
+      },
+      update: {
+        canView: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+      },
+      create: {
+        roleId: role.id,
+        moduleId: module.id,
+        canView: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+      },
+    });
   }
 
   // 4. Admin user

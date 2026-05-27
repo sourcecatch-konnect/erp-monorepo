@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyAccessToken } from "../util/auth.util.js";
 import { JwtPayload } from "@skerp/types";
-import { ROLES } from "../util/auth.util.js";
+import { sendError } from "../modules/_shared/response.js";
 
 declare global {
   namespace Express {
@@ -18,8 +18,8 @@ export const authMiddleware = (
   const token = req.cookies?.accessToken;
 
   if (!token) {
-    return res.status(401).json({
-      success: false,
+    return sendError(res, 401, {
+      code: "UNAUTHORIZED",
       message: "Not authenticated",
     });
   }
@@ -30,9 +30,9 @@ export const authMiddleware = (
     req.user = decoded; // attach user
 
     next();
-  } catch (err) {
-    return res.status(401).json({
-      success: false,
+  } catch {
+    return sendError(res, 401, {
+      code: "UNAUTHORIZED",
       message: "Invalid or expired token",
     });
   }
@@ -40,8 +40,8 @@ export const authMiddleware = (
 export const requireRole = (role: string) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user || req.user.role !== role) {
-      return res.status(403).json({
-        success: false,
+      return sendError(res, 403, {
+        code: "FORBIDDEN",
         message: "Forbidden",
       });
     }
