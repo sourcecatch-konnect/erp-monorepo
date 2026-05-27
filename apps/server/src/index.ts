@@ -20,14 +20,14 @@ import CustomerRoute from "./modules/customer/customer.route.js";
 import CompanyRoute from "./modules/company/company.route.js";
 import BranchRoute from "./modules/branch/branch.route.js";
 import Routes from "./modules/route/route.routes.js";
+import ewaybillRoute from "./modules/ewaybill/ewaybill.route.js";
 const app = express();
 
-// Dev origins for the admin (3001) and employee (3002) web apps.
-const allowedOrigins = ["http://localhost:3001", "http://localhost:3002"];
-
+// Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
+// credentials: true, so we echo the incoming Origin header instead.
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => callback(null, origin ?? true),
     credentials: true, // IMPORTANT
   }),
 );
@@ -50,6 +50,7 @@ app.use("/customers", CustomerRoute);
 app.use("/companies", CompanyRoute);
 app.use("/branches", BranchRoute);
 app.use("/routes", Routes);
+app.use("/ewaybills", ewaybillRoute);
 app.use(errorMiddleware);
 const PORT = 5000;
 

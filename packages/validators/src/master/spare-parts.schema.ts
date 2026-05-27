@@ -1,5 +1,5 @@
 import z from "zod";
-import { optionalString, partTypeSchema } from "./spare-category.schema";
+import { optionalString, partTypeSchema } from "./spare-category.schema.js";
 
 const numberField = (message: string) =>
   z

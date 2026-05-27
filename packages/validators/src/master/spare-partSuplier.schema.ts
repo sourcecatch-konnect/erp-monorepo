@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { optionalString } from "./spare-category.schema";
+import { optionalString } from "./spare-category.schema.js";
 export const indianPhone = z
   .string()
   .trim()

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { indianPhone } from "./spare-partSuplier.schema";
+import { indianPhone } from "./spare-partSuplier.schema.js";
 
 const optionalString = z
   .string()
