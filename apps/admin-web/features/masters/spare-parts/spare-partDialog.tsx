@@ -6,22 +6,29 @@ import type { SparePart } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import {
+  SectionLabel,
+  Field,
+  formatDate,
+  formatCurrency,
+} from "../_shared/dialog-parts";
+
+import {
   IconTool,
-  IconId,
   IconCategory,
   IconPackage,
   IconCurrencyRupee,
   IconFileText,
   IconCalendar,
-  IconBarcode,
+  IconRecycle,
+  IconStack,
+  IconTruck,
+  IconCircleCheckFilled,
+  IconClockEdit,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -31,53 +38,26 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-  wide = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-  wide?: boolean;
-}) {
+function SkeletonBody() {
   return (
-    <div
-      className={
-        wide
-          ? "grid gap-1 border-b py-4 md:col-span-2 xl:col-span-3"
-          : "grid gap-1 border-b py-4"
-      }
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">
-          {icon}
-        </span>
-        {label}
-      </div>
+    <div className="space-y-6 p-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i}>
+          <Skeleton className="mb-3 h-4 w-28" />
 
-      <div className="break-words text-sm font-semibold text-foreground">
-        {value || "-"}
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, x) => (
+              <Skeleton
+                key={x}
+                className="h-14 rounded-xl"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
-
-const formatCurrency = (
-  value?: number | null
-) => {
-  if (value == null) return "-";
-
-  return new Intl.NumberFormat(
-    "en-IN",
-    {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 2,
-    }
-  ).format(value);
-};
 
 export default function SparePartDetailDialog({
   open,
@@ -90,144 +70,164 @@ export default function SparePartDetailDialog({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1100px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconTool size={22} />
-              </span>
+      <DialogContent
+        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+      >
+        {/* Header */}
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Spare Part Detail
-                </DialogTitle>
+        <div className="flex items-center justify-between border-b px-5 py-4">
 
-                <DialogDescription>
-                  Complete spare part information
-                </DialogDescription>
-              </div>
+          <div className="flex items-center gap-3">
+
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconTool size={20}/>
+            </span>
+
+            <div>
+              <p className="text-sm font-semibold">
+                Spare Part Details
+              </p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10}/>
+                  Active Record
+                </div>
+              )}
             </div>
-          </DialogHeader>
+
+          </div>
+
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({
-                length: 12,
-              }).map((_, index) => (
-                <Skeleton
-                  key={index}
-                  className="h-20 w-full rounded-md"
+        {isLoading ? (
+          <SkeletonBody/>
+        ) : (
+          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+
+            {/* Basic Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Basic Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Part Name"
+                  value={data?.name}
+                  icon={<IconTool size={12}/>}
                 />
-              ))}
+
+                <Field
+                  label="Type"
+                  value={data?.type}
+                  icon={<IconCategory size={12}/>}
+                />
+
+                <Field
+                  label="Category"
+                  value={data?.category?.name}
+                  icon={<IconCategory size={12}/>}
+                />
+
+                <Field
+                  label="Unit"
+                  value={data?.unit}
+                  icon={<IconPackage size={12}/>}
+                />
+
+                <Field
+                  label="Rate"
+                  value={formatCurrency(data?.rate)}
+                  icon={<IconCurrencyRupee size={12}/>}
+                />
+
+                <Field
+                  label="Minimum Stock"
+                  value={data?.minimumStock}
+                  icon={<IconStack size={12}/>}
+                />
+
+                <Field
+                  label="Supplier"
+                  value={data?.supplier?.name}
+                  icon={<IconTruck size={12}/>}
+                />
+
+                <Field
+                  label="Recyclable"
+                  value={data?.isRecyclable ? "Yes" : "No"}
+                  icon={<IconRecycle size={12}/>}
+                />
+
+                <Field
+                  label="Batch Tracked"
+                  value={data?.isBatchTracked ? "Yes" : "No"}
+                  icon={<IconStack size={12}/>}
+                />
+
+                <Field
+                  label="Description"
+                  value={data?.description}
+                  icon={<IconFileText size={12}/>}
+                />
+
+              </div>
+
             </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
-              <DetailItem
-                icon={
-                  <IconTool size={15} />
-                }
-                label="Part Name"
-                value={data?.name}
-              />
 
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="Part Code"
-                value={data?.code}
-              />
+            <div className="mx-5 border-t"/>
 
-              <DetailItem
-                icon={
-                  <IconCategory size={15} />
-                }
-                label="Category"
-                value={
-                  data?.category?.name
-                }
-              />
+            {/* System Information */}
 
-              <DetailItem
-                icon={
-                  <IconPackage size={15} />
-                }
-                label="Unit"
-                value={
-                  data?.unit?.name
-                }
-              />
+            <div className="px-5 py-5">
 
-              <DetailItem
-                icon={
-                  <IconCurrencyRupee size={15} />
-                }
-                label="Purchase Rate"
-                value={formatCurrency(
-                  data?.purchaseRate
-                )}
-              />
+              <SectionLabel>
+                System Information
+              </SectionLabel>
 
-              <DetailItem
-                icon={
-                  <IconCurrencyRupee size={15} />
-                }
-                label="Selling Rate"
-                value={formatCurrency(
-                  data?.sellingRate
-                )}
-              />
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
 
-              <DetailItem
-                icon={
-                  <IconBarcode size={15} />
-                }
-                label="HSN Code"
-                value={data?.hsnCode}
-              />
+                <Field
+                  label="Created At"
+                  value={formatDate(data?.createdAt)}
+                  icon={<IconCalendar size={12}/>}
+                />
 
-              <DetailItem
-                icon={
-                  <IconFileText size={15} />
-                }
-                label="Description"
-                value={
-                  data?.description
-                }
-                wide
-              />
+                <Field
+                  label="Updated At"
+                  value={formatDate(data?.updatedAt)}
+                  icon={<IconClockEdit size={12}/>}
+                />
 
-              <DetailItem
-                icon={
-                  <IconCalendar size={15} />
-                }
-                label="Created At"
-                value={
-                  data?.createdAt
-                    ? new Date(
-                        data.createdAt
-                      ).toLocaleDateString()
-                    : "-"
-                }
-              />
+              </div>
 
-              <DetailItem
-                icon={
-                  <IconCalendar size={15} />
-                }
-                label="Updated At"
-                value={
-                  data?.updatedAt
-                    ? new Date(
-                        data.updatedAt
-                      ).toLocaleDateString()
-                    : "-"
-                }
-              />
             </div>
-          )}
+
+          </div>
+        )}
+
+        {/* Footer */}
+
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12}/>
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
+
         </div>
+
       </DialogContent>
     </Dialog>
   );

@@ -11,15 +11,15 @@ type Props<TFormValues extends FieldValues> = {
   required?: boolean;
   icon?: React.ReactNode;
   prefix?: string;
+  suffix?: string;
   type?: string;
   maxLength?: number;
   hint?: string;
   onChangeTransform?: (value: string) => string;
   min?: number;
-max?: number;
-step?: number | string;
+  max?: number;
+  step?: number | string;
 };
-
 export default function IconTextField<TFormValues extends FieldValues>({
   name,
   label,
@@ -31,6 +31,7 @@ export default function IconTextField<TFormValues extends FieldValues>({
   maxLength,
   hint,
   min,
+  suffix,
 max,
 step,
   onChangeTransform
@@ -60,7 +61,11 @@ step,
             {prefix}
           </span>
         ) : null}
-
+{suffix ? (
+  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+    {suffix}
+  </span>
+) : null}
       <Input
   type={type}
   placeholder={placeholder}
@@ -70,9 +75,10 @@ step,
 max={max}
 step={step}
   className={[
-    icon ? "pl-9" : prefix ? "pl-12" : "",
-    onChangeTransform ? "uppercase" : "",
-  ].join(" ")}
+  icon ? "pl-9" : prefix ? "pl-12" : "",
+  suffix ? "pr-12" : "",
+  onChangeTransform ? "uppercase" : "",
+].join(" ")}
   {...register(name, {
     onChange: (event) => {
       if (!onChangeTransform) return;

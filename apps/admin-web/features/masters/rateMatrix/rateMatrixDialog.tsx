@@ -18,6 +18,7 @@ import {
   IconClock,
   IconNotes,
 } from "@tabler/icons-react";
+import { formatCurrency } from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
@@ -57,14 +58,6 @@ function DetailItem({
   );
 }
 
-const formatCurrency = (value?: number | null) => {
-  if (value == null) return "-";
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-  }).format(value);
-};
 
 export default function RateMatrixDetailDialog({
   open,

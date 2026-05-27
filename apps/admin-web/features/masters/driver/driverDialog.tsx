@@ -2,24 +2,33 @@
 
 import * as React from "react";
 import type { Driver } from "@skerp/types";
+
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
+
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
 import {
+  SectionLabel,
+  Field,
+  PartyCard,
+  formatDate,
+} from "../_shared/dialog-parts";
+
+import {
+  IconTruck,
   IconUser,
   IconPhone,
   IconId,
   IconCalendar,
-  IconTruck,
   IconShield,
   IconBan,
   IconClock,
   IconMapPin,
+  IconCircleCheckFilled,
+  IconClockEdit,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -29,40 +38,25 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-  wide = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-  wide?: boolean;
-}) {
+function SkeletonBody() {
   return (
-    <div
-      className={
-        wide
-          ? "grid gap-1 border-b py-4 md:col-span-2 xl:col-span-3"
-          : "grid gap-1 border-b py-4"
-      }
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
-      </div>
+    <div className="space-y-6 p-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i}>
+          <Skeleton className="mb-3 h-4 w-28" />
 
-      <div className="break-words text-sm font-semibold leading-6 text-foreground">
-        {value || "-"}
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, x) => (
+              <Skeleton
+                key={x}
+                className="h-14 rounded-xl"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
-}
-
-function formatDate(value?: string | Date | null) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString();
 }
 
 export default function DriverDetailDialog({
@@ -72,111 +66,183 @@ export default function DriverDetailDialog({
   isLoading,
 }: Props) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1000px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconTruck size={22} />
-              </span>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <DialogContent
+        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+      >
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  Driver Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete driver profile, license and status information
-                </DialogDescription>
+        {/* Header */}
+
+        <div className="flex items-center justify-between border-b px-5 py-4">
+
+          <div className="flex items-center gap-3">
+
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconTruck size={20}/>
+            </span>
+
+            <div>
+              <p className="text-sm font-semibold">
+                Driver Details
+              </p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10}/>
+                  Active Profile
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+
+            {/* Driver Summary */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Driver Overview
+              </SectionLabel>
+
+              <PartyCard
+                label="Driver"
+                name={data?.name}
+                subtitle={data?.mobileNo ?? "-"}
+                colorClass="bg-blue-100 text-blue-700"
+                icon={<IconUser size={15}/>}
+              />
+
+            </div>
+
+            <div className="mx-5 border-t" />
+
+            {/* Driver Information */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                Driver Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Mobile No"
+                  value={data?.mobileNo}
+                  icon={<IconPhone size={12}/>}
+                />
+
+                <Field
+                  label="Alternate Phone"
+                  value={data?.alternatePhone}
+                  icon={<IconPhone size={12}/>}
+                />
+
+                <Field
+                  label="License No"
+                  value={data?.licenseNo}
+                  icon={<IconId size={12}/>}
+                />
+
+                <Field
+                  label="License Expiry"
+                  value={formatDate(data?.licenseExpiry)}
+                  icon={<IconCalendar size={12}/>}
+                />
+
+                <Field
+                  label="Driver Type"
+                  value={data?.type}
+                  icon={<IconTruck size={12}/>}
+                />
+
+                <Field
+                  label="Status"
+                  value={data?.status}
+                  icon={<IconShield size={12}/>}
+                />
+
+                <Field
+                  label="On Leave"
+                  value={data?.onLeave ? "Yes" : "No"}
+                  icon={<IconClock size={12}/>}
+                />
+
+                <Field
+                  label="Black Listed"
+                  value={data?.blackListed ? "Yes" : "No"}
+                  icon={<IconBan size={12}/>}
+                />
+
+                <Field
+                  label="Address"
+                  value={data?.address}
+                  icon={<IconMapPin size={12}/>}
+                />
+
               </div>
+
             </div>
-          </DialogHeader>
+
+            <div className="mx-5 border-t" />
+
+            {/* System Info */}
+
+            <div className="px-5 py-5">
+
+              <SectionLabel>
+                System Information
+              </SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+
+                <Field
+                  label="Created At"
+                  value={formatDate(data?.createdAt)}
+                  icon={<IconCalendar size={12}/>}
+                />
+
+                <Field
+                  label="Updated At"
+                  value={formatDate(data?.updatedAt)}
+                  icon={<IconClockEdit size={12}/>}
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* Footer */}
+
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12}/>
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs"
+          >
+            Close
+          </button>
+
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 15 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-md" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
-              <DetailItem
-                icon={<IconUser size={15} />}
-                label="Driver Name"
-                value={data?.name}
-              />
-
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Mobile No"
-                value={data?.mobileNo ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Alternate Phone"
-                value={data?.alternatePhone ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="License No"
-                value={data?.licenseNo ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="License Expiry"
-                value={formatDate(data?.licenseExpiry)}
-              />
-
-              <DetailItem
-                icon={<IconTruck size={15} />}
-                label="Driver Type"
-                value={data?.type ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconShield size={15} />}
-                label="Status"
-                value={data?.status ?? "-"}
-              />
-
-              <DetailItem
-                icon={<IconClock size={15} />}
-                label="On Leave"
-                value={data?.onLeave ? "Yes" : "No"}
-              />
-
-              <DetailItem
-                icon={<IconBan size={15} />}
-                label="Black Listed"
-                value={data?.blackListed ? "Yes" : "No"}
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Created At"
-                value={formatDate(data?.createdAt)}
-              />
-
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Updated At"
-                value={formatDate(data?.updatedAt)}
-              />
-
-              <DetailItem
-                icon={<IconMapPin size={15} />}
-                label="Address"
-                value={data?.address ?? "-"}
-                wide
-              />
-            </div>
-          )}
-        </div>
       </DialogContent>
     </Dialog>
   );

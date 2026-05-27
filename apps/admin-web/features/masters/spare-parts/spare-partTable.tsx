@@ -12,6 +12,7 @@ import {
   IconPackages,
   IconCalendar,
 } from "@tabler/icons-react";
+import { formatCurrency } from "../_shared/dialog-parts";
 
 const formatLabel = (value?: string | null) => {
   if (!value) return "-";
@@ -23,15 +24,6 @@ const formatDate = (value?: string | null) => {
   return new Date(value).toLocaleDateString();
 };
 
-const formatCurrency = (value?: number | string | null) => {
-  if (value == null || value === "") return "-";
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(Number(value));
-};
 
 export const sparePartColumns: ColumnDef<SparePart>[] = [
   {

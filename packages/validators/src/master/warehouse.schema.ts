@@ -45,6 +45,10 @@ export const optionalDate = z
 ------------------------------ */
 export const warehouseSchema = z.object({
   id: z.string(),
+
+  createdAt: z.date(),
+  updatedAt: z.date(),
+
   name: z.string(),
   type: z.string(),
   address: z.string().optional(),

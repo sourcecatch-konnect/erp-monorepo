@@ -268,13 +268,13 @@ export default function WarehouseForm({
           type="number"
         />
 
-        <IconTextField<CreateWarehouseFormInput>
-          name="storageCapacity"
-          label="Storage Capacity"
-          placeholder="Enter storage capacity"
-          icon={<IconRulerMeasure size={16} />}
-          type="number"
-        />
+    <IconTextField<CreateWarehouseFormInput>
+  name="storageCapacity"
+  label="Storage Capacity (Cubic ft.)"
+  placeholder="Enter storage capacity"
+  icon={<IconRulerMeasure size={16} />}
+  type="number"
+/>
       </FormSection>
     </MasterFormDialog>
   );

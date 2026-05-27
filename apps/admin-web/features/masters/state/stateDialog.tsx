@@ -2,16 +2,24 @@
 
 import * as React from "react";
 import type { State } from "@skerp/types";
+
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@skerp/ui/components/dialog";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+
+import {
+  SectionLabel,
+  Field,
+  PartyCard,
+  formatDate,
+} from "../_shared/dialog-parts";
+
 import {
   IconMapPin,
+  IconCircleCheckFilled,
+  IconClockEdit,
   IconId,
 } from "@tabler/icons-react";
 
@@ -22,24 +30,21 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-}) {
+function SkeletonBody() {
   return (
-    <div className="grid gap-1 border-b py-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
+    <div className="space-y-6 p-6">
+      <div>
+        <Skeleton className="mb-3 h-4 w-28" />
+        <Skeleton className="h-20 rounded-xl" />
       </div>
 
-      <div className="break-words text-sm font-semibold leading-6 text-foreground">
-        {value || "-"}
+      <div>
+        <Skeleton className="mb-3 h-4 w-28" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <Skeleton key={index} className="h-14 rounded-xl" />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -53,42 +58,63 @@ export default function StateDetailDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[700px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconMapPin size={22} />
-              </span>
+      <DialogContent className="w-[92vw] !max-w-[700px] max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconMapPin size={20} />
+            </span>
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
-                  State Detail
-                </DialogTitle>
-                <DialogDescription>
-                  Complete information about selected state
-                </DialogDescription>
-              </div>
+            <div>
+              <p className="text-sm font-semibold">State Details</p>
+
+              {!isLoading && data && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <IconCircleCheckFilled size={10} />
+                  Active State
+                </div>
+              )}
             </div>
-          </DialogHeader>
+          </div>
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {Array.from({ length: 2 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-md" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2">
-              <DetailItem
+        {/* Body */}
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="max-h-[calc(90vh-120px)] overflow-y-auto">
+            <div className="px-5 py-5">
+              <SectionLabel>State Overview</SectionLabel>
+
+              <PartyCard
+                label="State"
+                name={data?.name}
+                subtitle="State master information"
+                colorClass="bg-violet-100 text-violet-700"
                 icon={<IconMapPin size={15} />}
-                label="State Name"
-                value={data?.name}
               />
             </div>
-          )}
+
+            <div className="mx-5 border-t" />
+
+          
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12} />
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border px-4 py-1.5 text-xs hover:bg-muted"
+          >
+            Close
+          </button>
         </div>
       </DialogContent>
     </Dialog>

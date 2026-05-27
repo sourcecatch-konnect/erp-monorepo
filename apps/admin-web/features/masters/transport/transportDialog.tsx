@@ -59,6 +59,7 @@ export default function TransportDetailDialog({
   data,
   isLoading,
 }: Props) {
+  console.log(data,'transpotrr')
   return (
     <Dialog
       open={open}
@@ -120,29 +121,9 @@ export default function TransportDetailDialog({
                 value={data?.city?.name}
               />
 
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Created At"
-                value={
-                  data?.createdAt
-                    ? new Date(
-                        data.createdAt
-                      ).toLocaleDateString()
-                    : "-"
-                }
-              />
+        
 
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Updated At"
-                value={
-                  data?.updatedAt
-                    ? new Date(
-                        data.updatedAt
-                      ).toLocaleDateString()
-                    : "-"
-                }
-              />
+         
             </div>
           )}
         </div>
