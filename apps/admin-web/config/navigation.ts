@@ -2,6 +2,7 @@ import {
   IconActivity,
   IconClipboardList,
   IconDatabase,
+  IconFileBarcode,
   IconLayoutDashboard,
   IconReceipt2,
   IconSettings,
@@ -83,6 +84,14 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/operations",
         icon: IconActivity,
         disabled: true,
+      },
+      {
+        title: "E-Way Bills",
+        icon: IconFileBarcode,
+        items: [
+          { title: "Dashboard", href: "/ewaybills" },
+          { title: "Inbox", href: "/ewaybills/inbox" },
+        ],
       },
     ],
   },

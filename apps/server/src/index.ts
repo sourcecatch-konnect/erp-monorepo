@@ -7,20 +7,7 @@ import employeeRoute from "./router/employee/employee.route.js";
 import lookupRoute from "./router/lookup/lookup.route.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
-import stateRoute from "./modules/state/state.route.js"
-import cityRoute from "./modules/city/city.route.js"
-import areaRoute from "./modules/area/area.route.js"
-import transportRoute from "./modules/transport/transport.route.js"
-import vehicleRoute from "./modules/vehicle/vehicle.route.js"
-import sparePartRoute from "./modules/spare-parts/spare-parts.route.js"
-import spareCategory from "./modules/spare-catgory/spareCategory.route.js"
-import sparePartSupplier from "./modules/spare-partSuppiler/spare-partSuppiler.route.js"
-import CustomerRoute from "./modules/customer/customer.route.js"
-import CompanyRoute from "./modules/company/company.route.js"
-import BranchRoute from "./modules/branch/branch.route.js"
-import Routes from "./modules/route/route.routes.js"
 import WarehousesRoute from "./modules/warehouse/warehouse.route.js"
-import driverRoute from "./modules/warehouse/warehouse.route.js"
 import goodsRoute from "./modules/goods/goods.route.js"
 import labourRoute from "./modules/labour/labour.route.js"
 import pumpRoute from "./modules/pump/pump.route.js"
@@ -28,14 +15,27 @@ import wagonRoute from "./modules/wagon/wagon.type.js"
 import RailwayFreightRoute from "./modules/railwayFraightMatrix/railwayFreightMatrix.route.js"
 import agreementRoute from "./modules/agreements/agreement.route.js"
 import rateMatrixRoute from "./modules/rateMatrix/rateMatrix.route.js"
+import stateRoute from "./modules/state/state.route.js";
+import cityRoute from "./modules/city/city.route.js";
+import areaRoute from "./modules/area/area.route.js";
+import transportRoute from "./modules/transport/transport.route.js";
+import vehicleRoute from "./modules/vehicle/vehicle.route.js";
+import driverRoute from "./modules/driver/driver.route.js";
+import sparePartRoute from "./modules/spare-parts/spare-parts.route.js";
+import spareCategory from "./modules/spare-catgory/spareCategory.route.js";
+import sparePartSupplier from "./modules/spare-partSuppiler/spare-partSuppiler.route.js";
+import CustomerRoute from "./modules/customer/customer.route.js";
+import CompanyRoute from "./modules/company/company.route.js";
+import BranchRoute from "./modules/branch/branch.route.js";
+import Routes from "./modules/route/route.routes.js";
+import ewaybillRoute from "./modules/ewaybill/ewaybill.route.js";
 const app = express();
 
-// Dev origins for the admin (3001) and employee (3002) web apps.
-const allowedOrigins = ["http://localhost:3001", "http://localhost:3002"];
-
+// Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
+// credentials: true, so we echo the incoming Origin header instead.
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => callback(null, origin ?? true),
     credentials: true, // IMPORTANT
   }),
 );
@@ -66,7 +66,7 @@ app.use("/goods",goodsRoute)
 app.use("/wagons",wagonRoute)
 app.use("/agreements",agreementRoute)
 app.use("/pumps",pumpRoute)
-
+app.use("/ewaybills", ewaybillRoute);
 app.use(errorMiddleware);
 const PORT = 5000;
 
