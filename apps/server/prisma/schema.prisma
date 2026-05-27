@@ -50,6 +50,11 @@ enum OrderStatus {
   Rejected
 }
 
+enum BranchScope {
+  ALL
+  ASSIGNED
+}
+
 model User {
   id         String  @id @default(uuid())
   userName   String  @unique
@@ -62,6 +67,8 @@ model User {
   roleId     String
   status     Boolean
   password   String?
+
+  branchScope BranchScope @default(ASSIGNED)
 
   company Company @relation(fields: [companyId], references: [id])
   branch  Branch  @relation(fields: [branchId], references: [id])
@@ -78,16 +85,19 @@ model User {
   updatedLR         LorryReceipt[]      @relation("UpdatedLR")
   VehicleTrip       VehicleTrip[]
   TripStatusHistory TripStatusHistory[]
+
+  userBranches    UserBranch[]
+  userPermissions UserPermission[]
+  auditLogs       AuditLog[]
 }
 
 model Company {
-  id                String      @id @default(cuid())
-  name              String      @unique
-  address           String?
-  country           String
-  stateId           String?
-  cityId            String?
-
+  id      String  @id @default(cuid())
+  name    String  @unique
+  address String?
+  country String
+  stateId String?
+  cityId  String?
 
   contactPhone      String?
   establishmentYear DateTime
@@ -97,10 +107,10 @@ model Company {
   branches          Branch[]
   users             User[]
   agreements        Agreement[]
-  state             State?       @relation(fields: [stateId], references: [id])
-  city   City? @relation("CityCompanies", fields: [cityId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  state             State?      @relation(fields: [stateId], references: [id])
+  city              City?       @relation("CityCompanies", fields: [cityId], references: [id])
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 }
 
 model Branch {
@@ -129,23 +139,23 @@ model Branch {
   agreements Agreement[] @relation("BranchAgreement")
   workers    Labour[]    @relation("WorkerBranch")
 
-  users User[]
-  city       City?        @relation(fields: [cityId], references: [id])
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
-  fromOrders OrderBooking[] @relation("FromBranch")
-  toOrders   OrderBooking[] @relation("ToBranch")
+  users        User[]
+  userBranches UserBranch[]
+  city         City?          @relation(fields: [cityId], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  fromOrders   OrderBooking[] @relation("FromBranch")
+  toOrders     OrderBooking[] @relation("ToBranch")
 }
 
 model Warehouse {
-  id       String  @id @default(cuid())
-  name     String
-  type     String // Can later be enum if needed
-  address  String?
-  country  String
-  stateId  String
-  cityId   String
-
+  id      String  @id @default(cuid())
+  name    String
+  type    String // Can later be enum if needed
+  address String?
+  country String
+  stateId String
+  cityId  String
 
   branchId String
 
@@ -164,51 +174,102 @@ model Warehouse {
   gateNo          String?
   storageCapacity Float?
 
-  branch Branch @relation("BranchWarehouses", fields: [branchId], references: [id])
-  state          State @relation(fields: [stateId], references: [id])
-  city           City  @relation(fields: [cityId], references: [id])
+  branch    Branch   @relation("BranchWarehouses", fields: [branchId], references: [id])
+  state     State    @relation(fields: [stateId], references: [id])
+  city      City     @relation(fields: [cityId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Role {
-  id          String       @id @default(cuid())
-  name        String
-  users       User[]
-  permissions Permission[]
+  id              String           @id @default(cuid())
+  name            String           @unique
+  isSystem        Boolean          @default(false)
+  users           User[]
+  rolePermissions RolePermission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
 
-model Permission {
-  id       String @id @default(cuid())
-  roleId   String
-  moduleId String
-
-  canView   Boolean @default(false)
-  canCreate Boolean @default(false)
-  canUpdate Boolean @default(false)
-  canDelete Boolean @default(false)
-
-  role   Role   @relation(fields: [roleId], references: [id])
-  module Module @relation(fields: [moduleId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-
-  @@unique([roleId, moduleId])
-}
-
-model Module {
+// Permission catalog: one row per known permission key. Loaded from the
+// shared `@skerp/types` registry by the seed script.
+model PermissionDef {
   id          String  @id @default(cuid())
-  name        String
-  code        String  @unique
+  key         String  @unique
+  moduleCode  String
   description String?
+  isSystem    Boolean @default(false)
 
-  permissions Permission[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([moduleCode])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission PermissionDef @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+enum PermissionEffect {
+  GRANT
+  DENY
+}
+
+model UserPermission {
+  userId       String
+  permissionId String
+  effect       PermissionEffect
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission PermissionDef @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
+}
+
+model UserBranch {
+  userId   String
+  branchId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, branchId])
+  @@index([branchId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([createdAt])
 }
 
 enum ownershipType {
@@ -267,12 +328,10 @@ model Customer {
   creditLimit             Float?
   tdsDeductionRate        Float?
 
-  address      String?
-  country      String?
-  stateId      String
-  cityId       String
-
-  
+  address String?
+  country String?
+  stateId String
+  cityId  String
 
   contactPhone String?
   primaryEmail String?
@@ -281,9 +340,9 @@ model Customer {
   mobileNo      String?
   website       String?
 
-  agreements Agreement[] @relation("CustomerAgreements")
-  state        State @relation(fields: [stateId], references: [id])
-  city         City  @relation(fields: [cityId], references: [id])
+  agreements   Agreement[]    @relation("CustomerAgreements")
+  state        State          @relation(fields: [stateId], references: [id])
+  city         City           @relation(fields: [cityId], references: [id])
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   OrderBooking OrderBooking[]
@@ -303,10 +362,10 @@ model Agreement {
   carryingCapacity        Float?
   leadGeneratedByBranchId String
 
-  company Company  @relation(fields: [companyId], references: [id])
-  client  Customer @relation("CustomerAgreements", fields: [clientId], references: [id])
-  branch  Branch   @relation("BranchAgreement", fields: [leadGeneratedByBranchId], references: [id])
-  city    City     @relation(fields: [cityId], references: [id])
+  company   Company  @relation(fields: [companyId], references: [id])
+  client    Customer @relation("CustomerAgreements", fields: [clientId], references: [id])
+  branch    Branch   @relation("BranchAgreement", fields: [leadGeneratedByBranchId], references: [id])
+  city      City     @relation(fields: [cityId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -450,8 +509,8 @@ model Labour {
   type     WorkerType // Enum: Supervisor, Hamal, Mechanic
   branchId String
 
-  branch Branch @relation("WorkerBranch", fields: [branchId], references: [id])
-  city   City  @relation(fields: [cityId], references: [id])
+  branch    Branch   @relation("WorkerBranch", fields: [branchId], references: [id])
+  city      City     @relation(fields: [cityId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -489,16 +548,16 @@ model Area {
 }
 
 model State {
-  id     String @id @default(cuid())
-  name   String @unique
+  id   String @id @default(cuid())
+  name String @unique
 
   cities City[]
 
-  companies Company[]
+  companies  Company[]
   warehouses Warehouse[]
-  customers Customer[]
+  customers  Customer[]
   transports Transport[]
-  pumps Pump[]
+  pumps      Pump[]
 }
 
 model Transport {
@@ -507,8 +566,8 @@ model Transport {
   stateId String
   cityId  String
 
-  state   State @relation(fields: [stateId], references: [id])
-  city    City  @relation(fields: [cityId], references: [id])
+  state State @relation(fields: [stateId], references: [id])
+  city  City  @relation(fields: [cityId], references: [id])
 
   country String
   phoneNo String @unique
@@ -561,8 +620,8 @@ model Pump {
 
   isBlackListed Boolean @default(false)
 
-  city City @relation("PumpCity", fields: [cityId], references: [id])
-  state State @relation(fields: [stateId], references: [id])
+  city      City     @relation("PumpCity", fields: [cityId], references: [id])
+  state     State    @relation(fields: [stateId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

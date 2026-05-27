@@ -10,6 +10,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@skerp/ui/components/breadcrumb";
+import { Skeleton } from "@skerp/ui/components/skeleton";
+import { useBreadcrumbLabels } from "./breadcrumb-labels";
 
 /** "lorry-receipts" -> "Lorry Receipts" */
 const titleize = (segment: string): string =>
@@ -21,6 +23,7 @@ const titleize = (segment: string): string =>
 /** Breadcrumb derived from the current route path. */
 export function AppBreadcrumb() {
   const pathname = usePathname();
+  const { labels } = useBreadcrumbLabels();
   const segments = pathname.split("/").filter(Boolean);
 
   return (
@@ -29,15 +32,25 @@ export function AppBreadcrumb() {
         {segments.map((segment, index) => {
           const href = "/" + segments.slice(0, index + 1).join("/");
           const isLast = index === segments.length - 1;
+          const label = labels[href];
+          const isRoleDetailSegment =
+            segments[index - 2] === "settings" && segments[index - 1] === "roles";
+          const content =
+            label ??
+            (isRoleDetailSegment ? (
+              <Skeleton className="h-4 w-24 rounded-sm" />
+            ) : (
+              titleize(decodeURIComponent(segment))
+            ));
 
           return (
             <Fragment key={href}>
               <BreadcrumbItem>
                 {isLast ? (
-                  <BreadcrumbPage>{titleize(segment)}</BreadcrumbPage>
+                  <BreadcrumbPage>{content}</BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink href={href}>
-                    {titleize(segment)}
+                    {content}
                   </BreadcrumbLink>
                 )}
               </BreadcrumbItem>

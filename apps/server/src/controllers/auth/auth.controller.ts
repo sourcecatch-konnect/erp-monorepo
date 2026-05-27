@@ -115,7 +115,12 @@ export const meController = async (
 
     return res.json({
       success: true,
-      data: user,
+      data: {
+        ...user,
+        permissions: req.ctx ? Array.from(req.ctx.permissions) : [],
+        branchScope: req.ctx?.branchScope ?? "ASSIGNED",
+        branchIds: req.ctx?.branchIds ?? [],
+      },
     });
   } catch {
     return res.status(500).json({

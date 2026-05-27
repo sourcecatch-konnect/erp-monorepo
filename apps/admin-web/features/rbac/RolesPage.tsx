@@ -1,0 +1,227 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@skerp/ui/components/button";
+import { Input } from "@skerp/ui/components/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@skerp/ui/components/table";
+import { Skeleton } from "@skerp/ui/components/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@skerp/ui/components/dialog";
+import { rbacApi } from "./rbac.service";
+import { rbacKeys } from "./rbac.keys";
+import type { RoleSummary } from "./types";
+
+const COLUMN_COUNT = 5;
+
+export function RolesPage() {
+  const qc = useQueryClient();
+  const { data: roles, isLoading } = useQuery({
+    queryKey: rbacKeys.roles,
+    queryFn: rbacApi.listRoles,
+  });
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [copySource, setCopySource] = useState<RoleSummary | null>(null);
+  const [name, setName] = useState("");
+
+  const createMut = useMutation({
+    mutationFn: rbacApi.createRole,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: rbacKeys.roles });
+      setCreateOpen(false);
+      setName("");
+    },
+  });
+
+  const copyMut = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      rbacApi.copyRole(id, name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: rbacKeys.roles });
+      setCopySource(null);
+      setName("");
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: rbacApi.deleteRole,
+    onSuccess: () => qc.invalidateQueries({ queryKey: rbacKeys.roles }),
+  });
+
+  return (
+    <div className="space-y-6 p-6">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Roles</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage roles and their permission sets.
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setName("");
+            setCreateOpen(true);
+          }}
+        >
+          New role
+        </Button>
+      </header>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Users</TableHead>
+            <TableHead>Permissions</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading &&
+            Array.from({ length: 5 }).map((_, i) => (
+              <TableRow key={i}>
+                {Array.from({ length: COLUMN_COUNT }).map((__, j) => (
+                  <TableCell key={j}>
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+
+          {!isLoading && roles?.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={COLUMN_COUNT}
+                className="py-8 text-center text-muted-foreground"
+              >
+                No roles yet.
+              </TableCell>
+            </TableRow>
+          )}
+
+          {roles?.map((r) => (
+            <TableRow key={r.id}>
+              <TableCell className="font-medium">
+                <Link
+                  className="hover:underline"
+                  href={`/settings/roles/${r.id}`}
+                >
+                  {r.name}
+                </Link>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {r._count.users}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {r._count.rolePermissions}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {r.isSystem ? "System" : "Custom"}
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCopySource(r);
+                      setName(`${r.name} (copy)`);
+                    }}
+                  >
+                    Copy
+                  </Button>
+                  {!r.isSystem && r._count.users === 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm(`Delete role "${r.name}"?`)) {
+                          deleteMut.mutate(r.id);
+                        }
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New role</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Role name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createMut.mutate(name.trim())}
+              disabled={name.trim().length < 2 || createMut.isPending}
+            >
+              {createMut.isPending ? "Creating…" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!copySource}
+        onOpenChange={(o) => !o && setCopySource(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copy role &quot;{copySource?.name}&quot;</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Creates a new role with the same permission set. You can edit it
+            after.
+          </p>
+          <Input
+            placeholder="New role name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopySource(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                copySource &&
+                copyMut.mutate({ id: copySource.id, name: name.trim() })
+              }
+              disabled={name.trim().length < 2 || copyMut.isPending}
+            >
+              {copyMut.isPending ? "Copying…" : "Copy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

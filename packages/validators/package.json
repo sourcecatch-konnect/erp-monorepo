@@ -29,6 +29,10 @@
     "./master/vehicle": {
       "types": "./src/master/vehicle.schema.ts",
       "import": "./dist/master/vehicle.schema.js"
+    },
+    "./admin/rbac": {
+      "types": "./src/admin/rbac.schema.ts",
+      "import": "./dist/admin/rbac.schema.js"
     }
   },
   "scripts": {

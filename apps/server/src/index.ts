@@ -29,6 +29,7 @@ import CompanyRoute from "./modules/company/company.route.js";
 import BranchRoute from "./modules/branch/branch.route.js";
 import Routes from "./modules/route/route.routes.js";
 import ewaybillRoute from "./modules/ewaybill/ewaybill.route.js";
+import adminRoute from "./modules/admin/admin.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -67,6 +68,7 @@ app.use("/wagons",wagonRoute)
 app.use("/agreements",agreementRoute)
 app.use("/pumps",pumpRoute)
 app.use("/ewaybills", ewaybillRoute);
+app.use("/admin", adminRoute);
 app.use(errorMiddleware);
 const PORT = 5000;
 
