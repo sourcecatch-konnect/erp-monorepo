@@ -20,15 +20,21 @@ import { agreementKeys } from "./agreements.key";
 import { agreementApi } from "./agreements.service";
 import { agreementColumns } from "./agreementsTable";
 import AgreementForm from "./agreementsForm";
+import { useMasterPagination } from "../_shared/masterPagination";
 export default function AgreementPage() {
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Agreement | null>(null);
-const [search, setSearch] = React.useState("");
-const [page, setPage] = React.useState(0);
+
 const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailData, setDetailData] = React.useState<Agreement | null>(null);
-const size = 25;
+const {
+  search,
+  setSearch,
+  page,
+  setPage,
+  size,
+} = useMasterPagination();
   // ================= MASTER DATA =================
   const companies = useQuery({
     queryKey: ["companies"],

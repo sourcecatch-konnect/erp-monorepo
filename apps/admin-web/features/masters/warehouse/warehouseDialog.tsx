@@ -67,7 +67,6 @@ export default function WarehouseDetailDialog({
   data,
   isLoading,
 }: Props) {
-  console.log(data,"warehouse")
   return (
     <Dialog
       open={open}

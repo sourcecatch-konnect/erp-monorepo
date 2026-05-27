@@ -152,9 +152,7 @@ export function createCrudRouter<Create, Update>({
         }),
         model.count({ where }),
       ]);
-      console.log(
-  JSON.stringify(data, null, 2)
-);
+
       return sendOk(res, data, {
         page: query.page,
         size: query.size,

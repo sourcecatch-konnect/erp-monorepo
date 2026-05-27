@@ -59,7 +59,6 @@ export default function TransportDetailDialog({
   data,
   isLoading,
 }: Props) {
-  console.log(data,'transpotrr')
   return (
     <Dialog
       open={open}

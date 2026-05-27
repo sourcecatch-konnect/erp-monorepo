@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateRouteBody, Route } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
-import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
+import { useMasterPagination } from "../_shared/masterPagination";
 
 
 import { routeKeys } from "./route.key";
@@ -30,35 +30,27 @@ export default function RoutePage() {
 
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Route | null>(null);
-  const [search, setSearch] = React.useState("");
-  const [page, setPage] = React.useState(0);
+  const { search, setSearch, page, setPage, size } = useMasterPagination();
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
-  const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo(
     () => ({
       page,
       size,
       sort: "sourceCityId:asc",
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
+      ...(search.trim()
+        ? { search: search.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [search, page, size]
   );
-
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
 
   const routes = useQuery({
     queryKey: routeKeys.list(listQuery),
     queryFn: () => routeApi.list(listQuery),
   });
-console.log(routes,"data routes")
   const cities = useQuery({
     queryKey: cityKeys.list({ size: 1000 }),
     queryFn: () => cityApi.list({ size: 1000 }),

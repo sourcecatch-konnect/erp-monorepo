@@ -22,7 +22,7 @@ const router: Router =
       updateRateMatrixSchema as ZodTypeAny,
 
     permissionKey:
-      "masters.rateMatrix",
+      "masters.rate-matrix",
 
     listOptions: {
       searchableFields: [

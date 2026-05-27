@@ -5,12 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateVehicleBody, Vehicle } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
+import { useMasterPagination } from "../_shared/masterPagination";
 import {
   downloadBlob,
   ListQuery,
   parseCsvRows,
 } from "../_shared/master-api";
-import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
 import { vehicleApi } from "./vehicle.service";
 import { vehicleKeys } from "./vehicle.key";
@@ -45,24 +45,21 @@ export default function VehiclePage() {
 
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Vehicle | null>(null);
-  const [search, setSearch] = React.useState("");
-  const [page, setPage] = React.useState(0);
+  const { search, setSearch, page, setPage, size } = useMasterPagination();
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
-  const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
       sort: "vehicleNumber:asc",
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
+      ...(search.trim()
+        ? { search: search.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [search, page, size]
   );
 const vehicleDetail = useQuery({
   queryKey: detailId
@@ -71,9 +68,6 @@ const vehicleDetail = useQuery({
   queryFn: () => vehicleApi.detail(detailId!),
   enabled: Boolean(detailOpen && detailId),
 });
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
 
   const vehicles = useQuery({
     queryKey: vehicleKeys.list(listQuery),

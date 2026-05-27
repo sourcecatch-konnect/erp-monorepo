@@ -10,7 +10,7 @@ const router: Router = createCrudRouter({
   model: db.sparePart,
   createSchema: createSparePartSchema,
   updateSchema: updateSparePartSchema,
-  permissionKey: "masters.sparePart",
+  permissionKey: "masters.spare-part",
   listOptions: {
     searchableFields: ["name", "unit", "description"],
     defaultInclude: {

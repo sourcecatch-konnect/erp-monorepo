@@ -6,12 +6,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RateMatrix, CreateRateMatrixBody } from "@skerp/types";
 import type { AgreementWithRelations } from "@skerp/types";
 import MasterListPage from "../_shared/MasterListPage";
+import { useMasterPagination } from "../_shared/masterPagination";
 import {
   downloadBlob,
   ListQuery,
   parseCsvRows,
 } from "../_shared/master-api";
-import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
 import { rateMatrixApi } from "./rateMatrix.service";
 import { rateMatrixKeys } from "./rateMatrix.key";
@@ -41,30 +41,22 @@ export default function RateMatrixPage() {
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<RateMatrix | null>(null);
 
-  const [search, setSearch] = React.useState("");
-  const [page, setPage] = React.useState(0);
+  const { search, setSearch, page, setPage, size } = useMasterPagination();
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
-
-  const size = 25;
-  const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(() => {
     return {
       page,
       size,
       sort: "rate:asc",
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
+      ...(search.trim()
+        ? { search: search.trim() }
         : {}),
     };
-  }, [page, size, debouncedSearch]);
-
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
+  }, [page, size, search]);
 
   /* ================= LIST ================= */
   const rateMatrix = useQuery({
@@ -97,12 +89,8 @@ export default function RateMatrixPage() {
     api: rateMatrixApi,
     queryKey: rateMatrixKeys.all,
     entityName: "Rate Matrix",
-    
   });
 
-console.log("RATE MATRIX RESPONSE:", rateMatrix.data);
-console.log("RATE MATRIX LIST:", rateMatrix.data?.data);
-console.log("RATE MATRIX ERROR:", rateMatrix.error);
   const bulkDeleteMutation = React.useMemo(
     () => ({
       mutateAsync: async (ids: string[]) => {

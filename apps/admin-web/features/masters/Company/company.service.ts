@@ -18,7 +18,7 @@ export const companyApi = {
     const res = await api.get<ApiResponse<Company[]>>("/companies", {
       params: query,
     });
-    console.log(res)
+
     return unwrapListResponse(res);
   },
 

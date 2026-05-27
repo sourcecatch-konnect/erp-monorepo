@@ -27,6 +27,7 @@ permissionKey:
   | "masters.rate-matrix"
   | "masters.agreement"
   | "masters.goods"
+  | "masters.railwayFreightMatrix"
   | "masters.warehouse"
   | "masters.pump";
   page: () => Promise<{ default: ComponentType }>;
@@ -177,7 +178,7 @@ export const masterRegistry = [
   label: "Railway Freight",
   icon: IconTrain,
   category: "Location",
-  permissionKey: "masters.route", // or create: "masters.railway-freight"
+  permissionKey: "masters.railwayFreightMatrix", // or create: "masters.railway-freight"
   page: () => import("./railwayfreightMatrix/page"),
 },{
   slug: "agreement",

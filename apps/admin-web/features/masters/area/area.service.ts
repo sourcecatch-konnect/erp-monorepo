@@ -20,7 +20,7 @@ export const areaApi = {
     const res = await api.get<ApiResponse<Area[]>>("/areas", {
       params: query,
     });
-    console.log(res)
+
     return unwrapListResponse(res);
   },
 

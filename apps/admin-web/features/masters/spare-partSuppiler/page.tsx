@@ -9,12 +9,12 @@ import type {
 } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
+import { useMasterPagination } from "../_shared/masterPagination";
 import {
   downloadBlob,
   ListQuery,
   parseCsvRows,
 } from "../_shared/master-api";
-import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
 import { cityApi } from "../city/city.service";
 import { cityKeys } from "../city/city.keys";
@@ -50,27 +50,20 @@ export default function SparePartSupplierPage() {
   const [selected, setSelected] = React.useState<SparePartSupplier | null>(
     null
   );
-  const [search, setSearch] = React.useState("");
-  const [page, setPage] = React.useState(0);
+  const { search, setSearch, page, setPage, size } = useMasterPagination();
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
-  const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
       sort: "name:asc",
-      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+      ...(search.trim() ? { search: search.trim() } : {}),
     }),
-    [debouncedSearch, page]
+    [search, page, size]
   );
-
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
 
   const suppliers = useQuery({
     queryKey: sparePartSupplierKeys.list(listQuery),

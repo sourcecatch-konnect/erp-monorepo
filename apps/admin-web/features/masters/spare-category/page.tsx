@@ -9,6 +9,7 @@ import type {
 } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
+import { useMasterPagination } from "../_shared/masterPagination";
 
 import {
   downloadBlob,
@@ -16,7 +17,6 @@ import {
   parseCsvRows,
 } from "../_shared/master-api";
 
-import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
 import { spareCategoryKeys } from "./spare-category.key";
 import { spareCategoryApi } from "./spare-cateogry.service";
@@ -39,16 +39,11 @@ export default function SpareCategoryPage() {
   const [selected, setSelected] =
     React.useState<SpareCategory | null>(null);
 
-  const [search, setSearch] = React.useState("");
-  const [page, setPage] = React.useState(0);
+  const { search, setSearch, page, setPage, size } = useMasterPagination();
   const [selectedIds, setSelectedIds] =
     React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
-
-  const debouncedSearch =
-    useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
     () => ({
@@ -56,19 +51,15 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
       size,
       sort: "name:asc",
 
-      ...(debouncedSearch.trim()
+      ...(search.trim()
         ? {
             search:
-              debouncedSearch.trim(),
+              search.trim(),
           }
         : {}),
     }),
-    [debouncedSearch, page]
+    [search, page, size]
   );
-
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
 
   const spareCategories = useQuery({
     queryKey:

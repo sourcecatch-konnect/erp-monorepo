@@ -5,12 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateGoodsBody, Goods } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
+import { useMasterPagination } from "../_shared/masterPagination";
 import {
   downloadBlob,
   ListQuery,
   parseCsvRows,
 } from "../_shared/master-api";
-import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
 import { goodsApi } from "./goods.service";
 import { goodsKeys } from "./goods.key";
@@ -46,28 +46,20 @@ export default function GoodsPage() {
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Goods | null>(null);
 
-  const [search, setSearch] = React.useState("");
-  const [page, setPage] = React.useState(0);
+  const { search, setSearch, page, setPage, size } = useMasterPagination();
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
-  const debouncedSearch = useDebouncedValue(search);
-
   const listQuery = React.useMemo<ListQuery>(() => ({
     page,
     size,
     sort: "name:asc",
-    ...(debouncedSearch.trim()
-      ? { search: debouncedSearch.trim() }
+    ...(search.trim()
+      ? { search: search.trim() }
       : {}),
-  }), [debouncedSearch, page]);
-
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
+  }), [search, page, size]);
 
   // ---------------- LIST ----------------
   const goods = useQuery({

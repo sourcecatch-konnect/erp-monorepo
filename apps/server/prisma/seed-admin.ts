@@ -17,6 +17,22 @@ const MASTER_MODULES = [
   { code: "masters.area", name: "Area Master" },
   { code: "masters.transport", name: "Transport Master" },
   { code: "masters.vehicle", name: "Vehicle Master" },
+  { code: "masters.driver", name: "Driver Master" },
+  { code: "masters.spare-category", name: "Spare Category Master" },
+  { code: "masters.spare-part", name: "Spare Part Master" },
+  { code: "masters.spare-part-supplier", name: "Spare Part Supplier Master" },
+  { code: "masters.customer", name: "Customer Master" },
+  { code: "masters.company", name: "Company Master" },
+  { code: "masters.branch", name: "Branch Master" },
+  { code: "masters.route", name: "Route Master" },
+  { code: "masters.warehouse", name: "Warehouse Master" },
+  { code: "masters.labour", name: "Labour Master" },
+  { code: "masters.goods", name: "Goods Master" },
+  { code: "masters.pump", name: "Pump Master" },
+  { code: "masters.wagon", name: "Wagon Master" },
+  { code: "masters.railwayFreightMatrix", name: "Railway Freight Matrix Master" },
+  { code: "masters.agreement", name: "Agreement Master" },
+  { code: "masters.rate-matrix", name: "Rate Matrix Master" },
 ];
 
 async function main() {
@@ -24,20 +40,34 @@ async function main() {
   let company = await db.company.findFirst({
     where: { name: "SK Translines" },
   });
-  let state = await db.state.findFirst({
-  where: { name: "Maharashtra" },
-});
+  const state = await db.state.upsert({
+    where: { name: "Maharashtra" },
+    update: {},
+    create: { name: "Maharashtra" },
+  });
 
-let city = await db.city.findFirst({
-  where: { name: "Mumbai" },
-});
+  let city = await db.city.findFirst({
+    where: {
+      name: "Mumbai",
+      stateId: state.id,
+    },
+  });
+
+  if (!city) {
+    city = await db.city.create({
+      data: {
+        name: "Mumbai",
+        stateId: state.id,
+      },
+    });
+  }
   if (!company) {
     company = await db.company.create({
   data: {
     name: "SK Translines",
     country: "India",
-    stateId: state!.id,
-    cityId: city!.id,
+    stateId: state.id,
+    cityId: city.id,
     establishmentYear: new Date("2010-01-01"),
   },
 });
@@ -54,7 +84,7 @@ let city = await db.city.findFirst({
     branchCode: "HO",
     shortCode: "HO",
     name: "Head Office",
-    cityId: city!.id,
+    cityId: city.id,
     companyId: company.id,
   },
 });

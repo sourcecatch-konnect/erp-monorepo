@@ -135,27 +135,48 @@ export default function MasterListPage<T extends { id: string }>({
           />
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>
-            Page {page + 1} of {pageCount}
-          </span>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            onClick={() => onPageChange(page - 1)}
-            disabled={isFirstPage || isLoading}
-            aria-label="Previous page"
-          >
-            <IconChevronLeft size={16} />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            onClick={() => onPageChange(page + 1)}
-            disabled={isLastPage || isLoading}
-            aria-label="Next page"
-          >
-            <IconChevronRight size={16} />
-          </Button>
+           <span>
+    Showing {page * size + 1}–
+    {Math.min((page + 1) * size, total)}
+    {" "}of {total}
+  </span>
+
+  <span>
+    Page {page + 1} of {pageCount}
+  </span>
+        <div className="flex items-center gap-1">
+  <Button
+    size="icon-sm"
+    variant="outline"
+    onClick={() => onPageChange(page - 1)}
+    disabled={isFirstPage || isLoading}
+  >
+    <IconChevronLeft size={16} />
+  </Button>
+
+  {Array.from(
+    { length: Math.min(pageCount, 5) },
+    (_, i) => (
+      <Button
+        key={i}
+        size="icon-sm"
+        variant={page === i ? "default" : "outline"}
+        onClick={() => onPageChange(i)}
+      >
+        {i + 1}
+      </Button>
+    )
+  )}
+
+  <Button
+    size="icon-sm"
+    variant="outline"
+    onClick={() => onPageChange(page + 1)}
+    disabled={isLastPage || isLoading}
+  >
+    <IconChevronRight size={16} />
+  </Button>
+</div>
         </div>
       </div>
 

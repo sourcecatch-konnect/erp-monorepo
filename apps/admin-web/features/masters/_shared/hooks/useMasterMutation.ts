@@ -24,8 +24,6 @@ export default function getErrorMessage(
   if (axios.isAxiosError(error)) {
     const apiError = error.response?.data?.error;
 
-    console.log("API Error:", apiError);
-
     // Validation field errors
     if (
       apiError?.details &&
