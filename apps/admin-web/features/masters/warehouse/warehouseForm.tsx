@@ -13,23 +13,49 @@ import type {
   CreateWarehouseFormInput,
 } from "@skerp/types";
 
-import { createWarehouseSchema } from "@skerp/validators";
+import {
+  IconBuildingWarehouse,
+  IconCurrencyRupee,
+  IconMapPin,
+  IconPhone,
+  IconRulerMeasure,
+} from "@tabler/icons-react";
 
+import { createWarehouseSchema } from "@skerp/validators";
 import MasterFormDialog from "../_shared/MasterFormDialog";
-import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
-import NumberField from "../_shared/fields/NumberField";
+import IconTextField from "../_shared/fields/IconTextField";
+import FormSection from "../_shared/fields/FormSection";
+import TextAreaField from "../_shared/fields/TextAreaField";
+
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Warehouse | null;
-
   cities: City[];
   states: State[];
   branches: Branch[];
-
   onSubmit: (data: CreateWarehouseBody) => Promise<void>;
   isSubmitting?: boolean;
+};
+
+const defaultValues: CreateWarehouseFormInput = {
+  name: "",
+  type: "",
+  address: "",
+  country: "",
+  stateId: "",
+  cityId: "",
+  branchId: "",
+  contactName: "",
+  contactPhone: "",
+  monthlyRent: undefined,
+  securityDeposit: undefined,
+  length: undefined,
+  width: undefined,
+  breadth: undefined,
+  gateNo: "",
+  storageCapacity: undefined,
 };
 
 export default function WarehouseForm({
@@ -42,32 +68,11 @@ export default function WarehouseForm({
   onSubmit,
   isSubmitting,
 }: Props) {
-  const form = useForm<
-    CreateWarehouseFormInput,
-    unknown,
-    CreateWarehouseBody
-  >({
+  const form = useForm<CreateWarehouseFormInput, unknown, CreateWarehouseBody>({
     resolver: zodResolver(createWarehouseSchema),
     mode: "onChange",
     reValidateMode: "onChange",
-    defaultValues: {
-      name: "",
-      type: "",
-      address: "",
-      country: "",
-      stateId: "",
-      cityId: "",
-      branchId: "",
-      contactName: "",
-      contactPhone: "",
-      monthlyRent: undefined,
-      securityDeposit: undefined,
-      length: undefined,
-      width: undefined,
-      breadth: undefined,
-      gateNo: "",
-      storageCapacity: undefined,
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
@@ -93,19 +98,19 @@ export default function WarehouseForm({
     });
   }, [form, open, row]);
 
-  const cityOptions = cities.map((c) => ({
-    label: c.name,
-    value: c.id,
+  const cityOptions = cities.map((city) => ({
+    label: city.name,
+    value: city.id,
   }));
 
-  const stateOptions = states.map((s) => ({
-    label: s.name,
-    value: s.id,
+  const stateOptions = states.map((state) => ({
+    label: state.name,
+    value: state.id,
   }));
 
-  const branchOptions = branches.map((b) => ({
-    label: b.name,
-    value: b.id,
+  const branchOptions = branches.map((branch) => ({
+    label: branch.name,
+    value: branch.id,
   }));
 
   return (
@@ -116,114 +121,161 @@ export default function WarehouseForm({
       form={form}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
-      columns={2}
+      columns={3}
     >
-      {/* NAME */}
-      <TextField<CreateWarehouseFormInput>
-        name="name"
-        label="Warehouse Name"
-        required
-      />
+      <FormSection
+        icon={<IconBuildingWarehouse size={18} />}
+        title="Warehouse Information"
+        description="Basic warehouse identity and type"
+      >
+        <IconTextField<CreateWarehouseFormInput>
+          name="name"
+          label="Warehouse Name"
+          placeholder="Enter warehouse name"
+          icon={<IconBuildingWarehouse size={16} />}
+          required
+        />
 
-      {/* TYPE */}
-      <TextField<CreateWarehouseFormInput>
-        name="type"
-        label="Warehouse Type"
-        required
-      />
+        <IconTextField<CreateWarehouseFormInput>
+          name="type"
+          label="Warehouse Type"
+          placeholder="Enter warehouse type"
+          icon={<IconBuildingWarehouse size={16} />}
+          required
+        />
 
-      {/* ADDRESS */}
-      <TextField<CreateWarehouseFormInput>
-        name="address"
-        label="Address"
-      />
+        <SelectField<CreateWarehouseFormInput>
+          name="branchId"
+          label="Branch"
+          options={branchOptions}
+          required
+        />
 
-      {/* COUNTRY */}
-      <TextField<CreateWarehouseFormInput>
-        name="country"
-        label="Country"
-        required
-      />
+        <IconTextField<CreateWarehouseFormInput>
+          name="gateNo"
+          label="Gate Number"
+          placeholder="Enter gate number"
+          icon={<IconBuildingWarehouse size={16} />}
+        />
+      </FormSection>
 
-      {/* STATE */}
-      <SelectField<CreateWarehouseFormInput>
-        name="stateId"
-        label="State"
-        options={stateOptions}
-        required
-      />
+      <FormSection
+        icon={<IconMapPin size={18} />}
+        title="Location Details"
+        description="Warehouse address and location"
+      >
+        <IconTextField<CreateWarehouseFormInput>
+          name="country"
+          label="Country"
+          placeholder="Enter country"
+          icon={<IconMapPin size={16} />}
+          required
+        />
 
-      {/* CITY */}
-      <SelectField<CreateWarehouseFormInput>
-        name="cityId"
-        label="City"
-        options={cityOptions}
-        required
-      />
+        <SelectField<CreateWarehouseFormInput>
+          name="stateId"
+          label="State"
+          options={stateOptions}
+          required
+        />
 
-      {/* BRANCH */}
-      <SelectField<CreateWarehouseFormInput>
-        name="branchId"
-        label="Branch"
-        options={branchOptions}
-        required
-      />
+        <SelectField<CreateWarehouseFormInput>
+          name="cityId"
+          label="City"
+          options={cityOptions}
+          required
+        />
 
-      {/* CONTACT */}
-      <TextField<CreateWarehouseFormInput>
-        name="contactName"
-        label="Contact Person"
-      />
+        <div className="md:col-span-2 xl:col-span-3">
+          <TextAreaField<CreateWarehouseFormInput>
+            name="address"
+            label="Address"
+            placeholder="Enter warehouse address"
+            rows={2}
+            maxLength={250}
+          />
+        </div>
+      </FormSection>
 
-      <TextField<CreateWarehouseFormInput>
-        name="contactPhone"
-        label="Contact Phone"
-      />
+      <FormSection
+        icon={<IconPhone size={18} />}
+        title="Contact Details"
+        description="Warehouse contact person and phone"
+      >
+        <IconTextField<CreateWarehouseFormInput>
+          name="contactName"
+          label="Contact Person"
+          placeholder="Enter contact person"
+          icon={<IconPhone size={16} />}
+        />
 
-      {/* FINANCE */}
-      <NumberField<CreateWarehouseFormInput>
-  name="monthlyRent"
-  label="Monthly Rent"
-  control={form.control}
-/>
+        <IconTextField<CreateWarehouseFormInput>
+          name="contactPhone"
+          label="Contact Phone"
+          placeholder="Enter contact phone"
+          icon={<IconPhone size={16} />}
+        />
+      </FormSection>
 
+      <FormSection
+        icon={<IconCurrencyRupee size={18} />}
+        title="Rent & Deposit"
+        description="Warehouse financial details"
+      >
+        <IconTextField<CreateWarehouseFormInput>
+          name="monthlyRent"
+          label="Monthly Rent"
+          placeholder="0.00"
+          icon={<IconCurrencyRupee size={16} />}
+          type="number"
+        />
 
-    <NumberField<CreateWarehouseFormInput>
-  name="securityDeposit"
-  label="Security Deposit"
-  control={form.control}
-/>
+        <IconTextField<CreateWarehouseFormInput>
+          name="securityDeposit"
+          label="Security Deposit"
+          placeholder="0.00"
+          icon={<IconCurrencyRupee size={16} />}
+          type="number"
+        />
+      </FormSection>
 
-      {/* DIMENSIONS */}
-      <NumberField<CreateWarehouseFormInput>
-  name="length"
-  label="Length"
-  control={form.control}
-/>
+      <FormSection
+        icon={<IconRulerMeasure size={18} />}
+        title="Dimensions & Capacity"
+        description="Physical size and storage capacity"
+      >
+        <IconTextField<CreateWarehouseFormInput>
+          name="length"
+          label="Length"
+          placeholder="Enter length"
+          icon={<IconRulerMeasure size={16} />}
+          type="number"
+        />
 
-<NumberField<CreateWarehouseFormInput>
-  name="width"
-  label="Width"
-  control={form.control}
-/>
+        <IconTextField<CreateWarehouseFormInput>
+          name="width"
+          label="Width"
+          placeholder="Enter width"
+          icon={<IconRulerMeasure size={16} />}
+          type="number"
+        />
 
-<NumberField<CreateWarehouseFormInput>
-  name="breadth"
-  label="Breadth"
-  control={form.control}
-/>
+        <IconTextField<CreateWarehouseFormInput>
+          name="breadth"
+          label="Breadth"
+          placeholder="Enter breadth"
+          icon={<IconRulerMeasure size={16} />}
+          type="number"
+        />
 
-      {/* OTHERS */}
-      <TextField<CreateWarehouseFormInput>
-        name="gateNo"
-        label="Gate Number"
-      />
-
-     <NumberField<CreateWarehouseFormInput>
-  name="storageCapacity"
-  label="Storage Capacity"
-  control={form.control}
-/>
+        <IconTextField<CreateWarehouseFormInput>
+          name="storageCapacity"
+          label="Storage Capacity"
+          placeholder="Enter storage capacity"
+          icon={<IconRulerMeasure size={16} />}
+          type="number"
+        />
+      </FormSection>
     </MasterFormDialog>
   );
 }

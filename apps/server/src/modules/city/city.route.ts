@@ -19,6 +19,39 @@ const router: Router = createCrudRouter({
       },
     },
     defaultOrderBy: { name: "asc" },
+
+    blockDeleteIfExists: [
+      {
+        model: db.company,
+        label: "Companies",
+        where: (id: string) => ({ cityId: id }),
+      },
+      {
+        model: db.warehouse,
+        label: "Warehouses",
+        where: (id: string) => ({ cityId: id }),
+      },
+      {
+        model: db.customer,
+        label: "Customers",
+        where: (id: string) => ({ cityId: id }),
+      },
+      {
+        model: db.transport,
+        label: "Transports",
+        where: (id: string) => ({ cityId: id }),
+      },
+      {
+        model: db.pump,
+        label: "Pumps",
+        where: (id: string) => ({ cityId: id }),
+      },
+      {
+        model: db.area,
+        label: "Areas",
+        where: (id: string) => ({ cityId: id }),
+      },
+    ],
   },
 });
 

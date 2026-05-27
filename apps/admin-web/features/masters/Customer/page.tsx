@@ -15,14 +15,16 @@ import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 import { customerApi } from "./customer.service";
 import { customerKeys } from "./customer.key";
 import { customerColumns } from "./customerTable";
-import CustomerForm from "./customerForm";
 import { createCustomerSchema } from "@skerp/validators";
 
 import { stateApi } from "../state/state.service";
 import { cityApi } from "../city/city.service";
 import { stateKeys } from "../state/state.keys";
 import { cityKeys } from "../city/city.keys";
-import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CustomerAdvancedForm from "./customerForm";
+import CustomerDetailDialog from "./customerDialog";
+import { toast } from "sonner";
 
 
 type CustomerCsvRow = Record<
@@ -54,7 +56,8 @@ export default function CustomerPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -88,33 +91,64 @@ export default function CustomerPage() {
     queryKey: cityKeys.list({ size: 1000 }),
     queryFn: () => cityApi.list({ size: 1000 }),
   });
-
- const { create, update, remove } = useMasterMutations({
+const customerDetail = useQuery({
+  queryKey: detailId
+    ? customerKeys.detail(detailId)
+    : ["customer-detail-empty"],
+  queryFn: () => customerApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
+const { create, update, remove } = useMasterMutations({
   api: customerApi,
   queryKey: customerKeys.all,
+  entityName: "Customer",
+});
+const bulkRemove = useMutation({
+  mutationFn: customerApi.bulkRemove,
+  onSuccess: () => {
+    toast.success("Selected customers deleted successfully");
+
+    setSelectedIds([]);
+
+    queryClient.invalidateQueries({
+      queryKey: customerKeys.all,
+    });
+  },
+
+  onError: (error) => {
+    toast.error(getErrorMessage(error));
+  },
 });
 
-  const bulkRemove = useMutation({
-    mutationFn: customerApi.bulkRemove,
-    onSuccess: () => {
-      setSelectedIds([]);
-      queryClient.invalidateQueries({ queryKey: customerKeys.all });
-    },
-  });
+ const bulkImport = useMutation({
+  mutationFn: customerApi.bulkImport,
 
-  const bulkImport = useMutation({
-    mutationFn: customerApi.bulkImport,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: customerKeys.all });
-    },
-  });
+  onSuccess: () => {
+    toast.success("Customers imported successfully");
 
-  const exportCustomers = useMutation({
-    mutationFn: customerApi.export,
-    onSuccess: (blob) => {
-      downloadBlob(blob, "customers.csv");
-    },
-  });
+    queryClient.invalidateQueries({
+      queryKey: customerKeys.all,
+    });
+  },
+
+  onError: (error) => {
+    toast.error(getErrorMessage(error));
+  },
+});
+
+ const exportCustomers = useMutation({
+  mutationFn: customerApi.export,
+
+  onSuccess: (blob) => {
+    downloadBlob(blob, "customers.csv");
+
+    toast.success("Customers exported successfully");
+  },
+
+  onError: (error) => {
+    toast.error(getErrorMessage(error));
+  },
+});
 
   const handleSubmit = async (data: CreateCustomerBody) => {
     if (selected) {
@@ -143,6 +177,10 @@ export default function CustomerPage() {
         "createdAt",
         "updatedAt",
       ]}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       search={search}
       onSearchChange={setSearch}
       page={page}
@@ -184,15 +222,21 @@ export default function CustomerPage() {
       isImporting={bulkImport.isPending}
       isExporting={exportCustomers.isPending}
     >
-      <CustomerForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        states={states.data?.data ?? []}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+    <CustomerDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={customerDetail.data}
+  isLoading={customerDetail.isLoading}
+/>
+<CustomerAdvancedForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+  states={states.data?.data ?? []}
+  cities={cities.data?.data ?? []}
+  onSubmit={handleSubmit}
+  isSubmitting={create.isPending || update.isPending}
+/>
     </MasterListPage>
   );
 }

@@ -14,6 +14,10 @@ type Props<TFormValues extends FieldValues> = {
   type?: string;
   maxLength?: number;
   hint?: string;
+  onChangeTransform?: (value: string) => string;
+  min?: number;
+max?: number;
+step?: number | string;
 };
 
 export default function IconTextField<TFormValues extends FieldValues>({
@@ -26,6 +30,10 @@ export default function IconTextField<TFormValues extends FieldValues>({
   type = "text",
   maxLength,
   hint,
+  min,
+max,
+step,
+  onChangeTransform
 }: Props<TFormValues>) {
   const {
     register,
@@ -53,14 +61,26 @@ export default function IconTextField<TFormValues extends FieldValues>({
           </span>
         ) : null}
 
-        <Input
-          type={type}
-          placeholder={placeholder}
-          aria-invalid={Boolean(error)}
-          maxLength={maxLength}
-          className={icon ? "pl-9" : prefix ? "pl-12" : undefined}
-          {...register(name)}
-        />
+      <Input
+  type={type}
+  placeholder={placeholder}
+  aria-invalid={Boolean(error)}
+  maxLength={maxLength}
+  min={min}
+max={max}
+step={step}
+  className={[
+    icon ? "pl-9" : prefix ? "pl-12" : "",
+    onChangeTransform ? "uppercase" : "",
+  ].join(" ")}
+  {...register(name, {
+    onChange: (event) => {
+      if (!onChangeTransform) return;
+
+      event.target.value = onChangeTransform(event.target.value);
+    },
+  })}
+/>
       </div>
 
       {typeof error === "string" ? (

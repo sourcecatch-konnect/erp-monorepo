@@ -4,7 +4,12 @@ import { z } from "zod";
    HELPERS (reuse from vehicle)
 ------------------------------ */
 
-import { optionalString } from "./spare-category.schema";
+const optionalString = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value : undefined));
+
 export const requiredNumber = (label: string) =>
   z
     .union([z.string(), z.number()])

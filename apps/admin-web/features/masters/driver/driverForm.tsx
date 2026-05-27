@@ -27,7 +27,7 @@ import {
   IconUserStar,
 } from "@tabler/icons-react";
 
-import { DatePicker } from "../_shared/fields/DateField";
+
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import SelectField from "../_shared/fields/SelectField";
 import IconTextField from "../_shared/fields/IconTextField";
@@ -35,6 +35,7 @@ import TextAreaField from "../_shared/fields/TextAreaField";
 import SwitchField from "../_shared/fields/SwitchField";
 import FormSection from "../_shared/fields/FormSection";
 import { createDriverSchema } from "@skerp/validators";
+import { DatePicker } from "@skerp/ui/components/datepicker";
 
 type Props = {
   open: boolean;

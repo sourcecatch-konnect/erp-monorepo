@@ -18,6 +18,8 @@ import { vehicleColumns } from "./vehicleTable";
 import VehicleForm from "./vehicleForm";
 import { createVehicleSchema } from "@skerp/validators";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import MasterDetailDialog from "../_shared/MasterDetailDialog";
+import VehicleDetailDialog from "./vehicleDialog";
 type VehicleCsvRow = Record<
   | "vehicleNumber"
   | "chasisNumber"
@@ -46,7 +48,8 @@ export default function VehiclePage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -61,7 +64,13 @@ export default function VehiclePage() {
     }),
     [debouncedSearch, page]
   );
-
+const vehicleDetail = useQuery({
+  queryKey: detailId
+    ? vehicleKeys.detail(detailId)
+    : ["vehicle-detail-empty"],
+  queryFn: () => vehicleApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch]);
@@ -132,6 +141,10 @@ export default function VehiclePage() {
       search={search}
       onSearchChange={setSearch}
       page={page}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       size={size}
       total={vehicles.data?.meta?.total ?? 0}
       onPageChange={setPage}
@@ -173,6 +186,12 @@ await bulkImport.mutateAsync(parsedRows);
         onSubmit={handleSubmit}
         isSubmitting={create.isPending || update.isPending}
       />
+<VehicleDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={vehicleDetail.data}
+  isLoading={vehicleDetail.isLoading}
+/>
     </MasterListPage>
   );
 }

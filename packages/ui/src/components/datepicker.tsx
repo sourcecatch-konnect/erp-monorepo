@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { format, setMonth, setYear } from "date-fns";
-import { CalendarSearch } from "lucide-react";
+import { CalendarSearch, X } from "lucide-react";
 import { type DayPicker } from "react-day-picker";
 
 import { Field, FieldLabel } from "@skerp/ui/components/Field";
@@ -13,14 +13,23 @@ import {
 } from "@skerp/ui/components/popver";
 import { Button } from "@skerp/ui/components/button";
 import { Calendar } from "@skerp/ui/components/calender";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
 
 interface DatePickerProps {
   selected?: Date;
   onSelect?: (date: Date | undefined) => void;
   disabled?: boolean | React.ComponentProps<typeof DayPicker>["disabled"];
   label?: string;
+  placeholder?: string;
   fromYear?: number;
   toYear?: number;
+  clearable?: boolean;
 }
 
 const months = [
@@ -43,8 +52,10 @@ export function DatePicker({
   onSelect: onSelectProp,
   disabled,
   label = "Date",
+  placeholder = "Pick a date",
   fromYear = 1950,
   toYear = new Date().getFullYear() + 20,
+  clearable = true,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [internalDate, setInternalDate] = React.useState<Date | undefined>();
@@ -79,62 +90,100 @@ export function DatePicker({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            type="button"
             variant="outline"
             id="date-picker"
             disabled={disabled === true}
-            className="w-full justify-start px-2.5 font-normal"
+            className="h-10 w-full justify-between rounded-lg px-3 font-normal"
           >
-            <CalendarSearch size={17} className="mr-2 shrink-0" />
-            {date ? format(date, "LLL dd, y") : <span>Pick a date</span>}
+            <span className="flex min-w-0 items-center gap-2">
+              <CalendarSearch size={17} className="shrink-0 text-muted-foreground" />
+              <span
+                className={
+                  date
+                    ? "truncate text-sm text-foreground"
+                    : "truncate text-sm text-muted-foreground"
+                }
+              >
+                {date ? format(date, "dd MMM yyyy") : placeholder}
+              </span>
+            </span>
+
+            {date && clearable ? (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDate(undefined);
+                }}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X size={14} />
+              </span>
+            ) : null}
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent className="w-auto p-3" align="start">
-          <div className="mb-3 grid grid-cols-2 gap-2">
-            <select
-              value={calendarMonth.getMonth()}
-              onChange={(event) => {
+        <PopoverContent
+          className="w-auto rounded-xl border bg-popover p-3 shadow-xl"
+          align="start"
+        >
+          <div className="mb-3 grid grid-cols-[1.4fr_1fr] gap-2">
+            <Select
+              value={String(calendarMonth.getMonth())}
+              onValueChange={(value) => {
                 setCalendarMonth((current) =>
-                  setMonth(current, Number(event.target.value))
+                  setMonth(current, Number(value))
                 );
               }}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none"
             >
-              {months.map((month, index) => (
-                <option key={month} value={index}>
-                  {month}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-9 rounded-lg text-sm">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {months.map((month, index) => (
+                  <SelectItem key={month} value={String(index)}>
+                    {month}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <select
-              value={calendarMonth.getFullYear()}
-              onChange={(event) => {
+            <Select
+              value={String(calendarMonth.getFullYear())}
+              onValueChange={(value) => {
                 setCalendarMonth((current) =>
-                  setYear(current, Number(event.target.value))
+                  setYear(current, Number(value))
                 );
               }}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none"
             >
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-9 rounded-lg text-sm">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {years.map((year) => (
+                  <SelectItem key={year} value={String(year)}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <Calendar
-            mode="single"
-            month={calendarMonth}
-            onMonthChange={setCalendarMonth}
-            selected={date}
-            onSelect={(selectedDate) => {
-              setDate(selectedDate);
-              setOpen(false);
-            }}
-            disabled={disabled !== true ? disabled : undefined}
-          />
+          <div className="rounded-lg border bg-background p-1">
+            <Calendar
+              mode="single"
+              month={calendarMonth}
+              onMonthChange={setCalendarMonth}
+              selected={date}
+              onSelect={(selectedDate) => {
+                setDate(selectedDate);
+                setOpen(false);
+              }}
+              disabled={disabled !== true ? disabled : undefined}
+            />
+          </div>
         </PopoverContent>
       </Popover>
     </Field>

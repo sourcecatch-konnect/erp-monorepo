@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateWarehouseBody, Warehouse } from "@skerp/types";
+import type { CreateWarehouseBody, Warehouse, WarehouseWithRelations } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import {
@@ -22,6 +22,8 @@ import { warehouseColumns } from "./warehouseTable";
 import { stateApi } from "../state/state.service";
 import { cityApi } from "../city/city.service";
 import { branchApi } from "../branch/branch.service";
+import MasterDetailDialog from "../_shared/MasterDetailDialog";
+import WarehouseDetailDialog from "./warehouseDialog";
 /* -----------------------------
    CSV TYPE
 ------------------------------ */
@@ -49,14 +51,15 @@ export default function WarehousePage() {
   const queryClient = useQueryClient();
 
   const [open, setOpen] = React.useState(false);
-  const [selected, setSelected] = React.useState<Warehouse | null>(null);
+
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [selected, setSelected] = React.useState<WarehouseWithRelations | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
@@ -94,6 +97,14 @@ const citiesQuery = useQuery({
 const branchesQuery = useQuery({
   queryKey: ["branches"],
   queryFn: () => branchApi.list(),
+});
+
+const warehouseDetail = useQuery({
+  queryKey: detailId
+    ? warehouseKeys.detail(detailId)
+    : ["warehouse-detail-empty"],
+  queryFn: () => warehouseApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
 });
   const { create, update, remove } = useMasterMutations({
     api: warehouseApi,
@@ -160,6 +171,10 @@ const branchesQuery = useQuery({
         "breadth",
         "gateNo",
       ]}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       search={search}
       onSearchChange={setSearch}
       page={page}
@@ -202,6 +217,16 @@ const branchesQuery = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportWarehouses.isPending}
     >
+    <WarehouseDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={
+    warehouseDetail.data as
+      | WarehouseWithRelations
+      | undefined
+  }
+  isLoading={warehouseDetail.isLoading}
+/>
       <WarehouseForm
   open={open}
   onOpenChange={setOpen}

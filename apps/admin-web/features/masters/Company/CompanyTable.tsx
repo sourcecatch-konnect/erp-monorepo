@@ -2,47 +2,84 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import type { Company } from "@skerp/types";
+import {
+  IconBuilding,
+  IconCalendar,
+  IconFileCertificate,
+  IconMapPin,
+  IconPhone,
+} from "@tabler/icons-react";
 
 const formatDate = (value?: string | null) => {
   if (!value) return "-";
-
   return new Date(value).toLocaleDateString();
 };
 
 export const companyColumns: ColumnDef<Company>[] = [
   {
     accessorKey: "name",
-    header: "Company Name",
+    header: "Company",
     enableHiding: false,
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <IconBuilding size={15} />
+        </span>
+
+        <div className="flex flex-col">
+          <span className="font-medium">{row.original.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {row.original.country ?? "-"}
+          </span>
+        </div>
+      </div>
+    ),
   },
   {
-    accessorKey: "country",
-    header: "Country",
-  },
-  {
-    id: "state",
-    header: "State",
-    cell: ({ row }) => row.original.state?.name ?? "-",
-  },
-  {
-    id: "city",
-    header: "City",
-    cell: ({ row }) => row.original.city?.name ?? "-",
+    id: "location",
+    header: "Location",
+    cell: ({ row }) => (
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+          <IconMapPin size={12} />
+          {row.original.state?.name ?? "-"}
+        </span>
+
+        <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+          {row.original.city?.name ?? "-"}
+        </span>
+      </div>
+    ),
   },
   {
     accessorKey: "contactPhone",
-    header: "Contact Phone",
-    cell: ({ row }) => row.original.contactPhone ?? "-",
+    header: "Contact",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 text-sm">
+        <IconPhone size={13} />
+        {row.original.contactPhone ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "establishmentYear",
-    header: "Establishment Date",
-    cell: ({ row }) => formatDate(row.original.establishmentYear),
+    header: "Established",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 text-sm">
+        <IconCalendar size={13} />
+        {formatDate(row.original.establishmentYear)}
+      </span>
+    ),
   },
   {
     accessorKey: "companyPAN",
     header: "PAN",
-    cell: ({ row }) => row.original.companyPAN ?? "-",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+        <IconFileCertificate size={12} />
+        {row.original.companyPAN ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "companyTAN",

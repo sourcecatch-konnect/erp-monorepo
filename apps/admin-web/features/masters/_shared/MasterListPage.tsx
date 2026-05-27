@@ -25,6 +25,7 @@ type Props<T extends { id: string }> = {
   page: number;
   size: number;
   total: number;
+  onView?: (row: T) => void;
   onPageChange: (page: number) => void;
   selectedIds: string[];
   onSelectedIdsChange: (ids: string[]) => void;
@@ -50,6 +51,7 @@ export default function MasterListPage<T extends { id: string }>({
   onSearchChange,
   page,
   size,
+  onView,
   total,
   onPageChange,
   defaultHiddenColumns,
@@ -163,6 +165,7 @@ export default function MasterListPage<T extends { id: string }>({
         columns={columns}
         onEdit={onEdit}
         onDelete={onDelete}
+        onView={onView}
         defaultHiddenColumns={defaultHiddenColumns}
         selectedIds={selectedIds}
         onSelectedIdsChange={onSelectedIdsChange}

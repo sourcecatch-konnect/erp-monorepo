@@ -11,13 +11,22 @@ import type {
   CreateSparePartSupplierFormInput,
 } from "@skerp/types";
 
+import {
+  IconBuildingStore,
+  IconFileCertificate,
+  IconMail,
+  IconMapPin,
+  IconPhone,
+  IconUser,
+} from "@tabler/icons-react";
+
 import { createSparePartSupplierSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
-import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
-import UppercaseTextField from "../_shared/fields/UppercaseTextField";
-import PhoneField from "../_shared/fields/PhoneField";
+import IconTextField from "../_shared/fields/IconTextField";
+import TextAreaField from "../_shared/fields/TextAreaField";
+import FormSection from "../_shared/fields/FormSection";
 
 type Props = {
   open: boolean;
@@ -32,6 +41,20 @@ const supplierTypeOptions = [
   { label: "Item", value: "Item" },
   { label: "Service", value: "Service" },
 ];
+
+const defaultValues: CreateSparePartSupplierFormInput = {
+  name: "",
+  type: "Item",
+  shopName: "",
+  address: "",
+  cityId: "",
+  contactPerson: "",
+  contactPhone: "",
+  mobileNo: "",
+  email: "",
+  panNo: "",
+  gstin: "",
+};
 
 export default function SparePartSupplierForm({
   open,
@@ -49,19 +72,7 @@ export default function SparePartSupplierForm({
     resolver: zodResolver(createSparePartSupplierSchema),
     mode: "onChange",
     reValidateMode: "onChange",
-    defaultValues: {
-      name: "",
-      type: "Item",
-      shopName: "",
-      address: "",
-      cityId: "",
-      contactPerson: "",
-      contactPhone: "",
-      mobileNo: "",
-      email: "",
-      panNo: "",
-      gstin: "",
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
@@ -100,80 +111,116 @@ export default function SparePartSupplierForm({
       isSubmitting={isSubmitting}
       columns={3}
     >
-      <TextField<CreateSparePartSupplierFormInput>
-        name="name"
-        label="Supplier Name"
-        placeholder="Enter supplier name"
-        required
-      />
+      <FormSection
+        icon={<IconBuildingStore size={18} />}
+        title="Supplier Information"
+        description="Basic supplier and shop details"
+      >
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="name"
+          label="Supplier Name"
+          placeholder="Enter supplier name"
+          icon={<IconUser size={16} />}
+          required
+        />
 
-      <SelectField<CreateSparePartSupplierFormInput>
-        name="type"
-        label="Type"
-        options={supplierTypeOptions}
-        required
-      />
+        <SelectField<CreateSparePartSupplierFormInput>
+          name="type"
+          label="Type"
+          options={supplierTypeOptions}
+          required
+        />
 
-      <TextField<CreateSparePartSupplierFormInput>
-        name="shopName"
-        label="Shop Name"
-        placeholder="Enter shop name"
-        required
-      />
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="shopName"
+          label="Shop Name"
+          placeholder="Enter shop name"
+          icon={<IconBuildingStore size={16} />}
+          required
+        />
 
-      <SelectField<CreateSparePartSupplierFormInput>
-        name="cityId"
-        label="City"
-        options={cityOptions}
-        required
-      />
+        <SelectField<CreateSparePartSupplierFormInput>
+          name="cityId"
+          label="City"
+          options={cityOptions}
+          required
+        />
+      </FormSection>
 
-      <TextField<CreateSparePartSupplierFormInput>
-        name="contactPerson"
-        label="Contact Person"
-        placeholder="Enter contact person"
-        required
-      />
+      <FormSection
+        icon={<IconPhone size={18} />}
+        title="Contact Details"
+        description="Person, phone, mobile and email information"
+      >
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="contactPerson"
+          label="Contact Person"
+          placeholder="Enter contact person"
+          icon={<IconUser size={16} />}
+          required
+        />
 
-    <PhoneField<CreateSparePartSupplierFormInput>
-  control={form.control}
-  name="contactPhone"
-  label="Contact Phone"
-  required
-/>
-      <PhoneField<CreateSparePartSupplierFormInput>
-  control={form.control}
-  name="mobileNo"
-  label="Mobile No"
-/>
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="contactPhone"
+          label="Contact Phone"
+          placeholder="10-digit contact number"
+          icon={<IconPhone size={16} />}
+          maxLength={10}
+          required
+        />
 
-      <TextField<CreateSparePartSupplierFormInput>
-        name="email"
-        label="Email"
-        placeholder="Enter email"
-      />
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="mobileNo"
+          label="Mobile No"
+          placeholder="10-digit mobile number"
+          icon={<IconPhone size={16} />}
+          maxLength={10}
+        />
 
-      <UppercaseTextField<CreateSparePartSupplierFormInput>
-        control={form.control}
-        name="panNo"
-        label="PAN No"
-        placeholder="ABCDE1234F"
-        maxLength={10}
-      />
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="email"
+          label="Email"
+          placeholder="Enter email"
+          icon={<IconMail size={16} />}
+        />
+      </FormSection>
 
-      <UppercaseTextField<CreateSparePartSupplierFormInput>
-        control={form.control}
-        name="gstin"
-        label="GSTIN"
-        placeholder="27ABCDE1234F1Z5"
-        maxLength={15}
-      />
+      <FormSection
+        icon={<IconFileCertificate size={18} />}
+        title="Tax Information"
+        description="PAN and GST registration details"
+      >
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="panNo"
+          label="PAN No"
+          placeholder="ABCDE1234F"
+          icon={<IconFileCertificate size={16} />}
+          maxLength={10}
+        />
 
-      <TextField<CreateSparePartSupplierFormInput>
-        name="address"
-        label="Address"
-        placeholder="Enter address"
-      />
+        <IconTextField<CreateSparePartSupplierFormInput>
+          name="gstin"
+          label="GSTIN"
+          placeholder="27ABCDE1234F1Z5"
+          icon={<IconFileCertificate size={16} />}
+          maxLength={15}
+        />
+      </FormSection>
+
+      <FormSection
+        icon={<IconMapPin size={18} />}
+        title="Address"
+        description="Supplier address details"
+        columns={1}
+      >
+        <TextAreaField<CreateSparePartSupplierFormInput>
+          name="address"
+          label="Address"
+          placeholder="Enter address"
+          rows={3}
+          maxLength={250}
+        />
+      </FormSection>
     </MasterFormDialog>
   );
 }

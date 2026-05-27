@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { optionalString } from "./spare-category.schema";
+const optionalString = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value : undefined));
+
 export const indianPhone = z
   .string()
   .trim()

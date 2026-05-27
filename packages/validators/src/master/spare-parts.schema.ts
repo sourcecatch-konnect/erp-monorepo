@@ -1,5 +1,10 @@
 import z from "zod";
-import { optionalString, partTypeSchema } from "./spare-category.schema";
+import {  partTypeSchema } from "./spare-category.schema.js";
+const optionalString = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value : undefined));
 
 const numberField = (message: string) =>
   z

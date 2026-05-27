@@ -1,19 +1,4 @@
 import { z } from "zod";
-const optionalNumberField = (message: string) =>
-  z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform((value) => {
-      if (value === "" || value === undefined || value === null) {
-        return undefined;
-      }
-
-      return Number(value);
-    })
-    .refine(
-      (value) => value === undefined || !Number.isNaN(value),
-      message
-    );
 const optionalString = z
   .string()
   .trim()

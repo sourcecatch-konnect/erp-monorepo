@@ -4,7 +4,6 @@ import {
   updateWarehouseSchema,
   warehouseSchema,
 } from "@skerp/validators";
-
 /* ---------------------------------
    BASE ENTITY TYPE (DB / API)
 ---------------------------------- */

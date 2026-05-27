@@ -1,5 +1,5 @@
 import { ComponentType } from "react";
-import { IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch, IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld } from "@tabler/icons-react";
+import { IconBox, IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch,IconGasStation ,IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld, IconTrain } from "@tabler/icons-react";
 
 export type MasterCategory = "Location";
 
@@ -13,6 +13,7 @@ permissionKey:
   | "masters.city"
   | "masters.area"
   | "masters.transport"
+  | "masters.wagon"
   | "masters.company"
   | "masters.vehicle"
   | "masters.spare-category"
@@ -22,7 +23,12 @@ permissionKey:
   | "masters.route"
   | "masters.branch"
   | "masters.driver"
-  | "masters.warehouse";
+  | "masters.labour"
+  | "masters.rate-matrix"
+  | "masters.agreement"
+  | "masters.goods"
+  | "masters.warehouse"
+  | "masters.pump";
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -135,6 +141,59 @@ export const masterRegistry = [
     permissionKey: "masters.driver",
     page: () => import("./driver/page"),
   },
+  {
+  slug: "labour",
+  label: "Labour",
+  icon: IconUsers,
+  category: "Location",
+  permissionKey: "masters.labour",
+  page: () => import("./labour/page"),
+},{
+  slug: "goods",
+  label: "Goods",
+  icon: IconBox, // or IconPackage if you prefer
+  category: "Location",
+  permissionKey: "masters.goods",
+  page: () => import("./Goods/page"),
+},
+{
+  slug: "pumps",
+  label: "Pump",
+  icon: IconGasStation,
+  category: "Location",
+  permissionKey: "masters.pump",
+  page: () => import("./Pump/page"),
+},
+{
+  slug: "wagons",
+  label: "Wagon",
+  icon: IconTrain,
+  category: "Location",
+  permissionKey: "masters.wagon",
+  page: () => import("./wagon/page"),
+},
+{
+  slug: "railway-freight",
+  label: "Railway Freight",
+  icon: IconTrain,
+  category: "Location",
+  permissionKey: "masters.route", // or create: "masters.railway-freight"
+  page: () => import("./railwayfreightMatrix/page"),
+},{
+  slug: "agreement",
+  label: "Agreement",
+  icon: IconBuilding,
+  category: "Location",
+  permissionKey: "masters.agreement", // or better: "masters.agreement"
+  page: () => import("./Agreements/page"),
+},{
+  slug: "rate-matrix",
+  label: "Rate Matrix",
+  icon: IconGitBranch, // or IconGitBranch / IconCategory if you prefer
+  category: "Location",
+  permissionKey: "masters.rate-matrix", // or better: "masters.rate-matrix"
+  page: () => import("./rateMatrix/page"),
+},
 ] satisfies MasterEntry[];
 
 export type MasterKey = (typeof masterRegistry)[number]["slug"];

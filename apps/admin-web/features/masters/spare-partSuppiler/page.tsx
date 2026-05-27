@@ -25,6 +25,8 @@ import SparePartSupplierForm from "./spare-partSupplierForm";
 import { sparePartSupplierColumns } from "./spare-partSupplierTable";
 import { createSparePartSupplierSchema } from "@skerp/validators";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import MasterDetailDialog from "../_shared/MasterDetailDialog";
+import SparePartSupplierDetailDialog from "./spare-partSupplierDialog";
 
 type SparePartSupplierCsvRow = Record<
   | "name"
@@ -51,7 +53,8 @@ export default function SparePartSupplierPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -81,7 +84,13 @@ export default function SparePartSupplierPage() {
 
 
 
- 
+ const supplierDetail = useQuery({
+  queryKey: detailId
+    ? sparePartSupplierKeys.detail(detailId)
+    : ["spare-part-supplier-detail-empty"],
+  queryFn: () => sparePartSupplierApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
   const { create, update, remove } = useMasterMutations({
    api: sparePartSupplierApi,
    queryKey: sparePartSupplierKeys.all,
@@ -138,6 +147,10 @@ export default function SparePartSupplierPage() {
       ]}
       isLoading={suppliers.isLoading}
       search={search}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       onSearchChange={setSearch}
       page={page}
       size={size}
@@ -170,6 +183,12 @@ export default function SparePartSupplierPage() {
       isImporting={bulkImport.isPending}
       isExporting={exportData.isPending}
     >
+  <SparePartSupplierDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={supplierDetail.data}
+  isLoading={supplierDetail.isLoading}
+/>
       <SparePartSupplierForm
         open={open}
         onOpenChange={setOpen}

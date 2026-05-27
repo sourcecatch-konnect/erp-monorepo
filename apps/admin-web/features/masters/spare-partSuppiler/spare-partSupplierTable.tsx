@@ -2,17 +2,49 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import type { SparePartSupplier } from "@skerp/types";
+import {
+  IconBuildingStore,
+  IconFileCertificate,
+  IconMail,
+  IconMapPin,
+  IconPhone,
+  IconUser,
+} from "@tabler/icons-react";
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString();
+};
 
 export const sparePartSupplierColumns: ColumnDef<SparePartSupplier>[] = [
   {
     accessorKey: "name",
-    header: "Supplier Name",
+    header: "Supplier",
     enableHiding: false,
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <IconBuildingStore size={15} />
+        </span>
+
+        <div className="flex flex-col">
+          <span className="font-medium">{row.original.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {row.original.shopName ?? row.original.type ?? "-"}
+          </span>
+        </div>
+      </div>
+    ),
   },
   {
     accessorKey: "type",
     header: "Type",
     enableHiding: false,
+    cell: ({ row }) => (
+      <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+        {row.original.type ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "shopName",
@@ -22,28 +54,53 @@ export const sparePartSupplierColumns: ColumnDef<SparePartSupplier>[] = [
   {
     id: "city",
     header: "City",
-    cell: ({ row }) => row.original.city?.name ?? "-",
     enableHiding: false,
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+        <IconMapPin size={12} />
+        {row.original.city?.name ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "contactPerson",
     header: "Contact Person",
-    cell: ({ row }) => row.original.contactPerson ?? "-",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 text-sm">
+        <IconUser size={13} />
+        {row.original.contactPerson ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "contactPhone",
     header: "Contact Phone",
-    cell: ({ row }) => row.original.contactPhone ?? "-",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 text-sm">
+        <IconPhone size={13} />
+        {row.original.contactPhone ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "mobileNo",
     header: "Mobile No",
-    cell: ({ row }) => row.original.mobileNo ?? "-",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 text-sm">
+        <IconPhone size={13} />
+        {row.original.mobileNo ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "email",
     header: "Email",
-    cell: ({ row }) => row.original.email ?? "-",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 text-sm">
+        <IconMail size={13} />
+        {row.original.email ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "address",
@@ -52,8 +109,13 @@ export const sparePartSupplierColumns: ColumnDef<SparePartSupplier>[] = [
   },
   {
     accessorKey: "panNo",
-    header: "PAN No",
-    cell: ({ row }) => row.original.panNo ?? "-",
+    header: "PAN",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+        <IconFileCertificate size={12} />
+        {row.original.panNo ?? "-"}
+      </span>
+    ),
   },
   {
     accessorKey: "gstin",
@@ -63,17 +125,11 @@ export const sparePartSupplierColumns: ColumnDef<SparePartSupplier>[] = [
   {
     accessorKey: "createdAt",
     header: "Created At",
-    cell: ({ row }) =>
-      row.original.createdAt
-        ? new Date(row.original.createdAt).toLocaleDateString()
-        : "-",
+    cell: ({ row }) => formatDate(row.original.createdAt),
   },
   {
     accessorKey: "updatedAt",
     header: "Updated At",
-    cell: ({ row }) =>
-      row.original.updatedAt
-        ? new Date(row.original.updatedAt).toLocaleDateString()
-        : "-",
+    cell: ({ row }) => formatDate(row.original.updatedAt),
   },
 ];

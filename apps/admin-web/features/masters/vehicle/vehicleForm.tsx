@@ -10,13 +10,23 @@ import type {
   Vehicle,
 } from "@skerp/types";
 
-import { DatePicker } from "../_shared/fields/DateField";
-import MasterFormDialog from "../_shared/MasterFormDialog";
-import SelectField from "../_shared/fields/SelectField";
-import TextField from "../_shared/fields/TextField";
 import { createVehicleSchema } from "@skerp/validators";
+
+import MasterFormDialog from "../_shared/MasterFormDialog";
+import FormSection from "../_shared/fields/FormSection";
+import TextField from "../_shared/fields/TextField";
+import SelectField from "../_shared/fields/SelectField";
 import NumberField from "../_shared/fields/NumberField";
 import VehicleNumberField from "../_shared/fields/vehicleNumberField";
+import { DatePicker } from "@skerp/ui/components/datepicker";
+
+import {
+  IconTruck,
+  IconId,
+  IconCalendar,
+  IconGasStation,
+} from "@tabler/icons-react";
+
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
@@ -29,6 +39,15 @@ const ownershipOptions = [
   { label: "Own Vehicle", value: "Own_Vehicle" },
   { label: "Market Vehicle", value: "Market_Vehicle" },
 ];
+
+const vehicleTypeOptions = [
+  { label: "Container", value: "Container" },
+  { label: "Open Body", value: "Open_Body" },
+  { label: "TATA 407", value: "TATA_407" },
+  { label: "DCM Lorry", value: "DCM_Lorry" },
+  { label: "DI Pickup", value: "DI_Pickup" },
+];
+
 const wheelOptions = [
   { label: "2 Wheel", value: "2" },
   { label: "4 Wheel", value: "4" },
@@ -40,32 +59,30 @@ const wheelOptions = [
   { label: "18 Wheel", value: "18" },
   { label: "22 Wheel", value: "22" },
 ];
-const wheelValues = ["2", "4", "6", "10", "12", "14", "16", "18", "22"] as const;
-
-const toWheelInput = (value?: string | null) => {
-  if (!value) return undefined;
-
-  return wheelValues.includes(value as (typeof wheelValues)[number])
-    ? (value as (typeof wheelValues)[number])
-    : undefined;
-};
-const vehicleTypeOptions = [
-  { label: "Container", value: "Container" },
-  { label: "Open Body", value: "Open_Body" },
-  { label: "TATA 407", value: "TATA_407" },
-  { label: "DCM Lorry", value: "DCM_Lorry" },
-  { label: "DI Pickup", value: "DI_Pickup" },
-];
 
 const vehicleStatusOptions = [
   { label: "Available", value: "AVAILABLE" },
   { label: "On Trip", value: "ON_TRIP" },
 ];
 
-const toDateInput = (value?: string | null) => {
-  if (!value) return "";
-
-  return value.slice(0, 10);
+const defaultValues: CreateVehicleFormInput = {
+  vehicleNumber: "",
+  chasisNumber: "",
+  engineNumber: "",
+  ownershipType: "Own_Vehicle",
+  vehicleType: "Container",
+  capacityMT: "",
+  wheels: undefined,
+  bodyType: "",
+  lengthFeet: "",
+  openingKM: "",
+  currentKM: "",
+  purchaseDate: "",
+  insuranceNumber: "",
+  insuranceCompany: "",
+  insuranceIssueDate: "",
+  insuranceDueDate: "",
+  status: "AVAILABLE",
 };
 
 export default function VehicleForm({
@@ -78,26 +95,8 @@ export default function VehicleForm({
   const form = useForm<CreateVehicleFormInput, unknown, CreateVehicleBody>({
     resolver: zodResolver(createVehicleSchema),
     mode: "onChange",
-  reValidateMode: "onChange",
-    defaultValues: {
-      vehicleNumber: "",
-      chasisNumber: "",
-      engineNumber: "",
-      ownershipType: "Own_Vehicle",
-      vehicleType: "Container",
-      capacityMT: "",
-      wheels: undefined,
-      bodyType: "",
-      lengthFeet: "",
-      openingKM: "",
-      currentKM: "",
-      purchaseDate: "",
-      insuranceNumber: "",
-      insuranceCompany: "",
-      insuranceIssueDate: "",
-      insuranceDueDate: "",
-      status: "AVAILABLE",
-    },
+    reValidateMode: "onChange",
+    defaultValues,
   });
 
   React.useEffect(() => {
@@ -125,158 +124,212 @@ export default function VehicleForm({
   }, [form, open, row]);
 
   return (
-<MasterFormDialog<CreateVehicleFormInput, CreateVehicleBody>
-  open={open}
-  onOpenChange={onOpenChange}
-  title={row ? "Edit Vehicle" : "Add Vehicle"}
-  form={form}
-  onSubmit={onSubmit}
-  isSubmitting={isSubmitting}
-  columns={3}
->
- <VehicleNumberField<CreateVehicleFormInput>
-  control={form.control}
-  name="vehicleNumber"
-  required
-/>
+    <MasterFormDialog<CreateVehicleFormInput, CreateVehicleBody>
+      open={open}
+      onOpenChange={onOpenChange}
+      title={row ? "Edit Vehicle" : "Add Vehicle"}
+      form={form}
+      onSubmit={onSubmit}
+      isSubmitting={isSubmitting}
+      columns={3}
+    >
+      {/* BASIC INFO */}
+      <FormSection
+        icon={<IconTruck size={18} />}
+        title="Vehicle Information"
+        description="Basic vehicle identity details"
+      >
+        <VehicleNumberField<CreateVehicleFormInput>
+          control={form.control}
+          name="vehicleNumber"
+          required
+        />
 
-      <TextField<CreateVehicleFormInput>
-        name="chasisNumber"
-        label="Chasis Number"
-        placeholder="Enter chasis number"
-        required
-      />
+        <TextField<CreateVehicleFormInput>
+          name="chasisNumber"
+          label="Chasis Number"
+          required
+        />
 
-      <TextField<CreateVehicleFormInput>
-        name="engineNumber"
-        label="Engine Number"
-        placeholder="Enter engine number"
-        required
-      />
+        <TextField<CreateVehicleFormInput>
+          name="engineNumber"
+          label="Engine Number"
+          required
+        />
+      </FormSection>
 
-      <SelectField<CreateVehicleFormInput>
-        name="ownershipType"
-        label="Ownership Type"
-        options={ownershipOptions}
-        required
-      />
+      {/* SPECIFICATIONS */}
+      <FormSection
+        icon={<IconTruck size={18} />}
+        title="Specifications"
+        description="Vehicle type and physical attributes"
+      >
+        <SelectField<CreateVehicleFormInput>
+          name="ownershipType"
+          label="Ownership Type"
+          options={ownershipOptions}
+          required
+        />
 
-      <SelectField<CreateVehicleFormInput>
-        name="vehicleType"
-        label="Vehicle Type"
-        options={vehicleTypeOptions}
-        required
-      />
+        <SelectField<CreateVehicleFormInput>
+          name="vehicleType"
+          label="Vehicle Type"
+          options={vehicleTypeOptions}
+          required
+        />
 
-    <NumberField<CreateVehicleFormInput>
-  control={form.control}
-  name="capacityMT"
-  label="Capacity MT"
-  placeholder="Enter capacity"
-  min={0.1}
-  max={100}
-  step="0.1"
-  required
-/>
+        <SelectField<CreateVehicleFormInput>
+          name="wheels"
+          label="Wheels"
+          options={wheelOptions}
+        />
 
-    <SelectField<CreateVehicleFormInput>
-  name="wheels"
-  label="Wheels"
-  options={wheelOptions}
-/>
+        <TextField<CreateVehicleFormInput>
+          name="bodyType"
+          label="Body Type"
+        />
 
-      <TextField<CreateVehicleFormInput>
-        name="bodyType"
-        label="Body Type"
-        placeholder="Enter body type"
-      />
+        <NumberField<CreateVehicleFormInput>
+          control={form.control}
+          name="capacityMT"
+          label="Capacity MT"
+          min={0.1}
+          max={100}
+          step="0.1"
+          required
+        />
 
-    <NumberField<CreateVehicleFormInput>
-  control={form.control}
-  name="lengthFeet"
-  label="Length Feet"
-  placeholder="Enter length"
-  min={1}
-  max={100}
-/>
+        <NumberField<CreateVehicleFormInput>
+          control={form.control}
+          name="lengthFeet"
+          label="Length (Feet)"
+          min={1}
+          max={100}
+        />
+      </FormSection>
 
+      {/* KM & USAGE */}
+      <FormSection
+        icon={<IconGasStation size={18} />}
+        title="Usage Details"
+        description="Odometer and operational data"
+      >
+        <NumberField<CreateVehicleFormInput>
+          control={form.control}
+          name="openingKM"
+          label="Opening KM"
+          min={0}
+          max={9999999}
+          required
+        />
 
-    <NumberField<CreateVehicleFormInput>
-  control={form.control}
-  name="openingKM"
-  label="Opening KM"
-  placeholder="Enter opening KM"
-  min={0}
-  max={9999999}
-  required
-/>
-   <NumberField<CreateVehicleFormInput>
-  control={form.control}
-  name="currentKM"
-  label="Current KM"
-  placeholder="Enter current KM"
-  min={0}
-  max={9999999}
-  required
-/>
-<Controller
-  control={form.control}
-  name="purchaseDate"
-  render={({ field }) => (
-    <DatePicker
-      label="Purchase Date"
-      selected={field.value ? new Date(field.value) : undefined}
-      onSelect={(date) => field.onChange(date ? date.toISOString().slice(0, 10) : "")}
-    />
-  )}
-/>
+        <NumberField<CreateVehicleFormInput>
+          control={form.control}
+          name="currentKM"
+          label="Current KM"
+          min={0}
+          max={9999999}
+          required
+        />
+      </FormSection>
 
-<Controller
-  control={form.control}
-  name="insuranceIssueDate"
-  render={({ field }) => (
-    <DatePicker
-      label="Insurance Issue Date"
-      selected={field.value ? new Date(field.value) : undefined}
-      onSelect={(date) => field.onChange(date ? date.toISOString().slice(0, 10) : "")}
-    />
-  )}
-/>
+      {/* INSURANCE */}
+      <FormSection
+        icon={<IconId size={18} />}
+        title="Insurance Details"
+        description="Insurance policy information"
+      >
+        <TextField<CreateVehicleFormInput>
+          name="insuranceNumber"
+          label="Insurance Number"
+        />
 
-<Controller
-  control={form.control}
-  name="insuranceDueDate"
-  render={({ field }) => (
-    <DatePicker
-      label="Insurance Due Date"
-      selected={field.value ? new Date(field.value) : undefined}
-      onSelect={(date) => field.onChange(date ? date.toISOString().slice(0, 10) : "")}
-    />
-  )}
-/>
+        <TextField<CreateVehicleFormInput>
+          name="insuranceCompany"
+          label="Insurance Company"
+        />
 
-      <TextField<CreateVehicleFormInput>
-        name="insuranceNumber"
-        label="Insurance Number"
-        placeholder="Enter insurance number"
-      />
+        <Controller
+          control={form.control}
+          name="insuranceIssueDate"
+          render={({ field }) => (
+            <DatePicker
+              label="Insurance Issue Date"
+              selected={field.value ? new Date(field.value) : undefined}
+              onSelect={(d) =>
+                field.onChange(d ? d.toISOString().slice(0, 10) : "")
+              }
+            />
+          )}
+        />
 
-      <TextField<CreateVehicleFormInput>
-        name="insuranceCompany"
-        label="Insurance Company"
-        placeholder="Enter insurance company"
-      />
+        <Controller
+          control={form.control}
+          name="insuranceDueDate"
+          render={({ field }) => (
+            <DatePicker
+              label="Insurance Due Date"
+              selected={field.value ? new Date(field.value) : undefined}
+              onSelect={(d) =>
+                field.onChange(d ? d.toISOString().slice(0, 10) : "")
+              }
+            />
+          )}
+        />
+      </FormSection>
 
-   
+      {/* PURCHASE */}
+      <FormSection
+        icon={<IconCalendar size={18} />}
+        title="Purchase Details"
+        description="Vehicle purchase information"
+      >
+        <Controller
+          control={form.control}
+          name="purchaseDate"
+          render={({ field }) => (
+            <DatePicker
+              label="Purchase Date"
+              selected={field.value ? new Date(field.value) : undefined}
+              onSelect={(d) =>
+                field.onChange(d ? d.toISOString().slice(0, 10) : "")
+              }
+            />
+          )}
+        />
+      </FormSection>
 
-    
-
-      <SelectField<CreateVehicleFormInput>
-        name="status"
-        label="Status"
-        options={vehicleStatusOptions}
-        required
-      />
+      {/* STATUS */}
+      <FormSection
+        icon={<IconTruck size={18} />}
+        title="Status"
+      >
+        <SelectField<CreateVehicleFormInput>
+          name="status"
+          label="Vehicle Status"
+          options={vehicleStatusOptions}
+          required
+        />
+      </FormSection>
     </MasterFormDialog>
   );
 }
+
+function toWheelInput(
+  wheels: string | null | undefined
+): "2" | "4" | "6" | "10" | "12" | "14" | "16" | "18" | "22" | undefined {
+  if (!wheels) return undefined;
+
+  const value = String(wheels);
+
+  const allowed = ["2", "4", "6", "10", "12", "14", "16", "18", "22"] as const;
+
+  return allowed.includes(value as any) ? (value as any) : undefined;
+}
+
+function toDateInput(date: string | null | undefined): string {
+  if (!date) return "";
+
+  return new Date(date).toISOString().slice(0, 10);
+}
+

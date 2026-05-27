@@ -31,6 +31,7 @@ import { companyKeys } from "../Company/company.key";
 import { cityKeys } from "../city/city.keys";
 import { toast } from "sonner";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import BranchDetailDialog from "./branchDialog";
 
 type BranchCsvRow = Record<
   | "branchCode"
@@ -57,7 +58,8 @@ export default function BranchPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
 
   const debouncedSearch = useDebouncedValue(search);
@@ -92,7 +94,11 @@ export default function BranchPage() {
     queryKey: cityKeys.list({ size: 1000 }),
     queryFn: () => cityApi.list({ size: 1000 }),
   });
-
+const branchDetail = useQuery({
+  queryKey: detailId ? branchKeys.detail(detailId) : ["branch-detail-empty"],
+  queryFn: () => branchApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
 const { create, update, remove } = useMasterMutations({
   api: branchApi,
   queryKey: branchKeys.all,
@@ -191,6 +197,10 @@ const bulkImport = useMutation({
           parsedRows
         );
       }}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       onExport={() =>
         exportBranches.mutate(listQuery)
       }
@@ -198,6 +208,12 @@ const bulkImport = useMutation({
       isImporting={bulkImport.isPending}
       isExporting={exportBranches.isPending}
     >
+      <BranchDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={branchDetail.data}
+  isLoading={branchDetail.isLoading}
+/>
       <BranchForm
         open={open}
         onOpenChange={setOpen}

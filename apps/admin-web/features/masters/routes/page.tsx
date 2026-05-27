@@ -17,6 +17,8 @@ import { cityKeys } from "../city/city.keys";
 
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { routeApi } from "./routes.service";
+import MasterDetailDialog from "../_shared/MasterDetailDialog";
+import RouteDetailDialog from "./routeDialog";
 
 type RouteCsvRow = Record<
   "sourceCityId" | "destinationCityId",
@@ -31,7 +33,8 @@ export default function RoutePage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -60,7 +63,11 @@ console.log(routes,"data routes")
     queryKey: cityKeys.list({ size: 1000 }),
     queryFn: () => cityApi.list({ size: 1000 }),
   });
-
+const routeDetail = useQuery({
+  queryKey: detailId ? routeKeys.detail(detailId) : ["route-detail-empty"],
+  queryFn: () => routeApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
   const { create, update, remove } = useMasterMutations({
     api: routeApi,
     queryKey: routeKeys.all,
@@ -113,6 +120,10 @@ console.log(routes,"data routes")
       search={search}
       onSearchChange={setSearch}
       page={page}
+         onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       size={size}
       total={routes.data?.meta?.total ?? 0}
       onPageChange={setPage}
@@ -155,6 +166,12 @@ console.log(routes,"data routes")
       isImporting={bulkImport.isPending}
       isExporting={exportRoutes.isPending}
     >
+  <RouteDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={routeDetail.data}
+  isLoading={routeDetail.isLoading}
+/>
       <RouteForm
         open={open}
         onOpenChange={setOpen}

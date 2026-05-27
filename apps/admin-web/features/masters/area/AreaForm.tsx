@@ -4,17 +4,15 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-
-import type {
-  Area,
-  CreateAreaBody,
-  City,
-} from "@skerp/types";
+import type { Area, CreateAreaBody, City } from "@skerp/types";
+import { createAreaSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
-import SelectField from "../_shared/fields/SelectField";
+import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
-import { createAreaSchema } from "@skerp/validators";
+import SelectField from "../_shared/fields/SelectField";
+
+import { IconMapPin } from "@tabler/icons-react";
 
 type Props = {
   open: boolean;
@@ -23,6 +21,11 @@ type Props = {
   cities: City[];
   onSubmit: (data: CreateAreaBody) => Promise<void>;
   isSubmitting?: boolean;
+};
+
+const defaultValues: CreateAreaBody = {
+  name: "",
+  cityId: "",
 };
 
 export default function AreaForm({
@@ -35,22 +38,17 @@ export default function AreaForm({
 }: Props) {
   const form = useForm<CreateAreaBody>({
     resolver: zodResolver(createAreaSchema),
-    defaultValues: {
-      name: "",
-      cityId: "",
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
 
     form.reset({
       name: row?.name ?? "",
       cityId: row?.cityId ?? "",
     });
-  }, [form, open, row]);
+  }, [open, row]);
 
   return (
     <MasterFormDialog
@@ -60,23 +58,32 @@ export default function AreaForm({
       form={form}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
+      columns={2}
     >
-      <TextField<CreateAreaBody>
-        name="name"
-        label="Area Name"
-        placeholder="Enter area name"
-        required
-      />
+      {/* AREA INFO SECTION */}
+      <FormSection
+        icon={<IconMapPin size={18} />}
+        title="Area Information"
+        description="Basic details of the area"
+      >
+        <TextField<CreateAreaBody>
+          name="name"
+          label="Area Name"
+          placeholder="e.g. Civil Lines"
+          required
+        />
 
-      <SelectField<CreateAreaBody>
-        name="cityId"
-        label="City"
-        options={cities.map((city) => ({
-          label: city.name,
-          value: city.id,
-        }))}
-        required
-      />
+        <SelectField<CreateAreaBody>
+          name="cityId"
+          label="City"
+          options={cities.map((city) => ({
+            label: city.name,
+            value: city.id,
+          }))}
+          required
+        />
+      </FormSection>
+
     </MasterFormDialog>
   );
 }

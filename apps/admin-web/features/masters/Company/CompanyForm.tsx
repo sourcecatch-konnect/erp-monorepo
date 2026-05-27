@@ -12,13 +12,23 @@ import type {
   CreateCompanyFormInput,
 } from "@skerp/types";
 
+import {
+  IconBuilding,
+  IconCalendar,
+  IconFileCertificate,
+  IconImageInPicture,
+  IconMapPin,
+  IconPhone,
+} from "@tabler/icons-react";
+
 import { createCompanySchema } from "@skerp/validators";
-import { DatePicker } from "../_shared/fields/DateField";
+// import { DatePicker } from "../_shared/fields/DateField";
+import { DatePicker } from "@skerp/ui/components/datepicker";
 import MasterFormDialog from "../_shared/MasterFormDialog";
-import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
-import UppercaseTextField from "../_shared/fields/UppercaseTextField";
-import PhoneField from "../_shared/fields/PhoneField";
+import FormSection from "../_shared/fields/FormSection";
+import IconTextField from "../_shared/fields/IconTextField";
+import TextAreaField from "../_shared/fields/TextAreaField";
 
 type Props = {
   open: boolean;
@@ -30,6 +40,19 @@ type Props = {
   isSubmitting?: boolean;
 };
 
+const defaultValues: CreateCompanyFormInput = {
+  name: "",
+  address: "",
+  country: "India",
+  stateId: "",
+  cityId: "",
+  contactPhone: "",
+  establishmentYear: "",
+  companyPAN: "",
+  mainLogoPath: "",
+  companyTAN: "",
+};
+
 export default function CompanyForm({
   open,
   onOpenChange,
@@ -39,26 +62,11 @@ export default function CompanyForm({
   onSubmit,
   isSubmitting,
 }: Props) {
-  const form = useForm<
-    CreateCompanyFormInput,
-    unknown,
-    CreateCompanyBody
-  >({
+  const form = useForm<CreateCompanyFormInput, unknown, CreateCompanyBody>({
     resolver: zodResolver(createCompanySchema),
     mode: "onChange",
     reValidateMode: "onChange",
-    defaultValues: {
-      name: "",
-      address: "",
-      country: "India",
-      stateId: "",
-      cityId: "",
-      contactPhone: "",
-      establishmentYear: "",
-      companyPAN: "",
-      mainLogoPath: "",
-      companyTAN: "",
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
@@ -104,79 +112,106 @@ export default function CompanyForm({
       isSubmitting={isSubmitting}
       columns={3}
     >
-      <TextField<CreateCompanyFormInput>
-        name="name"
-        label="Company Name"
-        placeholder="Enter company name"
-        required
-      />
+      <FormSection
+        icon={<IconBuilding size={18} />}
+        title="Company Information"
+        description="Basic company identity and registration details"
+      >
+        <IconTextField<CreateCompanyFormInput>
+          name="name"
+          label="Company Name"
+          placeholder="Enter company name"
+          icon={<IconBuilding size={16} />}
+          required
+        />
 
-      <TextField<CreateCompanyFormInput>
-        name="country"
-        label="Country"
-        placeholder="Enter country"
-        required
-      />
-
-      <SelectField<CreateCompanyFormInput>
-        name="stateId"
-        label="State"
-        options={stateOptions}
-      />
-
-      <SelectField<CreateCompanyFormInput>
-        name="cityId"
-        label="City"
-        options={cityOptions}
-      />
-
-      <PhoneField<CreateCompanyFormInput>
-        control={form.control}
-        name="contactPhone"
-        label="Contact Phone"
-      />
-
-     <Controller
-  control={form.control}
-  name="establishmentYear"
-  render={({ field }) => (
-    <DatePicker
-      label="Establishment Date"
-      selected={field.value ? new Date(field.value) : undefined}
-      onSelect={(date) =>
-        field.onChange(date ? date.toISOString().slice(0, 10) : "")
-      }
-    />
-  )}
+        <IconTextField<CreateCompanyFormInput>
+  name="companyPAN"
+  label="Company PAN"
+  placeholder="ABCDE1234F"
+  icon={<IconFileCertificate size={16} />}
+  onChangeTransform={(value) => value.toUpperCase()}
 />
 
-      <UppercaseTextField<CreateCompanyFormInput>
-        control={form.control}
-        name="companyPAN"
-        label="Company PAN"
-        placeholder="ABCDE1234F"
-        maxLength={10}
-      />
+        <IconTextField<CreateCompanyFormInput>
+          name="companyTAN"
+          label="Company TAN"
+          placeholder="ABCD12345E"
+          icon={<IconFileCertificate size={16} />}
+          onChangeTransform={(value) => value.toUpperCase()}
+        />
 
-      <UppercaseTextField<CreateCompanyFormInput>
-        control={form.control}
-        name="companyTAN"
-        label="Company TAN"
-        placeholder="ABCD12345E"
-        maxLength={10}
-      />
+        <Controller
+          control={form.control}
+          name="establishmentYear"
+          render={({ field }) => (
+            <DatePicker
+              label="Establishment Date"
+              selected={field.value ? new Date(field.value) : undefined}
+              onSelect={(date) =>
+                field.onChange(date ? date.toISOString().slice(0, 10) : "")
+              }
+            />
+          )}
+        />
 
-      <TextField<CreateCompanyFormInput>
-        name="mainLogoPath"
-        label="Main Logo Path"
-        placeholder="Enter logo path"
-      />
+        <IconTextField<CreateCompanyFormInput>
+          name="mainLogoPath"
+          label="Main Logo Path"
+          placeholder="Enter logo path"
+          icon={<IconImageInPicture size={16} />}
+        />
+      </FormSection>
 
-      <TextField<CreateCompanyFormInput>
-        name="address"
-        label="Address"
-        placeholder="Enter address"
-      />
+      <FormSection
+        icon={<IconMapPin size={18} />}
+        title="Address Details"
+        description="Company location and registered address"
+      >
+        <IconTextField<CreateCompanyFormInput>
+          name="country"
+          label="Country"
+          placeholder="Enter country"
+          icon={<IconMapPin size={16} />}
+          required
+        />
+
+        <SelectField<CreateCompanyFormInput>
+          name="stateId"
+          label="State"
+          options={stateOptions}
+        />
+
+        <SelectField<CreateCompanyFormInput>
+          name="cityId"
+          label="City"
+          options={cityOptions}
+        />
+
+        <div className="md:col-span-2 xl:col-span-3">
+          <TextAreaField<CreateCompanyFormInput>
+            name="address"
+            label="Address"
+            placeholder="Enter address"
+            rows={2}
+            maxLength={250}
+          />
+        </div>
+      </FormSection>
+
+      <FormSection
+        icon={<IconPhone size={18} />}
+        title="Contact Details"
+        description="Primary communication information"
+      >
+        <IconTextField<CreateCompanyFormInput>
+          name="contactPhone"
+          label="Contact Phone"
+          placeholder="10-digit phone number"
+          icon={<IconPhone size={16} />}
+          maxLength={10}
+        />
+      </FormSection>
     </MasterFormDialog>
   );
 }

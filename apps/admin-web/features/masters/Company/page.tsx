@@ -22,8 +22,9 @@ import { stateApi } from "../state/state.service";
 import { cityApi } from "../city/city.service";
 import { stateKeys } from "../state/state.keys";
 import { cityKeys } from "../city/city.keys";
+import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CompanyDetailDialog from "./CompanyDialog";
 import { toast } from "sonner";
-import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 type CompanyCsvRow = Record<
   | "name"
@@ -47,7 +48,8 @@ export default function CompanyPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -81,33 +83,51 @@ export default function CompanyPage() {
     queryKey: cityKeys.list({ size: 1000 }),
     queryFn: () => cityApi.list({ size: 1000 }),
   });
-
- const { create, update, remove } = useMasterMutations({
+const companyDetail = useQuery({
+  queryKey: detailId
+    ? companyKeys.detail(detailId)
+    : ["company-detail-empty"],
+  queryFn: () => companyApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
+const { create, update, remove } = useMasterMutations({
   api: companyApi,
   queryKey: companyKeys.all,
+  entityName: "Company",
 });
-  const bulkRemove = useMutation({
-    mutationFn: companyApi.bulkRemove,
-    onSuccess: () => {
-      setSelectedIds([]);
-      queryClient.invalidateQueries({ queryKey: companyKeys.all });
-    },
-  });
+ const bulkRemove = useMutation({
+  mutationFn: companyApi.bulkRemove,
+  onSuccess: () => {
+    toast.success("Selected companies deleted successfully");
+    setSelectedIds([]);
+    queryClient.invalidateQueries({ queryKey: companyKeys.all });
+  },
+  onError: (error) => {
+    toast.error(getErrorMessage(error));
+  },
+});
 
-  const bulkImport = useMutation({
-    mutationFn: companyApi.bulkImport,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: companyKeys.all });
-    },
-  });
+const bulkImport = useMutation({
+  mutationFn: companyApi.bulkImport,
+  onSuccess: () => {
+    toast.success("Companies imported successfully");
+    queryClient.invalidateQueries({ queryKey: companyKeys.all });
+  },
+  onError: (error) => {
+    toast.error(getErrorMessage(error));
+  },
+});
 
-  const exportCompanies = useMutation({
-    mutationFn: companyApi.export,
-    onSuccess: (blob) => {
-      downloadBlob(blob, "companies.csv");
-    },
-  });
-
+const exportCompanies = useMutation({
+  mutationFn: companyApi.export,
+  onSuccess: (blob) => {
+    downloadBlob(blob, "companies.csv");
+    toast.success("Companies exported successfully");
+  },
+  onError: (error) => {
+    toast.error(getErrorMessage(error));
+  },
+});
   const handleSubmit = async (data: CreateCompanyBody) => {
     if (selected) {
       await update.mutateAsync({ id: selected.id, data });
@@ -138,6 +158,10 @@ export default function CompanyPage() {
         "createdAt",
         "updatedAt",
       ]}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       search={search}
       onSearchChange={setSearch}
       page={page}
@@ -175,6 +199,12 @@ export default function CompanyPage() {
       isImporting={bulkImport.isPending}
       isExporting={exportCompanies.isPending}
     >
+<CompanyDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={companyDetail.data}
+  isLoading={companyDetail.isLoading}
+/>
       <CompanyForm
         open={open}
         onOpenChange={setOpen}

@@ -16,7 +16,14 @@ import {
   TableHead,
   TableCell,
 } from "@skerp/ui/components/table";
-
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@skerp/ui/components/dialog";
 import { Button } from "@skerp/ui/components/button";
 import { Checkbox } from "@skerp/ui/components/checkbox";
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -30,7 +37,7 @@ import { DropdownMenu,
    DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger, } from "@skerp/ui/components/dropdown";
-import { IconDatabaseOff, IconEdit, IconTrash } from "@tabler/icons-react";
+import { IconDatabaseOff, IconEdit, IconEye, IconTrash } from "@tabler/icons-react";
 
 type Props<T extends { id: string }> = {
   title?: string;
@@ -43,6 +50,7 @@ type Props<T extends { id: string }> = {
   onSelectedIdsChange?: (ids: string[]) => void;
   isLoading?: boolean;
   defaultHiddenColumns?: string[];
+  onView?: (row: T) => void;
 };
 
 export default function MasterTable<T extends { id: string }>({
@@ -52,13 +60,15 @@ export default function MasterTable<T extends { id: string }>({
   onEdit,
   onDelete,
   onAddNew,
+  onView,
   selectedIds = [],
   onSelectedIdsChange,
   isLoading,
   defaultHiddenColumns
 }: Props<T>) {
-  const hasActions = Boolean(onEdit || onDelete);
+ const hasActions = Boolean(onView || onEdit || onDelete);
   const hasSelection = Boolean(onSelectedIdsChange);
+  const [deleteRow, setDeleteRow] = React.useState<T | null>(null);
   const selectedSet = React.useMemo(
     () => new Set(selectedIds),
     [selectedIds]
@@ -286,7 +296,22 @@ const [columnVisibility, setColumnVisibility] =
      {hasActions && (
  <TableCell className="sticky right-0 w-[104px] bg-white pr-4 text-right">
     <div className="flex justify-end items-center gap-1">
-      
+      {onView && (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        className="text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
+        onClick={() => onView(row.original)}
+        aria-label="View row"
+      >
+        <IconEye size={16} />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>View</TooltipContent>
+  </Tooltip>
+)}
       {onEdit && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -311,7 +336,7 @@ const [columnVisibility, setColumnVisibility] =
               size="icon-sm"
               variant="ghost"
               className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-              onClick={() => onDelete(row.original.id)}
+              onClick={() => setDeleteRow(row.original)}
               aria-label="Delete row"
             >
               <IconTrash size={16} />
@@ -330,6 +355,43 @@ const [columnVisibility, setColumnVisibility] =
         </TableBody>
       </Table>
       </div>
+      <Dialog
+  open={Boolean(deleteRow)}
+  onOpenChange={(open) => {
+    if (!open) setDeleteRow(null);
+  }}
+>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Delete record?</DialogTitle>
+      <DialogDescription>
+        This action cannot be undone. If dependent data exists, deletion will be blocked.
+      </DialogDescription>
+    </DialogHeader>
+
+    <DialogFooter>
+      <Button
+        variant="outline"
+        onClick={() => setDeleteRow(null)}
+      >
+        Cancel
+      </Button>
+
+      <Button
+        className="bg-red-600 text-white hover:bg-red-700"
+        onClick={() => {
+  if (deleteRow && onDelete) {
+    onDelete(deleteRow.id);
+  }
+
+  setDeleteRow(null);
+}}
+      >
+        Delete
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
     </div>
     </TooltipProvider>
   );

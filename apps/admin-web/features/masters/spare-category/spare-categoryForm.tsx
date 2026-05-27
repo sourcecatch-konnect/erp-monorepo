@@ -13,29 +13,30 @@ import type {
 import { createSpareCategorySchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
+import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
+
+import { IconTool } from "@tabler/icons-react";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: SpareCategory | null;
-  onSubmit: (
-    data: CreateSpareCategoryBody
-  ) => Promise<void>;
+  onSubmit: (data: CreateSpareCategoryBody) => Promise<void>;
   isSubmitting?: boolean;
 };
 
 const spareTypeOptions = [
-  {
-    label: "Item",
-    value: "Item",
-  },
-  {
-    label: "Service",
-    value: "Service",
-  },
+  { label: "Item", value: "Item" },
+  { label: "Service", value: "Service" },
 ];
+
+const defaultValues: CreateSpareCategoryFormInput = {
+  name: "",
+  type: "Item",
+  ledgerName: "",
+};
 
 export default function SpareCategoryForm({
   open,
@@ -49,17 +50,10 @@ export default function SpareCategoryForm({
     unknown,
     CreateSpareCategoryBody
   >({
-    resolver: zodResolver(
-      createSpareCategorySchema
-    ),
+    resolver: zodResolver(createSpareCategorySchema),
     mode: "onChange",
     reValidateMode: "onChange",
-
-    defaultValues: {
-      name: "",
-      type: "Item",
-      ledgerName: "",
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
@@ -70,7 +64,7 @@ export default function SpareCategoryForm({
       type: row?.type ?? "Item",
       ledgerName: row?.ledgerName ?? "",
     });
-  }, [form, open, row]);
+  }, [open, row]);
 
   return (
     <MasterFormDialog<
@@ -79,35 +73,45 @@ export default function SpareCategoryForm({
     >
       open={open}
       onOpenChange={onOpenChange}
-      title={
-        row
-          ? "Edit Spare Category"
-          : "Add Spare Category"
-      }
+      title={row ? "Edit Spare Category" : "Add Spare Category"}
       form={form}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
       columns={2}
     >
-      <TextField<CreateSpareCategoryFormInput>
-        name="name"
-        label="Name"
-        placeholder="Enter category name"
-        required
-      />
+      {/* BASIC INFO */}
+      <FormSection
+        icon={<IconTool size={18} />}
+        title="Spare Category Information"
+        description="Basic details of spare category"
+      >
+        <TextField<CreateSpareCategoryFormInput>
+          name="name"
+          label="Category Name"
+          placeholder="e.g. Engine Parts"
+          required
+        />
 
-      <SelectField<CreateSpareCategoryFormInput>
-        name="type"
-        label="Type"
-        options={spareTypeOptions}
-        required
-      />
+        <SelectField<CreateSpareCategoryFormInput>
+          name="type"
+          label="Type"
+          options={spareTypeOptions}
+          required
+        />
+      </FormSection>
 
-      <TextField<CreateSpareCategoryFormInput>
-        name="ledgerName"
-        label="Ledger Name"
-        placeholder="Enter ledger name"
-      />
+      {/* ACCOUNTING INFO */}
+      <FormSection
+        icon={<IconTool size={18} />}
+        title="Accounting Details"
+        description="Ledger mapping for accounting system"
+      >
+        <TextField<CreateSpareCategoryFormInput>
+          name="ledgerName"
+          label="Ledger Name"
+          placeholder="e.g. Spare Parts Account"
+        />
+      </FormSection>
     </MasterFormDialog>
   );
 }

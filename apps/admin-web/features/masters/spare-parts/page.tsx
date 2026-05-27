@@ -28,6 +28,8 @@ import { spareCategoryKeys } from "../spare-category/spare-category.key";
 import { sparePartSupplierApi } from "../spare-partSuppiler/spare-partSupplier.service";
 import { sparePartSupplierKeys } from "../spare-partSuppiler/spare-partSupplier.key";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import MasterDetailDialog from "../_shared/MasterDetailDialog";
+import SparePartDetailDialog from "./spare-partDialog";
 type SparePartCsvRow = Record<
   | "name"
   | "type"
@@ -50,7 +52,8 @@ export default function SparePartPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -85,7 +88,13 @@ export default function SparePartPage() {
     queryFn: () => sparePartSupplierApi.list(),
   });
 
-
+const sparePartDetail = useQuery({
+  queryKey: detailId
+    ? sparePartKeys.detail(detailId)
+    : ["spare-part-detail-empty"],
+  queryFn: () => sparePartApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
 
  const { create, update, remove } = useMasterMutations({
   api: sparePartApi,
@@ -138,6 +147,10 @@ export default function SparePartPage() {
         "createdAt",
         "updatedAt",
       ]}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       isLoading={spareParts.isLoading}
       search={search}
       onSearchChange={setSearch}
@@ -185,6 +198,12 @@ export default function SparePartPage() {
         onSubmit={handleSubmit}
         isSubmitting={create.isPending || update.isPending}
       />
+<SparePartDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={sparePartDetail.data}
+  isLoading={sparePartDetail.isLoading}
+/>
     </MasterListPage>
   );
 }

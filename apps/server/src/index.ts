@@ -21,6 +21,13 @@ import BranchRoute from "./modules/branch/branch.route.js"
 import Routes from "./modules/route/route.routes.js"
 import WarehousesRoute from "./modules/warehouse/warehouse.route.js"
 import driverRoute from "./modules/warehouse/warehouse.route.js"
+import goodsRoute from "./modules/goods/goods.route.js"
+import labourRoute from "./modules/labour/labour.route.js"
+import pumpRoute from "./modules/pump/pump.route.js"
+import wagonRoute from "./modules/wagon/wagon.type.js"
+import RailwayFreightRoute from "./modules/railwayFraightMatrix/railwayFreightMatrix.route.js"
+import agreementRoute from "./modules/agreements/agreement.route.js"
+import rateMatrixRoute from "./modules/rateMatrix/rateMatrix.route.js"
 const app = express();
 
 // Dev origins for the admin (3001) and employee (3002) web apps.
@@ -52,6 +59,14 @@ app.use("/companies",CompanyRoute)
 app.use("/branches", BranchRoute)
 app.use("/routes",Routes)
 app.use("/warehouses",WarehousesRoute)
+app.use("/labours",labourRoute)
+app.use("/rateMatrix",rateMatrixRoute)
+app.use("/railway-freight", RailwayFreightRoute);
+app.use("/goods",goodsRoute)
+app.use("/wagons",wagonRoute)
+app.use("/agreements",agreementRoute)
+app.use("/pumps",pumpRoute)
+
 app.use(errorMiddleware);
 const PORT = 5000;
 

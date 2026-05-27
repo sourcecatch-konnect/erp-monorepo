@@ -24,6 +24,8 @@ import { transportKeys } from "./transport.key";
 import TransportForm from "./transportForm";
 import { transportColumns } from "./transportTable";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import MasterDetailDialog from "../_shared/MasterDetailDialog";
+import TransportDetailDialog from "./transportDialog";
 
 export default function TransportPage() {
   const queryClient = useQueryClient();
@@ -33,7 +35,8 @@ export default function TransportPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -52,7 +55,13 @@ export default function TransportPage() {
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch]);
-
+const transportDetail = useQuery({
+  queryKey: detailId
+    ? transportKeys.detail(detailId)
+    : ["transport-detail-empty"],
+  queryFn: () => transportApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
   const transports = useQuery({
     queryKey: transportKeys.list(listQuery),
     queryFn: () => transportApi.list(listQuery),
@@ -116,6 +125,10 @@ export default function TransportPage() {
       onSearchChange={setSearch}
       page={page}
       size={size}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       total={transports.data?.meta?.total ?? 0}
       onPageChange={setPage}
       selectedIds={selectedIds}
@@ -140,6 +153,12 @@ export default function TransportPage() {
       isImporting={bulkImport.isPending}
       isExporting={exportTransports.isPending}
     >
+<TransportDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={transportDetail.data}
+  isLoading={transportDetail.isLoading}
+/>
       <TransportForm
         open={open}
         onOpenChange={setOpen}

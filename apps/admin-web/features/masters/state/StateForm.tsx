@@ -1,12 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createStateSchema } from "@skerp/validators/master/state";
+
 import type { CreateStateBody, State } from "@skerp/types";
+import { createStateSchema } from "@skerp/validators/master/state";
+
 import MasterFormDialog from "../_shared/MasterFormDialog";
+import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
+import IconTextField from "../_shared/fields/IconTextField";
+
+import { IconMapPin } from "@tabler/icons-react";
 
 type Props = {
   open: boolean;
@@ -14,6 +20,10 @@ type Props = {
   row?: State | null;
   onSubmit: (data: CreateStateBody) => Promise<void>;
   isSubmitting?: boolean;
+};
+
+const defaultValues: CreateStateBody = {
+  name: "",
 };
 
 export default function StateForm({
@@ -25,20 +35,16 @@ export default function StateForm({
 }: Props) {
   const form = useForm<CreateStateBody>({
     resolver: zodResolver(createStateSchema),
-    defaultValues: {
-      name: "",
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
 
     form.reset({
       name: row?.name ?? "",
     });
-  }, [form, open, row]);
+  }, [open, row]);
 
   return (
     <MasterFormDialog
@@ -48,13 +54,23 @@ export default function StateForm({
       form={form}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
+      columns={2}
     >
-      <TextField<CreateStateBody>
-        name="name"
-        label="State Name"
-        placeholder="Enter state name"
-        required
-      />
+      {/* BASIC INFO SECTION (like DriverForm style) */}
+      <FormSection
+        icon={<IconMapPin size={18} />}
+        title="State Information"
+        description="Basic details of the state"
+      >
+        <TextField<CreateStateBody>
+          name="name"
+          label="State Name"
+          placeholder="e.g. Maharashtra"
+          required
+        />
+      </FormSection>
+
+
     </MasterFormDialog>
   );
 }

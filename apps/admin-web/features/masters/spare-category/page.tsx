@@ -24,6 +24,8 @@ import SpareCategoryForm from "./spare-categoryForm";
 import { spareCategoryColumns } from "./spare-categoryTable";
 import { createSpareCategorySchema } from "@skerp/validators";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import MasterDetailDialog from "../_shared/MasterDetailDialog";
+import SpareCategoryDetailDialog from "./spare-categoryDialog";
 
 type SpareCategoryCsvRow = Record<
   "name" | "type" | "ledgerName",
@@ -41,7 +43,8 @@ export default function SpareCategoryPage() {
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] =
     React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
 
   const debouncedSearch =
@@ -78,7 +81,13 @@ export default function SpareCategoryPage() {
         listQuery
       ),
   });
-
+const spareCategoryDetail = useQuery({
+  queryKey: detailId
+    ? spareCategoryKeys.detail(detailId)
+    : ["spare-category-detail-empty"],
+  queryFn: () => spareCategoryApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
  const { create, update, remove } = useMasterMutations({
   api: spareCategoryApi,
   queryKey: spareCategoryKeys.all,
@@ -228,7 +237,17 @@ export default function SpareCategoryPage() {
       isExporting={
         exportData.isPending
       }
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
     >
+<SpareCategoryDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={spareCategoryDetail.data}
+  isLoading={spareCategoryDetail.isLoading}
+/>
       <SpareCategoryForm
         open={open}
         onOpenChange={

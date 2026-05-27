@@ -59,14 +59,21 @@ export * from "./master/state.schema.js";
 export * from "./master/city.schema.js";
 export * from "./master/area.schema.js";
 export * from "./master/transport.schema.js";
-export * from "./master/vehicle.schema.js";
 export * from "./master/driver.schema.js";
 
 export * from "./master/vehicle.schema.js";
 export * from "./master/spare-category.schema.js";
 export * from "./master/spare-parts.schema.js";
-export * from "./master/spare-partSuplier.schema.js";
-export * from "./master/customer.schema.js";
+export * from "./master/spare-part-supplier.schema.js"
 export * from "./master/company.schema.js";
 export * from "./master/branch.schema.js";
 export * from "./master/route.schema.js";
+export * from "./master/warehouse.schema.js"
+export * from "./master/customer.schema.js"
+export * from "./master/goods.schema.js"
+export * from "./master/labour.schema.js"
+export * from "./master/pump.schema.js"
+export * from "./master/wagon.schema.js"
+export * from "./master/railwayFreighMatrix.schema.js"
+export * from "./master/agreement.schema.js"
+export * from "./master/rateMatrix.schema.js"

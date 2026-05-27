@@ -17,6 +17,7 @@ import { driverKeys } from "./driver.key";
 import { driverColumns } from "./driverTable";
 import DriverForm from "./driverForm";
 import { createDriverSchema } from "@skerp/validators";
+import DriverDetailDialog from "./driverDialog";
 
 type DriverCsvRow = Record<string, string>;
 
@@ -28,7 +29,8 @@ export default function DriverPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
+const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
 
@@ -52,7 +54,11 @@ export default function DriverPage() {
     queryKey: driverKeys.list(listQuery),
     queryFn: () => driverApi.list(listQuery),
   });
-
+const driverDetail = useQuery({
+  queryKey: detailId ? driverKeys.detail(detailId) : ["driver-detail-empty"],
+  queryFn: () => driverApi.detail(detailId!),
+  enabled: Boolean(detailOpen && detailId),
+});
   const create = useMutation({
     mutationFn: driverApi.create,
     onSuccess: () => {
@@ -123,6 +129,10 @@ export default function DriverPage() {
       onSearchChange={setSearch}
       page={page}
       size={size}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       total={drivers.data?.meta?.total ?? 0}
       onPageChange={setPage}
       selectedIds={selectedIds}
@@ -158,6 +168,12 @@ export default function DriverPage() {
       isImporting={bulkImport.isPending}
       isExporting={exportDrivers.isPending}
     >
+      <DriverDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={driverDetail.data}
+  isLoading={driverDetail.isLoading}
+/>
       <DriverForm
         open={open}
         onOpenChange={setOpen}

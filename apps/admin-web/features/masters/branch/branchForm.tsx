@@ -15,9 +15,17 @@ import type {
 import { createBranchSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
+import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 import PhoneField from "../_shared/fields/PhoneField";
+
+import {
+  IconBuilding,
+  IconMapPin,
+  IconUser,
+  IconPhone,
+} from "@tabler/icons-react";
 
 type Props = {
   open: boolean;
@@ -29,6 +37,25 @@ type Props = {
   isSubmitting?: boolean;
 };
 
+const defaultValues: CreateBranchFormInput = {
+  branchCode: "",
+  shortCode: "",
+  name: "",
+  cityId: "",
+  address: "",
+  contactName: "",
+  contactPhone: "",
+  email: "",
+  weeklyOffDay: "",
+  gstNo: "",
+  workingHours: "",
+  allowLR: false,
+  isRailHead: false,
+  allowReceipt: true,
+  companyId: "",
+  warehouseId: "",
+};
+
 export default function BranchForm({
   open,
   onOpenChange,
@@ -38,33 +65,11 @@ export default function BranchForm({
   onSubmit,
   isSubmitting,
 }: Props) {
-  const form = useForm<
-    CreateBranchFormInput,
-    unknown,
-    CreateBranchBody
-  >({
+  const form = useForm<CreateBranchFormInput, unknown, CreateBranchBody>({
     resolver: zodResolver(createBranchSchema),
     mode: "onChange",
     reValidateMode: "onChange",
-
-    defaultValues: {
-      branchCode: "",
-      shortCode: "",
-      name: "",
-      cityId: "",
-      address: "",
-      contactName: "",
-      contactPhone: "",
-      email: "",
-      weeklyOffDay: "",
-      gstNo: "",
-      workingHours: "",
-      allowLR: false,
-      isRailHead: false,
-      allowReceipt: true,
-      companyId: "",
-      warehouseId: "",
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
@@ -88,16 +93,16 @@ export default function BranchForm({
       companyId: row?.companyId ?? "",
       warehouseId: row?.warehouseId ?? "",
     });
-  }, [form, open, row]);
+  }, [open, row]);
 
-  const companyOptions = companies.map((company) => ({
-    label: company.name,
-    value: company.id,
+  const companyOptions = companies.map((c) => ({
+    label: c.name,
+    value: c.id,
   }));
 
-  const cityOptions = cities.map((city) => ({
-    label: city.name,
-    value: city.id,
+  const cityOptions = cities.map((c) => ({
+    label: c.name,
+    value: c.id,
   }));
 
   return (
@@ -110,80 +115,99 @@ export default function BranchForm({
       isSubmitting={isSubmitting}
       columns={3}
     >
-      <TextField<CreateBranchFormInput>
-        name="branchCode"
-        label="Branch Code"
-        placeholder="Enter branch code"
-        required
-      />
+      {/* BASIC INFO */}
+      <FormSection
+        icon={<IconBuilding size={18} />}
+        title="Branch Information"
+        description="Basic branch identity details"
+      >
+        <TextField<CreateBranchFormInput>
+          name="branchCode"
+          label="Branch Code"
+          required
+        />
 
-      <TextField<CreateBranchFormInput>
-        name="shortCode"
-        label="Short Code"
-        placeholder="Enter short code"
-        required
-      />
+        <TextField<CreateBranchFormInput>
+          name="shortCode"
+          label="Short Code"
+          required
+        />
 
-      <TextField<CreateBranchFormInput>
-        name="name"
-        label="Branch Name"
-        placeholder="Enter branch name"
-        required
-      />
+        <TextField<CreateBranchFormInput>
+          name="name"
+          label="Branch Name"
+          required
+        />
+      </FormSection>
 
-      <SelectField<CreateBranchFormInput>
-        name="companyId"
-        label="Company"
-        options={companyOptions}
-      />
+      {/* LOCATION */}
+      <FormSection
+        icon={<IconMapPin size={18} />}
+        title="Location Details"
+        description="Branch location and company mapping"
+      >
+        <SelectField<CreateBranchFormInput>
+          name="companyId"
+          label="Company"
+          options={companyOptions}
+        />
 
-      <SelectField<CreateBranchFormInput>
-        name="cityId"
-        label="City"
-        options={cityOptions}
-      />
+        <SelectField<CreateBranchFormInput>
+          name="cityId"
+          label="City"
+          options={cityOptions}
+        />
 
-      <TextField<CreateBranchFormInput>
-        name="contactName"
-        label="Contact Name"
-        placeholder="Enter contact name"
-      />
+        <TextField<CreateBranchFormInput>
+          name="address"
+          label="Address"
+        />
+      </FormSection>
 
-      <PhoneField<CreateBranchFormInput>
-        control={form.control}
-        name="contactPhone"
-        label="Contact Phone"
-      />
+      {/* CONTACT */}
+      <FormSection
+        icon={<IconUser size={18} />}
+        title="Contact Information"
+        description="Branch contact person details"
+      >
+        <TextField<CreateBranchFormInput>
+          name="contactName"
+          label="Contact Name"
+        />
 
-      <TextField<CreateBranchFormInput>
-        name="email"
-        label="Email"
-        placeholder="Enter email"
-      />
+        <PhoneField<CreateBranchFormInput>
+          control={form.control}
+          name="contactPhone"
+          label="Contact Phone"
+        />
 
-      <TextField<CreateBranchFormInput>
-        name="weeklyOffDay"
-        label="Weekly Off Day"
-        placeholder="Sunday"
-      />
+        <TextField<CreateBranchFormInput>
+          name="email"
+          label="Email"
+        />
+      </FormSection>
 
-      <TextField<CreateBranchFormInput>
-        name="gstNo"
-        label="GST No"
-        placeholder="Enter GST number"
-      />
+      {/* BUSINESS INFO */}
+      <FormSection
+        icon={<IconBuilding size={18} />}
+        title="Business Settings"
+        description="Operational configuration"
+      >
+        <TextField<CreateBranchFormInput>
+          name="weeklyOffDay"
+          label="Weekly Off Day"
+        />
 
-      <TextField<CreateBranchFormInput>
-        name="workingHours"
-        label="Working Hours"
-        placeholder="9AM - 6PM"
-      />
+        <TextField<CreateBranchFormInput>
+          name="gstNo"
+          label="GST Number"
+        />
 
-      <TextField<CreateBranchFormInput>
-        name="address"
-        label="Address"
-        placeholder="Enter address"
-      />
+        <TextField<CreateBranchFormInput>
+          name="workingHours"
+          label="Working Hours"
+        />
+      </FormSection>
     </MasterFormDialog>
   );
 }

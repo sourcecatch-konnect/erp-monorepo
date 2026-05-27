@@ -9,9 +9,8 @@ const optionalString = z
 const optionalDateString = z
   .string()
   .optional()
-  .transform((value) => {
+  .transform((value): string | undefined => {
     if (!value) return undefined;
-
     return new Date(value).toISOString();
   });
 
@@ -267,7 +266,7 @@ export const createDriverSchema = z
     if (
       data.licenseDate &&
       data.licenseExpiryDate &&
-      new Date(data.licenseExpiryDate) <= new Date(data.licenseDate)
+      new Date(String(data.licenseExpiryDate)) <= new Date(String(data.licenseDate))
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

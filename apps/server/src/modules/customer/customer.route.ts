@@ -11,7 +11,7 @@ import { ZodTypeAny } from "zod";
 const router: Router = createCrudRouter({
   model: db.customer,
   createSchema: createCustomerSchema as ZodTypeAny,
-  updateSchema: updateCustomerSchema,
+  updateSchema: updateCustomerSchema as ZodTypeAny,
   permissionKey: "masters.customer",
   listOptions: {
     searchableFields: [
@@ -40,6 +40,46 @@ const router: Router = createCrudRouter({
       },
     },
     defaultOrderBy: { name: "asc" },
+
+    blockDeleteIfExists: [
+      {
+        model: db.agreement,
+        label: "Agreements",
+        where: (id: string) => ({ clientId: id }),
+        select: {
+          id: true,
+          cityId: true,
+        },
+        getName: (row: any) => row.id,
+      },
+      {
+        model: db.orderBooking,
+        label: "Order Bookings",
+        where: (id: string) => ({ customerId: id }),
+        select: {
+          id: true,
+        },
+        getName: (row: any) => row.id,
+      },
+      {
+        model: db.lorryReceipt,
+        label: "Lorry Receipts",
+        where: (id: string) => ({ consigneeId: id }),
+        select: {
+          id: true,
+        },
+        getName: (row: any) => row.id,
+      },
+      {
+        model: db.vehicleTrip,
+        label: "Vehicle Trips",
+        where: (id: string) => ({ consignorId: id }),
+        select: {
+          tripId: true,
+        },
+        getName: (row: any) => row.tripId,
+      },
+    ],
   },
 });
 

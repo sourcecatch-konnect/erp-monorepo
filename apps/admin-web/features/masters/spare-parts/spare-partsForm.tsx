@@ -15,10 +15,17 @@ import type {
 import { createSparePartSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
+import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 import NumberField from "../_shared/fields/NumberField";
 import CheckboxField from "../_shared/fields/CheckBoxField";
+
+import {
+  IconTool,
+  IconPackage,
+  IconTruck,
+} from "@tabler/icons-react";
 
 type Props = {
   open: boolean;
@@ -34,6 +41,19 @@ const partTypeOptions = [
   { label: "Item", value: "Item" },
   { label: "Service", value: "Service" },
 ];
+
+const defaultValues: CreateSparePartFormInput = {
+  name: "",
+  type: "Item",
+  categoryId: "",
+  supplierId: "",
+  rate: "",
+  minimumStock: "",
+  unit: "",
+  isRecyclable: false,
+  isBatchTracked: false,
+  description: "",
+};
 
 export default function SparePartForm({
   open,
@@ -52,18 +72,7 @@ export default function SparePartForm({
     resolver: zodResolver(createSparePartSchema),
     mode: "onChange",
     reValidateMode: "onChange",
-    defaultValues: {
-      name: "",
-      type: "Item",
-      categoryId: "",
-      supplierId: "",
-      rate: "",
-      minimumStock: "",
-      unit: "",
-      isRecyclable: false,
-      isBatchTracked: false,
-      description: "",
-    },
+    defaultValues,
   });
 
   React.useEffect(() => {
@@ -82,18 +91,16 @@ export default function SparePartForm({
       isBatchTracked: row?.isBatchTracked ?? false,
       description: row?.description ?? "",
     });
-  }, [form, open, row]);
+  }, [open, row]);
 
-  const categoryOptions = categories.map((category) => ({
-    label: category.name,
-    value: category.id,
+  const categoryOptions = categories.map((c) => ({
+    label: c.name,
+    value: c.id,
   }));
 
-  const supplierOptions = suppliers.map((supplier) => ({
-    label: supplier.shopName
-      ? `${supplier.name} - ${supplier.shopName}`
-      : supplier.name,
-    value: supplier.id,
+  const supplierOptions = suppliers.map((s) => ({
+    label: s.shopName ? `${s.name} - ${s.shopName}` : s.name,
+    value: s.id,
   }));
 
   return (
@@ -106,77 +113,109 @@ export default function SparePartForm({
       isSubmitting={isSubmitting}
       columns={3}
     >
-      <TextField<CreateSparePartFormInput>
-        name="name"
-        label="Name"
-        placeholder="Enter spare part name"
-        required
-      />
+      {/* BASIC INFO */}
+      <FormSection
+        icon={<IconPackage size={18} />}
+        title="Spare Part Information"
+        description="Basic details of the spare part"
+      >
+        <TextField<CreateSparePartFormInput>
+          name="name"
+          label="Part Name"
+          placeholder="e.g. Brake Pad"
+          required
+        />
 
-      <SelectField<CreateSparePartFormInput>
-        name="type"
-        label="Type"
-        options={partTypeOptions}
-        required
-      />
+        <SelectField<CreateSparePartFormInput>
+          name="type"
+          label="Type"
+          options={partTypeOptions}
+          required
+        />
 
-      <SelectField<CreateSparePartFormInput>
-        name="categoryId"
-        label="Category"
-        options={categoryOptions}
-        required
-      />
+        <TextField<CreateSparePartFormInput>
+          name="unit"
+          label="Unit"
+          placeholder="PCS / KG / LTR"
+          required
+        />
+      </FormSection>
 
-      <SelectField<CreateSparePartFormInput>
-        name="supplierId"
-        label="Supplier"
-        options={supplierOptions}
-        required
-      />
+      {/* CLASSIFICATION */}
+      <FormSection
+        icon={<IconTool size={18} />}
+        title="Classification"
+        description="Category and supplier mapping"
+      >
+        <SelectField<CreateSparePartFormInput>
+          name="categoryId"
+          label="Category"
+          options={categoryOptions}
+          required
+        />
 
-      <NumberField<CreateSparePartFormInput>
-        control={form.control}
-        name="rate"
-        label="Rate"
-        placeholder="Enter rate"
-        min={0}
-        max={9999999}
-        step="0.01"
-        required
-      />
+        <SelectField<CreateSparePartFormInput>
+          name="supplierId"
+          label="Supplier"
+          options={supplierOptions}
+          required
+        />
+      </FormSection>
 
-      <NumberField<CreateSparePartFormInput>
-        control={form.control}
-        name="minimumStock"
-        label="Minimum Stock"
-        placeholder="Enter minimum stock"
-        min={0}
-        max={999999}
-        required
-      />
+      {/* PRICING & STOCK */}
+      <FormSection
+        icon={<IconTruck size={18} />}
+        title="Stock & Pricing"
+        description="Inventory and pricing details"
+      >
+        <NumberField<CreateSparePartFormInput>
+          control={form.control}
+          name="rate"
+          label="Rate"
+          min={0}
+          max={9999999}
+          step="0.01"
+          required
+        />
 
-      <TextField<CreateSparePartFormInput>
-        name="unit"
-        label="Unit"
-        placeholder="PCS / KG / LTR"
-        required
-      />
+        <NumberField<CreateSparePartFormInput>
+          control={form.control}
+          name="minimumStock"
+          label="Minimum Stock"
+          min={0}
+          max={999999}
+          required
+        />
+      </FormSection>
 
-      <CheckboxField<CreateSparePartFormInput>
-        name="isRecyclable"
-        label="Is Recyclable"
-      />
+      {/* OPTIONS */}
+      <FormSection
+        icon={<IconTool size={18} />}
+        title="Properties"
+        description="Special tracking options"
+      >
+        <CheckboxField<CreateSparePartFormInput>
+          name="isRecyclable"
+          label="Is Recyclable"
+        />
 
-      <CheckboxField<CreateSparePartFormInput>
-        name="isBatchTracked"
-        label="Is Batch Tracked"
-      />
+        <CheckboxField<CreateSparePartFormInput>
+          name="isBatchTracked"
+          label="Is Batch Tracked"
+        />
+      </FormSection>
 
-      <TextField<CreateSparePartFormInput>
-        name="description"
-        label="Description"
-        placeholder="Enter description"
-      />
+      {/* DESCRIPTION */}
+      <FormSection
+        icon={<IconTool size={18} />}
+        title="Additional Details"
+      >
+        <TextField<CreateSparePartFormInput>
+          name="description"
+          label="Description"
+          placeholder="Enter description"
+        />
+      </FormSection>
     </MasterFormDialog>
   );
 }

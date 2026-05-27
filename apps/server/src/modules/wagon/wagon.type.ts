@@ -1,0 +1,61 @@
+import { Router } from "express";
+import { ZodTypeAny } from "zod";
+
+import {
+  createWagonSchema,
+  updateWagonSchema,
+} from "@skerp/validators";
+
+import { db } from "../../../prisma/prisma.js";
+import { createCrudRouter }
+from "../_shared/crud.factory.js";
+
+const router: Router =
+  createCrudRouter({
+    model: db.wagon,
+
+    createSchema:
+      createWagonSchema as ZodTypeAny,
+
+    updateSchema:
+      updateWagonSchema as ZodTypeAny,
+
+    permissionKey:
+      "masters.wagon",
+
+    listOptions: {
+      searchableFields: [
+        "name",
+      ],
+
+      defaultOrderBy: {
+        name: "asc",
+      },
+
+      blockDeleteIfExists: [
+        {
+          model:
+            db.railwayFreightMatrix,
+
+          label:
+            "Railway Freight Matrix",
+
+          where: (
+            id: string
+          ) => ({
+            wagonId: id,
+          }),
+
+          select: {
+            id: true,
+          },
+
+          getName: (
+            row: any
+          ) => row.id,
+        },
+      ],
+    },
+  });
+
+export default router;

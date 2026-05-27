@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { indianPhone } from "./spare-partSuplier.schema";
-
+import { indianPhone } from "./spare-part-supplier.schema.js";
 const optionalString = z
   .string()
   .trim()
   .optional()
   .transform((value) => (value ? value : undefined));
+
 
 const optionalNumberField = (message: string) =>
   z

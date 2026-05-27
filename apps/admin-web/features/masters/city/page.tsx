@@ -16,7 +16,9 @@ import CityForm from "./CityForm";
 import { cityColumns } from "./CityTable";
 import { cityKeys } from "./city.keys";
 import { cityApi } from "./city.service";
-import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CityDetailDialog from "./cityDialog";
+import { toast } from "sonner";
 
 export default function CityPage() {
   const queryClient = useQueryClient();
@@ -25,6 +27,9 @@ export default function CityPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const [detailId, setDetailId] = React.useState<string | null>(null);
+
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
@@ -47,23 +52,31 @@ export default function CityPage() {
     queryKey: cityKeys.list(listQuery),
     queryFn: () => cityApi.list(listQuery),
   });
-
+  const cityDetail = useQuery({
+    queryKey: detailId ? cityKeys.detail(detailId) : ["city-detail-empty"],
+    queryFn: () => cityApi.detail(detailId!),
+    enabled: Boolean(detailOpen && detailId),
+  });
   const states = useQuery({
     queryKey: stateKeys.list(),
     queryFn: () => stateApi.list(),
   });
 
- const { create, update, remove } = useMasterMutations({
+const { create, update, remove } = useMasterMutations({
   api: cityApi,
   queryKey: cityKeys.all,
+  entityName: "City",
 });
-
 const bulkRemove = useMutation({
   mutationFn: cityApi.bulkRemove,
-  onSuccess: () => {
-    setSelectedIds([]);
-    queryClient.invalidateQueries({ queryKey: cityKeys.all });
-  },
+onSuccess: () => {
+  toast.success("Selected cities deleted successfully");
+  setSelectedIds([]);
+  queryClient.invalidateQueries({ queryKey: cityKeys.all });
+},
+onError: (error) => {
+  toast.error(getErrorMessage(error));
+},
 });
 
 const bulkImport = useMutation({
@@ -113,6 +126,10 @@ const exportCities = useMutation({
         setSelected(row);
         setOpen(true);
       }}
+       onView={(row) => {
+        setDetailId(row.id);
+        setDetailOpen(true);
+      }}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
       onImport={async (file) => {
@@ -133,6 +150,13 @@ const exportCities = useMutation({
         onSubmit={handleSubmit}
         isSubmitting={create.isPending || update.isPending}
       />
+      
+    <CityDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  data={cityDetail.data}
+  isLoading={cityDetail.isLoading}
+/>
     </MasterListPage>
   );
 }
