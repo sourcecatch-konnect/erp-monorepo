@@ -1,0 +1,219 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="SKERP Business Flow A3" id="skerp-business-flow-a3">
+    <mxGraphModel dx="1433" dy="775" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="customer" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=15;fontStyle=1;" value="Customer / Shipper&#xa;requests transport" vertex="1">
+          <mxGeometry height="82" width="170" x="45" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="order" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=15;fontStyle=1;" value="1. Order Booking&#xa;pickup, destination, truck or item details" vertex="1">
+          <mxGeometry height="110" width="220" x="270" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="approval" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=15;fontStyle=1;" value="2. Approval&#xa;manager confirms freight and credit warning" vertex="1">
+          <mxGeometry height="110" width="220" x="545" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="lr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=15;fontStyle=1;" value="3. LR&#xa;legal transport document for each consignment" vertex="1">
+          <mxGeometry height="110" width="220" x="820" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="movement_choice" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" value="Movement Type" vertex="1">
+          <mxGeometry height="84" width="130" x="1102" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="delivery" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=15;fontStyle=1;" value="5. Delivery &amp; POD&#xa;acknowledgement, damage / shortage, POD upload" vertex="1">
+          <mxGeometry height="110" width="220" x="1440" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="road" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" value="4A. Road Movement&#xa;vehicle trip, driver, route, unloading, log slip" vertex="1">
+          <mxGeometry height="96" width="160" x="1250" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="rail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;" value="4B. Rail Movement&#xa;rake, VP, RR/MR, DC, railhead charges" vertex="1">
+          <mxGeometry height="96" width="160" x="1235" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="instant_lr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;dashed=1;" value="Instant LR&#xa;walk-in / general freight without order" vertex="1">
+          <mxGeometry height="70" width="220" x="820" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="detention" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;dashed=1;" value="DC Detention&#xa;delay charges calculated by slab and approved" vertex="1">
+          <mxGeometry height="70" width="220" x="1425" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="billing" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=15;fontStyle=1;" value="6. Billing / GST Invoice&#xa;LR to Bill, GST, split freight and detention when required" vertex="1">
+          <mxGeometry height="110" width="240" x="270" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="receipts" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=15;fontStyle=1;" value="7. Receipts&#xa;customer payment, bill allocation, TDS tracking" vertex="1">
+          <mxGeometry height="110" width="240" x="575" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="accounts" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=15;fontStyle=1;" value="8. Accounts Ledger&#xa;customer, vendor, broker, vehicle P&amp;L" vertex="1">
+          <mxGeometry height="110" width="240" x="880" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="tally" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=15;fontStyle=1;" value="Tally Prime&#xa;statutory accounting source" vertex="1">
+          <mxGeometry height="90" width="190" x="1210" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="reports" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dff7ff;strokeColor=#10739e;fontSize=15;fontStyle=1;" value="Reports &amp; Dashboards&#xa;LR booking, pending POD, customer ledger, ageing, vehicle P&amp;L, detention, broker payable, Tally sync, EWB expiry, SLA breaches" vertex="1">
+          <mxGeometry height="90" width="1130" x="270" y="615" as="geometry" />
+        </mxCell>
+        <mxCell id="support_note" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=15;fontStyle=1;fillColor=none;strokeColor=none;" value="Shared foundation and support modules used across the ERP" vertex="1">
+          <mxGeometry height="28" width="1130" x="270" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="masters" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="Masters 26+&#xa;customers, branches, vehicles, drivers, goods, routes, rates, pumps, spares, wagons, transporters" vertex="1">
+          <mxGeometry height="95" width="310" x="65" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="new_masters" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="New Masters&#xa;customer locations, vehicle types, brokers, detention slabs" vertex="1">
+          <mxGeometry height="95" width="250" x="420" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="rbac" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="Users, Roles, Branch Access&#xa;who can see and approve each branch&#39;s work" vertex="1">
+          <mxGeometry height="95" width="250" x="715" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="notifications" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="Notifications&#xa;email, WhatsApp, in-app alerts for staff" vertex="1">
+          <mxGeometry height="95" width="230" x="1010" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="attachments" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" value="Attachments&#xa;POD, agreements, vehicle docs, complaints" vertex="1">
+          <mxGeometry height="95" width="230" x="1285" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="maintenance" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" value="Maintenance&#xa;job cards and service bills" vertex="1">
+          <mxGeometry height="80" width="230" x="65" y="985" as="geometry" />
+        </mxCell>
+        <mxCell id="inventory" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" value="Inventory&#xa;spares at HO workshop" vertex="1">
+          <mxGeometry height="80" width="230" x="335" y="985" as="geometry" />
+        </mxCell>
+        <mxCell id="drivers" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" value="Driver Lifecycle&#xa;salary, advance, incentive, document expiry" vertex="1">
+          <mxGeometry height="80" width="250" x="605" y="985" as="geometry" />
+        </mxCell>
+        <mxCell id="claims" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;" value="Claims&#xa;damage, shortage, recovery" vertex="1">
+          <mxGeometry height="80" width="210" x="895" y="985" as="geometry" />
+        </mxCell>
+        <mxCell id="complaints" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;" value="Customer Complaint&#xa;ticket, SLA, resolution" vertex="1">
+          <mxGeometry height="80" width="210" x="1145" y="985" as="geometry" />
+        </mxCell>
+        <mxCell id="eway" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;" value="E-way Bill&#xa;customer gives EWB; SK updates Part-B" vertex="1">
+          <mxGeometry height="80" width="210" x="1395" y="985" as="geometry" />
+        </mxCell>
+        <mxCell id="count" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f7f7;strokeColor=#999999;fontSize=15;fontStyle=1;" value="v1 scope: 18 main business modules + 26+ masters + 4 new business masters" vertex="1">
+          <mxGeometry height="52" width="910" x="395" y="1100" as="geometry" />
+        </mxCell>
+        <mxCell id="e_customer_order" edge="1" parent="1" source="customer" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="order">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_order_approval" edge="1" parent="1" source="order" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="approval">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_approval_lr" edge="1" parent="1" source="approval" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="lr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_lr_choice" edge="1" parent="1" source="lr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="movement_choice">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_choice_road" edge="1" parent="1" source="movement_choice" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;" target="road" value="Road">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1220" y="88" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_choice_rail" edge="1" parent="1" source="movement_choice" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;" target="rail" value="Road + Rail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_road_delivery" edge="1" parent="1" source="road" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="delivery">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1430" y="88" />
+              <mxPoint x="1430" y="155" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rail_delivery" edge="1" parent="1" source="rail" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="delivery">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_instant_lr" edge="1" parent="1" source="instant_lr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" target="lr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rail_detention" edge="1" parent="1" source="rail" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" target="detention">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_detention_billing" edge="1" parent="1" source="detention" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" target="billing">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1535" y="370" />
+              <mxPoint x="390" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_delivery_billing" edge="1" parent="1" source="delivery" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;" target="billing" value=" ">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1640" y="380" />
+              <mxPoint x="390" y="380" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_billing_receipts" edge="1" parent="1" source="billing" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="receipts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_receipts_accounts" edge="1" parent="1" source="receipts" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="accounts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_accounts_tally" edge="1" parent="1" source="accounts" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;" target="tally">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_accounts_reports" edge="1" parent="1" source="accounts" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" target="reports">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_masters_order" edge="1" parent="1" source="masters" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#82b366;" target="order">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="780" />
+              <mxPoint x="220" y="260" />
+              <mxPoint x="380" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_newmasters_detention" edge="1" parent="1" source="new_masters" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#82b366;" target="detention">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="545" y="790" />
+              <mxPoint x="1535" y="790" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_attachments_delivery" edge="1" parent="1" source="attachments" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#82b366;" target="delivery">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1400" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_drivers_road" edge="1" parent="1" source="drivers" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#9673a6;" target="road">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="730" y="960" />
+              <mxPoint x="1315" y="960" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_maintenance_accounts" edge="1" parent="1" source="maintenance" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#9673a6;" target="accounts">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="180" y="950" />
+              <mxPoint x="1000" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_claims_accounts" edge="1" parent="1" source="claims" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#b85450;" target="accounts">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_complaints_reports" edge="1" parent="1" source="complaints" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#b85450;" target="reports">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_eway_lr" edge="1" parent="1" source="eway" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#b85450;" target="lr">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1500" y="950" />
+              <mxPoint x="930" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
