@@ -55,6 +55,33 @@ enum BranchScope {
   ASSIGNED
 }
 
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
+}
+
+enum NotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  CRITICAL
+}
+
+enum NotificationEventStatus {
+  PENDING
+  FANOUT_COMPLETE
+  FAILED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
 model User {
   id         String  @id @default(uuid())
   userName   String  @unique
@@ -69,6 +96,11 @@ model User {
   password   String?
 
   branchScope BranchScope @default(ASSIGNED)
+  mobile      String?
+  whatsappOptIn Boolean @default(false)
+  emailOptIn    Boolean @default(true)
+  notificationQuietHoursStart String?
+  notificationQuietHoursEnd   String?
 
   company Company @relation(fields: [companyId], references: [id])
   branch  Branch  @relation(fields: [branchId], references: [id])
@@ -89,6 +121,9 @@ model User {
   userBranches    UserBranch[]
   userPermissions UserPermission[]
   auditLogs       AuditLog[]
+  notificationDeliveries NotificationDelivery[]
+  inAppNotifications InAppNotification[]
+  notificationSubscriptions UserNotificationSubscription[]
 }
 
 model Company {
@@ -270,6 +305,128 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([actorId])
   @@index([createdAt])
+}
+
+model NotificationEvent {
+  id            String                  @id @default(cuid())
+  eventType     String
+  sourceModule  String
+  aggregateType String
+  aggregateId   String
+  branchId      String?
+  actorId       String?
+  payload       Json
+  dedupeKey     String?                 @unique
+  status        NotificationEventStatus @default(PENDING)
+  attemptCount  Int                     @default(0)
+  lastError     String?
+  createdAt     DateTime                @default(now())
+  processedAt   DateTime?
+
+  deliveries NotificationDelivery[]
+
+  @@index([eventType])
+  @@index([sourceModule])
+  @@index([aggregateType, aggregateId])
+  @@index([branchId])
+  @@index([status, createdAt])
+}
+
+model NotificationRule {
+  id                   String                 @id @default(cuid())
+  eventType            String
+  name                 String
+  description          String?
+  enabled              Boolean                @default(true)
+  severity             NotificationSeverity   @default(INFO)
+  critical             Boolean                @default(false)
+  recipientResolverKey String
+  channels             NotificationChannel[]
+  templateId           String?
+  sourceModule         String?
+  branchId             String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  template NotificationTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([eventType])
+  @@index([enabled])
+  @@index([sourceModule])
+  @@index([branchId])
+}
+
+model NotificationTemplate {
+  id        String              @id @default(cuid())
+  code      String
+  channel   NotificationChannel
+  subject   String?
+  body      String
+  meta      Json?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  rules NotificationRule[]
+
+  @@unique([code, channel])
+}
+
+model NotificationDelivery {
+  id              String                     @id @default(cuid())
+  eventId         String
+  channel         NotificationChannel
+  recipientUserId String
+  status          NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?
+  attemptCount    Int                        @default(0)
+  lastError       String?
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  failedAt        DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  recipient User @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  inAppNotification InAppNotification?
+
+  @@unique([eventId, channel, recipientUserId])
+  @@index([recipientUserId, status])
+  @@index([channel, status])
+  @@index([createdAt])
+}
+
+model InAppNotification {
+  id              String               @id @default(cuid())
+  deliveryId      String               @unique
+  userId          String
+  title           String
+  body            String
+  severity        NotificationSeverity @default(INFO)
+  linkUrl         String?
+  readAt          DateTime?
+  archivedAt      DateTime?
+  createdAt       DateTime             @default(now())
+
+  delivery NotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, archivedAt])
+}
+
+model UserNotificationSubscription {
+  userId     String
+  eventType  String
+  channel    NotificationChannel
+  subscribed Boolean @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventType, channel])
+  @@index([eventType, channel])
 }
 
 enum ownershipType {
