@@ -19,6 +19,13 @@ export type PublishNotificationEventInput = {
 export type RenderedNotification = {
   subject?: string;
   body: string;
+  // WhatsApp-specific: resolved positional params + the Meta template to send.
+  whatsapp?: {
+    metaName: string | null;
+    metaLanguage: string;
+    metaStatus: string | null;
+    params: string[];
+  };
 };
 
 export type DeliveryJob = {

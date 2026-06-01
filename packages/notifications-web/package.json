@@ -1,0 +1,33 @@
+{
+  "name": "@skerp/notifications-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@skerp/ui": "workspace:*",
+    "@tanstack/react-query": "^5.100.10",
+    "@tabler/icons-react": "^3.34.0",
+    "axios": "^1.16.1",
+    "date-fns": "^4.1.0",
+    "next": "16.2.0",
+    "react": "^19.2.0",
+    "socket.io-client": "^4.8.3",
+    "sonner": "^2.0.7"
+  },
+  "devDependencies": {
+    "@skerp/eslint-config": "workspace:*",
+    "@skerp/typescript-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "@types/react": "19.2.2",
+    "eslint": "^9.39.1",
+    "typescript": "5.9.2"
+  }
+}

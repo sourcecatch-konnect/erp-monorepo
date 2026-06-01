@@ -12,7 +12,8 @@
       "Read(//d/Work/erp/erp-backend/src/config/**)",
       "Bash(gh pr *)",
       "Bash(pnpm --filter @skerp/types check-types)",
-      "Bash(pnpm --filter @skerp/server check-types)"
+      "Bash(pnpm --filter @skerp/server check-types)",
+      "Bash(pnpm --filter @skerp/notifications-web check-types)"
     ]
   }
 }

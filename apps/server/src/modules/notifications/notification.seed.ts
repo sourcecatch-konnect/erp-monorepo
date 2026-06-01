@@ -2,10 +2,16 @@ import { NotificationChannel, NotificationSeverity } from "@prisma/client";
 import { db } from "../../../prisma/prisma.js";
 import type { RuleSeed } from "./types.js";
 
-const templateBodies: Record<string, { subject: string; body: string }> = {
-  "notification.test": {
+const templateBodies: Record<
+  string,
+  { subject: string; body: string; whatsappBody?: string }
+> = {
+  notification_test: {
     subject: "{{title}}",
     body: "{{message}}",
+    // WhatsApp rejects a body where a variable is at the start or end, so wrap it.
+    whatsappBody:
+      "SKERP test notification: {{message}} — this is an automated test.",
   },
   "order.confirmed": {
     subject: "Order confirmed",
@@ -181,16 +187,43 @@ const rules: RuleSeed[] = [
   },
 ];
 
+const defaultMetaName = (code: string) =>
+  code.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+
+const extractParamOrder = (body: string): string[] => {
+  const order: string[] = [];
+  for (const match of body.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)) {
+    const name = match[1] as string;
+    if (!order.includes(name)) order.push(name);
+  }
+  return order;
+};
+
 export const seedNotificationDefaults = async () => {
   for (const [code, template] of Object.entries(templateBodies)) {
     for (const channel of Object.values(NotificationChannel)) {
+      const isWhatsApp = channel === NotificationChannel.WHATSAPP;
+      const channelBody = isWhatsApp
+        ? (template.whatsappBody ?? template.body)
+        : template.body;
+      const whatsappDefaults = isWhatsApp
+        ? {
+            metaName: defaultMetaName(code),
+            metaLanguage: process.env.META_WHATSAPP_DEFAULT_LANGUAGE || "en_US",
+            metaCategory: "UTILITY",
+            metaStatus: "DRAFT",
+            metaParamOrder: extractParamOrder(channelBody),
+          }
+        : {};
+
       await db.notificationTemplate.upsert({
         where: { code_channel: { code, channel } },
         create: {
           code,
           channel,
           subject: template.subject,
-          body: template.body,
+          body: channelBody,
+          ...whatsappDefaults,
         },
         update: {},
       });
@@ -199,7 +232,12 @@ export const seedNotificationDefaults = async () => {
 
   for (const rule of rules) {
     const template = await db.notificationTemplate.findUnique({
-      where: { code_channel: { code: rule.templateCode, channel: NotificationChannel.IN_APP } },
+      where: {
+        code_channel: {
+          code: rule.templateCode,
+          channel: NotificationChannel.IN_APP,
+        },
+      },
       select: { id: true },
     });
 

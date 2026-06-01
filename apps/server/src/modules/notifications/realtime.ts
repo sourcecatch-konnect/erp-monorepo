@@ -14,7 +14,10 @@ const parseCookie = (cookieHeader: string | undefined, name: string) => {
 export const initNotificationRealtime = (server: HttpServer): Server => {
   io = new Server(server, {
     cors: {
-      origin: (origin, callback) => callback(null, origin ?? true),
+      origin: (
+        origin: string | undefined,
+        callback: (err: Error | null, allow?: boolean | string) => void
+      ) => callback(null, origin ?? true),
       credentials: true,
     },
   });

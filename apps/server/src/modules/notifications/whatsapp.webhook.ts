@@ -50,8 +50,58 @@ export const verifyWhatsAppWebhook = (req: Request, res: Response) => {
   return res.status(200).send(challenge);
 };
 
+type TemplateStatusUpdate = {
+  message_template_id?: number | string;
+  message_template_name?: string;
+  message_template_language?: string;
+  event?: string;
+  reason?: string;
+};
+
+const normaliseTemplateStatus = (event?: string) => {
+  switch ((event || "").toUpperCase()) {
+    case "APPROVED":
+      return "APPROVED";
+    case "REJECTED":
+      return "REJECTED";
+    case "DISABLED":
+    case "PAUSED":
+      return "DISABLED";
+    case "PENDING":
+    case "IN_APPEAL":
+      return "PENDING";
+    default:
+      return undefined;
+  }
+};
+
+const updateTemplateStatus = async (update: TemplateStatusUpdate) => {
+  const nextStatus = normaliseTemplateStatus(update.event);
+  if (!nextStatus || !update.message_template_name) return;
+
+  await db.notificationTemplate.updateMany({
+    where: {
+      channel: "WHATSAPP",
+      metaName: update.message_template_name,
+    },
+    data: {
+      metaStatus: nextStatus,
+      metaRejectedReason: nextStatus === "REJECTED" ? update.reason || null : null,
+      metaSyncedAt: new Date(),
+    },
+  });
+};
+
 const updateStatus = async (status: WhatsAppStatus) => {
   if (!status.id) return;
+
+  const errorText =
+    status.errors?.[0]?.message || status.errors?.[0]?.title || undefined;
+  console.log(
+    `[notifications][whatsapp] ← status "${status.status}" for message ${status.id}` +
+      (status.recipient_id ? ` (to ${status.recipient_id})` : "") +
+      (errorText ? ` — ${errorText}` : "")
+  );
 
   const nextStatus =
     status.status === "delivered"
@@ -90,6 +140,10 @@ export const receiveWhatsAppWebhook = async (
   if (req.body?.object === "whatsapp_business_account") {
     for (const entry of req.body.entry || []) {
       for (const change of entry.changes || []) {
+        if (change.field === "message_template_status_update") {
+          await updateTemplateStatus(change.value || {});
+          continue;
+        }
         const statuses = change.value?.statuses || [];
         for (const status of statuses) {
           await updateStatus(status);

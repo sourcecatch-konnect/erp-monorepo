@@ -35,6 +35,9 @@ import notificationRoute from "./modules/notifications/notification.route.js";
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
+import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
+import { authMiddleware } from "./middlewares/auth.middlware.js";
+import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -81,6 +84,8 @@ app.use("/pumps",pumpRoute)
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);
+// BullMQ dashboard — inspect notification queues at /admin/queues (login required)
+app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use(errorMiddleware);
 const PORT = Number(process.env.PORT || 5000);
 const server = createServer(app);
@@ -93,4 +98,8 @@ seedNotificationDefaults().catch((error) => {
 
 server.listen(PORT, () => {
   console.log(`SKERP server running on http://localhost:${PORT}`);
+  const redis = getRedisConnectionOptions();
+  console.log(
+    `[notifications] BullMQ workers connected to Redis at ${redis.host}:${redis.port} — dashboard at http://localhost:${PORT}/admin/queues`
+  );
 });

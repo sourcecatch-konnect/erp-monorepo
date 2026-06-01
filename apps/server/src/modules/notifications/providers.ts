@@ -99,13 +99,49 @@ const whatsappProvider: NotificationProvider = {
     const baseUrl = process.env.META_WHATSAPP_API_BASE_URL;
     const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
     const token = process.env.META_WHATSAPP_ACCESS_TOKEN;
-    const templateName = process.env.META_WHATSAPP_DEFAULT_TEMPLATE_NAME;
     if (!baseUrl || !phoneNumberId || !token) {
       return { skipped: true, reason: "Meta WhatsApp API is not configured" };
     }
-    if (!templateName) {
-      return { skipped: true, reason: "Meta WhatsApp template name is not configured" };
+
+    const wa = rendered.whatsapp;
+    if (!wa?.metaName) {
+      return { skipped: true, reason: "No WhatsApp template configured for this event" };
     }
+    if (wa.metaStatus !== "APPROVED") {
+      return {
+        skipped: true,
+        reason: `WhatsApp template not approved (${wa.metaStatus || "DRAFT"})`,
+      };
+    }
+
+    const requestBody = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: recipient.mobile,
+      type: "template",
+      template: {
+        name: wa.metaName,
+        language: { code: wa.metaLanguage },
+        ...(wa.params.length
+          ? {
+              components: [
+                {
+                  type: "body",
+                  parameters: wa.params.map((text) => ({
+                    type: "text",
+                    text,
+                  })),
+                },
+              ],
+            }
+          : {}),
+      },
+    };
+
+    console.log(
+      `[notifications][whatsapp] → sending template "${wa.metaName}" (${wa.metaLanguage}) to ${recipient.mobile}`,
+      JSON.stringify(requestBody.template)
+    );
 
     const response = await fetch(`${baseUrl}/${phoneNumberId}/messages`, {
       method: "POST",
@@ -113,45 +149,37 @@ const whatsappProvider: NotificationProvider = {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: recipient.mobile,
-        type: "template",
-        template: {
-          name: templateName,
-          language: {
-            code: process.env.META_WHATSAPP_DEFAULT_LANGUAGE || "en_US",
-          },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                {
-                  type: "text",
-                  text: rendered.subject || "SKERP notification",
-                },
-                {
-                  type: "text",
-                  text: rendered.body,
-                },
-              ],
-            },
-          ],
-        },
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const body = (await response.json().catch(() => ({}))) as {
       messages?: { id?: string }[];
-      error?: { message?: string };
+      error?: {
+        message?: string;
+        type?: string;
+        code?: number;
+        error_data?: { details?: string };
+      };
     };
 
     if (!response.ok) {
-      throw new Error(body.error?.message || "WhatsApp API request failed");
+      console.error(
+        `[notifications][whatsapp] ✗ Meta rejected message to ${recipient.mobile} (HTTP ${response.status}):`,
+        JSON.stringify(body.error || body)
+      );
+      const detail = body.error?.error_data?.details;
+      throw new Error(
+        [body.error?.message, detail].filter(Boolean).join(" — ") ||
+          `WhatsApp API request failed (HTTP ${response.status})`
+      );
     }
 
-    return { providerMessageId: body.messages?.[0]?.id };
+    const messageId = body.messages?.[0]?.id;
+    console.log(
+      `[notifications][whatsapp] ✓ Meta accepted message to ${recipient.mobile}, id=${messageId}. ` +
+        `Final delivery (delivered/failed on device) arrives via the status webhook.`
+    );
+    return { providerMessageId: messageId };
   },
 };
 

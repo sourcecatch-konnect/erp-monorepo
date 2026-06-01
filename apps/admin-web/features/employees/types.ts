@@ -10,6 +10,9 @@ export type Employee = {
   branchId: string;
   roleId: string;
   status: boolean;
+  mobile: string | null;
+  whatsappOptIn: boolean;
+  emailOptIn: boolean;
   createdAt: string;
   updatedAt: string;
   role: { id: string; name: string };
@@ -25,6 +28,18 @@ export type CreateEmployeeInput = {
   password: string;
   companyId: string;
   branchId: string;
+};
+
+export type UpdateEmployeeInput = {
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  email?: string;
+  mobile?: string | null;
+  companyId?: string;
+  branchId?: string;
+  whatsappOptIn?: boolean;
+  emailOptIn?: boolean;
 };
 
 export type Company = { id: string; name: string };

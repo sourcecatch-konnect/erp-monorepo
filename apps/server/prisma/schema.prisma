@@ -366,6 +366,18 @@ model NotificationTemplate {
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
 
+  // Meta WhatsApp template lifecycle (used only when channel = WHATSAPP)
+  metaName           String?
+  metaLanguage       String?
+  metaCategory       String?
+  metaStatus         String? // DRAFT | PENDING | APPROVED | REJECTED | DISABLED
+  metaTemplateId     String?
+  metaRejectedReason String?
+  metaParamOrder     String[] @default([])
+  metaFooter         String?
+  metaSubmittedAt    DateTime?
+  metaSyncedAt       DateTime?
+
   rules NotificationRule[]
 
   @@unique([code, channel])

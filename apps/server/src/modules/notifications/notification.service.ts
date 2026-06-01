@@ -186,6 +186,8 @@ export const processNotificationDelivery = async (deliveryId: string) => {
     orderBy: { updatedAt: "desc" },
   });
 
+  const logPrefix = `[notifications] delivery ${delivery.id} [${delivery.channel} → user ${delivery.recipientUserId}, event "${delivery.event.eventType}"]`;
+
   try {
     const result = await sendViaProvider(delivery.channel, {
       delivery,
@@ -194,6 +196,16 @@ export const processNotificationDelivery = async (deliveryId: string) => {
       severity: rule?.severity || "INFO",
       linkUrl: deliveryLinkUrl(payload),
     });
+
+    if (result.skipped) {
+      console.warn(`${logPrefix} SKIPPED: ${result.reason}`);
+    } else {
+      console.log(
+        `${logPrefix} SENT${
+          result.providerMessageId ? ` (id=${result.providerMessageId})` : ""
+        }`
+      );
+    }
 
     await db.notificationDelivery.update({
       where: { id: delivery.id },
@@ -212,6 +224,7 @@ export const processNotificationDelivery = async (deliveryId: string) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Delivery failed";
+    console.error(`${logPrefix} FAILED: ${message}`);
     await db.notificationDelivery.update({
       where: { id: delivery.id },
       data: {

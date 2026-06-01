@@ -101,6 +101,16 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Account",
     items: [
       {
+        title: "Notifications",
+        href: "/notifications",
+        icon: IconActivity,
+      },
+      {
+        title: "Notification preferences",
+        href: "/notifications/preferences",
+        icon: IconUser,
+      },
+      {
         title: "Profile",
         href: "/profile",
         icon: IconUser,

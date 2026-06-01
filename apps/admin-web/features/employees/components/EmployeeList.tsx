@@ -19,6 +19,7 @@ import type { Employee, EmployeeCredentials } from "../types";
 import { CreateEmployeeDialog } from "./CreateEmployeeDialog";
 import { ResetPasswordDialog } from "./ResetPasswordDialog";
 import { CredentialsDialog } from "./CredentialsDialog";
+import { EmployeeDetailDialog } from "./EmployeeDetailDialog";
 
 /** Employee management screen — list, create, reset password, activate/deactivate. */
 export function EmployeeList() {
@@ -26,6 +27,7 @@ export function EmployeeList() {
   const statusMutation = useSetEmployeeStatus();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [detailTarget, setDetailTarget] = useState<Employee | null>(null);
   const [resetTarget, setResetTarget] = useState<Employee | null>(null);
   const [credentials, setCredentials] =
     useState<EmployeeCredentials | null>(null);
@@ -80,7 +82,13 @@ export function EmployeeList() {
             {employees?.map((emp) => (
               <TableRow key={emp.id}>
                 <TableCell className="font-medium text-foreground">
-                  {emp.firstName} {emp.lastName}
+                  <button
+                    type="button"
+                    className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    onClick={() => setDetailTarget(emp)}
+                  >
+                    {emp.firstName} {emp.lastName}
+                  </button>
                 </TableCell>
                 <TableCell>{emp.email}</TableCell>
                 <TableCell>{emp.branch.name}</TableCell>
@@ -112,6 +120,11 @@ export function EmployeeList() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={setCredentials}
+      />
+      <EmployeeDetailDialog
+        employee={detailTarget}
+        onClose={() => setDetailTarget(null)}
+        onUpdated={setDetailTarget}
       />
       <ResetPasswordDialog
         employee={resetTarget}

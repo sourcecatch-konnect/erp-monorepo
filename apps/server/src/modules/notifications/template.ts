@@ -18,8 +18,19 @@ const renderText = (text: string, payload: NotificationPayload): string => {
   );
 };
 
+type RenderableTemplate = Pick<
+  NotificationTemplate,
+  | "subject"
+  | "body"
+  | "channel"
+  | "metaName"
+  | "metaLanguage"
+  | "metaStatus"
+  | "metaParamOrder"
+>;
+
 export const renderTemplate = (
-  template: Pick<NotificationTemplate, "subject" | "body"> | null,
+  template: RenderableTemplate | null,
   payload: NotificationPayload
 ): RenderedNotification => {
   if (!template) {
@@ -29,10 +40,23 @@ export const renderTemplate = (
     };
   }
 
-  return {
+  const rendered: RenderedNotification = {
     subject: template.subject
       ? renderText(template.subject, payload)
       : undefined,
     body: renderText(template.body, payload),
   };
+
+  if (template.channel === "WHATSAPP") {
+    rendered.whatsapp = {
+      metaName: template.metaName,
+      metaLanguage: template.metaLanguage || "en_US",
+      metaStatus: template.metaStatus,
+      params: (template.metaParamOrder || []).map((variable) =>
+        readPath(payload, variable)
+      ),
+    };
+  }
+
+  return rendered;
 };

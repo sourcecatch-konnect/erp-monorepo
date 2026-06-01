@@ -5,6 +5,7 @@ import type {
   CreateEmployeeInput,
   Employee,
   EmployeeMutationResult,
+  UpdateEmployeeInput,
 } from "../types";
 
 type ApiSuccess<T> = {
@@ -34,6 +35,17 @@ export const resetEmployeePassword = async (
   const res = await api.patch<ApiSuccess<EmployeeMutationResult>>(
     `/employees/${id}/password`,
     { password }
+  );
+  return res.data.data;
+};
+
+export const updateEmployee = async (
+  id: string,
+  input: UpdateEmployeeInput
+): Promise<Employee> => {
+  const res = await api.patch<ApiSuccess<Employee>>(
+    `/employees/${id}`,
+    input
   );
   return res.data.data;
 };

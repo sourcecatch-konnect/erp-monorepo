@@ -4,10 +4,12 @@
 
 /*
  * Tailwind v4 auto-detects content but does NOT scan node_modules.
- * Explicitly include the shared @skerp/ui package source so its
- * component classes (sidebar, dialog, button, ...) are generated.
+ * Explicitly include shared workspace package sources so their
+ * component classes (sidebar, dialog, button, notifications UI, ...)
+ * are generated.
  */
 @source "../../../packages/ui/src";
+@source "../../../packages/notifications-web/src";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -28,6 +30,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -72,6 +78,10 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.6 0.149 150);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.72 0.16 75);
+  --warning-foreground: oklch(0.205 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.546 0.215 263);
@@ -106,6 +116,10 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.145 0 0);
+  --warning: oklch(0.8 0.15 80);
+  --warning-foreground: oklch(0.145 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.62 0.19 263);

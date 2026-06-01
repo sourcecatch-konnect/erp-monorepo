@@ -8,6 +8,7 @@ import {
 import { Separator } from "@skerp/ui/components/separator";
 import { AppSidebar } from "./AppSidebar";
 import { AppBreadcrumb } from "./AppBreadcrumb";
+import { NotificationBellButton } from "@/features/notifications/NotificationBellButton";
 
 /**
  * Authenticated app frame: collapsible sidebar + a top bar with the
@@ -25,6 +26,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="mr-2 data-[orientation=vertical]:h-4"
           />
           <AppBreadcrumb />
+          <div className="ml-auto">
+            <NotificationBellButton />
+          </div>
         </header>
         <div className="flex-1 p-6">{children}</div>
       </SidebarInset>
