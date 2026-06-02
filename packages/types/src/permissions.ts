@@ -70,13 +70,27 @@ type AdminPermissionKey =
   | "admin.rbac.manage"
   | "admin.audit_log.view";
 
+type NotificationPermissionKey =
+  | "notifications.view"
+  | "notifications.manage_rules"
+  | "notifications.manage_templates"
+  | "notifications.test_send";
+
+type AttachmentPermissionKey =
+  | "attachments.view"
+  | "attachments.create"
+  | "attachments.download"
+  | "attachments.delete";
+
 export type PermissionKey =
   | MasterPermissionKey
   | LorryReceiptPermissionKey
   | TripPermissionKey
   | OrderPermissionKey
   | EwaybillPermissionKey
-  | AdminPermissionKey;
+  | AdminPermissionKey
+  | NotificationPermissionKey
+  | AttachmentPermissionKey;
 
 type MasterPerms<Slug extends MasterSlug> = {
   VIEW: `masters.${Slug}.view`;
@@ -156,6 +170,18 @@ export const PERMS = {
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",
     AUDIT_LOG_VIEW: "admin.audit_log.view",
+  },
+  NOTIFICATIONS: {
+    VIEW: "notifications.view",
+    MANAGE_RULES: "notifications.manage_rules",
+    MANAGE_TEMPLATES: "notifications.manage_templates",
+    TEST_SEND: "notifications.test_send",
+  },
+  ATTACHMENTS: {
+    VIEW: "attachments.view",
+    CREATE: "attachments.create",
+    DOWNLOAD: "attachments.download",
+    DELETE: "attachments.delete",
   },
 } as const;
 

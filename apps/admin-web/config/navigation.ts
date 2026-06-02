@@ -145,9 +145,11 @@ export const NAV_SECTIONS: NavSection[] = [
         title: "Settings",
         icon: IconSettings,
         items: [
+          { title: "Profile", href: "/settings/profile" },
           { title: "Users", href: "/settings/users" },
           { title: "User access", href: "/settings/access" },
           { title: "Roles", href: "/settings/roles" },
+          { title: "Notifications", href: "/settings/notifications" },
           { title: "Audit log", href: "/settings/audit-log" },
         ],
       },

@@ -130,13 +130,18 @@ export type UpdateEmployeeArgs = {
   middleName?: string;
   lastName?: string;
   email?: string;
+  mobile?: string | null;
+  companyId?: string;
+  branchId?: string;
+  whatsappOptIn?: boolean;
+  emailOptIn?: boolean;
 };
 
 export const updateEmployeeService = async (
   id: string,
   args: UpdateEmployeeArgs
 ) => {
-  await getEmployeeOrThrow(id);
+  const existing = await getEmployeeOrThrow(id);
 
   if (args.email) {
     const emailTaken = await db.user.findFirst({
@@ -147,6 +152,25 @@ export const updateEmployeeService = async (
     }
   }
 
+  const companyId = args.companyId ?? existing.companyId;
+  const branchId = args.branchId ?? existing.branchId;
+
+  if (args.companyId) {
+    const company = await db.company.findUnique({
+      where: { id: args.companyId },
+    });
+    if (!company) throw new NotFoundError("Company not found");
+  }
+
+  if (args.companyId || args.branchId) {
+    const branch = await db.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!branch || branch.companyId !== companyId) {
+      throw new NotFoundError("Branch not found for the selected company");
+    }
+  }
+
   const user = await db.user.update({
     where: { id },
     data: {
@@ -154,6 +178,25 @@ export const updateEmployeeService = async (
       middleName: args.middleName,
       lastName: args.lastName,
       email: args.email,
+      mobile: args.mobile,
+      companyId: args.companyId,
+      branchId: args.branchId,
+      whatsappOptIn: args.whatsappOptIn,
+      emailOptIn: args.emailOptIn,
+      ...(args.branchId
+        ? {
+            userBranches: {
+              ...(args.branchId !== existing.branchId
+                ? { deleteMany: { branchId: existing.branchId } }
+                : {}),
+              upsert: {
+                where: { userId_branchId: { userId: id, branchId } },
+                create: { branchId },
+                update: {},
+              },
+            },
+          }
+        : {}),
     },
     include: employeeInclude,
   });

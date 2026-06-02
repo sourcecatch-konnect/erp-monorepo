@@ -12,6 +12,7 @@ import {
   listEmployees,
   resetEmployeePassword,
   setEmployeeStatus,
+  updateEmployee,
 } from "../services/employee.service";
 
 const EMPLOYEES_KEY = ["employees"] as const;
@@ -42,6 +43,20 @@ export const useResetEmployeePassword = () => {
   return useMutation({
     mutationFn: ({ id, password }: { id: string; password: string }) =>
       resetEmployeePassword(id, password),
+    onSuccess: () => qc.invalidateQueries({ queryKey: EMPLOYEES_KEY }),
+  });
+};
+
+export const useUpdateEmployee = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: Parameters<typeof updateEmployee>[1];
+    }) => updateEmployee(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: EMPLOYEES_KEY }),
   });
 };

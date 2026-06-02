@@ -1,5 +1,6 @@
 import "./env.js";
 import express from "express";
+import { createServer } from "http";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRoute from "./router/auth/auth.route.js";
@@ -30,6 +31,14 @@ import BranchRoute from "./modules/branch/branch.route.js";
 import Routes from "./modules/route/route.routes.js";
 import ewaybillRoute from "./modules/ewaybill/ewaybill.route.js";
 import adminRoute from "./modules/admin/admin.route.js";
+import notificationRoute from "./modules/notifications/notification.route.js";
+import attachmentRoute from "./modules/attachments/attachment.route.js";
+import { initNotificationRealtime } from "./modules/notifications/realtime.js";
+import { startNotificationWorkers } from "./modules/notifications/worker.js";
+import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
+import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
+import { authMiddleware } from "./middlewares/auth.middlware.js";
+import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -40,7 +49,13 @@ app.use(
     credentials: true, // IMPORTANT
   }),
 );
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use(cookieParser());
 // routes
 app.use("/health", healthRouter);
@@ -69,9 +84,24 @@ app.use("/agreements",agreementRoute)
 app.use("/pumps",pumpRoute)
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
+app.use("/notifications", notificationRoute);
+app.use("/attachments", attachmentRoute);
+// BullMQ dashboard — inspect notification queues at /admin/queues (login required)
+app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use(errorMiddleware);
-const PORT = 5000;
+const PORT = Number(process.env.PORT || 5000);
+const server = createServer(app);
 
-app.listen(PORT, () => {
+initNotificationRealtime(server);
+startNotificationWorkers();
+seedNotificationDefaults().catch((error) => {
+  console.error("[notifications] Failed to seed defaults:", error);
+});
+
+server.listen(PORT, () => {
   console.log(`SKERP server running on http://localhost:${PORT}`);
+  const redis = getRedisConnectionOptions();
+  console.log(
+    `[notifications] BullMQ workers connected to Redis at ${redis.host}:${redis.port} — dashboard at http://localhost:${PORT}/admin/queues`
+  );
 });

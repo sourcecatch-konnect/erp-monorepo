@@ -17,9 +17,10 @@ declare global {
 export const authMiddleware = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const token = req.cookies?.accessToken;
+  console.log("got here");
 
   if (!token) {
     return sendError(res, 401, {

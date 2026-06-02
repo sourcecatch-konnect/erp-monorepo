@@ -37,6 +37,16 @@ export const updateEmployeeSchema = z.object({
   middleName: z.string().optional(),
   lastName: z.string().min(1).optional(),
   email: z.string().email("Invalid email format").optional(),
+  mobile: z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9][0-9\s-]{6,18}$/, "Enter a valid phone number")
+    .nullable()
+    .optional(),
+  companyId: z.string().min(1, "Company is required").optional(),
+  branchId: z.string().min(1, "Branch is required").optional(),
+  whatsappOptIn: z.boolean().optional(),
+  emailOptIn: z.boolean().optional(),
 });
 
 export const resetEmployeePasswordSchema = z.object({
@@ -78,3 +88,4 @@ export * from "./master/railwayFreighMatrix.schema.js"
 export * from "./master/agreement.schema.js"
 export * from "./master/rateMatrix.schema.js"
 export * from "./admin/rbac.schema.js"
+export * from "./attachments/attachment.schema.js"

@@ -1,7 +1,21 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
-  "globalEnv": ["DATABASE_URL", "JWT_SECRET", "NODE_ENV", "PORT"],
+  "globalEnv": [
+    "DATABASE_URL",
+    "JWT_SECRET",
+    "NODE_ENV",
+    "PORT",
+    "REDIS_URL",
+    "NOTIFICATION_QUEUE_PREFIX",
+    "AWS_REGION",
+    "AWS_S3_REGION",
+    "AWS_S3_BUCKET",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "ATTACHMENT_MAX_SIZE_BYTES",
+    "ATTACHMENT_ALLOWED_MIME"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
