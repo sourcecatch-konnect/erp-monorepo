@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.5.1",
+    "@skerp/attachments-web": "workspace:*",
     "@skerp/notifications-web": "workspace:*",
     "@skerp/types": "workspace:*",
     "@tabler/icons-react": "^3.34.0",

@@ -4,6 +4,7 @@ import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { PERMS } from "../../auth/permissions.js";
+import { ensurePermissionCatalog } from "../../auth/permission-catalog.js";
 import { invalidateUser } from "../../auth/permission-cache.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
 import { NotFoundError } from "../../lib/error.js";
@@ -58,6 +59,7 @@ router.get("/:id/access", async (req, res) => {
 
 router.patch("/:id/access", async (req, res) => {
   const body = updateUserAccessSchema.parse(req.body);
+  await ensurePermissionCatalog();
   const user = await db.user.findUnique({
     where: { id: req.params.id },
     include: {

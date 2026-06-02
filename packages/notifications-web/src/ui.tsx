@@ -17,6 +17,7 @@ import {
   IconBell,
   IconBrandWhatsapp,
   IconChecks,
+  IconChevronDown,
   IconDeviceFloppy,
   IconExternalLink,
   IconFilter,
@@ -25,10 +26,12 @@ import {
   IconMail,
   IconMessage2,
   IconRefresh,
+  IconSearch,
   IconSend,
   IconSettings,
   IconTrash,
   IconWorld,
+  IconX,
 } from "@tabler/icons-react";
 import { Button } from "@skerp/ui/components/button";
 import {
@@ -38,7 +41,13 @@ import {
   CardTitle,
 } from "@skerp/ui/components/Card";
 import { Checkbox } from "@skerp/ui/components/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@skerp/ui/components/collapsible";
 import { Input } from "@skerp/ui/components/input";
+import { Label } from "@skerp/ui/components/lable";
 import {
   Pagination,
   PaginationContent,
@@ -751,6 +760,50 @@ export function NotificationPreferencesPanel({
   );
 }
 
+// A rule is "dirty" when the local draft diverges from the saved rule. Channel
+// order is irrelevant to equality, so normalise it before comparing.
+const sameRule = (a: NotificationRule, b: NotificationRule) =>
+  JSON.stringify({ ...a, channels: [...a.channels].sort() }) ===
+  JSON.stringify({ ...b, channels: [...b.channels].sort() });
+
+// Compact, glanceable channel state for the collapsed row: lit = active.
+function ChannelSummary({
+  all,
+  active,
+}: {
+  all: NotificationChannel[];
+  active: NotificationChannel[];
+}) {
+  const activeLabels = active.map((channel) => channelLabels[channel]);
+  return (
+    <div className="flex items-center gap-1">
+      <span className="sr-only">
+        {activeLabels.length
+          ? `Channels: ${activeLabels.join(", ")}`
+          : "No channels selected"}
+      </span>
+      {all.map((channel) => {
+        const Icon = channelIcon[channel];
+        const on = active.includes(channel);
+        return (
+          <span
+            key={channel}
+            aria-hidden
+            title={`${channelLabels[channel]}: ${on ? "on" : "off"}`}
+            className={`inline-flex size-6 items-center justify-center rounded-sm border ${
+              on
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground/40"
+            }`}
+          >
+            <Icon size={13} />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function RuleEditor({
   api,
   rule,
@@ -763,6 +816,7 @@ function RuleEditor({
   templates: NotificationTemplate[];
 }) {
   const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(rule);
   useEffect(() => setDraft(rule), [rule]);
 
@@ -775,6 +829,10 @@ function RuleEditor({
     onError: (error) => toast.error(getErrorMessage(error)),
   });
 
+  const dirty = useMemo(() => !sameRule(draft, rule), [draft, rule]);
+  const persist = (next: NotificationRule) =>
+    save.mutate({ id: rule.id, body: next });
+
   const toggleChannel = (channel: NotificationChannel) => {
     setDraft((current) => ({
       ...current,
@@ -784,149 +842,253 @@ function RuleEditor({
     }));
   };
 
+  // The header switch is the headline action — toggle a rule live in one click,
+  // no expand or Save needed. It persists the current draft immediately.
+  const handleEnabledToggle = (enabled: boolean) => {
+    const next = { ...draft, enabled };
+    setDraft(next);
+    persist(next);
+  };
+
+  const noChannels = draft.channels.length === 0;
   const eventTemplates = templates.filter(
     (template) => template.code === rule.eventType,
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <CardTitle>{rule.name}</CardTitle>
-              <SeverityBadge severity={draft.severity} />
-              {draft.critical && (
-                <StatusPill tone="critical" label="Critical" />
-              )}
-            </div>
-            <code className="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              {rule.eventType}
-            </code>
-          </div>
+    <Card className="gap-0 py-0">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="group flex min-w-0 flex-1 items-center gap-3 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              <IconChevronDown
+                size={16}
+                className="shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+              />
+              <span className="min-w-0 space-y-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="truncate font-medium text-foreground">
+                    {rule.name}
+                  </span>
+                  <SeverityBadge severity={draft.severity} />
+                  {draft.critical && (
+                    <StatusPill tone="critical" label="Critical" />
+                  )}
+                  {dirty && <StatusPill tone="warning" label="Unsaved" />}
+                </span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <code className="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                    {rule.eventType}
+                  </code>
+                  {rule.description && (
+                    <span className="truncate text-xs text-muted-foreground">
+                      {rule.description}
+                    </span>
+                  )}
+                </span>
+              </span>
+            </button>
+          </CollapsibleTrigger>
+
+          <ChannelSummary all={metadata.channels} active={draft.channels} />
+
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>{draft.enabled ? "Enabled" : "Disabled"}</span>
+            <span className="hidden sm:inline">
+              {draft.enabled ? "Enabled" : "Disabled"}
+            </span>
             <Switch
               checked={draft.enabled}
-              onCheckedChange={(enabled) =>
-                setDraft((current) => ({ ...current, enabled }))
-              }
+              onCheckedChange={handleEnabledToggle}
+              disabled={save.isPending}
+              aria-label={`${draft.enabled ? "Disable" : "Enable"} ${rule.name}`}
             />
           </label>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-3">
-          <FieldLabel label="Severity">
-            <Select
-              value={draft.severity}
-              onValueChange={(value) =>
-                setDraft((current) => ({
-                  ...current,
-                  severity: value as NotificationSeverity,
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {metadata.severities.map((severity) => (
-                  <SelectItem key={severity} value={severity}>
-                    {severity}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
-          <FieldLabel label="Recipients">
-            <Select
-              value={draft.recipientResolverKey}
-              onValueChange={(value) =>
-                setDraft((current) => ({
-                  ...current,
-                  recipientResolverKey: value,
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {metadata.recipientResolvers.map((resolver) => (
-                  <SelectItem key={resolver.key} value={resolver.key}>
-                    {resolver.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
-          <FieldLabel label="Template">
-            <Select
-              value={draft.templateId || "none"}
-              onValueChange={(value) =>
-                setDraft((current) => ({
-                  ...current,
-                  templateId: value === "none" ? null : value,
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No template</SelectItem>
-                {eventTemplates.map((template) => (
-                  <SelectItem key={template.id} value={template.id}>
-                    {channelLabels[template.channel]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
-        </div>
 
-        <div className="space-y-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            Channels
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {metadata.channels.map((channel) => (
-              <ChannelChip
-                key={channel}
-                channel={channel}
-                active={draft.channels.includes(channel)}
-                onClick={() => toggleChannel(channel)}
-              />
-            ))}
+        <CollapsibleContent>
+          <div className="space-y-4 border-t border-border px-4 py-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <FieldLabel label="Severity">
+                <Select
+                  value={draft.severity}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      severity: value as NotificationSeverity,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {metadata.severities.map((severity) => (
+                      <SelectItem key={severity} value={severity}>
+                        {severity}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FieldLabel>
+              <FieldLabel label="Recipients">
+                <Select
+                  value={draft.recipientResolverKey}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      recipientResolverKey: value,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {metadata.recipientResolvers.map((resolver) => (
+                      <SelectItem key={resolver.key} value={resolver.key}>
+                        {resolver.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FieldLabel>
+              <FieldLabel label="Template">
+                <Select
+                  value={draft.templateId || "none"}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      templateId: value === "none" ? null : value,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No template</SelectItem>
+                    {eventTemplates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {channelLabels[template.channel]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FieldLabel>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Channels
+              </span>
+              <div
+                role="group"
+                aria-label="Delivery channels"
+                className="flex flex-wrap gap-2"
+              >
+                {metadata.channels.map((channel) => (
+                  <ChannelChip
+                    key={channel}
+                    channel={channel}
+                    active={draft.channels.includes(channel)}
+                    onClick={() => toggleChannel(channel)}
+                  />
+                ))}
+              </div>
+              {noChannels && (
+                <p role="alert" className="text-xs text-destructive">
+                  Select at least one channel to save this rule.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={draft.critical}
+                  onCheckedChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      critical: Boolean(value),
+                    }))
+                  }
+                />
+                <span>
+                  Critical — always delivered, recipients can&apos;t opt out
+                </span>
+              </label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDraft(rule)}
+                  disabled={!dirty || save.isPending}
+                >
+                  <IconRefresh /> Reset
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => persist(draft)}
+                  disabled={!dirty || save.isPending || noChannels}
+                >
+                  <IconDeviceFloppy /> Save rule
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={draft.critical}
-              onCheckedChange={(value) =>
-                setDraft((current) => ({
-                  ...current,
-                  critical: Boolean(value),
-                }))
-              }
-            />
-            <span>
-              Critical — always delivered, recipients can&apos;t opt out
-            </span>
-          </label>
-          <Button
-            size="sm"
-            onClick={() => save.mutate({ id: rule.id, body: draft })}
-            disabled={save.isPending || draft.channels.length === 0}
-          >
-            <IconDeviceFloppy /> Save rule
-          </Button>
-        </div>
-      </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
+  );
+}
+
+type RuleStatusFilter = "all" | "enabled" | "disabled";
+
+function StatusFilter({
+  value,
+  onChange,
+  counts,
+}: {
+  value: RuleStatusFilter;
+  onChange: (value: RuleStatusFilter) => void;
+  counts: Record<RuleStatusFilter, number>;
+}) {
+  const options: { key: RuleStatusFilter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "enabled", label: "Enabled" },
+    { key: "disabled", label: "Disabled" },
+  ];
+  return (
+    <div
+      role="group"
+      aria-label="Filter rules by status"
+      className="inline-flex items-center gap-0.5 rounded-sm border border-border p-0.5"
+    >
+      {options.map((option) => {
+        const active = value === option.key;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(option.key)}
+            className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            {option.label}
+            <span className={active ? "opacity-80" : "opacity-60"}>
+              {counts[option.key]}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -944,17 +1106,45 @@ function RulesPage({ api }: { api: NotificationApi }) {
     queryFn: api.metadata,
   });
 
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<RuleStatusFilter>("all");
+
+  const all = rules.data ?? [];
+  const counts = useMemo<Record<RuleStatusFilter, number>>(
+    () => ({
+      all: all.length,
+      enabled: all.filter((rule) => rule.enabled).length,
+      disabled: all.filter((rule) => !rule.enabled).length,
+    }),
+    [all],
+  );
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return all.filter((rule) => {
+      if (status === "enabled" && !rule.enabled) return false;
+      if (status === "disabled" && rule.enabled) return false;
+      if (!query) return true;
+      return (
+        rule.name.toLowerCase().includes(query) ||
+        rule.eventType.toLowerCase().includes(query) ||
+        (rule.description?.toLowerCase().includes(query) ?? false)
+      );
+    });
+  }, [all, search, status]);
+
   if (rules.isLoading || templates.isLoading || metadata.isLoading) {
     return (
       <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-40 w-full" />
+        <Skeleton className="h-9 w-full max-w-md" />
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Skeleton key={index} className="h-14 w-full" />
         ))}
       </div>
     );
   }
 
-  if (!rules.data?.length) {
+  if (!all.length) {
     return (
       <EmptyState
         icon={IconWorld}
@@ -964,17 +1154,78 @@ function RulesPage({ api }: { api: NotificationApi }) {
     );
   }
 
+  const clearFilters = () => {
+    setSearch("");
+    setStatus("all");
+  };
+
   return (
-    <div className="space-y-3">
-      {rules.data.map((rule) => (
-        <RuleEditor
-          key={rule.id}
-          api={api}
-          rule={rule}
-          metadata={metadata.data!}
-          templates={templates.data || []}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-xs">
+          <Label htmlFor="rule-search" className="sr-only">
+            Search rules
+          </Label>
+          <IconSearch
+            size={15}
+            aria-hidden
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            id="rule-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by name or event…"
+            className="pl-8"
+          />
+          {search && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <IconX size={15} />
+            </button>
+          )}
+        </div>
+        <StatusFilter value={status} onChange={setStatus} counts={counts} />
+      </div>
+
+      <p className="text-xs text-muted-foreground" aria-live="polite">
+        Showing {filtered.length} of {all.length}{" "}
+        {all.length === 1 ? "rule" : "rules"}
+      </p>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={IconFilter}
+          title="No matching rules"
+          hint={
+            search
+              ? `Nothing matches “${search}”. Try a different name or event type.`
+              : "No rules match the current filter."
+          }
+          action={
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          }
         />
-      ))}
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((rule) => (
+            <RuleEditor
+              key={rule.id}
+              api={api}
+              rule={rule}
+              metadata={metadata.data!}
+              templates={templates.data || []}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

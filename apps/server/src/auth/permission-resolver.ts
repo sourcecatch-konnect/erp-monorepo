@@ -1,5 +1,5 @@
 import { db } from "../../prisma/prisma.js";
-import type { PermissionKey } from "@skerp/types";
+import { ALL_PERMISSION_KEYS, type PermissionKey } from "@skerp/types";
 
 export type UserPermissionContext = {
   userId: string;
@@ -55,7 +55,7 @@ export const resolvePermissions = async (
   let permissions: Set<string>;
   if (user.role.isSystem) {
     const all = await db.permissionDef.findMany({ select: { key: true } });
-    permissions = new Set(all.map((p) => p.key));
+    permissions = new Set([...ALL_PERMISSION_KEYS, ...all.map((p) => p.key)]);
   } else {
     permissions = new Set(user.role.rolePermissions.map((r) => r.permission.key));
     for (const up of user.userPermissions) {

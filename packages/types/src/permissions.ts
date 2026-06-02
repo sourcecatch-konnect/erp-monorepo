@@ -76,6 +76,12 @@ type NotificationPermissionKey =
   | "notifications.manage_templates"
   | "notifications.test_send";
 
+type AttachmentPermissionKey =
+  | "attachments.view"
+  | "attachments.create"
+  | "attachments.download"
+  | "attachments.delete";
+
 export type PermissionKey =
   | MasterPermissionKey
   | LorryReceiptPermissionKey
@@ -83,7 +89,8 @@ export type PermissionKey =
   | OrderPermissionKey
   | EwaybillPermissionKey
   | AdminPermissionKey
-  | NotificationPermissionKey;
+  | NotificationPermissionKey
+  | AttachmentPermissionKey;
 
 type MasterPerms<Slug extends MasterSlug> = {
   VIEW: `masters.${Slug}.view`;
@@ -169,6 +176,12 @@ export const PERMS = {
     MANAGE_RULES: "notifications.manage_rules",
     MANAGE_TEMPLATES: "notifications.manage_templates",
     TEST_SEND: "notifications.test_send",
+  },
+  ATTACHMENTS: {
+    VIEW: "attachments.view",
+    CREATE: "attachments.create",
+    DOWNLOAD: "attachments.download",
+    DELETE: "attachments.delete",
   },
 } as const;
 

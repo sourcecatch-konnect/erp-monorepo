@@ -32,6 +32,7 @@ import Routes from "./modules/route/route.routes.js";
 import ewaybillRoute from "./modules/ewaybill/ewaybill.route.js";
 import adminRoute from "./modules/admin/admin.route.js";
 import notificationRoute from "./modules/notifications/notification.route.js";
+import attachmentRoute from "./modules/attachments/attachment.route.js";
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
@@ -84,6 +85,7 @@ app.use("/pumps",pumpRoute)
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);
+app.use("/attachments", attachmentRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use(errorMiddleware);

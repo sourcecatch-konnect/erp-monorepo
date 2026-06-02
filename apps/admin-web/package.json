@@ -13,6 +13,7 @@
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
     "@reduxjs/toolkit": "^2.5.1",
+    "@skerp/attachments-web": "workspace:*",
     "@skerp/notifications-web": "workspace:*",
     "@skerp/types": "workspace:*",
     "@skerp/ui": "workspace:*",

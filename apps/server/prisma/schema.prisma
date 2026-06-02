@@ -82,6 +82,39 @@ enum NotificationDeliveryStatus {
   SKIPPED
 }
 
+enum AntivirusStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  FAILED
+}
+
+/// Polymorphic file attachment. Referenced by any host entity via
+/// (entityType, entityId). Bytes live in S3; this row holds metadata only.
+model Attachment {
+  id              String          @id @default(cuid())
+  entityType      String // "User" | "Order" | "LR" | "Vehicle" | "Driver" | ...
+  entityId        String
+  branchId        String? // set from host entity when available (branch scoping later)
+  s3Key           String          @unique
+  originalName    String
+  mime            String
+  sizeBytes       Int
+  uploaded        Boolean         @default(false) // S3 PUT confirmed
+  antivirusStatus AntivirusStatus @default(PENDING)
+  scanError       String?
+  uploadedBy      String
+  uploadedAt      DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  uploader User @relation(fields: [uploadedBy], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([antivirusStatus])
+  @@index([branchId])
+}
+
 model User {
   id         String  @id @default(uuid())
   userName   String  @unique
@@ -124,6 +157,7 @@ model User {
   notificationDeliveries NotificationDelivery[]
   inAppNotifications InAppNotification[]
   notificationSubscriptions UserNotificationSubscription[]
+  attachments Attachment[]
 }
 
 model Company {

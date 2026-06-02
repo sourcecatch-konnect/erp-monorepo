@@ -33,6 +33,10 @@
     "./admin/rbac": {
       "types": "./src/admin/rbac.schema.ts",
       "import": "./dist/admin/rbac.schema.js"
+    },
+    "./attachments": {
+      "types": "./src/attachments/attachment.schema.ts",
+      "import": "./dist/attachments/attachment.schema.js"
     }
   },
   "scripts": {

@@ -10,6 +10,7 @@
  */
 @source "../../../packages/ui/src";
 @source "../../../packages/notifications-web/src";
+@source "../../../packages/attachments-web/src";
 
 @custom-variant dark (&:is(.dark *));
 
