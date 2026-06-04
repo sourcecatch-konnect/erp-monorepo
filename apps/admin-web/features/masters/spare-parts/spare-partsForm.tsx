@@ -91,7 +91,7 @@ export default function SparePartForm({
       isBatchTracked: row?.isBatchTracked ?? false,
       description: row?.description ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   const categoryOptions = categories.map((c) => ({
     label: c.name,

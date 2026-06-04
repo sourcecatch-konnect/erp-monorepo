@@ -28,6 +28,7 @@ import IconTextField from "../_shared/fields/IconTextField";
 import SelectField from "../_shared/fields/SelectField";
 import TextAreaField from "../_shared/fields/TextAreaField";
 import SwitchField from "../_shared/fields/SwitchField";
+import CustomerLocationsEditor from "./CustomerLocationsEditor";
 
 type Props = {
   open: boolean;
@@ -292,6 +293,16 @@ export default function CustomerAdvancedForm({
           icon={<IconFileDescription size={16} />}
         />
       </FormSection>
+
+      {row?.id ? (
+        <FormSection
+          icon={<IconMapPin size={18} />}
+          title="Pickup Locations"
+          description="Saved pickup points used when booking orders"
+        >
+          <CustomerLocationsEditor customerId={row.id} cities={cities} />
+        </FormSection>
+      ) : null}
     </MasterFormDialog>
   );
 }

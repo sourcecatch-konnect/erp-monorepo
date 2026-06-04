@@ -24,7 +24,6 @@ import {
   IconBuilding,
   IconMapPin,
   IconUser,
-  IconPhone,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -93,7 +92,7 @@ export default function BranchForm({
       companyId: row?.companyId ?? "",
       warehouseId: row?.warehouseId ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   const companyOptions = companies.map((c) => ({
     label: c.name,

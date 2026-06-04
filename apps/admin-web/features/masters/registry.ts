@@ -28,7 +28,8 @@ permissionKey:
   | "masters.agreement"
   | "masters.goods"
   | "masters.warehouse"
-  | "masters.pump";
+  | "masters.pump"
+  | "masters.vehicle-type";
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -71,6 +72,13 @@ export const masterRegistry = [
   category: "Location",
   permissionKey: "masters.vehicle",
   page: () => import("./vehicle/page"),
+},{
+  slug: "vehicle-type",
+  label: "Vehicle Type",
+  icon: IconTruck,
+  category: "Location",
+  permissionKey: "masters.vehicle-type",
+  page: () => import("./vehicleType/page"),
 },{
   slug: "spare-category",
   label: "Spare Category",

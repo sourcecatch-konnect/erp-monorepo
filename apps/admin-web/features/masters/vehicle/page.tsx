@@ -25,7 +25,7 @@ type VehicleCsvRow = Record<
   | "chasisNumber"
   | "engineNumber"
   | "ownershipType"
-  | "vehicleType"
+  | "vehicleTypeId"
   | "capacityMT"
   | "wheels"
   | "bodyType"

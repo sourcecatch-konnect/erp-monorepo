@@ -41,7 +41,7 @@ export const vehicleSchema = z.object({
   chasisNumber: z.string(),
   engineNumber: z.string(),
   ownershipType: ownershipTypeSchema,
-  vehicleType: vehicleTypeSchema,
+  vehicleTypeId: z.string(),
   capacityMT: z.number(),
   bodyType: z.string().nullable().optional(),
   wheels: z.string().nullable().optional(),
@@ -96,7 +96,7 @@ export const createVehicleSchema = z.object({
   ),
 
   ownershipType: ownershipTypeSchema,
-  vehicleType: vehicleTypeSchema,
+  vehicleTypeId: z.string().min(1, "Vehicle type is required"),
 
 
   wheels: z

@@ -12,11 +12,16 @@ import type {
 
 import { createVehicleSchema } from "@skerp/validators";
 
+import { useQuery } from "@tanstack/react-query";
+
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
+import ComboboxField from "../_shared/fields/ComboboxField";
 import NumberField from "../_shared/fields/NumberField";
+import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
+import { vehicleTypeKeys } from "../vehicleType/vehicleType.key";
 import VehicleNumberField from "../_shared/fields/vehicleNumberField";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 
@@ -38,14 +43,6 @@ type Props = {
 const ownershipOptions = [
   { label: "Own Vehicle", value: "Own_Vehicle" },
   { label: "Market Vehicle", value: "Market_Vehicle" },
-];
-
-const vehicleTypeOptions = [
-  { label: "Container", value: "Container" },
-  { label: "Open Body", value: "Open_Body" },
-  { label: "TATA 407", value: "TATA_407" },
-  { label: "DCM Lorry", value: "DCM_Lorry" },
-  { label: "DI Pickup", value: "DI_Pickup" },
 ];
 
 const wheelOptions = [
@@ -70,7 +67,7 @@ const defaultValues: CreateVehicleFormInput = {
   chasisNumber: "",
   engineNumber: "",
   ownershipType: "Own_Vehicle",
-  vehicleType: "Container",
+  vehicleTypeId: "",
   capacityMT: "",
   wheels: undefined,
   bodyType: "",
@@ -99,6 +96,17 @@ export default function VehicleForm({
     defaultValues,
   });
 
+  const vehicleTypes = useQuery({
+    queryKey: vehicleTypeKeys.list({ size: 1000, sort: "name:asc" }),
+    queryFn: () => vehicleTypeApi.list({ size: 1000, sort: "name:asc" }),
+    enabled: open,
+  });
+
+  const vehicleTypeOptions = (vehicleTypes.data?.data ?? []).map((vt) => ({
+    label: vt.name,
+    value: vt.id,
+  }));
+
   React.useEffect(() => {
     if (!open) return;
 
@@ -107,7 +115,7 @@ export default function VehicleForm({
       chasisNumber: row?.chasisNumber ?? "",
       engineNumber: row?.engineNumber ?? "",
       ownershipType: row?.ownershipType ?? "Own_Vehicle",
-      vehicleType: row?.vehicleType ?? "Container",
+      vehicleTypeId: row?.vehicleTypeId ?? "",
       capacityMT: row?.capacityMT != null ? String(row.capacityMT) : "",
       wheels: toWheelInput(row?.wheels),
       bodyType: row?.bodyType ?? "",
@@ -171,8 +179,8 @@ export default function VehicleForm({
           required
         />
 
-        <SelectField<CreateVehicleFormInput>
-          name="vehicleType"
+        <ComboboxField<CreateVehicleFormInput>
+          name="vehicleTypeId"
           label="Vehicle Type"
           options={vehicleTypeOptions}
           required
@@ -323,8 +331,11 @@ function toWheelInput(
   const value = String(wheels);
 
   const allowed = ["2", "4", "6", "10", "12", "14", "16", "18", "22"] as const;
+  type Wheel = (typeof allowed)[number];
 
-  return allowed.includes(value as any) ? (value as any) : undefined;
+  return (allowed as readonly string[]).includes(value)
+    ? (value as Wheel)
+    : undefined;
 }
 
 function toDateInput(date: string | null | undefined): string {

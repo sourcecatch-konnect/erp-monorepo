@@ -31,10 +31,10 @@ const router: Router = createCrudRouter({
           where: { leadGeneratedByBranchId: id },
         }),
         db.labour.count({ where: { branchId: id } }),
-        db.orderBooking.count({
+        db.order.count({
           where: { fromBranchId: id },
         }),
-        db.orderBooking.count({
+        db.order.count({
           where: { toBranchId: id },
         }),
       ]);

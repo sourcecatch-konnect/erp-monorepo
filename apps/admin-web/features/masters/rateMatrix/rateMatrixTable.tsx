@@ -5,7 +5,6 @@ import type { RateMatrixWithRelations } from "@skerp/types";
 
 import {
   IconRoute,
-  IconCurrencyRupee,
   IconClock,
   IconFileInvoice,
 } from "@tabler/icons-react";

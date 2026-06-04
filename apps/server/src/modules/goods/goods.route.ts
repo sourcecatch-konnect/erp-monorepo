@@ -28,8 +28,8 @@ const router: Router = createCrudRouter({
 
     blockDeleteIfExists: [
       {
-        model: db.orderGoods,
-        label: "Order Goods",
+        model: db.orderItem,
+        label: "Order Items",
 
         where: (id: string) => ({
           goodsId: id,

@@ -48,7 +48,7 @@ export default function AreaForm({
       name: row?.name ?? "",
       cityId: row?.cityId ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   return (
     <MasterFormDialog

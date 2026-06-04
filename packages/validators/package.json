@@ -30,6 +30,14 @@
       "types": "./src/master/vehicle.schema.ts",
       "import": "./dist/master/vehicle.schema.js"
     },
+    "./master/vehicle-type": {
+      "types": "./src/master/vehicleType.schema.ts",
+      "import": "./dist/master/vehicleType.schema.js"
+    },
+    "./order": {
+      "types": "./src/order/order.schema.ts",
+      "import": "./dist/order/order.schema.js"
+    },
     "./admin/rbac": {
       "types": "./src/admin/rbac.schema.ts",
       "import": "./dist/admin/rbac.schema.js"

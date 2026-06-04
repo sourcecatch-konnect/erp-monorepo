@@ -40,7 +40,8 @@ export const vehicleColumns: ColumnDef<Vehicle>[] = [
           </span>
 
           <span className="text-xs text-muted-foreground">
-            {formatLabel(row.original.vehicleType)}
+            {(row.original as { vehicleTypeRef?: { name?: string } })
+              .vehicleTypeRef?.name ?? "-"}
           </span>
         </div>
       </div>

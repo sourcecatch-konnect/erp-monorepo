@@ -11,16 +11,12 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   SectionLabel,
   Field,
-  PartyCard,
-  formatDate,
 } from "../_shared/dialog-parts";
 
 import {
   IconMapPin,
   IconBuildingCommunity,
   IconCircleCheckFilled,
-  IconClockEdit,
-  IconId,
 } from "@tabler/icons-react";
 
 type Props = {

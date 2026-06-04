@@ -192,6 +192,7 @@ const cities = useQuery({
         const text = await file.text();
         const rows = parseCsvRows<PumpCsvRow>(text);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await bulkImport.mutateAsync(rows as any);
       }}
       onExport={() => exportPumps.mutate(listQuery)}

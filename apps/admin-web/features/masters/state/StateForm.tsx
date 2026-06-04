@@ -44,7 +44,7 @@ export default function StateForm({
     form.reset({
       name: row?.name ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   return (
     <MasterFormDialog

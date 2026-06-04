@@ -10,7 +10,6 @@ import {
   IconUser,
   IconCash,
   IconBuildingBank,
-  IconAlertTriangle,
   IconCircleCheck,
   IconCircleX,
   IconFileDescription,

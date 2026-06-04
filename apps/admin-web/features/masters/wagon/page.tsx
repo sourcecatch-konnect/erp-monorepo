@@ -149,6 +149,7 @@ const wagonDetail = useQuery({
         const text = await file.text();
         const rows = parseCsvRows<WagonCsvRow>(text);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await bulkImport.mutateAsync(rows as any);
       }}
       onExport={() => exportWagons.mutate(listQuery)}

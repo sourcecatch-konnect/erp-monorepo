@@ -16,7 +16,6 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   IconTruck,
   IconMapPin,
-  IconCalendar,
   IconBuildingWarehouse,
 } from "@tabler/icons-react";
 

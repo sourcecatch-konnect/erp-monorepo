@@ -166,3 +166,60 @@ export const createCustomerSchema = z.object({
 });
 
 export const updateCustomerSchema = createCustomerSchema.partial();
+
+/* -----------------------------
+   CUSTOMER LOCATION (inline-lite, saved pickup points)
+------------------------------ */
+
+export const customerLocationSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  name: z.string(),
+  address: z.string().nullable().optional(),
+  cityId: z.string(),
+  contactName: z.string().nullable().optional(),
+  contactPhone: z.string().nullable().optional(),
+  gstNo: z.string().nullable().optional(),
+  city: z
+    .object({ id: z.string(), name: z.string() })
+    .optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export const createCustomerLocationSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Location name is required")
+    .max(100, "Location name cannot exceed 100 characters"),
+  address: optionalString,
+  cityId: z.string().min(1, "City is required"),
+  contactName: optionalString,
+  contactPhone: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (value) => !value || /^(\+91)?[6-9]\d{9}$/.test(value),
+      "Enter valid Indian mobile number"
+    )
+    .transform((value) => (value ? value : undefined)),
+  gstNo: z
+    .string()
+    .trim()
+    .transform((value) => (value ? value.toUpperCase() : undefined))
+    .pipe(
+      z
+        .string()
+        .regex(
+          /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+          "Enter valid GST number"
+        )
+        .optional()
+    ),
+});
+
+export const updateCustomerLocationSchema =
+  createCustomerLocationSchema.partial();

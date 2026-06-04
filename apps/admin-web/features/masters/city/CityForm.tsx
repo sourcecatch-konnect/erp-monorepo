@@ -48,7 +48,7 @@ export default function CityForm({
       name: row?.name ?? "",
       stateId: row?.stateId ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   return (
     <MasterFormDialog

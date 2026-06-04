@@ -5,7 +5,7 @@ import { Input } from "@skerp/ui/components/input";
 import { Label } from "@skerp/ui/components/lable";
 
 type VehicleNumberFieldProps<T extends FieldValues> = {
-  control: Control<T, unknown, any>;
+  control: Control<T, unknown, FieldValues>;
   name: Path<T>;
   label?: string;
   required?: boolean;

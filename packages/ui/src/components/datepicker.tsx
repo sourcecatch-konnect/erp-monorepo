@@ -64,7 +64,7 @@ export function DatePicker({
   const setDate = onSelectProp ?? setInternalDate;
 
   const [calendarMonth, setCalendarMonth] = React.useState<Date>(
-    date ?? new Date()
+    date ?? new Date(),
   );
 
   React.useEffect(() => {
@@ -97,7 +97,10 @@ export function DatePicker({
             className="h-10 w-full justify-between rounded-lg px-3 font-normal"
           >
             <span className="flex min-w-0 items-center gap-2">
-              <CalendarSearch size={17} className="shrink-0 text-muted-foreground" />
+              <CalendarSearch
+                size={17}
+                className="shrink-0 text-muted-foreground"
+              />
               <span
                 className={
                   date
@@ -133,9 +136,7 @@ export function DatePicker({
             <Select
               value={String(calendarMonth.getMonth())}
               onValueChange={(value) => {
-                setCalendarMonth((current) =>
-                  setMonth(current, Number(value))
-                );
+                setCalendarMonth((current) => setMonth(current, Number(value)));
               }}
             >
               <SelectTrigger className="h-9 rounded-lg text-sm">
@@ -153,9 +154,7 @@ export function DatePicker({
             <Select
               value={String(calendarMonth.getFullYear())}
               onValueChange={(value) => {
-                setCalendarMonth((current) =>
-                  setYear(current, Number(value))
-                );
+                setCalendarMonth((current) => setYear(current, Number(value)));
               }}
             >
               <SelectTrigger className="h-9 rounded-lg text-sm">
