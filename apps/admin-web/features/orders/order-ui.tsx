@@ -1,14 +1,8 @@
 import * as React from "react";
 import type { OrderStatus } from "@skerp/types";
+import { cn } from "@/lib/utils";
 
-const STATUS_STYLES: Record<OrderStatus, string> = {
-  PendingApproval: "bg-amber-100 text-amber-800 ring-amber-200",
-  Confirmed: "bg-green-100 text-green-800 ring-green-200",
-  Rejected: "bg-red-100 text-red-700 ring-red-200",
-  Cancelled: "bg-gray-100 text-gray-600 ring-gray-200",
-  InProgress: "bg-blue-100 text-blue-800 ring-blue-200",
-  Completed: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-};
+
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   PendingApproval: "Pending Approval",
@@ -19,16 +13,29 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   Completed: "Completed",
 };
 
+const STATUS_STYLES: Record<OrderStatus, string> = {
+  PendingApproval: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  Confirmed: "bg-green-500/10 text-green-700 border-green-500/20",
+  Rejected: "bg-red-500/10 text-red-700 border-red-500/20",
+  Cancelled: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+  InProgress: "bg-blue-500/10 text-blue-700 border-blue-500/20",
+  Completed: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
+};
+
 export function StatusBadge({ status }: { status: OrderStatus }) {
   return (
     <span
-      className={`inline-flex items-center rounded-sm px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLES[status]}`}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-md border px-2.5 py-1",
+        "text-xs font-semibold shadow-sm",
+        STATUS_STYLES[status],
+      )}
     >
+      <span className="h-2 w-2 rounded-full bg-current shadow-[0_0_0_3px_currentColor]/10" />
       {STATUS_LABELS[status]}
     </span>
   );
 }
-
 export const formatMoney = (value: string | number | null | undefined) => {
   if (value === null || value === undefined || value === "") return "—";
   const num = typeof value === "string" ? Number(value) : value;
@@ -57,4 +64,6 @@ export const STATUS_ORDER: { key: string; label: string }[] = [
   { key: "Confirmed", label: "Confirmed" },
   { key: "Rejected", label: "Rejected" },
   { key: "Cancelled", label: "Cancelled" },
+  { key: "InProgress", label: "In Progress" },
+  { key: "Completed", label: "Completed" },
 ];

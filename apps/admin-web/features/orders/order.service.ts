@@ -20,11 +20,27 @@ import {
 export type OrderDetail = Order & { freightPreview: FreightPreview };
 
 export const orderApi = {
-  list: async (query?: ListQuery): Promise<ListResult<Order>> => {
-    const res = await api.get<ApiResponse<Order[]>>("/orders", { params: query });
-    return unwrapListResponse(res);
-  },
+  // list: async (query?: ListQuery): Promise<ListResult<Order>> => {
+  //   const res = await api.get<ApiResponse<Order[]>>("/orders", { params: query });
+  //   return unwrapListResponse(res);
+  // },
+list: async (query?: ListQuery): Promise<ListResult<Order>> => {
+  const params: Record<string, string | number> = {};
 
+  if (query?.page !== undefined) params.page = query.page;
+  if (query?.size !== undefined) params.size = query.size;
+  if (query?.search) params.search = query.search;
+  if (query?.sort) {
+    params.sort = query.sort;
+  }
+
+  if (query?.filter?.status) {
+    params["filter[status]"] = String(query.filter.status);
+  }
+
+  const res = await api.get<ApiResponse<Order[]>>("/orders", { params });
+  return unwrapListResponse(res);
+},
   statusCounts: async (): Promise<Record<string, number>> => {
     const res = await api.get<ApiResponse<Record<string, number>>>(
       "/orders/status-counts"

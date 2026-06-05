@@ -15,8 +15,20 @@ import {
   TableHeader,
   TableRow,
 } from "@skerp/ui/components/table";
-import { IconCheck, IconX, IconBan, IconEdit, IconArrowLeft } from "@tabler/icons-react";
-
+import {
+  IconCheck,
+  IconX,
+  IconBan,
+  IconEdit,
+  IconArrowLeft,
+  IconDownload,
+  IconCopy,
+  IconMail,
+  IconAlertCircle,
+  IconCircleCheck,
+  IconClock,
+  IconCircleDot,
+} from "@tabler/icons-react";
 import { useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { orderApi } from "./order.service";
@@ -34,8 +46,46 @@ import ReasonDialog from "./ReasonDialog";
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid gap-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{value ?? "—"}</dd>
+      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="text-sm text-foreground">{value ?? <span className="text-muted-foreground/50">—</span>}</dd>
+    </div>
+  );
+}
+function CardSection({
+  title,
+  icon,
+  children,
+  action,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border bg-card p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between border-b pb-3">
+        <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {icon}
+          {title}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+ 
+function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+  return (
+    <div className="rounded-lg bg-muted/40 px-4 py-3">
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-medium leading-none">
+        {value}
+        {sub && <span className="ml-1 text-xs font-normal text-muted-foreground">{sub}</span>}
+      </p>
     </div>
   );
 }
@@ -83,12 +133,41 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
 
   if (isLoading || !order) {
     return (
-      <div className="space-y-3 p-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-40 w-full" />
+      <div className="mx-auto max-w-5xl space-y-4 p-6">
+        <Skeleton className="h-5 w-32" />
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="h-9 w-24" />
+          </div>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+          <div className="space-y-4">
+            <Skeleton className="h-40 w-full rounded-xl" />
+            <Skeleton className="h-56 w-full rounded-xl" />
+            <Skeleton className="h-40 w-full rounded-xl" />
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
+const itemCount = order.orderType === "Truck"
+  ? order.truckQuantity ?? 0
+  : order.items?.length ?? 0;
+
+const totalWeight =
+  order.items?.reduce((sum, item) => {
+    const weight = Number(item.weight ?? 0);
+    return sum + (Number.isNaN(weight) ? 0 : weight);
+  }, 0) ?? 0;
 
   const isPending = order.status === "PendingApproval";
   const editable = order.status === "PendingApproval" || order.status === "Rejected" || order.status === "Confirmed";
@@ -105,95 +184,117 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
         <IconArrowLeft size={16} className="mr-1" /> Back to orders
       </Button>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{order.orderNumber}</h1>
-          <StatusBadge status={order.status} />
+
+
+
+
+
+
+
+ <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold tracking-tight">{order.orderNumber}</h1>
+            <StatusBadge status={order.status} />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Created {formatDate(order.createdAt)}
+            {order.pickupDate ? ` · Pickup ${formatDate(order.pickupDate)}` : ""}
+          </p>
         </div>
-        <div className="flex gap-2">
-          {canUpdate && editable ? (
+
+
+           <div className="flex flex-wrap items-center gap-2">
+          {canUpdate && editable && (
+            <Button variant="outline" size="sm" onClick={() => router.push(`/orders/${order.id}/edit`)}>
+              <IconEdit size={14} className="mr-1.5" /> Edit
+            </Button>
+          )}
+          {canReject && isPending && (
+            <Button variant="outline" size="sm" onClick={() => setRejectOpen(true)}>
+              <IconX size={14} className="mr-1.5" /> Reject
+            </Button>
+          )}
+          {canCancel && cancellable && (
             <Button
               variant="outline"
-              onClick={() => router.push(`/orders/${order.id}/edit`)}
-            >
-              <IconEdit size={16} className="mr-1" /> Edit
-            </Button>
-          ) : null}
-          {canApprove && isPending ? (
-            <Button onClick={() => setApproveOpen(true)}>
-              <IconCheck size={16} className="mr-1" /> Approve
-            </Button>
-          ) : null}
-          {canReject && isPending ? (
-            <Button variant="outline" onClick={() => setRejectOpen(true)}>
-              <IconX size={16} className="mr-1" /> Reject
-            </Button>
-          ) : null}
-          {canCancel && cancellable ? (
-            <Button
-              variant="outline"
-              className="text-red-600 hover:bg-red-50"
+              size="sm"
+              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900 dark:hover:bg-red-950"
               onClick={() => setCancelOpen(true)}
             >
-              <IconBan size={16} className="mr-1" /> Cancel
+              <IconBan size={14} className="mr-1.5" /> Cancel
             </Button>
-          ) : null}
+          )}
+          {canApprove && isPending && (
+            <Button size="sm" onClick={() => setApproveOpen(true)}>
+              <IconCheck size={14} className="mr-1.5" /> Approve
+            </Button>
+          )}
         </div>
       </div>
-
-      {order.status === "Rejected" && order.rejectionReason ? (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
-          <strong>Rejected:</strong> {order.rejectionReason}
+      {order.status === "Rejected" && order.rejectionReason && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
+          <IconAlertCircle size={16} className="mt-0.5 shrink-0" />
+          <div><strong className="font-medium">Rejection reason: </strong>{order.rejectionReason}</div>
         </div>
-      ) : null}
-      {order.status === "Cancelled" && order.cancelReason ? (
-        <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-700 ring-1 ring-gray-200">
-          <strong>Cancelled:</strong> {order.cancelReason}
+      )}
+      {order.status === "Cancelled" && order.cancelReason && (
+        <div className="flex items-start gap-3 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          <IconBan size={16} className="mt-0.5 shrink-0" />
+          <div><strong className="font-medium text-foreground">Cancelled: </strong>{order.cancelReason}</div>
         </div>
-      ) : null}
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+     <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         <div className="space-y-4">
-          <section className="rounded-lg border p-4">
-            <h2 className="mb-3 text-sm font-semibold">Customer & Route</h2>
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label="Customer" value={order.customer?.name} />
-              <Field
-                label="From branch"
-                value={order.fromBranch?.name}
-              />
-              <Field label="To branch" value={order.toBranch?.name} />
-              <Field label="Pickup date" value={formatDate(order.pickupDate)} />
+        <CardSection title="Customer & Route">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <Field label="Customer"        value={order.customer?.name} />
+              <Field label="From branch"     value={order.fromBranch?.name} />
+              <Field label="To branch"       value={order.toBranch?.name} />
+              <Field label="Pickup date"     value={formatDate(order.pickupDate)} />
               <Field
                 label="Pickup location"
                 value={order.customerLocation?.name ?? order.pickupAddressOverride}
               />
+              <Field label="Order type" value={order.orderType === "Truck" ? "Truck hire" : "Goods transport"} />
             </dl>
-          </section>
+          </CardSection>
 
-          <section className="rounded-lg border p-4">
-            <h2 className="mb-3 text-sm font-semibold">Order details</h2>
+         <CardSection
+            title="Order Items"
+            action={
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                {itemCount} {itemCount === 1 ? "item" : "items"}
+              </span>
+            }
+          >
             {order.orderType === "Truck" ? (
-              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <Field label="Type" value="Truck hire" />
-                <Field label="Vehicle type" value={order.vehicleType?.name} />
-                <Field label="Truck quantity" value={order.truckQuantity} />
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="Vehicle type"    value={order.vehicleType?.name} />
+                <Field label="Truck quantity"  value={order.truckQuantity} />
               </dl>
             ) : (
               <div className="overflow-hidden rounded-lg border">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/40">
-                      <TableHead className="text-xs uppercase">Goods</TableHead>
-                      <TableHead className="text-xs uppercase">Qty</TableHead>
-                      <TableHead className="text-xs uppercase">Unit</TableHead>
-                      <TableHead className="text-xs uppercase">Weight</TableHead>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="text-[11px] uppercase tracking-wide">Goods</TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wide">Qty</TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wide">Unit</TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wide">Weight</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {order.items?.map((i) => (
+                    {order.items?.map((i: {
+                      id: string;
+                      goods?: { name: string } | null;
+                      quantity: number;
+                      unit: string;
+                      weight?: string | null;
+                    }) => (
                       <TableRow key={i.id}>
-                        <TableCell>{i.goods?.name ?? "—"}</TableCell>
+                        <TableCell className="font-medium">{i.goods?.name ?? "—"}</TableCell>
                         <TableCell>{i.quantity}</TableCell>
                         <TableCell>{i.unit}</TableCell>
                         <TableCell>{i.weight ?? "—"}</TableCell>
@@ -203,48 +304,82 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                 </Table>
               </div>
             )}
-          </section>
+ 
+            {/* Freight total */}
+            <div className="mt-4 flex items-center justify-between rounded-lg bg-muted/40 px-4 py-3">
+              <span className="text-sm text-muted-foreground">Total booking freight</span>
+              <span className="text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+                {formatMoney(order.bookingFreightAmount)}
+              </span>
+            </div>
+          </CardSection>
 
-          <section className="rounded-lg border p-4">
-            <h2 className="mb-3 text-sm font-semibold">Contact & Freight</h2>
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <CardSection title="Contact & Freight Details">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Contact person" value={order.contactPersonName} />
-              <Field label="Contact mobile" value={order.contactMobile} />
-              <Field label="Contact email" value={order.contactEmail} />
+              <Field label="Mobile"         value={order.contactMobile} />
+              <Field label="Email"          value={order.contactEmail} />
               <Field
-                label="Booking freight"
-                value={formatMoney(order.bookingFreightAmount)}
-              />
-              {order.freightOverrideReason ? (
-                <Field
-                  label="Freight override reason"
-                  value={order.freightOverrideReason}
-                />
-              ) : null}
-              <Field
-                label="Approved"
+                label="Approved by"
                 value={
                   order.approvedBy
-                    ? `${order.approvedBy.firstName} ${order.approvedBy.lastName} · ${formatDateTime(order.approvedAt)}`
-                    : "—"
+                    ? `${order.approvedBy.firstName} ${order.approvedBy.lastName}`
+                    : null
                 }
               />
+              <Field
+                label="Approval date"
+                value={order.approvedAt ? formatDateTime(order.approvedAt) : null}
+              />
+              {order.freightOverrideReason && (
+                <Field label="Freight override" value={order.freightOverrideReason} />
+              )}
             </dl>
-            {order.specialInstructions ? (
-              <div className="mt-3">
-                <Field
-                  label="Special instructions"
-                  value={order.specialInstructions}
-                />
+ 
+            {order.specialInstructions && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                  Special Instructions
+                </p>
+                <p className="text-sm text-amber-900 dark:text-amber-200">
+                  {order.specialInstructions}
+                </p>
               </div>
-            ) : null}
-          </section>
+            )}
+          </CardSection>
         </div>
 
-        <section className="rounded-lg border p-4">
-          <h2 className="mb-3 text-sm font-semibold">Timeline</h2>
-          <OrderTimeline events={order.events ?? []} />
-        </section>
+       <div className="space-y-4">
+ 
+          {/* Summary stats */}
+          <div className="grid grid-cols-2 gap-2">
+            <StatCard label="Total weight" value={totalWeight.toLocaleString()} sub="kg" />
+            <StatCard label="Items" value={itemCount} />
+          </div>
+ 
+          {/* Timeline */}
+          <CardSection title="Timeline">
+            <OrderTimeline events={order.events ?? []} />
+          </CardSection>
+ 
+          {/* Quick actions */}
+          <section className="rounded-xl border bg-muted/30 p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Quick actions
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm font-normal">
+                <IconDownload size={14} /> Download PDF
+              </Button>
+              <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm font-normal">
+                <IconCopy size={14} /> Duplicate order
+              </Button>
+              <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm font-normal">
+                <IconMail size={14} /> Notify customer
+              </Button>
+            </div>
+          </section>
+        </div>
       </div>
 
       <ApproveOrderModal

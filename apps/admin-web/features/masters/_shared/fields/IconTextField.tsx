@@ -19,6 +19,7 @@ type Props<TFormValues extends FieldValues> = {
   min?: number;
   max?: number;
   step?: number | string;
+  disabled?: boolean;
 };
 export default function IconTextField<TFormValues extends FieldValues>({
   name,
@@ -32,6 +33,7 @@ export default function IconTextField<TFormValues extends FieldValues>({
   hint,
   min,
   suffix,
+  disabled,
 max,
 step,
   onChangeTransform
@@ -68,6 +70,7 @@ step,
 ) : null}
       <Input
   type={type}
+  disabled={disabled}
   placeholder={placeholder}
   aria-invalid={Boolean(error)}
   maxLength={maxLength}

@@ -23,12 +23,19 @@ import {
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
 import { StatusBadge, formatDate, formatMoney } from "./order-ui";
+import { IconArrowRight } from "@tabler/icons-react";
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function DetailLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
-    <div className="grid gap-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{value ?? "—"}</dd>
+    <div className="grid grid-cols-[120px_1fr] items-start gap-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium text-foreground">{value || "—"}</p>
     </div>
   );
 }
@@ -50,82 +57,161 @@ export default function OrderQuickViewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isLoading ? "Order" : order?.orderNumber}
-            {order ? <StatusBadge status={order.status} /> : null}
+          <DialogTitle className="text-base">
+            {isLoading ? "Order quick view" : order?.orderNumber}
           </DialogTitle>
         </DialogHeader>
 
         {isLoading || !order ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            <Skeleton className="h-5 w-1/2" />
             <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-28 w-full" />
           </div>
         ) : (
           <div className="space-y-4">
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Row label="Customer" value={order.customer?.name} />
-              <Row
-                label="Route"
-                value={`${order.fromBranch?.shortCode ?? ""} → ${order.toBranch?.shortCode ?? ""}`}
+            <div className="flex items-start justify-between gap-4 border-b pb-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">
+                  {order.customer?.name ?? "—"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {order.fromBranch?.shortCode ?? "—"} →{" "}
+                  {order.toBranch?.shortCode ?? "—"}
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                <StatusBadge status={order.status} />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <DetailLine
+                label="Pickup date"
+                value={formatDate(order.pickupDate)}
               />
-              <Row label="Pickup date" value={formatDate(order.pickupDate)} />
-              <Row
-                label="Type"
+
+              <DetailLine
+                label="Order type"
                 value={
                   order.orderType === "Truck"
-                    ? `${order.truckQuantity ?? ""} × ${order.vehicleType?.name ?? "Truck"}`
+                    ? `${order.truckQuantity ?? 1} × ${
+                        order.vehicleType?.name ?? "Truck"
+                      }`
                     : "Item / Goods"
                 }
               />
-              <Row label="Freight" value={formatMoney(order.bookingFreightAmount)} />
-              <Row
-                label="Pickup location"
+
+              <DetailLine
+                label="Freight"
+                value={formatMoney(order.bookingFreightAmount)}
+              />
+
+              <DetailLine
+                label="Pickup"
                 value={
                   order.customerLocation?.name ??
                   order.pickupAddressOverride ??
                   "—"
                 }
               />
-            </section>
+
+              {(order.contactPersonName ||
+  order.contactMobile ||
+  order.contactEmail) && (
+  <div className="border-t pt-4">
+    <p className="mb-3 text-sm font-semibold">Contact details</p>
+
+    <div className="space-y-3">
+      {order.contactPersonName ? (
+        <DetailLine
+          label="Person"
+          value={order.contactPersonName}
+        />
+      ) : null}
+
+      {order.contactMobile ? (
+        <DetailLine
+          label="Mobile"
+          value={order.contactMobile}
+        />
+      ) : null}
+
+      {order.contactEmail ? (
+        <DetailLine
+          label="Email"
+          value={order.contactEmail}
+        />
+      ) : null}
+    </div>
+  </div>
+)}
+            </div>
 
             {order.orderType === "Item" && order.items?.length ? (
-              <section className="overflow-hidden rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40">
-                      <TableHead className="text-xs uppercase">Goods</TableHead>
-                      <TableHead className="text-xs uppercase">Qty</TableHead>
-                      <TableHead className="text-xs uppercase">Unit</TableHead>
-                      <TableHead className="text-xs uppercase">Weight</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {order.items.map((i) => (
-                      <TableRow key={i.id}>
-                        <TableCell>{i.goods?.name ?? "—"}</TableCell>
-                        <TableCell>{i.quantity}</TableCell>
-                        <TableCell>{i.unit}</TableCell>
-                        <TableCell>{i.weight ?? "—"}</TableCell>
+              <div className="border-t pt-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold">Goods</p>
+                  <p className="text-xs text-muted-foreground">
+                    {order.items.length} item{order.items.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+
+                <div className="max-h-44 overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="h-8 text-xs">Goods</TableHead>
+                        <TableHead className="h-8 text-xs">Qty</TableHead>
+                        <TableHead className="h-8 text-xs">Unit</TableHead>
+                        <TableHead className="h-8 text-xs">Weight</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </section>
+                    </TableHeader>
+                    <TableBody>
+                      {order.items.map((i) => (
+                        <TableRow key={i.id}>
+                          <TableCell className="py-2">
+                            {i.goods?.name ?? "—"}
+                          </TableCell>
+                          <TableCell className="py-2">{i.quantity}</TableCell>
+                          <TableCell className="py-2">{i.unit}</TableCell>
+                          <TableCell className="py-2">
+                            {i.weight ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
             ) : null}
 
             {order.specialInstructions ? (
-              <Row label="Instructions" value={order.specialInstructions} />
+              <div className="border-t pt-4">
+                <p className="mb-1 text-xs text-muted-foreground">
+                  Instructions
+                </p>
+                <p className="text-sm leading-6">{order.specialInstructions}</p>
+              </div>
             ) : null}
 
-            <div className="flex justify-end">
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/orders/${order.id}`}>Open full detail →</Link>
-              </Button>
-            </div>
+           <div className="flex justify-end border-t pt-4">
+  <Button asChild size="sm">
+    <Link
+      href={`/orders/${order.id}`}
+      className="group flex items-center gap-2"
+    >
+      Open full detail
+      <IconArrowRight
+        size={16}
+        className="transition-transform group-hover:translate-x-1"
+      />
+    </Link>
+  </Button>
+</div>
           </div>
         )}
       </DialogContent>

@@ -103,12 +103,15 @@ export default function CustomerLocationsEditor({ customerId, cities }: Props) {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <Combobox
-          options={cityOptions}
-          value={cityId || undefined}
-          onChange={setCityId}
-          placeholder="City"
-        />
+      <Combobox
+  options={cityOptions}
+  value={cityId || undefined}
+  onChange={(value) => {
+    console.log("selected city:", value);
+    setCityId(value ?? "");
+  }}
+  placeholder="City"
+/>
         <Input
           placeholder="Address (optional)"
           value={address}
@@ -120,7 +123,10 @@ export default function CustomerLocationsEditor({ customerId, cities }: Props) {
             size="sm"
             variant="outline"
             disabled={!canAdd || create.isPending}
-            onClick={() => create.mutate()}
+              onClick={() => {
+    console.log("Add clicked", { name, cityId, address, canAdd });
+    create.mutate();
+  }}
           >
             <IconPlus size={16} className="mr-1" />
             {create.isPending ? "Adding…" : "Add location"}

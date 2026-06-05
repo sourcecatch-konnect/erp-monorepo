@@ -56,7 +56,15 @@ export const parseListQuery = (req: Request): ListQuery => {
       }
     });
   }
+Object.entries(req.query).forEach(([key, value]) => {
+  const match = key.match(/^filter\[(.+)\]$/);
 
+const filterKey = match?.[1];
+
+if (filterKey && typeof value === "string" && value.trim()) {
+  filter[filterKey] = value.trim();
+}
+});
   return {
     page,
     size,

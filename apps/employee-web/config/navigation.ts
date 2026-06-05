@@ -64,25 +64,23 @@ export const NAV_SECTIONS: NavSection[] = [
         title: "Orders",
         href: "/orders",
         icon: IconClipboardList,
-        disabled: true,
       },
       {
         title: "Lorry Receipts",
         href: "/lorry-receipts",
         icon: IconReceipt2,
-        disabled: true,
+
       },
       {
         title: "Trips",
         href: "/trips",
         icon: IconTruckDelivery,
-        disabled: true,
+
       },
       {
         title: "Operations",
         href: "/operations",
         icon: IconActivity,
-        disabled: true,
       },
     ],
   },

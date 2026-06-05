@@ -134,31 +134,36 @@ export function RolesPage() {
                 {r.isSystem ? "System" : "Custom"}
               </TableCell>
               <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setCopySource(r);
-                      setName(`${r.name} (copy)`);
-                    }}
-                  >
-                    Copy
-                  </Button>
-                  {!r.isSystem && r._count.users === 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        if (confirm(`Delete role "${r.name}"?`)) {
-                          deleteMut.mutate(r.id);
-                        }
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  )}
-                </div>
+              <div className="flex justify-end gap-2">
+  <Button asChild variant="outline" size="sm">
+    <Link href={`/settings/roles/${r.id}`}>Edit</Link>
+  </Button>
+
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={() => {
+      setCopySource(r);
+      setName(`${r.name} (copy)`);
+    }}
+  >
+    Copy
+  </Button>
+
+  {!r.isSystem && r._count.users === 0 && (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        if (confirm(`Delete role "${r.name}"?`)) {
+          deleteMut.mutate(r.id);
+        }
+      }}
+    >
+      Delete
+    </Button>
+  )}
+</div>
               </TableCell>
             </TableRow>
           ))}

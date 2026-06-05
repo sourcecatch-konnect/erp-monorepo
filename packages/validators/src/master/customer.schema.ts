@@ -206,19 +206,18 @@ export const createCustomerLocationSchema = z.object({
       "Enter valid Indian mobile number"
     )
     .transform((value) => (value ? value : undefined)),
-  gstNo: z
-    .string()
-    .trim()
-    .transform((value) => (value ? value.toUpperCase() : undefined))
-    .pipe(
-      z
-        .string()
-        .regex(
-          /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
-          "Enter valid GST number"
-        )
-        .optional()
-    ),
+gstNo: z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .transform((value) => (value ? value.toUpperCase() : undefined))
+  .refine(
+    (value) =>
+      !value ||
+      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value),
+    "Enter valid GST number"
+  ),
 });
 
 export const updateCustomerLocationSchema =
