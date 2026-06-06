@@ -28,6 +28,8 @@ import {
   formatDocNumber,
   nextSequence,
   orderInclude,
+  orderListSelect,
+  orderQuickViewSelect,
   writeOrderEvent,
 } from "./order.service.js";
 
@@ -61,7 +63,7 @@ router.get("/", can(PERMS.ORDER.VIEW), async (req, res) => {
       where,
       skip: query.page * query.size,
       take: query.size,
-      include: orderInclude,
+      select: orderListSelect,
       orderBy: query.sort
         ? { [query.sort.field]: query.sort.direction }
         : { createdAt: "desc" },
@@ -96,13 +98,27 @@ router.get("/status-counts", can(PERMS.ORDER.VIEW), async (req, res) => {
 /* Detail                                                             */
 /* ------------------------------------------------------------------ */
 router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
+  const id = getParamId(req);
+  const isQuickView = req.query.view === "quick";
+
+  if (isQuickView) {
+    const order = await db.order.findFirst({
+      where: { id, deletedAt: null },
+      select: orderQuickViewSelect,
+    });
+
+    if (!order) throw new NotFoundError("Order not found");
+
+    return sendOk(res, order);
+  }
+
   const order = await db.order.findFirst({
-    where: { id: getParamId(req), deletedAt: null },
+    where: { id, deletedAt: null },
     include: orderInclude,
   });
+
   if (!order) throw new NotFoundError("Order not found");
 
-  // Freight preview (not stored until Confirm) for the approve dialog.
   const freight = await computeFreight({
     orderType: order.orderType,
     customerId: order.customerId,
@@ -113,7 +129,8 @@ router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
   });
 
   return sendOk(res, { ...order, freightPreview: freight });
-});
+});;
+
 
 /* ------------------------------------------------------------------ */
 /* Create -> PendingApproval                                          */

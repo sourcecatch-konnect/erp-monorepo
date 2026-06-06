@@ -52,7 +52,12 @@ list: async (query?: ListQuery): Promise<ListResult<Order>> => {
     const res = await api.get<ApiResponse<OrderDetail>>(`/orders/${id}`);
     return unwrapApiResponse(res);
   },
-
+  quickView: async (id: string): Promise<OrderQuickView> => {
+  const res = await api.get<ApiResponse<OrderQuickView>>(`/orders/${id}`, {
+    params: { view: "quick" },
+  });
+  return unwrapApiResponse(res);
+},
   create: async (body: CreateOrderBody): Promise<Order> => {
     const res = await api.post<ApiResponse<Order>>("/orders", body);
     return unwrapApiResponse(res);
@@ -135,4 +140,24 @@ export const orderLookupKeys = {
   vehicleTypes: ["lookup", "vehicle-types"] as const,
   customerLocations: (customerId: string) =>
     ["lookup", "customer-locations", customerId] as const,
+};
+export type OrderQuickView = Pick<
+  Order,
+  | "id"
+  | "orderNumber"
+  | "status"
+  | "pickupDate"
+  | "orderType"
+  | "truckQuantity"
+  | "bookingFreightAmount"
+  | "contactPersonName"
+  | "contactMobile"
+  | "contactEmail"
+  | "pickupAddressOverride"
+> & {
+  customer: { id: string; name: string } | null;
+  fromBranch: { id: string; shortCode: string } | null;
+  toBranch: { id: string; shortCode: string } | null;
+  vehicleType: { id: string; name: string } | null;
+  customerLocation: { id: string; name: string } | null;
 };

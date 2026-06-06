@@ -5,7 +5,11 @@ export type PermissionDefDto = {
   description: string | null;
   isSystem: boolean;
 };
-
+export type PermissionModuleDto = {
+  moduleCode: string;
+  label: string;
+  permissionCount: number;
+};
 export type RoleSummary = {
   id: string;
   name: string;

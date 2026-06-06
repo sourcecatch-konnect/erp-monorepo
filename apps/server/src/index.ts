@@ -41,6 +41,7 @@ import { seedNotificationDefaults } from "./modules/notifications/notification.s
 import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
 import { authMiddleware } from "./middlewares/auth.middlware.js";
 import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
+import { ensurePermissionCatalog } from "./auth/permission-catalog.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -96,16 +97,27 @@ app.use(errorMiddleware);
 const PORT = Number(process.env.PORT || 5000);
 const server = createServer(app);
 
-initNotificationRealtime(server);
-startNotificationWorkers();
-seedNotificationDefaults().catch((error) => {
-  console.error("[notifications] Failed to seed defaults:", error);
-});
+async function bootstrap() {
+  await ensurePermissionCatalog();
 
-server.listen(PORT, () => {
-  console.log(`SKERP server running on http://localhost:${PORT}`);
-  const redis = getRedisConnectionOptions();
-  console.log(
-    `[notifications] BullMQ workers connected to Redis at ${redis.host}:${redis.port} — dashboard at http://localhost:${PORT}/admin/queues`
-  );
+  initNotificationRealtime(server);
+  startNotificationWorkers();
+
+  seedNotificationDefaults().catch((error) => {
+    console.error("[notifications] Failed to seed defaults:", error);
+  });
+
+  server.listen(PORT, () => {
+    console.log(`SKERP server running on http://localhost:${PORT}`);
+
+    const redis = getRedisConnectionOptions();
+    console.log(
+      `[notifications] BullMQ workers connected to Redis at ${redis.host}:${redis.port} — dashboard at http://localhost:${PORT}/admin/queues`
+    );
+  });
+}
+
+bootstrap().catch((error) => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
 });

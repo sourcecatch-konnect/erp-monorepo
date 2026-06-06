@@ -109,7 +109,86 @@ export const computeFreight = async (args: {
   const qty = args.truckQuantity && args.truckQuantity > 0 ? args.truckQuantity : 1;
   return { amount: match.rate * qty, matched: true, source: "RateMatrix" };
 };
+export const orderListSelect = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  orderType: true,
+  pickupDate: true,
+  bookingFreightAmount: true,
+  truckQuantity: true,
 
+  customer: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+
+  fromBranch: {
+    select: {
+      id: true,
+      shortCode: true,
+    },
+  },
+
+  toBranch: {
+    select: {
+      id: true,
+      shortCode: true,
+    },
+  },
+
+  vehicleType: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+
+  createdBy: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+    },
+  },
+
+  _count: {
+    select: {
+      items: true,
+    },
+  },
+} satisfies Prisma.OrderSelect;
+export const orderQuickViewSelect = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  pickupDate: true,
+  orderType: true,
+  truckQuantity: true,
+  bookingFreightAmount: true,
+  contactPersonName: true,
+  contactMobile: true,
+  contactEmail: true,
+  pickupAddressOverride: true,
+
+  customer: {
+    select: { id: true, name: true },
+  },
+  fromBranch: {
+    select: { id: true, shortCode: true },
+  },
+  toBranch: {
+    select: { id: true, shortCode: true },
+  },
+  vehicleType: {
+    select: { id: true, name: true },
+  },
+  customerLocation: {
+    select: { id: true, name: true },
+  },
+} satisfies Prisma.OrderSelect;
 /** Standard include for returning a fully-hydrated order to the client. */
 export const orderInclude = {
   customer: { select: { id: true, name: true, disallowNewLRBooking: true } },

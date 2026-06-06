@@ -9,7 +9,7 @@ import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { PERMS } from "../../auth/permissions.js";
-import { ensurePermissionCatalog } from "../../auth/permission-catalog.js";
+
 import { invalidateAll } from "../../auth/permission-cache.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/error.js";
@@ -146,7 +146,6 @@ router.post("/:id/copy", async (req, res) => {
 
 router.put("/:id/permissions", async (req, res) => {
   const body = setRolePermissionsSchema.parse(req.body);
-  await ensurePermissionCatalog();
   const role = await db.role.findUnique({
     where: { id: req.params.id },
     include: { rolePermissions: { select: { permission: { select: { key: true } } } } },

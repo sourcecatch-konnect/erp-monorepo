@@ -26,6 +26,18 @@ export function UsersAccessPage() {
     queryKey: rbacKeys.users,
     queryFn: rbacApi.listUsers,
   });
+const { data: roles } = useQuery({
+  queryKey: rbacKeys.roles,
+  queryFn: rbacApi.listRoles,
+  staleTime: 10 * 60 * 1000,
+});
+
+const { data: branches } = useQuery({
+  queryKey: rbacKeys.branches,
+  queryFn: rbacApi.branches,
+  staleTime: 10 * 60 * 1000,
+});
+
 
   return (
     <div className="space-y-6 p-6">
@@ -105,10 +117,12 @@ export function UsersAccessPage() {
       </Table>
 
       {selected && (
-        <UserAccessDrawer
-          userId={selected.id}
-          onClose={() => setSelected(null)}
-        />
+<UserAccessDrawer
+  userId={selected.id}
+  roles={roles ?? []}
+  branches={branches ?? []}
+  onClose={() => setSelected(null)}
+/>
       )}
     </div>
   );
