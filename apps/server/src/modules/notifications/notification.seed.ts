@@ -13,6 +13,10 @@ const templateBodies: Record<
     whatsappBody:
       "SKERP test notification: {{message}} — this is an automated test.",
   },
+  "order.submitted": {
+    subject: "Order awaiting approval",
+    body: "Order {{orderNumber}} ({{customerName}}) is awaiting your approval.",
+  },
   "order.confirmed": {
     subject: "Order confirmed",
     body: "Order {{orderNumber}} has been confirmed.",
@@ -69,6 +73,14 @@ const defaultChannels = [
 ] as const;
 
 const rules: RuleSeed[] = [
+  {
+    eventType: "order.submitted",
+    name: "Order awaiting approval",
+    severity: NotificationSeverity.INFO,
+    recipientResolverKey: "role:Branch Manager@fromBranch",
+    channels: [NotificationChannel.IN_APP],
+    templateCode: "order.submitted",
+  },
   {
     eventType: "order.confirmed",
     name: "Order confirmed",

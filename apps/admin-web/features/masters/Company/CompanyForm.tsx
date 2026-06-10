@@ -14,7 +14,6 @@ import type {
 
 import {
   IconBuilding,
-  IconCalendar,
   IconFileCertificate,
   IconImageInPicture,
   IconMapPin,

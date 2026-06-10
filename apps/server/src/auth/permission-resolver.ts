@@ -53,10 +53,9 @@ export const resolvePermissions = async (
   if (!user || !user.role) return null;
 
   let permissions: Set<string>;
-  if (user.role.isSystem) {
-    const all = await db.permissionDef.findMany({ select: { key: true } });
-    permissions = new Set([...ALL_PERMISSION_KEYS, ...all.map((p) => p.key)]);
-  } else {
+ if (user.role.isSystem) {
+  permissions = new Set(ALL_PERMISSION_KEYS);
+} else {
     permissions = new Set(user.role.rolePermissions.map((r) => r.permission.key));
     for (const up of user.userPermissions) {
       if (up.effect === "GRANT") permissions.add(up.permission.key);

@@ -36,7 +36,7 @@ const schema = z.object({
   vehicleNo: z
     .string()
     .min(7, "Vehicle number is too short")
-    .regex(/^[A-Z0-9 \-]+$/, "Use uppercase letters and numbers only"),
+    .regex(/^[A-Z0-9 -]+$/, "Use uppercase letters and numbers only"),
   transDocNo: z.string().max(40).optional().or(z.literal("")),
   transDocDate: z.string().optional().or(z.literal("")),
   fromPlace: z.string().min(2, "Required"),

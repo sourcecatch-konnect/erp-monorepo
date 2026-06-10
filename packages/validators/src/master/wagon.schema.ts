@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-// Create helper here if it isn't available elsewhere
+// Accept string (from form inputs) or number, coerce to number.
 const requiredNumber = (field: string) =>
-  z.coerce.number({
-    required_error: `${field} is required`,
-    invalid_type_error: `${field} must be a number`,
-  });
+  z
+    .union([z.string(), z.number()])
+    .transform((v) => (v === "" ? NaN : Number(v)))
+    .refine((v) => !Number.isNaN(v), `${field} must be a number`);
 
 
 export const wagonSchema = z.object({

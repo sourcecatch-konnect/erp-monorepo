@@ -20,7 +20,6 @@ import SelectField from "../_shared/fields/SelectField";
 import {
   IconBox,
   IconRuler,
-  IconCategory,
   IconLayersIntersect,
 } from "@tabler/icons-react";
 
@@ -74,7 +73,7 @@ form.reset({
   isStackingAllowed: row?.isStackingAllowed ?? false,
   lorryReceiptId: row?.lorryReceiptId ?? undefined,
 });
-  }, [open, row]);
+  }, [form, open, row]);
 
   return (
     <MasterFormDialog<CreateGoodsFormInput, CreateGoodsBody>

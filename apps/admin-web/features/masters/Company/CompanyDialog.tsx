@@ -37,7 +37,6 @@ import {
   IconCalendarCheck,
   IconUser,
   IconFileDescription,
-  IconCurrencyRupee,
   IconClock,
   IconRoute,
 } from "@tabler/icons-react";

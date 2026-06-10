@@ -2,7 +2,11 @@ import { Router } from "express";
 import { ZodType, ZodTypeDef } from "zod";
 import { PermissionAction } from "@skerp/types";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
-import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
 import { getParamId } from "./param.js";
 import { parseListQuery } from "./list.query.js";
 import { requirePermission } from "./permission.middleware.js";
@@ -26,27 +30,24 @@ type CrudOptions<Create, Update> = {
   updateSchema: ZodType<Update, ZodTypeDef, unknown>;
   permissionKey: string;
 
- listOptions?: {
-  searchableFields?: string[];
-  defaultInclude?: Record<string, unknown>;
-  defaultOrderBy?: object;
-  softDelete?: boolean;
+  listOptions?: {
+    searchableFields?: string[];
+    defaultInclude?: Record<string, unknown>;
+    defaultOrderBy?: object;
+    softDelete?: boolean;
 
- blockDeleteIfExists?: {
-  model: any;
-  label: string;
-  where: (id: string) => object;
-  select?: Record<string, boolean>;
-  getName?: (row: any) => string;
-}[];
-};
+    blockDeleteIfExists?: {
+      model: any;
+      label: string;
+      where: (id: string) => object;
+      select?: Record<string, boolean>;
+      getName?: (row: any) => string;
+    }[];
+  };
 
   hooks?: {
     beforeCreate?: (data: Create) => Promise<Create>;
-    beforeUpdate?: (
-      data: Update,
-      row: unknown
-    ) => Promise<Update>;
+    beforeUpdate?: (data: Update, row: unknown) => Promise<Update>;
 
     beforeDelete?: (id: string) => Promise<void>;
   };
@@ -59,7 +60,7 @@ const buildWhere = (
   search: string | undefined,
   searchableFields: string[] | undefined,
   filter: Record<string, string>,
-  softDelete?: boolean
+  softDelete?: boolean,
 ) => {
   return {
     ...(softDelete ? { deletedAt: null } : {}),
@@ -111,7 +112,9 @@ const toCsv = (rows: unknown[]) => {
   return [
     keys.join(","),
     ...rows.map((row) =>
-      keys.map((key) => escape((row as Record<string, unknown>)[key])).join(",")
+      keys
+        .map((key) => escape((row as Record<string, unknown>)[key]))
+        .join(","),
     ),
   ].join("\n");
 };
@@ -137,7 +140,7 @@ export function createCrudRouter<Create, Update>({
         query.search,
         listOptions?.searchableFields,
         query.filter,
-        listOptions?.softDelete
+        listOptions?.softDelete,
       );
 
       const [data, total] = await Promise.all([
@@ -152,15 +155,13 @@ export function createCrudRouter<Create, Update>({
         }),
         model.count({ where }),
       ]);
-      console.log(
-  JSON.stringify(data, null, 2)
-);
+
       return sendOk(res, data, {
         page: query.page,
         size: query.size,
         total,
       });
-    }
+    },
   );
 
   router.get(
@@ -172,7 +173,7 @@ export function createCrudRouter<Create, Update>({
         q,
         listOptions?.searchableFields,
         {},
-        listOptions?.softDelete
+        listOptions?.softDelete,
       );
 
       const data = await model.findMany({
@@ -183,7 +184,7 @@ export function createCrudRouter<Create, Update>({
       });
 
       return sendOk(res, data);
-    }
+    },
   );
 
   router.get(
@@ -195,7 +196,7 @@ export function createCrudRouter<Create, Update>({
         query.search,
         listOptions?.searchableFields,
         query.filter,
-        listOptions?.softDelete
+        listOptions?.softDelete,
       );
       const data = await model.findMany({
         where,
@@ -208,7 +209,7 @@ export function createCrudRouter<Create, Update>({
       res.header("Content-Type", "text/csv");
       res.attachment("export.csv");
       return res.send(toCsv(data));
-    }
+    },
   );
 
   router.get(
@@ -225,7 +226,7 @@ export function createCrudRouter<Create, Update>({
       }
 
       return sendOk(res, row);
-    }
+    },
   );
 
   router.post(
@@ -234,11 +235,9 @@ export function createCrudRouter<Create, Update>({
     async (req, res) => {
       const parsed = createSchema.safeParse(req.body);
 
-    if (!parsed.success) {
-  throw new ValidationError(
-    parsed.error.flatten().fieldErrors
-  );
-}
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.flatten().fieldErrors);
+      }
       const data = hooks?.beforeCreate
         ? await hooks.beforeCreate(parsed.data)
         : parsed.data;
@@ -246,7 +245,7 @@ export function createCrudRouter<Create, Update>({
       const row = await model.create({ data });
 
       return sendOk(res, row, undefined, 201);
-    }
+    },
   );
 
   router.patch(
@@ -263,10 +262,8 @@ export function createCrudRouter<Create, Update>({
       const parsed = updateSchema.safeParse(req.body);
 
       if (!parsed.success) {
-  throw new ValidationError(
-    parsed.error.flatten().fieldErrors
-  );
-}
+        throw new ValidationError(parsed.error.flatten().fieldErrors);
+      }
 
       const data = hooks?.beforeUpdate
         ? await hooks.beforeUpdate(parsed.data, existing)
@@ -278,142 +275,137 @@ export function createCrudRouter<Create, Update>({
       });
 
       return sendOk(res, row);
-    }
+    },
   );
-router.delete(
-  "/:id",
-  requirePermission(permissionKey, actionPermission("delete")),
-  async (req, res) => {
-    const id = getParamId(req);
-     const existing = await model.findUnique({
-      where: { id },
-    });
+  router.delete(
+    "/:id",
+    requirePermission(permissionKey, actionPermission("delete")),
+    async (req, res) => {
+      const id = getParamId(req);
+      const existing = await model.findUnique({
+        where: { id },
+      });
 
-    if (!existing) {
-      throw new NotFoundError("Resource not found");
-    }
-    if (listOptions?.blockDeleteIfExists?.length) {
-      const dependencyErrors: string[] = [];
-
-      for (const dep of listOptions.blockDeleteIfExists) {
-        const rows = await dep.model.findMany({
-          where: dep.where(id),
-          select: dep.select ?? {
-  id: true,
-  name: true,
-},
-
-          take: 5,
-        });
-
-        if (rows.length > 0) {
-  const names = rows
-    .map((row: any) =>
-      dep.getName
-        ? dep.getName(row)
-        : row.name || row.code || row.id
-    )
-    .join(", ");
-
-
-          dependencyErrors.push(
-            `${dep.label}: ${names}${
-              rows.length === 5 ? " ..." : ""
-            }`
-          );
-        }
+      if (!existing) {
+        throw new NotFoundError("Resource not found");
       }
-      if (dependencyErrors.length > 0) {
-        throw new BadRequestError(
-          `Cannot delete this record because dependent data exists.\n\n${dependencyErrors.join(
-            "\n"
-          )}`
-        );
-      }
-    }
-    if (hooks?.beforeDelete) {
-      await hooks.beforeDelete(id);
-    }
-    await model.delete({
-      where: { id },
-    });
+      if (listOptions?.blockDeleteIfExists?.length) {
+        const dependencyErrors: string[] = [];
 
-    return sendOk(res, {
-      success: true,
-      message: "Record deleted successfully",
-    });
-  }
-);
-
-router.post(
-  "/bulk-delete",
-  requirePermission(permissionKey, actionPermission("delete")),
-  async (req, res) => {
-    const ids = parseIds(req.body);
-
-    // 1. Check dependency before deleting
-    if (listOptions?.blockDeleteIfExists?.length) {
-      const dependencyErrors: string[] = [];
-
-      for (const id of ids) {
         for (const dep of listOptions.blockDeleteIfExists) {
           const rows = await dep.model.findMany({
             where: dep.where(id),
             select: dep.select ?? {
-  id: true,
-  name: true,
-},
+              id: true,
+              name: true,
+            },
+
             take: 5,
           });
 
           if (rows.length > 0) {
             const names = rows
-  .map((row: any) =>
-    dep.getName
-      ? dep.getName(row)
-      : row.name || row.code || row.id
-  )
-  .join(", ");
+              .map((row: any) =>
+                dep.getName ? dep.getName(row) : row.name || row.code || row.id,
+              )
+              .join(", ");
 
             dependencyErrors.push(
-              `${dep.label}: ${names}${rows.length === 5 ? " ..." : ""}`
+              `${dep.label}: ${names}${rows.length === 5 ? " ..." : ""}`,
             );
           }
         }
+        if (dependencyErrors.length > 0) {
+          throw new BadRequestError(
+            `Cannot delete this record because dependent data exists.\n\n${dependencyErrors.join(
+              "\n",
+            )}`,
+          );
+        }
       }
-
-      if (dependencyErrors.length > 0) {
-        throw new BadRequestError(
-          `Cannot delete selected records because dependent data exists.\n\n${dependencyErrors.join(
-            "\n"
-          )}`
-        );
-      }
-    }
-
-    // 2. Run custom beforeDelete hook if available
-    if (hooks?.beforeDelete) {
-      for (const id of ids) {
+      if (hooks?.beforeDelete) {
         await hooks.beforeDelete(id);
       }
-    }
+      await model.delete({
+        where: { id },
+      });
 
-    // 3. Delete all selected rows
-    const result = await model.deleteMany({
-      where: {
-        id: {
-          in: ids,
+      return sendOk(res, {
+        success: true,
+        message: "Record deleted successfully",
+      });
+    },
+  );
+
+  router.post(
+    "/bulk-delete",
+    requirePermission(permissionKey, actionPermission("delete")),
+    async (req, res) => {
+      const ids = parseIds(req.body);
+
+      // 1. Check dependency before deleting
+      if (listOptions?.blockDeleteIfExists?.length) {
+        const dependencyErrors: string[] = [];
+
+        for (const id of ids) {
+          for (const dep of listOptions.blockDeleteIfExists) {
+            const rows = await dep.model.findMany({
+              where: dep.where(id),
+              select: dep.select ?? {
+                id: true,
+                name: true,
+              },
+              take: 5,
+            });
+
+            if (rows.length > 0) {
+              const names = rows
+                .map((row: any) =>
+                  dep.getName
+                    ? dep.getName(row)
+                    : row.name || row.code || row.id,
+                )
+                .join(", ");
+
+              dependencyErrors.push(
+                `${dep.label}: ${names}${rows.length === 5 ? " ..." : ""}`,
+              );
+            }
+          }
+        }
+
+        if (dependencyErrors.length > 0) {
+          throw new BadRequestError(
+            `Cannot delete selected records because dependent data exists.\n\n${dependencyErrors.join(
+              "\n",
+            )}`,
+          );
+        }
+      }
+
+      // 2. Run custom beforeDelete hook if available
+      if (hooks?.beforeDelete) {
+        for (const id of ids) {
+          await hooks.beforeDelete(id);
+        }
+      }
+
+      // 3. Delete all selected rows
+      const result = await model.deleteMany({
+        where: {
+          id: {
+            in: ids,
+          },
         },
-      },
-    });
+      });
 
-    return sendOk(res, {
-      success: true,
-      deletedCount: result.count,
-      message: `${result.count} record(s) deleted successfully`,
-    });
-  }
-);;
+      return sendOk(res, {
+        success: true,
+        deletedCount: result.count,
+        message: `${result.count} record(s) deleted successfully`,
+      });
+    },
+  );
 
   router.post(
     "/bulk-import",
@@ -447,7 +439,7 @@ router.post(
       }
 
       return sendOk(res, { inserted, errors });
-    }
+    },
   );
 
   return router;

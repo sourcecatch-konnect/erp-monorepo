@@ -106,7 +106,7 @@ export default function PumpAdvancedForm({
 
       isBlackListed: row?.isBlackListed ?? false,
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   const selectedStateId = form.watch("stateId");
 

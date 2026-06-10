@@ -117,7 +117,7 @@ export default function DriverDetailDialog({
               <PartyCard
                 label="Driver"
                 name={data?.name}
-                subtitle={data?.mobileNo ?? "-"}
+                subtitle={data?.mobile ?? "-"}
                 colorClass="bg-blue-100 text-blue-700"
                 icon={<IconUser size={15}/>}
               />
@@ -138,13 +138,13 @@ export default function DriverDetailDialog({
 
                 <Field
                   label="Mobile No"
-                  value={data?.mobileNo}
+                  value={data?.mobile}
                   icon={<IconPhone size={12}/>}
                 />
 
                 <Field
                   label="Alternate Phone"
-                  value={data?.alternatePhone}
+                  value={data?.alternateMobile}
                   icon={<IconPhone size={12}/>}
                 />
 
@@ -156,7 +156,7 @@ export default function DriverDetailDialog({
 
                 <Field
                   label="License Expiry"
-                  value={formatDate(data?.licenseExpiry)}
+                  value={formatDate(data?.licenseExpiryDate)}
                   icon={<IconCalendar size={12}/>}
                 />
 
@@ -186,7 +186,7 @@ export default function DriverDetailDialog({
 
                 <Field
                   label="Address"
-                  value={data?.address}
+                  value={data?.permanentAddress}
                   icon={<IconMapPin size={12}/>}
                 />
 

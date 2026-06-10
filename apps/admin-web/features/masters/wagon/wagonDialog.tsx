@@ -13,7 +13,6 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   SectionLabel,
   Field,
-  formatDate,
 } from "../_shared/dialog-parts";
 
 import {
@@ -21,9 +20,6 @@ import {
   IconRulerMeasure,
   IconScale,
   IconCircleCheckFilled,
-  IconCalendar,
-  IconClockEdit,
-  IconCalendarCheck,
 } from "@tabler/icons-react";
 
 type Props = {

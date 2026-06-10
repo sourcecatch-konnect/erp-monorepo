@@ -8,8 +8,6 @@ import {
   IconTruck,
   IconCurrencyRupee,
   IconScale,
-  IconRecycle,
-  IconPackages,
   IconCalendar,
 } from "@tabler/icons-react";
 import { formatCurrency } from "../_shared/dialog-parts";

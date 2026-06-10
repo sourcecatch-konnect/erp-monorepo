@@ -39,15 +39,18 @@ enum GoodsStorageLayer {
   Upper
 }
 
-enum OrderBy {
+enum OrderType {
   Truck
-  Goods
+  Item
 }
 
 enum OrderStatus {
-  Pending
-  Approved
+  PendingApproval
+  Confirmed
   Rejected
+  Cancelled
+  InProgress
+  Completed
 }
 
 enum BranchScope {
@@ -128,10 +131,10 @@ model User {
   status     Boolean
   password   String?
 
-  branchScope BranchScope @default(ASSIGNED)
-  mobile      String?
-  whatsappOptIn Boolean @default(false)
-  emailOptIn    Boolean @default(true)
+  branchScope                 BranchScope @default(ASSIGNED)
+  mobile                      String?
+  whatsappOptIn               Boolean     @default(false)
+  emailOptIn                  Boolean     @default(true)
   notificationQuietHoursStart String?
   notificationQuietHoursEnd   String?
 
@@ -139,9 +142,10 @@ model User {
   branch  Branch  @relation(fields: [branchId], references: [id])
   role    Role    @relation(fields: [roleId], references: [id])
 
-  createdBooking  OrderBooking[] @relation("CreatedOrderBookings")
-  updatedBooking  OrderBooking[] @relation("UpdatedOrderBookings")
-  approvedBooking OrderBooking[] @relation("ApprovedOrderBookings")
+  createdOrders  Order[]      @relation("CreatedOrders")
+  updatedOrders  Order[]      @relation("UpdatedOrders")
+  approvedOrders Order[]      @relation("ApprovedOrders")
+  orderEvents    OrderEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -151,13 +155,13 @@ model User {
   VehicleTrip       VehicleTrip[]
   TripStatusHistory TripStatusHistory[]
 
-  userBranches    UserBranch[]
-  userPermissions UserPermission[]
-  auditLogs       AuditLog[]
-  notificationDeliveries NotificationDelivery[]
-  inAppNotifications InAppNotification[]
+  userBranches              UserBranch[]
+  userPermissions           UserPermission[]
+  auditLogs                 AuditLog[]
+  notificationDeliveries    NotificationDelivery[]
+  inAppNotifications        InAppNotification[]
   notificationSubscriptions UserNotificationSubscription[]
-  attachments Attachment[]
+  attachments               Attachment[]
 }
 
 model Company {
@@ -210,11 +214,11 @@ model Branch {
 
   users        User[]
   userBranches UserBranch[]
-  city         City?          @relation(fields: [cityId], references: [id])
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  fromOrders   OrderBooking[] @relation("FromBranch")
-  toOrders     OrderBooking[] @relation("ToBranch")
+  city         City?        @relation(fields: [cityId], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  fromOrders   Order[]      @relation("FromBranch")
+  toOrders     Order[]      @relation("ToBranch")
 }
 
 model Warehouse {
@@ -367,20 +371,20 @@ model NotificationEvent {
 }
 
 model NotificationRule {
-  id                   String                 @id @default(cuid())
+  id                   String                @id @default(cuid())
   eventType            String
   name                 String
   description          String?
-  enabled              Boolean                @default(true)
-  severity             NotificationSeverity   @default(INFO)
-  critical             Boolean                @default(false)
+  enabled              Boolean               @default(true)
+  severity             NotificationSeverity  @default(INFO)
+  critical             Boolean               @default(false)
   recipientResolverKey String
   channels             NotificationChannel[]
   templateId           String?
   sourceModule         String?
   branchId             String?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   template NotificationTemplate? @relation(fields: [templateId], references: [id])
 
@@ -407,7 +411,7 @@ model NotificationTemplate {
   metaStatus         String? // DRAFT | PENDING | APPROVED | REJECTED | DISABLED
   metaTemplateId     String?
   metaRejectedReason String?
-  metaParamOrder     String[] @default([])
+  metaParamOrder     String[]  @default([])
   metaFooter         String?
   metaSubmittedAt    DateTime?
   metaSyncedAt       DateTime?
@@ -418,22 +422,22 @@ model NotificationTemplate {
 }
 
 model NotificationDelivery {
-  id              String                     @id @default(cuid())
-  eventId         String
-  channel         NotificationChannel
-  recipientUserId String
-  status          NotificationDeliveryStatus @default(PENDING)
+  id                String                     @id @default(cuid())
+  eventId           String
+  channel           NotificationChannel
+  recipientUserId   String
+  status            NotificationDeliveryStatus @default(PENDING)
   providerMessageId String?
-  attemptCount    Int                        @default(0)
-  lastError       String?
-  sentAt          DateTime?
-  deliveredAt     DateTime?
-  failedAt        DateTime?
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
+  attemptCount      Int                        @default(0)
+  lastError         String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
-  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  recipient User @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  event             NotificationEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  recipient         User               @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
   inAppNotification InAppNotification?
 
   @@unique([eventId, channel, recipientUserId])
@@ -443,19 +447,19 @@ model NotificationDelivery {
 }
 
 model InAppNotification {
-  id              String               @id @default(cuid())
-  deliveryId      String               @unique
-  userId          String
-  title           String
-  body            String
-  severity        NotificationSeverity @default(INFO)
-  linkUrl         String?
-  readAt          DateTime?
-  archivedAt      DateTime?
-  createdAt       DateTime             @default(now())
+  id         String               @id @default(cuid())
+  deliveryId String               @unique
+  userId     String
+  title      String
+  body       String
+  severity   NotificationSeverity @default(INFO)
+  linkUrl    String?
+  readAt     DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime             @default(now())
 
   delivery NotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
   @@index([userId, archivedAt])
@@ -465,9 +469,9 @@ model UserNotificationSubscription {
   userId     String
   eventType  String
   channel    NotificationChannel
-  subscribed Boolean @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  subscribed Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -500,7 +504,7 @@ model Vehicle {
   engineNumber  String @unique
 
   ownershipType      ownershipType
-  vehicleType        vehicleType
+  vehicleTypeId      String
   capacityMT         Float
   wheels             String?
   bodyType           String?
@@ -514,6 +518,8 @@ model Vehicle {
   insuranceDueDate   DateTime?
 
   status VehicleStatus @default(AVAILABLE)
+
+  vehicleTypeRef VehicleType @relation(fields: [vehicleTypeId], references: [id])
 
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -543,12 +549,13 @@ model Customer {
   mobileNo      String?
   website       String?
 
-  agreements   Agreement[]    @relation("CustomerAgreements")
-  state        State          @relation(fields: [stateId], references: [id])
-  city         City           @relation(fields: [cityId], references: [id])
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  OrderBooking OrderBooking[]
+  agreements   Agreement[]        @relation("CustomerAgreements")
+  state        State              @relation(fields: [stateId], references: [id])
+  city         City               @relation(fields: [cityId], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  orders       Order[]
+  locations    CustomerLocation[]
   LorryReceipt LorryReceipt[]
   VehicleTrip  VehicleTrip[]
 }
@@ -609,17 +616,19 @@ model Route {
 }
 
 model RateMatrix {
-  id          String        @id @default(cuid())
-  agreementId String
-  routeId     String
-  rate        Float
-  transitDays Int?
-  remarks     String?
-  agreement   Agreement     @relation(fields: [agreementId], references: [id])
-  route       Route         @relation(fields: [routeId], references: [id])
-  VehicleTrip VehicleTrip[]
+  id            String        @id @default(cuid())
+  agreementId   String
+  routeId       String
+  vehicleTypeId String?
+  rate          Float
+  transitDays   Int?
+  remarks       String?
+  agreement     Agreement     @relation(fields: [agreementId], references: [id])
+  route         Route         @relation(fields: [routeId], references: [id])
+  vehicleType   VehicleType?  @relation(fields: [vehicleTypeId], references: [id])
+  VehicleTrip   VehicleTrip[]
 
-  @@unique([agreementId, routeId])
+  @@unique([agreementId, routeId, vehicleTypeId])
 }
 
 enum DriverStatus {
@@ -687,7 +696,7 @@ model Goods {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  OrderGoods     OrderGoods[]
+  orderItems     OrderItem[]
   lorryReceiptId String?
 }
 
@@ -728,19 +737,20 @@ model City {
   pumps          Pump[]                 @relation("PumpCity")
   spareSuppliers SparePartSupplier[]    @relation("SparePartySupplierCity")
 
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  OrderBooking     OrderBooking[]
-  sourceRoute      Route[]        @relation("SourceRoute")
-  destinationRoute Route[]        @relation("DestinationRoute")
-  areas            Area[]
-  companies        Company[]      @relation("CityCompanies")
-  branches         Branch[]
-  warehouses       Warehouse[]
-  customers        Customer[]
-  agreements       Agreement[]
-  labours          Labour[]
-  transports       Transport[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  orders            Order[]
+  customerLocations CustomerLocation[]
+  sourceRoute       Route[]            @relation("SourceRoute")
+  destinationRoute  Route[]            @relation("DestinationRoute")
+  areas             Area[]
+  companies         Company[]          @relation("CityCompanies")
+  branches          Branch[]
+  warehouses        Warehouse[]
+  customers         Customer[]
+  agreements        Agreement[]
+  labours           Labour[]
+  transports        Transport[]
 }
 
 model Area {
@@ -885,41 +895,129 @@ model SparePart {
   updatedAt DateTime @updatedAt
 }
 
-model OrderBooking {
-  id           String   @id
-  customerId   String
-  fromBranchId String
-  toBranchId   String
-  pickupDate   DateTime
-  cityId       String
-  orderBy      OrderBy
+model Order {
+  id                    String      @id @default(cuid())
+  orderNumber           String      @unique
+  customerId            String
+  fromBranchId          String
+  toBranchId            String
+  pickupDate            DateTime
+  customerLocationId    String?
+  pickupAddressOverride String?
+  specialInstructions   String?
+  orderType             OrderType
+  truckQuantity         Int?
+  vehicleTypeId         String?
+  contactPersonName     String?
+  contactMobile         String?
+  contactEmail          String?
+  bookingFreightAmount  Decimal?
+  freightOverrideReason String?
+  status                OrderStatus @default(PendingApproval)
+  rejectionReason       String?
+  cancelReason          String?
+  fyCode                String
+  createdById           String
+  updatedById           String?
+  approvedById          String?
+  approvedAt            DateTime?
+  version               Int         @default(0)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  deletedAt             DateTime?
 
-  truckDetail  Json?
-  status       OrderStatus @default(Pending)
-  createdById  String
-  updatedById  String?
-  approvedById String?
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  fromBranch       Branch            @relation("FromBranch", fields: [fromBranchId], references: [id])
+  toBranch         Branch            @relation("ToBranch", fields: [toBranchId], references: [id])
+  vehicleType      VehicleType?      @relation(fields: [vehicleTypeId], references: [id])
+  customerLocation CustomerLocation? @relation(fields: [customerLocationId], references: [id])
+  city             City?             @relation(fields: [cityId], references: [id])
+  cityId           String?
+  createdBy        User              @relation("CreatedOrders", fields: [createdById], references: [id])
+  approvedBy       User?             @relation("ApprovedOrders", fields: [approvedById], references: [id])
+  updatedBy        User?             @relation("UpdatedOrders", fields: [updatedById], references: [id])
 
-  city       City     @relation(fields: [cityId], references: [id])
-  fromBranch Branch   @relation("FromBranch", fields: [fromBranchId], references: [id])
-  toBranch   Branch   @relation("ToBranch", fields: [toBranchId], references: [id])
-  customer   Customer @relation(fields: [customerId], references: [id])
+  items  OrderItem[]
+  events OrderEvent[]
 
-  createdBy  User         @relation("CreatedOrderBookings", fields: [createdById], references: [id])
-  approvedBy User?        @relation("ApprovedOrderBookings", fields: [approvedById], references: [id])
-  updatedBy  User?        @relation("UpdatedOrderBookings", fields: [updatedById], references: [id])
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  orderGoods OrderGoods[]
+  @@index([status])
+  @@index([fromBranchId])
+  @@index([customerId])
+  @@index([fyCode])
 }
 
-model OrderGoods {
-  id             String       @id @default(cuid())
-  orderBookingId String
-  goodsId        String
-  quantity       Int
-  order          OrderBooking @relation(fields: [orderBookingId], references: [id])
-  goods          Goods        @relation(fields: [goodsId], references: [id])
+model OrderItem {
+  id       String   @id @default(cuid())
+  orderId  String
+  goodsId  String
+  quantity Int
+  unit     String
+  weight   Decimal?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  goods Goods @relation(fields: [goodsId], references: [id])
+
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id          String   @id @default(cuid())
+  orderId     String
+  actorId     String
+  eventType   String
+  note        String?
+  payloadDiff Json?
+  createdAt   DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User  @relation(fields: [actorId], references: [id])
+
+  @@index([orderId])
+}
+
+model VehicleType {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  freightRangeFrom Decimal?
+  freightRangeTo   Decimal?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  vehicles     Vehicle[]
+  orders       Order[]
+  rateMatrices RateMatrix[]
+}
+
+model CustomerLocation {
+  id           String   @id @default(cuid())
+  customerId   String
+  name         String
+  address      String?
+  cityId       String
+  contactName  String?
+  contactPhone String?
+  gstNo        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  city     City     @relation(fields: [cityId], references: [id])
+  orders   Order[]
+
+  @@index([customerId])
+}
+
+model DocumentSequence {
+  id         String   @id @default(cuid())
+  branchCode String
+  fyCode     String
+  docType    String
+  nextSeq    Int      @default(1)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([branchCode, fyCode, docType])
 }
 
 enum TransportType {

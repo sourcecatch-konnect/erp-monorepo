@@ -7,7 +7,6 @@ import {
   IconCategory,
   IconRuler,
   IconWeight,
-  IconStack2,
   IconCheck,
   IconX,
   IconCalendar,

@@ -1,0 +1,418 @@
+{
+  "info": {
+    "name": "SKERP — Order Performance",
+    "_postman_id": "a1b2c3d4-0001-4a00-8b00-orderperf0001",
+    "description": "Auth + Order module endpoints for performance/load testing the order workflow.\n\nAuth is cookie-based (httpOnly accessToken ~15m, refreshToken 7d) — the server sets cookies on login and Postman's cookie jar replays them automatically on every subsequent request to the same host. So: run **Auth → Admin Login** (or Employee Login) once, then everything else just works.\n\nThe **Lookups** folder fetches the ids you need to build a valid order body (customer, branches, vehicle type, goods) and stashes the first result of each into collection variables. Run those once after login, then the **Orders → Create** requests use those variables. **Create** captures the new `orderId` so Detail/Update/Approve/Reject/Cancel target it automatically.\n\nbaseUrl defaults to http://localhost:5000.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
+    { "key": "adminEmail", "value": "admin@example.com", "type": "string" },
+    { "key": "adminPassword", "value": "ChangeMe123!", "type": "string" },
+    { "key": "employeeEmail", "value": "employee@example.com", "type": "string" },
+    { "key": "employeePassword", "value": "ChangeMe123!", "type": "string" },
+    { "key": "customerId", "value": "", "type": "string" },
+    { "key": "fromBranchId", "value": "", "type": "string" },
+    { "key": "toBranchId", "value": "", "type": "string" },
+    { "key": "vehicleTypeId", "value": "", "type": "string" },
+    { "key": "goodsId", "value": "", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Admin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(b.success).to.be.true);",
+                  "// Cookies (accessToken/refreshToken) are stored automatically in the cookie jar."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/admin/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "admin", "login"]
+            }
+          }
+        },
+        {
+          "name": "Employee Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employeeEmail}}\",\n  \"password\": \"{{employeePassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/employee/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "employee", "login"]
+            }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lookups (build order body)",
+      "description": "Run these once after login. Each stashes the first row's id into a collection variable used by Create Order.",
+      "item": [
+        {
+          "name": "Customers — first id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "const row = (b.data || [])[0];",
+                  "if (row) { pm.collectionVariables.set('customerId', row.id); console.log('customerId =', row.id); }",
+                  "else { console.warn('No customers found'); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers?page=0&size=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["customers"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Branches — from & to id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "const rows = b.data || [];",
+                  "if (rows[0]) { pm.collectionVariables.set('fromBranchId', rows[0].id); console.log('fromBranchId =', rows[0].id); }",
+                  "const toRow = rows[1] || rows[0];",
+                  "if (toRow) { pm.collectionVariables.set('toBranchId', toRow.id); console.log('toBranchId =', toRow.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/branches?page=0&size=2",
+              "host": ["{{baseUrl}}"],
+              "path": ["branches"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "2" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vehicle Types — first id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "const row = (b.data || [])[0];",
+                  "if (row) { pm.collectionVariables.set('vehicleTypeId', row.id); console.log('vehicleTypeId =', row.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vehicle-types?page=0&size=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["vehicle-types"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Goods — first id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "const row = (b.data || [])[0];",
+                  "if (row) { pm.collectionVariables.set('goodsId', row.id); console.log('goodsId =', row.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/goods?page=0&size=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["goods"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "1" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders?page=0&size=20&sort=createdAt:desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "createdAt:desc" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "filter[status]", "value": "PendingApproval", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Status Counts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/status-counts",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "status-counts"]
+            }
+          }
+        },
+        {
+          "name": "Create Order (Truck)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "if (b.ok && b.data && b.data.id) { pm.collectionVariables.set('orderId', b.data.id); console.log('orderId =', b.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"fromBranchId\": \"{{fromBranchId}}\",\n  \"toBranchId\": \"{{toBranchId}}\",\n  \"pickupDate\": \"2026-06-10\",\n  \"orderType\": \"Truck\",\n  \"truckQuantity\": 2,\n  \"vehicleTypeId\": \"{{vehicleTypeId}}\",\n  \"contactPersonName\": \"Load Test\",\n  \"contactMobile\": \"9876543210\",\n  \"contactEmail\": \"loadtest@example.com\",\n  \"specialInstructions\": \"Perf test order\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Order (Item)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "if (b.ok && b.data && b.data.id) { pm.collectionVariables.set('orderId', b.data.id); console.log('orderId =', b.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"fromBranchId\": \"{{fromBranchId}}\",\n  \"toBranchId\": \"{{toBranchId}}\",\n  \"pickupDate\": \"2026-06-10\",\n  \"orderType\": \"Item\",\n  \"contactPersonName\": \"Load Test\",\n  \"contactMobile\": \"9876543210\",\n  \"items\": [\n    {\n      \"goodsId\": \"{{goodsId}}\",\n      \"quantity\": 10,\n      \"unit\": \"BAGS\",\n      \"weight\": 500\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Order (detail)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Order (quick view)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}?view=quick",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"],
+              "query": [{ "key": "view", "value": "quick" }]
+            }
+          }
+        },
+        {
+          "name": "Update Order (Truck)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"fromBranchId\": \"{{fromBranchId}}\",\n  \"toBranchId\": \"{{toBranchId}}\",\n  \"pickupDate\": \"2026-06-12\",\n  \"orderType\": \"Truck\",\n  \"truckQuantity\": 3,\n  \"vehicleTypeId\": \"{{vehicleTypeId}}\",\n  \"contactPersonName\": \"Load Test (edited)\",\n  \"contactMobile\": \"9876543211\",\n  \"specialInstructions\": \"Updated perf test order\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Approve Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingFreightAmount\": 15000,\n  \"freightOverrideReason\": \"Negotiated rate\",\n  \"acknowledgeDisallow\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Reject Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Rejected for perf test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "reject"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Cancelled for perf test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "cancel"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

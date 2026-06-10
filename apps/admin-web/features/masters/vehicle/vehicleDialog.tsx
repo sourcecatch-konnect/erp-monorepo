@@ -139,7 +139,10 @@ export default function VehicleDetailDialog({
 
                 <Field
                   label="Vehicle Type"
-                  value={data?.vehicleType}
+                  value={
+                    (data as { vehicleTypeRef?: { name?: string } } | undefined)
+                      ?.vehicleTypeRef?.name
+                  }
                   icon={<IconTruck size={12}/>}
                 />
 

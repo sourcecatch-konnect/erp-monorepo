@@ -38,11 +38,11 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
     queryKey: rbacKeys.role(roleId),
     queryFn: () => rbacApi.getRole(roleId),
   });
-
-  const { data: catalog } = useQuery({
-    queryKey: rbacKeys.permissions,
-    queryFn: rbacApi.permissions,
-  });
+const { data: modules = [], isLoading: modulesLoading } = useQuery({
+  queryKey: rbacKeys.permissionModules,
+  queryFn: () => rbacApi.permissionModules(),
+  staleTime: 10 * 60 * 1000,
+});
 
   const [granted, setGranted] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -55,24 +55,26 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
     return () => setLabel(href, null);
   }, [role?.name, roleId, setLabel]);
 
-  const grouped = useMemo(() => {
-    if (!catalog) return [];
-    const byModule = new Map<string, PermissionDefDto[]>();
-    for (const p of catalog) {
-      const list = byModule.get(p.moduleCode) ?? [];
-      list.push(p);
-      byModule.set(p.moduleCode, list);
-    }
-    return Array.from(byModule.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [catalog]);
+const [openModules, setOpenModules] = useState<string[]>([]);
+const saveMut = useMutation({
+  mutationFn: () => rbacApi.setRolePermissions(roleId, Array.from(granted)),
+  onSuccess: () => {
+    qc.setQueryData(rbacKeys.role(roleId), (old: any) => {
+      if (!old) return old;
 
-  const saveMut = useMutation({
-    mutationFn: () => rbacApi.setRolePermissions(roleId, Array.from(granted)),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: rbacKeys.role(roleId) });
-      qc.invalidateQueries({ queryKey: rbacKeys.roles });
-    },
-  });
+      return {
+        ...old,
+        permissionKeys: Array.from(granted),
+        _count: {
+          ...old._count,
+          rolePermissions: granted.size,
+        },
+      };
+    });
+
+    qc.invalidateQueries({ queryKey: rbacKeys.roles });
+  },
+});
 
   const toggle = (key: string) => {
     setGranted((prev) => {
@@ -100,7 +102,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
     (granted.size !== role.permissionKeys.length ||
       role.permissionKeys.some((k) => !granted.has(k)));
 
-  if (!role || !catalog) {
+  if (!role) {
     return (
       <div className="space-y-6 p-6">
         <div className="space-y-2">
@@ -133,6 +135,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
   return (
     <div className="space-y-6 p-6">
       <header className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4">
         <div>
           <Link
             href="/settings/roles"
@@ -167,6 +170,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
             </Button>
           )}
         </div>
+        </div>
       </header>
 
       {readOnly && (
@@ -177,71 +181,167 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
         </div>
       )}
 
-      <Accordion type="multiple" className="space-y-3">
-        {grouped.map(([moduleCode, perms]) => {
-          const allOn = perms.every((p) => granted.has(p.key));
-          const someOn = perms.some((p) => granted.has(p.key));
-          const selectedCount = perms.filter((p) => granted.has(p.key)).length;
-          const moduleLabel = titleizeIdentifier(moduleCode);
-          return (
-            <AccordionItem
-              key={moduleCode}
-              value={moduleCode}
-              className="overflow-hidden rounded-sm border border-border bg-card"
-            >
-              <div className="flex items-center gap-3 border-b border-border bg-muted/40 px-4">
-                <AccordionTrigger className="py-3 hover:no-underline">
-                  <span className="flex min-w-0 flex-col">
-                    <span className="font-medium text-foreground">
-                      {moduleLabel}
-                    </span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {selectedCount} of {perms.length} permissions selected
-                    </span>
-                  </span>
-                </AccordionTrigger>
-                {!readOnly && (
-                  <div className="flex shrink-0 items-center">
-                    <Checkbox
-                      checked={allOn ? true : someOn ? "indeterminate" : false}
-                      onCheckedChange={(c) => toggleModule(perms, c === true)}
-                    />
-                  </div>
-                )}
-              </div>
-              <AccordionContent className="p-0">
-                <ul className="divide-y divide-border">
-                  {perms.map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex items-center justify-between gap-4 px-4 py-2.5"
-                    >
-                      <div>
-                        <div className="text-sm font-medium text-foreground">
-                          {permissionActionLabel(p.key)}
-                        </div>
-                        <div className="font-mono text-xs text-muted-foreground">
-                          {p.key}
-                        </div>
-                        {p.description && (
-                          <div className="text-xs text-muted-foreground">
-                            {p.description}
-                          </div>
-                        )}
-                      </div>
-                      <Checkbox
-                        checked={granted.has(p.key)}
-                        disabled={readOnly}
-                        onCheckedChange={() => toggle(p.key)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+  <Accordion
+  type="multiple"
+  value={openModules}
+  onValueChange={setOpenModules}
+  className="space-y-3"
+>
+  {modules.map((m) => (
+    <RolePermissionModule
+      key={m.moduleCode}
+      moduleCode={m.moduleCode}
+      moduleLabel={m.label}
+      permissionCount={m.permissionCount}
+      granted={granted}
+      setGranted={setGranted}
+      readOnly={readOnly}
+      isOpen={openModules.includes(m.moduleCode)}
+    />
+  ))}
+</Accordion>
+{!readOnly && dirty && (
+  <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+    <p className="text-sm text-muted-foreground">
+      You have unsaved permission changes.
+    </p>
+
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        onClick={() => setGranted(new Set(role.permissionKeys))}
+      >
+        Discard
+      </Button>
+
+      <Button
+        onClick={() => saveMut.mutate()}
+        disabled={saveMut.isPending}
+      >
+        {saveMut.isPending ? "Saving..." : "Save changes"}
+      </Button>
     </div>
+  </div>
+)}
+    </div>
+  );
+}
+function RolePermissionModule({
+  moduleCode,
+  moduleLabel,
+  permissionCount,
+  granted,
+  setGranted,
+  readOnly,
+  isOpen,
+}: {
+  moduleCode: string;
+  moduleLabel: string;
+  permissionCount: number;
+  granted: Set<string>;
+  setGranted: React.Dispatch<React.SetStateAction<Set<string>>>;
+  readOnly: boolean;
+  isOpen: boolean;
+}) {
+  const { data: perms = [], isLoading } = useQuery<PermissionDefDto[]>({
+    queryKey: rbacKeys.permissionsByModule(moduleCode),
+    queryFn: () => rbacApi.permissions(moduleCode),
+    enabled: isOpen,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const allOn = perms.length > 0 && perms.every((p) => granted.has(p.key));
+  const someOn = perms.some((p) => granted.has(p.key));
+  const selectedCount = perms.filter((p) => granted.has(p.key)).length;
+
+  const toggle = (key: string) => {
+    setGranted((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleModule = (on: boolean) => {
+    setGranted((prev) => {
+      const next = new Set(prev);
+      for (const p of perms) {
+        if (on) next.add(p.key);
+        else next.delete(p.key);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <AccordionItem
+      value={moduleCode}
+    className="overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md"
+    >
+     <div className="flex items-center gap-4 border-b bg-muted/30 px-5">
+      <AccordionTrigger className="flex-1 py-4 text-left hover:no-underline">
+          <span className="flex min-w-0 flex-col">
+            <span className="font-medium text-foreground">{moduleLabel}</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              {isOpen
+                ? `${selectedCount} of ${perms.length} permissions selected`
+                : `${permissionCount} permissions`}
+            </span>
+          </span>
+        </AccordionTrigger>
+
+        {!readOnly && isOpen && (
+          <div className="flex shrink-0 items-center">
+            <Checkbox
+              checked={allOn ? true : someOn ? "indeterminate" : false}
+              onCheckedChange={(c) => toggleModule(c === true)}
+            />
+          </div>
+        )}
+      </div>
+
+      <AccordionContent className="p-0">
+        {isLoading ? (
+          <div className="space-y-3 p-4">
+            <Skeleton className="h-4 w-56" />
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {perms.map((p) => (
+              <li
+                key={p.key}
+               className="flex items-center justify-between gap-4 px-5 py-3 transition hover:bg-muted/40"
+              >
+                <div>
+                  <div className="text-sm font-medium text-foreground">
+                    {permissionActionLabel(p.key)}
+                  </div>
+                  <div className="mt-1 inline-flex rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                    {p.key}
+                  </div>
+                  {p.description && (
+                    <div className="text-xs text-muted-foreground">
+                      {p.description}
+                    </div>
+                  )}
+                </div>
+
+                <Checkbox
+                  checked={granted.has(p.key)}
+                  disabled={readOnly}
+                  onCheckedChange={() => toggle(p.key)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </AccordionContent>
+      
+    </AccordionItem>
+    
+    
   );
 }

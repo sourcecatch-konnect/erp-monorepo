@@ -8,6 +8,7 @@ import type {
   AuditLogEntry,
   BranchOption,
   PermissionDefDto,
+  PermissionModuleDto,
   RoleDetail,
   RoleSummary,
   UserAccessDetail,
@@ -15,12 +16,18 @@ import type {
 } from "./types";
 
 export const rbacApi = {
-  // Catalog
-  permissions: async (): Promise<PermissionDefDto[]> =>
-    unwrapApiResponse(
-      await api.get<ApiResponse<PermissionDefDto[]>>("/admin/permissions")
-    ),
-
+ permissionModules: async () =>
+  unwrapApiResponse(
+    await api.get<ApiResponse<PermissionModuleDto[]>>(
+      "/admin/permissions/modules"
+    )
+  ),
+permissions: async (moduleCode?: string): Promise<PermissionDefDto[]> =>
+  unwrapApiResponse(
+    await api.get<ApiResponse<PermissionDefDto[]>>("/admin/permissions", {
+      params: moduleCode ? { moduleCode } : undefined,
+    })
+  ),
   // Roles
   listRoles: async (): Promise<RoleSummary[]> =>
     unwrapApiResponse(

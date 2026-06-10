@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@skerp/types", "@skerp/validators", "@skerp/ui"],

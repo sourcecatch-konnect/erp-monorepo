@@ -184,6 +184,7 @@ const wagons = useQuery({
         const text = await file.text();
         const rows = parseCsvRows<RailwayFreightCsvRow>(text);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await bulkImport.mutateAsync(rows as any);
       }}
 

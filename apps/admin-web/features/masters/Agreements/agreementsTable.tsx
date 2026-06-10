@@ -8,7 +8,6 @@ import {
   IconUser,
   IconMapPin,
   IconCalendar,
-  IconCash,
   IconWeight,
 } from "@tabler/icons-react";
 

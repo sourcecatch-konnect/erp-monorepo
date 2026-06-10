@@ -23,11 +23,9 @@ import SelectField from "../_shared/fields/SelectField";
 
 import {
   IconBuilding,
-  IconUser,
   IconMapPin,
   IconCalendar,
   IconTruck,
-  IconWeight,
 } from "@tabler/icons-react";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 

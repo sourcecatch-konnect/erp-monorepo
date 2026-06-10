@@ -13,6 +13,7 @@ const router = Router();
 
 router.use("/permissions", permissionsRoute);
 router.use("/roles", rolesRoute);
+
 router.use("/users", usersRoute);
 router.use("/audit-log", auditLogRoute);
 

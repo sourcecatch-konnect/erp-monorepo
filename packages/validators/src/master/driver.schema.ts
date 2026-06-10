@@ -95,6 +95,8 @@ export const driverSchema = z.object({
   tdsRate: z.number().nullable().optional(),
   onLeave: z.boolean(),
   blackListed: z.boolean(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 
 export const createDriverSchema = z

@@ -7,7 +7,6 @@ import type { Labour, LabourWithRelations } from "@skerp/types";
 import {
   IconBuilding,
   IconCalendar,
-  IconCash,
   IconFileCertificate,
   IconMapPin,
   IconPhone,

@@ -69,7 +69,7 @@ export default function TransportForm({
       country: row?.country ?? "",
       phoneNo: row?.phoneNo ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   return (
     <MasterFormDialog

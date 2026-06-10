@@ -91,6 +91,8 @@ const rateMatrixFieldsSchema =
         "Please select route"
       ),
 
+    vehicleTypeId: optionalString,
+
     rate:
       requiredNumber(
         "Rate"

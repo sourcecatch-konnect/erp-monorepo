@@ -65,7 +65,6 @@ export const NAV_SECTIONS: NavSection[] = [
         title: "Orders",
         href: "/orders",
         icon: IconClipboardList,
-        disabled: true,
       },
       {
         title: "Lorry Receipts",
@@ -108,6 +107,7 @@ export const NAV_SECTIONS: NavSection[] = [
         { title: "Drivers", href: "/masters/driver" },
         { title: "Transports", href: "/masters/transport" },
         { title: "Vehicles", href: "/masters/vehicle" },
+        { title: "Vehicle Types", href: "/masters/vehicle-type" },
         { title: "Spare Parts", href: "/masters/spare-parts" },
         { title: "Spare Categories", href: "/masters/spare-category" },
         { title: "Spare Part Supplier", href: "/masters/spare-part-supplier" },

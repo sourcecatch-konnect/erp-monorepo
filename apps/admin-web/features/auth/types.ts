@@ -21,6 +21,7 @@ export type AuthUser = {
   role: {
     id: string;
     name: string;
+    isSystem: boolean;
   };
   /**
    * Flat list of permission keys the user holds. Populated from /auth/me;

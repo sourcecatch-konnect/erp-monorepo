@@ -18,7 +18,6 @@ import IconTextField from "../_shared/fields/IconTextField";
 import SelectField from "../_shared/fields/SelectField";
 
 import {
-  IconRoute,
   IconFileInvoice,
   IconCurrencyRupee,
   IconClock,
@@ -70,7 +69,7 @@ export default function RateMatrixForm({
       transitDays: row?.transitDays != null ? String(row.transitDays) : "",
       remarks: row?.remarks ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   return (
     <MasterFormDialog

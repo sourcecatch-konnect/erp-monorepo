@@ -18,9 +18,8 @@ export const login = createAsyncThunk<
   LoginPayload,
   { rejectValue: string }
 >("auth/login", async (payload, { rejectWithValue }) => {
-  try {
-    await adminLogin(payload);
-    return await getMe();
+  try { 
+    return  await adminLogin(payload);
   } catch (err) {
     return rejectWithValue(
       err instanceof Error ? err.message : "Login failed"

@@ -36,6 +36,7 @@ const MASTER_SLUGS = [
   "railway-freight",
   "agreement",
   "rate-matrix",
+  "vehicle-type",
 ] as const;
 
 export type MasterSlug = (typeof MASTER_SLUGS)[number];
@@ -59,7 +60,8 @@ type TripPermissionKey =
 type OrderPermissionKey =
   | `order.${CrudAction}`
   | "order.approve"
-  | "order.reject";
+  | "order.reject"
+  | "order.cancel";
 
 type EwaybillPermissionKey =
   | `ewaybill.${CrudAction}`
@@ -133,6 +135,7 @@ export const PERMS = {
     RAILWAY_FREIGHT: masterPerms("railway-freight"),
     AGREEMENT: masterPerms("agreement"),
     RATE_MATRIX: masterPerms("rate-matrix"),
+    VEHICLE_TYPE: masterPerms("vehicle-type"),
   },
   LORRY_RECEIPT: {
     VIEW: "lorry_receipt.view",
@@ -158,6 +161,7 @@ export const PERMS = {
     DELETE: "order.delete",
     APPROVE: "order.approve",
     REJECT: "order.reject",
+    CANCEL: "order.cancel",
   },
   EWAYBILL: {
     VIEW: "ewaybill.view",

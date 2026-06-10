@@ -20,7 +20,6 @@ export const authMiddleware = async (
   next: NextFunction,
 ) => {
   const token = req.cookies?.accessToken;
-  console.log("got here");
 
   if (!token) {
     return sendError(res, 401, {

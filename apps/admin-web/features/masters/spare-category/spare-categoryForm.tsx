@@ -64,7 +64,7 @@ export default function SpareCategoryForm({
       type: row?.type ?? "Item",
       ledgerName: row?.ledgerName ?? "",
     });
-  }, [open, row]);
+  }, [form, open, row]);
 
   return (
     <MasterFormDialog<
