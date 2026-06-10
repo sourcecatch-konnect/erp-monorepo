@@ -569,7 +569,6 @@ model Agreement {
   agreementDate DateTime
   expiryDate    DateTime
 
-  carryingCapacity        Float?
   leadGeneratedByBranchId String
 
   company   Company  @relation(fields: [companyId], references: [id])
@@ -611,23 +610,55 @@ model Route {
   rateMatrixEntries RateMatrix[]
   LorryReceipt      LorryReceipt[]
   VehicleTrip       VehicleTrip[]
+  orders            Order[]
 
   @@unique([sourceCityId, destinationCityId])
 }
 
+model RateUnit {
+  id        String       @id @default(cuid())
+  unitValue Int
+  unitType  RateUnitType
+  isActive  Boolean      @default(true)
+
+  rateMatrix RateMatrix[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([unitValue, unitType])
+}
+
 model RateMatrix {
-  id            String        @id @default(cuid())
+  id            String            @id @default(cuid())
   agreementId   String
   routeId       String
   vehicleTypeId String?
-  rate          Float
-  transitDays   Int?
-  remarks       String?
-  agreement     Agreement     @relation(fields: [agreementId], references: [id])
-  route         Route         @relation(fields: [routeId], references: [id])
-  vehicleType   VehicleType?  @relation(fields: [vehicleTypeId], references: [id])
+  unitId        String?
+  transportType RateTransportType @default(ROAD)
 
-  @@unique([agreementId, routeId, vehicleTypeId])
+  rate        Float
+  transitDays Int?
+  remarks     String?
+
+  agreement   Agreement    @relation(fields: [agreementId], references: [id])
+  route       Route        @relation(fields: [routeId], references: [id])
+  vehicleType VehicleType? @relation(fields: [vehicleTypeId], references: [id])
+  unit        RateUnit?    @relation(fields: [unitId], references: [id])
+
+  VehicleTrip VehicleTrip[]
+
+  @@unique([agreementId, routeId, vehicleTypeId, unitId, transportType])
+}
+
+enum RateUnitType {
+  HQ
+  LQ
+}
+
+enum RateTransportType {
+  RAIL_ROAD
+  ROAD
 }
 
 enum DriverStatus {
@@ -736,20 +767,20 @@ model City {
   pumps          Pump[]                 @relation("PumpCity")
   spareSuppliers SparePartSupplier[]    @relation("SparePartySupplierCity")
 
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  orders            Order[]
-  customerLocations CustomerLocation[]
-  sourceRoute       Route[]            @relation("SourceRoute")
-  destinationRoute  Route[]            @relation("DestinationRoute")
-  areas             Area[]
-  companies         Company[]          @relation("CityCompanies")
-  branches          Branch[]
-  warehouses        Warehouse[]
-  customers         Customer[]
-  agreements        Agreement[]
-  labours           Labour[]
-  transports        Transport[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  orders              Order[]
+  customerLocations   CustomerLocation[]
+  sourceRoute         Route[]              @relation("SourceRoute")
+  destinationRoute    Route[]              @relation("DestinationRoute")
+  areas               Area[]
+  companies           Company[]            @relation("CityCompanies")
+  branches            Branch[]
+  warehouses          Warehouse[]
+  customers           Customer[]
+  agreements          Agreement[]
+  labours             Labour[]
+  transports          Transport[]
   tripUnloadingPoints TripUnloadingPoint[]
 }
 
@@ -905,6 +936,7 @@ model Order {
   customerLocationId    String?
   pickupAddressOverride String?
   specialInstructions   String?
+  routeId               String?
   orderType             OrderType
   truckQuantity         Int?
   vehicleTypeId         String?
@@ -936,6 +968,7 @@ model Order {
   createdBy        User              @relation("CreatedOrders", fields: [createdById], references: [id])
   approvedBy       User?             @relation("ApprovedOrders", fields: [approvedById], references: [id])
   updatedBy        User?             @relation("UpdatedOrders", fields: [updatedById], references: [id])
+  route            Route?            @relation(fields: [routeId], references: [id])
 
   items  OrderItem[]
   events OrderEvent[]
@@ -944,6 +977,7 @@ model Order {
   @@index([fromBranchId])
   @@index([customerId])
   @@index([fyCode])
+  @@index([routeId])
 }
 
 model OrderItem {
@@ -1002,9 +1036,9 @@ model CustomerLocation {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  city     City     @relation(fields: [cityId], references: [id])
-  orders   Order[]
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  city                City                 @relation(fields: [cityId], references: [id])
+  orders              Order[]
   tripUnloadingPoints TripUnloadingPoint[]
 
   @@index([customerId])
@@ -1130,12 +1164,14 @@ model VehicleTrip {
   LorryReceipt       LorryReceipt[]
   TripStatusHistory  TripStatusHistory[]
   TripUnloadingPoint TripUnloadingPoint[]
+  rateMatrix         RateMatrix?          @relation(fields: [rateMatrixId], references: [id])
+  rateMatrixId       String?
 
   @@index([status])
 }
 
 model TripUnloadingPoint {
-  id            String  @id @default(cuid())
+  id            String    @id @default(cuid())
   vehicleTripId String
   sequence      Int
   cityId        String
