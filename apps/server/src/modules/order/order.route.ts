@@ -243,11 +243,7 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
       fromBranchId: order.fromBranchId,
       createdById: order.createdById,
       customerName: order.customer?.name,
-<<<<<<< HEAD
       linkUrl: orderLink(order.orderNumber),
-=======
-      linkUrl: orderLink(order.id),
->>>>>>> 57a0bd587faed225bd7fd789eae8161370448dd2
     },
   });
 
