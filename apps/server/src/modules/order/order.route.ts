@@ -68,7 +68,6 @@ const orderLink = (orderNumber: string) =>
 /* List                                                               */
 /* ------------------------------------------------------------------ */
 router.get("/", can(PERMS.ORDER.VIEW), async (req, res) => {
-    console.time("ORDER LIST TOTAL");
   const query = parseListQuery(req);
   const where: Record<string, unknown> = {
     deletedAt: null,
@@ -96,9 +95,6 @@ router.get("/", can(PERMS.ORDER.VIEW), async (req, res) => {
     }),
     db.order.count({ where }),
   ]);
-  console.timeEnd("ORDER LIST DB");
-
-  console.timeEnd("ORDER LIST TOTAL");
   return sendOk(res, data, { page: query.page, size: query.size, total });
 });
 
@@ -247,7 +243,11 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
       fromBranchId: order.fromBranchId,
       createdById: order.createdById,
       customerName: order.customer?.name,
+<<<<<<< HEAD
       linkUrl: orderLink(order.orderNumber),
+=======
+      linkUrl: orderLink(order.id),
+>>>>>>> 57a0bd587faed225bd7fd789eae8161370448dd2
     },
   });
 

@@ -47,7 +47,6 @@ const { data: order, isLoading } = useQuery({
   queryFn: () => orderApi.quickView(orderId as string),
   enabled: Boolean(open && orderId),
 });
-console.log(order,"quick order")
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">

@@ -24,9 +24,8 @@ export const getPermissionContext = async (
     return hit.context;
   }
 
-  console.time("auth:getPermissionContext DB MISS");
+
   const fresh = await resolvePermissions(userId);
-  console.timeEnd("auth:getPermissionContext DB MISS");
 
   if (!fresh) {
     cache.delete(userId);
