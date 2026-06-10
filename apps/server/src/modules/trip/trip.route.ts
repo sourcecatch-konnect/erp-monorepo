@@ -20,7 +20,12 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
-import { tripInclude, tripListSelect, writeTripStatus } from "./trip.service.js";
+import {
+  buildTripName,
+  tripInclude,
+  tripListSelect,
+  writeTripStatus,
+} from "./trip.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -29,6 +34,65 @@ const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 /* Trips are not branch-scoped — a single global per-FY counter. */
 const TRIP_SEQ_KEY = "TRIP";
+
+/**
+ * Validate the trip's vehicle/route/client and build its auto name.
+ * `at` is the timestamp baked into the name (creation time; preserved on edit).
+ */
+async function resolveTripName(
+  data: {
+    vehicleId: string;
+    routeId: string;
+    tripType: "lr" | "dc";
+    consignorId?: string;
+    rakeDate?: Date;
+  },
+  at: Date
+): Promise<{ tripName: string; consignorId: string | null }> {
+  const [vehicle, route] = await Promise.all([
+    db.vehicle.findUnique({
+      where: { id: data.vehicleId },
+      select: { vehicleNumber: true, ownershipType: true },
+    }),
+    db.route.findUnique({
+      where: { id: data.routeId },
+      select: {
+        sourceCity: { select: { name: true } },
+        destinationCity: { select: { name: true } },
+      },
+    }),
+  ]);
+  if (!vehicle) throw new BadRequestError("Vehicle not found");
+  if (vehicle.ownershipType !== "Own_Vehicle") {
+    throw new BadRequestError("Trips can only be created for own vehicles");
+  }
+  if (!route) throw new BadRequestError("Route not found");
+
+  // LR trips carry one client; DC trips are identified by their rake.
+  let consignorId: string | null = null;
+  let shortCode: string | null = null;
+  if (data.tripType === "lr") {
+    const consignor = await db.customer.findUnique({
+      where: { id: data.consignorId! },
+      select: { shortName: true },
+    });
+    if (!consignor) throw new BadRequestError("Client not found");
+    consignorId = data.consignorId!;
+    shortCode = consignor.shortName;
+  }
+
+  const tripName = buildTripName({
+    fromCity: route.sourceCity.name,
+    toCity: route.destinationCity.name,
+    truckNumber: vehicle.vehicleNumber,
+    tripType: data.tripType,
+    customerShortCode: shortCode,
+    rakeDate: data.rakeDate ?? null,
+    at,
+  });
+
+  return { tripName, consignorId };
+}
 
 /* ------------------------------------------------------------------ */
 /* List                                                               */
@@ -103,29 +167,24 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   const data = parsed.data;
   const me = actorId(req);
 
-  // We only run trips on our own vehicles.
-  const vehicle = await db.vehicle.findUnique({
-    where: { id: data.vehicleId },
-    select: { ownershipType: true },
-  });
-  if (!vehicle) throw new BadRequestError("Vehicle not found");
-  if (vehicle.ownershipType !== "Own_Vehicle") {
-    throw new BadRequestError("Trips can only be created for own vehicles");
-  }
+  const now = new Date();
+  const { tripName, consignorId } = await resolveTripName(data, now);
 
   const trip = await db.$transaction(async (tx) => {
-    const fyCode = fyCodeFor(new Date());
+    const fyCode = fyCodeFor(now);
     const seq = await nextSequence(tx, TRIP_SEQ_KEY, fyCode, "TRIP");
     const tripNumber = formatDocNumber(TRIP_SEQ_KEY, fyCode, seq);
 
     const created = await tx.vehicleTrip.create({
       data: {
         tripNumber,
+        tripName,
         status: "Planned",
         tripType: data.tripType,
         vehicleId: data.vehicleId,
         driverId: data.driverId,
         routeId: data.routeId,
+        consignorId,
         onwardFreight: data.onwardFreight,
         isTripEmpty: data.isTripEmpty,
         rakeDate: data.tripType === "dc" ? data.rakeDate ?? null : null,
@@ -167,22 +226,18 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const data = parsed.data;
   const me = actorId(req);
 
-  const vehicle = await db.vehicle.findUnique({
-    where: { id: data.vehicleId },
-    select: { ownershipType: true },
-  });
-  if (!vehicle) throw new BadRequestError("Vehicle not found");
-  if (vehicle.ownershipType !== "Own_Vehicle") {
-    throw new BadRequestError("Trips can only be created for own vehicles");
-  }
+  // Keep the original creation timestamp in the regenerated name.
+  const { tripName, consignorId } = await resolveTripName(data, existing.createdAt);
 
   const updated = await db.vehicleTrip.update({
     where: { id },
     data: {
+      tripName,
       tripType: data.tripType,
       vehicleId: data.vehicleId,
       driverId: data.driverId,
       routeId: data.routeId,
+      consignorId,
       onwardFreight: data.onwardFreight,
       isTripEmpty: data.isTripEmpty,
       rakeDate: data.tripType === "dc" ? data.rakeDate ?? null : null,

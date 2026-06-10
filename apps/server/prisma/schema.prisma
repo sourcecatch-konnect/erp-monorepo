@@ -558,6 +558,7 @@ model Customer {
   orders       Order[]
   locations    CustomerLocation[]
   LorryReceipt LorryReceipt[]
+  vehicleTrips VehicleTrip[]
 }
 
 model Agreement {
@@ -1127,12 +1128,16 @@ enum TripType {
 model VehicleTrip {
   id         String     @id @default(cuid())
   tripNumber String     @unique
+  // Auto-generated human-readable label (see buildTripName in trip.service.ts).
+  tripName   String
   status     TripStatus @default(Planned)
   tripType   TripType
 
-  vehicleId String
-  driverId  String
-  routeId   String
+  vehicleId   String
+  driverId    String
+  routeId     String
+  // Full-load trips carry one client. Required for LR trips, null for DC (rake).
+  consignorId String?
 
   onwardFreight Decimal
   isTripEmpty   Boolean   @default(false)
@@ -1155,11 +1160,12 @@ model VehicleTrip {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
-  driver    Driver  @relation(fields: [driverId], references: [id])
-  route     Route   @relation(fields: [routeId], references: [id])
-  createdBy User    @relation("CreatedTrips", fields: [createdById], references: [id])
-  updatedBy User?   @relation("UpdatedTrips", fields: [updatedById], references: [id])
+  vehicle   Vehicle   @relation(fields: [vehicleId], references: [id])
+  driver    Driver    @relation(fields: [driverId], references: [id])
+  route     Route     @relation(fields: [routeId], references: [id])
+  consignor Customer? @relation(fields: [consignorId], references: [id])
+  createdBy User      @relation("CreatedTrips", fields: [createdById], references: [id])
+  updatedBy User?     @relation("UpdatedTrips", fields: [updatedById], references: [id])
 
   LorryReceipt       LorryReceipt[]
   TripStatusHistory  TripStatusHistory[]
