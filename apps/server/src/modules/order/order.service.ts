@@ -1,47 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { db } from "../../../prisma/prisma.js";
 
+// Shared document-numbering helpers live in _shared so every transactional
+// module (orders, trips, …) reuses one implementation. Re-exported here so
+// existing order imports keep working.
+export { fyCodeFor, nextSequence, formatDocNumber } from "../_shared/doc-number.js";
+
 type Tx = Prisma.TransactionClient;
-
-/**
- * Indian financial year code for a date — April..March.
- * 2026-06-02 -> "26-27", 2026-02-15 -> "25-26".
- */
-export const fyCodeFor = (date: Date): string => {
-  const year = date.getFullYear();
-  const startYear = date.getMonth() >= 3 ? year : year - 1; // month 3 = April
-  const pad = (y: number) => String(y % 100).padStart(2, "0");
-  return `${pad(startYear)}-${pad(startYear + 1)}`;
-};
-
-/**
- * Atomically reserve the next sequence number for (branchCode, fyCode, docType)
- * and return it. Single upsert+increment statement → safe under concurrency.
- */
-export const nextSequence = async (
-  tx: Tx,
-  branchCode: string,
-  fyCode: string,
-  docType: string
-): Promise<number> => {
-  const rows = await tx.$queryRaw<{ seq: number }[]>`
-    INSERT INTO "DocumentSequence" ("id", "branchCode", "fyCode", "docType", "nextSeq", "updatedAt")
-    VALUES (gen_random_uuid()::text, ${branchCode}, ${fyCode}, ${docType}, 2, now())
-    ON CONFLICT ("branchCode", "fyCode", "docType")
-    DO UPDATE SET "nextSeq" = "DocumentSequence"."nextSeq" + 1, "updatedAt" = now()
-    RETURNING ("nextSeq" - 1) AS seq
-  `;
-  return Number(rows[0]?.seq ?? 1);
-};
-
-/**
- * Build a document number: SKT/<branchCode>/<fyCode>/<00001>.
- */
-export const formatDocNumber = (
-  branchCode: string,
-  fyCode: string,
-  seq: number
-) => `SKT/${branchCode}/${fyCode}/${String(seq).padStart(5, "0")}`;
 
 export type FreightResult = {
   amount: number | null;

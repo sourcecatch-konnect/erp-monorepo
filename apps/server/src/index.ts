@@ -28,6 +28,7 @@ import sparePartSupplier from "./modules/spare-partSuppiler/spare-partSuppiler.r
 import CustomerRoute from "./modules/customer/customer.route.js";
 import vehicleTypeRoute from "./modules/vehicleType/vehicleType.route.js";
 import orderRoute from "./modules/order/order.route.js";
+import tripRoute from "./modules/trip/trip.route.js";
 import CompanyRoute from "./modules/company/company.route.js";
 import BranchRoute from "./modules/branch/branch.route.js";
 import Routes from "./modules/route/route.routes.js";
@@ -71,6 +72,7 @@ app.use("/transports", transportRoute);
 app.use("/vehicles", vehicleRoute);
 app.use("/vehicle-types", vehicleTypeRoute);
 app.use("/orders", orderRoute);
+app.use("/trips", tripRoute);
 app.use("/drivers", driverRoute);
 app.use("/spare-category", spareCategory);
 app.use("/spare-parts", sparePartRoute);
