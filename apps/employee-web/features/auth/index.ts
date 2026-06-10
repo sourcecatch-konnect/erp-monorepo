@@ -6,6 +6,7 @@ export { useAuth } from "./hooks/useAuth";
 export { AuthBootstrap } from "./components/AuthBootstrap";
 export { ProtectedRoute } from "./components/ProtectedRoute";
 export { LoginForm } from "./components/LoginForm";
+export { useCan, useCanAny } from "./hooks/useCan";
 export {
   login,
   logout,

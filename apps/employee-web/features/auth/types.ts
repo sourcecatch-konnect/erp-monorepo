@@ -1,3 +1,4 @@
+import type { PermissionKey } from "@skerp/types";
 /** Credentials submitted from the login form. */
 export type LoginPayload = {
   email: string;
@@ -22,6 +23,7 @@ export type AuthUser = {
     id: string;
     name: string;
   };
+  permissions: PermissionKey[];
 };
 
 /**
