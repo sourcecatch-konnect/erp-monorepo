@@ -37,11 +37,11 @@ export const ewbApi = {
 
   updateVehicle: async (
     ewbNo: string,
-    body: UpdateVehicleBody
+    body: UpdateVehicleBody,
   ): Promise<EwayBill> => {
     const res = await api.post<ApiResponse<EwayBill>>(
       `/ewaybills/${ewbNo}/update-vehicle`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -49,7 +49,7 @@ export const ewbApi = {
   extend: async (ewbNo: string, body: ExtendBody): Promise<EwayBill> => {
     const res = await api.post<ApiResponse<EwayBill>>(
       `/ewaybills/${ewbNo}/extend`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -66,14 +66,14 @@ export const ewbApi = {
 
   liveGstin: async (gstin: string): Promise<LiveWbResponse> => {
     const res = await api.get<ApiResponse<LiveWbResponse>>(
-      `/ewaybills/live/gstin/${gstin}`
+      `/ewaybills/live/gstin/${gstin}`,
     );
     return unwrapApiResponse(res);
   },
 
   liveHsn: async (hsn: string): Promise<LiveWbResponse> => {
     const res = await api.get<ApiResponse<LiveWbResponse>>(
-      `/ewaybills/live/hsn/${hsn}`
+      `/ewaybills/live/hsn/${hsn}`,
     );
     return unwrapApiResponse(res);
   },
