@@ -6,6 +6,7 @@ import type { State } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 
@@ -13,6 +14,7 @@ import {
   SectionLabel,
   PartyCard,
   formatDate,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -28,25 +30,7 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      <div>
-        <Skeleton className="mb-3 h-4 w-28" />
-        <Skeleton className="h-20 rounded-xl" />
-      </div>
 
-      <div>
-        <Skeleton className="mb-3 h-4 w-28" />
-        <div className="grid gap-4 sm:grid-cols-2">
-          {Array.from({ length: 2 }).map((_, index) => (
-            <Skeleton key={index} className="h-14 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function StateDetailDialog({
   open,
@@ -65,8 +49,8 @@ export default function StateDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">State Details</p>
-
+          
+        <DialogTitle>State Details</DialogTitle>
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
                   <IconCircleCheckFilled size={10} />

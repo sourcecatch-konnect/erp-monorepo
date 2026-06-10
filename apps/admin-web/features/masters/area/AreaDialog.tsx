@@ -5,12 +5,13 @@ import type { Area } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
-import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import {
   SectionLabel,
   Field,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -26,26 +27,6 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      <div>
-        <Skeleton className="mb-3 h-4 w-28" />
-        <Skeleton className="h-20 rounded-xl" />
-      </div>
-
-      <div>
-        <Skeleton className="mb-3 h-4 w-28" />
-        <div className="grid gap-4 sm:grid-cols-2">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className="h-14 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function AreaDetailDialog({
   open,
   onOpenChange,
@@ -55,7 +36,6 @@ export default function AreaDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[700px] max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
-        {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-3">
             <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -63,7 +43,7 @@ export default function AreaDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">Area Details</p>
+              <DialogTitle>Area Dialog</DialogTitle>
 
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
@@ -75,13 +55,10 @@ export default function AreaDetailDialog({
           </div>
         </div>
 
-        {/* Body */}
         {isLoading ? (
           <SkeletonBody />
         ) : (
           <div className="max-h-[calc(90vh-120px)] overflow-y-auto">
-
-
             <div className="mx-5 border-t" />
 
             <div className="px-5 py-5">
@@ -99,17 +76,12 @@ export default function AreaDetailDialog({
                   value={data?.city?.name}
                   icon={<IconBuildingCommunity size={12} />}
                 />
-
-     
               </div>
             </div>
           </div>
         )}
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-
-
+        <div className="flex items-center justify-end border-t bg-muted/30 px-5 py-3">
           <button
             onClick={() => onOpenChange(false)}
             className="rounded-lg border px-4 py-1.5 text-xs hover:bg-muted"

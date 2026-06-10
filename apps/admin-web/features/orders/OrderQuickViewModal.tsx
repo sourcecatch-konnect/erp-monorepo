@@ -47,6 +47,7 @@ const { data: order, isLoading } = useQuery({
   queryFn: () => orderApi.quickView(orderId as string),
   enabled: Boolean(open && orderId),
 });
+console.log(order,"quick order")
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
@@ -153,7 +154,7 @@ const { data: order, isLoading } = useQuery({
            <div className="flex justify-end border-t pt-4">
   <Button asChild size="sm">
     <Link
-      href={`/orders/${order.id}`}
+    href={`/orders/${encodeURIComponent(order.orderNumber)}`}
       className="group flex items-center gap-2"
     >
       Open full detail

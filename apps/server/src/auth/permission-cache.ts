@@ -18,15 +18,21 @@ export const getPermissionContext = async (
   userId: string
 ): Promise<UserPermissionContext | null> => {
   const hit = cache.get(userId);
-  if (hit && hit.expiresAt > Date.now()) return hit.context;
+
+  if (hit && hit.expiresAt > Date.now()) {
+    console.log("auth:getPermissionContext CACHE HIT");
+    return hit.context;
+  }
 
   console.time("auth:getPermissionContext DB MISS");
   const fresh = await resolvePermissions(userId);
   console.timeEnd("auth:getPermissionContext DB MISS");
+
   if (!fresh) {
     cache.delete(userId);
     return null;
   }
+
   cache.set(userId, { context: fresh, expiresAt: Date.now() + TTL_MS });
   return fresh;
 };

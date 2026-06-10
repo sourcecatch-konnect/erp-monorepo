@@ -42,6 +42,7 @@ import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js
 import { authMiddleware } from "./middlewares/auth.middlware.js";
 import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
 import { ensurePermissionCatalog } from "./auth/permission-catalog.js";
+
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with

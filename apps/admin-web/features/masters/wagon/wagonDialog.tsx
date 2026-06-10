@@ -6,6 +6,7 @@ import type { Wagon } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -13,6 +14,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   SectionLabel,
   Field,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -29,26 +31,6 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      {Array.from({ length: 2 }).map((_, i) => (
-        <div key={i}>
-          <Skeleton className="mb-3 h-4 w-28" />
-
-          <div className="grid grid-cols-3 gap-4">
-            {Array.from({ length: 4 }).map((_, x) => (
-              <Skeleton
-                key={x}
-                className="h-14 rounded-xl"
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export default function WagonDetailDialog({
   open,
@@ -73,10 +55,8 @@ export default function WagonDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">
-                Wagon Details
-              </p>
-
+            
+              <DialogTitle>Wagon Details</DialogTitle>
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
                   <IconCircleCheckFilled size={10} />

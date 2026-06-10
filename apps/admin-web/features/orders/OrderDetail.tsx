@@ -28,6 +28,7 @@ import {
   IconCircleCheck,
   IconClock,
   IconCircleDot,
+  IconLoader2,
 } from "@tabler/icons-react";
 import { useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -107,7 +108,43 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
     queryKey: orderKeys.detail(orderId),
     queryFn: () => orderApi.detail(orderId),
   });
+  const [isDownloadingPdf, setIsDownloadingPdf] = React.useState(false);
+const handleDownloadOrderPdf = async (orderIdOrNumber: string) => {
+  try {
+      setIsDownloadingPdf(true);
+    const encodedId = encodeURIComponent(orderIdOrNumber);
 
+    const response = await fetch(
+      `http://localhost:5000/orders/${encodedId}/pdf`,
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
+    console.log(response)
+    if (!response.ok) {
+      throw new Error("Failed to download PDF");
+    }
+
+    const blob = await response.blob();
+
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `order-${orderIdOrNumber}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(error);
+    alert("Unable to download PDF");
+  } finally {
+    setIsDownloadingPdf(false);
+  }
+};
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: orderKeys.all });
 
@@ -168,7 +205,30 @@ const totalWeight =
     const weight = Number(item.weight ?? 0);
     return sum + (Number.isNaN(weight) ? 0 : weight);
   }, 0) ?? 0;
+const autoFreight =
+  order.freightPreview?.matched && order.freightPreview.amount != null
+    ? Number(order.freightPreview.amount)
+    : null;
 
+const approvedFreight =
+  order.bookingFreightAmount != null
+    ? Number(order.bookingFreightAmount)
+    : null;
+
+const freightWasEdited =
+  approvedFreight != null &&
+  autoFreight != null &&
+  approvedFreight !== autoFreight;
+
+const freightDifference =
+  approvedFreight != null && autoFreight != null
+    ? approvedFreight - autoFreight
+    : 0;
+
+const rateMatrix = order.freightPreview?.rateMatrix;
+
+const matrixRate =
+  rateMatrix?.rate != null ? Number(rateMatrix.rate) : null;
   const isPending = order.status === "PendingApproval";
   const editable = order.status === "PendingApproval" || order.status === "Rejected" || order.status === "Confirmed";
   const cancellable = order.status === "PendingApproval" || order.status === "Confirmed";
@@ -206,7 +266,7 @@ const totalWeight =
 
            <div className="flex flex-wrap items-center gap-2">
           {canUpdate && editable && (
-            <Button variant="outline" size="sm" onClick={() => router.push(`/orders/${order.id}/edit`)}>
+            <Button variant="outline" size="sm" onClick={() => router.push(`/orders/${encodeURIComponent(order.orderNumber)}/edit`)}>
               <IconEdit size={14} className="mr-1.5" /> Edit
             </Button>
           )}
@@ -306,12 +366,63 @@ const totalWeight =
             )}
  
             {/* Freight total */}
-            <div className="mt-4 flex items-center justify-between rounded-lg bg-muted/40 px-4 py-3">
-              <span className="text-sm text-muted-foreground">Total booking freight</span>
-              <span className="text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
-                {formatMoney(order.bookingFreightAmount)}
-              </span>
-            </div>
+           <div className="mt-4 rounded-lg border bg-muted/40 px-4 py-3">
+  <div className="flex items-center justify-between gap-3">
+    <div>
+      <p className="text-sm text-muted-foreground">Total booking freight</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+        {formatMoney(order.bookingFreightAmount)}
+      </p>
+    </div>
+
+    {freightWasEdited ? (
+      <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700">
+        Edited
+      </span>
+    ) : (
+      <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+        Auto Rate
+      </span>
+    )}
+  </div>
+
+  {freightWasEdited && autoFreight != null && approvedFreight != null ? (
+    <div className="mt-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div>
+          <p className="text-orange-700/70">Auto freight</p>
+          <p className="font-medium">{formatMoney(autoFreight)}</p>
+        </div>
+
+        <div>
+          <p className="text-orange-700/70">Approved freight</p>
+          <p className="font-medium">{formatMoney(approvedFreight)}</p>
+        </div>
+
+        <div>
+          <p className="text-orange-700/70">Difference</p>
+          <p className="font-semibold">
+            {freightDifference > 0 ? "+" : ""}
+            {formatMoney(freightDifference)}
+          </p>
+        </div>
+      </div>
+
+      {order.freightOverrideReason ? (
+        <p className="mt-2">
+          <span className="font-semibold">Reason:</span>{" "}
+          {order.freightOverrideReason}
+        </p>
+      ) : null}
+    </div>
+  ) : null}
+
+  {!freightWasEdited && autoFreight != null ? (
+    <p className="mt-2 text-xs text-muted-foreground">
+      Freight matched with rate matrix and was approved without manual change.
+    </p>
+  ) : null}
+</div>
           </CardSection>
 
           <CardSection title="Contact & Freight Details">
@@ -364,21 +475,28 @@ const totalWeight =
  
           {/* Quick actions */}
           <section className="rounded-xl border bg-muted/30 p-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Quick actions
-            </p>
-            <div className="flex flex-col gap-1.5">
-              <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm font-normal">
-                <IconDownload size={14} /> Download PDF
-              </Button>
-              <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm font-normal">
-                <IconCopy size={14} /> Duplicate order
-              </Button>
-              <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm font-normal">
-                <IconMail size={14} /> Notify customer
-              </Button>
-            </div>
-          </section>
+  <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+    Quick actions
+  </p>
+
+  <div className="flex flex-col gap-1.5">
+    <Button
+      variant="ghost"
+      size="sm"
+      className="justify-start gap-2 text-sm font-normal"
+      disabled={isDownloadingPdf}
+      onClick={() => handleDownloadOrderPdf(order.orderNumber)}
+    >
+      {isDownloadingPdf ? (
+        <IconLoader2 size={14} className="animate-spin" />
+      ) : (
+        <IconDownload size={14} />
+      )}
+
+      {isDownloadingPdf ? "Downloading..." : "Download PDF"}
+    </Button>
+  </div>
+</section>
         </div>
       </div>
 

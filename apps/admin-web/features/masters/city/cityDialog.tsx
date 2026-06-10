@@ -5,6 +5,7 @@ import type { City } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
@@ -65,8 +66,8 @@ export default function CityDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">City Details</p>
 
+<DialogTitle>City Details</DialogTitle>
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
                   <IconCircleCheckFilled size={10} />
