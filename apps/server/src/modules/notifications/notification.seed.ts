@@ -1,4 +1,7 @@
-import { NotificationChannel, NotificationSeverity } from "@prisma/client";
+import {
+  NotificationChannel,
+  NotificationSeverity,
+} from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import type { RuleSeed } from "./types.js";
 

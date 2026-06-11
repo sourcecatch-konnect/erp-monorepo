@@ -3,13 +3,19 @@ import {
   NotificationDeliveryStatus,
   NotificationEventStatus,
   Prisma,
-} from "@prisma/client";
+} from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
-import { enqueueNotificationDelivery, enqueueNotificationEvent } from "./queue.js";
+import {
+  enqueueNotificationDelivery,
+  enqueueNotificationEvent,
+} from "./queue.js";
 import { resolveRecipients } from "./recipients.js";
 import { sendViaProvider } from "./providers.js";
 import { renderTemplate } from "./template.js";
-import type { NotificationPayload, PublishNotificationEventInput } from "./types.js";
+import type {
+  NotificationPayload,
+  PublishNotificationEventInput,
+} from "./types.js";
 
 const payloadObject = (payload: Prisma.JsonValue): NotificationPayload => {
   return payload && typeof payload === "object" && !Array.isArray(payload)
@@ -27,7 +33,7 @@ const deliveryLinkUrl = (payload: NotificationPayload) => {
 };
 
 export const publishNotificationEvent = async (
-  input: PublishNotificationEventInput
+  input: PublishNotificationEventInput,
 ) => {
   const event = await db.notificationEvent.upsert({
     where: input.dedupeKey
@@ -57,7 +63,7 @@ const isSubscribed = async (
   userId: string,
   eventType: string,
   channel: NotificationChannel,
-  critical: boolean
+  critical: boolean,
 ) => {
   if (critical) return true;
 
@@ -69,7 +75,9 @@ const isSubscribed = async (
 };
 
 export const fanoutNotificationEvent = async (eventId: string) => {
-  const event = await db.notificationEvent.findUnique({ where: { id: eventId } });
+  const event = await db.notificationEvent.findUnique({
+    where: { id: eventId },
+  });
   if (!event) return;
 
   const payload = payloadObject(event.payload);
@@ -77,10 +85,7 @@ export const fanoutNotificationEvent = async (eventId: string) => {
     where: {
       eventType: event.eventType,
       enabled: true,
-      OR: [
-        { sourceModule: null },
-        { sourceModule: event.sourceModule },
-      ],
+      OR: [{ sourceModule: null }, { sourceModule: event.sourceModule }],
       AND: [
         {
           OR: [
@@ -106,7 +111,7 @@ export const fanoutNotificationEvent = async (eventId: string) => {
             recipientUserId,
             event.eventType,
             channel,
-            rule.critical
+            rule.critical,
           ))
         ) {
           continue;
@@ -132,7 +137,7 @@ export const fanoutNotificationEvent = async (eventId: string) => {
           console.error(
             "[notifications] Failed to enqueue delivery:",
             delivery.id,
-            error
+            error,
           );
         });
       }
@@ -203,7 +208,7 @@ export const processNotificationDelivery = async (deliveryId: string) => {
       console.log(
         `${logPrefix} SENT${
           result.providerMessageId ? ` (id=${result.providerMessageId})` : ""
-        }`
+        }`,
       );
     }
 
@@ -238,10 +243,7 @@ export const processNotificationDelivery = async (deliveryId: string) => {
   }
 };
 
-export const markInAppNotificationRead = async (
-  userId: string,
-  id: string
-) => {
+export const markInAppNotificationRead = async (userId: string, id: string) => {
   return db.inAppNotification.updateMany({
     where: { id, userId },
     data: { readAt: new Date() },

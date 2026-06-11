@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../../generated/prisma/index.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -24,7 +24,7 @@ export const nextSequence = async (
   tx: Tx,
   branchCode: string,
   fyCode: string,
-  docType: string
+  docType: string,
 ): Promise<number> => {
   const rows = await tx.$queryRaw<{ seq: number }[]>`
     INSERT INTO "DocumentSequence" ("id", "branchCode", "fyCode", "docType", "nextSeq", "updatedAt")
@@ -42,5 +42,5 @@ export const nextSequence = async (
 export const formatDocNumber = (
   branchCode: string,
   fyCode: string,
-  seq: number
+  seq: number,
 ) => `SKT/${branchCode}/${fyCode}/${String(seq).padStart(5, "0")}`;

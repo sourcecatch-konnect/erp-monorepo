@@ -1,10 +1,14 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 
 // Shared document-numbering helpers live in _shared so every transactional
 // module (orders, trips, …) reuses one implementation. Re-exported here so
 // existing order imports keep working.
-export { fyCodeFor, nextSequence, formatDocNumber } from "../_shared/doc-number.js";
+export {
+  fyCodeFor,
+  nextSequence,
+  formatDocNumber,
+} from "../_shared/doc-number.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -33,8 +37,14 @@ export const computeFreight = async (args: {
   }
 
   const [fromBranch, toBranch] = await Promise.all([
-    db.branch.findUnique({ where: { id: args.fromBranchId }, select: { cityId: true } }),
-    db.branch.findUnique({ where: { id: args.toBranchId }, select: { cityId: true } }),
+    db.branch.findUnique({
+      where: { id: args.fromBranchId },
+      select: { cityId: true },
+    }),
+    db.branch.findUnique({
+      where: { id: args.toBranchId },
+      select: { cityId: true },
+    }),
   ]);
 
   if (!fromBranch?.cityId || !toBranch?.cityId) {
@@ -42,7 +52,10 @@ export const computeFreight = async (args: {
   }
 
   const route = await db.route.findFirst({
-    where: { sourceCityId: fromBranch.cityId, destinationCityId: toBranch.cityId },
+    where: {
+      sourceCityId: fromBranch.cityId,
+      destinationCityId: toBranch.cityId,
+    },
     select: { id: true },
   });
   if (!route) return { amount: null, matched: false, source: "None" };
@@ -51,7 +64,8 @@ export const computeFreight = async (args: {
     where: { clientId: args.customerId },
     select: { id: true },
   });
-  if (agreements.length === 0) return { amount: null, matched: false, source: "None" };
+  if (agreements.length === 0)
+    return { amount: null, matched: false, source: "None" };
 
   const agreementIds = agreements.map((a) => a.id);
 
@@ -71,7 +85,8 @@ export const computeFreight = async (args: {
 
   if (!match) return { amount: null, matched: false, source: "None" };
 
-  const qty = args.truckQuantity && args.truckQuantity > 0 ? args.truckQuantity : 1;
+  const qty =
+    args.truckQuantity && args.truckQuantity > 0 ? args.truckQuantity : 1;
   return { amount: match.rate * qty, matched: true, source: "RateMatrix" };
 };
 export const orderListSelect = {
@@ -166,7 +181,9 @@ export const orderInclude = {
   items: { include: { goods: { select: { id: true, name: true } } } },
   events: {
     orderBy: { createdAt: "asc" as const },
-    include: { actor: { select: { id: true, firstName: true, lastName: true } } },
+    include: {
+      actor: { select: { id: true, firstName: true, lastName: true } },
+    },
   },
 } satisfies Prisma.OrderInclude;
 
@@ -177,7 +194,7 @@ export const writeOrderEvent = async (
   actorId: string,
   eventType: string,
   note?: string | null,
-  payloadDiff?: Prisma.InputJsonValue
+  payloadDiff?: Prisma.InputJsonValue,
 ) => {
   await tx.orderEvent.create({
     data: { orderId, actorId, eventType, note: note ?? null, payloadDiff },

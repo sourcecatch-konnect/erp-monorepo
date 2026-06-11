@@ -1,4 +1,4 @@
-import { Prisma, type TripStatus } from "@prisma/client";
+import { Prisma, type TripStatus } from "../../../generated/prisma/index.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -98,7 +98,7 @@ export const writeTripStatus = async (
   vehicleTripId: string,
   userId: string,
   status: TripStatus,
-  note?: string | null
+  note?: string | null,
 ) => {
   await tx.tripStatusHistory.create({
     data: { vehicleTripId, userId, status, note: note ?? null },

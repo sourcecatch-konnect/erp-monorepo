@@ -1,7 +1,7 @@
 import type {
   NotificationChannel,
   NotificationSeverity,
-} from "@prisma/client";
+} from "../../../generated/prisma/index.js";
 
 export type NotificationPayload = Record<string, unknown>;
 
