@@ -118,15 +118,36 @@ export function AttachmentPanel({ api, entityType, entityId }: SharedProps) {
     },
     [uploadMutation],
   );
+const [downloadingId, setDownloadingId] = useState<string | null>(null);
+const handleDownload = async (att: Attachment) => {
+  try {
+    setDownloadingId(att.id);
 
-  const handleDownload = async (id: string) => {
-    try {
-      const url = await api.getDownloadUrl(id);
-      window.open(url, "_blank", "noopener");
-    } catch {
-      toast.error("File is not available for download yet");
+    const url = await api.getDownloadUrl(att.id);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("Download failed");
     }
-  };
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = att.originalName || "attachment.pdf";
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  } catch {
+    toast.error("File is not available for download yet");
+  } finally {
+    setDownloadingId(null);
+  }
+};
 
   const items = list.data ?? [];
 
@@ -145,6 +166,7 @@ export function AttachmentPanel({ api, entityType, entityId }: SharedProps) {
           Drag &amp; drop files here, or
         </p>
         <Button
+          type="button"
           variant="outline"
           size="sm"
           onClick={() => inputRef.current?.click()}
@@ -193,23 +215,39 @@ export function AttachmentPanel({ api, entityType, entityId }: SharedProps) {
                 </p>
               </div>
               <StatusBadge status={att.antivirusStatus} />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                title="Download"
-                disabled={att.antivirusStatus !== "CLEAN"}
-                onClick={() => handleDownload(att.id)}
-              >
-                <IconDownload />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                title="Delete"
-                onClick={() => removeMutation.mutate(att.id)}
-              >
-                <IconTrash />
-              </Button>
+        <Button
+  type="button"
+  variant="ghost"
+  size="icon-sm"
+  title="Download"
+  disabled={
+    att.antivirusStatus !== "CLEAN" || downloadingId === att.id
+  }
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void handleDownload(att);
+  }}
+>
+  {downloadingId === att.id ? (
+    <span className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+  ) : (
+    <IconDownload className="size-4" />
+  )}
+</Button>
+            <Button
+  type="button"
+  variant="ghost"
+  size="icon-sm"
+  title="Delete"
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    removeMutation.mutate(att.id);
+  }}
+>
+  <IconTrash />
+</Button>
             </div>
           ))
         )}
@@ -315,6 +353,7 @@ export function ProfilePhotoUploader({
 
       <div className="flex flex-col gap-1">
         <Button
+        type="button"
           variant="outline"
           size="sm"
           onClick={() => inputRef.current?.click()}
