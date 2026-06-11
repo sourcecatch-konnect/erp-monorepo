@@ -33,6 +33,8 @@ import { useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
+import { lorryReceiptApi } from "@/features/lorry-receipts/lorry-receipt.service";
+import { lrKeys } from "@/features/lorry-receipts/lorry-receipt.keys";
 import {
   StatusBadge,
   formatDate,
@@ -42,6 +44,7 @@ import {
 import OrderTimeline from "./OrderTimeline";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { IconFileText } from "@tabler/icons-react";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -102,10 +105,19 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
   const canReject = useCan(PERMS.ORDER.REJECT);
   const canCancel = useCan(PERMS.ORDER.CANCEL);
   const canUpdate = useCan(PERMS.ORDER.UPDATE);
+  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 
   const { data: order, isLoading } = useQuery({
     queryKey: orderKeys.detail(orderId),
     queryFn: () => orderApi.detail(orderId),
+  });
+
+  const lrCountsQuery = useQuery({
+    queryKey: [...lrKeys.all, "order-counts", orderId],
+    queryFn: () =>
+      lorryReceiptApi.list({ size: 1, filter: { orderId } } as never),
+    enabled: Boolean(order?.orderType === "Truck" && order?.status === "Confirmed"),
+    select: (res) => res.meta?.total ?? 0,
   });
 
   const invalidate = () =>
@@ -273,6 +285,25 @@ const totalWeight =
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Field label="Vehicle type"    value={order.vehicleType?.name} />
                 <Field label="Truck quantity"  value={order.truckQuantity} />
+                {order.status === "Confirmed" && order.truckQuantity != null && (
+                  <Field
+                    label="LRs created"
+                    value={
+                      <span className={`font-medium ${
+                        (lrCountsQuery.data ?? 0) >= order.truckQuantity
+                          ? "text-red-600"
+                          : "text-foreground"
+                      }`}>
+                        {lrCountsQuery.data ?? "—"} / {order.truckQuantity}
+                        {(lrCountsQuery.data ?? 0) >= order.truckQuantity && (
+                          <span className="ml-1.5 rounded-sm bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                            Full
+                          </span>
+                        )}
+                      </span>
+                    }
+                  />
+                )}
               </dl>
             ) : (
               <div className="overflow-hidden rounded-lg border">
@@ -377,6 +408,16 @@ const totalWeight =
               <Button variant="ghost" size="sm" className="justify-start gap-2 text-sm font-normal">
                 <IconMail size={14} /> Notify customer
               </Button>
+              {canCreateLR && order.orderType === "Truck" && order.status === "Confirmed" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start gap-2 text-sm font-normal"
+                  onClick={() => router.push(`/lorry-receipts/new?orderId=${order.id}`)}
+                >
+                  <IconFileText size={14} /> Create LR
+                </Button>
+              )}
             </div>
           </section>
         </div>

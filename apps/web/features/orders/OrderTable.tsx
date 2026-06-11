@@ -42,6 +42,8 @@ import {
   IconBan,
   IconEdit,
   IconDatabaseOff,
+  IconFileText,
+  IconDownload,
 } from "@tabler/icons-react";
 
 import { StatusBadge, formatDate, formatMoney, STATUS_ORDER } from "./order-ui";
@@ -51,10 +53,12 @@ export type OrderRowActions = {
   onApprove: (order: Order) => void;
   onReject: (order: Order) => void;
   onCancel: (order: Order) => void;
+  onCreateLR: (order: Order) => void;
   canApprove: boolean;
   canReject: boolean;
   canCancel: boolean;
   canUpdate: boolean;
+  canCreateLR: boolean;
 };
 
 type Props = OrderRowActions & {
@@ -96,10 +100,12 @@ export default function OrderTable(props: Props) {
     onApprove,
     onReject,
     onCancel,
+    onCreateLR,
     canApprove,
     canReject,
     canCancel,
     canUpdate,
+    canCreateLR,
   } = props;
 
   const columns = React.useMemo<ColumnDef<Order>[]>(
@@ -300,6 +306,16 @@ export default function OrderTable(props: Props) {
                                 </Link>
                               </DropdownMenuItem>
                             ) : null}
+                            {canCreateLR && o.status === "Confirmed" && o.orderType === "Truck" ? (
+                              <DropdownMenuItem onClick={() => onCreateLR(o)}>
+                                <IconFileText size={16} className="mr-2" /> Create LR
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuItem asChild>
+                              <Link href={`/orders/${o.id}`}>
+                                <IconDownload size={16} className="mr-2" /> Download PDF
+                              </Link>
+                            </DropdownMenuItem>
                             {canCancel && cancellable ? (
                               <>
                                 <DropdownMenuSeparator />

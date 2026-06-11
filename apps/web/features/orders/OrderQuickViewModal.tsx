@@ -2,7 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { PERMS } from "@skerp/types";
+import { useCan } from "@/features/auth";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +19,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
 import { StatusBadge, formatDate, formatMoney } from "./order-ui";
-import { IconArrowRight, IconBuildingWarehouse } from "@tabler/icons-react";
+import { IconArrowRight, IconBuildingWarehouse, IconFileText } from "@tabler/icons-react";
 
 function DetailLine({
   label,
@@ -42,6 +45,8 @@ export default function OrderQuickViewModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const router = useRouter();
+  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 const { data: order, isLoading } = useQuery({
   queryKey: orderId ? orderKeys.quickView(orderId) : ["order-quick-empty"],
   queryFn: () => orderApi.quickView(orderId as string),
@@ -150,7 +155,21 @@ const { data: order, isLoading } = useQuery({
 
          
 
-           <div className="flex justify-end border-t pt-4">
+           <div className="flex items-center justify-between border-t pt-4">
+  <div>
+    {canCreateLR && order.status === "Confirmed" && order.orderType === "Truck" ? (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          onOpenChange(false);
+          router.push(`/lorry-receipts/new?orderId=${order.id}`);
+        }}
+      >
+        <IconFileText size={14} className="mr-1.5" /> Create LR
+      </Button>
+    ) : null}
+  </div>
   <Button asChild size="sm">
     <Link
       href={`/orders/${order.id}`}

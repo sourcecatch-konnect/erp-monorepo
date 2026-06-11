@@ -25,11 +25,10 @@ const router: Router = createCrudRouter({
 
   hooks: {
     beforeDelete: async (id) => {
-      const [rateMatrices, vehicleTrips, lorryReceipts] =
+      const [rateMatrices, vehicleTrips] =
         await Promise.all([
           db.rateMatrix.count({ where: { routeId: id } }),
           db.vehicleTrip.count({ where: { routeId: id } }),
-          db.lorryReceipt.count({ where: { routeId: id } }),
         ]);
 
       const dependencies: string[] = [];
@@ -39,9 +38,6 @@ const router: Router = createCrudRouter({
 
       if (vehicleTrips)
         dependencies.push(`${vehicleTrips} Vehicle Trips`);
-
-      if (lorryReceipts)
-        dependencies.push(`${lorryReceipts} Lorry Receipts`);
 
       if (dependencies.length) {
         throw new BadRequestError(

@@ -153,6 +153,7 @@ model User {
 
   createdLR         LorryReceipt[]      @relation("CreatedLR")
   updatedLR         LorryReceipt[]      @relation("UpdatedLR")
+  finalisedLR       LorryReceipt[]      @relation("FinalisedLR")
   createdTrips      VehicleTrip[]       @relation("CreatedTrips")
   updatedTrips      VehicleTrip[]       @relation("UpdatedTrips")
   TripStatusHistory TripStatusHistory[]
@@ -221,6 +222,9 @@ model Branch {
   updatedAt    DateTime     @updatedAt
   fromOrders   Order[]      @relation("FromBranch")
   toOrders     Order[]      @relation("ToBranch")
+  originLRs      LorryReceipt[] @relation("LROrigin")
+  destinationLRs LorryReceipt[] @relation("LRDestination")
+  hubLRs         LorryReceipt[] @relation("LRHub")
 }
 
 model Warehouse {
@@ -237,8 +241,8 @@ model Warehouse {
   contactName  String?
   contactPhone String?
 
-  monthlyRent     Float?
-  securityDeposit Float?
+  monthlyRent     Int?
+  securityDeposit Int?
 
   agreementDate DateTime?
   expiryDate    DateTime?
@@ -534,10 +538,10 @@ model Customer {
   shortName               String?
   customerPAN             String?
   disallowNewLRBooking    Boolean @default(false)
-  interestRateLatePayment Float?
+  interestRateLatePayment Int?
   gstNo                   String?
-  creditLimit             Float?
-  tdsDeductionRate        Float?
+  creditLimit             Int?
+  tdsDeductionRate        Int?
 
   address String?
   country String?
@@ -558,7 +562,8 @@ model Customer {
   updatedAt    DateTime           @updatedAt
   orders       Order[]
   locations    CustomerLocation[]
-  LorryReceipt LorryReceipt[]
+  consignorLRs LorryReceipt[] @relation("LRConsignor")
+  consigneeLRs LorryReceipt[] @relation("LRConsignee")
   vehicleTrips VehicleTrip[]
 }
 
@@ -595,7 +600,7 @@ model DetentionRate {
   type         DetentionRateType
   fromDuration Int
   toDuration   Int
-  rate         Float
+  rate         Int
 
   agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
 
@@ -610,7 +615,6 @@ model Route {
   sourceCity        City           @relation("SourceRoute", fields: [sourceCityId], references: [id])
   destinationCity   City           @relation("DestinationRoute", fields: [destinationCityId], references: [id])
   rateMatrixEntries RateMatrix[]
-  LorryReceipt      LorryReceipt[]
   VehicleTrip       VehicleTrip[]
   orders            Order[]
 
@@ -639,7 +643,7 @@ model RateMatrix {
   unitId        String?
   transportType RateTransportType @default(ROAD)
 
-  rate        Float
+  rate        Int
   transitDays Int?
   remarks     String?
 
@@ -695,11 +699,11 @@ model Driver {
   referenceContactNo     String?
   bloodGroup             String?
   otherDetails           String?
-  salary                 Float?
+  salary                 Int?
   panNo                  String?
   aadharCardNo           String?
-  noTDSApplyAmount       Float?
-  tdsRate                Float?
+  noTDSApplyAmount       Int?
+  tdsRate                Int?
   onLeave                Boolean       @default(false)
   blackListed            Boolean       @default(false)
   createdAt              DateTime      @default(now())
@@ -708,13 +712,11 @@ model Driver {
 }
 
 model Goods {
-  id           String        @id @default(cuid())
-  name         String
-  description  String?
-  LorryReceipt LorryReceipt? @relation(fields: [lorryReceiptId], references: [id])
+  id          String  @id @default(cuid())
+  name        String
+  description String?
 
   weight Float?
-
   length Float?
   width  Float?
   height Float?
@@ -728,8 +730,7 @@ model Goods {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orderItems     OrderItem[]
-  lorryReceiptId String?
+  orderItems OrderItem[]
 }
 
 model Labour {
@@ -747,8 +748,8 @@ model Labour {
 
   startDate DateTime?
   pan       String?
-  tdsAmount Float?
-  tdsRate   Float?
+  tdsAmount Int?
+  tdsRate   Int?
 
   type     WorkerType // Enum: Supervisor, Hamal, Mechanic
   branchId String
@@ -824,7 +825,7 @@ model RailwayFreightMatrix {
   wagonType         String
   sourceCityId      String
   destinationCityId String
-  freightAmount     Float
+  freightAmount     Int
 
   sourceCity      City     @relation("SourceCity", fields: [sourceCityId], references: [id])
   destinationCity City     @relation("DestinationCity", fields: [destinationCityId], references: [id])
@@ -854,11 +855,11 @@ model Pump {
   contactPhone String?
 
   rateLastUpdated   DateTime?
-  currentDieselRate Float?
+  currentDieselRate Int?
 
   gstIn       String?
   pan         String?
-  creditLimit Float?
+  creditLimit Int?
 
   accountName    String?
   bankName       String?
@@ -912,7 +913,7 @@ model SparePart {
   categoryId String
   supplierId String
 
-  rate         Float
+  rate         Int
   minimumStock Int
   unit         String
 
@@ -945,7 +946,7 @@ model Order {
   contactPersonName     String?
   contactMobile         String?
   contactEmail          String?
-  bookingFreightAmount  Decimal?
+  bookingFreightAmount  Int?
   freightOverrideReason String?
   status                OrderStatus @default(PendingApproval)
   rejectionReason       String?
@@ -972,8 +973,9 @@ model Order {
   updatedBy        User?             @relation("UpdatedOrders", fields: [updatedById], references: [id])
   route            Route?            @relation(fields: [routeId], references: [id])
 
-  items  OrderItem[]
-  events OrderEvent[]
+  items         OrderItem[]
+  events        OrderEvent[]
+  lorryReceipts LorryReceipt[]
 
   @@index([status])
   @@index([fromBranchId])
@@ -1015,8 +1017,8 @@ model VehicleType {
   id               String   @id @default(cuid())
   code             String   @unique
   name             String
-  freightRangeFrom Decimal?
-  freightRangeTo   Decimal?
+  freightRangeFrom Int?
+  freightRangeTo   Int?
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1057,59 +1059,159 @@ model DocumentSequence {
   @@unique([branchCode, fyCode, docType])
 }
 
-enum TransportType {
+enum LRStatus {
+  DRAFT
+  FINALISED
+  CANCELLED
+}
+
+enum LRChargeType {
+  BASE_FREIGHT
+}
+
+enum LRSource {
+  FROM_ORDER
+  INSTANT
+}
+
+enum LRTransportType {
   Road
   Rail
+  RoadAndRail
+}
+
+enum LRTripLegType {
+  DIRECT
+  TO_HUB
+  FROM_HUB
 }
 
 enum LRPriority {
+  Normal
+  Express
   Critical
-  Low
-  Medium
-  High
-}
-
-enum LRstatus {
-  draft
-  generated
-  trip_attached
-  finalised
-  in_transit
-  delivered
-  closed
-  cancelled
 }
 
 model LorryReceipt {
-  id                 String        @id
-  routeId            String
-  route              Route         @relation(fields: [routeId], references: [id])
-  consigneeId        String
-  customer           Customer      @relation(fields: [consigneeId], references: [id])
-  isPodUploaded      Boolean
-  isInvoiceGenerated Boolean
-  cancelReason       String?
-  createdById        String
-  updatedById        String?
-  invoiceNo          String?
-  invoiceValue       Decimal?
-  tripId             String
-  trip               VehicleTrip   @relation(fields: [tripId], references: [id])
-  createdBy          User          @relation("CreatedLR", fields: [createdById], references: [id])
-  updatedBy          User?         @relation("UpdatedLR", fields: [updatedById], references: [id])
-  transportType      TransportType
-  priority           LRPriority
-  lrStatus           LRstatus
-  Goods              Goods[]
-  EwayBill           EwayBill[]
+  id           String   @id @default(cuid())
+  lrNumber     String   @unique
+  fyCode       String
+
+  source       LRSource
+  orderId      String?
+  order        Order?   @relation(fields: [orderId], references: [id])
+
+  originBranchId      String
+  destinationBranchId String
+  originBranch        Branch @relation("LROrigin",      fields: [originBranchId],      references: [id])
+  destinationBranch   Branch @relation("LRDestination", fields: [destinationBranchId], references: [id])
+
+  isMarketVehicle   Boolean @default(false)
+
+  // Own vehicle: attach VehicleTrip(s)
+  primaryTripId   String?
+  secondaryTripId String?
+  primaryTrip     VehicleTrip? @relation("LRPrimaryTrip",   fields: [primaryTripId],   references: [id])
+  secondaryTrip   VehicleTrip? @relation("LRSecondaryTrip", fields: [secondaryTripId], references: [id])
+
+  // Market vehicle: manually entered / searched
+  marketVehicleNumber String?
+  marketDriverName    String?
+
+  transportType LRTransportType @default(Road)
+  tripLegType   LRTripLegType   @default(DIRECT)
+  hubId         String?
+  hub           Branch?         @relation("LRHub", fields: [hubId], references: [id])
+
+  consignorId String
+  consigneeId String
+  consignor   Customer @relation("LRConsignor", fields: [consignorId], references: [id])
+  consignee   Customer @relation("LRConsignee", fields: [consigneeId], references: [id])
+
+  sealNumber   String?
+
+  status       LRStatus @default(DRAFT)
+  cancelReason String?
+
+  invoiceNumber String?
+  invoiceAmount Int?
+  priority      LRPriority @default(Normal)
+
+  finalisedAt   DateTime?
+  finalisedById String?
+  finalisedBy   User?    @relation("FinalisedLR", fields: [finalisedById], references: [id])
+
+  createdById String
+  updatedById String?
+  createdBy   User    @relation("CreatedLR",  fields: [createdById],  references: [id])
+  updatedBy   User?   @relation("UpdatedLR",  fields: [updatedById],  references: [id])
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  goods    LRGoods[]
+  charges  LRCharge[]
+  ewayBills EwayBill[]
+
+  @@index([status])
+  @@index([orderId])
+  @@index([originBranchId])
+  @@index([destinationBranchId])
+  @@index([fyCode])
+}
+
+model LRGoods {
+  id             String       @id @default(cuid())
+  lorryReceiptId String
+  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+
+  name        String
+  description String?
+  quantity    Int
+  unit        String
+  weight      Decimal?
+  length      Float?
+  width       Float?
+  height      Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lorryReceiptId])
+}
+
+model LRCharge {
+  id             String       @id @default(cuid())
+  lorryReceiptId String
+  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+
+  chargeType  LRChargeType
+  amount      Int
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lorryReceiptId])
 }
 
 model EwayBill {
-  ewaybill_no    String       @id
-  issueDate      DateTime
-  expiryDate     DateTime
+  id             String       @id @default(cuid())
   lorryReceiptId String
   lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+
+  ewayBillNo  String
+  generatedAt DateTime
+  expiresAt   DateTime
+  generatedBy String?
+  documentUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lorryReceiptId])
 }
 
 enum TripStatus {
@@ -1140,7 +1242,7 @@ model VehicleTrip {
   // Full-load trips carry one client. Required for LR trips, null for DC (rake).
   consignorId String?
 
-  onwardFreight Decimal
+  onwardFreight Int
   isTripEmpty   Boolean   @default(false)
   rakeDate      DateTime? // set when tripType = dc (rake/rail)
 
@@ -1168,7 +1270,8 @@ model VehicleTrip {
   createdBy User      @relation("CreatedTrips", fields: [createdById], references: [id])
   updatedBy User?     @relation("UpdatedTrips", fields: [updatedById], references: [id])
 
-  LorryReceipt       LorryReceipt[]
+  primaryLRs    LorryReceipt[] @relation("LRPrimaryTrip")
+  secondaryLRs  LorryReceipt[] @relation("LRSecondaryTrip")
   TripStatusHistory  TripStatusHistory[]
   TripUnloadingPoint TripUnloadingPoint[]
   rateMatrix         RateMatrix?          @relation(fields: [rateMatrixId], references: [id])

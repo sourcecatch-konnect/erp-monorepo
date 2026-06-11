@@ -41,6 +41,7 @@ export default function OrdersListPage() {
   const canReject = useCan(PERMS.ORDER.REJECT);
   const canCancel = useCan(PERMS.ORDER.CANCEL);
   const canUpdate = useCan(PERMS.ORDER.UPDATE);
+  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
@@ -123,10 +124,12 @@ export default function OrdersListPage() {
         canReject={canReject}
         canCancel={canCancel}
         canUpdate={canUpdate}
+        canCreateLR={canCreateLR}
         onQuickView={(o) => setQuickViewId(o.id)}
         onApprove={(o) => setApproveId(o.id)}
         onReject={(o) => setRejectOrder(o)}
         onCancel={(o) => setCancelOrder(o)}
+        onCreateLR={(o) => router.push(`/lorry-receipts/new?orderId=${o.id}`)}
       />
 
       <OrderQuickViewModal

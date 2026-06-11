@@ -117,6 +117,9 @@
 }
 @theme {
   --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-truck-wheel: truck-wheel 0.9s linear infinite;
+  --animate-truck-bob: truck-bob 1.6s ease-in-out infinite;
+  --animate-truck-road: truck-road 0.8s linear infinite;
 
   @keyframes shimmer {
     0% {
@@ -124,6 +127,29 @@
     }
     100% {
       background-position: -200% 0;
+    }
+  }
+
+  @keyframes truck-wheel {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes truck-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-0.8px);
+    }
+  }
+
+  /* dash period (10 + 14) so the loop is seamless */
+  @keyframes truck-road {
+    to {
+      stroke-dashoffset: 24;
     }
   }
 }
