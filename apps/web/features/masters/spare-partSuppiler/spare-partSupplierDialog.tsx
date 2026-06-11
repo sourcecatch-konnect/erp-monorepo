@@ -6,6 +6,7 @@ import type { SparePartSupplier } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -14,6 +15,7 @@ import {
   SectionLabel,
   Field,
   formatDate,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -37,13 +39,8 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i}>
-          <Skeleton className="mb-3 h-4 w-28" />
 
+<<<<<<< HEAD:apps/web/features/masters/spare-partSuppiler/spare-partSupplierDialog.tsx
           <div className="grid grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, x) => (
               <Skeleton
@@ -57,6 +54,8 @@ function SkeletonBody() {
     </div>
   );
 }
+=======
+>>>>>>> 2d56891e7d1cc1580b6573a5bec34ea840b7ab08:apps/admin-web/features/masters/spare-partSuppiler/spare-partSupplierDialog.tsx
 
 export default function SparePartSupplierDetailDialog({
   open,
@@ -84,10 +83,8 @@ export default function SparePartSupplierDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">
-                Spare Part Supplier Details
-              </p>
-
+         
+              <DialogTitle>Spare Part Supplier Details</DialogTitle>
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10}/>

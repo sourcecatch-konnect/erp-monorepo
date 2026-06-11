@@ -6,9 +6,10 @@ import type { Customer } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
+
 
 import {
   SectionLabel,
@@ -16,6 +17,7 @@ import {
   PartyCard,
   formatDate,
   formatCurrency,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -42,6 +44,7 @@ type Props = {
   isLoading?: boolean;
 };
 
+<<<<<<< HEAD:apps/web/features/masters/Customer/customerDialog.tsx
 function SkeletonBody() {
   return (
     <div className="space-y-6 p-6">
@@ -63,6 +66,8 @@ function SkeletonBody() {
   );
 }
 
+=======
+>>>>>>> 2d56891e7d1cc1580b6573a5bec34ea840b7ab08:apps/admin-web/features/masters/Customer/customerDialog.tsx
 
 
 export default function CustomerDetailDialog({
@@ -91,9 +96,7 @@ export default function CustomerDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">
-                Customer Details
-              </p>
+            <DialogTitle>Customer Details</DialogTitle>
 
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">

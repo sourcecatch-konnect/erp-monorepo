@@ -172,7 +172,7 @@ const { data: order, isLoading } = useQuery({
   </div>
   <Button asChild size="sm">
     <Link
-      href={`/orders/${order.id}`}
+    href={`/orders/${encodeURIComponent(order.orderNumber)}`}
       className="group flex items-center gap-2"
     >
       Open full detail

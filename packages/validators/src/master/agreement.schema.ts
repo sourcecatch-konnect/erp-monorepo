@@ -60,8 +60,6 @@ export const agreementSchema =
 
     expiryDate: z.date(),
 
-    carryingCapacity:
-      z.number().optional(),
 
     leadGeneratedByBranchId:
       z.string(),
@@ -98,11 +96,7 @@ const agreementFieldsSchema =
         "Expiry date"
       ),
 
-    carryingCapacity:
-      optionalNumber(
-        "Carrying capacity"
-      ),
-
+ 
     leadGeneratedByBranchId:
       z
         .string()

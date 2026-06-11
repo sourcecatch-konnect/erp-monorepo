@@ -8,7 +8,7 @@ export type CompanyWithRelations = Company & {
     startDate: Date;
     agreementDate: Date;
     expiryDate: Date;
-    carryingCapacity?: number | null;
+
     client?: { id: string; name: string };
     city?: { id: string; name: string };
     branch?: { id: string; name: string };

@@ -20,6 +20,8 @@ import { agreementKeys } from "./agreements.key";
 import { agreementApi } from "./agreements.service";
 import { agreementColumns } from "./agreementsTable";
 import AgreementForm from "./agreementsForm";
+import { attachmentApi } from "@/features/attachments/attachment.client";
+
 export default function AgreementPage() {
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Agreement | null>(null);
@@ -87,16 +89,67 @@ const exportAgreements = useMutation({
   mutationFn: agreementApi.export,
 });
   // ================= SUBMIT =================
-  const handleSubmit = async (data: CreateAgreementBody) => {
+const [isUploadingAgreementFile, setIsUploadingAgreementFile] =
+  React.useState(false);
+
+const handleSubmit = async (
+  data: CreateAgreementBody,
+  agreementFile?: File | null,
+) => {
+  let agreementId = selected?.id;
+
+  try {
     if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
+      await update.mutateAsync({
+        id: selected.id,
+        data,
+      });
+
+      agreementId = selected.id;
     } else {
-      await create.mutateAsync(data);
+      const createdAgreement = await create.mutateAsync(data);
+
+      agreementId = createdAgreement?.id;
+
+      if (!agreementId) {
+        toast.error("Agreement created but agreement ID was not returned.");
+        return;
+      }
+    }
+
+    if (agreementFile && agreementId) {
+      try {
+        setIsUploadingAgreementFile(true);
+
+        await attachmentApi.upload(
+          {
+            entityType: "agreement",
+            entityId: agreementId,
+            originalName: agreementFile.name,
+            mime: agreementFile.type || "application/octet-stream",
+            sizeBytes: agreementFile.size,
+          },
+          agreementFile,
+        );
+
+        toast.success("Agreement file uploaded successfully");
+      } catch (uploadError) {
+        console.error("Agreement file upload failed:", uploadError);
+
+        toast.warning(
+          "Agreement saved, but file upload failed. Please configure S3 bucket and upload again.",
+        );
+      } finally {
+        setIsUploadingAgreementFile(false);
+      }
     }
 
     setOpen(false);
     setSelected(null);
-  };
+  } catch (error) {
+    toast.error(getErrorMessage(error));
+  }
+};
 
   return (
    <MasterListPage
@@ -149,17 +202,19 @@ const exportAgreements = useMutation({
   data={detailData ?? undefined}
   isLoading={false}
 />
-      <AgreementForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-        companies={companies.data?.data ?? []}
-        customers={customers.data?.data ?? []}
-        cities={cities.data?.data ?? []}
-        branches={branches.data?.data ?? []}
-      />
+   <AgreementForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+  onSubmit={handleSubmit}
+  isSubmitting={
+    create.isPending || update.isPending || isUploadingAgreementFile
+  }
+  companies={companies.data?.data ?? []}
+  customers={customers.data?.data ?? []}
+  cities={cities.data?.data ?? []}
+  branches={branches.data?.data ?? []}
+/>
     </MasterListPage>
   );
 }

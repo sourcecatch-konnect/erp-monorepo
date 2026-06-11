@@ -44,6 +44,7 @@ import {
   IconDatabaseOff,
   IconFileText,
   IconDownload,
+  IconTrash,
 } from "@tabler/icons-react";
 
 import { StatusBadge, formatDate, formatMoney, STATUS_ORDER } from "./order-ui";
@@ -59,6 +60,7 @@ export type OrderRowActions = {
   canCancel: boolean;
   canUpdate: boolean;
   canCreateLR: boolean;
+  canDelete: boolean;
 };
 
 type Props = OrderRowActions & {
@@ -73,6 +75,8 @@ type Props = OrderRowActions & {
   onStatusFilterChange: (value: string) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
+
+  onDelete: (order: Order) => void;
 };
 
 const routeLabel = (o: Order) =>
@@ -96,6 +100,8 @@ export default function OrderTable(props: Props) {
     onStatusFilterChange,
     counts,
     isLoading,
+    canDelete,
+    onDelete,
     onQuickView,
     onApprove,
     onReject,
@@ -115,7 +121,7 @@ export default function OrderTable(props: Props) {
         accessorKey: "orderNumber",
         cell: ({ row }) => (
           <Link
-            href={`/orders/${row.original.id}`}
+            href={`/orders/${encodeURIComponent(row.original.orderNumber)}`}
             className="font-medium text-primary hover:underline"
           >
             {row.original.orderNumber}
@@ -253,11 +259,29 @@ export default function OrderTable(props: Props) {
             ) : (
               table.getRowModel().rows.map((row) => {
                 const o = row.original;
+
                 const isPending = o.status === "PendingApproval";
-                const cancellable =
-                  o.status === "PendingApproval" || o.status === "Confirmed";
+
                 const editable =
                   o.status === "PendingApproval" || o.status === "Rejected";
+
+                const deletable =
+                  o.status === "PendingApproval" || o.status === "Rejected";
+
+                const cancellable =
+                  o.status === "PendingApproval" || o.status === "Confirmed";
+
+                const hasTopActions =
+                  (canApprove && isPending) ||
+                  (canReject && isPending) ||
+                  (canUpdate && editable);
+
+                const hasDangerActions =
+                  (canCancel && cancellable) || (canDelete && deletable);
+
+                const hasActions = hasTopActions || hasDangerActions;
+
+                const showSeparator = hasTopActions && hasDangerActions;
                 return (
                   <TableRow key={row.id} className="hover:bg-muted/30">
                     {row.getVisibleCells().map((cell) => (
@@ -306,14 +330,18 @@ export default function OrderTable(props: Props) {
                                 </Link>
                               </DropdownMenuItem>
                             ) : null}
-                            {canCreateLR && o.status === "Confirmed" && o.orderType === "Truck" ? (
+                            {canCreateLR &&
+                            o.status === "Confirmed" &&
+                            o.orderType === "Truck" ? (
                               <DropdownMenuItem onClick={() => onCreateLR(o)}>
-                                <IconFileText size={16} className="mr-2" /> Create LR
+                                <IconFileText size={16} className="mr-2" />{" "}
+                                Create LR
                               </DropdownMenuItem>
                             ) : null}
                             <DropdownMenuItem asChild>
                               <Link href={`/orders/${o.id}`}>
-                                <IconDownload size={16} className="mr-2" /> Download PDF
+                                <IconDownload size={16} className="mr-2" />{" "}
+                                Download PDF
                               </Link>
                             </DropdownMenuItem>
                             {canCancel && cancellable ? (

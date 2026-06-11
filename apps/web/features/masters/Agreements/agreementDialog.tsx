@@ -1,7 +1,7 @@
 "use client";
 
 import type { AgreementWithRelations } from "@skerp/types";
-import { Dialog, DialogContent } from "@skerp/ui/components/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@skerp/ui/components/dialog";
 
 import {
   Field,
@@ -59,9 +59,7 @@ export default function AgreementDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold text-foreground">
-                Agreement Details
-              </p>
+    <DialogTitle>Agreement Details</DialogTitle>
 
               <div className="mt-0.5 flex items-center gap-2">
                 {!isLoading && data && (
@@ -182,15 +180,7 @@ export default function AgreementDetailDialog({
                   icon={<IconBuildingStore size={12} />}
                 />
 
-                <Field
-                  label="Carrying capacity"
-                  value={
-                    data?.carryingCapacity != null
-                      ? `${data.carryingCapacity} Ton`
-                      : "-"
-                  }
-                  icon={<IconTruck size={12} />}
-                />
+            
               </div>
             </div>
 

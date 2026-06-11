@@ -1,24 +1,37 @@
 "use client";
 
-import * as React from "react";
-import type {  RateMatrixWithRelations } from "@skerp/types";
+import type { RateMatrixWithRelations } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
-import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import {
+  Field,
+  PartyCard,
+  SectionLabel,
+  SkeletonBody,
+  formatDate,
+  formatCurrency,
+} from "../_shared/dialog-parts";
+
+import {
+  IconBuilding,
+  IconUser,
   IconRoute,
-  IconFileInvoice,
+  IconMapPin,
+  IconTruck,
+  IconPackage,
   IconCurrencyRupee,
   IconClock,
   IconNotes,
+  IconFileInvoice,
+  IconCircleCheckFilled,
+  IconClockEdit,
+  IconCirclePlus,
+  IconId,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
@@ -27,37 +40,16 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-  wide = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-  wide?: boolean;
-}) {
-  return (
-    <div
-      className={
-        wide
-          ? "grid gap-1 border-b py-4 md:col-span-2 xl:col-span-3"
-          : "grid gap-1 border-b py-4"
-      }
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
-      </div>
+const formatTransportType = (value?: string | null) => {
+  if (!value) return "-";
 
-      <div className="break-words text-sm font-semibold leading-6 text-foreground">
-        {value || "-"}
-      </div>
-    </div>
-  );
-}
+  const labels: Record<string, string> = {
+    ROAD: "Road",
+    RAIL_ROAD: "Rail / Road",
+  };
 
+  return labels[value] ?? value;
+};
 
 export default function RateMatrixDetailDialog({
   open,
@@ -65,79 +57,218 @@ export default function RateMatrixDetailDialog({
   data,
   isLoading,
 }: Props) {
+  console.log(data, "rate maitrix");
+  const unitLabel =
+    data?.unit?.unitValue != null && data?.unit?.unitType
+      ? `${data.unit.unitValue} ${data.unit.unitType}`
+      : "-";
+
+  const routeLabel =
+    data?.route?.sourceCity?.name || data?.route?.destinationCity?.name
+      ? `${data?.route?.sourceCity?.name ?? "-"} to ${
+          data?.route?.destinationCity?.name ?? "-"
+        }`
+      : "-";
+
+  const agreementLabel =
+    data?.agreement?.company?.name || data?.agreement?.client?.name
+      ? `${data?.agreement?.company?.name ?? "-"} - ${
+          data?.agreement?.client?.name ?? "-"
+        }`
+      : "-";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1100px]">
+      <DialogContent className="w-[96vw] max-w-[580px] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[900px]">
         {/* HEADER */}
-    <div className="border-b bg-gradient-to-r from-primary/10 via-muted/40 to-background px-6 py-5">
-  <DialogHeader>
-    <div className="flex items-center gap-4">
-      <span className="flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-        <IconFileInvoice size={24} />
-      </span>
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IconFileInvoice size={18} />
+            </span>
 
-      <div>
-        <DialogTitle className="text-xl font-semibold">
-          Rate Matrix Detail
-        </DialogTitle>
-        <DialogDescription>
-          Route-wise pricing linked with agreement details
-        </DialogDescription>
-      </div>
-    </div>
-  </DialogHeader>
-</div>
+            <div>
+              <DialogTitle className="text-lg font-semibold">
+                Rate Matrix Details
+              </DialogTitle>
+
+              <div className="mt-0.5 flex items-center gap-2">
+                {!isLoading && data ? (
+                  <>
+                    <span className="text-[11px] text-muted-foreground">
+                      {routeLabel}
+                    </span>
+                    <span className="text-border">·</span>
+                    <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                      <IconCircleCheckFilled size={10} />
+                      Active
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    Route-wise pricing details
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* BODY */}
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 12 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-md" />
-              ))}
+        {isLoading ? (
+          <SkeletonBody />
+        ) : (
+          <div className="max-h-[calc(90vh-130px)] overflow-y-auto">
+            {/* AGREEMENT */}
+            <div className="px-5 py-5">
+              <SectionLabel>Agreement</SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <Field
+                  label="Agreement"
+                  value={agreementLabel}
+                  icon={<IconFileInvoice size={12} />}
+                />
+                <Field
+                  label="Customer"
+                  value={data?.agreement?.client?.name}
+                  icon={<IconUser size={15} />}
+                />
+              </div>
             </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <DetailItem
-  icon={<IconFileInvoice size={16} />}
-  label="Agreement"
-  value={`${data?.agreement?.company?.name ?? "-"} - ${
-    data?.agreement?.client?.name ?? "-"
-  }`}
-/>
 
-            <DetailItem
-  icon={<IconRoute size={16} />}
-  label="Route"
-  value={`${data?.route?.sourceCity?.name ?? "-"} to ${
-    data?.route?.destinationCity?.name ?? "-"
-  }`}
-/>
+            <div className="mx-5 border-t" />
 
-              <DetailItem
-                icon={<IconCurrencyRupee size={16} />}
-                label="Rate"
-                value={formatCurrency(data?.rate)}
-              />
+            {/* ROUTE */}
+            <div className="px-5 py-5">
+              <SectionLabel>Route Details</SectionLabel>
 
-              <DetailItem
-                icon={<IconClock size={16} />}
-                label="Transit Days"
-                value={
-                  data?.transitDays != null
-                    ? `${data.transitDays} days`
-                    : "-"
-                }
-              />
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <Field
+                  label="From City"
+                  value={data?.route?.sourceCity?.name}
+                  icon={<IconMapPin size={12} />}
+                />
 
-              <DetailItem
-                icon={<IconNotes size={16}/>}
-                label="Remarks"
-                value={data?.remarks}
-                wide
-              />
+                <Field
+                  label="To City"
+                  value={data?.route?.destinationCity?.name}
+                  icon={<IconMapPin size={12} />}
+                />
+
+                <Field
+                  label="Route"
+                  value={routeLabel}
+                  icon={<IconRoute size={12} />}
+                />
+              </div>
             </div>
-          )}
+
+            <div className="mx-5 border-t" />
+
+            {/* VEHICLE & UNIT */}
+            <div className="px-5 py-5">
+              <SectionLabel>Vehicle & Unit</SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <Field
+                  label="Vehicle Type"
+                  value={data?.vehicleType?.name}
+                  icon={<IconTruck size={12} />}
+                />
+
+                <Field
+                  label="Transport Type"
+                  value={formatTransportType(data?.transportType)}
+                  icon={<IconRoute size={12} />}
+                />
+
+                <Field
+                  label="Unit"
+                  value={unitLabel}
+                  icon={<IconPackage size={12} />}
+                />
+              </div>
+            </div>
+
+            <div className="mx-5 border-t" />
+
+            {/* PRICING */}
+            <div className="px-5 py-5">
+              <SectionLabel>Pricing & Transit</SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <Field
+                  label="Rate"
+                  value={formatCurrency(data?.rate)}
+                  icon={<IconCurrencyRupee size={12} />}
+                />
+
+                <Field
+                  label="Transit Days"
+                  value={
+                    data?.transitDays != null ? `${data.transitDays} days` : "-"
+                  }
+                  icon={<IconClock size={12} />}
+                />
+              </div>
+            </div>
+
+            <div className="mx-5 border-t" />
+
+            {/* REMARKS */}
+            <div className="px-5 py-5">
+              <SectionLabel>Remarks</SectionLabel>
+
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <IconNotes size={13} />
+                  Notes
+                </div>
+
+                <p className="text-sm font-medium leading-6 text-foreground">
+                  {data?.remarks || "-"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mx-5 border-t" />
+
+            {/* SYSTEM INFO */}
+            <div className="px-5 py-5">
+              <SectionLabel>System Info</SectionLabel>
+
+              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <Field
+                  label="Created at"
+                  value={formatDate(data?.createdAt)}
+                  icon={<IconCirclePlus size={12} />}
+                />
+
+                <Field
+                  label="Last updated"
+                  value={formatDate(data?.updatedAt)}
+                  icon={<IconClockEdit size={12} />}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* FOOTER */}
+        <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
+          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <IconClockEdit size={12} />
+            Updated {formatDate(data?.updatedAt)}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border border-border bg-background px-4 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            Close
+          </button>
         </div>
       </DialogContent>
     </Dialog>

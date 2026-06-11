@@ -19,7 +19,12 @@ import { orderKeys } from "./order.keys";
 import OrderTable from "./OrderTable";
 import OrderQuickViewModal from "./OrderQuickViewModal";
 import ApproveOrderModal from "./ApproveOrderModal";
+<<<<<<< HEAD:apps/web/features/orders/OrdersListPage.tsx
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+=======
+import ReasonDialog from "./ReasonDialog";
+import ConfirmDialog from "./components/confirmDialog";
+>>>>>>> 2d56891e7d1cc1580b6573a5bec34ea840b7ab08:apps/admin-web/features/orders/OrdersListPage.tsx
 
 export default function OrdersListPage() {
   const router = useRouter();
@@ -35,13 +40,17 @@ export default function OrdersListPage() {
   const [approveId, setApproveId] = React.useState<string | null>(null);
   const [rejectOrder, setRejectOrder] = React.useState<Order | null>(null);
   const [cancelOrder, setCancelOrder] = React.useState<Order | null>(null);
-
+  const [deleteOrder, setDeleteOrder] = React.useState<Order | null>(null);
   const canCreate = useCan(PERMS.ORDER.CREATE);
   const canApprove = useCan(PERMS.ORDER.APPROVE);
   const canReject = useCan(PERMS.ORDER.REJECT);
   const canCancel = useCan(PERMS.ORDER.CANCEL);
   const canUpdate = useCan(PERMS.ORDER.UPDATE);
+<<<<<<< HEAD:apps/web/features/orders/OrdersListPage.tsx
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
+=======
+  const canDelete = useCan(PERMS.ORDER.DELETE);
+>>>>>>> 2d56891e7d1cc1580b6573a5bec34ea840b7ab08:apps/admin-web/features/orders/OrdersListPage.tsx
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
@@ -96,7 +105,15 @@ export default function OrdersListPage() {
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
-
+const remove = useMutation({
+  mutationFn: (id: string) => orderApi.delete(id),
+  onSuccess: () => {
+    toast.success("Order deleted");
+    setDeleteOrder(null);
+    invalidate();
+  },
+  onError: (e) => toast.error(getErrorMessage(e)),
+});
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -124,12 +141,20 @@ export default function OrdersListPage() {
         canReject={canReject}
         canCancel={canCancel}
         canUpdate={canUpdate}
+<<<<<<< HEAD:apps/web/features/orders/OrdersListPage.tsx
         canCreateLR={canCreateLR}
+=======
+        canDelete={canDelete}
+>>>>>>> 2d56891e7d1cc1580b6573a5bec34ea840b7ab08:apps/admin-web/features/orders/OrdersListPage.tsx
         onQuickView={(o) => setQuickViewId(o.id)}
         onApprove={(o) => setApproveId(o.id)}
         onReject={(o) => setRejectOrder(o)}
         onCancel={(o) => setCancelOrder(o)}
+<<<<<<< HEAD:apps/web/features/orders/OrdersListPage.tsx
         onCreateLR={(o) => router.push(`/lorry-receipts/new?orderId=${o.id}`)}
+=======
+        onDelete={(o) => setDeleteOrder(o)}
+>>>>>>> 2d56891e7d1cc1580b6573a5bec34ea840b7ab08:apps/admin-web/features/orders/OrdersListPage.tsx
       />
 
       <OrderQuickViewModal
@@ -172,6 +197,25 @@ export default function OrdersListPage() {
           if (cancelOrder) cancel.mutate({ id: cancelOrder.id, reason });
         }}
       />
+<ConfirmDialog
+  open={Boolean(deleteOrder)}
+  onOpenChange={(open) => {
+    if (!open && !remove.isPending) {
+      setDeleteOrder(null);
+    }
+  }}
+  title={`Delete order ${deleteOrder?.orderNumber ?? ""}`}
+  description="This will hide the order from the normal order list. Use this only for wrong or duplicate orders."
+  confirmLabel="Delete order"
+  pendingLabel="Deleting..."
+  destructive
+  isPending={remove.isPending}
+  onConfirm={() => {
+    if (deleteOrder) {
+      remove.mutate(deleteOrder.id);
+    }
+  }}
+/>
     </div>
   );
 }

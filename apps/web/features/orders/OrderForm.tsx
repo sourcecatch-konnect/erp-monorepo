@@ -73,7 +73,10 @@ const [showContactFields, setShowContactFields] = useState(
     queryKey: orderLookupKeys.vehicleTypes,
     queryFn: orderLookups.vehicleTypes,
   });
-
+const routes = useQuery({
+  queryKey: orderLookupKeys.routes,
+  queryFn: orderLookups.routes,
+});
   const form = useForm<CreateOrderFormInput, unknown, CreateOrderBody>({
     resolver: zodResolver(createOrderSchema),
     defaultValues: order
@@ -86,6 +89,7 @@ const [showContactFields, setShowContactFields] = useState(
           pickupAddressOverride: order.pickupAddressOverride ?? undefined,
           specialInstructions: order.specialInstructions ?? undefined,
           orderType: order.orderType,
+          routeId: order.routeId ?? undefined,
           truckQuantity: order.truckQuantity ?? undefined,
           vehicleTypeId: order.vehicleTypeId ?? undefined,
           contactPersonName: order.contactPersonName ?? undefined,
@@ -127,7 +131,7 @@ const [showContactFields, setShowContactFields] = useState(
             ? "Order resubmitted for approval"
             : "Order updated",
         );
-        router.push(`/orders/${order.id}`);
+        router.push(`/orders/${encodeURIComponent(order.orderNumber)}`);
       } else {
         const created = await orderApi.create(values);
         toast.success(
@@ -248,7 +252,17 @@ const [showContactFields, setShowContactFields] = useState(
     options={toOptions(branches.data ?? [])}
     disabled={softOnly}
   />
-
+<ComboboxField
+  name="routeId"
+  label="Route"
+  required
+  options={(routes.data ?? []).map((route) => ({
+    label: `${route.sourceCity?.name ?? "-"} → ${route.destinationCity?.name ?? "-"}`,
+    value: route.id,
+  }))}
+  emptyText="No routes found"
+  disabled={softOnly}
+/>
   <ComboboxField
     name="customerLocationId"
     label="Saved pickup location"
