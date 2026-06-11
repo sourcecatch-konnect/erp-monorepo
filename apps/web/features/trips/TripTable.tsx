@@ -182,7 +182,7 @@ export default function TripTable(props: Props) {
         />
       </div>
 
-      <div className="w-full overflow-x-auto rounded-lg bg-white">
+      <div className="w-full overflow-x-auto rounded-lg bg-card">
         <Table className="w-full">
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
@@ -190,7 +190,7 @@ export default function TripTable(props: Props) {
                 {hg.headers.map((h) => (
                   <TableHead
                     key={h.id}
-                    className="h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
                   >
                     {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>

@@ -201,7 +201,7 @@ const saveMut = useMutation({
   ))}
 </Accordion>
 {!readOnly && dirty && (
-  <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+  <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-lg border bg-background/95 p-4 shadow-lg backdrop-blur">
     <p className="text-sm text-muted-foreground">
       You have unsaved permission changes.
     </p>
@@ -277,7 +277,7 @@ function RolePermissionModule({
   return (
     <AccordionItem
       value={moduleCode}
-    className="overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md"
+    className="overflow-hidden rounded-lg border bg-card shadow-sm transition hover:shadow-md"
     >
      <div className="flex items-center gap-4 border-b bg-muted/30 px-5">
       <AccordionTrigger className="flex-1 py-4 text-left hover:no-underline">

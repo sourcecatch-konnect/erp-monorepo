@@ -51,7 +51,7 @@ export default function AgreementDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-[580px] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[900px]">
+      <DialogContent className="w-[96vw] max-w-[580px] gap-0 overflow-hidden rounded-lg p-0 sm:max-w-[900px]">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-3">
             <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -67,7 +67,7 @@ export default function AgreementDetailDialog({
                 {!isLoading && data && (
                   <>
                     <span className="text-border">·</span>
-                    <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                    <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
                       <IconCircleCheckFilled size={10} />
                       Active
                     </span>
@@ -142,7 +142,7 @@ export default function AgreementDetailDialog({
                       }`}
                     />
 
-                    <p className="mb-1 text-[10px] text-muted-foreground">
+                    <p className="mb-1 text-xs text-muted-foreground">
                       {item.label}
                     </p>
 
@@ -155,7 +155,7 @@ export default function AgreementDetailDialog({
                     </p>
 
                     {item.sub && (
-                      <p className="mt-0.5 text-[10px] text-amber-500">
+                      <p className="mt-0.5 text-xs text-amber-500">
                         {item.sub}
                       </p>
                     )}
@@ -219,7 +219,7 @@ export default function AgreementDetailDialog({
         )}
 
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <IconCalendarCheck size={12} />
             Updated {formatDate(data?.updatedAt)}
           </span>

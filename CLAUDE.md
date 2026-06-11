@@ -112,7 +112,7 @@ When adding a master, follow `modules/`. Don't move old routers preemptively.
 
 Source: `llm-guideline/design.md`. Both web apps must look identical.
 
-1. **Sharp, not soft.** Global radius is 2px (`--radius: 0.125rem`). Never use `rounded-lg`/`xl`/`2xl`. `rounded-full` only for true circles (avatars, dots, spinners).
+1. **Precise, not soft.** Global radius is 6px (`--radius: 0.375rem`); all `rounded-*` derive from it. Never use `rounded-xl`/`2xl`+. `rounded-full` only for true circles (avatars, dots, spinners). Neutrals are warm-tinted oklch (hue ~92) — never pure gray. Motion: `transition-colors` 150ms hovers, shared overlay animations, Skeleton shimmer; no `hover:scale-*`/`hover:shadow-*`. Body/data text ≥ `text-sm`, labels ≥ `text-xs`, no `tracking-wide`.
 2. **One primary color** — blue `#2563EB`, accessed via the `primary` token. Never hardcode `bg-blue-600` or hex.
 3. **Tokens, never raw colors** — `bg-card`, `text-foreground`, `border-border`, `bg-primary`, `text-muted-foreground`, `bg-destructive`. Never `bg-white`, `text-gray-900`.
 4. **Use `@skerp/ui`** for buttons, inputs, dialogs, tables. Need a variant? Add it to the shared component — don't fork into an app. New reusable thing? Add to `packages/ui` so both apps benefit.

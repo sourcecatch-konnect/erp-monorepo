@@ -66,7 +66,7 @@ const { data: order, isLoading } = useQuery({
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4 border-b pb-4">
         <div className="min-w-0">
-  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+  <p className="text-xs font-medium uppercase text-muted-foreground">
     Customer
   </p>
 

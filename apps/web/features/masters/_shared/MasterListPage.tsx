@@ -121,7 +121,7 @@ export default function MasterListPage<T extends { id: string }>({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white px-3 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-3 py-3">
         <div className="relative w-full max-w-sm">
           <IconSearch
             size={16}
@@ -160,7 +160,7 @@ export default function MasterListPage<T extends { id: string }>({
       </div>
 
       <MasterTable
-        title={isLoading ? "Loading..." : title}
+        title={title}
         data={data}
         columns={columns}
         onEdit={onEdit}

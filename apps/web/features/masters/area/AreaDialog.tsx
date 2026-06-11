@@ -31,14 +31,14 @@ function SkeletonBody() {
     <div className="space-y-6 p-6">
       <div>
         <Skeleton className="mb-3 h-4 w-28" />
-        <Skeleton className="h-20 rounded-xl" />
+        <Skeleton className="h-20 rounded-lg" />
       </div>
 
       <div>
         <Skeleton className="mb-3 h-4 w-28" />
         <div className="grid gap-4 sm:grid-cols-2">
           {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className="h-14 rounded-xl" />
+            <Skeleton key={index} className="h-14 rounded-lg" />
           ))}
         </div>
       </div>
@@ -54,7 +54,7 @@ export default function AreaDetailDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[92vw] !max-w-[700px] max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
+      <DialogContent className="w-[92vw] !max-w-[700px] max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-3">
@@ -66,7 +66,7 @@ export default function AreaDetailDialog({
               <p className="text-sm font-semibold">Area Details</p>
 
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10} />
                   Active Area
                 </div>

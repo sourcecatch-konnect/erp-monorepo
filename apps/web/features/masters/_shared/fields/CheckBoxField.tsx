@@ -30,7 +30,7 @@ export default function CheckboxField<T extends FieldValues>({
         const inputId = String(name);
 
         return (
-          <div className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
             <Checkbox
               id={inputId}
               checked={Boolean(field.value)}

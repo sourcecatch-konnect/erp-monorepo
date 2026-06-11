@@ -7,28 +7,33 @@ The source of truth for tokens is each app's `app/globals.css` `:root` block —
 
 ## 1. Core Principles
 
-1. **Sharp, not soft.** Borders are effectively square (2px radius). The product should feel
-   like a precise data tool, not a consumer app.
+1. **Precise, not sharp.** Borders use a restrained 6px radius — crisp and serious
+   (Notion/Linear territory), never pill-shaped or bubbly. Still a data tool, not a consumer app.
 2. **One primary color.** Everything that needs emphasis uses the single primary blue.
    No secondary brand colors, no gradients, no color theming per module.
 3. **Tokens, never raw values.** Components reference CSS-variable-backed Tailwind tokens.
-   A screen should re-theme correctly if a token changes.
+   A screen should re-theme correctly if a token changes. Neutrals carry a whisper of
+   warmth (oklch hue ~92, chroma ≤0.005) — never reintroduce pure-gray or raw Tailwind grays.
 4. **Reuse `packages/ui`.** Visual consistency comes from using shared components, not from
    re-styling per page.
 5. **Restraint.** Flat surfaces, minimal shadow, generous whitespace, clear hierarchy.
+6. **Quiet motion.** A small fixed motion vocabulary (see §11) — color/opacity transitions,
+   overlay fades, skeleton shimmer. Nothing springs, bounces, or scales on hover.
+7. **Readable first.** Primary users are mid-age; body and data text never go below 14px
+   (`text-sm`), labels never below 12px (`text-xs`). Don't shrink text for aesthetics.
 
 ---
 
-## 2. Border Radius — "No Curved Borders"
+## 2. Border Radius
 
-Global radius is **2px** (`--radius: 0.125rem`). This is a deliberate "barely there" radius
-to avoid jagged pixel corners while staying visually square.
+Global radius is **6px** (`--radius: 0.375rem`). All `rounded-*` utilities derive from it
+(`rounded-lg` = 6px, `rounded-md` ≈ 5px, `rounded-sm` ≈ 3.6px).
 
-| Do                                                                        | Don't                                         |
-| ------------------------------------------------------------------------- | --------------------------------------------- |
-| Rely on the default radius from `@skerp/ui` components                    | Add `rounded-lg`, `rounded-xl`, `rounded-2xl` |
-| Use `rounded-sm` / `rounded-md` (both resolve near-square via `--radius`) | Use `rounded-full` on non-circular elements   |
-| `rounded-full` **only** for avatars, status dots, spinners                | Override radius to make a softer card         |
+| Do                                                          | Don't                                       |
+| ----------------------------------------------------------- | ------------------------------------------- |
+| Rely on the default radius from `@skerp/ui` components      | Add `rounded-xl`, `rounded-2xl`, or larger  |
+| Use `rounded-sm` / `rounded-md` / `rounded-lg` (token-based) | Use `rounded-full` on non-circular elements |
+| `rounded-full` **only** for avatars, status dots, spinners  | Override radius to make a softer card       |
 
 If you need a corner change, change `--radius` globally — never per component.
 
@@ -64,9 +69,13 @@ first and document it here.
 ## 4. Typography
 
 - Font: the app's default sans (Geist). Don't import new fonts.
-- Sizes: `text-xs` (helper/labels), `text-sm` (default body & inputs), `text-base` (section
-  titles), `text-lg`/`text-xl` (page titles). Avoid larger.
+- Sizes: `text-xs` (helper/labels — the floor; never `text-[10px]`/`text-[11px]`),
+  `text-sm` (default body, inputs, table cells & headers), `text-base` (section titles),
+  `text-lg`/`text-xl` (page titles). Avoid larger. Don't shrink text to "fit the aesthetic" —
+  hierarchy comes from weight and `text-muted-foreground`, not size reduction.
 - Weight: `font-medium` for labels/buttons, `font-semibold` for headings. Avoid `font-bold`.
+- Letter-spacing: default tracking everywhere. `tracking-tight` is allowed only on page-level
+  headings (`text-xl`+). Never `tracking-wide`/`wider` micro-labels.
 - Use `text-muted-foreground` for secondary text — don't dim with opacity.
 
 ---
@@ -80,11 +89,15 @@ first and document it here.
 
 ---
 
-## 6. Elevation
+## 6. Elevation & Surfaces
 
-- Flat by default. Cards use a 1px border (`border border-border`), not shadows.
-- Shadows allowed only for floating layers: dropdowns, dialogs, popovers, toasts —
-  and those come from `@skerp/ui`, so don't add your own.
+- Flat by default. Cards use a 1px border (`border border-border`) on `bg-card`, not shadows.
+  The page background sits 1% below white, so white cards read as raised surfaces for free.
+- Shadows allowed only for floating layers: dropdowns, dialogs, popovers, toasts, sticky
+  action bars — and those come from `@skerp/ui`, so don't add your own. No `hover:shadow-*`.
+- **Interactive items use background shifts, not borders.** Sidebar items, table rows, and
+  menu entries are borderless with `hover:bg-muted` (or `hover:bg-sidebar-accent`) ghost
+  treatment. Reserve borders for structural containers: cards, inputs, table frames.
 
 ---
 
@@ -142,9 +155,29 @@ Available (see `packages/ui/src/components`): `button`, `input`, `inputgroup`, `
 
 ## 10. Checklist Before Shipping a Screen
 
-- [ ] No `rounded-lg`/`xl`/`2xl`/`full` (except true circles)
+- [ ] No `rounded-xl`/`2xl`/`full` (except true circles)
 - [ ] No hardcoded hex / `bg-blue-*` / `text-gray-*` / `bg-white` — tokens only
+- [ ] No text below `text-xs`; body/data text is `text-sm`+; no `tracking-wide` labels
+- [ ] No `shadow-*` on static surfaces; no `hover:shadow-*` / `hover:scale-*`
+- [ ] Hover states are `transition-colors` background/border shifts (150–300ms)
 - [ ] All form controls, buttons, dialogs from `@skerp/ui`
 - [ ] One primary button per view
-- [ ] Focus, disabled, loading, error, empty states handled
-- [ ] Looks consistent with the same screen type in the other web app
+- [ ] Focus, disabled, loading (Skeleton, never "Loading…"), error, empty states handled
+- [ ] Looks consistent with the same screen type elsewhere in the app
+
+---
+
+## 11. Motion
+
+A fixed, minimal vocabulary — used everywhere, nothing else added per screen:
+
+| Pattern            | Recipe                                                                   |
+| ------------------ | ------------------------------------------------------------------------ |
+| Hover / state      | `transition-colors duration-150` on rows, sidebar items, buttons, links  |
+| Overlays           | fade + slight zoom/slide from `@skerp/ui` (tw-animate-css) — don't add own |
+| Collapse / expand  | height/opacity ease from the shared `accordion`/`collapsible` components |
+| Loading            | `Skeleton` (shimmer is built in) — never spinners-in-cells or text       |
+
+**Banned:** spring/bounce easings, `hover:scale-*`, gradient text/blobs, glassmorphism,
+staggered entrance animations, anything longer than 300ms for a micro-interaction.
+`prefers-reduced-motion` is honored globally in `globals.css` — don't bypass it.

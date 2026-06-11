@@ -110,7 +110,7 @@ export default function TripForm({ mode, trip }: Props) {
         onSubmit={form.handleSubmit(onSubmit)}
         className="mx-auto max-w-4xl space-y-5 p-4 md:p-6"
       >
-        <div className="rounded-xl border bg-background p-4 shadow-sm">
+        <div className="rounded-lg border bg-background p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-lg font-semibold tracking-tight">
@@ -184,7 +184,7 @@ export default function TripForm({ mode, trip }: Props) {
                         form.setValue("tripType", t, { shouldDirty: true })
                       }
                       className={[
-                        "rounded-xl border p-4 text-left transition",
+                        "rounded-lg border p-4 text-left transition",
                         active
                           ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                           : "bg-background hover:bg-muted/40",

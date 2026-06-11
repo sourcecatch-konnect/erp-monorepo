@@ -58,7 +58,7 @@ function SkeletonBody() {
             {Array.from({ length: 3 }).map((_, x) => (
               <Skeleton
                 key={x}
-                className="h-14 rounded-xl"
+                className="h-14 rounded-lg"
               />
             ))}
           </div>
@@ -80,7 +80,7 @@ export default function CompanyDetailDialog({
       onOpenChange={onOpenChange}
     >
 <DialogContent
-  className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+  className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0"
 >
         {/* Header */}
 
@@ -97,7 +97,7 @@ export default function CompanyDetailDialog({
               </p>
 
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10}/>
                   Active Profile
                 </div>
@@ -307,7 +307,7 @@ export default function CompanyDetailDialog({
     {data?.agreements?.some((a) => a.RateMatrix?.length) ? (
       data.agreements.flatMap((agreement) =>
         agreement.RateMatrix?.map((rate) => (
-          <div key={rate.id} className="rounded-xl border bg-muted/20 p-4">
+          <div key={rate.id} className="rounded-lg border bg-muted/20 p-4">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -384,7 +384,7 @@ export default function CompanyDetailDialog({
 
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
 
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <IconClockEdit size={12}/>
             Updated {formatDate(data?.updatedAt)}
           </span>

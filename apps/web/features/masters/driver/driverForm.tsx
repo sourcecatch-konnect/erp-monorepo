@@ -385,7 +385,7 @@ export default function DriverForm({
         title="Correspondence Address"
         description="Where official communication is sent"
       >
-        <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-md border border-dashed bg-white px-3 py-2 text-xs font-medium text-muted-foreground">
+        <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-md border border-dashed bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
           <input
             type="checkbox"
             className="size-3.5 accent-primary"
@@ -444,7 +444,7 @@ export default function DriverForm({
         title="Reference"
         description="Anyone who referred this driver?"
       >
-        <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-md border border-dashed bg-white px-3 py-2 text-xs font-medium text-muted-foreground">
+        <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-md border border-dashed bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
           <input
             type="checkbox"
             className="size-3.5 accent-primary"

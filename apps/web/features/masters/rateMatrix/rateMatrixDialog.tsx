@@ -46,7 +46,7 @@ function DetailItem({
           : "grid gap-1 border-b py-4"
       }
     >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
         <span className="text-primary">{icon}</span>
         {label}
       </div>
@@ -72,7 +72,7 @@ export default function RateMatrixDetailDialog({
     <div className="border-b bg-gradient-to-r from-primary/10 via-muted/40 to-background px-6 py-5">
   <DialogHeader>
     <div className="flex items-center gap-4">
-      <span className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+      <span className="flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
         <IconFileInvoice size={24} />
       </span>
 

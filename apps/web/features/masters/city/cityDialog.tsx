@@ -32,7 +32,7 @@ function DetailItem({
 }) {
   return (
     <div className="grid gap-1 border-b py-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
         <span className="text-primary">{icon}</span>
         {label}
       </div>
@@ -57,7 +57,7 @@ export default function CityDetailDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[92vw] !max-w-[620px] max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
+      <DialogContent className="w-[92vw] !max-w-[620px] max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-3">
             <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -68,7 +68,7 @@ export default function CityDetailDialog({
               <p className="text-sm font-semibold">City Details</p>
 
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10} />
                   Active City
                 </div>
@@ -81,7 +81,7 @@ export default function CityDetailDialog({
           {isLoading ? (
             <div className="grid gap-4">
               {Array.from({ length: 2 }).map((_, index) => (
-                <Skeleton key={index} className="h-16 rounded-xl" />
+                <Skeleton key={index} className="h-16 rounded-lg" />
               ))}
             </div>
           ) : (
@@ -102,7 +102,7 @@ export default function CityDetailDialog({
         </div>
 
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <IconClockEdit size={12} />
             Updated {formatDate(data?.updatedAt)}
           </span>

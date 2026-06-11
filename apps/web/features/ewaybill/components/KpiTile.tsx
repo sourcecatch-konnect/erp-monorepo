@@ -32,7 +32,7 @@ export function KpiTile({
         <Icon className="size-5" />
       </div>
       <div className="flex flex-col">
-        <span className="text-[11px] uppercase tracking-wider opacity-70">
+        <span className="text-xs uppercase opacity-70">
           {label}
         </span>
         <span className="font-mono text-2xl font-semibold leading-tight tabular-nums">

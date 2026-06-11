@@ -40,7 +40,7 @@ function SkeletonBody() {
             {Array.from({ length: 4 }).map((_, x) => (
               <Skeleton
                 key={x}
-                className="h-14 rounded-xl"
+                className="h-14 rounded-lg"
               />
             ))}
           </div>
@@ -62,7 +62,7 @@ export default function WagonDetailDialog({
       onOpenChange={onOpenChange}
     >
       <DialogContent
-        className="w-[92vw] !max-w-[1000px] h-[50vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
+        className="w-[92vw] !max-w-[1000px] h-[50vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0"
       >
         {/* Header */}
 
@@ -78,7 +78,7 @@ export default function WagonDetailDialog({
               </p>
 
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10} />
                   Active Wagon
                 </div>

@@ -42,7 +42,7 @@ export default function SwitchField<TFormValues extends FieldValues>({
         >
           <div className="flex items-center gap-2">
             {icon ? (
-              <span className="flex size-7 items-center justify-center rounded-full bg-white text-muted-foreground">
+              <span className="flex size-7 items-center justify-center rounded-full bg-card text-muted-foreground">
                 {icon}
               </span>
             ) : null}

@@ -46,7 +46,7 @@ export function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted px-4">
-      <div className="w-full max-w-md rounded-md border border-border bg-card p-8 shadow-sm">
+      <div className="w-full max-w-md rounded-md border border-border bg-card p-8">
         {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-xl font-semibold text-foreground">SKERP Web</h1>

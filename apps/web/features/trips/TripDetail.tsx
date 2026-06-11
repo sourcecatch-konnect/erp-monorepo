@@ -22,7 +22,7 @@ import StartTripDialog from "./StartTripDialog";
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid gap-0.5">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-xs font-medium uppercase text-muted-foreground">
         {label}
       </span>
       <span className="text-sm">{value ?? "—"}</span>

@@ -141,7 +141,7 @@ export default function EwaybillInbox() {
       {/* Table */}
       <div className="overflow-hidden border bg-card">
         <table className="w-full border-collapse text-sm">
-          <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+          <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
             <tr>
               <Th>EWB</Th>
               <Th>Status</Th>
@@ -191,7 +191,7 @@ function Row({ row }: { row: EwayBill }) {
           >
             {row.ewbNo}
           </Link>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {row.docType} · {row.docNo}
           </span>
         </div>
@@ -204,7 +204,7 @@ function Row({ row }: { row: EwayBill }) {
           <span className="truncate text-sm">
             {row.fromPlace} → {row.toPlace}
           </span>
-          <span className="truncate text-[11px] text-muted-foreground">
+          <span className="truncate text-xs text-muted-foreground">
             {row.fromTrdName} → {row.toTrdName}
           </span>
         </div>

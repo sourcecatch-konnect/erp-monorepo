@@ -46,7 +46,7 @@ import ReasonDialog from "@/components/feedback/ReasonDialog";
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid gap-0.5">
-      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+      <dt className="text-xs uppercase text-muted-foreground">
         {label}
       </dt>
       <dd className="text-sm text-foreground">{value ?? <span className="text-muted-foreground/50">—</span>}</dd>
@@ -65,9 +65,9 @@ function CardSection({
   action?: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border bg-card p-5 shadow-sm">
+    <section className="rounded-lg border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between border-b pb-3">
-        <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
           {icon}
           {title}
         </h2>
@@ -81,7 +81,7 @@ function CardSection({
 function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
   return (
     <div className="rounded-lg bg-muted/40 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-medium leading-none">
         {value}
         {sub && <span className="ml-1 text-xs font-normal text-muted-foreground">{sub}</span>}
@@ -147,13 +147,13 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
         </div>
         <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
           <div className="space-y-4">
-            <Skeleton className="h-40 w-full rounded-xl" />
-            <Skeleton className="h-56 w-full rounded-xl" />
-            <Skeleton className="h-40 w-full rounded-xl" />
+            <Skeleton className="h-40 w-full rounded-lg" />
+            <Skeleton className="h-56 w-full rounded-lg" />
+            <Skeleton className="h-40 w-full rounded-lg" />
           </div>
           <div className="space-y-4">
-            <Skeleton className="h-24 w-full rounded-xl" />
-            <Skeleton className="h-64 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-lg" />
+            <Skeleton className="h-64 w-full rounded-lg" />
           </div>
         </div>
       </div>
@@ -233,13 +233,13 @@ const totalWeight =
         </div>
       </div>
       {order.status === "Rejected" && order.rejectionReason && (
-        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
           <IconAlertCircle size={16} className="mt-0.5 shrink-0" />
           <div><strong className="font-medium">Rejection reason: </strong>{order.rejectionReason}</div>
         </div>
       )}
       {order.status === "Cancelled" && order.cancelReason && (
-        <div className="flex items-start gap-3 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+        <div className="flex items-start gap-3 rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
           <IconBan size={16} className="mt-0.5 shrink-0" />
           <div><strong className="font-medium text-foreground">Cancelled: </strong>{order.cancelReason}</div>
         </div>
@@ -279,10 +279,10 @@ const totalWeight =
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="text-[11px] uppercase tracking-wide">Goods</TableHead>
-                      <TableHead className="text-[11px] uppercase tracking-wide">Qty</TableHead>
-                      <TableHead className="text-[11px] uppercase tracking-wide">Unit</TableHead>
-                      <TableHead className="text-[11px] uppercase tracking-wide">Weight</TableHead>
+                      <TableHead className="text-xs uppercase">Goods</TableHead>
+                      <TableHead className="text-xs uppercase">Qty</TableHead>
+                      <TableHead className="text-xs uppercase">Unit</TableHead>
+                      <TableHead className="text-xs uppercase">Weight</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -338,7 +338,7 @@ const totalWeight =
  
             {order.specialInstructions && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                <p className="mb-1 text-xs font-semibold uppercase text-amber-600 dark:text-amber-400">
                   Special Instructions
                 </p>
                 <p className="text-sm text-amber-900 dark:text-amber-200">
@@ -363,8 +363,8 @@ const totalWeight =
           </CardSection>
  
           {/* Quick actions */}
-          <section className="rounded-xl border bg-muted/30 p-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <section className="rounded-lg border bg-muted/30 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
               Quick actions
             </p>
             <div className="flex flex-col gap-1.5">

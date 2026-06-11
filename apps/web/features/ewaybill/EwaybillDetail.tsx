@@ -161,7 +161,7 @@ export default function EwaybillDetail({ ewbNo }: { ewbNo: string }) {
             icon={IconFileInvoice}
           >
             <table className="w-full text-sm">
-              <thead className="text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+              <thead className="text-left text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="pb-2 font-medium">Product</th>
                   <th className="pb-2 font-medium">HSN</th>
@@ -290,7 +290,7 @@ function PartyCard({
 }) {
   return (
     <div className="flex flex-col gap-2 border bg-card p-4">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
         <Icon className="size-3.5" />
         {label}
       </div>
@@ -313,7 +313,7 @@ function Card({
 }) {
   return (
     <section className="flex flex-col gap-3 border bg-card p-4">
-      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase text-muted-foreground">
         {Icon && <Icon className="size-3.5" />}
         {title}
       </h3>
@@ -333,7 +333,7 @@ function Stat({
 }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+      <dt className="text-xs uppercase text-muted-foreground">
         {label}
       </dt>
       <dd className={cn("text-sm", mono && "font-mono tabular-nums")}>
@@ -365,7 +365,7 @@ function LiveLookupCard({ bill }: { bill: EwayBill }) {
       <div className="flex flex-col gap-2 text-xs">
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <span className="font-medium">GET</span>
-          <code className="font-mono text-[11px]">
+          <code className="font-mono text-xs">
             /getgstindetails?GSTIN={bill.fromGstin}
           </code>
         </div>
@@ -399,7 +399,7 @@ function LiveLookupCard({ bill }: { bill: EwayBill }) {
           </div>
         )}
 
-        <p className="border-t border-border pt-2 text-[11px] text-muted-foreground">
+        <p className="border-t border-border pt-2 text-xs text-muted-foreground">
           This widget proves the WhiteBooks E-Way Bill API is wired live —
           remaining endpoints (Part-B update, extend, fetch) follow the same
           adapter pattern.

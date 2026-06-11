@@ -128,7 +128,7 @@ const [columnVisibility, setColumnVisibility] =
 
   return (
     <TooltipProvider>
-    <div className="w-full min-w-0 overflow-hidden rounded-lg border bg-white shadow-sm">
+    <div className="w-full min-w-0 overflow-hidden rounded-lg border bg-card">
       <div className="flex min-h-11 items-center justify-between border-b bg-muted/20 px-4">
         <h2 className="text-sm font-semibold text-foreground">
           {title}
@@ -188,7 +188,7 @@ const [columnVisibility, setColumnVisibility] =
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
-                  className="h-10 min-w-[150px] whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  className="h-10 min-w-[150px] whitespace-nowrap text-sm font-medium text-muted-foreground"
                 >
                   {header.isPlaceholder
                     ? null
@@ -200,7 +200,7 @@ const [columnVisibility, setColumnVisibility] =
               ))}
 
               {hasActions && (
-                <TableHead className="sticky right-0 h-10 w-[104px] bg-muted/40 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <TableHead className="sticky right-0 h-10 w-[104px] bg-muted/40 pr-4 text-right text-sm font-medium text-muted-foreground">
                   Actions
                 </TableHead>
               )}
@@ -294,7 +294,7 @@ const [columnVisibility, setColumnVisibility] =
                 ))}
 
      {hasActions && (
- <TableCell className="sticky right-0 w-[104px] bg-white pr-4 text-right">
+ <TableCell className="sticky right-0 w-[104px] bg-card pr-4 text-right">
     <div className="flex justify-end items-center gap-1">
       {onView && (
   <Tooltip>

@@ -47,7 +47,7 @@ export const vehicleTypeColumns: ColumnDef<VehicleType>[] = [
           Active
         </span>
       ) : (
-        <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+        <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           Inactive
         </span>
       ),

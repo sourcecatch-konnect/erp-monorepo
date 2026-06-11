@@ -41,7 +41,7 @@ export function RouteHeader({
       )}
     >
       <div className="flex-1">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <div className="text-xs uppercase text-muted-foreground">
           From
         </div>
         <div className="text-base font-semibold text-foreground">
@@ -56,11 +56,11 @@ export function RouteHeader({
           <Icon className="size-4" />
           <div className="h-px w-8 bg-border" />
         </div>
-        <div className="text-[10px] tabular-nums">{distanceKm} km</div>
+        <div className="text-xs tabular-nums">{distanceKm} km</div>
       </div>
 
       <div className="flex-1 text-right">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <div className="text-xs uppercase text-muted-foreground">
           To
         </div>
         <div className="text-base font-semibold text-foreground">{toPlace}</div>
