@@ -27,7 +27,7 @@ import {
   IconUser,
   IconTool,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
@@ -253,7 +253,7 @@ export default function LabourDetailDialog({
                   <IconCash size={15}/>
                 }
                 label="TDS Amount"
-                value={formatCurrency(
+                value={formatCurrencyFromPaise(
                   data?.tdsAmount
                 )}
               />

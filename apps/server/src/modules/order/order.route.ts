@@ -36,6 +36,7 @@ import {
 import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
 import { buildOrderPdfDocument , orderPdfInclude} from "./order.pdf.js";
 import { basePdfTemplate } from "../../templetes/pdf/template/base-pdf.template.js";
+import { rupeesToPaise } from "../../lib/money.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -411,9 +412,9 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
     );
   }
 
-  // Use the provided freight, else auto-compute (may be null for unmatched/Item).
-  let freight = bookingFreightAmount ?? null;
-  if (freight === null) {
+  // Use the provided freight in rupees, else auto-compute rupees (may be null for unmatched/Item).
+  let freightRupees = bookingFreightAmount ?? null;
+  if (freightRupees === null) {
   const computed = await computeFreight({
   orderType: existing.orderType,
   customerId: existing.customerId,
@@ -423,7 +424,7 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
   vehicleTypeId: existing.vehicleTypeId,
   truckQuantity: existing.truckQuantity,
 });
-    freight = computed.amount;
+    freightRupees = computed.amount;
   }
 
   const me = actorId(req);
@@ -436,7 +437,8 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
         status: "Confirmed",
         approvedById: me,
         approvedAt: new Date(),
-        bookingFreightAmount: freight,
+        bookingFreightAmount:
+          freightRupees == null ? null : rupeesToPaise(freightRupees),
         freightOverrideReason: freightOverrideReason ?? null,
         version: { increment: 1 },
       },

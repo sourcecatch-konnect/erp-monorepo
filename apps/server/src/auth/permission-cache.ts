@@ -20,7 +20,7 @@ export const getPermissionContext = async (
   const hit = cache.get(userId);
 
   if (hit && hit.expiresAt > Date.now()) {
-    console.log("auth:getPermissionContext CACHE HIT");
+ 
     return hit.context;
   }
 

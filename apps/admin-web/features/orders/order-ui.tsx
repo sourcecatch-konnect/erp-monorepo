@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { OrderStatus } from "@skerp/types";
 import { cn } from "@/lib/utils";
+import { formatPaise } from "@/lib/money";
 
 
 
@@ -45,6 +46,16 @@ export const formatMoney = (value: string | number | null | undefined) => {
     currency: "INR",
     maximumFractionDigits: 2,
   }).format(num);
+};
+
+export const formatMoneyFromPaise = (
+  value: string | number | null | undefined
+) => {
+  if (value === null || value === undefined || value === "") return "-";
+  const num = typeof value === "string" ? Number(value) : value;
+  if (Number.isNaN(num)) return "-";
+
+  return formatPaise(num);
 };
 
 export const formatDate = (iso: string | null | undefined) =>

@@ -22,6 +22,7 @@ import { SectionLabel ,
     Field,
   PartyCard,
   formatDate,
+  formatCurrencyFromPaise,
   SkeletonBody,
 } from "../_shared/dialog-parts"
 import {
@@ -302,7 +303,7 @@ export default function CompanyDetailDialog({
 
               <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right text-emerald-700">
                 <p className="text-xs font-medium">Freight Rate</p>
-                <p className="text-sm font-bold">₹{rate.rate}</p>
+                <p className="text-sm font-bold">{formatCurrencyFromPaise(rate.rate)}</p>
               </div>
             </div>
 

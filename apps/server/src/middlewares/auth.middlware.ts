@@ -45,7 +45,7 @@ export const authMiddleware = async (
 
 const ctx = await getPermissionContext(decoded.userId);
 
-console.timeEnd("authMiddleware total");
+
   if (!ctx) {
     return sendError(res, 401, {
       code: "UNAUTHORIZED",

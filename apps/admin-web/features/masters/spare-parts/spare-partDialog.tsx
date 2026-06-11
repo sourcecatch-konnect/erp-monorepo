@@ -15,7 +15,7 @@ import {
   SectionLabel,
   Field,
   formatDate,
-  formatCurrency,
+  formatCurrencyFromPaise,
   SkeletonBody,
 } from "../_shared/dialog-parts";
 
@@ -120,7 +120,7 @@ export default function SparePartDetailDialog({
 
                 <Field
                   label="Rate"
-                  value={formatCurrency(data?.rate)}
+                  value={formatCurrencyFromPaise(data?.rate)}
                   icon={<IconCurrencyRupee size={12}/>}
                 />
 

@@ -13,6 +13,7 @@ import type {
 } from "@skerp/types";
 
 import { createSparePartSchema } from "@skerp/validators";
+import { paiseToRupees } from "@/lib/money";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
@@ -83,7 +84,7 @@ export default function SparePartForm({
       type: row?.type ?? "Item",
       categoryId: row?.categoryId ?? "",
       supplierId: row?.supplierId ?? "",
-      rate: row?.rate != null ? String(row.rate) : "",
+      rate: row?.rate != null ? String(paiseToRupees(row.rate)) : "",
       minimumStock:
         row?.minimumStock != null ? String(row.minimumStock) : "",
       unit: row?.unit ?? "",

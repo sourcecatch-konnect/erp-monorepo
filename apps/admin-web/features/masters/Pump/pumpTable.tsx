@@ -14,16 +14,7 @@ import {
   IconCircleX,
   IconFileDescription,
 } from "@tabler/icons-react";
-
-const formatCurrency = (value?: number | null) => {
-  if (value == null) return "-";
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
-};
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 const formatDate = (value?: string | Date | null) => {
   if (!value) return "-";
@@ -105,7 +96,7 @@ export const pumpColumns: ColumnDef<Pump>[] = [
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1 text-sm font-medium">
         <IconCash size={13} />
-        {formatCurrency(row.original.currentDieselRate)}
+        {formatCurrencyFromPaise(row.original.currentDieselRate)}
       </span>
     ),
   },
@@ -116,7 +107,7 @@ export const pumpColumns: ColumnDef<Pump>[] = [
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1 text-sm font-medium">
         <IconCash size={13} />
-        {formatCurrency(row.original.creditLimit)}
+        {formatCurrencyFromPaise(row.original.creditLimit)}
       </span>
     ),
   },

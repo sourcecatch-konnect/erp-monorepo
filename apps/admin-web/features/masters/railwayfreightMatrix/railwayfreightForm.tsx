@@ -13,6 +13,7 @@ import type {
 } from "@skerp/types";
 
 import { createRailwayFreightMatrixSchema } from "@skerp/validators";
+import { paiseToRupees } from "@/lib/money";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
@@ -68,7 +69,7 @@ export default function RailwayFreightForm({
       sourceCityId: row?.sourceCityId ?? "",
       destinationCityId: row?.destinationCityId ?? "",
       freightAmount:
-        row?.freightAmount != null ? String(row.freightAmount) : "",
+        row?.freightAmount != null ? String(paiseToRupees(row.freightAmount)) : "",
     });
   }, [open, row, form]);
 

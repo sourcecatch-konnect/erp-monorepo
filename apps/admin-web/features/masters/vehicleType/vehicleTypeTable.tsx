@@ -3,15 +3,10 @@
 import { ColumnDef } from "@tanstack/react-table";
 import type { VehicleType } from "@skerp/types";
 import { IconTruck } from "@tabler/icons-react";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 const money = (v?: number | null) =>
-  v === null || v === undefined
-    ? "-"
-    : new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency: "INR",
-        maximumFractionDigits: 0,
-      }).format(v);
+  formatCurrencyFromPaise(v);
 
 export const vehicleTypeColumns: ColumnDef<VehicleType>[] = [
   {

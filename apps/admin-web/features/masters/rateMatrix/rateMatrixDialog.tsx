@@ -9,7 +9,7 @@ import {
   SectionLabel,
   SkeletonBody,
   formatDate,
-  formatCurrency,
+  formatCurrencyFromPaise,
 } from "../_shared/dialog-parts";
 
 import {
@@ -199,7 +199,7 @@ export default function RateMatrixDetailDialog({
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                 <Field
                   label="Rate"
-                  value={formatCurrency(data?.rate)}
+                  value={formatCurrencyFromPaise(data?.rate)}
                   icon={<IconCurrencyRupee size={12} />}
                 />
 

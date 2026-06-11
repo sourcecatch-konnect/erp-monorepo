@@ -22,6 +22,7 @@ import {
 } from "@tabler/icons-react";
 
 import { createWarehouseSchema } from "@skerp/validators";
+import { paiseToRupees } from "@/lib/money";
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import SelectField from "../_shared/fields/SelectField";
 import IconTextField from "../_shared/fields/IconTextField";
@@ -88,8 +89,10 @@ export default function WarehouseForm({
       branchId: row?.branchId ?? "",
       contactName: row?.contactName ?? "",
       contactPhone: row?.contactPhone ?? "",
-      monthlyRent: row?.monthlyRent ?? undefined,
-      securityDeposit: row?.securityDeposit ?? undefined,
+      monthlyRent:
+        row?.monthlyRent != null ? paiseToRupees(row.monthlyRent) : undefined,
+      securityDeposit:
+        row?.securityDeposit != null ? paiseToRupees(row.securityDeposit) : undefined,
       length: row?.length ?? undefined,
       width: row?.width ?? undefined,
       breadth: row?.breadth ?? undefined,

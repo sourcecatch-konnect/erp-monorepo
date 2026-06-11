@@ -11,6 +11,9 @@ import {
 import { db } from "../../../prisma/prisma.js";
 
 import { createCrudRouter } from "../_shared/crud.factory.js";
+import { convertRupeeFieldsToPaise } from "../../lib/money.js";
+
+const moneyFields = ["rate"];
 
 
 const rateMatrixRouter: Router = createCrudRouter({
@@ -21,6 +24,12 @@ const rateMatrixRouter: Router = createCrudRouter({
   updateSchema: updateRateMatrixSchema as ZodTypeAny,
 
   permissionKey: "masters.rate-matrix",
+
+  hooks: {
+    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+
+    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+  },
 
   listOptions: {
     searchableFields: ["remarks"],

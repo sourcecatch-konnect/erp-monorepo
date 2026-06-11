@@ -2,15 +2,21 @@
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import * as React from "react";
+import { formatPaise, formatRupees } from "@/lib/money";
 export const formatCurrency = (
   value?: number | null
 ) => {
   if (value == null) return "-";
 
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-  }).format(value);
+  return formatRupees(value);
+};
+
+export const formatCurrencyFromPaise = (
+  value?: number | null
+) => {
+  if (value == null) return "-";
+
+  return formatPaise(value);
 };
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {

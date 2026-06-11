@@ -45,7 +45,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 
-import { StatusBadge, formatDate, formatMoney, STATUS_ORDER } from "./order-ui";
+import { StatusBadge, formatDate, formatMoneyFromPaise, STATUS_ORDER } from "./order-ui";
 
 export type OrderRowActions = {
   onQuickView: (order: Order) => void;
@@ -134,7 +134,7 @@ export default function OrderTable(props: Props) {
       },
       {
         header: "Freight",
-        cell: ({ row }) => formatMoney(row.original.bookingFreightAmount),
+        cell: ({ row }) => formatMoneyFromPaise(row.original.bookingFreightAmount),
       },
       {
         header: "Status",

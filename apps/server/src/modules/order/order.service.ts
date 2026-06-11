@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "../../../prisma/prisma.js";
+import { paiseToRupees } from "../../lib/money.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -182,7 +183,7 @@ if (!route) {
     rateMatrix: null,
   };
 }
-console.log("FREIGHT ROUTE:", route);
+
   const agreements = await db.agreement.findMany({
     where: { clientId: args.customerId },
     select: { id: true },
@@ -198,13 +199,7 @@ console.log("FREIGHT ROUTE:", route);
 }
 
   const agreementIds = agreements.map((a) => a.id);
-console.log("FREIGHT AGREEMENTS:", agreements);
-  // Prefer an exact vehicleType match; fall back to the wildcard (null) row.
-  console.log("FREIGHT MATCH WHERE:", {
-  agreementIds,
-  routeId: route.id,
-  vehicleTypeId: args.vehicleTypeId,
-});
+
 const match = await db.rateMatrix.findFirst({
   where: {
     agreementId: { in: agreementIds },
@@ -274,7 +269,7 @@ const match = await db.rateMatrix.findFirst({
   },
 });
 
-  if (!match) {
+if (!match) {
   return {
     amount: null,
     matched: false,
@@ -283,9 +278,10 @@ const match = await db.rateMatrix.findFirst({
     rateMatrix: null,
   };
 }
-console.log("FREIGHT RATE MATRIX MATCH:", match);
+
+
 const qty = args.truckQuantity && args.truckQuantity > 0 ? args.truckQuantity : 1;
-const amount = match.rate * qty;
+const amount = paiseToRupees(match.rate) * qty;
 
 return {
   amount,

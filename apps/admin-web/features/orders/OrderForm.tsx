@@ -137,7 +137,7 @@ const routes = useQuery({
         toast.success(
           `Order ${created.orderNumber} created and sent for approval`,
         );
-        router.push(`/orders/${created.id}`);
+        router.push(`/orders/${encodeURIComponent(created.orderNumber)}`);
       }
     } catch (error) {
       toast.error(getErrorMessage(error));

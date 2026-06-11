@@ -38,8 +38,10 @@ import {
   StatusBadge,
   formatDate,
   formatMoney,
+  formatMoneyFromPaise,
   formatDateTime,
 } from "./order-ui";
+import { paiseToRupees } from "@/lib/money";
 import OrderTimeline from "./OrderTimeline";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "./ReasonDialog";
@@ -212,7 +214,7 @@ const autoFreight =
 
 const approvedFreight =
   order.bookingFreightAmount != null
-    ? Number(order.bookingFreightAmount)
+    ? paiseToRupees(Number(order.bookingFreightAmount))
     : null;
 
 const freightWasEdited =
@@ -371,7 +373,7 @@ const matrixRate =
     <div>
       <p className="text-sm text-muted-foreground">Total booking freight</p>
       <p className="mt-1 text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
-        {formatMoney(order.bookingFreightAmount)}
+        {formatMoneyFromPaise(order.bookingFreightAmount)}
       </p>
     </div>
 

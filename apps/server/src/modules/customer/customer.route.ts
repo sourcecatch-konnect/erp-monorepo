@@ -13,12 +13,19 @@ import { can } from "../../auth/can.middleware.js";
 import { getParamId } from "../_shared/param.js";
 import { sendOk } from "../_shared/response.js";
 import { NotFoundError, ValidationError } from "../../lib/error.js";
+import { convertRupeeFieldsToPaise } from "../../lib/money.js";
+
+const moneyFields = ["creditLimit"];
 
 const router: Router = createCrudRouter({
   model: db.customer,
   createSchema: createCustomerSchema as ZodTypeAny,
   updateSchema: updateCustomerSchema as ZodTypeAny,
   permissionKey: "masters.customer",
+  hooks: {
+    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+  },
   listOptions: {
     searchableFields: [
       "name",

@@ -21,7 +21,7 @@ import {
   IconCalendar,
   IconHome,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
@@ -144,7 +144,7 @@ export default function PumpDetailDialog({
               <DetailItem
                 icon={<IconCash size={15} />}
                 label="Current Diesel Rate"
-                value={formatCurrency(data?.currentDieselRate)}
+                value={formatCurrencyFromPaise(data?.currentDieselRate)}
               />
 
               <DetailItem
@@ -172,7 +172,7 @@ export default function PumpDetailDialog({
               <DetailItem
                 icon={<IconCash size={15} />}
                 label="Credit Limit"
-                value={formatCurrency(data?.creditLimit)}
+                value={formatCurrencyFromPaise(data?.creditLimit)}
               />
 
               <DetailItem
