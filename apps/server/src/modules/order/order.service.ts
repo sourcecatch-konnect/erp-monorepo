@@ -100,7 +100,7 @@ if (args.orderType !== "Truck") {
   };
 }
 
- console.log("FREIGHT INPUT:", args);
+ 
 
 let route: { id: string } | null = null;
 
