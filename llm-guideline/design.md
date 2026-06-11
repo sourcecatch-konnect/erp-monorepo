@@ -1,6 +1,6 @@
 # Design System — SKERP Web Apps
 
-Applies to **admin-web** and **employee-web**. Both apps must share one design language.
+Applies to **web**. The app should keep one design language across all roles.
 The source of truth for tokens is each app's `app/globals.css` `:root` block — keep them in sync.
 
 ---
@@ -24,11 +24,11 @@ The source of truth for tokens is each app's `app/globals.css` `:root` block —
 Global radius is **2px** (`--radius: 0.125rem`). This is a deliberate "barely there" radius
 to avoid jagged pixel corners while staying visually square.
 
-| Do | Don't |
-|----|-------|
-| Rely on the default radius from `@skerp/ui` components | Add `rounded-lg`, `rounded-xl`, `rounded-2xl` |
-| Use `rounded-sm` / `rounded-md` (both resolve near-square via `--radius`) | Use `rounded-full` on non-circular elements |
-| `rounded-full` **only** for avatars, status dots, spinners | Override radius to make a softer card |
+| Do                                                                        | Don't                                         |
+| ------------------------------------------------------------------------- | --------------------------------------------- |
+| Rely on the default radius from `@skerp/ui` components                    | Add `rounded-lg`, `rounded-xl`, `rounded-2xl` |
+| Use `rounded-sm` / `rounded-md` (both resolve near-square via `--radius`) | Use `rounded-full` on non-circular elements   |
+| `rounded-full` **only** for avatars, status dots, spinners                | Override radius to make a softer card         |
 
 If you need a corner change, change `--radius` globally — never per component.
 
@@ -37,22 +37,23 @@ If you need a corner change, change `--radius` globally — never per component.
 ## 3. Color
 
 ### Primary
+
 - **Primary:** Blue `#2563EB` → `oklch(0.546 0.215 263)` → token `--primary`
 - **Primary foreground:** White → `--primary-foreground`
 - Use for: primary buttons, active nav, links, focus rings, selected states, key icons.
 
 ### Token palette (use these, not raw Tailwind colors)
 
-| Token | Use |
-|-------|-----|
-| `bg-background` / `text-foreground` | Page surface and default text |
-| `bg-card` / `text-card-foreground` | Cards, panels, table containers |
-| `bg-primary` / `text-primary-foreground` | Primary actions |
-| `bg-secondary` / `bg-muted` | Subtle fills, disabled, table headers |
-| `text-muted-foreground` | Secondary/helper text |
-| `border-border` / `border-input` | All borders |
-| `ring-ring` | Focus rings (tinted with primary) |
-| `text-destructive` / `bg-destructive` | Errors, delete actions |
+| Token                                    | Use                                   |
+| ---------------------------------------- | ------------------------------------- |
+| `bg-background` / `text-foreground`      | Page surface and default text         |
+| `bg-card` / `text-card-foreground`       | Cards, panels, table containers       |
+| `bg-primary` / `text-primary-foreground` | Primary actions                       |
+| `bg-secondary` / `bg-muted`              | Subtle fills, disabled, table headers |
+| `text-muted-foreground`                  | Secondary/helper text                 |
+| `border-border` / `border-input`         | All borders                           |
+| `ring-ring`                              | Focus rings (tinted with primary)     |
+| `text-destructive` / `bg-destructive`    | Errors, delete actions                |
 
 **Never** write `bg-blue-600`, `text-gray-900`, `bg-white`, `#2563EB` in components.
 There is no `success`/`warning` brand token yet — if you need one, add it to `globals.css`
@@ -104,12 +105,14 @@ Available (see `packages/ui/src/components`): `button`, `input`, `inputgroup`, `
 `item`, `sooner`/`toaster`.
 
 **Rules**
+
 - Need a component that exists in `@skerp/ui`? Use it.
 - Need a variant? Add it to the shared component, don't fork it into an app.
 - Need something new and reusable? Add it to `packages/ui` so both apps benefit.
 - One-off layout composition (page-specific arrangements) lives in the app.
 
 ### Buttons
+
 - `variant="default"` / `"primary"` → primary blue action. One primary button per view.
 - `variant="outline"` / `"secondary"` → secondary actions.
 - `variant="ghost"` → toolbar/icon actions.

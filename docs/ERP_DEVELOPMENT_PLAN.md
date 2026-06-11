@@ -10,17 +10,17 @@
 
 ### New monorepo (`erp-monorepo`) — the target build
 
-| Area | Status | Notes |
-|------|--------|-------|
-| Turborepo workspace | ✅ Done | `apps/` + `packages/` set up |
-| `apps/server` (Express + TS + Prisma) | 🟡 Partial | Auth flow only |
-| `apps/admin-web` | 🟡 Scaffold | Shell only |
-| `apps/employee-web` | 🟡 Scaffold | Shell only |
-| `packages/ui`, `validators`, `types`, `config` | 🟡 Partial | Shared libs started |
-| Prisma schema | 🟡 Draft | Full TMS schema drafted (~26 models), **not finalised** |
-| Auth (admin + employee login, refresh token, logout) | ✅ Done | Cookie-based JWT, refresh rotation |
-| Health route | ✅ Done | |
-| Everything else (masters, orders, LR, trips, dashboard) | ❌ Not started | |
+| Area                                                    | Status         | Notes                                                   |
+| ------------------------------------------------------- | -------------- | ------------------------------------------------------- |
+| Turborepo workspace                                     | ✅ Done        | `apps/` + `packages/` set up                            |
+| `apps/server` (Express + TS + Prisma)                   | 🟡 Partial     | Auth flow only                                          |
+| `apps/web`                                              | 🟡 Scaffold    | Shell only                                              |
+| `apps/web`                                              | 🟡 Scaffold    | Shell only                                              |
+| `packages/ui`, `validators`, `types`, `config`          | 🟡 Partial     | Shared libs started                                     |
+| Prisma schema                                           | 🟡 Draft       | Full TMS schema drafted (~26 models), **not finalised** |
+| Auth (admin + employee login, refresh token, logout)    | ✅ Done        | Cookie-based JWT, refresh rotation                      |
+| Health route                                            | ✅ Done        |                                                         |
+| Everything else (masters, orders, LR, trips, dashboard) | ❌ Not started |                                                         |
 
 ### Old ERP (`erp-backend` + `erp-frontend`) — reference only
 
@@ -41,13 +41,13 @@ The legacy app is the **functional reference** for what the business needs. It a
 
 > **Important:** We are **not** copying the old repo's design decisions. No fully-dynamic
 > generic master engine, no config-driven `:masterName` routing. The old ERP is a
-> *functional* reference (field lists, business rules) — **not** an architectural one.
+> _functional_ reference (field lists, business rules) — **not** an architectural one.
 
 1. **Schema first, per module.** Finalise the Prisma models for a module before building its API.
 2. **Validators are shared.** Every entity gets a Zod schema in `packages/validators`, consumed by both server and web.
 3. **Vertical slices.** Each module ships end-to-end: schema → API → admin UI → employee UI (where relevant).
 4. **Explicit, typed modules over dynamic abstraction.** Each master is its own typed
-   route + service + Prisma model. Repetition is reduced with shared *helpers/factories*,
+   route + service + Prisma model. Repetition is reduced with shared _helpers/factories_,
    not with a runtime metadata engine. See §6 for the full rationale.
 5. **Permissions enforced from Phase 1.** Every route checks module-level `canView/Create/Update/Delete`.
 6. **Type safety end-to-end.** No `any`, no untyped `Json` blobs as a design crutch.
@@ -57,7 +57,7 @@ The legacy app is the **functional reference** for what the business needs. It a
 
 ## 3. Phase-Wise Plan
 
-### Phase 0 — Foundation & Infrastructure *(do first)*
+### Phase 0 — Foundation & Infrastructure _(do first)_
 
 Goal: a stable base every module can build on.
 
@@ -76,22 +76,22 @@ Goal: a stable base every module can build on.
 
 Goal: complete identity + permissions. Mostly done — finish and harden.
 
-| Task | Status |
-|------|--------|
-| Admin / employee login, refresh token, logout | ✅ Done |
-| `profile` endpoint (real implementation) | ❌ TODO |
-| Signup / create user | ❌ TODO |
-| Role CRUD + assign role to user | ❌ TODO |
-| Module registry + Permission matrix (`role × module`) | ❌ TODO |
-| `requirePermission(module, action)` middleware | ❌ TODO |
+| Task                                                       | Status  |
+| ---------------------------------------------------------- | ------- |
+| Admin / employee login, refresh token, logout              | ✅ Done |
+| `profile` endpoint (real implementation)                   | ❌ TODO |
+| Signup / create user                                       | ❌ TODO |
+| Role CRUD + assign role to user                            | ❌ TODO |
+| Module registry + Permission matrix (`role × module`)      | ❌ TODO |
+| `requirePermission(module, action)` middleware             | ❌ TODO |
 | Admin UI: login, user management, roles, permission matrix | ❌ TODO |
-| Employee UI: login, profile | ❌ TODO |
+| Employee UI: login, profile                                | ❌ TODO |
 
 **Deliverable:** an admin can create users, define roles, and grant per-module permissions; both web apps gate routes on them.
 
 ---
 
-### Phase 2 — Master Module *(the backbone — build before transactions)*
+### Phase 2 — Master Module _(the backbone — build before transactions)_
 
 Goal: all reference data that orders/LR/trips depend on.
 
@@ -100,7 +100,7 @@ Goal: all reference data that orders/LR/trips depend on.
 - [ ] Each master = its own Prisma model + Zod schema (`packages/validators`) + typed
       service + typed router (`/customers`, `/vehicles`, `/routes`, …). No `:masterName`.
 - [ ] Cut boilerplate with a **typed CRUD factory/helper** (generics over the Prisma
-      delegate) — shared *code*, not shared runtime config. Each master still has its
+      delegate) — shared _code_, not shared runtime config. Each master still has its
       own file, types, and overridable handlers.
 - [ ] Standardise list endpoints: pagination, sorting, filtering, search as shared utilities.
 - [ ] Bulk import as an explicit per-master endpoint with a typed row schema + error report.
@@ -191,7 +191,7 @@ Goal: turn movement into money.
 
 ---
 
-### Phase 8 — Dashboard & Reports *(do last)*
+### Phase 8 — Dashboard & Reports _(do last)_
 
 Goal: visibility for management.
 
@@ -262,7 +262,7 @@ metadata object. It looks DRY but in production it costs you:
 - **Hard to read/debug** — stack traces all point at the same file; you can't grep for "where is customer created".
 - **Weak validation & authz granularity** — everything funnels through one permission check, one schema lookup.
 
-**Our rule:** explicit modules, with shared *helpers* (a typed `createCrudRouter<T>()`
+**Our rule:** explicit modules, with shared _helpers_ (a typed `createCrudRouter<T>()`
 factory) to remove boilerplate. Generic where it's safe (pagination, error mapping),
 explicit where the domain lives (each master's file).
 
@@ -347,16 +347,16 @@ explicit where the domain lives (each master's file).
 
 ### 6.9 Summary: old vs new
 
-| Concern | Old ERP | New repo |
-|---------|---------|----------|
-| Masters | One dynamic `:masterName` engine | Explicit typed module per master + shared CRUD factory |
-| Types | JS, runtime-checked | TS strict, compile-checked, shared validators |
-| Validation | Ad-hoc | Zod at the edge, single source of truth |
-| Money | `Float` | `Decimal` |
-| Schema changes | `db push`-style | Reviewed migrations |
-| Structure | Mixed | One layered, feature-first convention |
-| API lists | Inconsistent | Standard pagination/sort/filter contract |
+| Concern        | Old ERP                          | New repo                                               |
+| -------------- | -------------------------------- | ------------------------------------------------------ |
+| Masters        | One dynamic `:masterName` engine | Explicit typed module per master + shared CRUD factory |
+| Types          | JS, runtime-checked              | TS strict, compile-checked, shared validators          |
+| Validation     | Ad-hoc                           | Zod at the edge, single source of truth                |
+| Money          | `Float`                          | `Decimal`                                              |
+| Schema changes | `db push`-style                  | Reviewed migrations                                    |
+| Structure      | Mixed                            | One layered, feature-first convention                  |
+| API lists      | Inconsistent                     | Standard pagination/sort/filter contract               |
 
 ---
 
-*Generated as a planning baseline. Update phase checkboxes as work lands.*
+_Generated as a planning baseline. Update phase checkboxes as work lands._

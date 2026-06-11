@@ -38,6 +38,10 @@
       "types": "./src/order/order.schema.ts",
       "import": "./dist/order/order.schema.js"
     },
+    "./trip": {
+      "types": "./src/trip/trip.schema.ts",
+      "import": "./dist/trip/trip.schema.js"
+    },
     "./admin/rbac": {
       "types": "./src/admin/rbac.schema.ts",
       "import": "./dist/admin/rbac.schema.js"

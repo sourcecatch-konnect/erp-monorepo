@@ -13,7 +13,11 @@ import { can } from "../../auth/can.middleware.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
-import { fyCodeFor, nextSequence, formatDocNumber } from "../_shared/doc-number.js";
+import {
+  fyCodeFor,
+  nextSequence,
+  formatDocNumber,
+} from "../_shared/doc-number.js";
 import {
   BadRequestError,
   ConflictError,
@@ -47,7 +51,7 @@ async function resolveTripName(
     consignorId?: string;
     rakeDate?: Date;
   },
-  at: Date
+  at: Date,
 ): Promise<{ tripName: string; consignorId: string | null }> {
   const [vehicle, route] = await Promise.all([
     db.vehicle.findUnique({
@@ -187,7 +191,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         consignorId,
         onwardFreight: data.onwardFreight,
         isTripEmpty: data.isTripEmpty,
-        rakeDate: data.tripType === "dc" ? data.rakeDate ?? null : null,
+        rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
         fyCode,
         createdById: me,
       },
@@ -206,13 +210,17 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
 /* ------------------------------------------------------------------ */
 router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const id = getParamId(req);
-  const existing = await db.vehicleTrip.findFirst({ where: { id, deletedAt: null } });
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+  });
   if (!existing) throw new NotFoundError("Trip not found");
 
   const clientVersion =
     typeof req.body?.version === "number" ? req.body.version : undefined;
   if (clientVersion !== undefined && clientVersion !== existing.version) {
-    throw new ConflictError("This trip changed in another tab — reload and retry");
+    throw new ConflictError(
+      "This trip changed in another tab — reload and retry",
+    );
   }
 
   if (existing.status !== "Planned") {
@@ -227,7 +235,10 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const me = actorId(req);
 
   // Keep the original creation timestamp in the regenerated name.
-  const { tripName, consignorId } = await resolveTripName(data, existing.createdAt);
+  const { tripName, consignorId } = await resolveTripName(
+    data,
+    existing.createdAt,
+  );
 
   const updated = await db.vehicleTrip.update({
     where: { id },
@@ -240,7 +251,7 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
       consignorId,
       onwardFreight: data.onwardFreight,
       isTripEmpty: data.isTripEmpty,
-      rakeDate: data.tripType === "dc" ? data.rakeDate ?? null : null,
+      rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
       updatedById: me,
       version: { increment: 1 },
     },
@@ -255,7 +266,9 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
 /* ------------------------------------------------------------------ */
 router.post("/:id/start", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const id = getParamId(req);
-  const existing = await db.vehicleTrip.findFirst({ where: { id, deletedAt: null } });
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+  });
   if (!existing) throw new NotFoundError("Trip not found");
 
   if (existing.status !== "Planned") {
@@ -297,11 +310,15 @@ router.post("/:id/start", can(PERMS.TRIP.UPDATE), async (req, res) => {
 /* ------------------------------------------------------------------ */
 router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
   const id = getParamId(req);
-  const existing = await db.vehicleTrip.findFirst({ where: { id, deletedAt: null } });
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+  });
   if (!existing) throw new NotFoundError("Trip not found");
 
   if (!["Planned", "InTransit"].includes(existing.status)) {
-    throw new BadRequestError("Only a Planned or InTransit trip can be cancelled");
+    throw new BadRequestError(
+      "Only a Planned or InTransit trip can be cancelled",
+    );
   }
 
   const parsed = cancelTripSchema.safeParse(req.body);

@@ -1,7 +1,7 @@
 # Master Module — Architecture & Build Guideline
 
 > How we build all reference-data masters (Customer, Vehicle, Route, City, Agreement, …)
-> in `apps/admin-web` and `apps/server`.
+> in `apps/web` and `apps/server`.
 > A "master" = an entity that other transactional modules (Orders, LR, Trips) depend on.
 
 ---
@@ -59,7 +59,7 @@ app.use("/api/vehicles", vehicleRouter);
 // …
 ```
 
-### 3.2 Web — `apps/admin-web/features/masters/<master>/`
+### 3.2 Web — `apps/web/features/masters/<master>/`
 
 ```
 features/masters/
@@ -142,15 +142,20 @@ import type { ComponentType } from "react";
 import { Users, Truck, MapPin } from "lucide-react";
 
 export type MasterCategory =
-  | "Organisation" | "Vendors" | "Transportation"
-  | "Inventory"    | "Agreement" | "Access" | "Manpower";
+  | "Organisation"
+  | "Vendors"
+  | "Transportation"
+  | "Inventory"
+  | "Agreement"
+  | "Access"
+  | "Manpower";
 
 export type MasterEntry = {
-  slug: string;                                   // url segment, e.g. "customer"
-  label: string;                                  // "Customer"
+  slug: string; // url segment, e.g. "customer"
+  label: string; // "Customer"
   icon: ComponentType;
   category: MasterCategory;
-  permissionKey: string;                          // matches Permission matrix
+  permissionKey: string; // matches Permission matrix
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -172,7 +177,7 @@ This file is allowed to grow with N masters because each entry is a one-line poi
 The catalog page maps over `masterRegistry` to render category-grouped cards. The `[master]` route does:
 
 ```tsx
-const entry = masterRegistry.find(m => m.slug === params.master);
+const entry = masterRegistry.find((m) => m.slug === params.master);
 if (!entry) notFound();
 const { default: Page } = await entry.page();
 return <Page />;
@@ -195,13 +200,13 @@ export function createCrudRouter<Create, Update>(opts: {
     searchableFields?: string[];
     defaultInclude?: object;
     defaultOrderBy?: object;
-    softDelete?: boolean;                 // hides rows where deletedAt != null
+    softDelete?: boolean; // hides rows where deletedAt != null
   };
   hooks?: {
     beforeCreate?: (data: Create, ctx: ReqCtx) => Promise<Create>;
-    afterCreate?:  (row: any,    ctx: ReqCtx) => Promise<void>;
+    afterCreate?: (row: any, ctx: ReqCtx) => Promise<void>;
     beforeUpdate?: (data: Update, row: any, ctx: ReqCtx) => Promise<Update>;
-    transformRow?: (row: any) => any;     // shape sent to client (list + detail)
+    transformRow?: (row: any) => any; // shape sent to client (list + detail)
   };
 }): Router;
 ```
@@ -215,7 +220,7 @@ const router = createCrudRouter({
   permissionKey: "masters.customer",
   listOptions: {
     searchableFields: ["name", "gst", "city"],
-    defaultInclude:   { agreements: { select: { id: true } } },
+    defaultInclude: { agreements: { select: { id: true } } },
     softDelete: true,
   },
 });
@@ -228,17 +233,17 @@ export default router;
 
 Endpoints the factory provides for every master:
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET    | `/`              | List (paginated, searchable, sortable, filterable) |
-| GET    | `/:id`           | Detail |
-| POST   | `/`              | Create |
-| PATCH  | `/:id`           | Update |
-| DELETE | `/:id`           | Delete (soft or hard per options) |
-| POST   | `/bulk-delete`   | `{ ids: string[] }` |
-| POST   | `/bulk-import`   | multipart file → row-by-row validated insert |
-| GET    | `/export`        | streamed CSV/XLSX |
-| GET    | `/search`        | typeahead — for AsyncCombobox usage |
+| Method | Path           | Purpose                                            |
+| ------ | -------------- | -------------------------------------------------- |
+| GET    | `/`            | List (paginated, searchable, sortable, filterable) |
+| GET    | `/:id`         | Detail                                             |
+| POST   | `/`            | Create                                             |
+| PATCH  | `/:id`         | Update                                             |
+| DELETE | `/:id`         | Delete (soft or hard per options)                  |
+| POST   | `/bulk-delete` | `{ ids: string[] }`                                |
+| POST   | `/bulk-import` | multipart file → row-by-row validated insert       |
+| GET    | `/export`      | streamed CSV/XLSX                                  |
+| GET    | `/search`      | typeahead — for AsyncCombobox usage                |
 
 The factory wires `requirePermission(permissionKey, action)` on each verb. **No master can be exposed without a permissionKey.**
 
@@ -262,14 +267,14 @@ export default function CustomerPage() {
   return (
     <MasterListPage
       title="Customers"
-      query={useCustomers}                          // typed list hook
-      columns={customerColumns}                     // ColumnDef<Customer>[]
-      FormDialog={CustomerForm}                     // master's own form
+      query={useCustomers} // typed list hook
+      columns={customerColumns} // ColumnDef<Customer>[]
+      FormDialog={CustomerForm} // master's own form
       bulkImport={{
         template: "/templates/customer.xlsx",
-        schema:   customerCreateSchema,
+        schema: customerCreateSchema,
       }}
-      toolbar={<CustomerExtraToolbar />}            // optional
+      toolbar={<CustomerExtraToolbar />} // optional
     />
   );
 }
@@ -286,12 +291,12 @@ Each master defines its own columns. Shared cell helpers cover common cases.
 export const customerColumns: ColumnDef<Customer>[] = [
   selectColumn(),
   { accessorKey: "name", header: "Name" },
-  { accessorKey: "gst",  header: "GST" },
-  { accessorFn: r => r.city?.name, id: "city", header: "City" },
+  { accessorKey: "gst", header: "GST" },
+  { accessorFn: (r) => r.city?.name, id: "city", header: "City" },
   statusColumn(),
   dateColumn("createdAt", "Created"),
   actionsColumn<Customer>({
-    onEdit:   (row, ctx) => ctx.openForm(row),
+    onEdit: (row, ctx) => ctx.openForm(row),
     onDelete: (row, ctx) => ctx.delete(row.id),
     permissionKey: "masters.customer",
   }),
@@ -306,7 +311,11 @@ Forms are written as **JSX composition** of typed field components. The Zod sche
 
 ```tsx
 // features/masters/customer/CustomerForm.tsx
-export function CustomerForm({ open, onOpenChange, row }: FormDialogProps<Customer>) {
+export function CustomerForm({
+  open,
+  onOpenChange,
+  row,
+}: FormDialogProps<Customer>) {
   const form = useZodForm(customerCreateSchema, { defaultValues: row });
   const { mutate, isPending } = useCustomerMutation({ row });
 
@@ -320,12 +329,12 @@ export function CustomerForm({ open, onOpenChange, row }: FormDialogProps<Custom
       isSubmitting={isPending}
     >
       <FormGrid cols={3}>
-        <TextField          name="name"   label="Name" required />
-        <MobileField        name="mobile" label="Mobile" />
-        <GstField           name="gst"    label="GST" />
-        <PanField           name="pan"    label="PAN" />
+        <TextField name="name" label="Name" required />
+        <MobileField name="mobile" label="Mobile" />
+        <GstField name="gst" label="GST" />
+        <PanField name="pan" label="PAN" />
         <AsyncComboboxField name="cityId" label="City" loader={cityLoader} />
-        <SelectField        name="status" label="Status" options={STATUS_OPTIONS} />
+        <SelectField name="status" label="Status" options={STATUS_OPTIONS} />
       </FormGrid>
     </MasterFormDialog>
   );
@@ -340,7 +349,7 @@ const vehicleType = form.watch("vehicleType");
 
 <FormGrid cols={3}>
   <VehicleNumberField name="number" required />
-  <SelectField        name="vehicleType" options={VEHICLE_TYPES} required />
+  <SelectField name="vehicleType" options={VEHICLE_TYPES} required />
 
   {vehicleType === "Container" && (
     <SelectField name="containerSize" options={CONTAINER_SIZES} />
@@ -349,7 +358,7 @@ const vehicleType = form.watch("vehicleType");
   {(vehicleType === "Container" || vehicleType === "Open_Body") && (
     <SelectField name="bodyLength" options={lengthsFor(vehicleType)} />
   )}
-</FormGrid>
+</FormGrid>;
 ```
 
 The Container-specific rule lives in `VehicleForm.tsx`. The other 25 masters never see it.
@@ -396,7 +405,7 @@ Sections still use the same shared field components.
 
 ```ts
 type ApiResponse<T> =
-  | { ok: true;  data: T;            meta?: ListMeta }
+  | { ok: true; data: T; meta?: ListMeta }
   | { ok: false; error: ApiError };
 
 type ListMeta = { page: number; size: number; total: number };
@@ -411,15 +420,17 @@ type ListMeta = { page: number; size: number; total: number };
 import type { Customer, CustomerCreate, CustomerUpdate } from "@erp/types";
 
 export const customerApi = {
-  list:        (q: ListQuery)             => http.get<Customer[]>("/customers", { params: q }),
-  detail:      (id: string)               => http.get<Customer>(`/customers/${id}`),
-  create:      (body: CustomerCreate)     => http.post<Customer>("/customers", body),
-  update:      (id: string, body: CustomerUpdate)
-                                          => http.patch<Customer>(`/customers/${id}`, body),
-  remove:      (id: string)               => http.delete(`/customers/${id}`),
-  bulkRemove:  (ids: string[])            => http.post("/customers/bulk-delete", { ids }),
-  bulkImport:  (file: File)               => http.upload<BulkImportResult>("/customers/bulk-import", file),
-  search:      (q: string)                => http.get<Customer[]>("/customers/search", { params: { q } }),
+  list: (q: ListQuery) => http.get<Customer[]>("/customers", { params: q }),
+  detail: (id: string) => http.get<Customer>(`/customers/${id}`),
+  create: (body: CustomerCreate) => http.post<Customer>("/customers", body),
+  update: (id: string, body: CustomerUpdate) =>
+    http.patch<Customer>(`/customers/${id}`, body),
+  remove: (id: string) => http.delete(`/customers/${id}`),
+  bulkRemove: (ids: string[]) => http.post("/customers/bulk-delete", { ids }),
+  bulkImport: (file: File) =>
+    http.upload<BulkImportResult>("/customers/bulk-import", file),
+  search: (q: string) =>
+    http.get<Customer[]>("/customers/search", { params: { q } }),
 };
 ```
 
@@ -428,13 +439,13 @@ export const customerApi = {
 ```ts
 // features/masters/customer/customer.keys.ts
 export const customerKeys = {
-  all:    ["customers"] as const,
-  list:   (q: ListQuery) => [...customerKeys.all, "list", q] as const,
-  detail: (id: string)    => [...customerKeys.all, "detail", id] as const,
+  all: ["customers"] as const,
+  list: (q: ListQuery) => [...customerKeys.all, "list", q] as const,
+  detail: (id: string) => [...customerKeys.all, "detail", id] as const,
 };
 ```
 
-`_shared/hooks/useMasterMutations.ts` is generic over `service + keys` — shared *code*, per-master concrete types. Invalidation is always explicit (`queryClient.invalidateQueries({ queryKey: customerKeys.all })`).
+`_shared/hooks/useMasterMutations.ts` is generic over `service + keys` — shared _code_, per-master concrete types. Invalidation is always explicit (`queryClient.invalidateQueries({ queryKey: customerKeys.all })`).
 
 ### 7.4 List query syntax (lock this early)
 
@@ -470,15 +481,15 @@ The Permission matrix is `(role × moduleKey × action)`. Every master declares 
 
 ## 10. Cross-Cutting Concerns
 
-| Concern | Decision |
-|---|---|
-| **Soft delete** | Default ON for masters referenced by transactional modules (Customer, Vehicle, Route, Agreement, …). Add `deletedAt DateTime?` to those Prisma models. The factory hides soft-deleted rows from list/detail unless `?includeDeleted=true` is passed by an admin. |
-| **Audit fields** | Every master row has `createdAt`, `updatedAt`, `createdById`, `updatedById`. Populated by a Prisma extension that reads the request context — never by hand in service code. |
-| **Status field** | Masters that have lifecycle use a typed enum (`ACTIVE`/`INACTIVE`), not a free-form string. Status changes go through a dedicated endpoint when they trigger side effects. |
-| **IDs** | CUIDs (Prisma `@default(cuid())`). Never expose raw DB sequences. |
-| **Timestamps** | ISO strings on the wire. Date pickers convert at the form boundary. |
-| **Numbers (money, weight)** | Decimal in Prisma; string-on-the-wire to avoid float drift; parsed at the form boundary. |
-| **i18n** | Field labels live in the master's form/table files. Not central. |
+| Concern                     | Decision                                                                                                                                                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Soft delete**             | Default ON for masters referenced by transactional modules (Customer, Vehicle, Route, Agreement, …). Add `deletedAt DateTime?` to those Prisma models. The factory hides soft-deleted rows from list/detail unless `?includeDeleted=true` is passed by an admin. |
+| **Audit fields**            | Every master row has `createdAt`, `updatedAt`, `createdById`, `updatedById`. Populated by a Prisma extension that reads the request context — never by hand in service code.                                                                                     |
+| **Status field**            | Masters that have lifecycle use a typed enum (`ACTIVE`/`INACTIVE`), not a free-form string. Status changes go through a dedicated endpoint when they trigger side effects.                                                                                       |
+| **IDs**                     | CUIDs (Prisma `@default(cuid())`). Never expose raw DB sequences.                                                                                                                                                                                                |
+| **Timestamps**              | ISO strings on the wire. Date pickers convert at the form boundary.                                                                                                                                                                                              |
+| **Numbers (money, weight)** | Decimal in Prisma; string-on-the-wire to avoid float drift; parsed at the form boundary.                                                                                                                                                                         |
+| **i18n**                    | Field labels live in the master's form/table files. Not central.                                                                                                                                                                                                 |
 
 ---
 
@@ -501,14 +512,14 @@ That's it. No central form config to edit. No central column map. No shared swit
 
 Build one small master end-to-end before starting the rest, to harden the `_shared/` primitives.
 
-| Wave | Masters | Why this order |
-|---|---|---|
-| 1 | **City**, State, Area | Trivial fields, no relations. Proves the list shell, table, form dialog, bulk import, permissions. |
-| 2 | Company, Branch, Warehouse | Org tree. Proves relational selects via `AsyncComboboxField`. |
-| 3 | **Customer** | Heaviest field variety (GST, PAN, mobile, status). Proves the field registry covers the common cases. |
-| 4 | Vehicle | Conditional fields (Container/Open_Body). Proves per-master conditionals stay local. |
-| 5 | Agreement + DetentionRate | Nested writes. Proves the repeater field. |
-| 6 | Driver, Labour, Transport, Pump, Spare*, RateMatrix, RailwayFreightMatrix, Route, Goods, Wagon, User, Role | Pattern is now stable. Should be near-mechanical. |
+| Wave | Masters                                                                                                     | Why this order                                                                                        |
+| ---- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 1    | **City**, State, Area                                                                                       | Trivial fields, no relations. Proves the list shell, table, form dialog, bulk import, permissions.    |
+| 2    | Company, Branch, Warehouse                                                                                  | Org tree. Proves relational selects via `AsyncComboboxField`.                                         |
+| 3    | **Customer**                                                                                                | Heaviest field variety (GST, PAN, mobile, status). Proves the field registry covers the common cases. |
+| 4    | Vehicle                                                                                                     | Conditional fields (Container/Open_Body). Proves per-master conditionals stay local.                  |
+| 5    | Agreement + DetentionRate                                                                                   | Nested writes. Proves the repeater field.                                                             |
+| 6    | Driver, Labour, Transport, Pump, Spare\*, RateMatrix, RailwayFreightMatrix, Route, Goods, Wagon, User, Role | Pattern is now stable. Should be near-mechanical.                                                     |
 
 Bold = "stop here and review the shared primitives before continuing".
 
@@ -549,21 +560,21 @@ These shape every master that follows. Settle them in writing, then build.
 
 ## 15. Summary
 
-| Layer | Per-master | Shared |
-|---|---|---|
-| Prisma model | ✅ | — |
-| Zod create/update schema | ✅ | — |
-| TS types (inferred) | ✅ | — |
-| Server router/controller/service | ✅ | `createCrudRouter` |
-| List endpoint behavior (pagination/search/sort/filter) | — | `_shared/list.query.ts` |
-| Bulk import endpoint | ✅ (calls helper) | `_shared/bulk-import.ts` |
-| Permissions middleware | — | `requirePermission` |
-| Web `page.tsx` | ✅ | — |
-| Web form | ✅ (composes shared fields) | field components |
-| Web table | ✅ (composes shared columns) | column helpers |
-| Web service / query keys | ✅ | `useMasterList`, `useMasterMutations` |
-| List page shell (header, toolbar, pagination, dialogs) | — | `MasterListPage` |
-| Form dialog shell | — | `MasterFormDialog` |
-| Navigation entry | ✅ (one line) | `registry.ts` |
+| Layer                                                  | Per-master                   | Shared                                |
+| ------------------------------------------------------ | ---------------------------- | ------------------------------------- |
+| Prisma model                                           | ✅                           | —                                     |
+| Zod create/update schema                               | ✅                           | —                                     |
+| TS types (inferred)                                    | ✅                           | —                                     |
+| Server router/controller/service                       | ✅                           | `createCrudRouter`                    |
+| List endpoint behavior (pagination/search/sort/filter) | —                            | `_shared/list.query.ts`               |
+| Bulk import endpoint                                   | ✅ (calls helper)            | `_shared/bulk-import.ts`              |
+| Permissions middleware                                 | —                            | `requirePermission`                   |
+| Web `page.tsx`                                         | ✅                           | —                                     |
+| Web form                                               | ✅ (composes shared fields)  | field components                      |
+| Web table                                              | ✅ (composes shared columns) | column helpers                        |
+| Web service / query keys                               | ✅                           | `useMasterList`, `useMasterMutations` |
+| List page shell (header, toolbar, pagination, dialogs) | —                            | `MasterListPage`                      |
+| Form dialog shell                                      | —                            | `MasterFormDialog`                    |
+| Navigation entry                                       | ✅ (one line)                | `registry.ts`                         |
 
 The pattern: **typed code primitives are shared; everything that describes a specific master lives in that master's folder.** When a master needs to be weird, it's weird locally — the other 25 don't notice.

@@ -1,6 +1,6 @@
-# Frontend Architecture — SKERP Web Apps
+# Frontend Architecture — SKERP Web
 
-Conventions for `admin-web` and `employee-web` (Next.js App Router, TypeScript strict).
+Conventions for `web` (Next.js App Router, TypeScript strict).
 
 ---
 
@@ -12,10 +12,11 @@ Conventions for `admin-web` and `employee-web` (Next.js App Router, TypeScript s
   invalidation, pagination.
 - **Local component state** (`useState`) for ephemeral UI (form open, toggles).
 
-Rule of thumb: *who owns it?* App-wide & long-lived → RTK. Server-owned & cacheable →
+Rule of thumb: _who owns it?_ App-wide & long-lived → RTK. Server-owned & cacheable →
 React Query. View-local → `useState`.
 
 ### Redux layout (`app/store/`)
+
 - `store.ts` — `configureStore`, combines slices.
 - `hooks.ts` — typed `useAppDispatch` / `useAppSelector`.
 - `<feature>Slice.ts` — slice + `createAsyncThunk`s per feature (e.g. `authSlice.ts`).
@@ -46,19 +47,19 @@ React Query. View-local → `useState`.
   `idle | loading | authenticated | unauthenticated`.
 - **Route protection:** a `ProtectedRoute` wrapper redirects to `/login` when
   `unauthenticated`, and renders a loader while `idle`/`loading`.
-- **No signup UI in admin-web.** Admin users are provisioned server-side. A `/signup` route
+- **No signup UI in web.** Admin users are provisioned server-side. A `/signup` route
   may exist as a placeholder only.
 
 ---
 
 ## 4. Folder Structure
 
-**Feature-first.** `app/` holds *routing only* — thin pages that compose feature
+**Feature-first.** `app/` holds _routing only_ — thin pages that compose feature
 code. Business logic lives in `features/<feature>/`. `app/` stays at the project
 root (no `src/` directory).
 
 ```
-apps/admin-web/
+apps/web/
   app/                         ROUTING ONLY — thin pages, route groups, layouts
     (auth)/
       login/page.tsx           -> renders <LoginForm/>
@@ -105,7 +106,7 @@ apps/admin-web/
   from the slice file, not the barrel, to avoid circular imports).
 - **Path alias:** import with `@/...` (configured in `tsconfig.json` →
   `paths: { "@/*": ["./*"] }`). No deep `../../../` relative imports across
-  folders; relative imports are fine *within* a feature.
+  folders; relative imports are fine _within_ a feature.
 - **New module = new feature folder.** Adding "orders" means
   `features/orders/{components,hooks,services,store,types.ts,index.ts}` plus a
   route under `app/(dashboard)/orders/`.

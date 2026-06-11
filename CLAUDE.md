@@ -7,8 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Turborepo + pnpm workspaces. Node ≥18, TypeScript strict everywhere, pnpm@9.
 
 - **apps/server** — Express 5 + Prisma 7 (PostgreSQL) + Zod. ESM (`"type": "module"`, run with `tsx`). Cookie-based auth (httpOnly), JWT, bcryptjs.
-- **apps/admin-web** — Next.js 16 App Router (port 3001). React 19, Redux Toolkit, TanStack Query + Table, axios, react-hook-form + zodResolver, Tailwind 4.
-- **apps/employee-web** — Same shape as admin-web (port 3002).
+- **apps/web** — Next.js 16 App Router (port 3001). React 19, Redux Toolkit, TanStack Query + Table, axios, react-hook-form + zodResolver, Tailwind 4.
 - **packages/ui** (`@skerp/ui`) — shadcn-style component library. Exported via `./*` glob (`@skerp/ui/components/button`). Storybook for previews.
 - **packages/validators** (`@skerp/validators`) — Shared Zod schemas. Built to `dist/`, with per-master subpath exports (`@skerp/validators/master/city`).
 - **packages/types** (`@skerp/types`) — Inferred types from validators + shared API/response types. Source-only (`./src/index.ts`).
@@ -32,8 +31,7 @@ pnpm db:migrate               # prisma migrate dev
 
 # Single app dev
 pnpm --filter @skerp/server dev          # http://localhost:5000
-pnpm --filter @skerp/admin-web dev       # http://localhost:3001
-pnpm --filter @skerp/employee-web dev    # http://localhost:3002
+pnpm --filter @skerp/web dev       # http://localhost:3001
 
 # Single package build / type-check
 pnpm --filter @skerp/validators build
@@ -53,11 +51,11 @@ There is no test runner wired into turbo right now (UI has vitest deps but no `t
 
 `docs/MASTER_MODULE_PLAN.md` and `llm-guideline/` are the authoritative architecture docs — read them before touching masters or UI. Key invariants:
 
-- **Each master is a vertical slice** under `apps/server/src/modules/<master>/` and `apps/admin-web/features/masters/<master>/`. Deleting one folder must not break others. No cross-master imports.
-- **Schema is single source of truth.** Prisma model → Zod in `packages/validators/src/master/<name>.schema.ts` → inferred types re-exported from `packages/types`. Forms/tables consume *types*, never a runtime config object describing fields.
+- **Each master is a vertical slice** under `apps/server/src/modules/<master>/` and `apps/web/features/masters/<master>/`. Deleting one folder must not break others. No cross-master imports.
+- **Schema is single source of truth.** Prisma model → Zod in `packages/validators/src/master/<name>.schema.ts` → inferred types re-exported from `packages/types`. Forms/tables consume _types_, never a runtime config object describing fields.
 - **Server uses `createCrudRouter`** (`apps/server/src/modules/_shared/crud.factory.ts`) for standard CRUD + list/search/export/bulk-delete/bulk-import. Each route is gated by `requirePermission(permissionKey, action)` — never expose a master without a `permissionKey`. Bespoke endpoints live in the same router, not as factory flags.
 - **Web uses composition, not dispatch.** `_shared/MasterListPage.tsx` and `_shared/MasterFormDialog.tsx` are layout shells. Each master writes its own `page.tsx`, `<Name>Form.tsx`, `<Name>Table.tsx`, `<name>.service.ts`. Forms are JSX composition of field components in `_shared/fields/` reading from `useFormContext()`. Conditional fields live locally in that master's form.
-- **Registry** (`apps/admin-web/features/masters/registry.ts`) is navigation + permissions metadata only — slug, label, icon, category, permissionKey, lazy `page` import. Not a field config map.
+- **Registry** (`apps/web/features/masters/registry.ts`) is navigation + permissions metadata only — slug, label, icon, category, permissionKey, lazy `page` import. Not a field config map.
 - Anti-patterns to reject in review: central `switch` over master/field type, `if (slug === "...")` outside that master's folder, field-config objects driving rendering, untyped `ColumnDef<any>[]`, one Zod schema for both create + update without reason. See MASTER_MODULE_PLAN §13.
 
 The `[master]` dynamic route does `masterRegistry.find(...)` + `entry.page()` — dynamism stops at routing.
@@ -66,7 +64,7 @@ The `[master]` dynamic route does `masterRegistry.find(...)` + `entry.page()` �
 
 ```ts
 type ApiResponse<T> =
-  | { ok: true;  data: T; meta?: ListMeta }
+  | { ok: true; data: T; meta?: ListMeta }
   | { ok: false; error: ApiError };
 ```
 
@@ -84,9 +82,9 @@ When adding a master, follow `modules/`. Don't move old routers preemptively.
 ### Auth
 
 - Tokens are **httpOnly cookies** (`accessToken` ~15m, `refreshToken` 7d) set by the server. Frontend never reads or stores tokens — relies on `axios` with `withCredentials: true`.
-- On 401, the axios interceptor in `apps/admin-web/lib/api.ts` calls `/auth/refresh` once and retries (concurrent 401s share one refresh).
+- On 401, the axios interceptor in `apps/web/lib/api.ts` calls `/auth/refresh` once and retries (concurrent 401s share one refresh).
 - App-load bootstrap: `AuthBootstrap` dispatches `fetchMe` (`GET /auth/me`). Session lives in the Redux `auth` slice: `{ user, status, error }` with status `idle | loading | authenticated | unauthenticated`. The user object carries `permissions: string[]`, `branchScope`, `branchIds`.
-- `ProtectedRoute` wraps `(dashboard)` routes. Accepts an optional `permission` prop for permission-gated pages. No signup UI in admin-web — admins are provisioned server-side.
+- `ProtectedRoute` wraps `(dashboard)` routes. Accepts an optional `permission` prop for permission-gated pages. No signup UI in web — admins are provisioned server-side.
 
 ### RBAC
 
@@ -130,7 +128,7 @@ These get violated quickly by ad-hoc code. If you find yourself writing a `<tabl
 - **Pagination** — `Pagination` / `PaginationContent` / `PaginationItem` / `PaginationPrevious` / `PaginationNext` from `@skerp/ui/components/pagination`. Never hand-rolled "Previous / Next" buttons.
 - **Forms** — `useForm` + `zodResolver(<schema from @skerp/validators>)` + `FormProvider`. Field components live in `features/masters/_shared/fields/*` (TextField, SelectField, CheckboxField, NumberField, …). They read from `useFormContext`. Use `Controller` from react-hook-form only for fields that aren't in the shared field library.
 - **API services** — every feature has `<feature>.service.ts` calling `api` (the shared axios instance from `@/lib/api`). Unwrap responses with `unwrapApiResponse` / `unwrapListResponse` from `features/masters/_shared/master-api.ts` — never define a local `Envelope<T>` or call `res.data.data` directly.
-- **Service Zod schemas live in `@skerp/validators`**, not inline in route handlers. Both server (`.parse(req.body)`) and admin-web (`zodResolver(schema)`) consume the same schema. New surface? Add the file under `packages/validators/src/<area>/` plus a subpath export in its `package.json`.
+- **Service Zod schemas live in `@skerp/validators`**, not inline in route handlers. Both server (`.parse(req.body)`) and web (`zodResolver(schema)`) consume the same schema. New surface? Add the file under `packages/validators/src/<area>/` plus a subpath export in its `package.json`.
 
 ## Adding a master (the 6-step path)
 
@@ -139,11 +137,11 @@ If this grows past ~6 steps the architecture is broken. From `MASTER_MODULE_PLAN
 1. Prisma model in `apps/server/prisma/schema.prisma` + migration. Include `createdAt`/`updatedAt`; add `deletedAt` if referenced by transactional modules (soft delete).
 2. Zod create + update schemas in `packages/validators/src/master/<name>.schema.ts`. Re-export from `packages/validators/src/index.ts` and add a subpath export in its `package.json`. Inferred types re-exported via `packages/types`.
 3. Server module: `apps/server/src/modules/<name>/<name>.route.ts` calling `createCrudRouter`. Mount in `apps/server/src/index.ts`.
-4. Web feature: `apps/admin-web/features/masters/<name>/` with `page.tsx`, `<Name>Form.tsx`, `<Name>Table.tsx`, `<name>.service.ts`, `<name>.keys.ts`.
-5. One-line entry in `apps/admin-web/features/masters/registry.ts`.
+4. Web feature: `apps/web/features/masters/<name>/` with `page.tsx`, `<Name>Form.tsx`, `<Name>Table.tsx`, `<name>.service.ts`, `<name>.keys.ts`.
+5. One-line entry in `apps/web/features/masters/registry.ts`.
 6. Seed permission key `masters.<name>` in `apps/server/prisma/seed-admin.ts`.
 
-CSV template (not XLSX in current impl) lives at `apps/admin-web/public/templates/<name>.csv`.
+CSV template (not XLSX in current impl) lives at `apps/web/public/templates/<name>.csv`.
 
 ## Conventions
 
@@ -151,4 +149,4 @@ CSV template (not XLSX in current impl) lives at `apps/admin-web/public/template
 - ESM throughout. Server imports use `.js` extensions in source (`import x from "./foo.js"`) because of NodeNext resolution.
 - `"use client"` only where required.
 - IDs are CUIDs. Timestamps are ISO strings on the wire.
-- Don't call `fetch` directly or create ad-hoc axios instances — go through `apps/admin-web/lib/api.ts` and the feature's `<name>.service.ts`.
+- Don't call `fetch` directly or create ad-hoc axios instances — go through `apps/web/lib/api.ts` and the feature's `<name>.service.ts`.
