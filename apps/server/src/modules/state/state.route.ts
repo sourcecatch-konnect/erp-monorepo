@@ -2,12 +2,83 @@ import { Router } from "express";
 import { createStateSchema, updateStateSchema } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
+import { ZodTypeAny } from "zod";
+
+function normalizeStateName(name: string) {
+  return name
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+function duplicateStateError(name: string) {
+  const error = new Error(`State "${name}" already exists`);
+
+  (error as any).statusCode = 409;
+  (error as any).details = {
+    fieldErrors: {
+      name: [`State "${name}" already exists`],
+    },
+  };
+
+  return error;
+}
 
 const router: Router = createCrudRouter({
   model: db.state,
   createSchema: createStateSchema,
   updateSchema: updateStateSchema,
   permissionKey: "masters.state",
+
+  hooks: {
+    beforeCreate: async (data: any) => {
+      const name = normalizeStateName(data.name);
+
+      const existing = await db.state.findFirst({
+        where: {
+          name: {
+            equals: name,
+            mode: "insensitive",
+          },
+        },
+      });
+
+      if (existing) {
+        throw duplicateStateError(name);
+      }
+
+      data.name = name;
+
+      return data;
+    },
+
+    beforeUpdate: async (data: any, row: any) => {
+      if (!data.name) return data;
+
+      const name = normalizeStateName(data.name);
+
+      const existing = await db.state.findFirst({
+        where: {
+          id: {
+            not: row.id,
+          },
+          name: {
+            equals: name,
+            mode: "insensitive",
+          },
+        },
+      });
+
+      if (existing) {
+        throw duplicateStateError(name);
+      }
+
+      data.name = name;
+
+      return data;
+    },
+  },
+
   listOptions: {
     searchableFields: ["name"],
     defaultOrderBy: { name: "asc" },
@@ -46,5 +117,4 @@ const router: Router = createCrudRouter({
     ],
   },
 });
-
 export default router;

@@ -65,14 +65,8 @@ const router: Router = createCrudRouter({
         where: (id: string) => ({ consigneeId: id }),
         select: { id: true },
         getName: (row: any) => row.id,
-      },
-      {
-        model: db.vehicleTrip,
-        label: "Vehicle Trips",
-        where: (id: string) => ({ consignorId: id }),
-        select: { tripId: true },
-        getName: (row: any) => row.tripId,
-      },
+      }
+      
     ],
   },
 });

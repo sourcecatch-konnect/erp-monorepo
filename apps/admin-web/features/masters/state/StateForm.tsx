@@ -10,9 +10,12 @@ import { createStateSchema } from "@skerp/validators/master/state";
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
-import IconTextField from "../_shared/fields/IconTextField";
+
 
 import { IconMapPin } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { stateKeys } from "./state.keys";
+import { stateApi } from "./state.service";
 
 type Props = {
   open: boolean;
@@ -37,7 +40,24 @@ export default function StateForm({
     resolver: zodResolver(createStateSchema),
     defaultValues,
   });
+const stateName = form.watch("name");
 
+const trimmedStateName = stateName?.trim() ?? "";
+
+const { data: stateSuggestions } = useQuery({
+  queryKey: stateKeys.list({
+    page: 0,
+    size: 5,
+    search: trimmedStateName,
+  }),
+  queryFn: () =>
+    stateApi.list({
+      page: 0,
+      size: 5,
+      search: trimmedStateName,
+    }),
+  enabled: open && trimmedStateName.length >= 2 && !row,
+});
   React.useEffect(() => {
     if (!open) return;
 
@@ -45,7 +65,7 @@ export default function StateForm({
       name: row?.name ?? "",
     });
   }, [form, open, row]);
-
+const firstStateSuggestion = stateSuggestions?.data?.[0];
   return (
     <MasterFormDialog
       open={open}
@@ -57,19 +77,38 @@ export default function StateForm({
       columns={2}
     >
       {/* BASIC INFO SECTION (like DriverForm style) */}
-      <FormSection
-        icon={<IconMapPin size={18} />}
-        title="State Information"
-        description="Basic details of the state"
-      >
-        <TextField<CreateStateBody>
-          name="name"
-          label="State Name"
-          placeholder="e.g. Maharashtra"
-          required
-        />
-      </FormSection>
+   <FormSection
+  icon={<IconMapPin size={18} />}
+  title="State Information"
+  description="Basic details of the state"
+>
+  <div>
+    <TextField<CreateStateBody>
+      name="name"
+      label="State Name"
+      placeholder="e.g. Maharashtra"
+      required
+    />
 
+    {firstStateSuggestion ? (
+      <p className="mt-1 text-xs text-muted-foreground">
+        Similar state found:{" "}
+        <button
+          type="button"
+          onClick={() =>
+            form.setValue("name", firstStateSuggestion.name, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }
+          className="font-medium text-primary hover:underline"
+        >
+          {firstStateSuggestion.name}
+        </button>
+      </p>
+    ) : null}
+  </div>
+</FormSection>
 
     </MasterFormDialog>
   );

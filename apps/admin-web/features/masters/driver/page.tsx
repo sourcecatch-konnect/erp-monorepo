@@ -18,6 +18,10 @@ import { driverColumns } from "./driverTable";
 import DriverForm from "./driverForm";
 import { createDriverSchema } from "@skerp/validators";
 import DriverDetailDialog from "./driverDialog";
+import { stateKeys } from "../state/state.keys";
+import { stateApi } from "../state/state.service";
+import { cityApi } from "../city/city.service";
+import { cityKeys } from "../city/city.keys";
 
 type DriverCsvRow = Record<string, string>;
 
@@ -59,6 +63,18 @@ const driverDetail = useQuery({
   queryFn: () => driverApi.detail(detailId!),
   enabled: Boolean(detailOpen && detailId),
 });
+const { data: statesData } = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+});
+
+const { data: citiesData } = useQuery({
+  queryKey: cityKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => cityApi.list({ page: 0, size: 1000 }),
+});
+
+const states = statesData?.data ?? [];
+const cities = citiesData?.data ?? [];
   const create = useMutation({
     mutationFn: driverApi.create,
     onSuccess: () => {
@@ -174,13 +190,15 @@ const driverDetail = useQuery({
   data={driverDetail.data}
   isLoading={driverDetail.isLoading}
 />
-      <DriverForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+<DriverForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+  states={states}
+  cities={cities}
+  onSubmit={handleSubmit}
+  isSubmitting={create.isPending || update.isPending}
+/>
     </MasterListPage>
   );
 }

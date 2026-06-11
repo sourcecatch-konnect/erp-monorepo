@@ -28,7 +28,7 @@ export default function StatePage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const size = 10;
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
     () => ({

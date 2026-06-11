@@ -18,7 +18,8 @@ import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 
-import { IconTruck } from "@tabler/icons-react";
+import { IconPhone, IconTruck, IconTruckDelivery, IconWorld } from "@tabler/icons-react";
+import IconTextField from "../_shared/fields/IconTextField";
 
 type Props = {
   open: boolean;
@@ -34,7 +35,7 @@ const defaultValues: CreateTransportBody = {
   name: "",
   stateId: "",
   cityId: "",
-  country: "",
+  country: "India",
   phoneNo: "",
 };
 
@@ -66,7 +67,7 @@ export default function TransportForm({
       name: row?.name ?? "",
       stateId: row?.stateId ?? "",
       cityId: row?.cityId ?? "",
-      country: row?.country ?? "",
+      country: "India",
       phoneNo: row?.phoneNo ?? "",
     });
   }, [form, open, row]);
@@ -87,19 +88,22 @@ export default function TransportForm({
         title="Transport Information"
         description="Basic transport and contact details"
       >
-        <TextField<CreateTransportBody>
-          name="name"
-          label="Transport Name"
-          placeholder="e.g. ABC Logistics"
-          required
-        />
-
-        <TextField<CreateTransportBody>
-          name="phoneNo"
-          label="Phone Number"
-          placeholder="Enter phone number"
-          required
-        />
+       <IconTextField<CreateTransportBody>
+  name="name"
+  label="Transport Name"
+  placeholder="e.g. ABC Logistics"
+  icon={<IconTruckDelivery size={16} />}
+  required
+/>
+          <IconTextField<CreateTransportBody>
+                  name="phoneNo"
+                  label="Phone Number"
+                  placeholder="10-digit phone"
+                  icon={<IconPhone size={16} />}
+                  maxLength={10}
+                  
+                />
+    
       </FormSection>
 
       {/* LOCATION INFO */}
@@ -128,16 +132,17 @@ export default function TransportForm({
           required
         />
 
-        <TextField<CreateTransportBody>
+        <IconTextField<CreateTransportBody>
           name="country"
           label="Country"
           placeholder="e.g. India"
+          icon={<IconWorld size={16} />}
           required
         />
       </FormSection>
 
       {/* FUTURE EXTENSION */}
-      <FormSection
+      {/* <FormSection
         icon={<IconTruck size={18} />}
         title="Advanced Settings"
         description="Optional transport configuration"
@@ -147,7 +152,7 @@ export default function TransportForm({
           label="Transport Code (future use)"
           placeholder="e.g. TRP-001"
         />
-      </FormSection>
+      </FormSection> */}
     </MasterFormDialog>
   );
 }

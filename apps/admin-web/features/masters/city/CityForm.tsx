@@ -6,7 +6,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type { City, CreateCityBody, State } from "@skerp/types";
 import { createCitySchema } from "@skerp/validators/master/city";
-
+import { useQuery } from "@tanstack/react-query";
+import { cityApi } from "./city.service";
+import { cityKeys } from "./city.keys";
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
@@ -40,7 +42,38 @@ export default function CityForm({
     resolver: zodResolver(createCitySchema),
     defaultValues,
   });
+const cityName = form.watch("name");
+const selectedStateId = form.watch("stateId");
 
+const trimmedCityName = cityName?.trim() ?? "";
+const isCreateMode = !row;
+
+const { data: citySuggestions } = useQuery({
+  queryKey: cityKeys.list({
+    page: 0,
+    size: 5,
+    search: trimmedCityName,
+  }),
+  queryFn: () =>
+    cityApi.list({
+      page: 0,
+      size: 5,
+      search: trimmedCityName,
+    }),
+  enabled:
+    open &&
+    isCreateMode &&
+    trimmedCityName.length >= 2 &&
+    !!selectedStateId,
+});
+
+const filteredCitySuggestions = isCreateMode
+  ? citySuggestions?.data?.filter(
+      (city) => city.stateId === selectedStateId
+    ) ?? []
+  : [];
+
+const firstCitySuggestion = filteredCitySuggestions[0];
   React.useEffect(() => {
     if (!open) return;
 
@@ -49,6 +82,10 @@ export default function CityForm({
       stateId: row?.stateId ?? "",
     });
   }, [form, open, row]);
+
+
+
+
 
   return (
     <MasterFormDialog
@@ -61,28 +98,44 @@ export default function CityForm({
       columns={2}
     >
       {/* CITY INFO SECTION */}
-      <FormSection
-        icon={<IconBuildingCommunity size={18} />}
-        title="City Information"
-        description="Basic details of the city"
-      >
-        <TextField<CreateCityBody>
-          name="name"
-          label="City Name"
-          placeholder="e.g. Nagpur"
-          required
-        />
+     <FormSection
+  icon={<IconBuildingCommunity size={18} />}
+  title="City Information"
+  description="Basic details of the city"
+>
+<div>
+  <TextField<CreateCityBody>
+    name="name"
+    label="City Name"
+    placeholder="e.g. Nagpur"
+    required
+  />
 
-        <SelectField<CreateCityBody>
-          name="stateId"
-          label="State"
-          options={states.map((state) => ({
-            label: state.name,
-            value: state.id,
-          }))}
-          required
-        />
-      </FormSection>
+{!row && firstCitySuggestion ? (
+  <p className="mt-1 text-xs text-muted-foreground">
+    Similar city found:{" "}
+    <button
+      type="button"
+      onClick={() => form.setValue("name", firstCitySuggestion.name)}
+      className="font-medium text-primary hover:underline"
+    >
+      {firstCitySuggestion.name}
+    </button>
+  </p>
+) : null}
+</div>
+
+
+  <SelectField<CreateCityBody>
+    name="stateId"
+    label="State"
+    options={states.map((state) => ({
+      label: state.name,
+      value: state.id,
+    }))}
+    required
+  />
+</FormSection>
     </MasterFormDialog>
   );
 }

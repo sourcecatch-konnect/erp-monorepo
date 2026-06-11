@@ -5,9 +5,11 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
+  City,
   CreateDriverBody,
   CreateDriverFormInput,
   Driver,
+  State,
 } from "@skerp/types";
 import {
   IconBan,
@@ -37,15 +39,28 @@ import FormSection from "../_shared/fields/FormSection";
 import { createDriverSchema } from "@skerp/validators";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { paiseToRupees } from "@/lib/money";
-
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Driver | null;
+  states: State[];
+  cities: City[];
   onSubmit: (data: CreateDriverBody) => Promise<void>;
   isSubmitting?: boolean;
 };
+function uniqueCitiesByName(cities: City[]) {
+  const map = new Map<string, City>();
 
+  for (const city of cities) {
+    const key = city.name.trim().toLowerCase();
+
+    if (!map.has(key)) {
+      map.set(key, city);
+    }
+  }
+
+  return Array.from(map.values());
+}
 const driverStatusOptions = [
   { label: "Available", value: "AVAILABLE" },
   { label: "On Trip", value: "ON_TRIP" },
@@ -113,13 +128,80 @@ export default function DriverForm({
   open,
   onOpenChange,
   row,
+  states,
+  cities,
   onSubmit,
   isSubmitting,
 }: Props) {
+  
   const form = useForm<CreateDriverFormInput, unknown, CreateDriverBody>({
     resolver: zodResolver(createDriverSchema),
     defaultValues,
   });
+const permanentState = form.watch("permanentState");
+const correspondenceState = form.watch("correspondenceState");
+
+const permanentCities = React.useMemo(() => {
+  if (!permanentState) return [];
+
+  const selectedState = states.find((state) => state.name === permanentState);
+  if (!selectedState) return [];
+
+  return uniqueCitiesByName(
+    cities.filter((city) => city.stateId === selectedState.id)
+  );
+}, [cities, states, permanentState]);
+
+const correspondenceCities = React.useMemo(() => {
+  if (!correspondenceState) return [];
+
+  const selectedState = states.find(
+    (state) => state.name === correspondenceState
+  );
+  if (!selectedState) return [];
+
+  return uniqueCitiesByName(
+    cities.filter((city) => city.stateId === selectedState.id)
+  );
+}, [cities, states, correspondenceState]);
+
+
+
+
+
+
+
+
+const previousPermanentState = React.useRef<string | undefined>(undefined);
+
+React.useEffect(() => {
+  if (!open) return;
+
+  if (
+    previousPermanentState.current &&
+    previousPermanentState.current !== permanentState
+  ) {
+    form.setValue("permanentCity", "");
+  }
+
+  previousPermanentState.current = permanentState;
+}, [open, permanentState, form]);
+
+const previousCorrespondenceState = React.useRef<string | undefined>(undefined);
+
+React.useEffect(() => {
+  if (!open) return;
+
+  if (
+    previousCorrespondenceState.current &&
+    previousCorrespondenceState.current !== correspondenceState
+  ) {
+    form.setValue("correspondenceCity", "");
+  }
+
+  previousCorrespondenceState.current = correspondenceState;
+}, [open, correspondenceState, form]);
+
 
   const [copyAddress, setCopyAddress] = React.useState(false);
   const [hasReference, setHasReference] = React.useState(false);
@@ -370,17 +452,25 @@ export default function DriverForm({
           icon={<IconMapPin size={16} />}
         />
 
-        <IconTextField<CreateDriverFormInput>
-          name="permanentState"
-          label="State"
-          icon={<IconMapPin size={16} />}
-        />
+        <SelectField<CreateDriverFormInput>
+  name="permanentState"
+  label="State"
+  placeholder="Select state"
+  options={states.map((state) => ({
+    label: state.name,
+    value: state.name,
+  }))}
+/>
 
-        <IconTextField<CreateDriverFormInput>
-          name="permanentCity"
-          label="City"
-          icon={<IconMapPin size={16} />}
-        />
+<SelectField<CreateDriverFormInput>
+  name="permanentCity"
+  label="City"
+  placeholder="Select city"
+  options={permanentCities.map((city) => ({
+    label: city.name,
+    value: city.name,
+  }))}
+/>
       </FormSection>
 
       <FormSection
@@ -420,17 +510,25 @@ export default function DriverForm({
               icon={<IconMapPin size={16} />}
             />
 
-            <IconTextField<CreateDriverFormInput>
-              name="correspondenceState"
-              label="State"
-              icon={<IconMapPin size={16} />}
-            />
+          <SelectField<CreateDriverFormInput>
+  name="correspondenceState"
+  label="State"
+  placeholder="Select state"
+  options={states.map((state) => ({
+    label: state.name,
+    value: state.name,
+  }))}
+/>
 
-            <IconTextField<CreateDriverFormInput>
-              name="correspondenceCity"
-              label="City"
-              icon={<IconMapPin size={16} />}
-            />
+<SelectField<CreateDriverFormInput>
+  name="correspondenceCity"
+  label="City"
+  placeholder="Select city"
+  options={correspondenceCities.map((city) => ({
+    label: city.name,
+    value: city.name,
+  }))}
+/>
 
             <IconTextField<CreateDriverFormInput>
               name="correspondenceLandline"

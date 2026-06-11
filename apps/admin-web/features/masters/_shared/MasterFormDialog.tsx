@@ -105,14 +105,16 @@ export default function MasterFormDialog<
         }
       }
 
-      const message =
-        details?.formErrors?.[0] ||
-        getErrorMessage(error);
+    const hasFieldErrors = Object.keys(details?.fieldErrors ?? {}).length > 0;
 
-      form.setError("root", {
-        type: "server",
-        message,
-      });
+if (!hasFieldErrors) {
+  const message = details?.formErrors?.[0] || getErrorMessage(error);
+
+  form.setError("root", {
+    type: "server",
+    message,
+  });
+}
     }
   };
 

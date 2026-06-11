@@ -92,22 +92,24 @@ const rateMatrixRouter: Router = createCrudRouter({
     },
 
     blockDeleteIfExists: [
-      {
-        model: db.vehicleTrip,
+  {
+    model: db.vehicleTrip,
 
-        label: "Vehicle Trips",
+    label: "Vehicle Trips",
 
-        where: (id: string) => ({
-          rateMatrixId: id,
-        }),
+    where: (id: string) => ({
+      rateMatrixId: id,
+    }),
 
-        select: {
-          tripId: true,
-        },
+    select: {
+      id: true,
+      tripNumber: true,
+      tripName: true,
+    },
 
-        getName: (row: any) => row.tripId,
-      },
-    ],
+    getName: (row: any) => row.tripNumber || row.tripName || row.id,
+  },
+],
   },
 });
 
