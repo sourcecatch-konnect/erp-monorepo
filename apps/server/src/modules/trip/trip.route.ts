@@ -75,14 +75,16 @@ async function resolveTripName(
   // LR trips carry one client; DC trips are identified by their rake.
   let consignorId: string | null = null;
   let shortCode: string | null = null;
+  let consignorName: string | null = null;
   if (data.tripType === "lr") {
     const consignor = await db.customer.findUnique({
       where: { id: data.consignorId! },
-      select: { shortName: true },
+      select: { shortName: true, name: true },
     });
     if (!consignor) throw new BadRequestError("Client not found");
     consignorId = data.consignorId!;
     shortCode = consignor.shortName;
+    consignorName = consignor.name;
   }
 
   const tripName = buildTripName({
@@ -91,6 +93,7 @@ async function resolveTripName(
     truckNumber: vehicle.vehicleNumber,
     tripType: data.tripType,
     customerShortCode: shortCode,
+    consignorName: consignorName,
     rakeDate: data.rakeDate ?? null,
     at,
   });

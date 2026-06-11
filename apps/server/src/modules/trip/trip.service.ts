@@ -27,16 +27,19 @@ export const buildTripName = (args: {
   truckNumber: string;
   tripType: "lr" | "dc";
   customerShortCode?: string | null;
+  consignorName?: string | null;
   rakeDate?: Date | null;
   at: Date;
 }): string => {
   const middle =
     args.tripType === "dc"
-      ? `Rake(${args.rakeDate ? dateStamp(args.rakeDate) : "?"})`
-      : args.customerShortCode || "NA";
-  return `${args.fromCity}-${args.toCity}/${args.truckNumber}/${middle}/${stamp(args.at)}`;
-};
+      ? `RAKE(${args.rakeDate ? dateStamp(args.rakeDate) : "?"})`
+      : (args.customerShortCode || args.consignorName || "NA").toUpperCase();
 
+  const route = `${args.fromCity}-${args.toCity}`.toUpperCase();
+  const truck = args.truckNumber.toUpperCase();
+  return `${route}/${truck}/${middle}/${stamp(args.at)}`;
+};
 /** Columns for the trips list table. */
 export const tripListSelect = {
   id: true,

@@ -18,6 +18,7 @@ import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import { TripStatusBadge, TRIP_TYPE_LABELS } from "./trip-ui";
 import StartTripDialog from "./StartTripDialog";
+import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -31,6 +32,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function TripDetail({ id }: { id: string }) {
+  const { setLabel } = useBreadcrumbLabels();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [startOpen, setStartOpen] = React.useState(false);
@@ -43,6 +45,15 @@ export default function TripDetail({ id }: { id: string }) {
     queryKey: tripKeys.detail(id),
     queryFn: () => tripApi.detail(id),
   });
+
+  // Register trip name as the breadcrumb label for this route segment
+  React.useEffect(() => {
+    if (trip.data?.tripName) {
+      setLabel(`/trips/${id}`, trip.data.tripName);
+    }
+    return () => setLabel(`/trips/${id}`, null); // cleanup on unmount
+  }, [id, trip.data?.tripName, setLabel]);
+
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: tripKeys.all });
@@ -90,9 +101,8 @@ export default function TripDetail({ id }: { id: string }) {
   const startable = t.status === "Planned";
   const editable = t.status === "Planned";
   const cancellable = t.status === "Planned" || t.status === "InTransit";
-  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${
-    t.route?.destinationCity?.name ?? "?"
-  }`;
+  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${t.route?.destinationCity?.name ?? "?"
+    }`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-4 md:p-6">
@@ -102,9 +112,13 @@ export default function TripDetail({ id }: { id: string }) {
             <IconArrowLeft size={18} />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">{t.tripName}</h1>
-            <p className="text-xs text-muted-foreground">{t.tripNumber}</p>
-            <div className="mt-1">
+            <h1 className="text-sm font-semibold tracking-wider text-foreground">
+              {t.tripName}
+            </h1>
+            <div className="mt-0.5 flex items-center gap-2">
+              <p className="text-xs tracking-wide text-muted-foreground">
+                {t.tripNumber}
+              </p>
               <TripStatusBadge status={t.status} />
             </div>
           </div>

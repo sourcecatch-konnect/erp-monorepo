@@ -35,14 +35,17 @@ export function AppBreadcrumb() {
           const label = labels[href];
           const isRoleDetailSegment =
             segments[index - 2] === "settings" && segments[index - 1] === "roles";
+          const isDynamicSegment =
+            (isRoleDetailSegment) ||
+            (segments[index - 1] === "trips" && !label);   // ← add this
+
           const content =
             label ??
-            (isRoleDetailSegment ? (
-              <Skeleton className="h-4 w-24 rounded-sm" />
+            (isDynamicSegment ? (
+              <Skeleton className="h-4 w-36 rounded-sm" />
             ) : (
               titleize(decodeURIComponent(segment))
             ));
-
           return (
             <Fragment key={href}>
               <BreadcrumbItem>
