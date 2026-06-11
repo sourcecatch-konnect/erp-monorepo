@@ -570,6 +570,7 @@ model Agreement {
   agreementDate DateTime
   expiryDate    DateTime
 
+ 
   leadGeneratedByBranchId String
 
   company   Company  @relation(fields: [companyId], references: [id])
@@ -615,6 +616,11 @@ model Route {
 
   @@unique([sourceCityId, destinationCityId])
 }
+model RateUnit {
+  id        String       @id @default(cuid())
+  unitValue Int
+  unitType  RateUnitType
+  isActive  Boolean      @default(true)
 
 model RateUnit {
   id        String       @id @default(cuid())
@@ -629,7 +635,6 @@ model RateUnit {
 
   @@unique([unitValue, unitType])
 }
-
 model RateMatrix {
   id            String            @id @default(cuid())
   agreementId   String
@@ -662,6 +667,10 @@ enum RateTransportType {
   ROAD
 }
 
+enum RateTransportType {
+  RAIL_ROAD
+  ROAD
+}
 enum DriverStatus {
   AVAILABLE
   ON_TRIP

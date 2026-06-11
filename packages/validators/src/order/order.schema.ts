@@ -72,6 +72,7 @@ const orderBaseShape = {
   fromBranchId: z.string().min(1, "From branch is required"),
   toBranchId: z.string().min(1, "To branch is required"),
   pickupDate: requiredDate,
+  routeId: z.string().trim().min(1, "Route is required"),
   customerLocationId: optionalString,
   pickupAddressOverride: optionalString,
   specialInstructions: optionalString,

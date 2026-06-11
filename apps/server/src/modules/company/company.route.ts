@@ -32,7 +32,7 @@ const router: Router = createCrudRouter({
       startDate: true,
       agreementDate: true,
       expiryDate: true,
-      carryingCapacity: true,
+
 
       client: {
         select: { id: true, name: true },

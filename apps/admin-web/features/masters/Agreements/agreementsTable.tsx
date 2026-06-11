@@ -97,15 +97,4 @@ export const agreementColumns: ColumnDef<AgreementWithRelations>[] = [
       </span>
     ),
   },
-
-{
-  accessorKey: "carryingCapacity",
-  header: "Capacity",
-  cell: ({ row }) => (
-    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-      <IconWeight size={12} />
-      {formatNumber(row.original.carryingCapacity)} Ton
-    </span>
-  ),
-},
 ];

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import {
   createOrderSchema,
   updateOrderSchema,
@@ -32,12 +32,37 @@ import {
   orderQuickViewSelect,
   writeOrderEvent,
 } from "./order.service.js";
+// import { buildOrderPdfDocument, orderPdfInclude } from "./order.pdf.js";
+import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
+import { buildOrderPdfDocument , orderPdfInclude} from "./order.pdf.js";
+import { basePdfTemplate } from "../../templetes/pdf/template/base-pdf.template.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
-const orderLink = (id: string) => `/orders/${id}`;
+
+const getOrderIdentifier = (req: { params: { id?: string } }) => {
+  const identifier = decodeURIComponent(req.params.id ?? "").trim();
+
+  if (!identifier) {
+    throw new BadRequestError("Order identifier is required");
+  }
+
+  return identifier;
+};
+
+const orderWhereByIdentifier = (identifier: string) => ({
+  deletedAt: null,
+  OR: [
+    { id: identifier },
+    { orderNumber: identifier },
+  ],
+});
+
+const orderLink = (orderNumber: string) =>
+  `/orders/${encodeURIComponent(orderNumber)}`;
+
 
 /* ------------------------------------------------------------------ */
 /* List                                                               */
@@ -70,7 +95,6 @@ router.get("/", can(PERMS.ORDER.VIEW), async (req, res) => {
     }),
     db.order.count({ where }),
   ]);
-
   return sendOk(res, data, { page: query.page, size: query.size, total });
 });
 
@@ -98,38 +122,43 @@ router.get("/status-counts", can(PERMS.ORDER.VIEW), async (req, res) => {
 /* Detail                                                             */
 /* ------------------------------------------------------------------ */
 router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
-  const id = getParamId(req);
+  const identifier = getOrderIdentifier(req);
   const isQuickView = req.query.view === "quick";
-
   if (isQuickView) {
+  
     const order = await db.order.findFirst({
-      where: { id, deletedAt: null },
+      where: orderWhereByIdentifier(identifier),
       select: orderQuickViewSelect,
     });
+   
 
     if (!order) throw new NotFoundError("Order not found");
 
+   
     return sendOk(res, order);
   }
 
   const order = await db.order.findFirst({
-    where: { id, deletedAt: null },
+     where: orderWhereByIdentifier(identifier),
     include: orderInclude,
   });
 
+
   if (!order) throw new NotFoundError("Order not found");
 
-  const freight = await computeFreight({
-    orderType: order.orderType,
-    customerId: order.customerId,
-    fromBranchId: order.fromBranchId,
-    toBranchId: order.toBranchId,
-    vehicleTypeId: order.vehicleTypeId,
-    truckQuantity: order.truckQuantity,
-  });
+const freight = await computeFreight({
+  orderType: order.orderType,
+  customerId: order.customerId,
+  fromBranchId: order.fromBranchId,
+  toBranchId: order.toBranchId,
+  routeId: order.routeId,
+  vehicleTypeId: order.vehicleTypeId,
+  truckQuantity: order.truckQuantity,
+});
+ 
 
   return sendOk(res, { ...order, freightPreview: freight });
-});;
+});
 
 
 /* ------------------------------------------------------------------ */
@@ -161,6 +190,7 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
         orderNumber,
         customerId: data.customerId,
         fromBranchId: data.fromBranchId,
+        routeId: data.routeId,
         toBranchId: data.toBranchId,
         pickupDate: data.pickupDate,
         customerLocationId: data.customerLocationId,
@@ -213,7 +243,7 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
       fromBranchId: order.fromBranchId,
       createdById: order.createdById,
       customerName: order.customer?.name,
-      linkUrl: orderLink(order.id),
+      linkUrl: orderLink(order.orderNumber),
     },
   });
 
@@ -224,9 +254,16 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
 /* Edit (PendingApproval/Rejected full; Confirmed soft only)          */
 /* ------------------------------------------------------------------ */
 router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
-  const id = getParamId(req);
-  const existing = await db.order.findFirst({ where: { id, deletedAt: null } });
+  const identifier = getOrderIdentifier(req);
+
+  const existing = await db.order.findFirst({
+    where: orderWhereByIdentifier(identifier),
+  });
+
   if (!existing) throw new NotFoundError("Order not found");
+
+  const id = existing.id;
+
   assertBranchAccess(req, existing.fromBranchId);
 
   const clientVersion =
@@ -278,6 +315,7 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
         customerId: data.customerId,
         fromBranchId: data.fromBranchId,
         toBranchId: data.toBranchId,
+        routeId: data.routeId,
         pickupDate: data.pickupDate,
         customerLocationId: data.customerLocationId ?? null,
         pickupAddressOverride: data.pickupAddressOverride ?? null,
@@ -330,7 +368,7 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
         fromBranchId: updated.fromBranchId,
         createdById: updated.createdById,
         customerName: updated.customer?.name,
-        linkUrl: orderLink(updated.id),
+        linkUrl: orderLink(updated.orderNumber),
       },
     });
   }
@@ -342,12 +380,17 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
 /* Approve -> Confirmed                                               */
 /* ------------------------------------------------------------------ */
 router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
-  const id = getParamId(req);
+  const identifier = getOrderIdentifier(req);
+
   const existing = await db.order.findFirst({
-    where: { id, deletedAt: null },
+    where: orderWhereByIdentifier(identifier),
     include: { customer: { select: { disallowNewLRBooking: true } } },
   });
+
   if (!existing) throw new NotFoundError("Order not found");
+
+  const id = existing.id;
+
   assertBranchAccess(req, existing.fromBranchId);
 
   if (existing.status !== "PendingApproval") {
@@ -371,14 +414,15 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
   // Use the provided freight, else auto-compute (may be null for unmatched/Item).
   let freight = bookingFreightAmount ?? null;
   if (freight === null) {
-    const computed = await computeFreight({
-      orderType: existing.orderType,
-      customerId: existing.customerId,
-      fromBranchId: existing.fromBranchId,
-      toBranchId: existing.toBranchId,
-      vehicleTypeId: existing.vehicleTypeId,
-      truckQuantity: existing.truckQuantity,
-    });
+  const computed = await computeFreight({
+  orderType: existing.orderType,
+  customerId: existing.customerId,
+  fromBranchId: existing.fromBranchId,
+  toBranchId: existing.toBranchId,
+  routeId: existing.routeId,
+  vehicleTypeId: existing.vehicleTypeId,
+  truckQuantity: existing.truckQuantity,
+});
     freight = computed.amount;
   }
 
@@ -419,7 +463,7 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
     payload: {
       orderNumber: updated.orderNumber,
       createdById: updated.createdById,
-      linkUrl: orderLink(updated.id),
+      linkUrl: orderLink(updated.orderNumber),
     },
   });
 
@@ -430,9 +474,16 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
 /* Reject -> Rejected                                                 */
 /* ------------------------------------------------------------------ */
 router.post("/:id/reject", can(PERMS.ORDER.REJECT), async (req, res) => {
-  const id = getParamId(req);
-  const existing = await db.order.findFirst({ where: { id, deletedAt: null } });
+  const identifier = getOrderIdentifier(req);
+
+  const existing = await db.order.findFirst({
+    where: orderWhereByIdentifier(identifier),
+  });
+
   if (!existing) throw new NotFoundError("Order not found");
+
+  const id = existing.id;
+
   assertBranchAccess(req, existing.fromBranchId);
 
   if (existing.status !== "PendingApproval") {
@@ -470,7 +521,7 @@ router.post("/:id/reject", can(PERMS.ORDER.REJECT), async (req, res) => {
       orderNumber: updated.orderNumber,
       createdById: updated.createdById,
       reason: parsed.data.reason,
-      linkUrl: orderLink(updated.id),
+      linkUrl: orderLink(updated.orderNumber),
     },
   });
 
@@ -481,9 +532,16 @@ router.post("/:id/reject", can(PERMS.ORDER.REJECT), async (req, res) => {
 /* Cancel -> Cancelled                                                */
 /* ------------------------------------------------------------------ */
 router.post("/:id/cancel", can(PERMS.ORDER.CANCEL), async (req, res) => {
-  const id = getParamId(req);
-  const existing = await db.order.findFirst({ where: { id, deletedAt: null } });
+  const identifier = getOrderIdentifier(req);
+
+  const existing = await db.order.findFirst({
+    where: orderWhereByIdentifier(identifier),
+  });
+
   if (!existing) throw new NotFoundError("Order not found");
+
+  const id = existing.id;
+
   assertBranchAccess(req, existing.fromBranchId);
 
   if (!["PendingApproval", "Confirmed"].includes(existing.status)) {
@@ -515,4 +573,108 @@ router.post("/:id/cancel", can(PERMS.ORDER.CANCEL), async (req, res) => {
   return sendOk(res, updated);
 });
 
+router.get(
+  "/:id/pdf",
+  can(PERMS.ORDER.VIEW),
+  async (req: Request<{ id: string }>, res: Response) => {
+    const identifier = getOrderIdentifier(req);
+
+    const order = await db.order.findFirst({
+      where: orderWhereByIdentifier(identifier),
+      include: orderPdfInclude,
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    assertBranchAccess(req, order.fromBranchId);
+
+    const pdfDocument = buildOrderPdfDocument(order);
+    const pdfBuffer = await generatePdfBuffer(pdfDocument);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="order-${order.orderNumber || order.id}.pdf"`
+    );
+
+    return res.send(pdfBuffer);
+  }
+);
+/* ------------------------------------------------------------------ */
+/* Delete                                             */
+/* ------------------------------------------------------------------ */
+router.delete("/:id", can(PERMS.ORDER.DELETE), async (req, res) => {
+  const identifier = getOrderIdentifier(req);
+
+  const existing = await db.order.findFirst({
+    where: orderWhereByIdentifier(identifier),
+  });
+
+  if (!existing) {
+    throw new NotFoundError("Order not found");
+  }
+
+  assertBranchAccess(req, existing.fromBranchId);
+
+  /**
+   * ERP safety rule:
+   * Only non-operational orders can be deleted.
+   * Confirmed / InProgress / Completed orders should not be deleted.
+   */
+  if (!["PendingApproval", "Rejected"].includes(existing.status)) {
+    throw new BadRequestError(
+      `A ${existing.status} order cannot be deleted. Please cancel the order instead.`,
+      "ORDER_DELETE_NOT_ALLOWED"
+    );
+  }
+
+  const me = actorId(req);
+
+  const deleted = await db.$transaction(async (tx) => {
+    /**
+     * Since Attachment is polymorphic, Prisma does not have direct relation.
+     * We manually check files attached to this order.
+     */
+    const attachmentCount = await tx.attachment.count({
+      where: {
+        entityType: "Order",
+        entityId: existing.id,
+        deletedAt: null,
+      },
+    });
+
+    if (attachmentCount > 0) {
+      throw new BadRequestError(
+        `This order cannot be deleted because ${attachmentCount} attachment(s) are linked with this order.`,
+        "ORDER_DELETE_BLOCKED"
+      );
+    }
+
+    const row = await tx.order.update({
+      where: { id: existing.id },
+      data: {
+        deletedAt: new Date(),
+        updatedById: me,
+        version: { increment: 1 },
+      },
+      include: orderInclude,
+    });
+
+    await writeOrderEvent(
+      tx,
+      existing.id,
+      me,
+      "deleted",
+      "Order soft deleted"
+    );
+
+    return row;
+  });
+
+  return sendOk(res, deleted);
+});
 export default router;

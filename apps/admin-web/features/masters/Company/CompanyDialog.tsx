@@ -6,6 +6,7 @@ import type { CompanyWithRelations } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import {
@@ -15,13 +16,13 @@ import {
   TabsTrigger,
 } from "@skerp/ui/components/tabs";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
 
 
 import { SectionLabel ,
     Field,
   PartyCard,
   formatDate,
+  SkeletonBody,
 } from "../_shared/dialog-parts"
 import {
   IconBuilding,
@@ -48,25 +49,7 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i}>
-          <Skeleton className="mb-3 h-4 w-28" />
-          <div className="grid grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, x) => (
-              <Skeleton
-                key={x}
-                className="h-14 rounded-xl"
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+
 
 export default function CompanyDetailDialog({
   open,
@@ -92,9 +75,7 @@ export default function CompanyDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">
-                Company Details
-              </p>
+             <DialogTitle>Company Details</DialogTitle>
 
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
@@ -279,15 +260,7 @@ export default function CompanyDetailDialog({
               icon={<IconMapPin size={12} />}
             />
 
-            <Field
-              label="Carrying Capacity"
-              value={
-                agreement.carryingCapacity != null
-                  ? `${agreement.carryingCapacity} Ton`
-                  : "-"
-              }
-              icon={<IconTruck size={12} />}
-            />
+          
 
        
           </div>

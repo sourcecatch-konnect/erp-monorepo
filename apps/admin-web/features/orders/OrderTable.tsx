@@ -42,6 +42,7 @@ import {
   IconBan,
   IconEdit,
   IconDatabaseOff,
+  IconTrash,
 } from "@tabler/icons-react";
 
 import { StatusBadge, formatDate, formatMoney, STATUS_ORDER } from "./order-ui";
@@ -55,6 +56,7 @@ export type OrderRowActions = {
   canReject: boolean;
   canCancel: boolean;
   canUpdate: boolean;
+  canDelete: boolean;
 };
 
 type Props = OrderRowActions & {
@@ -69,6 +71,8 @@ type Props = OrderRowActions & {
   onStatusFilterChange: (value: string) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
+  
+onDelete: (order: Order) => void;
 };
 
 const routeLabel = (o: Order) =>
@@ -92,6 +96,8 @@ export default function OrderTable(props: Props) {
     onStatusFilterChange,
     counts,
     isLoading,
+    canDelete,
+     onDelete,
     onQuickView,
     onApprove,
     onReject,
@@ -109,7 +115,7 @@ export default function OrderTable(props: Props) {
         accessorKey: "orderNumber",
         cell: ({ row }) => (
           <Link
-            href={`/orders/${row.original.id}`}
+            href={`/orders/${encodeURIComponent(row.original.orderNumber)}`}
             className="font-medium text-primary hover:underline"
           >
             {row.original.orderNumber}
@@ -246,12 +252,30 @@ export default function OrderTable(props: Props) {
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => {
-                const o = row.original;
-                const isPending = o.status === "PendingApproval";
-                const cancellable =
-                  o.status === "PendingApproval" || o.status === "Confirmed";
-                const editable =
-                  o.status === "PendingApproval" || o.status === "Rejected";
+           const o = row.original;
+
+const isPending = o.status === "PendingApproval";
+
+const editable =
+  o.status === "PendingApproval" || o.status === "Rejected";
+
+const deletable =
+  o.status === "PendingApproval" || o.status === "Rejected";
+
+const cancellable =
+  o.status === "PendingApproval" || o.status === "Confirmed";
+
+const hasTopActions =
+  (canApprove && isPending) ||
+  (canReject && isPending) ||
+  (canUpdate && editable);
+
+const hasDangerActions =
+  (canCancel && cancellable) || (canDelete && deletable);
+
+const hasActions = hasTopActions || hasDangerActions;
+
+const showSeparator = hasTopActions && hasDangerActions;
                 return (
                   <TableRow key={row.id} className="hover:bg-muted/30">
                     {row.getVisibleCells().map((cell) => (
@@ -262,59 +286,76 @@ export default function OrderTable(props: Props) {
                         )}
                       </TableCell>
                     ))}
-                    <TableCell className="w-16 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="Quick view"
-                          onClick={() => onQuickView(o)}
-                        >
-                          <IconEye size={16} />
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              aria-label="Row actions"
-                            >
-                              <IconDotsVertical size={16} />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canApprove && isPending ? (
-                              <DropdownMenuItem onClick={() => onApprove(o)}>
-                                <IconCheck size={16} className="mr-2" /> Approve
-                              </DropdownMenuItem>
-                            ) : null}
-                            {canReject && isPending ? (
-                              <DropdownMenuItem onClick={() => onReject(o)}>
-                                <IconX size={16} className="mr-2" /> Reject
-                              </DropdownMenuItem>
-                            ) : null}
-                            {canUpdate && editable ? (
-                              <DropdownMenuItem asChild>
-                                <Link href={`/orders/${o.id}/edit`}>
-                                  <IconEdit size={16} className="mr-2" /> Edit
-                                </Link>
-                              </DropdownMenuItem>
-                            ) : null}
-                            {canCancel && cancellable ? (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-red-600"
-                                  onClick={() => onCancel(o)}
-                                >
-                                  <IconBan size={16} className="mr-2" /> Cancel
-                                </DropdownMenuItem>
-                              </>
-                            ) : null}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
+                   <TableCell className="w-16 text-right">
+  <div className="flex justify-end gap-1">
+    <Button
+      size="icon-sm"
+      variant="ghost"
+      aria-label="Quick view"
+      onClick={() => onQuickView(o)}
+    >
+      <IconEye size={16} />
+    </Button>
+
+   <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button
+      size="icon-sm"
+      variant="ghost"
+      aria-label="Row actions"
+      disabled={!hasActions}
+      className={!hasActions ? "opacity-40" : ""}
+    >
+      <IconDotsVertical size={16} />
+    </Button>
+  </DropdownMenuTrigger>
+
+  {hasActions ? (
+    <DropdownMenuContent align="end" className="w-36 p-1">
+      {canApprove && isPending ? (
+        <DropdownMenuItem onClick={() => onApprove(o)}>
+          <IconCheck size={16} className="mr-2" /> Approve
+        </DropdownMenuItem>
+      ) : null}
+
+      {canReject && isPending ? (
+        <DropdownMenuItem onClick={() => onReject(o)}>
+          <IconX size={16} className="mr-2" /> Reject
+        </DropdownMenuItem>
+      ) : null}
+
+      {canUpdate && editable ? (
+        <DropdownMenuItem asChild>
+          <Link href={`/orders/${encodeURIComponent(o.orderNumber)}/edit`}>
+            <IconEdit size={16} className="mr-2" /> Edit
+          </Link>
+        </DropdownMenuItem>
+      ) : null}
+
+      {showSeparator ? <DropdownMenuSeparator /> : null}
+
+      {canCancel && cancellable ? (
+        <DropdownMenuItem
+          className="text-red-600 focus:text-red-600"
+          onClick={() => onCancel(o)}
+        >
+          <IconBan size={16} className="mr-2" /> Cancel
+        </DropdownMenuItem>
+      ) : null}
+
+      {canDelete && deletable ? (
+        <DropdownMenuItem
+          className="text-red-600 focus:text-red-600"
+          onClick={() => onDelete(o)}
+        >
+          <IconTrash size={16} className="mr-2" /> Delete
+        </DropdownMenuItem>
+      ) : null}
+    </DropdownMenuContent>
+  ) : null}
+</DropdownMenu>
+  </div>
+</TableCell>
                   </TableRow>
                 );
               })

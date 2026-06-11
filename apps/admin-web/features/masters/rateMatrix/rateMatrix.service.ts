@@ -5,6 +5,9 @@ import type {
   RateMatrix,
   CreateRateMatrixBody,
   UpdateRateMatrixBody,
+  RateUnit,
+  UpdateRateUnitBody,
+  CreateRateUnitBody,
 } from "@skerp/types";
 
 import {
@@ -87,5 +90,65 @@ export const rateMatrixApi = {
     );
 
     return unwrapApiResponse(res);
+  },
+  units: {
+    list: async (query?: ListQuery): Promise<ListResult<RateUnit>> => {
+      const res = await api.get<ApiResponse<RateUnit[]>>(
+        "/rateMatrix/units",
+        {
+          params: query,
+        }
+      );
+
+      return unwrapListResponse(res);
+    },
+
+    detail: async (id: string): Promise<RateUnit> => {
+      const res = await api.get<ApiResponse<RateUnit>>(
+        `/rateMatrix/units/${id}`
+      );
+
+      return unwrapApiResponse(res);
+    },
+
+    create: async (body: CreateRateUnitBody): Promise<RateUnit> => {
+      const res = await api.post<ApiResponse<RateUnit>>(
+        "/rateMatrix/units",
+        body
+      );
+
+      return unwrapApiResponse(res);
+    },
+
+    update: async (
+      id: string,
+      body: UpdateRateUnitBody
+    ): Promise<RateUnit> => {
+      const res = await api.patch<ApiResponse<RateUnit>>(
+        `/rateMatrix/units/${id}`,
+        body
+      );
+
+      return unwrapApiResponse(res);
+    },
+
+    remove: async (id: string): Promise<void> => {
+      const res = await api.delete<ApiResponse<null>>(
+        `/rateMatrix/units/${id}`
+      );
+
+      unwrapApiResponse(res);
+    },
+
+    search: async (q: string): Promise<RateUnit[]> => {
+      const res = await api.get<ApiResponse<RateUnit[]>>(
+        "/rateMatrix/units/search",
+        {
+          params: { q },
+        }
+      );
+
+      return unwrapApiResponse(res);
+    },
   },
 };

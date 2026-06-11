@@ -22,8 +22,7 @@ const router: Router =
     updateSchema:
       updateRailwayFreightMatrixSchema as ZodTypeAny,
 
-    permissionKey:
-      "masters.railwayFreightMatrix",
+    permissionKey: "masters.railway-freight",
 
     listOptions: {
       searchableFields: [
