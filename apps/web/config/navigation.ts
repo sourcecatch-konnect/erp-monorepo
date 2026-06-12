@@ -106,6 +106,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       {
         title: "Masters",
+        href: "/masters",
         icon: IconDatabase,
         items: [
           {

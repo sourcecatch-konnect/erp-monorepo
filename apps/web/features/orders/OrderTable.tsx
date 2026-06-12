@@ -63,6 +63,7 @@ type Props = OrderRowActions & {
   page: number;
   size: number;
   onPageChange: (page: number) => void;
+  onSizeChange: (size: number) => void;
   search: string;
   onSearchChange: (value: string) => void;
   statusFilter: string;
@@ -70,7 +71,7 @@ type Props = OrderRowActions & {
   counts: Record<string, number>;
   isLoading?: boolean;
 };
-
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 const routeLabel = (o: Order) =>
   `${o.fromBranch?.shortCode ?? "?"} → ${o.toBranch?.shortCode ?? "?"}`;
 
@@ -88,6 +89,7 @@ export default function OrderTable(props: Props) {
     onPageChange,
     search,
     onSearchChange,
+    onSizeChange,
     statusFilter,
     onStatusFilterChange,
     counts,
@@ -165,20 +167,18 @@ export default function OrderTable(props: Props) {
               key={tab.key}
               type="button"
               onClick={() => onStatusFilterChange(tab.key)}
-              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
+              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted"
+                }`}
             >
               {tab.label}
               {typeof count === "number" ? (
                 <span
-                  className={`ml-1.5 rounded-sm px-1 text-xs ${
-                    active
-                      ? "bg-primary-foreground/20"
-                      : "bg-muted-foreground/10"
-                  }`}
+                  className={`ml-1.5 rounded-sm px-1 text-xs ${active
+                    ? "bg-primary-foreground/20"
+                    : "bg-muted-foreground/10"
+                    }`}
                 >
                   {count}
                 </span>
@@ -323,10 +323,35 @@ export default function OrderTable(props: Props) {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {total} order{total === 1 ? "" : "s"} · page {page + 1} of {pageCount}
-        </p>
+      <div className="flex flex-col gap-3 border-t px-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span>
+            {total === 0
+              ? "Showing 0"
+              : `Showing ${page * size + 1}-${Math.min((page + 1) * size, total)}`}{" "}
+            of {total}
+          </span>
+
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+            <select
+              value={size}
+              onChange={(e) => onSizeChange(Number(e.target.value))}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+            >
+              {PAGE_SIZE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <span>
+            Page {page + 1} of {pageCount}
+          </span>
+        </div>
+
         <Pagination className="mx-0 w-auto">
           <PaginationContent>
             <PaginationItem>
@@ -340,6 +365,7 @@ export default function OrderTable(props: Props) {
                 }}
               />
             </PaginationItem>
+
             <PaginationItem>
               <PaginationNext
                 href="#"

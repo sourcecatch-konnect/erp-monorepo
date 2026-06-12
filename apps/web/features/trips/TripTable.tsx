@@ -59,6 +59,7 @@ type Props = TripRowActions & {
   page: number;
   size: number;
   onPageChange: (page: number) => void;
+  onSizeChange: (size: number) => void;
   search: string;
   onSearchChange: (value: string) => void;
   statusFilter: string;
@@ -77,6 +78,7 @@ export default function TripTable(props: Props) {
     page,
     size,
     onPageChange,
+    onSizeChange,
     search,
     onSearchChange,
     statusFilter,
@@ -88,6 +90,28 @@ export default function TripTable(props: Props) {
     canUpdate,
     canCancel,
   } = props;
+
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isCtrlF = event.ctrlKey && event.key.toLowerCase() === "f";
+      const isMetaF = event.metaKey && event.key.toLowerCase() === "f";
+
+      if (!isCtrlF && !isMetaF) return;
+
+      event.preventDefault();
+
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   const columns = React.useMemo<ColumnDef<Trip>[]>(
     () => [
@@ -137,6 +161,7 @@ export default function TripTable(props: Props) {
   });
 
   const pageCount = Math.max(1, Math.ceil(total / size));
+  const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
   return (
     <div className="w-full space-y-3">
@@ -150,20 +175,18 @@ export default function TripTable(props: Props) {
               key={tab.key}
               type="button"
               onClick={() => onStatusFilterChange(tab.key)}
-              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
+              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted"
+                }`}
             >
               {tab.label}
               {typeof count === "number" ? (
                 <span
-                  className={`ml-1.5 rounded-sm px-1 text-xs ${
-                    active
-                      ? "bg-primary-foreground/20"
-                      : "bg-muted-foreground/10"
-                  }`}
+                  className={`ml-1.5 rounded-sm px-1 text-xs ${active
+                    ? "bg-primary-foreground/20"
+                    : "bg-muted-foreground/10"
+                    }`}
                 >
                   {count}
                 </span>
@@ -173,13 +196,18 @@ export default function TripTable(props: Props) {
         })}
       </div>
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="relative w-full sm:max-w-sm">
         <Input
+          ref={searchInputRef}
+          placeholder="Search trip no. or vehicle no..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search trip no…"
-          className="h-9 max-w-xs"
+          className="pr-16"
         />
+
+        <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+          Ctrl+F
+        </kbd>
       </div>
 
       <div className="w-full overflow-x-auto rounded-lg bg-white">
@@ -305,10 +333,35 @@ export default function TripTable(props: Props) {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {total} trip{total === 1 ? "" : "s"} · page {page + 1} of {pageCount}
-        </p>
+      <div className="flex flex-col gap-3 border-t px-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span>
+            {total === 0
+              ? "Showing 0"
+              : `Showing ${page * size + 1}-${Math.min((page + 1) * size, total)}`}{" "}
+            of {total}
+          </span>
+
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+            <select
+              value={size}
+              onChange={(e) => onSizeChange(Number(e.target.value))}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+            >
+              {PAGE_SIZE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <span>
+            Page {page + 1} of {pageCount}
+          </span>
+        </div>
+
         <Pagination className="mx-0 w-auto">
           <PaginationContent>
             <PaginationItem>
@@ -322,6 +375,7 @@ export default function TripTable(props: Props) {
                 }}
               />
             </PaginationItem>
+
             <PaginationItem>
               <PaginationNext
                 href="#"

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Breadcrumb,
@@ -33,11 +34,14 @@ export function AppBreadcrumb() {
           const href = "/" + segments.slice(0, index + 1).join("/");
           const isLast = index === segments.length - 1;
           const label = labels[href];
+
           const isRoleDetailSegment =
-            segments[index - 2] === "settings" && segments[index - 1] === "roles";
+            segments[index - 2] === "settings" &&
+            segments[index - 1] === "roles";
+
           const isDynamicSegment =
-            (isRoleDetailSegment) ||
-            (segments[index - 1] === "trips" && !label);   // ← add this
+            isRoleDetailSegment ||
+            (segments[index - 1] === "trips" && !label);
 
           const content =
             label ??
@@ -46,17 +50,19 @@ export function AppBreadcrumb() {
             ) : (
               titleize(decodeURIComponent(segment))
             ));
+
           return (
             <Fragment key={href}>
               <BreadcrumbItem>
                 {isLast ? (
                   <BreadcrumbPage>{content}</BreadcrumbPage>
                 ) : (
-                  <BreadcrumbLink href={href}>
-                    {content}
+                  <BreadcrumbLink asChild>
+                    <Link href={href}>{content}</Link>
                   </BreadcrumbLink>
                 )}
               </BreadcrumbItem>
+
               {!isLast && <BreadcrumbSeparator />}
             </Fragment>
           );
