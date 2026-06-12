@@ -8,7 +8,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Readable } from "node:stream";
 
-const region = process.env.AWS_S3_REGION || process.env.AWS_REGION || "ap-south-1";
+const region = process.env.AWS_S3_REGION || "ap-south-1";
 const bucket = process.env.AWS_S3_BUCKET || "";
 
 // Credentials are read from the standard AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY

@@ -13,7 +13,7 @@ import {
   IconPhone,
   IconUser,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 
 
@@ -84,7 +84,7 @@ export const customerColumns: ColumnDef<Customer>[] = [
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1 text-sm font-medium">
         <IconCash size={13} />
-        {formatCurrency(row.original.creditLimit)}
+        {formatCurrencyFromPaise(row.original.creditLimit)}
       </span>
     ),
   },

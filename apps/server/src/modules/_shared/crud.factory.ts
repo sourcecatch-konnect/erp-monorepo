@@ -434,7 +434,11 @@ export function createCrudRouter<Create, Update>({
           continue;
         }
 
-        await model.create({ data: parsed.data });
+        const data = hooks?.beforeCreate
+          ? await hooks.beforeCreate(parsed.data)
+          : parsed.data;
+
+        await model.create({ data });
         inserted += 1;
       }
 

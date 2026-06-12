@@ -14,7 +14,7 @@ import {
   Field,
   PartyCard,
   formatDate,
-  formatCurrency,
+  formatCurrencyFromPaise,
   SkeletonBody,
 } from "../_shared/dialog-parts";
 
@@ -118,7 +118,7 @@ export default function CustomerDetailDialog({
 
                 <Field
                   label="Credit Limit"
-                  value={formatCurrency(data?.creditLimit)}
+                  value={formatCurrencyFromPaise(data?.creditLimit)}
                   icon={<IconCash size={12} />}
                 />
 

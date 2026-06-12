@@ -1,8 +1,9 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../../generated/prisma/index.js";
 import type { PdfDocument } from "../../templetes/pdf/pdf.type.js";
 import path from "node:path";
 // import { imageToBase64Src } from "../utils/image-to-base64.js";
 import { imageToBase64Src } from "../_shared/pdf.helper.js";
+import { paiseToRupees } from "../../lib/money.js";
 const headerImageSrc = imageToBase64Src(
   path.resolve(process.cwd(), "public/SKT.jpg")
 );
@@ -40,6 +41,15 @@ const pdfValue = (value: unknown): string | number | null | undefined => {
   }
 
   return String(value);
+};
+
+const pdfMoneyFromPaise = (value: unknown): string | number | undefined => {
+  if (value === null || value === undefined || value === "") return undefined;
+
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return undefined;
+
+  return paiseToRupees(amount);
 };
 const userFullName = (
   user:
@@ -124,7 +134,7 @@ export const buildOrderPdfDocument = (order: OrderPdfData): PdfDocument => {
         fields: [
           { label: "Vehicle Type", value: pdfValue(order.vehicleType?.name) },
           { label: "Truck Quantity", value: pdfValue(order.truckQuantity) },
-          { label: "Booking Freight Amount", value: pdfValue(order.bookingFreightAmount) },
+          { label: "Booking Freight Amount", value: pdfMoneyFromPaise(order.bookingFreightAmount) },
           { label: "Freight Override Reason", value: pdfValue(order.freightOverrideReason) },
         ],
       },
@@ -157,7 +167,7 @@ export const buildOrderPdfDocument = (order: OrderPdfData): PdfDocument => {
     summary: [
       {
         label: "Booking Freight Amount",
-        value: pdfValue(order.bookingFreightAmount) || 0,
+        value: pdfMoneyFromPaise(order.bookingFreightAmount) || 0,
       },
     ],
 

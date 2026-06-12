@@ -15,6 +15,7 @@ import type {
 
 import { createRateMatrixSchema } from "@skerp/validators";
 import { rateMatrixApi } from "./rateMatrix.service";
+import { paiseToRupees } from "@/lib/money";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
@@ -144,7 +145,7 @@ export default function RateMatrixForm({
       vehicleTypeId: row?.vehicleTypeId ?? "",
       unitId: row?.unitId ?? "",
       transportType: row?.transportType ?? "ROAD",
-      rate: row?.rate != null ? String(row.rate) : "",
+      rate: row?.rate != null ? String(paiseToRupees(row.rate)) : "",
       transitDays: row?.transitDays != null ? String(row.transitDays) : "",
       remarks: row?.remarks ?? "",
     });

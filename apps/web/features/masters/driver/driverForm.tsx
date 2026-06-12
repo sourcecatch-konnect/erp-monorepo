@@ -36,6 +36,7 @@ import SwitchField from "../_shared/fields/SwitchField";
 import FormSection from "../_shared/fields/FormSection";
 import { createDriverSchema } from "@skerp/validators";
 import { DatePicker } from "@skerp/ui/components/datepicker";
+import { paiseToRupees } from "@/lib/money";
 
 type Props = {
   open: boolean;
@@ -152,11 +153,13 @@ export default function DriverForm({
       referenceContactNo: row?.referenceContactNo ?? "",
       bloodGroup: row?.bloodGroup ?? "",
       otherDetails: row?.otherDetails ?? "",
-      salary: row?.salary != null ? String(row.salary) : "",
+      salary: row?.salary != null ? String(paiseToRupees(row.salary)) : "",
       panNo: row?.panNo ?? "",
       aadharCardNo: row?.aadharCardNo ?? "",
       noTDSApplyAmount:
-        row?.noTDSApplyAmount != null ? String(row.noTDSApplyAmount) : "",
+        row?.noTDSApplyAmount != null
+          ? String(paiseToRupees(row.noTDSApplyAmount))
+          : "",
       tdsRate: row?.tdsRate != null ? String(row.tdsRate) : "",
       onLeave: row?.onLeave ?? false,
       blackListed: row?.blackListed ?? false,

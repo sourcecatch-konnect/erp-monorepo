@@ -46,7 +46,7 @@ router.get("/company/:companyId", async (req, res, next) => {
     const { companyId } = req.params;
 
     const page = Number(req.query.page ?? 0);
-    const size = Number(req.query.size ?? 25);
+    const size = Number(req.query.size ?? 10);
     const search = String(req.query.search ?? "").trim();
 
     const where = {

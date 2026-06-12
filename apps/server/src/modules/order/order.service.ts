@@ -1,5 +1,6 @@
 import { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
+import { paiseToRupees } from "../../lib/money.js";
 
 // Shared document-numbering helpers live in _shared so every transactional
 // module (orders, trips, …) reuses one implementation. Re-exported here so
@@ -69,8 +70,6 @@ export const computeFreight = async (args: {
     };
   }
 
-  console.log("FREIGHT INPUT:", args);
-
   let route: { id: string } | null = null;
 
   if (args.routeId) {
@@ -122,7 +121,7 @@ export const computeFreight = async (args: {
       };
     }
 
-    const route = await db.route.findFirst({
+    route = await db.route.findFirst({
       where: {
         sourceCityId: fromBranch.cityId,
         destinationCityId: toBranch.cityId,
@@ -151,7 +150,6 @@ export const computeFreight = async (args: {
       rateMatrix: null,
     };
   }
-  console.log("FREIGHT ROUTE:", route);
   const agreements = await db.agreement.findMany({
     where: { clientId: args.customerId },
     select: { id: true },
@@ -167,13 +165,7 @@ export const computeFreight = async (args: {
   }
 
   const agreementIds = agreements.map((a) => a.id);
-  console.log("FREIGHT AGREEMENTS:", agreements);
   // Prefer an exact vehicleType match; fall back to the wildcard (null) row.
-  console.log("FREIGHT MATCH WHERE:", {
-    agreementIds,
-    routeId: route.id,
-    vehicleTypeId: args.vehicleTypeId,
-  });
   const match = await db.rateMatrix.findFirst({
     where: {
       agreementId: { in: agreementIds },
@@ -252,10 +244,9 @@ export const computeFreight = async (args: {
       rateMatrix: null,
     };
   }
-  console.log("FREIGHT RATE MATRIX MATCH:", match);
   const qty =
     args.truckQuantity && args.truckQuantity > 0 ? args.truckQuantity : 1;
-  const amount = match.rate * qty;
+  const amount = paiseToRupees(match.rate) * qty;
 
   return {
     amount,

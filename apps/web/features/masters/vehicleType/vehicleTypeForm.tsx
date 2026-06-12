@@ -10,6 +10,7 @@ import type {
 } from "@skerp/types";
 import { createVehicleTypeSchema } from "@skerp/validators";
 import { IconTruck } from "@tabler/icons-react";
+import { paiseToRupees } from "@/lib/money";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
@@ -46,8 +47,10 @@ export default function VehicleTypeForm({
     form.reset({
       code: row?.code ?? "",
       name: row?.name ?? "",
-      freightRangeFrom: row?.freightRangeFrom ?? undefined,
-      freightRangeTo: row?.freightRangeTo ?? undefined,
+      freightRangeFrom:
+        row?.freightRangeFrom != null ? paiseToRupees(row.freightRangeFrom) : undefined,
+      freightRangeTo:
+        row?.freightRangeTo != null ? paiseToRupees(row.freightRangeTo) : undefined,
       isActive: row?.isActive ?? true,
     });
   }, [form, open, row]);

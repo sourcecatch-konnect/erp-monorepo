@@ -13,7 +13,7 @@ import {
   IconTool,
   IconUser,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 
 const formatPercent = (
@@ -170,7 +170,7 @@ export const labourColumns: ColumnDef<LabourWithRelations>[] = [
       "TDS Amount",
 
     cell: ({ row }) =>
-      formatCurrency(
+      formatCurrencyFromPaise(
         row.original
           .tdsAmount
       ),

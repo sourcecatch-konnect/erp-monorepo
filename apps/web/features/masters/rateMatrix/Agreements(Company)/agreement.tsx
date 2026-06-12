@@ -4,10 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
-import type { AgreementWithRelations, RateMatrixWithRelations } from "@skerp/types";
+import type {
+  AgreementWithRelations,
+  RateMatrixWithRelations,
+} from "@skerp/types";
 
 import MasterListPage from "../../_shared/MasterListPage";
-import type { ListQuery } from "../../_shared/master-api";
 
 import { rateMatrixApi } from "../rateMatrix.service";
 import { rateMatrixKeys } from "../rateMatrix.key";
@@ -68,41 +70,44 @@ export default function RateMatrixCompanyAgreementsPage({
 
   return (
     <MasterListPage
-          title={`Company Agreements - ${companyName}`}
-          data={agreements}
-          columns={agreementColumns}
-          isLoading={isLoading}
-          search={search}
-          onSearchChange={setSearch}
-          page={page}
-          size={size}
-          total={total}
-          onPageChange={setPage}
-          selectedIds={selectedIds}
-          onSelectedIdsChange={setSelectedIds}
-          onAdd={() => {
-              router.push("/dashboard/masters/agreement");
-          } }
-          onEdit={() => {
-              router.push("/dashboard/masters/agreement");
-          } }
-          onView={(row) => {
-              setSelectedAgreement(row as AgreementWithRelations);
-              setDetailOpen(true);
-          } }
-          onDelete={async (id) => {
-              await agreementApi.remove(id);
-              await refetch();
-          } }
-          onBulkDelete={async () => {
-              await agreementApi.bulkRemove(selectedIds);
-              setSelectedIds([]);
-              await refetch();
-          } } onImport={function (file: File): Promise<void> {
-              throw new Error("Function not implemented.");
-          } } onExport={function (): void {
-              throw new Error("Function not implemented.");
-          } }    >
+      title={`Company Agreements - ${companyName}`}
+      data={agreements}
+      columns={agreementColumns}
+      isLoading={isLoading}
+      search={search}
+      onSearchChange={setSearch}
+      page={page}
+      size={size}
+      total={total}
+      onPageChange={setPage}
+      selectedIds={selectedIds}
+      onSelectedIdsChange={setSelectedIds}
+      onAdd={() => {
+        router.push("/masters/agreement");
+      }}
+      onEdit={() => {
+        router.push("/masters/agreement");
+      }}
+      onView={(row) => {
+        setSelectedAgreement(row as AgreementWithRelations);
+        setDetailOpen(true);
+      }}
+      onDelete={async (id) => {
+        await agreementApi.remove(id);
+        await refetch();
+      }}
+      onBulkDelete={async () => {
+        await agreementApi.bulkRemove(selectedIds);
+        setSelectedIds([]);
+        await refetch();
+      }}
+      onImport={async () => {
+        throw new Error("Import is not implemented for company agreements.");
+      }}
+      onExport={() => {
+        throw new Error("Export is not implemented for company agreements.");
+      }}
+    >
       <AgreementDetailDialog
         open={detailOpen}
         onOpenChange={setDetailOpen}

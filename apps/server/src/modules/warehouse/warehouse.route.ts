@@ -9,6 +9,9 @@ import {
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
 import { BadRequestError } from "../../lib/error.js";
+import { convertRupeeFieldsToPaise } from "../../lib/money.js";
+
+const moneyFields = ["monthlyRent", "securityDeposit"];
 
 const router: Router = createCrudRouter({
   model: db.warehouse,
@@ -33,6 +36,10 @@ const router: Router = createCrudRouter({
   },
 
   hooks: {
+    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+
+    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+
     beforeDelete: async (id) => {
       const branches = await db.branch.count({
         where: { warehouseId: id },
