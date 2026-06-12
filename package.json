@@ -2,7 +2,8 @@
   "name": "erp-monorepo",
   "private": true,
   "scripts": {
-    "predev": "pnpm build:packages",
+    "postinstall": "pnpm db:generate",
+    "predev": "pnpm db:generate && pnpm build:packages",
     "build:packages": "turbo run build --filter=./packages/*",
     "build": "turbo run build",
     "dev": "turbo run dev",

@@ -1,47 +1,16 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 
+// Shared document-numbering helpers live in _shared so every transactional
+// module (orders, trips, …) reuses one implementation. Re-exported here so
+// existing order imports keep working.
+export {
+  fyCodeFor,
+  nextSequence,
+  formatDocNumber,
+} from "../_shared/doc-number.js";
+
 type Tx = Prisma.TransactionClient;
-
-/**
- * Indian financial year code for a date — April..March.
- * 2026-06-02 -> "26-27", 2026-02-15 -> "25-26".
- */
-export const fyCodeFor = (date: Date): string => {
-  const year = date.getFullYear();
-  const startYear = date.getMonth() >= 3 ? year : year - 1; // month 3 = April
-  const pad = (y: number) => String(y % 100).padStart(2, "0");
-  return `${pad(startYear)}-${pad(startYear + 1)}`;
-};
-
-/**
- * Atomically reserve the next sequence number for (branchCode, fyCode, docType)
- * and return it. Single upsert+increment statement → safe under concurrency.
- */
-export const nextSequence = async (
-  tx: Tx,
-  branchCode: string,
-  fyCode: string,
-  docType: string
-): Promise<number> => {
-  const rows = await tx.$queryRaw<{ seq: number }[]>`
-    INSERT INTO "DocumentSequence" ("id", "branchCode", "fyCode", "docType", "nextSeq", "updatedAt")
-    VALUES (gen_random_uuid()::text, ${branchCode}, ${fyCode}, ${docType}, 2, now())
-    ON CONFLICT ("branchCode", "fyCode", "docType")
-    DO UPDATE SET "nextSeq" = "DocumentSequence"."nextSeq" + 1, "updatedAt" = now()
-    RETURNING ("nextSeq" - 1) AS seq
-  `;
-  return Number(rows[0]?.seq ?? 1);
-};
-
-/**
- * Build a document number: SKT/<branchCode>/<fyCode>/<00001>.
- */
-export const formatDocNumber = (
-  branchCode: string,
-  fyCode: string,
-  seq: number
-) => `SKT/${branchCode}/${fyCode}/${String(seq).padStart(5, "0")}`;
 
 export type FreightResult = {
   amount: number | null;
@@ -90,220 +59,221 @@ export const computeFreight = async (args: {
   vehicleTypeId?: string | null;
   truckQuantity?: number | null;
 }): Promise<FreightResult> => {
-if (args.orderType !== "Truck") {
-  return {
-    amount: null,
-    matched: false,
-    source: "Manual",
-    reason: "Item order requires manual freight",
-    rateMatrix: null,
-  };
-}
+  if (args.orderType !== "Truck") {
+    return {
+      amount: null,
+      matched: false,
+      source: "Manual",
+      reason: "Item order requires manual freight",
+      rateMatrix: null,
+    };
+  }
 
- console.log("FREIGHT INPUT:", args);
+  console.log("FREIGHT INPUT:", args);
 
-let route: { id: string } | null = null;
+  let route: { id: string } | null = null;
 
-if (args.routeId) {
-  route = await db.route.findUnique({
-    where: { id: args.routeId },
-    select: { id: true },
-  });
+  if (args.routeId) {
+    route = await db.route.findUnique({
+      where: { id: args.routeId },
+      select: { id: true },
+    });
 
+    if (!route) {
+      return {
+        amount: null,
+        matched: false,
+        source: "None",
+        reason: "Selected route not found",
+        rateMatrix: null,
+      };
+    }
+  } else {
+    const [fromBranch, toBranch] = await Promise.all([
+      db.branch.findUnique({
+        where: { id: args.fromBranchId },
+        select: {
+          id: true,
+          name: true,
+          shortCode: true,
+          cityId: true,
+          city: { select: { id: true, name: true } },
+        },
+      }),
+      db.branch.findUnique({
+        where: { id: args.toBranchId },
+        select: {
+          id: true,
+          name: true,
+          shortCode: true,
+          cityId: true,
+          city: { select: { id: true, name: true } },
+        },
+      }),
+    ]);
+
+    if (!fromBranch?.cityId || !toBranch?.cityId) {
+      return {
+        amount: null,
+        matched: false,
+        source: "None",
+        reason: "Branch city not found",
+        rateMatrix: null,
+      };
+    }
+
+    const route = await db.route.findFirst({
+      where: {
+        sourceCityId: fromBranch.cityId,
+        destinationCityId: toBranch.cityId,
+      },
+      select: { id: true },
+    });
+
+    if (!route) {
+      return {
+        amount: null,
+        matched: false,
+        source: "None",
+        reason: "Route not found",
+        rateMatrix: null,
+      };
+    }
+  }
   if (!route) {
     return {
       amount: null,
       matched: false,
       source: "None",
-      reason: "Selected route not found",
+      reason: args.routeId
+        ? "Selected route does not match from/to branch cities"
+        : "Route not found",
       rateMatrix: null,
     };
   }
-} else {
-  const [fromBranch, toBranch] = await Promise.all([
-    db.branch.findUnique({
-      where: { id: args.fromBranchId },
-      select: {
-        id: true,
-        name: true,
-        shortCode: true,
-        cityId: true,
-        city: { select: { id: true, name: true } },
-      },
-    }),
-    db.branch.findUnique({
-      where: { id: args.toBranchId },
-      select: {
-        id: true,
-        name: true,
-        shortCode: true,
-        cityId: true,
-        city: { select: { id: true, name: true } },
-      },
-    }),
-  ]);
-
-  if (!fromBranch?.cityId || !toBranch?.cityId) {
-    return {
-      amount: null,
-      matched: false,
-      source: "None",
-      reason: "Branch city not found",
-      rateMatrix: null,
-    };
-  }
-
-  route = await db.route.findFirst({
-    where: {
-      sourceCityId: fromBranch.cityId,
-      destinationCityId: toBranch.cityId,
-    },
-    select: { id: true },
-  });
-
-  if (!route) {
-    return {
-      amount: null,
-      matched: false,
-      source: "None",
-      reason: "Route not found",
-      rateMatrix: null,
-    };
-  }
-}
-if (!route) {
-  return {
-    amount: null,
-    matched: false,
-    source: "None",
-    reason: args.routeId
-      ? "Selected route does not match from/to branch cities"
-      : "Route not found",
-    rateMatrix: null,
-  };
-}
-console.log("FREIGHT ROUTE:", route);
+  console.log("FREIGHT ROUTE:", route);
   const agreements = await db.agreement.findMany({
     where: { clientId: args.customerId },
     select: { id: true },
   });
- if (agreements.length === 0) {
-  return {
-    amount: null,
-    matched: false,
-    source: "None",
-    reason: "Agreement not found",
-    rateMatrix: null,
-  };
-}
+  if (agreements.length === 0) {
+    return {
+      amount: null,
+      matched: false,
+      source: "None",
+      reason: "Agreement not found",
+      rateMatrix: null,
+    };
+  }
 
   const agreementIds = agreements.map((a) => a.id);
-console.log("FREIGHT AGREEMENTS:", agreements);
+  console.log("FREIGHT AGREEMENTS:", agreements);
   // Prefer an exact vehicleType match; fall back to the wildcard (null) row.
   console.log("FREIGHT MATCH WHERE:", {
-  agreementIds,
-  routeId: route.id,
-  vehicleTypeId: args.vehicleTypeId,
-});
-const match = await db.rateMatrix.findFirst({
-  where: {
-    agreementId: { in: agreementIds },
+    agreementIds,
     routeId: route.id,
-    OR: [
-      ...(args.vehicleTypeId ? [{ vehicleTypeId: args.vehicleTypeId }] : []),
-      { vehicleTypeId: null },
-    ],
-  },
-  orderBy: {
-    vehicleTypeId: {
-      sort: "desc",
-      nulls: "last",
+    vehicleTypeId: args.vehicleTypeId,
+  });
+  const match = await db.rateMatrix.findFirst({
+    where: {
+      agreementId: { in: agreementIds },
+      routeId: route.id,
+      OR: [
+        ...(args.vehicleTypeId ? [{ vehicleTypeId: args.vehicleTypeId }] : []),
+        { vehicleTypeId: null },
+      ],
     },
-  },
-  include: {
-    agreement: {
-      select: {
-        id: true,
-        company: {
-          select: {
-            id: true,
-            name: true,
+    orderBy: {
+      vehicleTypeId: {
+        sort: "desc",
+        nulls: "last",
+      },
+    },
+    include: {
+      agreement: {
+        select: {
+          id: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
-        },
-        client: {
-          select: {
-            id: true,
-            name: true,
+          client: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
       },
-    },
 
-    route: {
-      select: {
-        id: true,
-        sourceCity: {
-          select: {
-            id: true,
-            name: true,
+      route: {
+        select: {
+          id: true,
+          sourceCity: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          destinationCity: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-        destinationCity: {
-          select: {
-            id: true,
-            name: true,
-          },
+      },
+
+      vehicleType: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+
+      unit: {
+        select: {
+          id: true,
+          unitValue: true,
+          unitType: true,
         },
       },
     },
-
-    vehicleType: {
-      select: {
-        id: true,
-        name: true,
-      },
-    },
-
-    unit: {
-      select: {
-        id: true,
-        unitValue: true,
-        unitType: true,
-      },
-    },
-  },
-});
+  });
 
   if (!match) {
-  return {
-    amount: null,
-    matched: false,
-    source: "None",
-    reason: "No rate matched",
-    rateMatrix: null,
-  };
-}
-console.log("FREIGHT RATE MATRIX MATCH:", match);
-const qty = args.truckQuantity && args.truckQuantity > 0 ? args.truckQuantity : 1;
-const amount = match.rate * qty;
+    return {
+      amount: null,
+      matched: false,
+      source: "None",
+      reason: "No rate matched",
+      rateMatrix: null,
+    };
+  }
+  console.log("FREIGHT RATE MATRIX MATCH:", match);
+  const qty =
+    args.truckQuantity && args.truckQuantity > 0 ? args.truckQuantity : 1;
+  const amount = match.rate * qty;
 
-return {
-  amount,
-  matched: true,
-  source: "RateMatrix",
-  reason: null,
-  rateMatrix: {
-    id: match.id,
-    rate: match.rate,
-    transitDays: match.transitDays,
-    transportType: match.transportType,
-    remarks: match.remarks,
-    agreement: match.agreement,
-    route: match.route,
-    vehicleType: match.vehicleType,
-    unit: match.unit,
-  },
-};
+  return {
+    amount,
+    matched: true,
+    source: "RateMatrix",
+    reason: null,
+    rateMatrix: {
+      id: match.id,
+      rate: match.rate,
+      transitDays: match.transitDays,
+      transportType: match.transportType,
+      remarks: match.remarks,
+      agreement: match.agreement,
+      route: match.route,
+      vehicleType: match.vehicleType,
+      unit: match.unit,
+    },
+  };
 };
 export const orderListSelect = {
   id: true,
@@ -406,7 +376,9 @@ export const orderInclude = {
   items: { include: { goods: { select: { id: true, name: true } } } },
   events: {
     orderBy: { createdAt: "asc" as const },
-    include: { actor: { select: { id: true, firstName: true, lastName: true } } },
+    include: {
+      actor: { select: { id: true, firstName: true, lastName: true } },
+    },
   },
 } satisfies Prisma.OrderInclude;
 
@@ -417,7 +389,7 @@ export const writeOrderEvent = async (
   actorId: string,
   eventType: string,
   note?: string | null,
-  payloadDiff?: Prisma.InputJsonValue
+  payloadDiff?: Prisma.InputJsonValue,
 ) => {
   await tx.orderEvent.create({
     data: { orderId, actorId, eventType, note: note ?? null, payloadDiff },

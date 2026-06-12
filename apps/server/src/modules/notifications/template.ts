@@ -1,4 +1,4 @@
-import type { NotificationTemplate } from "@prisma/client";
+import type { NotificationTemplate } from "../../../generated/prisma/index.js";
 import type { NotificationPayload, RenderedNotification } from "./types.js";
 
 const readPath = (payload: NotificationPayload, path: string): string => {
@@ -14,7 +14,7 @@ const readPath = (payload: NotificationPayload, path: string): string => {
 
 const renderText = (text: string, payload: NotificationPayload): string => {
   return text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) =>
-    readPath(payload, path)
+    readPath(payload, path),
   );
 };
 
@@ -31,12 +31,14 @@ type RenderableTemplate = Pick<
 
 export const renderTemplate = (
   template: RenderableTemplate | null,
-  payload: NotificationPayload
+  payload: NotificationPayload,
 ): RenderedNotification => {
   if (!template) {
     return {
       subject: payload.title ? String(payload.title) : "SKERP notification",
-      body: payload.message ? String(payload.message) : "A new ERP notification was generated.",
+      body: payload.message
+        ? String(payload.message)
+        : "A new ERP notification was generated.",
     };
   }
 
@@ -53,7 +55,7 @@ export const renderTemplate = (
       metaLanguage: template.metaLanguage || "en_US",
       metaStatus: template.metaStatus,
       params: (template.metaParamOrder || []).map((variable) =>
-        readPath(payload, variable)
+        readPath(payload, variable),
       ),
     };
   }

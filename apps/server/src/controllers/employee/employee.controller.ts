@@ -17,12 +17,9 @@ import {
 import { sendEmployeeCredentialsEmail } from "../../Services/email/email.services.js";
 
 const loginUrl = () =>
-  `${process.env.EMPLOYEE_WEB_URL || "http://localhost:3002"}/login`;
+  `${process.env.WEB_URL || "http://localhost:3001"}/login`;
 
-export const createEmployeeController = async (
-  req: Request,
-  res: Response
-) => {
+export const createEmployeeController = async (req: Request, res: Response) => {
   const parsed = createEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten());
@@ -44,26 +41,17 @@ export const createEmployeeController = async (
   });
 };
 
-export const listEmployeesController = async (
-  _req: Request,
-  res: Response
-) => {
+export const listEmployeesController = async (_req: Request, res: Response) => {
   const employees = await listEmployeesService();
   return res.json({ success: true, data: employees });
 };
 
-export const getEmployeeController = async (
-  req: Request,
-  res: Response
-) => {
+export const getEmployeeController = async (req: Request, res: Response) => {
   const employee = await getEmployeeService(req.params.id as string);
   return res.json({ success: true, data: employee });
 };
 
-export const updateEmployeeController = async (
-  req: Request,
-  res: Response
-) => {
+export const updateEmployeeController = async (req: Request, res: Response) => {
   const parsed = updateEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten());
@@ -71,14 +59,14 @@ export const updateEmployeeController = async (
 
   const employee = await updateEmployeeService(
     req.params.id as string,
-    parsed.data
+    parsed.data,
   );
   return res.json({ success: true, data: employee });
 };
 
 export const resetEmployeePasswordController = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   const parsed = resetEmployeePasswordSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -87,7 +75,7 @@ export const resetEmployeePasswordController = async (
 
   const employee = await resetEmployeePasswordService(
     req.params.id as string,
-    parsed.data.password
+    parsed.data.password,
   );
 
   const emailSent = await sendEmployeeCredentialsEmail({
@@ -106,7 +94,7 @@ export const resetEmployeePasswordController = async (
 
 export const updateEmployeeStatusController = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   const parsed = updateEmployeeStatusSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -115,7 +103,7 @@ export const updateEmployeeStatusController = async (
 
   const employee = await updateEmployeeStatusService(
     req.params.id as string,
-    parsed.data.status
+    parsed.data.status,
   );
   return res.json({ success: true, data: employee });
 };
