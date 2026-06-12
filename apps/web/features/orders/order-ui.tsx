@@ -6,8 +6,7 @@ import { formatPaise } from "@/lib/money";
 // Shared formatters — re-exported so existing order imports keep working.
 export { formatMoney, formatDate, formatDateTime } from "@/lib/format";
 
-
-
+// Shared formatters — re-exported so existing order imports keep working.
 const STATUS_LABELS: Record<OrderStatus, string> = {
   PendingApproval: "Pending Approval",
   Confirmed: "Confirmed",
