@@ -25,10 +25,10 @@ export default function TripsListPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
   const debouncedSearch = useDebouncedValue(search);
-  const size = 25;
 
   const [startTrip, setStartTrip] = React.useState<Trip | null>(null);
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
@@ -39,24 +39,39 @@ export default function TripsListPage() {
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
+  const handleSizeChange = (nextSize: number) => {
+    setSize(nextSize);
+    setPage(0);
+  };
+
+  React.useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, statusFilter]);
+
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
-      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
-      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
+      ...(debouncedSearch.trim()
+        ? { search: debouncedSearch.trim() }
+        : {}),
+      ...(statusFilter !== "ALL"
+        ? { filter: { status: statusFilter } }
+        : {}),
     }),
-    [page, debouncedSearch, statusFilter]
+    [page, size, debouncedSearch, statusFilter]
   );
 
   const trips = useQuery({
     queryKey: tripKeys.list(listQuery),
     queryFn: () => tripApi.list(listQuery),
+    staleTime: 60_000,
   });
 
   const counts = useQuery({
     queryKey: tripKeys.statusCounts,
     queryFn: tripApi.statusCounts,
+    staleTime: 60_000,
   });
 
   const invalidate = () => {
@@ -102,6 +117,7 @@ export default function TripsListPage() {
         page={page}
         size={size}
         onPageChange={setPage}
+        onSizeChange={handleSizeChange}
         search={search}
         onSearchChange={setSearch}
         statusFilter={statusFilter}

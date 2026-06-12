@@ -63,19 +63,19 @@ export default function TripForm({ mode, trip }: Props) {
     resolver: zodResolver(createTripSchema),
     defaultValues: trip
       ? {
-          vehicleId: trip.vehicleId,
-          driverId: trip.driverId,
-          routeId: trip.routeId,
-          tripType: trip.tripType,
-          consignorId: trip.consignorId ?? undefined,
-          onwardFreight: trip.onwardFreight ? Number(trip.onwardFreight) : undefined,
-          isTripEmpty: trip.isTripEmpty,
-          rakeDate: trip.rakeDate ?? undefined,
-        }
+        vehicleId: trip.vehicleId,
+        driverId: trip.driverId,
+        routeId: trip.routeId,
+        tripType: trip.tripType,
+        consignorId: trip.consignorId ?? undefined,
+        onwardFreight: trip.onwardFreight ? Number(trip.onwardFreight) : undefined,
+        isTripEmpty: trip.isTripEmpty,
+        rakeDate: trip.rakeDate ?? undefined,
+      }
       : {
-          tripType: "lr",
-          isTripEmpty: false,
-        },
+        tripType: "lr",
+        isTripEmpty: false,
+      },
   });
 
   const tripType = form.watch("tripType");

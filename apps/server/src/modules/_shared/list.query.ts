@@ -29,7 +29,7 @@ const toPositiveInt = (
 
 export const parseListQuery = (req: Request): ListQuery => {
   const page = toPositiveInt(req.query.page, 0);
-  const size = toPositiveInt(req.query.size, 25, 100);
+  const size = toPositiveInt(req.query.size, 10, 100);
   const search =
     typeof req.query.search === "string" && req.query.search.trim()
       ? req.query.search.trim()
@@ -56,15 +56,15 @@ export const parseListQuery = (req: Request): ListQuery => {
       }
     });
   }
-Object.entries(req.query).forEach(([key, value]) => {
-  const match = key.match(/^filter\[(.+)\]$/);
+  Object.entries(req.query).forEach(([key, value]) => {
+    const match = key.match(/^filter\[(.+)\]$/);
 
-const filterKey = match?.[1];
+    const filterKey = match?.[1];
 
-if (filterKey && typeof value === "string" && value.trim()) {
-  filter[filterKey] = value.trim();
-}
-});
+    if (filterKey && typeof value === "string" && value.trim()) {
+      filter[filterKey] = value.trim();
+    }
+  });
   return {
     page,
     size,

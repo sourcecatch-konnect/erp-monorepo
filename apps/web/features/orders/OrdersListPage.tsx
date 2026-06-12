@@ -27,10 +27,11 @@ export default function OrdersListPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
+
   const debouncedSearch = useDebouncedValue(search);
-  const size = 25;
 
   const [quickViewId, setQuickViewId] = React.useState<string | null>(null);
   const [approveId, setApproveId] = React.useState<string | null>(null);
@@ -47,14 +48,27 @@ export default function OrdersListPage() {
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
+  const handleSizeChange = (nextSize: number) => {
+    setSize(nextSize);
+    setPage(0);
+  };
+
+  React.useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, statusFilter]);
+
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
-      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
-      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
+      ...(debouncedSearch.trim()
+        ? { search: debouncedSearch.trim() }
+        : {}),
+      ...(statusFilter !== "ALL"
+        ? { filter: { status: statusFilter } }
+        : {}),
     }),
-    [page, debouncedSearch, statusFilter],
+    [page, size, debouncedSearch, statusFilter]
   );
 
   const orders = useQuery({
@@ -126,6 +140,7 @@ export default function OrdersListPage() {
         page={page}
         size={size}
         onPageChange={setPage}
+        onSizeChange={handleSizeChange}
         search={search}
         onSearchChange={setSearch}
         statusFilter={statusFilter}
@@ -145,6 +160,7 @@ export default function OrdersListPage() {
         onCreateLR={(o) => router.push(`/lorry-receipts/new?orderId=${o.id}`)}
         onDelete={(o) => setDeleteOrder(o)}
       />
+
 
       <OrderQuickViewModal
         orderId={quickViewId}

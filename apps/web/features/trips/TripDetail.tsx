@@ -90,9 +90,8 @@ export default function TripDetail({ id }: { id: string }) {
   const startable = t.status === "Planned";
   const editable = t.status === "Planned";
   const cancellable = t.status === "Planned" || t.status === "InTransit";
-  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${
-    t.route?.destinationCity?.name ?? "?"
-  }`;
+  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${t.route?.destinationCity?.name ?? "?"
+    }`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-4 md:p-6">

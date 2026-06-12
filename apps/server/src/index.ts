@@ -78,19 +78,19 @@ app.use("/lorry-receipts", lorryReceiptRoute);
 app.use("/drivers", driverRoute);
 app.use("/spare-category", spareCategory);
 app.use("/spare-parts", sparePartRoute);
-app.use("/spare-part-suppliers",sparePartSupplier)
-app.use("/customers",CustomerRoute)
-app.use("/companies",CompanyRoute)
+app.use("/spare-part-suppliers", sparePartSupplier)
+app.use("/customers", CustomerRoute)
+app.use("/companies", CompanyRoute)
 app.use("/branches", BranchRoute)
-app.use("/routes",Routes)
-app.use("/warehouses",WarehousesRoute)
-app.use("/labours",labourRoute)
-app.use("/rateMatrix",rateMatrixRoute)
+app.use("/routes", Routes)
+app.use("/warehouses", WarehousesRoute)
+app.use("/labours", labourRoute)
+app.use("/rateMatrix", rateMatrixRoute)
 app.use("/railway-freight", RailwayFreightRoute);
-app.use("/goods",goodsRoute)
-app.use("/wagons",wagonRoute)
-app.use("/agreements",agreementRoute)
-app.use("/pumps",pumpRoute)
+app.use("/goods", goodsRoute)
+app.use("/wagons", wagonRoute)
+app.use("/agreements", agreementRoute)
+app.use("/pumps", pumpRoute)
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);

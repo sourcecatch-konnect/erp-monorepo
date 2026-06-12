@@ -30,6 +30,10 @@ import {
   tripListSelect,
   writeTripStatus,
 } from "./trip.service.js";
+import {
+  Prisma,
+  TripStatus,
+} from "../../../generated/prisma/index.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -75,14 +79,16 @@ async function resolveTripName(
   // LR trips carry one client; DC trips are identified by their rake.
   let consignorId: string | null = null;
   let shortCode: string | null = null;
+  let consignorName: string | null = null;
   if (data.tripType === "lr") {
     const consignor = await db.customer.findUnique({
       where: { id: data.consignorId! },
-      select: { shortName: true },
+      select: { shortName: true, name: true },
     });
     if (!consignor) throw new BadRequestError("Client not found");
     consignorId = data.consignorId!;
     shortCode = consignor.shortName;
+    consignorName = consignor.name;
   }
 
   const tripName = buildTripName({
@@ -91,6 +97,7 @@ async function resolveTripName(
     truckNumber: vehicle.vehicleNumber,
     tripType: data.tripType,
     customerShortCode: shortCode,
+    consignorName: consignorName,
     rakeDate: data.rakeDate ?? null,
     at,
   });
@@ -103,15 +110,44 @@ async function resolveTripName(
 /* ------------------------------------------------------------------ */
 router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
   const query = parseListQuery(req);
-  const where: Record<string, unknown> = {
-    deletedAt: null,
-    ...(query.filter.status ? { status: query.filter.status } : {}),
-    ...(query.filter.tripType ? { tripType: query.filter.tripType } : {}),
-    ...(query.search
-      ? { tripNumber: { contains: query.search, mode: "insensitive" } }
+  const search = query.search;
+
+  const where: Prisma.VehicleTripWhereInput = {
+    ...(search
+      ? {
+        OR: [
+          {
+            tripNumber: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            tripName: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            vehicle: {
+              is: {
+                vehicleNumber: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          },
+        ],
+      }
+      : {}),
+
+    ...(query.filter.status
+      ? {
+        status: query.filter.status as TripStatus,
+      }
       : {}),
   };
-
   const [data, total] = await Promise.all([
     db.vehicleTrip.findMany({
       where,

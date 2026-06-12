@@ -386,11 +386,10 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                       label="LRs created"
                       value={
                         <span
-                          className={`font-medium ${
-                            (lrCountsQuery.data ?? 0) >= order.truckQuantity
+                          className={`font-medium ${(lrCountsQuery.data ?? 0) >= order.truckQuantity
                               ? "text-red-600"
                               : "text-foreground"
-                          }`}
+                            }`}
                         >
                           {lrCountsQuery.data ?? "—"} / {order.truckQuantity}
                           {(lrCountsQuery.data ?? 0) >= order.truckQuantity && (
@@ -464,8 +463,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               </div>
 
               {freightWasEdited &&
-              autoFreight != null &&
-              approvedFreight != null ? (
+                autoFreight != null &&
+                approvedFreight != null ? (
                 <div className="mt-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div>
