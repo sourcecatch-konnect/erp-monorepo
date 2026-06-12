@@ -117,6 +117,8 @@ const router: Router = createCrudRouter({
           },
         ],
       },
-    });
+    },
+  },
+});
 
 export default router;
