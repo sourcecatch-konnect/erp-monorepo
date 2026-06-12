@@ -130,7 +130,6 @@ export default function TripsListPage() {
         onCancel={(t) => setCancelTrip(t)}
       />
 
-
       <StartTripDialog
         open={Boolean(startTrip)}
         onOpenChange={(open) => !open && setStartTrip(null)}

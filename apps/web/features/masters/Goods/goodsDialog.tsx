@@ -6,15 +6,15 @@ import type { Goods } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
-
-import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import {
   SectionLabel,
   Field,
   PartyCard,
   formatDate,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -36,27 +36,6 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i}>
-          <Skeleton className="mb-3 h-4 w-28" />
-
-          <div className="grid grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, x) => (
-              <Skeleton
-                key={x}
-                className="h-14 rounded-xl"
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function GoodsDetailDialog({
   open,
   onOpenChange,
@@ -64,168 +43,128 @@ export default function GoodsDetailDialog({
   isLoading,
 }: Props) {
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-    >
-      <DialogContent
-        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
-      >
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
         {/* Header */}
 
         <div className="flex items-center justify-between border-b px-5 py-4">
-
           <div className="flex items-center gap-3">
-
             <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <IconBox size={20}/>
+              <IconBox size={20} />
             </span>
 
             <div>
-              <p className="text-sm font-semibold">
-                Goods Details
-              </p>
+              <DialogTitle>Goods Details</DialogTitle>
 
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
-                  <IconCircleCheckFilled size={10}/>
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+                  <IconCircleCheckFilled size={10} />
                   Active Goods
                 </div>
               )}
             </div>
-
           </div>
-
         </div>
 
         {isLoading ? (
           <SkeletonBody />
         ) : (
           <div className="h-[calc(90vh-120px)] overflow-y-auto">
-
             {/* Overview */}
 
             <div className="px-5 py-5">
-
-              <SectionLabel>
-                Goods Overview
-              </SectionLabel>
+              <SectionLabel>Goods Overview</SectionLabel>
 
               <PartyCard
                 label="Goods"
                 name={data?.name}
                 subtitle={data?.category}
                 colorClass="bg-blue-100 text-blue-700"
-                icon={<IconBox size={15}/>}
+                icon={<IconBox size={15} />}
               />
-
             </div>
 
-            <div className="mx-5 border-t"/>
+            <div className="mx-5 border-t" />
 
             {/* Goods Information */}
 
             <div className="px-5 py-5">
-
-              <SectionLabel>
-                Goods Information
-              </SectionLabel>
+              <SectionLabel>Goods Information</SectionLabel>
 
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-
                 <Field
                   label="Category"
                   value={data?.category}
-                  icon={<IconCategory size={12}/>}
+                  icon={<IconCategory size={12} />}
                 />
 
                 <Field
                   label="Weight"
-                  value={
-                    data?.weight != null
-                      ? `${data.weight} kg`
-                      : "-"
-                  }
-                  icon={<IconWeight size={12}/>}
+                  value={data?.weight != null ? `${data.weight} kg` : "-"}
+                  icon={<IconWeight size={12} />}
                 />
 
                 <Field
                   label="Dimensions"
-                  value={
-                    `${data?.length ?? "-"} × ${data?.width ?? "-"} × ${data?.height ?? "-"}`
-                  }
-                  icon={<IconRulerMeasure size={12}/>}
+                  value={`${data?.length ?? "-"} × ${data?.width ?? "-"} × ${data?.height ?? "-"}`}
+                  icon={<IconRulerMeasure size={12} />}
                 />
 
                 <Field
                   label="Storage Position"
                   value={data?.storagePosition}
-                  icon={<IconStack size={12}/>}
+                  icon={<IconStack size={12} />}
                 />
 
                 <Field
                   label="Storage Layer"
                   value={data?.storageLayer}
-                  icon={<IconAlignBoxBottomCenter size={12}/>}
+                  icon={<IconAlignBoxBottomCenter size={12} />}
                 />
 
                 <Field
                   label="Stacking Allowed"
-                  value={
-                    data?.isStackingAllowed
-                      ? "Yes"
-                      : "No"
-                  }
-                  icon={<IconStack size={12}/>}
+                  value={data?.isStackingAllowed ? "Yes" : "No"}
+                  icon={<IconStack size={12} />}
                 />
 
                 <Field
                   label="Description"
                   value={data?.description}
-                  icon={<IconBox size={12}/>}
+                  icon={<IconBox size={12} />}
                 />
-
               </div>
-
             </div>
 
-            <div className="mx-5 border-t"/>
+            <div className="mx-5 border-t" />
 
             {/* System */}
 
             <div className="px-5 py-5">
-
-              <SectionLabel>
-                System Information
-              </SectionLabel>
+              <SectionLabel>System Information</SectionLabel>
 
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-
                 <Field
                   label="Created At"
                   value={formatDate(data?.createdAt)}
-                  icon={<IconCalendar size={12}/>}
+                  icon={<IconCalendar size={12} />}
                 />
 
                 <Field
                   label="Updated At"
                   value={formatDate(data?.updatedAt)}
-                  icon={<IconClockEdit size={12}/>}
+                  icon={<IconClockEdit size={12} />}
                 />
-
               </div>
-
             </div>
-
           </div>
         )}
 
         {/* Footer */}
 
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <IconClockEdit size={12}/>
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <IconClockEdit size={12} />
             Updated {formatDate(data?.updatedAt)}
           </span>
 
@@ -235,9 +174,7 @@ export default function GoodsDetailDialog({
           >
             Close
           </button>
-
         </div>
-
       </DialogContent>
     </Dialog>
   );

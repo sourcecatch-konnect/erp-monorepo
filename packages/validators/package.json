@@ -49,6 +49,10 @@
     "./attachments": {
       "types": "./src/attachments/attachment.schema.ts",
       "import": "./dist/attachments/attachment.schema.js"
+    },
+    "./lorry-receipt": {
+      "types": "./src/lorry-receipt/lorry-receipt.schema.ts",
+      "import": "./dist/lorry-receipt/lorry-receipt.schema.js"
     }
   },
   "scripts": {

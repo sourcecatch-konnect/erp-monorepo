@@ -10,6 +10,9 @@ import { db } from "../../../prisma/prisma.js";
 
 import { createCrudRouter }
 from "../_shared/crud.factory.js";
+import { convertRupeeFieldsToPaise } from "../../lib/money.js";
+
+const moneyFields = ["currentDieselRate", "creditLimit"];
 
 const router: Router =
   createCrudRouter({
@@ -23,6 +26,11 @@ const router: Router =
 
     permissionKey:
       "masters.pump",
+
+    hooks: {
+      beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+      beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    },
 
     listOptions: {
       searchableFields: [

@@ -3,15 +3,10 @@
 import { ColumnDef } from "@tanstack/react-table";
 import type { VehicleType } from "@skerp/types";
 import { IconTruck } from "@tabler/icons-react";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 const money = (v?: number | null) =>
-  v === null || v === undefined
-    ? "-"
-    : new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency: "INR",
-        maximumFractionDigits: 0,
-      }).format(v);
+  formatCurrencyFromPaise(v);
 
 export const vehicleTypeColumns: ColumnDef<VehicleType>[] = [
   {
@@ -47,7 +42,7 @@ export const vehicleTypeColumns: ColumnDef<VehicleType>[] = [
           Active
         </span>
       ) : (
-        <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+        <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           Inactive
         </span>
       ),

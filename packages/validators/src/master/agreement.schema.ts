@@ -15,28 +15,6 @@ const requiredDate = (label: string) =>
       date.setHours(0, 0, 0, 0);
       return date;
     });
-const optionalNumber = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform((v) => {
-      if (v === "" || v === null || v === undefined)
-        return undefined;
-
-      const num = Number(v);
-
-      return Number.isNaN(num)
-        ? undefined
-        : num;
-    })
-    .refine(
-      (v) =>
-        v === undefined ||
-        typeof v === "number",
-      {
-        message: `${label} must be valid`,
-      }
-    );
 
 
 
@@ -60,8 +38,6 @@ export const agreementSchema =
 
     expiryDate: z.date(),
 
-    carryingCapacity:
-      z.number().optional(),
 
     leadGeneratedByBranchId:
       z.string(),
@@ -98,11 +74,7 @@ const agreementFieldsSchema =
         "Expiry date"
       ),
 
-    carryingCapacity:
-      optionalNumber(
-        "Carrying capacity"
-      ),
-
+ 
     leadGeneratedByBranchId:
       z
         .string()

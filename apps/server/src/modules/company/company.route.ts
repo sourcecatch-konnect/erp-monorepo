@@ -32,7 +32,7 @@ const router: Router = createCrudRouter({
           startDate: true,
           agreementDate: true,
           expiryDate: true,
-          carryingCapacity: true,
+
 
           client: {
             select: { id: true, name: true },
@@ -47,58 +47,76 @@ const router: Router = createCrudRouter({
           RateMatrix: {
             select: {
               id: true,
-              rate: true,
-              transitDays: true,
-              remarks: true,
-              route: {
+              startDate: true,
+              agreementDate: true,
+              expiryDate: true,
+              carryingCapacity: true,
+
+              client: {
+                select: { id: true, name: true },
+              },
+              city: {
+                select: { id: true, name: true },
+              },
+              branch: {
+                select: { id: true, name: true },
+              },
+
+              RateMatrix: {
                 select: {
                   id: true,
-                  sourceCity: { select: { id: true, name: true } },
-                  destinationCity: { select: { id: true, name: true } },
+                  rate: true,
+                  transitDays: true,
+                  remarks: true,
+                  route: {
+                    select: {
+                      id: true,
+                      sourceCity: { select: { id: true, name: true } },
+                      destinationCity: { select: { id: true, name: true } },
+                    },
+                  },
                 },
               },
             },
           },
         },
-      },
-    },
-    defaultOrderBy: { name: "asc" },
+        defaultOrderBy: { name: "asc" },
 
-    blockDeleteIfExists: [
-      {
-        model: db.branch,
-        label: "Branches",
-        where: (id: string) => ({ companyId: id }),
+        blockDeleteIfExists: [
+          {
+            model: db.branch,
+            label: "Branches",
+            where: (id: string) => ({ companyId: id }),
+          },
+          {
+            model: db.user,
+            label: "Users",
+            where: (id: string) => ({ companyId: id }),
+            select: {
+              id: true,
+              userName: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+            getName: (row: any) =>
+              row.userName ||
+              `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() ||
+              row.email ||
+              row.id,
+          },
+          {
+            model: db.agreement,
+            label: "Agreements",
+            where: (id: string) => ({ companyId: id }),
+            select: {
+              id: true,
+              clientId: true,
+            },
+            getName: (row: any) => row.clientId || row.id,
+          },
+        ],
       },
-      {
-        model: db.user,
-        label: "Users",
-        where: (id: string) => ({ companyId: id }),
-        select: {
-          id: true,
-          userName: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-        },
-        getName: (row: any) =>
-          row.userName ||
-          `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() ||
-          row.email ||
-          row.id,
-      },
-      {
-        model: db.agreement,
-        label: "Agreements",
-        where: (id: string) => ({ companyId: id }),
-        select: {
-          id: true,
-          clientId: true,
-        },
-        getName: (row: any) => row.clientId || row.id,
-      },
-    ],
-  },
-});
+    });
 
 export default router;

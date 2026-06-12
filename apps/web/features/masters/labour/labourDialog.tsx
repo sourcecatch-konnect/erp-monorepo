@@ -27,7 +27,7 @@ import {
   IconUser,
   IconTool,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
@@ -59,7 +59,7 @@ function DetailItem({
           : "grid gap-1 border-b py-4"
       }
     >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
         <span className="text-primary">
           {icon}
         </span>
@@ -105,7 +105,7 @@ export default function LabourDetailDialog({
         <div className="border-b bg-muted/30 px-6 py-5">
           <DialogHeader>
             <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <span className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <IconUser
                   size={22}
                 />
@@ -253,7 +253,7 @@ export default function LabourDetailDialog({
                   <IconCash size={15}/>
                 }
                 label="TDS Amount"
-                value={formatCurrency(
+                value={formatCurrencyFromPaise(
                   data?.tdsAmount
                 )}
               />

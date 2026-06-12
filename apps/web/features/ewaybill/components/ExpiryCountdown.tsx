@@ -82,7 +82,7 @@ export function ExpiryCountdown({
           <IconClockHour4 className="size-5 text-muted-foreground" />
         )}
         <div className="flex flex-col leading-tight">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-xs uppercase text-muted-foreground">
             {expired ? "Expired" : "Valid for"}
           </span>
           <span

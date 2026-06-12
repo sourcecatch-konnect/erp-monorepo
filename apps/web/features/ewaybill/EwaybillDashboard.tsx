@@ -103,7 +103,7 @@ export default function EwaybillDashboard() {
       {/* Expiring soon strip */}
       <section className="grid gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <h2 className="text-sm font-semibold uppercase text-muted-foreground">
             Expiring soon — act now
           </h2>
           <Link
@@ -161,7 +161,7 @@ export default function EwaybillDashboard() {
 
       {/* Origin states breakdown */}
       <section className="grid gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2 className="text-sm font-semibold uppercase text-muted-foreground">
           Pickups by origin state
         </h2>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
@@ -192,7 +192,7 @@ function LiveBadge({
 }) {
   if (configured === undefined) {
     return (
-      <span className="inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
         <span className="size-1.5 animate-pulse bg-current" />
         Checking live link…
       </span>
@@ -201,7 +201,7 @@ function LiveBadge({
 
   if (!configured) {
     return (
-      <span className="inline-flex items-center gap-1.5 border border-border bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5 border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
         <IconAlertCircle className="size-3" />
         Live API not configured
       </span>
@@ -212,7 +212,7 @@ function LiveBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 border px-2 py-1 text-[11px]",
+        "inline-flex items-center gap-1.5 border px-2 py-1 text-xs",
         ok
           ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/5 dark:text-emerald-200"
           : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/5 dark:text-amber-200"

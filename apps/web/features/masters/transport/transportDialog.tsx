@@ -37,7 +37,7 @@ function DetailItem({
 }) {
   return (
     <div className="grid gap-1 border-b py-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
         <span className="text-primary">
           {icon}
         </span>
@@ -68,7 +68,7 @@ export default function TransportDetailDialog({
         <div className="border-b bg-muted/30 px-6 py-5">
           <DialogHeader>
             <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <span className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <IconTruck size={22} />
               </span>
 

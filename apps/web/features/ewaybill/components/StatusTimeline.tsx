@@ -109,7 +109,7 @@ export function StatusTimeline({ bill }: { bill: EwayBill }) {
                   {step.label}
                 </span>
                 {step.at && (
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {fmt(step.at)}
                   </span>
                 )}

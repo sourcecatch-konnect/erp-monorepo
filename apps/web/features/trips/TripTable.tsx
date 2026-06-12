@@ -375,7 +375,6 @@ export default function TripTable(props: Props) {
                 }}
               />
             </PaginationItem>
-
             <PaginationItem>
               <PaginationNext
                 href="#"

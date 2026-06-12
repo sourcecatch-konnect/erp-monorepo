@@ -21,7 +21,7 @@ import {
   IconCalendar,
   IconHome,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
@@ -49,7 +49,7 @@ function DetailItem({
           : "grid gap-1 border-b py-4"
       }
     >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
         <span className="text-primary">{icon}</span>
         {label}
       </div>
@@ -73,7 +73,7 @@ export default function PumpDetailDialog({
         <div className="border-b bg-muted/30 px-6 py-5">
           <DialogHeader>
             <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <span className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <IconGasStation size={22} />
               </span>
 
@@ -144,7 +144,7 @@ export default function PumpDetailDialog({
               <DetailItem
                 icon={<IconCash size={15} />}
                 label="Current Diesel Rate"
-                value={formatCurrency(data?.currentDieselRate)}
+                value={formatCurrencyFromPaise(data?.currentDieselRate)}
               />
 
               <DetailItem
@@ -172,7 +172,7 @@ export default function PumpDetailDialog({
               <DetailItem
                 icon={<IconCash size={15} />}
                 label="Credit Limit"
-                value={formatCurrency(data?.creditLimit)}
+                value={formatCurrencyFromPaise(data?.creditLimit)}
               />
 
               <DetailItem

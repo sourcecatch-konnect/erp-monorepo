@@ -6,6 +6,7 @@ import type { Branch } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -15,6 +16,7 @@ import {
   Field,
   PartyCard,
   formatDate,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -38,26 +40,6 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      <div>
-        <Skeleton className="mb-3 h-4 w-28" />
-        <Skeleton className="h-16 rounded-xl" />
-      </div>
-
-      <div>
-        <Skeleton className="mb-3 h-4 w-28" />
-        <div className="grid grid-cols-3 gap-4">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <Skeleton key={index} className="h-14 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function BranchDetailDialog({
   open,
   onOpenChange,
@@ -66,7 +48,7 @@ export default function BranchDetailDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
+      <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-3">
@@ -75,10 +57,9 @@ export default function BranchDetailDialog({
             </span>
 
             <div>
-              <p className="text-sm font-semibold">Branch Details</p>
-
+              <DialogTitle>Branch Details</DialogTitle>
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10} />
                   Active Branch
                 </div>
@@ -197,7 +178,7 @@ export default function BranchDetailDialog({
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <IconClockEdit size={12} />
             Updated {formatDate(data?.updatedAt)}
           </span>

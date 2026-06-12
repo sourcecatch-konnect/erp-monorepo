@@ -6,16 +6,16 @@ import type { Customer } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
-
-import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import {
   SectionLabel,
   Field,
   PartyCard,
   formatDate,
-  formatCurrency,
+  formatCurrencyFromPaise,
+  SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
@@ -42,29 +42,6 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i}>
-          <Skeleton className="mb-3 h-4 w-28" />
-
-          <div className="grid grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, x) => (
-              <Skeleton
-                key={x}
-                className="h-14 rounded-xl"
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-
-
 export default function CustomerDetailDialog({
   open,
   onOpenChange,
@@ -72,62 +49,45 @@ export default function CustomerDetailDialog({
   isLoading,
 }: Props) {
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-    >
-      <DialogContent
-        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
-      >
-
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
         {/* Header */}
 
         <div className="flex items-center justify-between border-b px-5 py-4">
-
           <div className="flex items-center gap-3">
-
             <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <IconBuildingStore size={20}/>
+              <IconBuildingStore size={20} />
             </span>
 
             <div>
-              <p className="text-sm font-semibold">
-                Customer Details
-              </p>
+              <DialogTitle>Customer Details</DialogTitle>
 
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
-                  <IconCircleCheckFilled size={10}/>
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+                  <IconCircleCheckFilled size={10} />
                   Active Profile
                 </div>
               )}
             </div>
-
           </div>
-
         </div>
 
         {isLoading ? (
-          <SkeletonBody/>
+          <SkeletonBody />
         ) : (
           <div className="h-[calc(90vh-120px)] overflow-y-auto">
-
             {/* Overview */}
 
             <div className="px-5 py-5">
-
-              <SectionLabel>
-                Customer Overview
-              </SectionLabel>
+              <SectionLabel>Customer Overview</SectionLabel>
 
               <PartyCard
                 label="Customer"
                 name={data?.name}
                 subtitle={data?.city?.name}
                 colorClass="bg-blue-100 text-blue-700"
-                icon={<IconUser size={15}/>}
+                icon={<IconUser size={15} />}
               />
-
             </div>
 
             <div className="mx-5 border-t" />
@@ -135,35 +95,31 @@ export default function CustomerDetailDialog({
             {/* Customer Information */}
 
             <div className="px-5 py-5">
-
-              <SectionLabel>
-                Customer Information
-              </SectionLabel>
+              <SectionLabel>Customer Information</SectionLabel>
 
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-
                 <Field
                   label="Short Name"
                   value={data?.shortName}
-                  icon={<IconId size={12}/>}
+                  icon={<IconId size={12} />}
                 />
 
                 <Field
                   label="PAN No"
                   value={data?.customerPAN}
-                  icon={<IconId size={12}/>}
+                  icon={<IconId size={12} />}
                 />
 
                 <Field
                   label="GSTIN"
                   value={data?.gstNo}
-                  icon={<IconId size={12}/>}
+                  icon={<IconId size={12} />}
                 />
 
                 <Field
                   label="Credit Limit"
-                  value={formatCurrency(data?.creditLimit)}
-                  icon={<IconCash size={12}/>}
+                  value={formatCurrencyFromPaise(data?.creditLimit)}
+                  icon={<IconCash size={12} />}
                 />
 
                 <Field
@@ -173,7 +129,7 @@ export default function CustomerDetailDialog({
                       ? `${data.interestRateLatePayment}%`
                       : "-"
                   }
-                  icon={<IconPercentage size={12}/>}
+                  icon={<IconPercentage size={12} />}
                 />
 
                 <Field
@@ -183,114 +139,100 @@ export default function CustomerDetailDialog({
                       ? `${data.tdsDeductionRate}%`
                       : "-"
                   }
-                  icon={<IconPercentage size={12}/>}
+                  icon={<IconPercentage size={12} />}
                 />
 
                 <Field
                   label="Country"
                   value={data?.country}
-                  icon={<IconMapPin size={12}/>}
+                  icon={<IconMapPin size={12} />}
                 />
 
                 <Field
                   label="State"
                   value={data?.state?.name}
-                  icon={<IconMapPin size={12}/>}
+                  icon={<IconMapPin size={12} />}
                 />
 
                 <Field
                   label="City"
                   value={data?.city?.name}
-                  icon={<IconMapPin size={12}/>}
+                  icon={<IconMapPin size={12} />}
                 />
 
                 <Field
                   label="Contact Person"
                   value={data?.contactPerson}
-                  icon={<IconUser size={12}/>}
+                  icon={<IconUser size={12} />}
                 />
 
                 <Field
                   label="Contact Phone"
                   value={data?.contactPhone}
-                  icon={<IconPhone size={12}/>}
+                  icon={<IconPhone size={12} />}
                 />
 
                 <Field
                   label="Mobile No"
                   value={data?.mobileNo}
-                  icon={<IconPhone size={12}/>}
+                  icon={<IconPhone size={12} />}
                 />
 
                 <Field
                   label="Email"
                   value={data?.primaryEmail}
-                  icon={<IconMail size={12}/>}
+                  icon={<IconMail size={12} />}
                 />
 
                 <Field
                   label="Website"
                   value={data?.website}
-                  icon={<IconWorld size={12}/>}
+                  icon={<IconWorld size={12} />}
                 />
 
                 <Field
                   label="Booking Restriction"
-                  value={
-                    data?.disallowNewLRBooking
-                      ? "Yes"
-                      : "No"
-                  }
-                  icon={<IconBan size={12}/>}
+                  value={data?.disallowNewLRBooking ? "Yes" : "No"}
+                  icon={<IconBan size={12} />}
                 />
 
                 <Field
                   label="Address"
                   value={data?.address}
-                  icon={<IconHome size={12}/>}
+                  icon={<IconHome size={12} />}
                 />
-
               </div>
-
             </div>
 
-            <div className="mx-5 border-t"/>
+            <div className="mx-5 border-t" />
 
             {/* System */}
 
             <div className="px-5 py-5">
-
-              <SectionLabel>
-                System Information
-              </SectionLabel>
+              <SectionLabel>System Information</SectionLabel>
 
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-
                 <Field
                   label="Created At"
                   value={formatDate(data?.createdAt)}
-                  icon={<IconCalendar size={12}/>}
+                  icon={<IconCalendar size={12} />}
                 />
 
                 <Field
                   label="Updated At"
                   value={formatDate(data?.updatedAt)}
-                  icon={<IconClockEdit size={12}/>}
+                  icon={<IconClockEdit size={12} />}
                 />
-
               </div>
-
             </div>
-
           </div>
         )}
 
         {/* Footer */}
 
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <IconClockEdit size={12}/>
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <IconClockEdit size={12} />
             Updated {formatDate(data?.updatedAt)}
           </span>
 
@@ -300,9 +242,7 @@ export default function CustomerDetailDialog({
           >
             Close
           </button>
-
         </div>
-
       </DialogContent>
     </Dialog>
   );

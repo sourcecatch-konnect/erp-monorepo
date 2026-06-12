@@ -9,6 +9,7 @@ import type {
   CancelOrderBody,
   FreightPreview,
   CustomerLocation,
+  Route,
 } from "@skerp/types";
 import {
   ListQuery,
@@ -17,30 +18,73 @@ import {
   unwrapListResponse,
 } from "../masters/_shared/master-api";
 
-export type OrderDetail = Order & { freightPreview: FreightPreview };
+type OrderCityLite = {
+  id: string;
+  name: string;
+};
+
+type OrderBranchLite = {
+  id: string;
+  name?: string | null;
+  shortCode?: string | null;
+};
+
+type OrderRouteDetail = {
+  id: string;
+  sourceCity?: OrderCityLite | null;
+  destinationCity?: OrderCityLite | null;
+};
+
+type OrderRateMatrixDetail = {
+  id?: string;
+  rate?: number | null;
+  remarks?: string | null;
+  agreement?: {
+    id?: string;
+    client?: {
+      id?: string;
+      name?: string | null;
+    } | null;
+    company?: {
+      id?: string;
+      name?: string | null;
+    } | null;
+  } | null;
+  route?: OrderRouteDetail | null;
+};
+
+type OrderFreightPreviewDetail = FreightPreview & {
+  rateMatrix?: OrderRateMatrixDetail | null;
+};
+
+export type OrderDetail = Order & {
+  route?: OrderRouteDetail | null;
+  fromBranch?: OrderBranchLite | null;
+  toBranch?: OrderBranchLite | null;
+  freightPreview?: OrderFreightPreviewDetail | null;
+};
+const encodeOrderIdentifier = (identifier: string) =>
+  encodeURIComponent(identifier);
 
 export const orderApi = {
-  // list: async (query?: ListQuery): Promise<ListResult<Order>> => {
-  //   const res = await api.get<ApiResponse<Order[]>>("/orders", { params: query });
-  //   return unwrapListResponse(res);
-  // },
-list: async (query?: ListQuery): Promise<ListResult<Order>> => {
-  const params: Record<string, string | number> = {};
+  list: async (query?: ListQuery): Promise<ListResult<Order>> => {
+    const params: Record<string, string | number> = {};
 
-  if (query?.page !== undefined) params.page = query.page;
-  if (query?.size !== undefined) params.size = query.size;
-  if (query?.search) params.search = query.search;
-  if (query?.sort) {
-    params.sort = query.sort;
-  }
+    if (query?.page !== undefined) params.page = query.page;
+    if (query?.size !== undefined) params.size = query.size;
+    if (query?.search) params.search = query.search;
+    if (query?.sort) {
+      params.sort = query.sort;
+    }
 
-  if (query?.filter?.status) {
-    params["filter[status]"] = String(query.filter.status);
-  }
+    if (query?.filter?.status) {
+      params["filter[status]"] = String(query.filter.status);
+    }
 
-  const res = await api.get<ApiResponse<Order[]>>("/orders", { params });
-  return unwrapListResponse(res);
-},
+    const res = await api.get<ApiResponse<Order[]>>("/orders", { params });
+    return unwrapListResponse(res);
+  },
+
   statusCounts: async (): Promise<Record<string, number>> => {
     const res = await api.get<ApiResponse<Record<string, number>>>(
       "/orders/status-counts"
@@ -48,41 +92,69 @@ list: async (query?: ListQuery): Promise<ListResult<Order>> => {
     return unwrapApiResponse(res);
   },
 
-  detail: async (id: string): Promise<OrderDetail> => {
-    const res = await api.get<ApiResponse<OrderDetail>>(`/orders/${id}`);
+  detail: async (identifier: string): Promise<OrderDetail> => {
+    const res = await api.get<ApiResponse<OrderDetail>>(
+      `/orders/${encodeOrderIdentifier(identifier)}`
+    );
     return unwrapApiResponse(res);
   },
-  quickView: async (id: string): Promise<OrderQuickView> => {
-  const res = await api.get<ApiResponse<OrderQuickView>>(`/orders/${id}`, {
-    params: { view: "quick" },
-  });
-  return unwrapApiResponse(res);
-},
+
+  quickView: async (identifier: string): Promise<OrderQuickView> => {
+    const res = await api.get<ApiResponse<OrderQuickView>>(
+      `/orders/${encodeOrderIdentifier(identifier)}`,
+      {
+        params: { view: "quick" },
+      }
+    );
+    return unwrapApiResponse(res);
+  },
+
   create: async (body: CreateOrderBody): Promise<Order> => {
     const res = await api.post<ApiResponse<Order>>("/orders", body);
     return unwrapApiResponse(res);
   },
 
   update: async (
-    id: string,
+    identifier: string,
     body: UpdateOrderBody & { version?: number }
   ): Promise<Order> => {
-    const res = await api.patch<ApiResponse<Order>>(`/orders/${id}`, body);
+    const res = await api.patch<ApiResponse<Order>>(
+      `/orders/${encodeOrderIdentifier(identifier)}`,
+      body
+    );
     return unwrapApiResponse(res);
   },
 
-  approve: async (id: string, body: ApproveOrderBody): Promise<Order> => {
-    const res = await api.post<ApiResponse<Order>>(`/orders/${id}/approve`, body);
+  approve: async (
+    identifier: string,
+    body: ApproveOrderBody
+  ): Promise<Order> => {
+    const res = await api.post<ApiResponse<Order>>(
+      `/orders/${encodeOrderIdentifier(identifier)}/approve`,
+      body
+    );
     return unwrapApiResponse(res);
   },
 
-  reject: async (id: string, body: RejectOrderBody): Promise<Order> => {
-    const res = await api.post<ApiResponse<Order>>(`/orders/${id}/reject`, body);
+  reject: async (
+    identifier: string,
+    body: RejectOrderBody
+  ): Promise<Order> => {
+    const res = await api.post<ApiResponse<Order>>(
+      `/orders/${encodeOrderIdentifier(identifier)}/reject`,
+      body
+    );
     return unwrapApiResponse(res);
   },
 
-  cancel: async (id: string, body: CancelOrderBody): Promise<Order> => {
-    const res = await api.post<ApiResponse<Order>>(`/orders/${id}/cancel`, body);
+  cancel: async (
+    identifier: string,
+    body: CancelOrderBody
+  ): Promise<Order> => {
+    const res = await api.post<ApiResponse<Order>>(
+      `/orders/${encodeOrderIdentifier(identifier)}/cancel`,
+      body
+    );
     return unwrapApiResponse(res);
   },
 
@@ -94,8 +166,14 @@ list: async (query?: ListQuery): Promise<ListResult<Order>> => {
     );
     return unwrapApiResponse(res);
   },
-};
+  delete: async (identifier: string): Promise<Order> => {
+  const res = await api.delete<ApiResponse<Order>>(
+    `/orders/${encodeOrderIdentifier(identifier)}`
+  );
 
+  return unwrapApiResponse(res);
+},
+};
 /* ------------------------------------------------------------------ */
 /* Lookups for the order form (reuse master list endpoints)           */
 /* ------------------------------------------------------------------ */
@@ -125,6 +203,15 @@ export const orderLookups = {
     });
     return unwrapListResponse(res).data;
   },
+routes: async (): Promise<Route[]> => {
+  const res = await api.get<ApiResponse<Route[]>>("/routes", {
+    params: {
+      size: 1000,
+    },
+  });
+
+  return unwrapListResponse(res).data;
+},
   vehicleTypes: async (): Promise<VehicleTypeRow[]> => {
     const res = await api.get<ApiResponse<VehicleTypeRow[]>>("/vehicle-types", {
       params: LOOKUP_QUERY,
@@ -136,6 +223,7 @@ export const orderLookups = {
 export const orderLookupKeys = {
   customers: ["lookup", "customers"] as const,
   branches: ["lookup", "branches"] as const,
+  routes: ["order-lookups", "routes"] as const,
   goods: ["lookup", "goods"] as const,
   vehicleTypes: ["lookup", "vehicle-types"] as const,
   customerLocations: (customerId: string) =>

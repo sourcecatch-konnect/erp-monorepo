@@ -1,0 +1,145 @@
+"use client";
+
+import * as React from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { IconPlus } from "@tabler/icons-react";
+
+import { addEwayBillSchema } from "@skerp/validators/lorry-receipt";
+import type { AddEwayBillFormInput, AddEwayBillBody, EwayBill } from "@skerp/types";
+import { Button } from "@skerp/ui/components/button";
+import { Input } from "@skerp/ui/components/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@skerp/ui/components/dialog";
+
+import { formatDate } from "@/lib/format";
+import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
+import { lorryReceiptApi } from "../lorry-receipt.service";
+import { lrKeys } from "../lorry-receipt.keys";
+
+type Props = {
+  lrId: string;
+  ewayBills: EwayBill[];
+  canAdd: boolean;
+};
+
+export default function EwayBillSection({ lrId, ewayBills, canAdd }: Props) {
+  const queryClient = useQueryClient();
+  const [addOpen, setAddOpen] = React.useState(false);
+
+  const form = useForm<AddEwayBillFormInput, unknown, AddEwayBillBody>({
+    resolver: zodResolver(addEwayBillSchema),
+    defaultValues: {
+      ewayBillNo: "",
+      generatedAt: "" as unknown as Date,
+      expiresAt: "" as unknown as Date,
+      generatedBy: "",
+      documentUrl: "",
+    },
+  });
+
+  const add = useMutation({
+    mutationFn: (body: AddEwayBillBody) => lorryReceiptApi.addEwayBill(lrId, body),
+    onSuccess: () => {
+      toast.success("E-way bill added");
+      setAddOpen(false);
+      form.reset();
+      queryClient.invalidateQueries({ queryKey: lrKeys.detail(lrId) });
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const onSubmit = (values: AddEwayBillBody) => add.mutate(values);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase text-muted-foreground">E-Way Bills</p>
+        {canAdd && (
+          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
+            <IconPlus size={14} className="mr-1" /> Add
+          </Button>
+        )}
+      </div>
+
+      {ewayBills.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No e-way bills.</p>
+      ) : (
+        <div className="space-y-2">
+          {ewayBills.map((eb) => (
+            <div key={eb.id} className="rounded-lg border bg-muted/20 p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{eb.ewayBillNo}</span>
+                <span
+                  className={`text-xs ${new Date(eb.expiresAt) < new Date() ? "text-red-600" : "text-muted-foreground"}`}
+                >
+                  Expires {formatDate(eb.expiresAt)}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Generated {formatDate(eb.generatedAt)}
+                {eb.generatedBy ? ` by ${eb.generatedBy}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add E-Way Bill</DialogTitle>
+            <DialogDescription>Add a new or extended e-way bill to this LR.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                E-way bill number <span className="text-red-600">*</span>
+              </label>
+              <Input {...form.register("ewayBillNo")} placeholder="12-digit number" className="h-9" />
+              {form.formState.errors.ewayBillNo?.message && (
+                <p className="mt-1 text-xs text-red-600">{form.formState.errors.ewayBillNo.message}</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Generated on <span className="text-red-600">*</span>
+                </label>
+                <Input {...form.register("generatedAt")} type="date" className="h-9" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Expires on <span className="text-red-600">*</span>
+                </label>
+                <Input {...form.register("expiresAt")} type="date" className="h-9" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Generated by
+              </label>
+              <Input {...form.register("generatedBy")} placeholder="Name or org" className="h-9" />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={add.isPending}>
+                {add.isPending ? "Adding…" : "Add"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

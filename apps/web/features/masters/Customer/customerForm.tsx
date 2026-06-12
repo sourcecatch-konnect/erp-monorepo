@@ -22,6 +22,7 @@ import {
 } from "@tabler/icons-react";
 
 import { createCustomerSchema } from "@skerp/validators";
+import { paiseToRupees } from "@/lib/money";
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import IconTextField from "../_shared/fields/IconTextField";
@@ -89,7 +90,7 @@ export default function CustomerAdvancedForm({
           ? String(row.interestRateLatePayment)
           : "",
       gstNo: row?.gstNo ?? "",
-      creditLimit: row?.creditLimit != null ? String(row.creditLimit) : "",
+      creditLimit: row?.creditLimit != null ? String(paiseToRupees(row.creditLimit)) : "",
       tdsDeductionRate:
         row?.tdsDeductionRate != null
           ? String(row.tdsDeductionRate)

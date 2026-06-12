@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-
+import { useRouter } from "next/navigation";
 import type { RateMatrix, CreateRateMatrixBody } from "@skerp/types";
 import type { AgreementWithRelations } from "@skerp/types";
 import MasterListPage from "../_shared/MasterListPage";
@@ -24,11 +24,15 @@ import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 import { agreementApi } from "../Agreements/agreements.service";
 import { routeApi } from "../routes/routes.service";
+import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
 
 /* ================= CSV TYPE ================= */
 type CreateRateMatrixCsvRow = {
   agreementId: string;
   routeId: string;
+  vehicleTypeId?: string;
+  unitId?: string;
+  transportType?: "RAIL_ROAD" | "ROAD";
   rate: string;
   transitDays?: string;
   remarks?: string;
@@ -50,7 +54,7 @@ export default function RateMatrixPage() {
 
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
-
+const router = useRouter();
   const listQuery = React.useMemo<ListQuery>(() => {
     return {
       page,
@@ -71,7 +75,15 @@ export default function RateMatrixPage() {
     queryKey: rateMatrixKeys.list(listQuery),
     queryFn: () => rateMatrixApi.list(listQuery),
   });
+const vehicleTypes = useQuery({
+  queryKey: ["vehicleTypes"],
+  queryFn: () => vehicleTypeApi.list(),
+});
 
+const rateUnits = useQuery({
+  queryKey: ["rateMatrix", "units"],
+  queryFn: () => rateMatrixApi.units.list(),
+});
   /* ================= DETAIL ================= */
   const rateMatrixDetail = useQuery({
     queryKey: detailId
@@ -100,9 +112,6 @@ export default function RateMatrixPage() {
     
   });
 
-console.log("RATE MATRIX RESPONSE:", rateMatrix.data);
-console.log("RATE MATRIX LIST:", rateMatrix.data?.data);
-console.log("RATE MATRIX ERROR:", rateMatrix.error);
   const bulkDeleteMutation = React.useMemo(
     () => ({
       mutateAsync: async (ids: string[]) => {
@@ -156,13 +165,19 @@ console.log("RATE MATRIX ERROR:", rateMatrix.error);
 
     const rows = parseCsvRows<CreateRateMatrixCsvRow>(text);
 
-    const parsedRows: CreateRateMatrixBody[] = rows.map((row) => ({
-      agreementId: row.agreementId,
-      routeId: row.routeId,
-      rate: Number(row.rate),
-      transitDays: row.transitDays ? Number(row.transitDays) : undefined,
-      remarks: row.remarks || undefined,
-    }));
+const parsedRows: CreateRateMatrixBody[] = rows.map((row) => ({
+  agreementId: row.agreementId,
+  routeId: row.routeId,
+
+  vehicleTypeId: row.vehicleTypeId || undefined,
+  unitId: row.unitId || undefined,
+
+  transportType: row.transportType || "ROAD",
+
+  rate: Number(row.rate),
+  transitDays: row.transitDays ? Number(row.transitDays) : undefined,
+  remarks: row.remarks || undefined,
+}));
 
     await bulkImportMutation.mutateAsync(parsedRows);
   };
@@ -194,6 +209,9 @@ console.log("RATE MATRIX ERROR:", rateMatrix.error);
         setDetailId(row.id);
         setDetailOpen(true);
       }}
+      onRowClick={(row) => {
+  router.push(`/rateMatrix/${row.id}/agreements`);
+}}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkDeleteMutation.mutateAsync(selectedIds)}
       onImport={handleImport}
@@ -209,25 +227,31 @@ console.log("RATE MATRIX ERROR:", rateMatrix.error);
         isLoading={rateMatrixDetail.isLoading}
       />
 
-      <RateMatrixForm
+<RateMatrixForm
   open={open}
   onOpenChange={setOpen}
   row={selected}
   onSubmit={handleSubmit}
   isSubmitting={create.isPending || update.isPending}
-agreements={
-  ((agreements.data?.data ?? []) as AgreementWithRelations[]).map((a) => ({
-    id: a.id,
-    name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
-  }))
-}
-routes={
-  routes.data?.data.map((r) => ({
-    id: r.id,
-    name: `${r.sourceCity?.name ?? "-"} to ${r.destinationCity?.name ?? "-"}`,
-  })) ?? []
-}
+  agreements={
+    ((agreements.data?.data ?? []) as AgreementWithRelations[]).map((a) => ({
+      id: a.id,
+      name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
+    }))
+  }
+  routes={
+    routes.data?.data.map((r) => ({
+      id: r.id,
+      name: `${r.sourceCity?.name ?? "-"} to ${
+        r.destinationCity?.name ?? "-"
+      }`,
+    })) ?? []
+  }
+  vehicleTypes={vehicleTypes.data?.data ?? []}
+  rateUnits={rateUnits.data?.data ?? []}
+
 />
+
     </MasterListPage>
   );
 }

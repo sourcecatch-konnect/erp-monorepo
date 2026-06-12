@@ -41,8 +41,11 @@ export const authMiddleware = async (
   req.user = decoded;
 
   // Hydrate permission context. Failures here log out the user — the token
-  // is valid but the underlying user/role no longer resolves.
-  const ctx = await getPermissionContext(decoded.userId);
+
+
+const ctx = await getPermissionContext(decoded.userId);
+
+
   if (!ctx) {
     return sendError(res, 401, {
       code: "UNAUTHORIZED",

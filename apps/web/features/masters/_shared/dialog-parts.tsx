@@ -2,20 +2,26 @@
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import * as React from "react";
+import { formatPaise, formatRupees } from "@/lib/money";
 export const formatCurrency = (
   value?: number | null
 ) => {
   if (value == null) return "-";
 
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-  }).format(value);
+  return formatRupees(value);
+};
+
+export const formatCurrencyFromPaise = (
+  value?: number | null
+) => {
+  if (value == null) return "-";
+
+  return formatPaise(value);
 };
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+    <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
       {children}
     </p>
   );
@@ -34,7 +40,7 @@ export function Field({
 }) {
   return (
     <div className="grid gap-1">
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         {icon && <span className="opacity-70">{icon}</span>}
         {label}
       </div>
@@ -84,16 +90,16 @@ export function PartyCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/30 px-4 py-3">
+    <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-4 py-3">
       <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${colorClass}`}>
         {getInitials(name)}
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] text-muted-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
         <p className="truncate text-sm font-medium text-foreground">
           {name ?? "-"}
         </p>
-        {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
+        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </div>
       <span className="ml-auto text-muted-foreground/40">{icon}</span>
     </div>
@@ -126,8 +132,8 @@ export function SkeletonBody() {
   return (
     <div className="space-y-6 p-6">
       <div className="grid grid-cols-2 gap-3">
-        <Skeleton className="h-16 rounded-xl" />
-        <Skeleton className="h-16 rounded-xl" />
+        <Skeleton className="h-16 rounded-lg" />
+        <Skeleton className="h-16 rounded-lg" />
       </div>
 
       {Array.from({ length: 3 }).map((_, sectionIndex) => (

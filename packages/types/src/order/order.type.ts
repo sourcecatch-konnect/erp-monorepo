@@ -55,6 +55,7 @@ export type Order = {
   fromBranchId: string;
   toBranchId: string;
   pickupDate: string;
+  routeId: string | null;
   customerLocationId: string | null;
   pickupAddressOverride: string | null;
   specialInstructions: string | null;

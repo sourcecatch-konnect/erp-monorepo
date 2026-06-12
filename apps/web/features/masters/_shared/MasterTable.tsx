@@ -47,6 +47,7 @@ type Props<T extends { id: string }> = {
   onDelete?: (id: string) => void;
   onAddNew?: () => void;
   selectedIds?: string[];
+  onRowClick?: (row: T) => void;
   onSelectedIdsChange?: (ids: string[]) => void;
   isLoading?: boolean;
   defaultHiddenColumns?: string[];
@@ -59,6 +60,7 @@ export default function MasterTable<T extends { id: string }>({
   columns,
   onEdit,
   onDelete,
+  onRowClick,
   onAddNew,
   onView,
   selectedIds = [],
@@ -128,7 +130,7 @@ const [columnVisibility, setColumnVisibility] =
 
   return (
     <TooltipProvider>
-    <div className="w-full min-w-0 overflow-hidden rounded-lg border bg-white shadow-sm">
+    <div className="w-full min-w-0 overflow-hidden rounded-lg border bg-card">
       <div className="flex min-h-11 items-center justify-between border-b bg-muted/20 px-4">
         <h2 className="text-sm font-semibold text-foreground">
           {title}
@@ -179,6 +181,7 @@ const [columnVisibility, setColumnVisibility] =
                 <TableHead className="w-11 px-4">
                   <Checkbox
                     checked={allVisibleSelected}
+                    onClick={(event) => event.stopPropagation()}
                     onCheckedChange={(value) => setAllVisible(Boolean(value))}
                     aria-label="Select all rows"
                   />
@@ -188,7 +191,7 @@ const [columnVisibility, setColumnVisibility] =
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
-                  className="h-10 min-w-[150px] whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  className="h-10 min-w-[150px] whitespace-nowrap text-sm font-medium text-muted-foreground"
                 >
                   {header.isPlaceholder
                     ? null
@@ -200,7 +203,7 @@ const [columnVisibility, setColumnVisibility] =
               ))}
 
               {hasActions && (
-                <TableHead className="sticky right-0 h-10 w-[104px] bg-muted/40 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <TableHead className="sticky right-0 h-10 w-[104px] bg-muted/40 pr-4 text-right text-sm font-medium text-muted-foreground">
                   Actions
                 </TableHead>
               )}
@@ -211,7 +214,7 @@ const [columnVisibility, setColumnVisibility] =
         <TableBody>
           {isLoading ? (
             Array.from({ length: 8 }).map((_, rowIndex) => (
-              <TableRow key={rowIndex} className="border-b">
+              <TableRow key={rowIndex}  className="border-b">
                 {hasSelection ? (
                   <TableCell className="w-11 px-4">
                     <Skeleton className="size-4 rounded-[4px]" />
@@ -265,15 +268,20 @@ const [columnVisibility, setColumnVisibility] =
             </TableRow>
           ) : (
             table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                data-selected={selectedSet.has(row.original.id)}
-                className="border-b transition-colors hover:bg-muted/30 data-[selected=true]:bg-primary/5"
-              >
+            <TableRow
+  key={row.id}
+  data-selected={selectedSet.has(row.original.id)}
+  onClick={() => onRowClick?.(row.original)}
+  className={[
+    "border-b transition-colors hover:bg-muted/30 data-[selected=true]:bg-primary/5",
+    onRowClick ? "cursor-pointer" : "",
+  ].join(" ")}
+>
                 {hasSelection ? (
                   <TableCell className="w-11 px-4">
                     <Checkbox
                       checked={selectedSet.has(row.original.id)}
+                      onClick={(event) => event.stopPropagation()}
                       onCheckedChange={(value) =>
                         setSelected(row.original.id, Boolean(value))
                       }
@@ -294,7 +302,7 @@ const [columnVisibility, setColumnVisibility] =
                 ))}
 
      {hasActions && (
- <TableCell className="sticky right-0 w-[104px] bg-white pr-4 text-right">
+ <TableCell className="sticky right-0 w-[104px] bg-card pr-4 text-right">
     <div className="flex justify-end items-center gap-1">
       {onView && (
   <Tooltip>
@@ -303,7 +311,10 @@ const [columnVisibility, setColumnVisibility] =
         size="icon-sm"
         variant="ghost"
         className="text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
-        onClick={() => onView(row.original)}
+        onClick={(event) => {
+  event.stopPropagation();
+  onView(row.original);
+}}
         aria-label="View row"
       >
         <IconEye size={16} />
@@ -319,7 +330,10 @@ const [columnVisibility, setColumnVisibility] =
               size="icon-sm"
               variant="ghost"
               className="text-muted-foreground hover:bg-primary/10 hover:text-primary"
-              onClick={() => onEdit(row.original)}
+              onClick={(event) => {
+  event.stopPropagation();
+  onEdit(row.original);
+}}
               aria-label="Edit row"
             >
               <IconEdit size={16} />
@@ -336,7 +350,10 @@ const [columnVisibility, setColumnVisibility] =
               size="icon-sm"
               variant="ghost"
               className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-              onClick={() => setDeleteRow(row.original)}
+             onClick={(event) => {
+  event.stopPropagation();
+  setDeleteRow(row.original);
+}}
               aria-label="Delete row"
             >
               <IconTrash size={16} />

@@ -6,6 +6,7 @@ import type { CompanyWithRelations } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@skerp/ui/components/dialog";
 
 import {
@@ -15,15 +16,14 @@ import {
   TabsTrigger,
 } from "@skerp/ui/components/tabs";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
-
-
 import {
   SectionLabel,
   Field,
   PartyCard,
   formatDate,
-} from "../_shared/dialog-parts"
+  formatCurrencyFromPaise,
+  SkeletonBody,
+} from "../_shared/dialog-parts";
 import {
   IconBuilding,
   IconMapPin,
@@ -49,26 +49,6 @@ type Props = {
   isLoading?: boolean;
 };
 
-function SkeletonBody() {
-  return (
-    <div className="space-y-6 p-6">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i}>
-          <Skeleton className="mb-3 h-4 w-28" />
-          <div className="grid grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, x) => (
-              <Skeleton
-                key={x}
-                className="h-14 rounded-xl"
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function CompanyDetailDialog({
   open,
   onOpenChange,
@@ -76,29 +56,21 @@ export default function CompanyDetailDialog({
   isLoading,
 }: Props) {
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-    >
-      <DialogContent
-        className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0"
-      >
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
         {/* Header */}
 
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-3">
-
             <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <IconBuilding size={20} />
             </span>
 
             <div>
-              <p className="text-sm font-semibold">
-                Company Details
-              </p>
+              <DialogTitle>Company Details</DialogTitle>
 
               {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10} />
                   Active Profile
                 </div>
@@ -111,13 +83,10 @@ export default function CompanyDetailDialog({
           <SkeletonBody />
         ) : (
           <div className="h-[calc(95vh-120px)] overflow-y-auto">
-
             {/* Company Summary */}
 
             <div className="px-5 py-5">
-              <SectionLabel>
-                Company Overview
-              </SectionLabel>
+              <SectionLabel>Company Overview</SectionLabel>
 
               <PartyCard
                 label="Company"
@@ -130,44 +99,25 @@ export default function CompanyDetailDialog({
 
             <div className="mx-5 border-t" />
 
-            <Tabs
-              defaultValue="profile"
-              className="w-full"
-            >
+            <Tabs defaultValue="profile" className="w-full">
               <div className="px-5 py-4">
-
                 <TabsList>
-                  <TabsTrigger value="profile">
-                    Profile
-                  </TabsTrigger>
+                  <TabsTrigger value="profile">Profile</TabsTrigger>
 
                   <TabsTrigger value="agreements">
-                    Agreements (
-                    {data?.agreements?.length ?? 0}
-                    )
+                    Agreements ({data?.agreements?.length ?? 0})
                   </TabsTrigger>
 
-                  <TabsTrigger value="rates">
-                    Rate Matrix
-                  </TabsTrigger>
-
+                  <TabsTrigger value="rates">Rate Matrix</TabsTrigger>
                 </TabsList>
-
               </div>
 
               {/* Profile */}
 
-              <TabsContent
-                value="profile"
-                className="m-0 px-5 pb-5"
-              >
-
-                <SectionLabel>
-                  Company Information
-                </SectionLabel>
+              <TabsContent value="profile" className="m-0 px-5 pb-5">
+                <SectionLabel>Company Information</SectionLabel>
 
                 <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-
                   <Field
                     label="Country"
                     value={data?.country}
@@ -194,9 +144,7 @@ export default function CompanyDetailDialog({
 
                   <Field
                     label="Established"
-                    value={formatDate(
-                      data?.establishmentYear
-                    )}
+                    value={formatDate(data?.establishmentYear)}
                     icon={<IconCalendar size={12} />}
                   />
 
@@ -223,9 +171,7 @@ export default function CompanyDetailDialog({
                     value={data?.address}
                     icon={<IconHome size={12} />}
                   />
-
                 </div>
-
               </TabsContent>
 
               {/* Agreements */}
@@ -279,18 +225,6 @@ export default function CompanyDetailDialog({
                             value={agreement.city?.name ?? "-"}
                             icon={<IconMapPin size={12} />}
                           />
-
-                          <Field
-                            label="Carrying Capacity"
-                            value={
-                              agreement.carryingCapacity != null
-                                ? `${agreement.carryingCapacity} Ton`
-                                : "-"
-                            }
-                            icon={<IconTruck size={12} />}
-                          />
-
-
                         </div>
                       </div>
                     ))
@@ -306,68 +240,79 @@ export default function CompanyDetailDialog({
               <TabsContent value="rates" className="m-0 px-5 pb-5">
                 <div className="space-y-5">
                   {data?.agreements?.some((a) => a.RateMatrix?.length) ? (
-                    data.agreements.flatMap((agreement) =>
-                      agreement.RateMatrix?.map((rate) => (
-                        <div key={rate.id} className="rounded-xl border bg-muted/20 p-4">
-                          <div className="mb-4 flex items-start justify-between gap-4">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                  <IconRoute size={15} />
-                                </span>
+                    data.agreements.flatMap(
+                      (agreement) =>
+                        agreement.RateMatrix?.map((rate) => (
+                          <div
+                            key={rate.id}
+                            className="rounded-lg border bg-muted/20 p-4"
+                          >
+                            <div className="mb-4 flex items-start justify-between gap-4">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                    <IconRoute size={15} />
+                                  </span>
 
-                                <div>
-                                  <p className="text-sm font-semibold">
-                                    {rate.route?.sourceCity?.name ?? "-"} →{" "}
-                                    {rate.route?.destinationCity?.name ?? "-"}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    Customer: {agreement.client?.name ?? "-"}
-                                  </p>
+                                  <div>
+                                    <p className="text-sm font-semibold">
+                                      {rate.route?.sourceCity?.name ?? "-"} →{" "}
+                                      {rate.route?.destinationCity?.name ?? "-"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Customer: {agreement.client?.name ?? "-"}
+                                    </p>
+                                  </div>
                                 </div>
+                              </div>
+
+                              <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right text-emerald-700">
+                                <p className="text-xs font-medium">
+                                  Freight Rate
+                                </p>
+                                <p className="text-sm font-bold">
+                                  {formatCurrencyFromPaise(rate.rate)}
+                                </p>
                               </div>
                             </div>
 
-                            <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right text-emerald-700">
-                              <p className="text-xs font-medium">Freight Rate</p>
-                              <p className="text-sm font-bold">₹{rate.rate}</p>
+                            <div className="grid grid-cols-3 gap-x-6 gap-y-4 border-t pt-4">
+                              <Field
+                                label="Source City"
+                                value={rate.route?.sourceCity?.name ?? "-"}
+                                icon={<IconMapPin size={12} />}
+                              />
+
+                              <Field
+                                label="Destination City"
+                                value={rate.route?.destinationCity?.name ?? "-"}
+                                icon={<IconMapPin size={12} />}
+                              />
+
+                              <Field
+                                label="Transit Days"
+                                value={
+                                  rate.transitDays
+                                    ? `${rate.transitDays} days`
+                                    : "-"
+                                }
+                                icon={<IconClock size={12} />}
+                              />
+
+                              <Field
+                                label="Agreement Client"
+                                value={agreement.client?.name ?? "-"}
+                                icon={<IconUser size={12} />}
+                              />
+
+                              <Field
+                                label="Remarks"
+                                value={rate.remarks ?? "-"}
+                                icon={<IconFileDescription size={12} />}
+                              />
                             </div>
                           </div>
-
-                          <div className="grid grid-cols-3 gap-x-6 gap-y-4 border-t pt-4">
-                            <Field
-                              label="Source City"
-                              value={rate.route?.sourceCity?.name ?? "-"}
-                              icon={<IconMapPin size={12} />}
-                            />
-
-                            <Field
-                              label="Destination City"
-                              value={rate.route?.destinationCity?.name ?? "-"}
-                              icon={<IconMapPin size={12} />}
-                            />
-
-                            <Field
-                              label="Transit Days"
-                              value={rate.transitDays ? `${rate.transitDays} days` : "-"}
-                              icon={<IconClock size={12} />}
-                            />
-
-                            <Field
-                              label="Agreement Client"
-                              value={agreement.client?.name ?? "-"}
-                              icon={<IconUser size={12} />}
-                            />
-
-                            <Field
-                              label="Remarks"
-                              value={rate.remarks ?? "-"}
-                              icon={<IconFileDescription size={12} />}
-                            />
-
-                          </div>
-                        </div>
-                      )) ?? []
+                        )) ?? [],
                     )
                   ) : (
                     <p className="text-sm text-muted-foreground">
@@ -376,7 +321,6 @@ export default function CompanyDetailDialog({
                   )}
                 </div>
               </TabsContent>
-
             </Tabs>
           </div>
         )}
@@ -384,8 +328,7 @@ export default function CompanyDetailDialog({
         {/* Footer */}
 
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <IconClockEdit size={12} />
             Updated {formatDate(data?.updatedAt)}
           </span>
@@ -396,9 +339,7 @@ export default function CompanyDetailDialog({
           >
             Close
           </button>
-
         </div>
-
       </DialogContent>
     </Dialog>
   );

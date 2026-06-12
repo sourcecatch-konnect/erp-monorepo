@@ -42,19 +42,25 @@ import {
   IconBan,
   IconEdit,
   IconDatabaseOff,
+  IconFileText,
+  IconDownload,
+  IconTrash,
 } from "@tabler/icons-react";
 
-import { StatusBadge, formatDate, formatMoney, STATUS_ORDER } from "./order-ui";
+import { StatusBadge, formatDate, formatMoneyFromPaise, STATUS_ORDER } from "./order-ui";
 
 export type OrderRowActions = {
   onQuickView: (order: Order) => void;
   onApprove: (order: Order) => void;
   onReject: (order: Order) => void;
   onCancel: (order: Order) => void;
+  onCreateLR: (order: Order) => void;
   canApprove: boolean;
   canReject: boolean;
   canCancel: boolean;
   canUpdate: boolean;
+  canCreateLR: boolean;
+  canDelete: boolean;
 };
 
 type Props = OrderRowActions & {
@@ -70,6 +76,8 @@ type Props = OrderRowActions & {
   onStatusFilterChange: (value: string) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
+
+  onDelete: (order: Order) => void;
 };
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 const routeLabel = (o: Order) =>
@@ -94,14 +102,18 @@ export default function OrderTable(props: Props) {
     onStatusFilterChange,
     counts,
     isLoading,
+    canDelete,
+    onDelete,
     onQuickView,
     onApprove,
     onReject,
     onCancel,
+    onCreateLR,
     canApprove,
     canReject,
     canCancel,
     canUpdate,
+    canCreateLR,
   } = props;
 
   const columns = React.useMemo<ColumnDef<Order>[]>(
@@ -111,7 +123,7 @@ export default function OrderTable(props: Props) {
         accessorKey: "orderNumber",
         cell: ({ row }) => (
           <Link
-            href={`/orders/${row.original.id}`}
+            href={`/orders/${encodeURIComponent(row.original.orderNumber)}`}
             className="font-medium text-primary hover:underline"
           >
             {row.original.orderNumber}
@@ -130,7 +142,7 @@ export default function OrderTable(props: Props) {
       },
       {
         header: "Freight",
-        cell: ({ row }) => formatMoney(row.original.bookingFreightAmount),
+        cell: ({ row }) => formatMoneyFromPaise(row.original.bookingFreightAmount),
       },
       {
         header: "Status",
@@ -197,7 +209,7 @@ export default function OrderTable(props: Props) {
         />
       </div>
 
-      <div className="w-full overflow-x-auto rounded-lg  bg-white ">
+      <div className="w-full overflow-x-auto rounded-lg  bg-card ">
         <Table className="w-full">
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
@@ -205,7 +217,7 @@ export default function OrderTable(props: Props) {
                 {hg.headers.map((h) => (
                   <TableHead
                     key={h.id}
-                    className="h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
                   >
                     {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
@@ -247,11 +259,21 @@ export default function OrderTable(props: Props) {
             ) : (
               table.getRowModel().rows.map((row) => {
                 const o = row.original;
+
                 const isPending = o.status === "PendingApproval";
-                const cancellable =
-                  o.status === "PendingApproval" || o.status === "Confirmed";
+
                 const editable =
                   o.status === "PendingApproval" || o.status === "Rejected";
+
+                const deletable =
+                  o.status === "PendingApproval" || o.status === "Rejected";
+
+                const cancellable =
+                  o.status === "PendingApproval" || o.status === "Confirmed";
+
+                const hasDangerActions =
+                  (canCancel && cancellable) || (canDelete && deletable);
+
                 return (
                   <TableRow key={row.id} className="hover:bg-muted/30">
                     {row.getVisibleCells().map((cell) => (
@@ -300,15 +322,41 @@ export default function OrderTable(props: Props) {
                                 </Link>
                               </DropdownMenuItem>
                             ) : null}
-                            {canCancel && cancellable ? (
+                            {canCreateLR &&
+                            o.status === "Confirmed" &&
+                            o.orderType === "Truck" ? (
+                              <DropdownMenuItem onClick={() => onCreateLR(o)}>
+                                <IconFileText size={16} className="mr-2" />{" "}
+                                Create LR
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuItem asChild>
+                              <Link href={`/orders/${o.id}`}>
+                                <IconDownload size={16} className="mr-2" />{" "}
+                                Download PDF
+                              </Link>
+                            </DropdownMenuItem>
+                            {hasDangerActions ? (
                               <>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-red-600"
-                                  onClick={() => onCancel(o)}
-                                >
-                                  <IconBan size={16} className="mr-2" /> Cancel
-                                </DropdownMenuItem>
+                                {canCancel && cancellable ? (
+                                  <DropdownMenuItem
+                                    className="text-red-600"
+                                    onClick={() => onCancel(o)}
+                                  >
+                                    <IconBan size={16} className="mr-2" />{" "}
+                                    Cancel
+                                  </DropdownMenuItem>
+                                ) : null}
+                                {canDelete && deletable ? (
+                                  <DropdownMenuItem
+                                    className="text-red-600"
+                                    onClick={() => onDelete(o)}
+                                  >
+                                    <IconTrash size={16} className="mr-2" />{" "}
+                                    Delete
+                                  </DropdownMenuItem>
+                                ) : null}
                               </>
                             ) : null}
                           </DropdownMenuContent>

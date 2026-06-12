@@ -73,7 +73,10 @@ const [showContactFields, setShowContactFields] = useState(
     queryKey: orderLookupKeys.vehicleTypes,
     queryFn: orderLookups.vehicleTypes,
   });
-
+const routes = useQuery({
+  queryKey: orderLookupKeys.routes,
+  queryFn: orderLookups.routes,
+});
   const form = useForm<CreateOrderFormInput, unknown, CreateOrderBody>({
     resolver: zodResolver(createOrderSchema),
     defaultValues: order
@@ -86,6 +89,7 @@ const [showContactFields, setShowContactFields] = useState(
           pickupAddressOverride: order.pickupAddressOverride ?? undefined,
           specialInstructions: order.specialInstructions ?? undefined,
           orderType: order.orderType,
+          routeId: order.routeId ?? undefined,
           truckQuantity: order.truckQuantity ?? undefined,
           vehicleTypeId: order.vehicleTypeId ?? undefined,
           contactPersonName: order.contactPersonName ?? undefined,
@@ -127,13 +131,13 @@ const [showContactFields, setShowContactFields] = useState(
             ? "Order resubmitted for approval"
             : "Order updated",
         );
-        router.push(`/orders/${order.id}`);
+        router.push(`/orders/${encodeURIComponent(order.orderNumber)}`);
       } else {
         const created = await orderApi.create(values);
         toast.success(
           `Order ${created.orderNumber} created and sent for approval`,
         );
-        router.push(`/orders/${created.id}`);
+        router.push(`/orders/${encodeURIComponent(created.orderNumber)}`);
       }
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -153,7 +157,7 @@ const [showContactFields, setShowContactFields] = useState(
         onSubmit={form.handleSubmit(onSubmit)}
        className="mx-auto max-w-6xl space-y-5 p-4 md:p-6"
       >
-       <div className="rounded-xl border bg-background p-4 shadow-sm">
+       <div className="rounded-lg border bg-background p-4 shadow-sm">
   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
     <div>
       <h1 className="text-lg font-semibold tracking-tight">
@@ -248,7 +252,17 @@ const [showContactFields, setShowContactFields] = useState(
     options={toOptions(branches.data ?? [])}
     disabled={softOnly}
   />
-
+<ComboboxField
+  name="routeId"
+  label="Route"
+  required
+  options={(routes.data ?? []).map((route) => ({
+    label: `${route.sourceCity?.name ?? "-"} → ${route.destinationCity?.name ?? "-"}`,
+    value: route.id,
+  }))}
+  emptyText="No routes found"
+  disabled={softOnly}
+/>
   <ComboboxField
     name="customerLocationId"
     label="Saved pickup location"
@@ -283,7 +297,7 @@ const [showContactFields, setShowContactFields] = useState(
         disabled={softOnly}
         onClick={() => form.setValue("orderType", t, { shouldDirty: true })}
         className={[
-          "rounded-xl border p-4 text-left transition",
+          "rounded-lg border p-4 text-left transition",
           active
             ? "border-primary bg-primary/5 ring-1 ring-primary/20"
             : "bg-background hover:bg-muted/40",

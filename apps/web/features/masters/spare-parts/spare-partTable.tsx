@@ -10,7 +10,7 @@ import {
   IconScale,
   IconCalendar,
 } from "@tabler/icons-react";
-import { formatCurrency } from "../_shared/dialog-parts";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 const formatLabel = (value?: string | null) => {
   if (!value) return "-";
@@ -80,7 +80,7 @@ export const sparePartColumns: ColumnDef<SparePart>[] = [
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1">
         <IconCurrencyRupee size={13} />
-        {formatCurrency(row.original.rate)}
+        {formatCurrencyFromPaise(row.original.rate)}
       </span>
     ),
   },

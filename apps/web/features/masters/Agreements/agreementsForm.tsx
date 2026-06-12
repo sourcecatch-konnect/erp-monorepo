@@ -18,7 +18,6 @@ import { createAgreementSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
-import IconTextField from "../_shared/fields/IconTextField";
 import SelectField from "../_shared/fields/SelectField";
 
 import {
@@ -26,14 +25,22 @@ import {
   IconMapPin,
   IconCalendar,
   IconTruck,
+  IconX,
+  IconFileUpload,
 } from "@tabler/icons-react";
 import { DatePicker } from "@skerp/ui/components/datepicker";
+import { Button } from "@skerp/ui/components/button";
+import { attachmentApi } from "@/features/attachments/attachment.client";
+import { AttachmentPanel } from "@skerp/attachments-web";
 
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   row?: Agreement | null;
-  onSubmit: (data: CreateAgreementBody) => Promise<void>;
+  onSubmit: (
+  data: CreateAgreementBody,
+  agreementFile?: File | null,
+) => Promise<void>;
   isSubmitting?: boolean;
 
   companies: Company[];
@@ -50,7 +57,7 @@ const defaultValues: CreateAgreementFormInput = {
   startDate: "",
   agreementDate: "",
   expiryDate: "",
-  carryingCapacity: "",
+  
 };
 
 export default function AgreementForm({
@@ -70,10 +77,10 @@ const form = useForm<CreateAgreementFormInput, unknown, CreateAgreementBody>({
   mode: "onChange",
   reValidateMode: "onChange",
 });
-
+const [agreementFile, setAgreementFile] = React.useState<File | null>(null);
   React.useEffect(() => {
     if (!open) return;
-
+      setAgreementFile(null);
     form.reset({
       companyId: row?.companyId ?? "",
       clientId: row?.clientId ?? "",
@@ -82,17 +89,21 @@ const form = useForm<CreateAgreementFormInput, unknown, CreateAgreementBody>({
       startDate: row?.startDate ? String(row.startDate) : "",
       agreementDate: row?.agreementDate ? String(row.agreementDate) : "",
       expiryDate: row?.expiryDate ? String(row.expiryDate) : "",
-      carryingCapacity: row?.carryingCapacity?.toString() ?? "",
+
     });
   }, [open, row, form]);
 
+const agreementFileInputRef = React.useRef<HTMLInputElement | null>(null);
   return (
     <MasterFormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={row ? "Edit Agreement" : "Add Agreement"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={async (data) => {
+  await onSubmit(data, agreementFile);
+  setAgreementFile(null);
+}}
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -113,7 +124,7 @@ const form = useForm<CreateAgreementFormInput, unknown, CreateAgreementBody>({
 
         <SelectField
           name="clientId"
-          label="Customer"
+          label="Consigner"
           options={customers.map((c) => ({
             label: c.name,
             value: c.id,
@@ -124,8 +135,8 @@ const form = useForm<CreateAgreementFormInput, unknown, CreateAgreementBody>({
       {/* ================= LOCATION ================= */}
       <FormSection
         icon={<IconMapPin size={18} />}
-        title="Location Details"
-        description="City and branch responsible for agreement"
+        title="City and branch responsible for agreement"
+        description="Location Details"
       >
         <SelectField
           name="cityId"
@@ -215,18 +226,95 @@ const form = useForm<CreateAgreementFormInput, unknown, CreateAgreementBody>({
 </FormSection>
 
       {/* ================= TRANSPORT DETAILS ================= */}
-      <FormSection
-        icon={<IconTruck size={18} />}
-        title="Transport Terms"
-        description="Capacity and logistics conditions"
+<FormSection
+  icon={<IconFileUpload size={18} />}
+  title="Agreement Upload"
+  description="Upload signed agreement PDF or scanned agreement copy"
+>
+  {row?.id ? (
+    <div className="col-span-full">
+      <AttachmentPanel
+        api={attachmentApi}
+        entityType="agreement"
+        entityId={row.id}
+      />
+    </div>
+  ) : (
+  <div className="col-span-full rounded-xl border border-dashed border-border bg-muted/20 p-4">
+  <div className="flex flex-col items-center justify-center gap-3 text-center">
+    <div className="rounded-full bg-background p-3">
+      <IconFileUpload className="size-7 text-muted-foreground" />
+    </div>
+
+    <div>
+      <p className="text-sm font-medium text-foreground">
+        Upload Agreement File
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        PDF file only
+      </p>
+    </div>
+
+    <input
+      ref={agreementFileInputRef}
+      type="file"
+      accept="application/pdf,.pdf"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0] ?? null;
+
+        if (!file) return;
+
+        if (file.type !== "application/pdf" && !file.name.endsWith(".pdf")) {
+          setAgreementFile(null);
+          e.target.value = "";
+          return;
+        }
+
+        setAgreementFile(file);
+        e.target.value = "";
+      }}
+    />
+
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={() => agreementFileInputRef.current?.click()}
+    >
+      <IconFileUpload className="mr-2 size-4" />
+      Choose PDF File
+    </Button>
+  </div>
+
+  {agreementFile ? (
+    <div className="mt-4 flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">
+          {agreementFile.name}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {(agreementFile.size / (1024 * 1024)).toFixed(2)} MB
+        </p>
+      </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => setAgreementFile(null)}
       >
-        <IconTextField
-          name="carryingCapacity"
-          label="Carrying Capacity (Ton)"
-          type="number"
-          placeholder="Enter capacity"
-        />
-      </FormSection>
+        <IconX className="size-4" />
+      </Button>
+    </div>
+  ) : null}
+
+  <p className="mt-3 text-xs text-muted-foreground">
+    File will be uploaded after the agreement is created.
+  </p>
+</div>
+  )}
+</FormSection>
     </MasterFormDialog>
   );
 }

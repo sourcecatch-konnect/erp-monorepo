@@ -23,6 +23,7 @@ type Props<T extends { id: string }> = {
   search: string;
   onSearchChange: (value: string) => void;
   page: number;
+  onRowClick?: (row: T) => void;
   size: number;
   total: number;
   onView?: (row: T) => void;
@@ -52,6 +53,7 @@ export default function MasterListPage<T extends { id: string }>({
   page,
   size,
   onView,
+  onRowClick,
   total,
   onPageChange,
   defaultHiddenColumns,
@@ -121,7 +123,7 @@ export default function MasterListPage<T extends { id: string }>({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white px-3 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-3 py-3">
         <div className="relative w-full max-w-sm">
           <IconSearch
             size={16}
@@ -160,12 +162,13 @@ export default function MasterListPage<T extends { id: string }>({
       </div>
 
       <MasterTable
-        title={isLoading ? "Loading..." : title}
+        title={title}
         data={data}
         columns={columns}
         onEdit={onEdit}
         onDelete={onDelete}
         onView={onView}
+        onRowClick={onRowClick}
         defaultHiddenColumns={defaultHiddenColumns}
         selectedIds={selectedIds}
         onSelectedIdsChange={onSelectedIdsChange}
