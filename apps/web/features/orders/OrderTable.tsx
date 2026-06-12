@@ -271,17 +271,9 @@ export default function OrderTable(props: Props) {
                 const cancellable =
                   o.status === "PendingApproval" || o.status === "Confirmed";
 
-                const hasTopActions =
-                  (canApprove && isPending) ||
-                  (canReject && isPending) ||
-                  (canUpdate && editable);
-
                 const hasDangerActions =
                   (canCancel && cancellable) || (canDelete && deletable);
 
-                const hasActions = hasTopActions || hasDangerActions;
-
-                const showSeparator = hasTopActions && hasDangerActions;
                 return (
                   <TableRow key={row.id} className="hover:bg-muted/30">
                     {row.getVisibleCells().map((cell) => (
@@ -344,15 +336,27 @@ export default function OrderTable(props: Props) {
                                 Download PDF
                               </Link>
                             </DropdownMenuItem>
-                            {canCancel && cancellable ? (
+                            {hasDangerActions ? (
                               <>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-red-600"
-                                  onClick={() => onCancel(o)}
-                                >
-                                  <IconBan size={16} className="mr-2" /> Cancel
-                                </DropdownMenuItem>
+                                {canCancel && cancellable ? (
+                                  <DropdownMenuItem
+                                    className="text-red-600"
+                                    onClick={() => onCancel(o)}
+                                  >
+                                    <IconBan size={16} className="mr-2" />{" "}
+                                    Cancel
+                                  </DropdownMenuItem>
+                                ) : null}
+                                {canDelete && deletable ? (
+                                  <DropdownMenuItem
+                                    className="text-red-600"
+                                    onClick={() => onDelete(o)}
+                                  >
+                                    <IconTrash size={16} className="mr-2" />{" "}
+                                    Delete
+                                  </DropdownMenuItem>
+                                ) : null}
                               </>
                             ) : null}
                           </DropdownMenuContent>

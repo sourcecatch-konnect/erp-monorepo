@@ -25,9 +25,6 @@ import {
   IconCopy,
   IconMail,
   IconAlertCircle,
-  IconCircleCheck,
-  IconClock,
-  IconCircleDot,
   IconLoader2,
 } from "@tabler/icons-react";
 import { useCan } from "@/features/auth";
@@ -124,21 +121,21 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
     queryKey: orderKeys.detail(orderId),
     queryFn: () => orderApi.detail(orderId),
   });
+
+  const lrCountsQuery = useQuery({
+    queryKey: [...lrKeys.all, "order-counts", orderId],
+    queryFn: () => lorryReceiptApi.list({ size: 1, filter: { orderId } }),
+    enabled: Boolean(
+      order?.orderType === "Truck" && order?.status === "Confirmed",
+    ),
+    select: (res) => res.meta?.total ?? 0,
+  });
+
   const [isDownloadingPdf, setIsDownloadingPdf] = React.useState(false);
   const handleDownloadOrderPdf = async (orderIdOrNumber: string) => {
     try {
       setIsDownloadingPdf(true);
       const encodedId = encodeURIComponent(orderIdOrNumber);
-
-      const lrCountsQuery = useQuery({
-        queryKey: [...lrKeys.all, "order-counts", orderId],
-        queryFn: () =>
-          lorryReceiptApi.list({ size: 1, filter: { orderId } } as never),
-        enabled: Boolean(
-          order?.orderType === "Truck" && order?.status === "Confirmed",
-        ),
-        select: (res) => res.meta?.total ?? 0,
-      });
 
       const response = await fetch(
         `http://localhost:5000/orders/${encodedId}/pdf`,
@@ -252,9 +249,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
       ? approvedFreight - autoFreight
       : 0;
 
-  const rateMatrix = order.freightPreview?.rateMatrix;
-
-  const matrixRate = rateMatrix?.rate != null ? Number(rateMatrix.rate) : null;
   const isPending = order.status === "PendingApproval";
   const editable =
     order.status === "PendingApproval" ||

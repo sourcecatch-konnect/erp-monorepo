@@ -72,6 +72,7 @@ router.get("/", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
     ...lrBranchFilter(req),
     ...(query.filter.status ? { status: query.filter.status as LRStatus } : {}),
     ...(query.filter.source ? { source: query.filter.source as LRSource } : {}),
+    ...(query.filter.orderId ? { orderId: query.filter.orderId } : {}),
     ...(query.search
       ? { lrNumber: { contains: query.search, mode: "insensitive" as const } }
       : {}),

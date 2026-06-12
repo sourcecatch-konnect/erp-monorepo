@@ -26,6 +26,7 @@ export const lorryReceiptApi = {
     if (query?.sort) params.sort = query.sort;
     if (query?.filter?.status) params["filter[status]"] = String(query.filter.status);
     if (query?.filter?.source) params["filter[source]"] = String(query.filter.source);
+    if (query?.filter?.orderId) params["filter[orderId]"] = String(query.filter.orderId);
     const res = await api.get<ApiResponse<LRListItem[]>>("/lorry-receipts", { params });
     return unwrapListResponse(res);
   },
