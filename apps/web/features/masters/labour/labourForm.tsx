@@ -13,6 +13,7 @@ import type {
 } from "@skerp/types";
 
 import { createLabourSchema } from "@skerp/validators";
+import { paiseToRupees } from "@/lib/money";
 
 import {
   IconUser,
@@ -134,7 +135,7 @@ export default function LabourAdvancedForm({
       tdsAmount:
         row?.tdsAmount != null
           ? String(
-              row.tdsAmount
+              paiseToRupees(row.tdsAmount)
             )
           : "",
 

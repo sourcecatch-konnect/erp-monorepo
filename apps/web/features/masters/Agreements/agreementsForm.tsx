@@ -30,6 +30,8 @@ import {
 } from "@tabler/icons-react";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { Button } from "@skerp/ui/components/button";
+import { attachmentApi } from "@/features/attachments/attachment.client";
+import { AttachmentPanel } from "@skerp/attachments-web";
 
 type Props = {
   open: boolean;
@@ -91,6 +93,7 @@ const [agreementFile, setAgreementFile] = React.useState<File | null>(null);
     });
   }, [open, row, form]);
 
+const agreementFileInputRef = React.useRef<HTMLInputElement | null>(null);
   return (
     <MasterFormDialog
       open={open}
@@ -228,62 +231,89 @@ const [agreementFile, setAgreementFile] = React.useState<File | null>(null);
   title="Agreement Upload"
   description="Upload signed agreement PDF or scanned agreement copy"
 >
-  <div className="col-span-full rounded-xl border border-dashed border-border bg-muted/20 p-4">
-    <label className="flex cursor-pointer flex-col items-center justify-center gap-2 text-center">
-      <IconFileUpload className="size-7 text-muted-foreground" />
-
-      <span className="text-sm font-medium text-foreground">
-        Upload Agreement File
-      </span>
-
-      <span className="text-xs text-muted-foreground">
-        PDF, image, DOC or DOCX file
-      </span>
-
-      <input
-        type="file"
-        accept=".pdf,.doc,.docx,image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0] ?? null;
-          setAgreementFile(file);
-          e.target.value = "";
-        }}
+  {row?.id ? (
+    <div className="col-span-full">
+      <AttachmentPanel
+        api={attachmentApi}
+        entityType="agreement"
+        entityId={row.id}
       />
-    </label>
+    </div>
+  ) : (
+  <div className="col-span-full rounded-xl border border-dashed border-border bg-muted/20 p-4">
+  <div className="flex flex-col items-center justify-center gap-3 text-center">
+    <div className="rounded-full bg-background p-3">
+      <IconFileUpload className="size-7 text-muted-foreground" />
+    </div>
 
-    {agreementFile ? (
-      <div className="mt-4 flex items-center justify-between rounded-lg border bg-background px-3 py-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">
-            {agreementFile.name}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {(agreementFile.size / (1024 * 1024)).toFixed(2)} MB
-          </p>
-        </div>
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => setAgreementFile(null)}
-        >
-          <IconX className="size-4" />
-        </Button>
-      </div>
-    ) : null}
-
-    {!row?.id ? (
-      <p className="mt-3 text-xs text-muted-foreground">
-        File will be uploaded after the agreement is created.
+    <div>
+      <p className="text-sm font-medium text-foreground">
+        Upload Agreement File
       </p>
-    ) : (
-      <p className="mt-3 text-xs text-muted-foreground">
-        File will be uploaded after saving this agreement.
+      <p className="mt-1 text-xs text-muted-foreground">
+        PDF file only
       </p>
-    )}
+    </div>
+
+    <input
+      ref={agreementFileInputRef}
+      type="file"
+      accept="application/pdf,.pdf"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0] ?? null;
+
+        if (!file) return;
+
+        if (file.type !== "application/pdf" && !file.name.endsWith(".pdf")) {
+          setAgreementFile(null);
+          e.target.value = "";
+          return;
+        }
+
+        setAgreementFile(file);
+        e.target.value = "";
+      }}
+    />
+
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={() => agreementFileInputRef.current?.click()}
+    >
+      <IconFileUpload className="mr-2 size-4" />
+      Choose PDF File
+    </Button>
   </div>
+
+  {agreementFile ? (
+    <div className="mt-4 flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">
+          {agreementFile.name}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {(agreementFile.size / (1024 * 1024)).toFixed(2)} MB
+        </p>
+      </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => setAgreementFile(null)}
+      >
+        <IconX className="size-4" />
+      </Button>
+    </div>
+  ) : null}
+
+  <p className="mt-3 text-xs text-muted-foreground">
+    File will be uploaded after the agreement is created.
+  </p>
+</div>
+  )}
 </FormSection>
     </MasterFormDialog>
   );

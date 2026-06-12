@@ -23,6 +23,7 @@ import {
 } from "@tabler/icons-react";
 
 import { createPumpSchema } from "@skerp/validators";
+import { paiseToRupees } from "@/lib/money";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
@@ -93,7 +94,8 @@ export default function PumpAdvancedForm({
 
       gstIn: row?.gstIn ?? "",
       pan: row?.pan ?? "",
-      creditLimit: row?.creditLimit?.toString() ?? "",
+      creditLimit:
+        row?.creditLimit != null ? String(paiseToRupees(row.creditLimit)) : "",
 
       accountName: row?.accountName ?? "",
       bankName: row?.bankName ?? "",
@@ -101,7 +103,7 @@ export default function PumpAdvancedForm({
 
       currentDieselRate:
         row?.currentDieselRate != null
-          ? String(row.currentDieselRate)
+          ? String(paiseToRupees(row.currentDieselRate))
           : "",
 
       isBlackListed: row?.isBlackListed ?? false,

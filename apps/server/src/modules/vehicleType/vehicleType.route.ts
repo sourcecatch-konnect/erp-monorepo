@@ -7,12 +7,19 @@ import {
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
+import { convertRupeeFieldsToPaise } from "../../lib/money.js";
+
+const moneyFields = ["freightRangeFrom", "freightRangeTo"];
 
 const router: Router = createCrudRouter({
   model: db.vehicleType,
   createSchema: createVehicleTypeSchema as ZodTypeAny,
   updateSchema: updateVehicleTypeSchema as ZodTypeAny,
   permissionKey: "masters.vehicle-type",
+  hooks: {
+    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+  },
   listOptions: {
     searchableFields: ["code", "name"],
     defaultOrderBy: { name: "asc" },

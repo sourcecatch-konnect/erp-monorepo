@@ -11,20 +11,11 @@ import {
   IconArrowRight,
   IconCash,
 } from "@tabler/icons-react";
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 const formatNumber = (value?: number | null, suffix = "") => {
   if (value == null) return "-";
   return `${value}${suffix}`;
-};
-
-const formatCurrency = (value?: number | null) => {
-  if (value == null) return "-";
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
 };
 
 export const railwayFreightColumns:
@@ -77,7 +68,7 @@ ColumnDef<RailwayFreightMatrixWithRelations>[] = [
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
         <IconCash size={12} />
-        {formatCurrency(row.original.freightAmount)}
+        {formatCurrencyFromPaise(row.original.freightAmount)}
       </span>
     ),
   },

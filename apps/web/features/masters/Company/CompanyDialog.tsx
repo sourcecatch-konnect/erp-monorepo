@@ -21,6 +21,7 @@ import {
   Field,
   PartyCard,
   formatDate,
+  formatCurrencyFromPaise,
   SkeletonBody,
 } from "../_shared/dialog-parts";
 import {
@@ -270,7 +271,7 @@ export default function CompanyDetailDialog({
                                   Freight Rate
                                 </p>
                                 <p className="text-sm font-bold">
-                                  ₹{rate.rate}
+                                  {formatCurrencyFromPaise(rate.rate)}
                                 </p>
                               </div>
                             </div>

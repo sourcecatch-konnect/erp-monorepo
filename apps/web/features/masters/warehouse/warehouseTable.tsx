@@ -10,16 +10,7 @@ import {
   IconUser,
   IconRulerMeasure,
 } from "@tabler/icons-react";
-
-const formatCurrency = (value?: number | null) => {
-  if (value == null) return "-";
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
-};
+import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
 export const warehouseColumns: ColumnDef<WarehouseWithRelations>[] = [
   {
@@ -109,12 +100,12 @@ export const warehouseColumns: ColumnDef<WarehouseWithRelations>[] = [
       <div className="flex flex-col text-xs">
         <span className="inline-flex items-center gap-1">
 
-          Rent: {formatCurrency(row.original.monthlyRent)}
+          Rent: {formatCurrencyFromPaise(row.original.monthlyRent)}
         </span>
 
         <span>
           Deposit:{" "}
-          {formatCurrency(
+          {formatCurrencyFromPaise(
             row.original.securityDeposit
           )}
         </span>

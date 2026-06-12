@@ -19,7 +19,8 @@ import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-react";
 import { useAppSelector } from "@/store/hooks";
 import { orderApi, type OrderDetail } from "./order.service";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
-import { formatMoney } from "./order-ui";
+import { formatMoney, formatMoneyFromPaise } from "./order-ui";
+import { paiseToRupees } from "@/lib/money";
 
 type Props = {
   open: boolean;
@@ -44,7 +45,7 @@ export default function ApproveOrderModal({
 
   const prefill =
     order.bookingFreightAmount != null
-      ? Number(order.bookingFreightAmount)
+      ? paiseToRupees(Number(order.bookingFreightAmount))
       : order.freightPreview?.amount ?? null;
 
   const [freight, setFreight] = React.useState<string>(
@@ -185,7 +186,7 @@ export default function ApproveOrderModal({
   <div>
     <dt className="text-xs text-muted-foreground">Matrix rate</dt>
     <dd>
-      {rateMatrix?.rate != null ? formatMoney(rateMatrix.rate) : "—"}
+      {rateMatrix?.rate != null ? formatMoneyFromPaise(rateMatrix.rate) : "—"}
     </dd>
   </div>
 

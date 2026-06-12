@@ -16,7 +16,7 @@ import {
   Field,
   PartyCard,
   formatDate,
-  formatCurrency,
+  formatCurrencyFromPaise,
   SkeletonBody,
 } from "../_shared/dialog-parts";
 
@@ -141,13 +141,13 @@ export default function WarehouseDetailDialog({
 
                 <Field
                   label="Monthly Rent"
-                  value={formatCurrency(data?.monthlyRent)}
+                  value={formatCurrencyFromPaise(data?.monthlyRent)}
                   icon={<IconCash size={12} />}
                 />
 
                 <Field
                   label="Security Deposit"
-                  value={formatCurrency(data?.securityDeposit)}
+                  value={formatCurrencyFromPaise(data?.securityDeposit)}
                   icon={<IconCash size={12} />}
                 />
 

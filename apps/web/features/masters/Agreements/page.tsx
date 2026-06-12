@@ -30,7 +30,7 @@ const [page, setPage] = React.useState(0);
 const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailData, setDetailData] = React.useState<Agreement | null>(null);
-const size = 25;
+const size = 10;
   // ================= MASTER DATA =================
   const companies = useQuery({
     queryKey: ["companies"],
@@ -126,7 +126,7 @@ const handleSubmit = async (
             entityType: "agreement",
             entityId: agreementId,
             originalName: agreementFile.name,
-            mime: agreementFile.type || "application/octet-stream",
+            mime: agreementFile.type || "application/pdf",
             sizeBytes: agreementFile.size,
           },
           agreementFile,

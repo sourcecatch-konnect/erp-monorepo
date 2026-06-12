@@ -66,7 +66,7 @@ listByCompany: async (
     data: payload.data ?? [],
     meta: payload.meta ?? {
       page: query?.page ?? 0,
-      size: query?.size ?? 25,
+      size: query?.size ?? 10,
       total: payload.data?.length ?? 0,
       pageCount: 1,
     },
