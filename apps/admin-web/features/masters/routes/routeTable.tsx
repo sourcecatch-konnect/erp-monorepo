@@ -64,35 +64,5 @@ export const routeColumns: ColumnDef<Route>[] = [
       </span>
     ),
     enableHiding: false,
-  },
-  {
-    accessorKey: "rateMatrixEntries",
-    header: "Rate Matrices",
-    cell: ({ row }) => (
-      <CountBadge
-        value={row.original.rateMatrixEntries?.length ?? 0}
-        icon={<IconTableOptions size={12} />}
-      />
-    ),
-  },
-  {
-    accessorKey: "VehicleTrip",
-    header: "Trips",
-    cell: ({ row }) => (
-      <CountBadge
-        value={row.original.VehicleTrip?.length ?? 0}
-        icon={<IconTruck size={12} />}
-      />
-    ),
-  },
-  {
-    accessorKey: "LorryReceipt",
-    header: "LR Count",
-    cell: ({ row }) => (
-      <CountBadge
-        value={row.original.LorryReceipt?.length ?? 0}
-        icon={<IconReceipt size={12} />}
-      />
-    ),
-  },
+  }
 ];

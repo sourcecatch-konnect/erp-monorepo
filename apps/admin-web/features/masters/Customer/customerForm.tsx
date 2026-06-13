@@ -17,6 +17,7 @@ import {
   IconCash,
   IconFileDescription,
   IconMapPin,
+  IconPercentage,
   IconPhone,
   IconUser,
 } from "@tabler/icons-react";
@@ -192,22 +193,24 @@ export default function CustomerAdvancedForm({
   min={0}
   step="0.01"
 />
-      <IconTextField<CreateCustomerFormInput>
+  <IconTextField<CreateCustomerFormInput>
   name="interestRateLatePayment"
-  label="Late Payment Interest %"
-  placeholder="0"
-  icon={<IconCash size={16} />}
+  label="Late Payment Interest"
+  placeholder="e.g. 18"
+  icon={<IconPercentage size={16} />}
+  suffix="%"
   type="number"
   min={0}
   max={100}
   step="0.01"
 />
 
-   <IconTextField<CreateCustomerFormInput>
+  <IconTextField<CreateCustomerFormInput>
   name="tdsDeductionRate"
-  label="TDS Deduction %"
-  placeholder="0"
-  icon={<IconCash size={16} />}
+  label="TDS Deduction"
+  placeholder="e.g. 2"
+  icon={<IconPercentage size={16} />}
+  suffix="%"
   type="number"
   min={0}
   max={100}

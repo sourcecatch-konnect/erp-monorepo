@@ -23,6 +23,7 @@ import {
   IconCash,
   IconCalendar,
   IconFileDescription,
+  IconPercentage,
 } from "@tabler/icons-react";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
@@ -270,7 +271,7 @@ export default function LabourAdvancedForm({
         <IconTextField<CreateLabourFormInput>
           name="contactPhone"
           label="Phone"
-          placeholder="Phone"
+          placeholder="10-digit phone"
           maxLength={10}
           icon={
             <IconPhone size={16}/>
@@ -280,7 +281,7 @@ export default function LabourAdvancedForm({
         <IconTextField<CreateLabourFormInput>
           name="mobileNo"
           label="Mobile"
-          placeholder="Mobile"
+          placeholder="10-digit phone"
           maxLength={10}
           icon={
             <IconPhone size={16}/>
@@ -364,27 +365,27 @@ export default function LabourAdvancedForm({
           icon={
             <IconFileDescription size={16}/>
           }
+          hint="10-character PAN"
         />
+          
+      
 
-        <IconTextField<CreateLabourFormInput>
-          name="tdsAmount"
-          label="TDS Amount"
-          type="number"
-          placeholder="0"
-          icon={
-            <IconCash size={16}/>
-          }
-        />
+       <IconTextField<CreateLabourFormInput>
+  name="tdsAmount"
+  label="TDS Amount"
+  type="number"
+  placeholder="Enter TDS amount"
+  icon={<IconCash size={16} />}
+/>
 
-        <IconTextField<CreateLabourFormInput>
-          name="tdsRate"
-          label="TDS Rate %"
-          type="number"
-          placeholder="0"
-          icon={
-            <IconCash size={16}/>
-          }
-        />
+<IconTextField<CreateLabourFormInput>
+  name="tdsRate"
+  label="TDS Rate"
+  type="number"
+  placeholder="Enter TDS rate"
+  suffix="%"
+  icon={<IconPercentage size={16} />}
+/>
       </FormSection>
 
       <FormSection

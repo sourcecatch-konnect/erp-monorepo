@@ -37,7 +37,7 @@ import { DropdownMenu,
    DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger, } from "@skerp/ui/components/dropdown";
-import { IconDatabaseOff, IconEdit, IconEye, IconTrash } from "@tabler/icons-react";
+import { IconDatabaseOff, IconEdit, IconEye, IconTrash, IconChevronDown } from "@tabler/icons-react";
 
 type Props<T extends { id: string }> = {
   title?: string;
@@ -52,8 +52,11 @@ type Props<T extends { id: string }> = {
   isLoading?: boolean;
   defaultHiddenColumns?: string[];
   onView?: (row: T) => void;
-};
 
+  // NEW
+  renderExpandedRow?: (row: T) => React.ReactNode;
+  expandOnRowClick?: boolean;
+};
 export default function MasterTable<T extends { id: string }>({
   title = "Data List",
   data,
@@ -66,11 +69,20 @@ export default function MasterTable<T extends { id: string }>({
   selectedIds = [],
   onSelectedIdsChange,
   isLoading,
-  defaultHiddenColumns
+  defaultHiddenColumns,
+  renderExpandedRow,
+expandOnRowClick = false,
 }: Props<T>) {
  const hasActions = Boolean(onView || onEdit || onDelete);
   const hasSelection = Boolean(onSelectedIdsChange);
   const [deleteRow, setDeleteRow] = React.useState<T | null>(null);
+  const [expandedRowId, setExpandedRowId] = React.useState<string | null>(null);
+
+const hasExpandedRow = Boolean(renderExpandedRow);
+
+const toggleExpandedRow = (id: string) => {
+  setExpandedRowId((current) => (current === id ? null : id));
+};
   const selectedSet = React.useMemo(
     () => new Set(selectedIds),
     [selectedIds]
@@ -136,15 +148,7 @@ const [columnVisibility, setColumnVisibility] =
           {title}
         </h2>
 
-      {onAddNew && (
-  <Button
-    size="sm"
-    className="h-8 px-3"
-    onClick={onAddNew}
-  >
-    + Add New
-  </Button>
-)}
+  
 <DropdownMenu>
   <DropdownMenuTrigger asChild>
     <Button size="sm" variant="outline">
@@ -177,6 +181,10 @@ const [columnVisibility, setColumnVisibility] =
               key={headerGroup.id}
               className="border-b bg-muted/40 hover:bg-muted/40"
             >
+                {hasExpandedRow ? (
+    <TableHead className="w-10 px-3" />
+  ) : null}
+
               {hasSelection ? (
                 <TableHead className="w-11 px-4">
                   <Checkbox
@@ -215,6 +223,11 @@ const [columnVisibility, setColumnVisibility] =
           {isLoading ? (
             Array.from({ length: 8 }).map((_, rowIndex) => (
               <TableRow key={rowIndex}  className="border-b">
+                {hasExpandedRow ? (
+  <TableCell className="w-10 px-3">
+    <Skeleton className="size-7 rounded-md" />
+  </TableCell>
+) : null}
                 {hasSelection ? (
                   <TableCell className="w-11 px-4">
                     <Skeleton className="size-4 rounded-[4px]" />
@@ -251,11 +264,12 @@ const [columnVisibility, setColumnVisibility] =
           ) : table.getRowModel().rows.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={
-                  columns.length +
-                  (hasActions ? 1 : 0) +
-                  (hasSelection ? 1 : 0)
-                }
+              colSpan={
+  columns.length +
+  (hasActions ? 1 : 0) +
+  (hasSelection ? 1 : 0) +
+  (hasExpandedRow ? 1 : 0)
+}
                 className="py-14 text-center text-muted-foreground"
               >
                 <div className="flex flex-col items-center gap-2">
@@ -267,107 +281,162 @@ const [columnVisibility, setColumnVisibility] =
               </TableCell>
             </TableRow>
           ) : (
-            table.getRowModel().rows.map((row) => (
-            <TableRow
-  key={row.id}
-  data-selected={selectedSet.has(row.original.id)}
-  onClick={() => onRowClick?.(row.original)}
-  className={[
-    "border-b transition-colors hover:bg-muted/30 data-[selected=true]:bg-primary/5",
-    onRowClick ? "cursor-pointer" : "",
-  ].join(" ")}
->
-                {hasSelection ? (
-                  <TableCell className="w-11 px-4">
-                    <Checkbox
-                      checked={selectedSet.has(row.original.id)}
-                      onClick={(event) => event.stopPropagation()}
-                      onCheckedChange={(value) =>
-                        setSelected(row.original.id, Boolean(value))
-                      }
-                      aria-label="Select row"
-                    />
-                  </TableCell>
-                ) : null}
+            table.getRowModel().rows.map((row) => {
+  const isExpanded = expandedRowId === row.original.id;
 
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="h-12 min-w-[150px] whitespace-nowrap">
-                    <span className="text-sm text-foreground">
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </span>
-                  </TableCell>
-                ))}
+  return (
+    <React.Fragment key={row.id}>
+      <TableRow
+        data-selected={selectedSet.has(row.original.id)}
+        data-expanded={isExpanded}
+        onClick={() => {
+          if (hasExpandedRow && expandOnRowClick) {
+            toggleExpandedRow(row.original.id);
+            return;
+          }
 
-     {hasActions && (
- <TableCell className="sticky right-0 w-[104px] bg-white pr-4 text-right">
-    <div className="flex justify-end items-center gap-1">
-      {onView && (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        className="text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
-        onClick={(event) => {
-  event.stopPropagation();
-  onView(row.original);
-}}
-        aria-label="View row"
+          onRowClick?.(row.original);
+        }}
+        className={[
+          "border-b transition-colors hover:bg-muted/30 data-[selected=true]:bg-primary/5 data-[expanded=true]:bg-muted/20",
+          onRowClick || (hasExpandedRow && expandOnRowClick)
+            ? "cursor-pointer"
+            : "",
+        ].join(" ")}
       >
-        <IconEye size={16} />
-      </Button>
-    </TooltipTrigger>
-    <TooltipContent>View</TooltipContent>
-  </Tooltip>
-)}
-      {onEdit && (
-        <Tooltip>
-          <TooltipTrigger asChild>
+        {hasExpandedRow ? (
+          <TableCell className="w-10 px-3">
             <Button
+              type="button"
               size="icon-sm"
               variant="ghost"
-              className="text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              className="text-muted-foreground"
               onClick={(event) => {
-  event.stopPropagation();
-  onEdit(row.original);
-}}
-              aria-label="Edit row"
+                event.stopPropagation();
+                toggleExpandedRow(row.original.id);
+              }}
+              aria-label={isExpanded ? "Collapse row" : "Expand row"}
             >
-              <IconEdit size={16} />
+              <IconChevronDown
+                size={16}
+                className={[
+                  "transition-transform duration-200",
+                  isExpanded ? "rotate-180" : "",
+                ].join(" ")}
+              />
             </Button>
-          </TooltipTrigger>
-          <TooltipContent>Edit</TooltipContent>
-        </Tooltip>
-      )}
+          </TableCell>
+        ) : null}
 
-      {onDelete && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-             onClick={(event) => {
-  event.stopPropagation();
-  setDeleteRow(row.original);
-}}
-              aria-label="Delete row"
-            >
-              <IconTrash size={16} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Delete</TooltipContent>
-        </Tooltip>
-      )}
+        {hasSelection ? (
+          <TableCell className="w-11 px-4">
+            <Checkbox
+              checked={selectedSet.has(row.original.id)}
+              onClick={(event) => event.stopPropagation()}
+              onCheckedChange={(value) =>
+                setSelected(row.original.id, Boolean(value))
+              }
+              aria-label="Select row"
+            />
+          </TableCell>
+        ) : null}
 
-    </div>
-  </TableCell>
-)}
-              </TableRow>
-            ))
+        {row.getVisibleCells().map((cell) => (
+          <TableCell
+            key={cell.id}
+            className="h-12 min-w-[150px] whitespace-nowrap"
+          >
+            <span className="text-sm text-foreground">
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </span>
+          </TableCell>
+        ))}
+
+        {hasActions && (
+          <TableCell className="sticky right-0 w-[104px] bg-white pr-4 text-right">
+            <div className="flex items-center justify-end gap-1">
+              {onView && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onView(row.original);
+                      }}
+                      aria-label="View row"
+                    >
+                      <IconEye size={16} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>View</TooltipContent>
+                </Tooltip>
+              )}
+
+              {onEdit && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEdit(row.original);
+                      }}
+                      aria-label="Edit row"
+                    >
+                      <IconEdit size={16} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit</TooltipContent>
+                </Tooltip>
+              )}
+
+              {onDelete && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setDeleteRow(row.original);
+                      }}
+                      aria-label="Delete row"
+                    >
+                      <IconTrash size={16} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </TableCell>
+        )}
+      </TableRow>
+
+      {hasExpandedRow && isExpanded ? (
+        <TableRow className="border-b bg-muted/10 hover:bg-muted/10">
+          <TableCell
+            colSpan={
+              columns.length +
+              (hasActions ? 1 : 0) +
+              (hasSelection ? 1 : 0) +
+              1
+            }
+            className="p-0"
+          >
+            {renderExpandedRow?.(row.original)}
+          </TableCell>
+        </TableRow>
+      ) : null}
+    </React.Fragment>
+  );
+})
           )}
         </TableBody>
       </Table>

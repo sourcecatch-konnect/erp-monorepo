@@ -11,13 +11,19 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
+import {
+  IconBuildingWarehouse,
+  IconHash,
+  IconMapPin,
+  IconPhone,
+  IconTruck,
+  IconWorld,
+} from "@tabler/icons-react";
 
 import {
-  IconTruck,
-  IconMapPin,
-  IconBuildingWarehouse,
-} from "@tabler/icons-react";
+  Field,
+  SkeletonBody,
+} from "../_shared/dialog-parts";
 
 type Props = {
   open: boolean;
@@ -26,31 +32,29 @@ type Props = {
   isLoading?: boolean;
 };
 
-function DetailItem({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-1 border-b py-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className="text-primary">
-          {icon}
-        </span>
+type RelationName = {
+  id?: string;
+  name?: string | null;
+};
 
-        {label}
-      </div>
+type TransportDetail = Transport & {
+  id?: string;
+  name?: string | null;
+  phoneNo?: string | null;
+  country?: string | null;
+  stateId?: string | null;
+  cityId?: string | null;
+  state?: RelationName | null;
+  city?: RelationName | null;
+};
 
-      <div className="break-words text-sm font-semibold text-foreground">
-        {value || "-"}
-      </div>
-    </div>
-  );
-}
+const display = (value?: React.ReactNode) => {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  return value;
+};
 
 export default function TransportDetailDialog({
   open,
@@ -58,71 +62,67 @@ export default function TransportDetailDialog({
   data,
   isLoading,
 }: Props) {
-  console.log(data,'transpotrr')
+  const transport = data as TransportDetail | undefined;
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-    >
-      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1000px]">
-        <div className="border-b bg-muted/30 px-6 py-5">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[900px]">
+        <div className="border-b bg-gradient-to-r from-muted/70 to-background px-6 py-5">
           <DialogHeader>
-            <div className="flex items-center gap-4">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <IconTruck size={22} />
+            <div className="flex items-start gap-4">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                <IconTruck size={24} />
               </span>
 
-              <div>
-                <DialogTitle className="text-lg font-semibold">
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="truncate text-xl font-semibold">
                   Transport Detail
                 </DialogTitle>
 
                 <DialogDescription>
-                  Complete transport information
+                  Basic transport and location information
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
         </div>
 
-        <div className="max-h-[calc(92vh-96px)] overflow-y-auto p-6">
+        <div className="max-h-[calc(92vh-112px)] overflow-y-auto p-6">
           {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({
-                length: 6,
-              }).map((_, index) => (
-                <Skeleton
-                  key={index}
-                  className="h-20 w-full rounded-md"
-                />
-              ))}
-            </div>
+            <SkeletonBody />
           ) : (
-            <div className="grid gap-x-10 gap-y-0 md:grid-cols-2 xl:grid-cols-3">
-
-              <DetailItem
-                icon={<IconTruck size={15} />}
+            <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
+              <Field
+                icon={<IconTruck size={12} />}
                 label="Transport Name"
-                value={data?.name}
+                value={display(transport?.name)}
               />
 
-              <DetailItem
-                icon={
-                  <IconBuildingWarehouse size={15} />
-                }
+              <Field
+                icon={<IconPhone size={12} />}
+                label="Mobile Number"
+                value={display(transport?.phoneNo)}
+              />
+
+              <Field
+                icon={<IconWorld size={12} />}
+                label="Country"
+                value={display(transport?.country)}
+              />
+
+              <Field
+                icon={<IconBuildingWarehouse size={12} />}
                 label="State"
-                value={data?.state?.name}
+                value={display(transport?.state?.name)}
               />
 
-              <DetailItem
-                icon={<IconMapPin size={15} />}
+              <Field
+                icon={<IconMapPin size={12} />}
                 label="City"
-                value={data?.city?.name}
+                value={display(transport?.city?.name)}
               />
 
-        
-
-         
+      
             </div>
           )}
         </div>

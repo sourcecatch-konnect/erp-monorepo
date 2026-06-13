@@ -13,7 +13,12 @@ const optionalDateString = z
 
     return new Date(value).toISOString();
   });
+export const bodyTypeSchema = z.enum(["HQ", "LQ"]);
 
+const optionalBodyType = z
+  .union([bodyTypeSchema, z.literal("")])
+  .optional()
+  .transform((value) => (value ? value : undefined));
 const numberField = (message: string) =>
   z
     .union([z.string(), z.number()])
@@ -43,7 +48,7 @@ export const vehicleSchema = z.object({
   ownershipType: ownershipTypeSchema,
   vehicleTypeId: z.string(),
   capacityMT: z.number(),
-  bodyType: z.string().nullable().optional(),
+  bodyType: bodyTypeSchema.nullable().optional(),
   wheels: z.string().nullable().optional(),
   lengthFeet: z.string().nullable().optional(),
   openingKM: z.number(),
@@ -97,18 +102,29 @@ export const createVehicleSchema = z.object({
 
   ownershipType: ownershipTypeSchema,
   vehicleTypeId: z.string().min(1, "Vehicle type is required"),
+bodyType: optionalBodyType,
 
+lengthFeet: optionalString.refine(
+  (value) => {
+    if (value === undefined || value === "") return true;
 
-  wheels: z
-  .enum(["2", "4", "6", "10", "12", "14", "16", "18", "22"])
-  .optional(),
-  bodyType: optionalString,
-  lengthFeet: optionalString.refine(
-    (value) =>
-      value === undefined ||
-      (!Number.isNaN(Number(value)) && Number(value) >= 1 && Number(value) <= 100),
-    "Length must be between 1 and 100 feet"
-  ),
+    const num = Number(value);
+
+    return !Number.isNaN(num) && num >= 1 && num <= 100;
+  },
+  "Length must be between 1 and 100 feet"
+),
+
+ wheels: optionalString.refine(
+  (value) => {
+    if (value === undefined || value === "") return true;
+
+    const num = Number(value);
+
+    return Number.isInteger(num) && num > 0 && num % 2 === 0;
+  },
+  "Please enter wheels correctly"
+),
 
   capacityMT: numberField("Capacity is required")
   .refine((value) => value > 0, "Capacity must be greater than 0")

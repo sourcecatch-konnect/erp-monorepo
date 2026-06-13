@@ -11,7 +11,41 @@ import { getParamId } from "./param.js";
 import { parseListQuery } from "./list.query.js";
 import { requirePermission } from "./permission.middleware.js";
 import { sendOk } from "./response.js";
+const getUniqueConstraintMessage = (
+  error: unknown,
+  uniqueErrorMessages?: Record<string, string>,
+) => {
+  const err = error as any;
 
+  if (err?.code !== "P2002") {
+    return null;
+  }
+
+  const target = err?.meta?.target;
+
+  const fields = Array.isArray(target)
+    ? target
+    : typeof target === "string"
+      ? [target]
+      : [];
+
+  for (const field of fields) {
+    const message = uniqueErrorMessages?.[field];
+
+    if (message) {
+      return message;
+    }
+  }
+
+  const compoundKey = fields.join("_");
+  const compoundMessage = uniqueErrorMessages?.[compoundKey];
+
+  if (compoundMessage) {
+    return compoundMessage;
+  }
+
+  return "This record already exists.";
+};
 type PrismaDelegate = {
   findMany(args?: unknown): Promise<unknown[]>;
   findUnique(args?: unknown): Promise<unknown | null>;
@@ -29,7 +63,7 @@ type CrudOptions<Create, Update> = {
   createSchema: ZodType<Create, ZodTypeDef, unknown>;
   updateSchema: ZodType<Update, ZodTypeDef, unknown>;
   permissionKey: string;
-
+  uniqueErrorMessages?: Record<string, string>;
   listOptions?: {
     searchableFields?: string[];
     defaultInclude?: Record<string, unknown>;
@@ -124,6 +158,7 @@ export function createCrudRouter<Create, Update>({
   createSchema,
   updateSchema,
   permissionKey,
+  uniqueErrorMessages,
   listOptions,
   hooks,
 }: CrudOptions<Create, Update>) {
@@ -242,41 +277,61 @@ export function createCrudRouter<Create, Update>({
         ? await hooks.beforeCreate(parsed.data)
         : parsed.data;
 
-      const row = await model.create({ data });
+ try {
+  const row = await model.create({ data });
 
-      return sendOk(res, row, undefined, 201);
+  return sendOk(res, row, undefined, 201);
+} catch (error) {
+  const message = getUniqueConstraintMessage(error, uniqueErrorMessages);
+
+  if (message) {
+    throw new BadRequestError(message);
+  }
+
+  throw error;
+}
     },
   );
 
-  router.patch(
-    "/:id",
-    requirePermission(permissionKey, actionPermission("update")),
-    async (req, res) => {
-      const id = getParamId(req);
-      const existing = await model.findUnique({ where: { id } });
+ router.patch(
+  "/:id",
+  requirePermission(permissionKey, actionPermission("update")),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await model.findUnique({ where: { id } });
 
-      if (!existing) {
-        throw new NotFoundError("Resource not found");
-      }
+    if (!existing) {
+      throw new NotFoundError("Resource not found");
+    }
 
-      const parsed = updateSchema.safeParse(req.body);
+    const parsed = updateSchema.safeParse(req.body);
 
-      if (!parsed.success) {
-        throw new ValidationError(parsed.error.flatten().fieldErrors);
-      }
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
 
-      const data = hooks?.beforeUpdate
-        ? await hooks.beforeUpdate(parsed.data, existing)
-        : parsed.data;
+    const data = hooks?.beforeUpdate
+      ? await hooks.beforeUpdate(parsed.data, existing)
+      : parsed.data;
 
+    try {
       const row = await model.update({
         where: { id },
         data,
       });
 
       return sendOk(res, row);
-    },
-  );
+    } catch (error) {
+      const message = getUniqueConstraintMessage(error, uniqueErrorMessages);
+
+      if (message) {
+        throw new BadRequestError(message);
+      }
+
+      throw error;
+    }
+  },
+);
   router.delete(
     "/:id",
     requirePermission(permissionKey, actionPermission("delete")),

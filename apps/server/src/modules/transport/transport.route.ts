@@ -12,6 +12,11 @@ const router: Router = createCrudRouter({
   createSchema: createTransportSchema,
   updateSchema: updateTransportSchema,
   permissionKey: "masters.transport",
+
+  uniqueErrorMessages: {
+    phoneNo: "This mobile number already exists.",
+    name: "This transport name already exists.",
+  },
   listOptions: {
     searchableFields: ["name", "phoneNo", "country"],
     defaultInclude: {

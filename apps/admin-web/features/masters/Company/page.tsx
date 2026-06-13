@@ -151,7 +151,6 @@ const exportCompanies = useMutation({
       isLoading={companies.isLoading}
       defaultHiddenColumns={[
         "contactPhone",
-        "establishmentYear",
         "companyPAN",
         "companyTAN",
         "mainLogoPath",

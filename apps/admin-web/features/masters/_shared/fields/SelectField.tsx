@@ -23,6 +23,8 @@ type Props<TFormValues extends FieldValues> = {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  suffix?: React.ReactNode;
+  icon?: React.ReactNode;
 };
 
 export default function SelectField<TFormValues extends FieldValues>({
@@ -32,6 +34,8 @@ export default function SelectField<TFormValues extends FieldValues>({
   placeholder,
   required,
   disabled,
+  suffix,
+  icon
 }: Props<TFormValues>) {
   const [search, setSearch] = React.useState("");
 
@@ -78,12 +82,28 @@ export default function SelectField<TFormValues extends FieldValues>({
         }
         disabled={disabled}
       >
-        <SelectTrigger
-          aria-invalid={Boolean(error)}
-          className="h-10 w-full rounded-lg"
-        >
-          <SelectValue placeholder={placeholder ?? `Select ${label}`} />
-        </SelectTrigger>
+    <SelectTrigger
+  aria-invalid={Boolean(error)}
+  className="h-10 w-full rounded-lg"
+>
+  <div className="flex min-w-0 flex-1 items-center gap-2">
+    {icon ? (
+      <span className="shrink-0 text-muted-foreground">
+        {icon}
+      </span>
+    ) : null}
+
+    <span className="min-w-0 flex-1 truncate text-left">
+      <SelectValue placeholder={placeholder ?? `Select ${label}`} />
+    </span>
+
+    {suffix ? (
+      <span className="shrink-0 text-xs font-medium text-muted-foreground">
+        {suffix}
+      </span>
+    ) : null}
+  </div>
+</SelectTrigger>
 
         <SelectContent className="w-[var(--radix-select-trigger-width)] min-w-[280px] max-h-[320px] p-2">
           <div className="sticky top-0 z-10 bg-popover pb-2">

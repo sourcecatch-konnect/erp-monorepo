@@ -31,9 +31,9 @@ type Props<T extends { id: string }> = {
   selectedIds: string[];
   onSelectedIdsChange: (ids: string[]) => void;
   onAdd: () => void;
-  onEdit: (row: T) => void;
-  onDelete: (id: string) => void;
-  onBulkDelete: () => void;
+  onEdit?: (row: T) => void;
+  onDelete?: (id: string) => void;
+  onBulkDelete?: () => void;
   onImport: (file: File) => Promise<void>;
   onExport: () => void;
   isBulkDeleting?: boolean;
@@ -41,6 +41,8 @@ type Props<T extends { id: string }> = {
   isExporting?: boolean;
   children?: React.ReactNode;
   defaultHiddenColumns?: string[];
+  renderExpandedRow?: (row: T) => React.ReactNode;
+expandOnRowClick?: boolean;
 };
 
 export default function MasterListPage<T extends { id: string }>({
@@ -69,6 +71,8 @@ export default function MasterListPage<T extends { id: string }>({
   isImporting,
   isExporting,
   children,
+  renderExpandedRow,
+  expandOnRowClick
 }: Props<T>) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const pageCount = Math.max(1, Math.ceil(total / size));
@@ -161,19 +165,22 @@ export default function MasterListPage<T extends { id: string }>({
         </div>
       </div>
 
-      <MasterTable
-        title={isLoading ? "Loading..." : title}
-        data={data}
-        columns={columns}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onView={onView}
-        onRowClick={onRowClick}
-        defaultHiddenColumns={defaultHiddenColumns}
-        selectedIds={selectedIds}
-        onSelectedIdsChange={onSelectedIdsChange}
-        isLoading={isLoading}
-      />
+    <MasterTable
+  title={title}
+  data={data}
+  columns={columns}
+  onEdit={onEdit}
+  onDelete={onDelete}
+  onAddNew={onAdd}
+  onView={onView}
+  onRowClick={onRowClick}
+  selectedIds={selectedIds}
+  onSelectedIdsChange={onSelectedIdsChange}
+  isLoading={isLoading}
+  defaultHiddenColumns={defaultHiddenColumns}
+  renderExpandedRow={renderExpandedRow}
+  expandOnRowClick
+/>
 
       <input
         ref={fileInputRef}

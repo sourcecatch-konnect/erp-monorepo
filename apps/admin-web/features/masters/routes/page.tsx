@@ -58,7 +58,7 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     queryKey: routeKeys.list(listQuery),
     queryFn: () => routeApi.list(listQuery),
   });
-console.log(routes,"data routes")
+
   const cities = useQuery({
     queryKey: cityKeys.list({ size: 1000 }),
     queryFn: () => cityApi.list({ size: 1000 }),
@@ -68,6 +68,7 @@ const routeDetail = useQuery({
   queryFn: () => routeApi.detail(detailId!),
   enabled: Boolean(detailOpen && detailId),
 });
+
   const { create, update, remove } = useMasterMutations({
     api: routeApi,
     queryKey: routeKeys.all,

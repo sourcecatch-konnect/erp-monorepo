@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
+
 
 import {
   SectionLabel,
@@ -37,7 +37,34 @@ type Props = {
   data?: Vehicle;
   isLoading?: boolean;
 };
+const display = (value?: string | number | null) => {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+};
 
+const formatLabel = (value?: string | null) => {
+  if (!value) return "-";
+
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+function VehicleStatusBadge({ status }: { status?: string | null }) {
+  return (
+    <span
+      className={
+        status === "ACTIVE"
+          ? "inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"
+          : "inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700"
+      }
+    >
+      <IconCircleCheckFilled size={12} />
+      {formatLabel(status)}
+    </span>
+  );
+}
 
 
 export default function VehicleDetailDialog({
@@ -82,7 +109,10 @@ export default function VehicleDetailDialog({
         {isLoading ? (
           <SkeletonBody/>
         ) : (
-          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+          <div className="h-[calc(90vh-120px)] overflow-y-auto p-2">
+{/* Vehicle Overview */}
+
+
 
             {/* Vehicle Information */}
 
@@ -92,7 +122,7 @@ export default function VehicleDetailDialog({
                 Vehicle Information
               </SectionLabel>
 
-              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
 
                 <Field
                   label="Vehicle Number"

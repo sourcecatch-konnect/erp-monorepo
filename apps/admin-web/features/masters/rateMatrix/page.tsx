@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+
 import type { RateMatrix, CreateRateMatrixBody } from "@skerp/types";
 import type { AgreementWithRelations } from "@skerp/types";
+import { agreementColumns } from "../Agreements/agreementsTable";
 import MasterListPage from "../_shared/MasterListPage";
 import {
   downloadBlob,
@@ -25,6 +26,9 @@ import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { agreementApi } from "../Agreements/agreements.service";
 import { routeApi } from "../routes/routes.service";
 import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
+import { agreementKeys } from "../Agreements/agreements.key";
+import AgreementRateMatrixExpanded from "./Agreements(Company)/agreementRateMatrixEpanded";
+import AgreementRateMatrixAccordionList from "./agreementList";
 
 /* ================= CSV TYPE ================= */
 type CreateRateMatrixCsvRow = {
@@ -54,27 +58,44 @@ export default function RateMatrixPage() {
 
   const size = 25;
   const debouncedSearch = useDebouncedValue(search);
-const router = useRouter();
-  const listQuery = React.useMemo<ListQuery>(() => {
-    return {
-      page,
-      size,
-      sort: "rate:asc",
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
-    };
-  }, [page, size, debouncedSearch]);
+const agreementListQuery = React.useMemo<ListQuery>(() => {
+  return {
+    page,
+    size,
+    sort: "createdAt:desc",
+    ...(debouncedSearch.trim()
+      ? { search: debouncedSearch.trim() }
+      : {}),
+  };
+}, [page, size, debouncedSearch]);
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
+const rateMatrixListQuery = React.useMemo<ListQuery>(() => {
+  return {
+    page: 0,
+    size: 1000,
+    sort: "rate:asc",
+  };
+}, []);
+/* ================= LIST ================= */
+const agreements = useQuery({
+  queryKey: agreementKeys.list(agreementListQuery),
+  queryFn: () => agreementApi.list(agreementListQuery),
+});
 
-  /* ================= LIST ================= */
-  const rateMatrix = useQuery({
-    queryKey: rateMatrixKeys.list(listQuery),
-    queryFn: () => rateMatrixApi.list(listQuery),
-  });
+const agreementOptions = useQuery({
+  queryKey: agreementKeys.list({
+    page: 0,
+    size: 1000,
+    sort: "createdAt:desc",
+  }),
+  queryFn: () =>
+    agreementApi.list({
+      page: 0,
+      size: 1000,
+      sort: "createdAt:desc",
+    }),
+});
+
 const vehicleTypes = useQuery({
   queryKey: ["vehicleTypes"],
   queryFn: () => vehicleTypeApi.list(),
@@ -84,6 +105,21 @@ const rateUnits = useQuery({
   queryKey: ["rateMatrix", "units"],
   queryFn: () => rateMatrixApi.units.list(),
 });
+
+const routes = useQuery({
+  queryKey: ["routes"],
+  queryFn: () => routeApi.list(),
+});
+
+
+
+  React.useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch]);
+
+  /* ================= LIST ================= */
+ 
+
   /* ================= DETAIL ================= */
   const rateMatrixDetail = useQuery({
     queryKey: detailId
@@ -94,15 +130,7 @@ const rateUnits = useQuery({
   });
 
   /* ================= MASTER DATA ================= */
-  const agreements = useQuery({
-    queryKey: ["agreements"],
-    queryFn: () => agreementApi.list(),
-  });
 
-  const routes = useQuery({
-    queryKey: ["routes"],
-    queryFn: () => routeApi.list(),
-  });
 
   /* ================= MUTATIONS ================= */
   const { create, update, remove } = useMasterMutations({
@@ -184,74 +212,64 @@ const parsedRows: CreateRateMatrixBody[] = rows.map((row) => ({
 
   /* ================= UI ================= */
   return (
-    <MasterListPage
-      title="Rate Matrix"
-      data={rateMatrix.data?.data ?? []}
-      columns={rateMatrixColumns}
-      isLoading={rateMatrix.isLoading}
+  <>
+    <AgreementRateMatrixAccordionList
+      agreements={(agreements.data?.data ?? []) as AgreementWithRelations[]}
+      isLoading={agreements.isLoading}
       search={search}
       onSearchChange={setSearch}
       page={page}
       size={size}
-      total={rateMatrix.data?.meta?.total ?? 0}
+      total={agreements.data?.meta?.total ?? 0}
       onPageChange={setPage}
-      selectedIds={selectedIds}
-      onSelectedIdsChange={setSelectedIds}
       onAdd={() => {
         setSelected(null);
         setOpen(true);
       }}
-      onEdit={(row) => {
-        setSelected(row);
-        setOpen(true);
-      }}
-      onView={(row) => {
-        setDetailId(row.id);
-        setDetailOpen(true);
-      }}
-      onRowClick={(row) => {
-  router.push(`/rateMatrix/${row.id}/agreements`);
-}}
-      onDelete={(id) => remove.mutateAsync(id)}
-      onBulkDelete={() => bulkDeleteMutation.mutateAsync(selectedIds)}
       onImport={handleImport}
-      onExport={() => exportMutation.mutate(listQuery)}
-      isBulkDeleting={bulkDeleteMutation.isPending}
+      onExport={() => exportMutation.mutate(rateMatrixListQuery)}
       isImporting={bulkImportMutation.isPending}
       isExporting={exportMutation.isPending}
-    >
-      <RateMatrixDetailDialog
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        data={rateMatrixDetail.data}
-        isLoading={rateMatrixDetail.isLoading}
-      />
+      routes={(routes.data?.data ?? []).map((r) => ({
+        id: r.id,
+        name: `${r.sourceCity?.name ?? "-"} to ${
+          r.destinationCity?.name ?? "-"
+        }`,
+      }))}
+      vehicleTypes={vehicleTypes.data?.data ?? []}
+      rateUnits={rateUnits.data?.data ?? []}
+    />
 
-<RateMatrixForm
-  open={open}
-  onOpenChange={setOpen}
-  row={selected}
-  onSubmit={handleSubmit}
-  isSubmitting={create.isPending || update.isPending}
-  agreements={
-    ((agreements.data?.data ?? []) as AgreementWithRelations[]).map((a) => ({
-      id: a.id,
-      name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
-    }))
-  }
-  routes={
-    routes.data?.data.map((r) => ({
-      id: r.id,
-      name: `${r.sourceCity?.name ?? "-"} to ${
-        r.destinationCity?.name ?? "-"
-      }`,
-    })) ?? []
-  }
-  vehicleTypes={vehicleTypes.data?.data ?? []}
-  rateUnits={rateUnits.data?.data ?? []}
+    <RateMatrixDetailDialog
+      open={detailOpen}
+      onOpenChange={setDetailOpen}
+      data={rateMatrixDetail.data}
+      isLoading={rateMatrixDetail.isLoading}
+    />
 
-/>
-
-    </MasterListPage>
-  );
+    <RateMatrixForm
+      open={open}
+      onOpenChange={setOpen}
+      row={selected}
+      onSubmit={handleSubmit}
+      isSubmitting={create.isPending || update.isPending}
+      agreements={(
+        (agreementOptions.data?.data ?? []) as AgreementWithRelations[]
+      ).map((a) => ({
+        id: a.id,
+        name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
+      }))}
+      routes={
+        routes.data?.data.map((r) => ({
+          id: r.id,
+          name: `${r.sourceCity?.name ?? "-"} to ${
+            r.destinationCity?.name ?? "-"
+          }`,
+        })) ?? []
+      }
+      vehicleTypes={vehicleTypes.data?.data ?? []}
+      rateUnits={rateUnits.data?.data ?? []}
+    />
+  </>
+);
 }

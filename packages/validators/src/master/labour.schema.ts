@@ -9,29 +9,46 @@ const optionalString = z
   .trim()
   .optional()
   .transform((v) => (v ? v : undefined));
+const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const MAX_TDS_AMOUNT = 10_00_00_000; // ₹10 Crore
 
-const optionalNumber = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform((v) => {
-      if (v === "" || v === null || v === undefined)
+const optionalAmount = (label: string, max = MAX_TDS_AMOUNT) =>
+  z.preprocess(
+    (value) => {
+      if (value === "" || value === null || value === undefined) {
         return undefined;
-
-      const num = Number(v);
-
-      return Number.isNaN(num)
-        ? undefined
-        : num;
-    })
-    .refine(
-      (v) =>
-        v === undefined ||
-        typeof v === "number",
-      {
-        message: `${label} must be valid`,
       }
-    );
+
+      return Number(value);
+    },
+    z
+      .number({
+        message: `${label} must be a valid number`,
+      })
+      .finite(`${label} must be a valid number`)
+      .min(0, `${label} cannot be negative`)
+      .max(
+        max,
+        `${label} cannot be more than ₹${max.toLocaleString("en-IN")}`
+      )
+      .optional()
+  );
+const optionalNumber = (label: string) =>
+  z.preprocess(
+    (value) => {
+      if (value === "" || value === null || value === undefined) {
+        return undefined;
+      }
+
+      return Number(value);
+    },
+    z
+      .number({
+        message: `${label} must be a valid number`,
+      })
+      .min(0, `${label} cannot be negative`)
+      .optional()
+  );
 
 const optionalDate = z
   .string()
@@ -133,13 +150,26 @@ export const createLabourSchema =
 
     startDate: optionalDate,
 
-    pan: optionalString,
+    pan: z
+          .string()
+          .trim()
+          .optional()
+          .transform((value) => (value ? value.toUpperCase() : undefined))
+          .pipe(
+            z
+              .string()
+              .regex(panRegex, "Enter valid PAN, e.g. ABCDE1234F")
+              .optional()
+          ),
 
-    tdsAmount:
-      optionalNumber("TDS Amount"),
+    tdsAmount: optionalAmount("TDS Amount"),
 
-    tdsRate:
-      optionalNumber("TDS Rate"),
+    tdsRate: optionalNumber("TDS Rate").refine(
+  (value) => value === undefined || value <= 100,
+  {
+    message: "TDS Rate cannot be more than 100%",
+  }
+),
 
     type: z.enum([
       "Supervisor",

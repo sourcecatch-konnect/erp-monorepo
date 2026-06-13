@@ -30,7 +30,16 @@ import {
   IconId,
   IconCalendar,
   IconGasStation,
+  IconBarcode,
+  IconEngine,
+  IconScale,
+  IconRuler,
+  IconGauge,
+  IconShieldCheck,
+  IconBuildingBank,
+  IconWheel,
 } from "@tabler/icons-react";
+import IconTextField from "../_shared/fields/IconTextField";
 
 type Props = {
   open: boolean;
@@ -45,17 +54,7 @@ const ownershipOptions = [
   { label: "Market Vehicle", value: "Market_Vehicle" },
 ];
 
-const wheelOptions = [
-  { label: "2 Wheel", value: "2" },
-  { label: "4 Wheel", value: "4" },
-  { label: "6 Wheel", value: "6" },
-  { label: "10 Wheel", value: "10" },
-  { label: "12 Wheel", value: "12" },
-  { label: "14 Wheel", value: "14" },
-  { label: "16 Wheel", value: "16" },
-  { label: "18 Wheel", value: "18" },
-  { label: "22 Wheel", value: "22" },
-];
+
 
 const vehicleStatusOptions = [
   { label: "Available", value: "AVAILABLE" },
@@ -69,7 +68,7 @@ const defaultValues: CreateVehicleFormInput = {
   ownershipType: "Own_Vehicle",
   vehicleTypeId: "",
   capacityMT: "",
-  wheels: undefined,
+  wheels: "",
   bodyType: "",
   lengthFeet: "",
   openingKM: "",
@@ -81,7 +80,10 @@ const defaultValues: CreateVehicleFormInput = {
   insuranceDueDate: "",
   status: "AVAILABLE",
 };
-
+const bodyTypeOptions = [
+  { label: "HQ", value: "HQ" },
+  { label: "LQ", value: "LQ" },
+];
 export default function VehicleForm({
   open,
   onOpenChange,
@@ -117,7 +119,7 @@ export default function VehicleForm({
       ownershipType: row?.ownershipType ?? "Own_Vehicle",
       vehicleTypeId: row?.vehicleTypeId ?? "",
       capacityMT: row?.capacityMT != null ? String(row.capacityMT) : "",
-      wheels: toWheelInput(row?.wheels),
+      wheels: row?.wheels != null ? String(row.wheels) : "",
       bodyType: row?.bodyType ?? "",
       lengthFeet: row?.lengthFeet ?? "",
       openingKM: row?.openingKM != null ? String(row.openingKM) : "",
@@ -153,17 +155,21 @@ export default function VehicleForm({
           required
         />
 
-        <TextField<CreateVehicleFormInput>
-          name="chasisNumber"
-          label="Chasis Number"
-          required
-        />
+       <IconTextField<CreateVehicleFormInput>
+  name="chasisNumber"
+  label="Chasis Number"
+  placeholder="Enter the chasis number"
+  icon={<IconBarcode size={16} />}
+  required
+/>
 
-        <TextField<CreateVehicleFormInput>
-          name="engineNumber"
-          label="Engine Number"
-          required
-        />
+       <IconTextField<CreateVehicleFormInput>
+  name="engineNumber"
+  label="Engine Number"
+    placeholder="Enter engine number"
+  icon={<IconEngine size={16} />}
+  required
+/>
       </FormSection>
 
       {/* SPECIFICATIONS */}
@@ -172,12 +178,13 @@ export default function VehicleForm({
         title="Specifications"
         description="Vehicle type and physical attributes"
       >
-        <SelectField<CreateVehicleFormInput>
-          name="ownershipType"
-          label="Ownership Type"
-          options={ownershipOptions}
-          required
-        />
+      <SelectField<CreateVehicleFormInput>
+  name="ownershipType"
+  label="Ownership Type"
+  options={ownershipOptions}
+  icon={<IconTruck size={16} />}
+  required
+/>
 
         <ComboboxField<CreateVehicleFormInput>
           name="vehicleTypeId"
@@ -186,34 +193,38 @@ export default function VehicleForm({
           required
         />
 
-        <SelectField<CreateVehicleFormInput>
-          name="wheels"
-          label="Wheels"
-          options={wheelOptions}
-        />
+<IconTextField<CreateVehicleFormInput>
+  name="wheels"
+  label="Wheels"
+  placeholder="Enter wheels"
+  icon={<IconWheel size={16} />}
+  type="number"
+  suffix="wheels"
+/>
+<SelectField<CreateVehicleFormInput>
+  name="bodyType"
+  label="Body Type"
+  options={bodyTypeOptions}
+  suffix="body"
+  icon={<IconTruck size={16} />}
+/>
 
-        <TextField<CreateVehicleFormInput>
-          name="bodyType"
-          label="Body Type"
-        />
+       <IconTextField<CreateVehicleFormInput>
+  name="capacityMT"
+  label="Capacity MT"
+  placeholder="0.00"
+  icon={<IconScale size={16} />}
+  type="number"
+  required
+/>
 
-        <NumberField<CreateVehicleFormInput>
-          control={form.control}
-          name="capacityMT"
-          label="Capacity MT"
-          min={0.1}
-          max={100}
-          step="0.1"
-          required
-        />
-
-        <NumberField<CreateVehicleFormInput>
-          control={form.control}
-          name="lengthFeet"
-          label="Length (Feet)"
-          min={1}
-          max={100}
-        />
+    <IconTextField<CreateVehicleFormInput>
+  name="lengthFeet"
+  label="Length (Feet)"
+  placeholder="Enter the Lenght Feet"
+  icon={<IconRuler size={16} />}
+  type="number"
+/>
       </FormSection>
 
       {/* KM & USAGE */}
@@ -222,23 +233,23 @@ export default function VehicleForm({
         title="Usage Details"
         description="Odometer and operational data"
       >
-        <NumberField<CreateVehicleFormInput>
-          control={form.control}
-          name="openingKM"
-          label="Opening KM"
-          min={0}
-          max={9999999}
-          required
-        />
+      <IconTextField<CreateVehicleFormInput>
+  name="openingKM"
+  label="Opening KM"
+  placeholder="0"
+  icon={<IconGauge size={16} />}
+  type="number"
+  required
+/>
 
-        <NumberField<CreateVehicleFormInput>
-          control={form.control}
-          name="currentKM"
-          label="Current KM"
-          min={0}
-          max={9999999}
-          required
-        />
+       <IconTextField<CreateVehicleFormInput>
+  name="currentKM"
+  label="Current KM"
+  placeholder="0"
+  icon={<IconGasStation size={16} />}
+  type="number"
+  required
+/>
       </FormSection>
 
       {/* INSURANCE */}
@@ -247,15 +258,19 @@ export default function VehicleForm({
         title="Insurance Details"
         description="Insurance policy information"
       >
-        <TextField<CreateVehicleFormInput>
-          name="insuranceNumber"
-          label="Insurance Number"
-        />
+        <IconTextField<CreateVehicleFormInput>
+  name="insuranceNumber"
+  label="Insurance Number"
+  placeholder="e.g. 33"
+  icon={<IconShieldCheck size={16} />}
+/>
 
-        <TextField<CreateVehicleFormInput>
-          name="insuranceCompany"
-          label="Insurance Company"
-        />
+       <IconTextField<CreateVehicleFormInput>
+  name="insuranceCompany"
+  label="Insurance Company"
+   placeholder="e.g. HDFC ERGO"
+  icon={<IconBuildingBank size={16} />}
+/>
 
         <Controller
           control={form.control}
@@ -287,56 +302,39 @@ export default function VehicleForm({
       </FormSection>
 
       {/* PURCHASE */}
-      <FormSection
-        icon={<IconCalendar size={18} />}
-        title="Purchase Details"
-        description="Vehicle purchase information"
-      >
-        <Controller
-          control={form.control}
-          name="purchaseDate"
-          render={({ field }) => (
-            <DatePicker
-              label="Purchase Date"
-              selected={field.value ? new Date(field.value) : undefined}
-              onSelect={(d) =>
-                field.onChange(d ? d.toISOString().slice(0, 10) : "")
-              }
-            />
-          )}
-        />
-      </FormSection>
+  <FormSection
+  icon={<IconCalendar size={18} />}
+  title="Purchase & Status"
+  description="Vehicle purchase date and current status"
+>
+  <Controller
+    control={form.control}
+    name="purchaseDate"
+    render={({ field }) => (
+      <DatePicker
+        label="Purchase Date"
+        selected={field.value ? new Date(field.value) : undefined}
+        onSelect={(d) =>
+          field.onChange(d ? d.toISOString().slice(0, 10) : "")
+        }
+      />
+    )}
+  />
 
-      {/* STATUS */}
-      <FormSection
-        icon={<IconTruck size={18} />}
-        title="Status"
-      >
-        <SelectField<CreateVehicleFormInput>
-          name="status"
-          label="Vehicle Status"
-          options={vehicleStatusOptions}
-          required
-        />
-      </FormSection>
+  <SelectField<CreateVehicleFormInput>
+    name="status"
+    label="Vehicle Status"
+    options={vehicleStatusOptions}
+     icon={<IconTruck size={16} />}
+    required
+  />
+</FormSection>
     </MasterFormDialog>
   );
 }
 
-function toWheelInput(
-  wheels: string | null | undefined
-): "2" | "4" | "6" | "10" | "12" | "14" | "16" | "18" | "22" | undefined {
-  if (!wheels) return undefined;
 
-  const value = String(wheels);
 
-  const allowed = ["2", "4", "6", "10", "12", "14", "16", "18", "22"] as const;
-  type Wheel = (typeof allowed)[number];
-
-  return (allowed as readonly string[]).includes(value)
-    ? (value as Wheel)
-    : undefined;
-}
 
 function toDateInput(date: string | null | undefined): string {
   if (!date) return "";
