@@ -437,7 +437,7 @@ Each phase ships behind a feature flag at the registry level, so the previous ph
 - API + workers (same container, per user choice). Node 22, Express 5, Prisma 7.
 - Self-hosted Postgres 17 with `pgBackRest` for backups → S3.
 - Redis 7 for BullMQ + permission cache + sessions.
-- Next.js (admin-web + employee-web) `output: standalone` running as Node services on the same host.
+- Next.js (web) `output: standalone` running as Node services on the same host.
 - nginx or Caddy as TLS-terminating reverse proxy in front.
 - TLS via Let's Encrypt (Caddy auto-renews) or ACM if behind a basic ALB.
 

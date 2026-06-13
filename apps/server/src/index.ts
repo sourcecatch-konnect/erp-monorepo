@@ -28,6 +28,8 @@ import sparePartSupplier from "./modules/spare-partSuppiler/spare-partSuppiler.r
 import CustomerRoute from "./modules/customer/customer.route.js";
 import vehicleTypeRoute from "./modules/vehicleType/vehicleType.route.js";
 import orderRoute from "./modules/order/order.route.js";
+import tripRoute from "./modules/trip/trip.route.js";
+import lorryReceiptRoute from "./modules/lorry-receipt/lorry-receipt.route.js";
 import CompanyRoute from "./modules/company/company.route.js";
 import BranchRoute from "./modules/branch/branch.route.js";
 import Routes from "./modules/route/route.routes.js";
@@ -71,22 +73,24 @@ app.use("/transports", transportRoute);
 app.use("/vehicles", vehicleRoute);
 app.use("/vehicle-types", vehicleTypeRoute);
 app.use("/orders", orderRoute);
+app.use("/trips", tripRoute);
+app.use("/lorry-receipts", lorryReceiptRoute);
 app.use("/drivers", driverRoute);
 app.use("/spare-category", spareCategory);
 app.use("/spare-parts", sparePartRoute);
-app.use("/spare-part-suppliers",sparePartSupplier)
-app.use("/customers",CustomerRoute)
-app.use("/companies",CompanyRoute)
+app.use("/spare-part-suppliers", sparePartSupplier)
+app.use("/customers", CustomerRoute)
+app.use("/companies", CompanyRoute)
 app.use("/branches", BranchRoute)
-app.use("/routes",Routes)
-app.use("/warehouses",WarehousesRoute)
-app.use("/labours",labourRoute)
-app.use("/rateMatrix",rateMatrixRoute)
+app.use("/routes", Routes)
+app.use("/warehouses", WarehousesRoute)
+app.use("/labours", labourRoute)
+app.use("/rateMatrix", rateMatrixRoute)
 app.use("/railway-freight", RailwayFreightRoute);
-app.use("/goods",goodsRoute)
-app.use("/wagons",wagonRoute)
-app.use("/agreements",agreementRoute)
-app.use("/pumps",pumpRoute)
+app.use("/goods", goodsRoute)
+app.use("/wagons", wagonRoute)
+app.use("/agreements", agreementRoute)
+app.use("/pumps", pumpRoute)
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);

@@ -1,12 +1,9 @@
-import {
-  SendEmailCommand,
-  SESv2Client,
-} from "@aws-sdk/client-sesv2";
+import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import type {
   NotificationChannel,
   NotificationDelivery,
   User,
-} from "@prisma/client";
+} from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { emitInAppNotification } from "./realtime.js";
 import type { RenderedNotification } from "./types.js";
@@ -19,7 +16,10 @@ type ProviderResult = {
 
 type ProviderArgs = {
   delivery: NotificationDelivery;
-  recipient: Pick<User, "id" | "email" | "mobile" | "emailOptIn" | "whatsappOptIn">;
+  recipient: Pick<
+    User,
+    "id" | "email" | "mobile" | "emailOptIn" | "whatsappOptIn"
+  >;
   rendered: RenderedNotification;
   severity: "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
   linkUrl?: string | null;
@@ -61,7 +61,10 @@ const inAppProvider: NotificationProvider = {
 const emailProvider: NotificationProvider = {
   async send({ recipient, rendered }) {
     if (!recipient.emailOptIn) {
-      return { skipped: true, reason: "Recipient has email notifications disabled" };
+      return {
+        skipped: true,
+        reason: "Recipient has email notifications disabled",
+      };
     }
     if (!process.env.AWS_REGION || !process.env.MAIL_FROM) {
       return { skipped: true, reason: "SES is not configured" };
@@ -80,7 +83,7 @@ const emailProvider: NotificationProvider = {
             Body: { Text: { Data: rendered.body, Charset: "UTF-8" } },
           },
         },
-      })
+      }),
     );
 
     return {};
@@ -90,7 +93,10 @@ const emailProvider: NotificationProvider = {
 const whatsappProvider: NotificationProvider = {
   async send({ recipient, rendered }) {
     if (!recipient.whatsappOptIn) {
-      return { skipped: true, reason: "Recipient has WhatsApp notifications disabled" };
+      return {
+        skipped: true,
+        reason: "Recipient has WhatsApp notifications disabled",
+      };
     }
     if (!recipient.mobile) {
       return { skipped: true, reason: "Recipient mobile number is missing" };
@@ -105,7 +111,10 @@ const whatsappProvider: NotificationProvider = {
 
     const wa = rendered.whatsapp;
     if (!wa?.metaName) {
-      return { skipped: true, reason: "No WhatsApp template configured for this event" };
+      return {
+        skipped: true,
+        reason: "No WhatsApp template configured for this event",
+      };
     }
     if (wa.metaStatus !== "APPROVED") {
       return {
@@ -140,7 +149,7 @@ const whatsappProvider: NotificationProvider = {
 
     console.log(
       `[notifications][whatsapp] → sending template "${wa.metaName}" (${wa.metaLanguage}) to ${recipient.mobile}`,
-      JSON.stringify(requestBody.template)
+      JSON.stringify(requestBody.template),
     );
 
     const response = await fetch(`${baseUrl}/${phoneNumberId}/messages`, {
@@ -165,19 +174,19 @@ const whatsappProvider: NotificationProvider = {
     if (!response.ok) {
       console.error(
         `[notifications][whatsapp] ✗ Meta rejected message to ${recipient.mobile} (HTTP ${response.status}):`,
-        JSON.stringify(body.error || body)
+        JSON.stringify(body.error || body),
       );
       const detail = body.error?.error_data?.details;
       throw new Error(
         [body.error?.message, detail].filter(Boolean).join(" — ") ||
-          `WhatsApp API request failed (HTTP ${response.status})`
+          `WhatsApp API request failed (HTTP ${response.status})`,
       );
     }
 
     const messageId = body.messages?.[0]?.id;
     console.log(
       `[notifications][whatsapp] ✓ Meta accepted message to ${recipient.mobile}, id=${messageId}. ` +
-        `Final delivery (delivered/failed on device) arrives via the status webhook.`
+        `Final delivery (delivered/failed on device) arrives via the status webhook.`,
     );
     return { providerMessageId: messageId };
   },
@@ -191,5 +200,5 @@ const providers: Record<NotificationChannel, NotificationProvider> = {
 
 export const sendViaProvider = (
   channel: NotificationChannel,
-  args: ProviderArgs
+  args: ProviderArgs,
 ) => providers[channel].send(args);

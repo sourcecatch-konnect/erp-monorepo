@@ -3,10 +3,10 @@
 Rules an AI assistant (and humans) must follow when writing code in this monorepo.
 Read the relevant file before generating UI or frontend code.
 
-| File | Scope |
-|------|-------|
-| [design.md](./design.md) | Visual design system — colors, borders, spacing, typography, component usage. Applies to **admin-web** and **employee-web**. |
-| [frontend.md](./frontend.md) | Frontend architecture — state management, data fetching, auth, folder structure. |
+| File                         | Scope                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [design.md](./design.md)     | Visual design system — colors, borders, spacing, typography, component usage. Applies to **web** and **web**. |
+| [frontend.md](./frontend.md) | Frontend architecture — state management, data fetching, auth, folder structure.                              |
 
 ## Non-negotiables (quick reference)
 

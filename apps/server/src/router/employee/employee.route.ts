@@ -1,9 +1,7 @@
 import { Router } from "express";
-import {
-  authMiddleware,
-  requireRole,
-} from "../../middlewares/auth.middlware.js";
-import { ROLES } from "../../util/auth.util.js";
+import { authMiddleware } from "../../middlewares/auth.middlware.js";
+import { can } from "../../auth/can.middleware.js";
+import { PERMS } from "../../auth/permissions.js";
 import {
   createEmployeeController,
   getEmployeeController,
@@ -15,8 +13,8 @@ import {
 
 const router = Router();
 
-// Every employee-management route is admin-only.
-router.use(authMiddleware, requireRole(ROLES.ADMIN));
+// Employee management is available to users with RBAC management permission.
+router.use(authMiddleware, can(PERMS.ADMIN.RBAC_MANAGE));
 
 router.post("/", createEmployeeController);
 router.get("/", listEmployeesController);

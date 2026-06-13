@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { NotificationChannel, Prisma } from "@prisma/client";
+import {
+  NotificationChannel,
+  Prisma,
+} from "../../../generated/prisma/index.js";
 import { PERMS } from "@skerp/types";
 import { z } from "zod";
 import { db } from "../../../prisma/prisma.js";

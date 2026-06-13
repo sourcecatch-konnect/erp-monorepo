@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../../generated/prisma/index.js";
 import type { PdfDocument } from "../../templetes/pdf/pdf.type.js";
 import path from "node:path";
 // import { imageToBase64Src } from "../utils/image-to-base64.js";
