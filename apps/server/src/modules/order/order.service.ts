@@ -165,7 +165,6 @@ export const computeFreight = async (args: {
   }
 
   const agreementIds = agreements.map((a) => a.id);
-
 const match = await db.rateMatrix.findFirst({
   where: {
     agreementId: { in: agreementIds },
@@ -180,65 +179,60 @@ const match = await db.rateMatrix.findFirst({
       sort: "desc",
       nulls: "last",
     },
-    orderBy: {
-      vehicleTypeId: {
-        sort: "desc",
-        nulls: "last",
-      },
-    },
-    include: {
-      agreement: {
-        select: {
-          id: true,
-          company: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          client: {
-            select: {
-              id: true,
-              name: true,
-            },
+  },
+  include: {
+    agreement: {
+      select: {
+        id: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
           },
         },
-      },
-
-      route: {
-        select: {
-          id: true,
-          sourceCity: {
-            select: {
-              id: true,
-              name: true,
-            },
+        client: {
+          select: {
+            id: true,
+            name: true,
           },
-          destinationCity: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      },
-
-      vehicleType: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-
-      unit: {
-        select: {
-          id: true,
-          unitValue: true,
-          unitType: true,
         },
       },
     },
-  });
+
+    route: {
+      select: {
+        id: true,
+        sourceCity: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        destinationCity: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    },
+
+    vehicleType: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+
+    unit: {
+      select: {
+        id: true,
+        unitValue: true,
+        unitType: true,
+      },
+    },
+  },
+});
 
   if (!match) {
     return {
