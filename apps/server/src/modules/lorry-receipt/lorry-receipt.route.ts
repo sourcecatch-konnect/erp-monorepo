@@ -5,6 +5,7 @@ import {
   finaliseLRSchema,
   cancelLRSchema,
   addEwayBillSchema,
+  splitLRAtHubSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -26,6 +27,7 @@ import type { LRStatus, LRSource } from "../../../generated/prisma/index.js";
 import {
   generateLRNumber,
   assertTruckSlotAvailable,
+  resolveHubBranchId,
   lrListSelect,
   lrDetailInclude,
 } from "./lorry-receipt.service.js";
@@ -210,14 +212,17 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
         orderId: input.source === "FROM_ORDER" ? input.orderId : null,
         originBranchId,
         destinationBranchId,
-        // Transport
+        // Transport. Always created DIRECT — hub split happens later via the
+        // /split-at-hub action, never at creation.
         transportType: input.source === "INSTANT" ? "Road" : (input.transportType ?? "Road"),
-        tripLegType: input.source === "INSTANT" ? "DIRECT" : (input.tripLegType ?? "DIRECT"),
-        hubId: input.source === "FROM_ORDER" ? (input.hubId ?? null) : null,
-        // Vehicle
+        tripLegType: "DIRECT",
+        // Railhead: order + RoadAndRail only. Unrelated to the Jalgaon hub.
+        railheadBranchId:
+          input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null,
+        // Vehicle. Only the leg-1 (primary) trip at creation; leg 2 is attached
+        // by the split action.
         isMarketVehicle,
         primaryTripId: !isMarketVehicle ? (input.primaryTripId ?? null) : null,
-        secondaryTripId: !isMarketVehicle ? (input.secondaryTripId ?? null) : null,
         marketVehicleNumber: isMarketVehicle ? (input.marketVehicleNumber ?? null) : null,
         marketDriverName: isMarketVehicle ? (input.marketDriverName ?? null) : null,
         // Parties
@@ -282,12 +287,10 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
       data: {
         ...(input.isMarketVehicle !== undefined ? { isMarketVehicle: input.isMarketVehicle } : {}),
         ...(input.primaryTripId !== undefined ? { primaryTripId: input.primaryTripId ?? null } : {}),
-        ...(input.secondaryTripId !== undefined ? { secondaryTripId: input.secondaryTripId ?? null } : {}),
         ...(input.marketVehicleNumber !== undefined ? { marketVehicleNumber: input.marketVehicleNumber ?? null } : {}),
         ...(input.marketDriverName !== undefined ? { marketDriverName: input.marketDriverName ?? null } : {}),
         ...(input.transportType ? { transportType: input.transportType } : {}),
-        ...(input.tripLegType ? { tripLegType: input.tripLegType } : {}),
-        ...(input.hubId !== undefined ? { hubId: input.hubId ?? null } : {}),
+        ...(input.railheadBranchId !== undefined ? { railheadBranchId: input.railheadBranchId ?? null } : {}),
         ...(input.consigneeId ? { consigneeId: input.consigneeId } : {}),
         ...(input.priority ? { priority: input.priority } : {}),
         ...(input.invoiceNumber !== undefined ? { invoiceNumber: input.invoiceNumber ?? null } : {}),
@@ -373,6 +376,61 @@ router.post(
           invoiceAmount: invoiceAmount ?? null,
           finalisedAt: new Date(),
           finalisedById: me,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        include: lrDetailInclude,
+      });
+    });
+
+    return sendOk(res, updated);
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Split at hub (HO action) — attach leg-2 trip to a FINALISED LR       */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/:id/split-at-hub",
+  can(PERMS.LORRY_RECEIPT.APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.lorryReceipt.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) throw new NotFoundError("Lorry receipt not found");
+    if (existing.status !== "FINALISED") {
+      throw new BadRequestError(
+        "Hub split is only allowed on a finalised lorry receipt",
+      );
+    }
+
+    const parsed = splitLRAtHubSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const { secondaryTripId } = parsed.data;
+    const me = actorId(req);
+
+    const updated = await db.$transaction(async (tx) => {
+      // Hub is always the head-office branch — derived, never sent by client.
+      const hubId = await resolveHubBranchId(tx);
+
+      const leg2 = await tx.vehicleTrip.findUnique({
+        where: { id: secondaryTripId },
+        select: { id: true },
+      });
+      if (!leg2) throw new BadRequestError("Leg 2 trip not found");
+      if (secondaryTripId === existing.primaryTripId) {
+        throw new BadRequestError("Leg 2 trip must differ from the leg 1 trip");
+      }
+
+      return tx.lorryReceipt.update({
+        where: { id },
+        data: {
+          hubId,
+          secondaryTripId,
+          tripLegType: "FROM_HUB",
           updatedById: me,
           version: { increment: 1 },
         },

@@ -11,6 +11,7 @@ import {
   finaliseLRSchema,
   cancelLRSchema,
   addEwayBillSchema,
+  splitLRAtHubSchema,
 } from "@skerp/validators";
 
 export type LRStatus = z.infer<typeof lrStatusSchema>;
@@ -26,6 +27,7 @@ export type UpdateLRBody = z.output<typeof updateLRSchema>;
 export type FinaliseLRBody = z.output<typeof finaliseLRSchema>;
 export type FinaliseLRFormInput = z.input<typeof finaliseLRSchema>;
 export type CancelLRBody = z.output<typeof cancelLRSchema>;
+export type SplitLRAtHubBody = z.output<typeof splitLRAtHubSchema>;
 export type AddEwayBillBody = z.output<typeof addEwayBillSchema>;
 export type AddEwayBillFormInput = z.input<typeof addEwayBillSchema>;
 
@@ -104,6 +106,7 @@ export type LRListItem = {
   primaryTrip: TripRef | null;
   secondaryTrip: TripRef | null;
   hub: BranchRef | null;
+  railheadBranch: BranchRef | null;
   consignor: CustomerRef | null;
   consignee: CustomerRef | null;
   originBranch: BranchRef | null;
@@ -118,6 +121,7 @@ export type LorryReceipt = LRListItem & {
   primaryTripId: string | null;
   secondaryTripId: string | null;
   hubId: string | null;
+  railheadBranchId: string | null;
   consignorId: string;
   consigneeId: string;
   originBranchId: string;

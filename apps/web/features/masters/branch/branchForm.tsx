@@ -19,11 +19,15 @@ import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 import PhoneField from "../_shared/fields/PhoneField";
+import SwitchField from "../_shared/fields/SwitchField";
 
 import {
   IconBuilding,
   IconMapPin,
   IconUser,
+  IconReceipt,
+  IconTrain,
+  IconFileText,
 } from "@tabler/icons-react";
 
 type Props = {
@@ -50,6 +54,7 @@ const defaultValues: CreateBranchFormInput = {
   workingHours: "",
   allowLR: false,
   isRailHead: false,
+  isHeadOffice: false,
   allowReceipt: true,
   companyId: "",
   warehouseId: "",
@@ -88,6 +93,7 @@ export default function BranchForm({
       workingHours: row?.workingHours ?? "",
       allowLR: row?.allowLR ?? false,
       isRailHead: row?.isRailHead ?? false,
+      isHeadOffice: row?.isHeadOffice ?? false,
       allowReceipt: row?.allowReceipt ?? true,
       companyId: row?.companyId ?? "",
       warehouseId: row?.warehouseId ?? "",
@@ -205,6 +211,34 @@ export default function BranchForm({
         <TextField<CreateBranchFormInput>
           name="workingHours"
           label="Working Hours"
+        />
+
+        <SwitchField<CreateBranchFormInput>
+          name="allowLR"
+          label="Allow LR"
+          description="Allow lorry receipts from this branch"
+          icon={<IconFileText size={14} />}
+        />
+
+        <SwitchField<CreateBranchFormInput>
+          name="isRailHead"
+          label="Is this a Rail Head?"
+          description="Selectable as the railhead for Road & Rail order LRs"
+          icon={<IconTrain size={14} />}
+        />
+
+        <SwitchField<CreateBranchFormInput>
+          name="isHeadOffice"
+          label="Is this the Head Office (hub)?"
+          description="The HO/hub branch (Jalgaon). LR hub splits attach to this branch — set on exactly one branch."
+          icon={<IconBuilding size={14} />}
+        />
+
+        <SwitchField<CreateBranchFormInput>
+          name="allowReceipt"
+          label="Allow Receipt"
+          description="Allow receipts at this branch"
+          icon={<IconReceipt size={14} />}
         />
       </FormSection>
     </MasterFormDialog>

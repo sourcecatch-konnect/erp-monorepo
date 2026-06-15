@@ -20,6 +20,8 @@ export type ComboboxOption = {
   value: string;
   /** Optional secondary line rendered under the label. */
   hint?: string;
+  /** Optional right-side badge rendered in the option list. */
+  badge?: string;
 };
 
 type ComboboxProps = {
@@ -68,13 +70,16 @@ export function Combobox({
           aria-invalid={invalid || undefined}
           disabled={disabled}
           className={cn(
-            "h-10 w-full justify-between rounded-lg font-normal",
+            // Auto height so a long selected label wraps instead of clipping.
+            "h-auto min-h-10 w-full justify-between rounded-lg font-normal",
             !selected && "text-muted-foreground",
             invalid && "ring-1 ring-destructive",
             className
           )}
         >
-          <span className="truncate">{selected ? selected.label : placeholder}</span>
+          <span className="whitespace-normal break-words text-left">
+            {selected ? selected.label : placeholder}
+          </span>
           <ChevronsUpDownIcon className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -108,11 +113,19 @@ export function Combobox({
                       option.value === value ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <span className="flex flex-col">
-                    <span>{option.label}</span>
-                    {option.hint ? (
-                      <span className="text-xs text-muted-foreground">
-                        {option.hint}
+                  <span className="flex min-w-0 flex-1 items-start justify-between gap-2">
+                    <span className="flex min-w-0 flex-col">
+                      {/* Wrap, don't truncate — long names (e.g. trip names) must stay readable. */}
+                      <span className="whitespace-normal break-words">{option.label}</span>
+                      {option.hint ? (
+                        <span className="whitespace-normal break-words text-xs text-muted-foreground">
+                          {option.hint}
+                        </span>
+                      ) : null}
+                    </span>
+                    {option.badge ? (
+                      <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                        {option.badge}
                       </span>
                     ) : null}
                   </span>

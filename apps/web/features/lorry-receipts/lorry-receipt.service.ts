@@ -7,6 +7,7 @@ import type {
   UpdateLRBody,
   FinaliseLRBody,
   CancelLRBody,
+  SplitLRAtHubBody,
   AddEwayBillBody,
   EwayBill,
 } from "@skerp/types";
@@ -69,6 +70,14 @@ export const lorryReceiptApi = {
     return unwrapApiResponse(res);
   },
 
+  splitAtHub: async (id: string, body: SplitLRAtHubBody): Promise<LorryReceipt> => {
+    const res = await api.post<ApiResponse<LorryReceipt>>(
+      `/lorry-receipts/${id}/split-at-hub`,
+      body
+    );
+    return unwrapApiResponse(res);
+  },
+
   addEwayBill: async (id: string, body: AddEwayBillBody): Promise<EwayBill> => {
     const res = await api.post<ApiResponse<EwayBill>>(
       `/lorry-receipts/${id}/eway-bills`,
@@ -85,6 +94,12 @@ export const lorryReceiptApi = {
 type VehicleRow = { id: string; vehicleNumber: string; ownershipType?: string };
 type DriverRow = { id: string; name: string; mobile?: string | null };
 type CustomerRow = { id: string; name: string; shortName: string | null };
+type GoodsRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  weight?: number | null;
+};
 type BranchRow = { id: string; name: string; branchCode: string; shortCode?: string; isRailHead?: boolean };
 type TripRow = {
   id: string;
@@ -93,6 +108,11 @@ type TripRow = {
   status: string;
   vehicle?: { id: string; vehicleNumber: string } | null;
   driver?: { id: string; name: string } | null;
+  route?: {
+    id: string;
+    sourceCity?: { id: string; name: string } | null;
+    destinationCity?: { id: string; name: string } | null;
+  } | null;
 };
 type OrderRow = {
   id: string;
@@ -113,7 +133,7 @@ type OrderRow = {
 const LOOKUP_SIZE = { size: 1000 } as const;
 
 export type LROption = { value: string; label: string };
-export type LRTripOption = LROption & TripRow;
+export type LRTripOption = LROption & TripRow & { hint?: string; badge?: string };
 export type LRBranchOption = LROption & { branchCode: string; isRailHead: boolean };
 
 export const lrLookups = {
@@ -147,6 +167,17 @@ export const lrLookups = {
       ...d,
       value: d.id,
       label: d.name,
+    }));
+  },
+
+  goods: async (): Promise<(LROption & GoodsRow)[]> => {
+    const res = await api.get<ApiResponse<GoodsRow[]>>("/goods", {
+      params: { ...LOOKUP_SIZE, sort: "name:asc" },
+    });
+    return unwrapListResponse(res).data.map((g) => ({
+      ...g,
+      value: g.id,
+      label: g.name,
     }));
   },
 
@@ -184,15 +215,29 @@ export const lrLookups = {
     }));
   },
 
-  plannedTrips: async (): Promise<LRTripOption[]> => {
-    const res = await api.get<ApiResponse<TripRow[]>>("/vehicle-trips", {
-      params: { ...LOOKUP_SIZE, "filter[status]": "Planned" },
+  /** Trips an LR can attach to: any non-cancelled trip with no live LR on it. */
+  attachableTrips: async (): Promise<LRTripOption[]> => {
+    const res = await api.get<ApiResponse<TripRow[]>>("/trips", {
+      params: { ...LOOKUP_SIZE, "filter[unattached]": "true" },
     });
-    return unwrapListResponse(res).data.map((t) => ({
-      ...t,
-      value: t.id,
-      label: `${t.tripNumber} — ${t.tripName}`,
-    }));
+    const statusLabel: Record<string, string> = {
+      Planned: "Planned",
+      InTransit: "In Transit",
+      AtDestination: "At Destination",
+      Completed: "Completed",
+      Closed: "Closed",
+    };
+    return unwrapListResponse(res).data.map((t) => {
+      const from = t.route?.sourceCity?.name;
+      const to = t.route?.destinationCity?.name;
+      return {
+        ...t,
+        value: t.id,
+        label: t.tripName,
+        hint: from && to ? `${from} → ${to}` : t.tripNumber,
+        badge: statusLabel[t.status] ?? t.status,
+      };
+    });
   },
 
   confirmedTruckOrders: async (): Promise<(LROption & OrderRow)[]> => {
@@ -216,8 +261,9 @@ export const lrLookupKeys = {
   marketVehicles: ["lookup", "market-vehicles"] as const,
   drivers: ["lookup", "drivers"] as const,
   customers: ["lookup", "customers"] as const,
+  goods: ["lookup", "goods"] as const,
   branches: ["lookup", "branches"] as const,
   railheadBranches: ["lookup", "railhead-branches"] as const,
-  plannedTrips: ["lookup", "planned-trips"] as const,
+  attachableTrips: ["lookup", "attachable-trips"] as const,
   confirmedTruckOrders: ["lookup", "confirmed-truck-orders"] as const,
 };

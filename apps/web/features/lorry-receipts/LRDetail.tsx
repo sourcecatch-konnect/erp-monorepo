@@ -8,7 +8,7 @@ import { PERMS } from "@skerp/types";
 import type { FinaliseLRBody } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import { IconArrowLeft, IconBan, IconCheck } from "@tabler/icons-react";
+import { IconArrowLeft, IconBan, IconCheck, IconRouteAltLeft } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
@@ -19,6 +19,7 @@ import { lorryReceiptApi } from "./lorry-receipt.service";
 import { lrKeys } from "./lorry-receipt.keys";
 import { LRStatusBadge, SOURCE_LABELS } from "./lorry-receipt-ui";
 import FinaliseDialog from "./components/FinaliseDialog";
+import SplitAtHubDialog from "./components/SplitAtHubDialog";
 import EwayBillSection from "./components/EwayBillSection";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -35,6 +36,7 @@ export default function LRDetail({ id }: { id: string }) {
   const queryClient = useQueryClient();
   const [finaliseOpen, setFinaliseOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [splitOpen, setSplitOpen] = React.useState(false);
 
   const canApprove = useCan(PERMS.LORRY_RECEIPT.APPROVE);
   const canCancel = useCan(PERMS.LORRY_RECEIPT.CANCEL);
@@ -71,6 +73,17 @@ export default function LRDetail({ id }: { id: string }) {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
+  const splitAtHub = useMutation({
+    mutationFn: (secondaryTripId: string) =>
+      lorryReceiptApi.splitAtHub(id, { secondaryTripId }),
+    onSuccess: () => {
+      toast.success("LR split at hub — leg 2 attached");
+      setSplitOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
   if (lr.isLoading) {
     return (
       <div className="mx-auto max-w-4xl space-y-4 p-4 md:p-6">
@@ -88,6 +101,9 @@ export default function LRDetail({ id }: { id: string }) {
 
   const data = lr.data;
   const isDraft = data.status === "DRAFT";
+  // Hub split is an HO action on a FINALISED LR that hasn't been split yet.
+  const canSplitAtHub =
+    data.status === "FINALISED" && data.tripLegType !== "FROM_HUB";
   const baseFreight = data.charges.find((c) => c.chargeType === "BASE_FREIGHT");
 
   return (
@@ -120,6 +136,11 @@ export default function LRDetail({ id }: { id: string }) {
             {canApprove && isDraft && (
               <Button onClick={() => setFinaliseOpen(true)}>
                 <IconCheck size={16} className="mr-1" /> Finalise
+              </Button>
+            )}
+            {canApprove && canSplitAtHub && (
+              <Button variant="outline" onClick={() => setSplitOpen(true)}>
+                <IconRouteAltLeft size={16} className="mr-1" /> Split at hub
               </Button>
             )}
             {canCancel && isDraft && (
@@ -156,10 +177,13 @@ export default function LRDetail({ id }: { id: string }) {
                 ? "Direct"
                 : data.tripLegType === "TO_HUB"
                 ? "To Hub"
-                : "From Hub"
+                : "Split at hub"
             }
           />
-          {data.hub && <Field label="Railhead hub" value={data.hub.name} />}
+          {data.railheadBranch && (
+            <Field label="Railhead branch" value={data.railheadBranch.name} />
+          )}
+          {data.hub && <Field label="Hub" value={data.hub.name} />}
           <Field label="Priority" value={data.priority} />
         </div>
       </div>
@@ -310,6 +334,15 @@ export default function LRDetail({ id }: { id: string }) {
         destructive
         isPending={cancel.isPending}
         onConfirm={(reason) => cancel.mutate(reason)}
+      />
+
+      <SplitAtHubDialog
+        open={splitOpen}
+        onOpenChange={setSplitOpen}
+        lrNumber={data.lrNumber}
+        primaryTripId={data.primaryTripId}
+        isPending={splitAtHub.isPending}
+        onConfirm={(secondaryTripId) => splitAtHub.mutate(secondaryTripId)}
       />
     </div>
   );

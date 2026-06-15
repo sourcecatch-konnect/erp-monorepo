@@ -255,14 +255,17 @@ export const computeFreight = async (args: {
     reason: null,
     rateMatrix: {
       id: match.id,
-      rate: match.rate,
+      // Money is BigInt paise in the DB; the wire contract is number paise.
+      rate: Number(match.rate),
       transitDays: match.transitDays,
       transportType: match.transportType,
       remarks: match.remarks,
       agreement: match.agreement,
       route: match.route,
       vehicleType: match.vehicleType,
-      unit: match.unit,
+      unit: match.unit
+        ? { ...match.unit, unitValue: Number(match.unit.unitValue) }
+        : null,
     },
   };
 };

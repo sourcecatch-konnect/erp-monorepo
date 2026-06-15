@@ -105,7 +105,23 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
   const query = parseListQuery(req);
   const where: Record<string, unknown> = {
     deletedAt: null,
-    ...(query.filter.status ? { status: query.filter.status } : {}),
+    // Supports a single status or comma-separated list (e.g. "Planned,InTransit").
+    ...(query.filter.status
+      ? {
+          status: String(query.filter.status).includes(",")
+            ? { in: String(query.filter.status).split(",") }
+            : query.filter.status,
+        }
+      : {}),
+    // Trips with no live LR attached (for the LR trip picker). Cancelled trips
+    // are excluded — you can't dispatch goods on a cancelled trip.
+    ...(query.filter.unattached === "true"
+      ? {
+          status: { not: "Cancelled" },
+          primaryLRs: { none: { deletedAt: null, status: { not: "CANCELLED" } } },
+          secondaryLRs: { none: { deletedAt: null, status: { not: "CANCELLED" } } },
+        }
+      : {}),
     ...(query.filter.tripType ? { tripType: query.filter.tripType } : {}),
     ...(query.search
       ? { tripNumber: { contains: query.search, mode: "insensitive" } }
@@ -303,6 +319,47 @@ router.post("/:id/start", can(PERMS.TRIP.UPDATE), async (req, res) => {
   });
 
   return sendOk(res, updated);
+});
+
+/* ------------------------------------------------------------------ */
+/* Delete (Planned / Cancelled only)                                  */
+/* ------------------------------------------------------------------ */
+router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
+  const id = getParamId(req);
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+  });
+  if (!existing) throw new NotFoundError("Trip not found");
+
+  if (!["Planned", "Cancelled"].includes(existing.status)) {
+    throw new BadRequestError(
+      `A ${existing.status} trip cannot be deleted. Please cancel the trip instead.`,
+      "TRIP_DELETE_NOT_ALLOWED",
+    );
+  }
+
+  const deleted = await db.$transaction(async (tx) => {
+    const lrCount = await tx.lorryReceipt.count({
+      where: {
+        deletedAt: null,
+        OR: [{ primaryTripId: id }, { secondaryTripId: id }],
+      },
+    });
+
+    if (lrCount > 0) {
+      throw new BadRequestError(
+        `This trip cannot be deleted because ${lrCount} LR(s) are linked with this trip.`,
+        "TRIP_DELETE_BLOCKED",
+      );
+    }
+
+    return tx.vehicleTrip.delete({
+      where: { id },
+      include: tripInclude,
+    });
+  });
+
+  return sendOk(res, deleted);
 });
 
 /* ------------------------------------------------------------------ */

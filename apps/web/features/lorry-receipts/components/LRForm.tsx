@@ -31,6 +31,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
+import { SuggestInput } from "@skerp/ui/components/suggest-input";
 
 import FormSection from "@/features/masters/_shared/fields/FormSection";
 import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
@@ -57,12 +65,6 @@ const EMPTY_GOODS: GoodsFields = { name: "", description: "", quantity: "", unit
 const TRANSPORT_OPTIONS = [
   { value: "Road", label: "Road" },
   { value: "RoadAndRail", label: "Road & Rail" },
-] as const;
-
-const TRIP_LEG_OPTIONS = [
-  { value: "DIRECT", label: "Direct" },
-  { value: "TO_HUB", label: "To Hub" },
-  { value: "FROM_HUB", label: "From Hub" },
 ] as const;
 
 const PRIORITY_OPTIONS = [
@@ -282,7 +284,11 @@ export default function LRForm({ orderId }: Props) {
     queryFn: lrLookups.railheadBranches,
     enabled: source === "FROM_ORDER",
   });
-  const trips = useQuery({ queryKey: lrLookupKeys.plannedTrips, queryFn: lrLookups.plannedTrips });
+  const trips = useQuery({
+    queryKey: lrLookupKeys.attachableTrips,
+    queryFn: lrLookups.attachableTrips,
+  });
+  const goodsMaster = useQuery({ queryKey: lrLookupKeys.goods, queryFn: lrLookups.goods });
   const orders = useQuery({
     queryKey: lrLookupKeys.confirmedTruckOrders,
     queryFn: lrLookups.confirmedTruckOrders,
@@ -297,7 +303,6 @@ export default function LRForm({ orderId }: Props) {
             source: "FROM_ORDER",
             orderId,
             transportType: "Road",
-            tripLegType: "DIRECT",
             priority: "Normal",
             isMarketVehicle: false,
             goods: [EMPTY_GOODS],
@@ -306,7 +311,6 @@ export default function LRForm({ orderId }: Props) {
             source: "INSTANT",
             priority: "Normal",
             isMarketVehicle: false,
-            tripLegType: "DIRECT",
             goods: [EMPTY_GOODS],
           },
   });
@@ -320,7 +324,6 @@ export default function LRForm({ orderId }: Props) {
     watchOriginBranchId,
     watchDestBranchId,
     watchTransportType,
-    watchTripLegType,
     watchIsMarket,
     watchPrimaryTripId,
     watchMarketVehicleNumber,
@@ -332,7 +335,6 @@ export default function LRForm({ orderId }: Props) {
       source === "INSTANT" ? "originBranchId" : "orderId",
       source === "INSTANT" ? "destinationBranchId" : "orderId",
       source === "FROM_ORDER" ? "transportType" : "orderId",
-      "tripLegType",
       "isMarketVehicle",
       "primaryTripId",
       "marketVehicleNumber",
@@ -343,7 +345,9 @@ export default function LRForm({ orderId }: Props) {
   const branchOptions = (branches.data ?? []).map((b) => ({ value: b.value, label: b.label }));
   const tripOptions = (trips.data ?? []).map((t) => ({
     value: t.id,
-    label: `${t.tripNumber} — ${t.tripName}`,
+    label: t.label,
+    hint: t.hint,
+    badge: t.badge,
   }));
   // Market vehicle number is stored as the plate string, so value === label.
   const marketVehicleOptions = (marketVehicles.data ?? []).map((v) => ({
@@ -379,8 +383,30 @@ export default function LRForm({ orderId }: Props) {
     ? (watchMarketVehicleNumber as string | undefined) || undefined
     : selectedTrip?.vehicle?.vehicleNumber;
 
-  const showHub = source === "FROM_ORDER" && (watchTransportType as string) === "RoadAndRail";
-  const showSecondaryTrip = watchTripLegType === "TO_HUB" || watchTripLegType === "FROM_HUB";
+  const showRailhead = source === "FROM_ORDER" && (watchTransportType as string) === "RoadAndRail";
+
+  const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
+    value: g.name,
+    hint: g.description ?? undefined,
+  }));
+
+  // When the typed goods name matches a master goods entry, prefill its
+  // description and weight — but never overwrite what the user already typed.
+  const prefillGoodsFromMaster = (idx: number, name: string) => {
+    const match = (goodsMaster.data ?? []).find(
+      (g) => g.name.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
+    if (!match) return;
+    const base = `goods.${idx}` as const;
+    const description = form.getValues(`${base}.description` as never) as unknown;
+    if (!description && match.description) {
+      form.setValue(`${base}.description` as never, match.description as never);
+    }
+    const weight = form.getValues(`${base}.weight` as never) as unknown;
+    if ((weight === "" || weight == null) && match.weight != null) {
+      form.setValue(`${base}.weight` as never, match.weight as never);
+    }
+  };
 
   const orderSummary: OrderSummary | null = orderRow
     ? {
@@ -474,73 +500,63 @@ export default function LRForm({ orderId }: Props) {
               )}
             </FormSection>
 
-            {/* Transport & Trip leg — compact, inline */}
-            <FormSection icon={<IconRoute size={16} />} title="Transport" columns={1}>
-              <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-                {source === "FROM_ORDER" && (
-                  <Controller
-                    name="transportType"
-                    control={form.control}
-                    render={({ field }) => (
-                      <div>
-                        <FieldLabel>Mode</FieldLabel>
-                        <Segmented
-                          value={(field.value as string) ?? "Road"}
-                          onChange={(v) => {
-                            field.onChange(v);
-                            if (v !== "RoadAndRail")
-                              form.setValue("hubId" as never, undefined as never);
-                          }}
-                          options={TRANSPORT_OPTIONS}
-                        />
-                        <FieldError message={errMsg(errors, "transportType")} />
-                      </div>
-                    )}
-                  />
+            {/* Transport */}
+            <FormSection icon={<IconRoute size={16} />} title="Transport" columns={3}>
+              {source === "FROM_ORDER" && (
+                <Controller
+                  name="transportType"
+                  control={form.control}
+                  render={({ field }) => (
+                    <div>
+                      <FieldLabel>Mode</FieldLabel>
+                      <Segmented
+                        value={(field.value as string) ?? "Road"}
+                        onChange={(v) => {
+                          field.onChange(v);
+                          if (v !== "RoadAndRail")
+                            form.setValue("railheadBranchId" as never, undefined as never);
+                        }}
+                        options={TRANSPORT_OPTIONS}
+                      />
+                      <FieldError message={errMsg(errors, "transportType")} />
+                    </div>
+                  )}
+                />
+              )}
+
+              <Controller
+                name="priority"
+                control={form.control}
+                render={({ field }) => (
+                  <div>
+                    <FieldLabel>Priority</FieldLabel>
+                    <Select
+                      value={(field.value as string) ?? "Normal"}
+                      onValueChange={field.onChange as (v: string) => void}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
+              />
 
-                <Controller
-                  name="tripLegType"
-                  control={form.control}
-                  render={({ field }) => (
-                    <div>
-                      <FieldLabel>Trip leg</FieldLabel>
-                      <Segmented
-                        value={(field.value as string) ?? "DIRECT"}
-                        onChange={field.onChange as (v: string) => void}
-                        options={TRIP_LEG_OPTIONS}
-                      />
-                      <FieldError message={errMsg(errors, "tripLegType")} />
-                    </div>
-                  )}
+              {showRailhead && (
+                <ComboboxField
+                  name="railheadBranchId"
+                  label="Railhead branch"
+                  required
+                  options={(railheads.data ?? []).map((b) => ({ value: b.value, label: b.label }))}
+                  emptyText="No railhead branches found"
                 />
-
-                <Controller
-                  name="priority"
-                  control={form.control}
-                  render={({ field }) => (
-                    <div>
-                      <FieldLabel>Priority</FieldLabel>
-                      <Segmented
-                        value={(field.value as string) ?? "Normal"}
-                        onChange={field.onChange as (v: string) => void}
-                        options={PRIORITY_OPTIONS}
-                      />
-                    </div>
-                  )}
-                />
-              </div>
-
-              {showHub && (
-                <div className="mt-1 max-w-sm">
-                  <ComboboxField
-                    name="hubId"
-                    label="Railhead hub"
-                    required
-                    options={(railheads.data ?? []).map((b) => ({ value: b.value, label: b.label }))}
-                    emptyText="No railhead branches found"
-                  />
-                </div>
               )}
             </FormSection>
 
@@ -565,45 +581,37 @@ export default function LRForm({ orderId }: Props) {
               />
 
               {!watchIsMarket && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 max-w-2xl">
                   <ComboboxField
                     name="primaryTripId"
-                    label={showSecondaryTrip ? "Trip · leg 1" : "Trip"}
+                    label="Trip"
+                    required
                     options={tripOptions}
-                    emptyText="No planned trips found"
+                    emptyText="No trips available — create a trip first"
                   />
-                  {showSecondaryTrip && (
-                    <ComboboxField
-                      name="secondaryTripId"
-                      label="Trip · leg 2"
-                      options={tripOptions}
-                      emptyText="No planned trips found"
-                    />
-                  )}
-                  <p className="col-span-full text-[11px] text-muted-foreground">
-                    Trip is optional — you can attach it now or later before finalising.
-                  </p>
                 </div>
               )}
 
               {watchIsMarket && (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <FieldLabel required>Vehicle number</FieldLabel>
-                    <Input
-                      {...form.register("marketVehicleNumber")}
-                      list="market-vehicle-list"
-                      placeholder="Search or type — e.g. MH12AB1234"
-                      className="h-9"
-                      autoComplete="off"
-                    />
-                    <datalist id="market-vehicle-list">
-                      {marketVehicleOptions.map((v) => (
-                        <option key={v.value} value={v.value} />
-                      ))}
-                    </datalist>
-                    <FieldError message={errMsg(errors, "marketVehicleNumber")} />
-                  </div>
+                  <Controller
+                    name="marketVehicleNumber"
+                    control={form.control}
+                    render={({ field }) => (
+                      <div>
+                        <FieldLabel required>Vehicle number</FieldLabel>
+                        <SuggestInput
+                          value={(field.value as string) ?? ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          suggestions={marketVehicleOptions.map((v) => ({ value: v.value }))}
+                          placeholder="Search or type — e.g. MH12AB1234"
+                          invalid={Boolean(errMsg(errors, "marketVehicleNumber"))}
+                        />
+                        <FieldError message={errMsg(errors, "marketVehicleNumber")} />
+                      </div>
+                    )}
+                  />
                   <ComboboxField
                     name="marketDriverName"
                     label="Driver"
@@ -636,7 +644,23 @@ export default function LRForm({ orderId }: Props) {
                       <div className="grid gap-3 sm:grid-cols-4">
                         <div className="sm:col-span-2">
                           <FieldLabel required>Goods name</FieldLabel>
-                          <Input {...form.register(`${base}.name`)} placeholder="e.g. Steel coils" className="h-9" />
+                          <Controller
+                            name={`${base}.name`}
+                            control={form.control}
+                            render={({ field }) => (
+                              <SuggestInput
+                                value={(field.value as string) ?? ""}
+                                onChange={(v) => {
+                                  field.onChange(v);
+                                  prefillGoodsFromMaster(idx, v);
+                                }}
+                                onBlur={field.onBlur}
+                                suggestions={goodsSuggestions}
+                                placeholder="Select from master or type — e.g. Steel coils"
+                                invalid={Boolean(gErrors?.name?.message)}
+                              />
+                            )}
+                          />
                           <FieldError message={gErrors?.name?.message} />
                         </div>
                         <div>

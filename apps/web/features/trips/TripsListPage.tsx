@@ -10,6 +10,7 @@ import { Button } from "@skerp/ui/components/button";
 import { IconPlus } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -32,10 +33,12 @@ export default function TripsListPage() {
 
   const [startTrip, setStartTrip] = React.useState<Trip | null>(null);
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
+  const [deleteTrip, setDeleteTrip] = React.useState<Trip | null>(null);
 
   const canCreate = useCan(PERMS.TRIP.CREATE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
+  const canDelete = useCan(PERMS.TRIP.DELETE);
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
@@ -85,6 +88,16 @@ export default function TripsListPage() {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
+  const remove = useMutation({
+    mutationFn: (id: string) => tripApi.delete(id),
+    onSuccess: () => {
+      toast.success("Trip deleted");
+      setDeleteTrip(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -110,8 +123,10 @@ export default function TripsListPage() {
         isLoading={trips.isLoading}
         canUpdate={canUpdate}
         canCancel={canCancel}
+        canDelete={canDelete}
         onStart={(t) => setStartTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
+        onDelete={(t) => setDeleteTrip(t)}
       />
 
       <StartTripDialog
@@ -134,6 +149,22 @@ export default function TripsListPage() {
         isPending={cancel.isPending}
         onConfirm={(reason) => {
           if (cancelTrip) cancel.mutate({ id: cancelTrip.id, reason });
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTrip)}
+        onOpenChange={(open) => {
+          if (!open && !remove.isPending) setDeleteTrip(null);
+        }}
+        title={`Delete trip ${deleteTrip?.tripNumber ?? ""}`}
+        description="This will permanently delete the trip. Use this only for wrong, duplicate, or cancelled trips."
+        confirmLabel="Delete trip"
+        pendingLabel="Deleting..."
+        destructive
+        isPending={remove.isPending}
+        onConfirm={() => {
+          if (deleteTrip) remove.mutate(deleteTrip.id);
         }}
       />
     </div>

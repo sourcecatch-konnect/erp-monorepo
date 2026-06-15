@@ -1,3 +1,4 @@
+import "./lib/bigint-json.js";
 import "./env.js";
 import express from "express";
 import { createServer } from "http";

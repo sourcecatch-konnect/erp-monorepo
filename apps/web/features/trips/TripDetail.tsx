@@ -7,9 +7,16 @@ import { toast } from "sonner";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import { IconArrowLeft, IconEdit, IconTruckDelivery, IconBan } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconBan,
+  IconEdit,
+  IconTrash,
+  IconTruckDelivery,
+} from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { formatMoney, formatDate, formatDateTime } from "@/lib/format";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -35,9 +42,11 @@ export default function TripDetail({ id }: { id: string }) {
   const queryClient = useQueryClient();
   const [startOpen, setStartOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
 
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
+  const canDelete = useCan(PERMS.TRIP.DELETE);
 
   const trip = useQuery({
     queryKey: tripKeys.detail(id),
@@ -69,6 +78,17 @@ export default function TripDetail({ id }: { id: string }) {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
+  const remove = useMutation({
+    mutationFn: () => tripApi.delete(id),
+    onSuccess: () => {
+      toast.success("Trip deleted");
+      setDeleteOpen(false);
+      queryClient.invalidateQueries({ queryKey: tripKeys.all });
+      router.push("/trips");
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
   if (trip.isLoading) {
     return (
       <div className="mx-auto max-w-4xl space-y-4 p-4 md:p-6">
@@ -89,6 +109,7 @@ export default function TripDetail({ id }: { id: string }) {
   const t = trip.data;
   const startable = t.status === "Planned";
   const editable = t.status === "Planned";
+  const deletable = t.status === "Planned" || t.status === "Cancelled";
   const cancellable = t.status === "Planned" || t.status === "InTransit";
   const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${
     t.route?.destinationCity?.name ?? "?"
@@ -128,6 +149,14 @@ export default function TripDetail({ id }: { id: string }) {
               onClick={() => setCancelOpen(true)}
             >
               <IconBan size={16} className="mr-1" /> Cancel
+            </Button>
+          ) : null}
+          {canDelete && deletable ? (
+            <Button
+              variant="destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <IconTrash size={16} className="mr-1" /> Delete
             </Button>
           ) : null}
         </div>
@@ -210,6 +239,18 @@ export default function TripDetail({ id }: { id: string }) {
         destructive
         isPending={cancel.isPending}
         onConfirm={(reason) => cancel.mutate(reason)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`Delete trip ${t.tripNumber}`}
+        description="This will permanently delete the trip. Use this only for wrong, duplicate, or cancelled trips."
+        confirmLabel="Delete trip"
+        pendingLabel="Deleting..."
+        destructive
+        isPending={remove.isPending}
+        onConfirm={() => remove.mutate()}
       />
     </div>
   );

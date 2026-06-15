@@ -44,6 +44,8 @@ export const tripListSelect = {
   tripName: true,
   status: true,
   tripType: true,
+  vehicleId: true,
+  driverId: true,
   onwardFreight: true,
   isTripEmpty: true,
   rakeDate: true,

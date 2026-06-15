@@ -64,6 +64,11 @@ export const tripApi = {
     const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/cancel`, body);
     return unwrapApiResponse(res);
   },
+
+  delete: async (id: string): Promise<Trip> => {
+    const res = await api.delete<ApiResponse<Trip>>(`/trips/${id}`);
+    return unwrapApiResponse(res);
+  },
 };
 
 /* ------------------------------------------------------------------ */

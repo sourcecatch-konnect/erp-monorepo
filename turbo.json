@@ -15,7 +15,8 @@
     "AWS_SECRET_ACCESS_KEY",
     "ATTACHMENT_MAX_SIZE_BYTES",
     "ATTACHMENT_ALLOWED_MIME",
-    "API_PROXY_TARGET"
+    "API_PROXY_TARGET",
+    "NEXT_PUBLIC_TEST_MODE"
   ],
   "tasks": {
     "build": {

@@ -206,6 +206,9 @@ model Branch {
   allowLR      Boolean @default(false)
   isRailHead   Boolean @default(false)
   allowReceipt Boolean @default(true)
+  // Marks the HO / hub branch (Jalgaon). Hub on an LR is derived from this,
+  // never picked. Exactly one branch should have this set.
+  isHeadOffice Boolean @default(false)
 
   companyId   String
   warehouseId String?
@@ -225,6 +228,7 @@ model Branch {
   originLRs      LorryReceipt[] @relation("LROrigin")
   destinationLRs LorryReceipt[] @relation("LRDestination")
   hubLRs         LorryReceipt[] @relation("LRHub")
+  railheadLRs    LorryReceipt[] @relation("LRRailhead")
 }
 
 model Warehouse {
@@ -241,8 +245,8 @@ model Warehouse {
   contactName  String?
   contactPhone String?
 
-  monthlyRent     Int?
-  securityDeposit Int?
+  monthlyRent     BigInt?
+  securityDeposit BigInt?
 
   agreementDate DateTime?
   expiryDate    DateTime?
@@ -538,10 +542,10 @@ model Customer {
   shortName               String?
   customerPAN             String?
   disallowNewLRBooking    Boolean @default(false)
-  interestRateLatePayment Int?
+  interestRateLatePayment BigInt?
   gstNo                   String?
-  creditLimit             Int?
-  tdsDeductionRate        Int?
+  creditLimit             BigInt?
+  tdsDeductionRate        BigInt?
 
   address String?
   country String?
@@ -623,7 +627,7 @@ model Route {
 
 model RateUnit {
   id        String       @id @default(cuid())
-  unitValue Int
+  unitValue BigInt
   unitType  RateUnitType
   isActive  Boolean      @default(true)
 
@@ -643,7 +647,7 @@ model RateMatrix {
   unitId        String?
   transportType RateTransportType @default(ROAD)
 
-  rate        Int
+  rate        BigInt
   transitDays Int?
   remarks     String?
 
@@ -699,7 +703,7 @@ model Driver {
   referenceContactNo     String?
   bloodGroup             String?
   otherDetails           String?
-  salary                 Int?
+  salary                 BigInt?
   panNo                  String?
   aadharCardNo           String?
   noTDSApplyAmount       Int?
@@ -748,8 +752,8 @@ model Labour {
 
   startDate DateTime?
   pan       String?
-  tdsAmount Int?
-  tdsRate   Int?
+  tdsAmount BigInt?
+  tdsRate   BigInt?
 
   type     WorkerType // Enum: Supervisor, Hamal, Mechanic
   branchId String
@@ -825,7 +829,7 @@ model RailwayFreightMatrix {
   wagonType         String
   sourceCityId      String
   destinationCityId String
-  freightAmount     Int
+  freightAmount     BigInt
 
   sourceCity      City     @relation("SourceCity", fields: [sourceCityId], references: [id])
   destinationCity City     @relation("DestinationCity", fields: [destinationCityId], references: [id])
@@ -859,7 +863,7 @@ model Pump {
 
   gstIn       String?
   pan         String?
-  creditLimit Int?
+  creditLimit BigInt?
 
   accountName    String?
   bankName       String?
@@ -913,7 +917,7 @@ model SparePart {
   categoryId String
   supplierId String
 
-  rate         Int
+  rate         BigInt
   minimumStock Int
   unit         String
 
@@ -946,7 +950,7 @@ model Order {
   contactPersonName     String?
   contactMobile         String?
   contactEmail          String?
-  bookingFreightAmount  Int?
+  bookingFreightAmount  BigInt?
   freightOverrideReason String?
   status                OrderStatus @default(PendingApproval)
   rejectionReason       String?
@@ -1119,9 +1123,17 @@ model LorryReceipt {
   marketDriverName    String?
 
   transportType LRTransportType @default(Road)
-  tripLegType   LRTripLegType   @default(DIRECT)
-  hubId         String?
-  hub           Branch?         @relation("LRHub", fields: [hubId], references: [id])
+
+  // Hub (always Jalgaon/HO): set ONLY by the "split at hub" action on a
+  // FINALISED LR. Never picked in a form. tripLegType becomes FROM_HUB then.
+  tripLegType LRTripLegType @default(DIRECT)
+  hubId       String?
+  hub         Branch?       @relation("LRHub", fields: [hubId], references: [id])
+
+  // Railhead: order LRs only, required when transportType = RoadAndRail.
+  // A user-picked branch where isRailHead = true. Unrelated to hub.
+  railheadBranchId String?
+  railheadBranch   Branch? @relation("LRRailhead", fields: [railheadBranchId], references: [id])
 
   consignorId String
   consigneeId String
@@ -1134,7 +1146,7 @@ model LorryReceipt {
   cancelReason String?
 
   invoiceNumber String?
-  invoiceAmount Int?
+  invoiceAmount BigInt?
   priority      LRPriority @default(Normal)
 
   finalisedAt   DateTime?
@@ -1188,7 +1200,7 @@ model LRCharge {
   lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
 
   chargeType  LRChargeType
-  amount      Int
+  amount      BigInt
   description String?
 
   createdAt DateTime @default(now())
@@ -1242,7 +1254,7 @@ model VehicleTrip {
   // Full-load trips carry one client. Required for LR trips, null for DC (rake).
   consignorId String?
 
-  onwardFreight Int
+  onwardFreight BigInt
   isTripEmpty   Boolean   @default(false)
   rakeDate      DateTime? // set when tripType = dc (rake/rail)
 

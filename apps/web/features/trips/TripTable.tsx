@@ -41,6 +41,7 @@ import {
   IconBan,
   IconEdit,
   IconDatabaseOff,
+  IconTrash,
 } from "@tabler/icons-react";
 
 import { formatMoney } from "@/lib/format";
@@ -49,8 +50,10 @@ import { TripStatusBadge, TRIP_STATUS_ORDER, TRIP_TYPE_LABELS } from "./trip-ui"
 export type TripRowActions = {
   onStart: (trip: Trip) => void;
   onCancel: (trip: Trip) => void;
+  onDelete: (trip: Trip) => void;
   canUpdate: boolean;
   canCancel: boolean;
+  canDelete: boolean;
 };
 
 type Props = TripRowActions & {
@@ -66,6 +69,8 @@ type Props = TripRowActions & {
   counts: Record<string, number>;
   isLoading?: boolean;
 };
+
+const DELETE_ALLOWED_STATUSES = ["Planned", "Cancelled"] as const;
 
 const routeLabel = (t: Trip) =>
   `${t.route?.sourceCity?.name ?? "?"} → ${t.route?.destinationCity?.name ?? "?"}`;
@@ -85,8 +90,10 @@ export default function TripTable(props: Props) {
     isLoading,
     onStart,
     onCancel,
+    onDelete,
     canUpdate,
     canCancel,
+    canDelete,
   } = props;
 
   const columns = React.useMemo<ColumnDef<Trip>[]>(
@@ -234,6 +241,9 @@ export default function TripTable(props: Props) {
                 const t = row.original;
                 const startable = t.status === "Planned";
                 const editable = t.status === "Planned";
+                const deletable = DELETE_ALLOWED_STATUSES.includes(
+                  t.status as (typeof DELETE_ALLOWED_STATUSES)[number]
+                );
                 const cancellable =
                   t.status === "Planned" || t.status === "InTransit";
                 return (
@@ -290,6 +300,18 @@ export default function TripTable(props: Props) {
                                   onClick={() => onCancel(t)}
                                 >
                                   <IconBan size={16} className="mr-2" /> Cancel
+                                </DropdownMenuItem>
+                              </>
+                            ) : null}
+                            {canDelete && deletable ? (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={() => onDelete(t)}
+                                >
+                                  <IconTrash size={16} className="mr-2" />{" "}
+                                  Delete
                                 </DropdownMenuItem>
                               </>
                             ) : null}
