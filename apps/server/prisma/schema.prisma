@@ -781,10 +781,19 @@ model City {
 }
 
 model Area {
-  id     String @id @default(cuid())
-  name   String
-  cityId String
-  city   City   @relation(fields: [cityId], references: [id])
+  id               String  @id @default(cuid())
+  name             String
+  cityId           String
+
+  googlePlaceId    String?
+  formattedAddress String?
+  latitude         Float?
+  longitude        Float?
+
+  city City @relation(fields: [cityId], references: [id])
+
+  @@unique([cityId, name])
+  @@unique([googlePlaceId])
 }
 
 model State {
