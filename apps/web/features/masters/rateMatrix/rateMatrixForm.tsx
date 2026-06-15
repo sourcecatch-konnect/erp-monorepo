@@ -156,36 +156,36 @@ export default function RateMatrixForm({
     setUnitError(null);
   }, [form, open, row]);
 
-const handleAddUnit = async () => {
-  const trimmedValue = unitValue.trim();
-  const value = Number(trimmedValue);
+  const handleAddUnit = async () => {
+    const trimmedValue = unitValue.trim();
+    const value = Number(trimmedValue);
 
-  if (!trimmedValue || Number.isNaN(value) || value <= 0) {
-    setUnitError("Please enter a valid unit value.");
-    return;
-  }
+    if (!trimmedValue || Number.isNaN(value) || value <= 0) {
+      setUnitError("Please enter a valid unit value.");
+      return;
+    }
 
-  const alreadyExists = rateUnits.some((unit) => {
-    const existingValue = Number(unit.unitValue);
-    const existingType = String(unit.unitType).trim().toUpperCase();
+    const alreadyExists = rateUnits.some((unit) => {
+      const existingValue = Number(unit.unitValue);
+      const existingType = String(unit.unitType).trim().toUpperCase();
 
-    return existingValue === value && existingType === unitType;
-  });
+      return existingValue === value && existingType === unitType;
+    });
 
-  if (alreadyExists) {
-    setUnitError(
-      `${value} ${unitType} already exists. Please select it from the dropdown instead of adding it again.`
-    );
-    return;
-  }
+    if (alreadyExists) {
+      setUnitError(
+        `${value} ${unitType} already exists. Please select it from the dropdown instead of adding it again.`
+      );
+      return;
+    }
 
-  setUnitError(null);
+    setUnitError(null);
 
-  await createUnitMutation.mutateAsync({
-    unitValue: value,
-    unitType,
-  });
-};
+    await createUnitMutation.mutateAsync({
+      unitValue: value,
+      unitType,
+    });
+  };
 
   return (
     <MasterFormDialog
@@ -251,155 +251,155 @@ const handleAddUnit = async () => {
         />
       </FormSection>
 
-{/* UNIT */}
-<div className="col-span-1 md:col-span-2">
-  <FormSection
-    icon={<IconPackage size={18} />}
-    title="Unit"
-    description="Select or add HQ/LQ unit for this rate"
-    columns={2}
-  >
-    <div className="col-span-full">
-      <SelectField
-        name="unitId"
-        label="Unit"
-        options={rateUnits.map((unit) => ({
-          label: `${unit.unitValue} ${unit.unitType}`,
-          value: unit.id,
-        }))}
-      />
-    </div>
-
-    {!showUnitFields ? (
-      <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              Additional unit setup
-            </p>
-            <p className="text-xs text-slate-500">
-              Add a new HQ/LQ unit if it is not available in the dropdown.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowUnitFields(true)}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
-          >
-            <IconPlus size={14} />
-            Add Unit
-          </button>
-        </div>
-      </div>
-    ) : (
-      <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              Add New Unit
-            </p>
-            <p className="text-xs text-slate-500">
-              Create a new HQ/LQ unit without leaving this form.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowUnitFields(false);
-              setUnitValue("");
-              setUnitType("HQ");
-              setUnitError(null);
-            }}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-          >
-            <IconX size={14} />
-            Remove
-          </button>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-600">
-              Unit Value
-            </label>
-
-            <input
-              value={unitValue}
-              onChange={(event) => {
-                setUnitValue(event.target.value);
-                setUnitError(null);
-              }}
-              placeholder="Enter unit value"
-              type="number"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+      {/* UNIT */}
+      <div className="col-span-1 md:col-span-2">
+        <FormSection
+          icon={<IconPackage size={18} />}
+          title="Unit"
+          description="Select or add HQ/LQ unit for this rate"
+          columns={2}
+        >
+          <div className="col-span-full">
+            <SelectField
+              name="unitId"
+              label="Unit"
+              options={rateUnits.map((unit) => ({
+                label: `${unit.unitValue} ${unit.unitType}`,
+                value: unit.id,
+              }))}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-600">
-              Unit Type
-            </label>
+          {!showUnitFields ? (
+            <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">
+                    Additional unit setup
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Add a new HQ/LQ unit if it is not available in the dropdown.
+                  </p>
+                </div>
 
-        <select
-  value={unitType}
-  onChange={(event) => {
-    setUnitType(event.target.value as UnitType);
-    setUnitError(null);
-  }}
-  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
->
-  <option value="HQ">HQ</option>
-  <option value="LQ">LQ</option>
-</select>
-          </div>
-        </div>
+                <button
+                  type="button"
+                  onClick={() => setShowUnitFields(true)}
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
+                >
+                  <IconPlus size={14} />
+                  Add Unit
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">
+                    Add New Unit
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Create a new HQ/LQ unit without leaving this form.
+                  </p>
+                </div>
 
-        {unitError ? (
-          <p className="mt-2 text-xs font-medium text-red-600">
-            {unitError}
-          </p>
-        ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUnitFields(false);
+                    setUnitValue("");
+                    setUnitType("HQ");
+                    setUnitError(null);
+                  }}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                >
+                  <IconX size={14} />
+                  Remove
+                </button>
+              </div>
 
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={handleAddUnit}
-            disabled={createUnitMutation.isPending}
-            className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {createUnitMutation.isPending ? "Adding..." : "Save Unit"}
-          </button>
-        </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-600">
+                    Unit Value
+                  </label>
+
+                  <input
+                    value={unitValue}
+                    onChange={(event) => {
+                      setUnitValue(event.target.value);
+                      setUnitError(null);
+                    }}
+                    placeholder="Enter unit value"
+                    type="number"
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-600">
+                    Unit Type
+                  </label>
+
+                  <select
+                    value={unitType}
+                    onChange={(event) => {
+                      setUnitType(event.target.value as UnitType);
+                      setUnitError(null);
+                    }}
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  >
+                    <option value="HQ">HQ</option>
+                    <option value="LQ">LQ</option>
+                  </select>
+                </div>
+              </div>
+
+              {unitError ? (
+                <p className="mt-2 text-xs font-medium text-red-600">
+                  {unitError}
+                </p>
+              ) : null}
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleAddUnit}
+                  disabled={createUnitMutation.isPending}
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {createUnitMutation.isPending ? "Adding..." : "Save Unit"}
+                </button>
+              </div>
+            </div>
+          )}
+        </FormSection>
       </div>
-    )}
-  </FormSection>
-</div>
 
-     <FormSection
-  icon={<IconCurrencyRupee size={18} />}
-  title="Pricing & Transit"
-  description="Rate and delivery timing details"
-  columns={2}
->
-  <IconTextField
-    name="rate"
-    label="Rate"
-    type="number"
-    placeholder="Enter freight rate"
-    icon={<IconCurrencyRupee size={16} />}
-    required
-  />
+      <FormSection
+        icon={<IconCurrencyRupee size={18} />}
+        title="Pricing & Transit"
+        description="Rate and delivery timing details"
+        columns={2}
+      >
+        <IconTextField
+          name="rate"
+          label="Rate"
+          type="number"
+          placeholder="Enter freight rate"
+          icon={<IconCurrencyRupee size={16} />}
+          required
+        />
 
-  <IconTextField
-    name="transitDays"
-    label="Transit Days"
-    type="number"
-    placeholder="e.g. 2 or 5 days"
-    icon={<IconClock size={16} />}
-  />
-</FormSection>
+        <IconTextField
+          name="transitDays"
+          label="Transit Days"
+          type="number"
+          placeholder="e.g. 2 or 5 days"
+          icon={<IconClock size={16} />}
+        />
+      </FormSection>
       <FormSection
         icon={<IconNote size={18} />}
         title="Remarks"

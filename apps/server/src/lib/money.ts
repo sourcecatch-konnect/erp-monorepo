@@ -4,9 +4,7 @@ export const rupeesToPaise = (value: number) => Math.round(value * 100);
 // both so DB reads and plain numbers convert through the same boundary.
 export const paiseToRupees = (value: bigint | number) => Number(value) / 100;
 
-export const convertRupeeFieldsToPaise = <
-  T extends Record<string, unknown>,
->(
+export const convertRupeeFieldsToPaise = <T extends Record<string, unknown>>(
   data: T,
   fields: string[],
 ): T => {

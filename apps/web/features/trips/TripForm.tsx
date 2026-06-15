@@ -69,7 +69,9 @@ export default function TripForm({ mode, trip }: Props) {
           routeId: trip.routeId,
           tripType: trip.tripType,
           consignorId: trip.consignorId ?? undefined,
-          onwardFreight: trip.onwardFreight ? Number(trip.onwardFreight) : undefined,
+          onwardFreight: trip.onwardFreight
+            ? Number(trip.onwardFreight)
+            : undefined,
           openingKm: trip.openingKm,
           isTripEmpty: trip.isTripEmpty,
           rakeDate: trip.rakeDate ?? undefined,
@@ -86,36 +88,44 @@ export default function TripForm({ mode, trip }: Props) {
       new Set(
         (activeTrips.data?.data ?? [])
           .filter((row) => row.id !== trip?.id)
-          .filter((row) => row.status === "Planned" || row.status === "InTransit")
-          .map((row) => row.vehicleId)
+          .filter(
+            (row) => row.status === "Planned" || row.status === "InTransit",
+          )
+          .map((row) => row.vehicleId),
       ),
-    [activeTrips.data?.data, trip?.id]
+    [activeTrips.data?.data, trip?.id],
   );
   const assignedDriverIds = React.useMemo(
     () =>
       new Set(
         (activeTrips.data?.data ?? [])
           .filter((row) => row.id !== trip?.id)
-          .filter((row) => row.status === "Planned" || row.status === "InTransit")
-          .map((row) => row.driverId)
+          .filter(
+            (row) => row.status === "Planned" || row.status === "InTransit",
+          )
+          .map((row) => row.driverId),
       ),
-    [activeTrips.data?.data, trip?.id]
+    [activeTrips.data?.data, trip?.id],
   );
   const vehicleOptions = React.useMemo(
     () =>
       (vehicles.data ?? []).map((option) => ({
         ...option,
-        badge: assignedVehicleIds.has(option.value) ? "Already assigned" : undefined,
+        badge: assignedVehicleIds.has(option.value)
+          ? "Already assigned"
+          : undefined,
       })),
-    [assignedVehicleIds, vehicles.data]
+    [assignedVehicleIds, vehicles.data],
   );
   const driverOptions = React.useMemo(
     () =>
       (drivers.data ?? []).map((option) => ({
         ...option,
-        badge: assignedDriverIds.has(option.value) ? "Already assigned" : undefined,
+        badge: assignedDriverIds.has(option.value)
+          ? "Already assigned"
+          : undefined,
       })),
-    [assignedDriverIds, drivers.data]
+    [assignedDriverIds, drivers.data],
   );
 
   const onSubmit = async (values: CreateTripBody) => {
@@ -152,7 +162,9 @@ export default function TripForm({ mode, trip }: Props) {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-lg font-semibold tracking-tight">
-                {mode === "edit" ? `Edit Trip ${trip?.tripNumber}` : "Create New Trip"}
+                {mode === "edit"
+                  ? `Edit Trip ${trip?.tripNumber}`
+                  : "Create New Trip"}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
                 {mode === "edit"
@@ -172,7 +184,11 @@ export default function TripForm({ mode, trip }: Props) {
         </div>
 
         <div className="grid gap-4">
-          <FormSection icon={<IconTruck size={16} />} title="Vehicle & Driver" columns={2}>
+          <FormSection
+            icon={<IconTruck size={16} />}
+            title="Vehicle & Driver"
+            columns={2}
+          >
             <ComboboxField
               name="vehicleId"
               label="Vehicle"
@@ -188,7 +204,11 @@ export default function TripForm({ mode, trip }: Props) {
             />
           </FormSection>
 
-          <FormSection icon={<IconRoute size={16} />} title="Trip Details" columns={2}>
+          <FormSection
+            icon={<IconRoute size={16} />}
+            title="Trip Details"
+            columns={2}
+          >
             <ComboboxField
               name="routeId"
               label="Route"

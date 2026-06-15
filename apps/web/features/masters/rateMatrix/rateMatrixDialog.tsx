@@ -65,16 +65,14 @@ export default function RateMatrixDetailDialog({
 
   const routeLabel =
     data?.route?.sourceCity?.name || data?.route?.destinationCity?.name
-      ? `${data?.route?.sourceCity?.name ?? "-"} to ${
-          data?.route?.destinationCity?.name ?? "-"
-        }`
+      ? `${data?.route?.sourceCity?.name ?? "-"} to ${data?.route?.destinationCity?.name ?? "-"
+      }`
       : "-";
 
   const agreementLabel =
     data?.agreement?.company?.name || data?.agreement?.client?.name
-      ? `${data?.agreement?.company?.name ?? "-"} - ${
-          data?.agreement?.client?.name ?? "-"
-        }`
+      ? `${data?.agreement?.company?.name ?? "-"} - ${data?.agreement?.client?.name ?? "-"
+      }`
       : "-";
 
   return (

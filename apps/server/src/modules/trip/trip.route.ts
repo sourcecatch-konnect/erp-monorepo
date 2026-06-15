@@ -30,6 +30,7 @@ import {
   tripListSelect,
   writeTripStatus,
 } from "./trip.service.js";
+import { Prisma, TripStatus } from "../../../generated/prisma/index.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -75,14 +76,16 @@ async function resolveTripName(
   // LR trips carry one client; DC trips are identified by their rake.
   let consignorId: string | null = null;
   let shortCode: string | null = null;
+  let consignorName: string | null = null;
   if (data.tripType === "lr") {
     const consignor = await db.customer.findUnique({
       where: { id: data.consignorId! },
-      select: { shortName: true },
+      select: { shortName: true, name: true },
     });
     if (!consignor) throw new BadRequestError("Client not found");
     consignorId = data.consignorId!;
     shortCode = consignor.shortName;
+    consignorName = consignor.name;
   }
 
   const tripName = buildTripName({
@@ -91,6 +94,7 @@ async function resolveTripName(
     truckNumber: vehicle.vehicleNumber,
     tripType: data.tripType,
     customerShortCode: shortCode,
+    consignorName: consignorName,
     rakeDate: data.rakeDate ?? null,
     at,
   });
@@ -118,8 +122,12 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
     ...(query.filter.unattached === "true"
       ? {
           status: "Planned",
-          primaryLRs: { none: { deletedAt: null, status: { not: "CANCELLED" } } },
-          secondaryLRs: { none: { deletedAt: null, status: { not: "CANCELLED" } } },
+          primaryLRs: {
+            none: { deletedAt: null, status: { not: "CANCELLED" } },
+          },
+          secondaryLRs: {
+            none: { deletedAt: null, status: { not: "CANCELLED" } },
+          },
         }
       : {}),
     ...(query.filter.tripType ? { tripType: query.filter.tripType } : {}),
@@ -127,7 +135,6 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
       ? { tripNumber: { contains: query.search, mode: "insensitive" } }
       : {}),
   };
-
   const [data, total] = await Promise.all([
     db.vehicleTrip.findMany({
       where,

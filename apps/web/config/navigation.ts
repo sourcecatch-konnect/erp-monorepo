@@ -64,6 +64,7 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/lorry-receipts",
         icon: IconReceipt2,
         permission: PERMS.LORRY_RECEIPT.VIEW,
+        disabled: true,
       },
       {
         title: "Operations",
@@ -105,6 +106,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       {
         title: "Masters",
+        href: "/masters",
         icon: IconDatabase,
         items: [
           {
