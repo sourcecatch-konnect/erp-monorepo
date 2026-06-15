@@ -176,8 +176,8 @@ export default function LRDetail({ id }: { id: string }) {
               data.tripLegType === "DIRECT"
                 ? "Direct"
                 : data.tripLegType === "TO_HUB"
-                ? "To Hub"
-                : "Split at hub"
+                ? "To hub"
+                : "Trip departure from hub"
             }
           />
           {data.railheadBranch && (

@@ -25,39 +25,55 @@ export const lorryReceiptApi = {
     if (query?.size !== undefined) params.size = query.size;
     if (query?.search) params.search = query.search;
     if (query?.sort) params.sort = query.sort;
-    if (query?.filter?.status) params["filter[status]"] = String(query.filter.status);
-    if (query?.filter?.source) params["filter[source]"] = String(query.filter.source);
-    if (query?.filter?.orderId) params["filter[orderId]"] = String(query.filter.orderId);
-    const res = await api.get<ApiResponse<LRListItem[]>>("/lorry-receipts", { params });
+    if (query?.filter?.status)
+      params["filter[status]"] = String(query.filter.status);
+    if (query?.filter?.source)
+      params["filter[source]"] = String(query.filter.source);
+    if (query?.filter?.orderId)
+      params["filter[orderId]"] = String(query.filter.orderId);
+    const res = await api.get<ApiResponse<LRListItem[]>>("/lorry-receipts", {
+      params,
+    });
     return unwrapListResponse(res);
   },
 
   statusCounts: async (): Promise<Record<string, number>> => {
     const res = await api.get<ApiResponse<Record<string, number>>>(
-      "/lorry-receipts/status-counts"
+      "/lorry-receipts/status-counts",
     );
     return unwrapApiResponse(res);
   },
 
   detail: async (id: string): Promise<LorryReceipt> => {
-    const res = await api.get<ApiResponse<LorryReceipt>>(`/lorry-receipts/${id}`);
+    const res = await api.get<ApiResponse<LorryReceipt>>(
+      `/lorry-receipts/${id}`,
+    );
     return unwrapApiResponse(res);
   },
 
   create: async (body: CreateLRBody): Promise<LorryReceipt> => {
-    const res = await api.post<ApiResponse<LorryReceipt>>("/lorry-receipts", body);
+    const res = await api.post<ApiResponse<LorryReceipt>>(
+      "/lorry-receipts",
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
-  update: async (id: string, body: UpdateLRBody & { version?: number }): Promise<LorryReceipt> => {
-    const res = await api.patch<ApiResponse<LorryReceipt>>(`/lorry-receipts/${id}`, body);
+  update: async (
+    id: string,
+    body: UpdateLRBody & { version?: number },
+  ): Promise<LorryReceipt> => {
+    const res = await api.patch<ApiResponse<LorryReceipt>>(
+      `/lorry-receipts/${id}`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
   finalise: async (id: string, body: FinaliseLRBody): Promise<LorryReceipt> => {
     const res = await api.post<ApiResponse<LorryReceipt>>(
       `/lorry-receipts/${id}/finalise`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -65,15 +81,18 @@ export const lorryReceiptApi = {
   cancel: async (id: string, body: CancelLRBody): Promise<LorryReceipt> => {
     const res = await api.post<ApiResponse<LorryReceipt>>(
       `/lorry-receipts/${id}/cancel`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
 
-  splitAtHub: async (id: string, body: SplitLRAtHubBody): Promise<LorryReceipt> => {
+  splitAtHub: async (
+    id: string,
+    body: SplitLRAtHubBody,
+  ): Promise<LorryReceipt> => {
     const res = await api.post<ApiResponse<LorryReceipt>>(
       `/lorry-receipts/${id}/split-at-hub`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -81,7 +100,7 @@ export const lorryReceiptApi = {
   addEwayBill: async (id: string, body: AddEwayBillBody): Promise<EwayBill> => {
     const res = await api.post<ApiResponse<EwayBill>>(
       `/lorry-receipts/${id}/eway-bills`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -100,7 +119,14 @@ type GoodsRow = {
   description?: string | null;
   weight?: number | null;
 };
-type BranchRow = { id: string; name: string; branchCode: string; shortCode?: string; isRailHead?: boolean };
+type BranchRow = {
+  id: string;
+  name: string;
+  branchCode: string;
+  shortCode?: string;
+  isRailHead?: boolean;
+  isHeadOffice?: boolean;
+};
 type TripRow = {
   id: string;
   tripNumber: string;
@@ -133,8 +159,13 @@ type OrderRow = {
 const LOOKUP_SIZE = { size: 1000 } as const;
 
 export type LROption = { value: string; label: string };
-export type LRTripOption = LROption & TripRow & { hint?: string; badge?: string };
-export type LRBranchOption = LROption & { branchCode: string; isRailHead: boolean };
+export type LRTripOption = LROption &
+  TripRow & { hint?: string; badge?: string };
+export type LRBranchOption = LROption & {
+  branchCode: string;
+  isRailHead: boolean;
+  isHeadOffice: boolean;
+};
 
 export const lrLookups = {
   vehicles: async (): Promise<(LROption & VehicleRow)[]> => {
@@ -195,11 +226,13 @@ export const lrLookups = {
     const res = await api.get<ApiResponse<BranchRow[]>>("/branches", {
       params: LOOKUP_SIZE,
     });
+
     return unwrapListResponse(res).data.map((b) => ({
       value: b.id,
       label: b.name,
       branchCode: b.branchCode,
       isRailHead: b.isRailHead ?? false,
+      isHeadOffice: b.isHeadOffice ?? false,
     }));
   },
 
@@ -212,6 +245,7 @@ export const lrLookups = {
       label: b.name,
       branchCode: b.branchCode,
       isRailHead: true,
+      isHeadOffice: b.isHeadOffice ?? false,
     }));
   },
 

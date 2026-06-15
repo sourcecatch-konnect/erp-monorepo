@@ -19,7 +19,6 @@ import { fyCodeFor } from "../_shared/doc-number.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
@@ -203,6 +202,9 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       input.source === "FROM_ORDER" ? input.consigneeId : input.consigneeId;
 
     const isMarketVehicle = input.isMarketVehicle ?? false;
+    const tripLegType =
+      input.source === "FROM_ORDER" ? (input.tripLegType ?? "DIRECT") : "DIRECT";
+    const hubId = tripLegType === "DIRECT" ? null : await resolveHubBranchId(tx);
 
     const created = await tx.lorryReceipt.create({
       data: {
@@ -212,10 +214,10 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
         orderId: input.source === "FROM_ORDER" ? input.orderId : null,
         originBranchId,
         destinationBranchId,
-        // Transport. Always created DIRECT — hub split happens later via the
-        // /split-at-hub action, never at creation.
+        // Instant LRs are direct. Order LRs can be direct, to-hub, or from-hub.
         transportType: input.source === "INSTANT" ? "Road" : (input.transportType ?? "Road"),
-        tripLegType: "DIRECT",
+        tripLegType,
+        hubId,
         // Railhead: order + RoadAndRail only. Unrelated to the Jalgaon hub.
         railheadBranchId:
           input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null,

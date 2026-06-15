@@ -109,8 +109,9 @@ export const createLRFromOrderSchema = z.object({
   railheadBranchId: z.string().trim().optional().transform((v) => v || undefined),
   priority: lrPrioritySchema.default("Normal"),
   isMarketVehicle: z.boolean().default(false),
-  // Created direct: a single trip. The leg-2 trip is attached later by the HO
-  // "split at hub" action, never at creation.
+  // Order LRs can be explicitly marked as direct, going to hub, or departing
+  // from hub at creation time.
+  tripLegType: lrTripLegTypeSchema.default("DIRECT"),
   primaryTripId: z.string().trim().optional().transform((v) => v || undefined),
   marketVehicleNumber: z.string().trim().optional().transform((v) => v || undefined),
   marketDriverName: z.string().trim().optional().transform((v) => v || undefined),
