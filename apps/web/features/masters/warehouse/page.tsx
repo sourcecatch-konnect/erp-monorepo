@@ -56,7 +56,7 @@ export default function WarehousePage() {
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [selected, setSelected] = React.useState<WarehouseWithRelations | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
@@ -69,12 +69,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   /* -----------------------------
      LIST
@@ -179,6 +179,7 @@ const warehouseDetail = useQuery({
       onSearchChange={setSearch}
       page={page}
       size={size}
+      onSizeChange={setSize}
       total={warehouses.data?.meta?.total ?? 0}
       onPageChange={setPage}
       selectedIds={selectedIds}

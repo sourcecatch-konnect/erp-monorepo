@@ -13,7 +13,7 @@ const router: Router = createCrudRouter({
   model: db.sparePart,
   createSchema: createSparePartSchema,
   updateSchema: updateSparePartSchema,
-  permissionKey: "masters.sparePart",
+  permissionKey: "masters.spare-part",
   hooks: {
     beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
     beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),

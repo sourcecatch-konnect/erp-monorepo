@@ -35,7 +35,7 @@ export default function WagonPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -47,12 +47,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const wagons = useQuery({
     queryKey: wagonKeys.list(listQuery),
@@ -124,6 +124,7 @@ const wagonDetail = useQuery({
       isLoading={wagons.isLoading}
       defaultHiddenColumns={[]}
       search={search}
+      onSizeChange={setSize}
       onSearchChange={setSearch}
       page={page}
       size={size}

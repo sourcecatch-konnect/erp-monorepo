@@ -50,7 +50,7 @@ type Props = {
   onAdd: () => void;
   onImport: (file: File) => Promise<void>;
   onExport: () => void;
-
+  onSizeChange: (size: number) => void;
   isImporting?: boolean;
   isExporting?: boolean;
 };
@@ -78,6 +78,7 @@ export default function AgreementRateMatrixAccordionList({
   size,
   total,
   onPageChange,
+  onSizeChange,
   routes,
   vehicleTypes,
   rateUnits,
@@ -287,8 +288,51 @@ export default function AgreementRateMatrixAccordionList({
   )}
 </div>
 
-      {/* Pagination */}
-    
+      <div className="flex items-center justify-between rounded-2xl border bg-card px-4 py-3 text-sm shadow-sm">
+  <div className="text-muted-foreground">
+    Page <span className="font-medium text-foreground">{page + 1}</span>{" "}
+    of <span className="font-medium text-foreground">{totalPages}</span>
+  </div>
+
+  <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
+      <span className="text-sm text-muted-foreground">Rows</span>
+
+      <select
+        value={size}
+        onChange={(event) => {
+          onSizeChange(Number(event.target.value));
+          onPageChange(0);
+        }}
+        className="h-9 rounded-md border bg-background px-2 text-sm"
+      >
+        <option value={10}>10</option>
+        <option value={25}>25</option>
+        <option value={30}>30</option>
+      </select>
+    </div>
+
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={!canGoPrev}
+      onClick={() => onPageChange(page - 1)}
+    >
+      Previous
+    </Button>
+
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={!canGoNext}
+      onClick={() => onPageChange(page + 1)}
+    >
+      Next
+    </Button>
+  </div>
+</div>
     </div>
   );
 }

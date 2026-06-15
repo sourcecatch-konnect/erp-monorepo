@@ -45,7 +45,7 @@ export default function SpareCategoryPage() {
     React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
 
   const debouncedSearch =
     useDebouncedValue(search);
@@ -63,12 +63,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
           }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const spareCategories = useQuery({
     queryKey:
@@ -176,6 +176,7 @@ const spareCategoryDetail = useQuery({
         spareCategories.data
           ?.meta?.total ?? 0
       }
+      onSizeChange={setSize}
       onPageChange={
         setPage
       }

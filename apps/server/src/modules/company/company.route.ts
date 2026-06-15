@@ -23,66 +23,73 @@ const router: Router = createCrudRouter({
       "companyTAN",
     ],
     defaultInclude: {
-      state: { select: { id: true, name: true } },
-      city: { select: { id: true, name: true } },
+  state: {
+    select: { id: true, name: true },
+  },
+  city: {
+    select: { id: true, name: true },
+  },
+agreements: {
+  select: {
+    id: true,
+    startDate: true,
+    agreementDate: true,
+    expiryDate: true,
 
-      agreements: {
-        select: {
-          id: true,
-          startDate: true,
-          agreementDate: true,
-          expiryDate: true,
+    client: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
 
+    city: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
 
-          client: {
-            select: { id: true, name: true },
-          },
-          city: {
-            select: { id: true, name: true },
-          },
-          branch: {
-            select: { id: true, name: true },
-          },
+    branch: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+    RateMatrix: {
+  select: {
+    id: true,
+    rate: true,
+    transitDays: true,
+    remarks: true,
 
-          RateMatrix: {
-            select: {
-              id: true,
-              startDate: true,
-              agreementDate: true,
-              expiryDate: true,
-              carryingCapacity: true,
-
-              client: {
-                select: { id: true, name: true },
-              },
-              city: {
-                select: { id: true, name: true },
-              },
-              branch: {
-                select: { id: true, name: true },
-              },
-
-              RateMatrix: {
-                select: {
-                  id: true,
-                  rate: true,
-                  transitDays: true,
-                  remarks: true,
-                  route: {
-                    select: {
-                      id: true,
-                      sourceCity: { select: { id: true, name: true } },
-                      destinationCity: { select: { id: true, name: true } },
-                    },
-                  },
-                },
-              },
-            },
+    route: {
+      select: {
+        id: true,
+        sourceCity: {
+          select: {
+            id: true,
+            name: true,
           },
         },
-        defaultOrderBy: { name: "asc" },
+        destinationCity: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    },
+  },
+},
+  },
+},
+  
 
-        blockDeleteIfExists: [
+        
+},
+defaultOrderBy: { name: "asc" },
+blockDeleteIfExists: [
           {
             model: db.branch,
             label: "Branches",
@@ -116,8 +123,6 @@ const router: Router = createCrudRouter({
             getName: (row: any) => row.clientId || row.id,
           },
         ],
-      },
-    },
   },
 });
 

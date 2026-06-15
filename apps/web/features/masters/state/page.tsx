@@ -28,7 +28,7 @@ export default function StatePage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 10;
+ const [size, setSize] = React.useState(30); 
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
     () => ({
@@ -39,12 +39,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page,size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const states = useQuery({
     queryKey: stateKeys.list(listQuery),
@@ -122,7 +122,9 @@ const bulkRemove = useMutation({
       onView={(row) => {
   setDetailId(row.id);
   setDetailOpen(true);
+  
 }}
+onSizeChange={setSize}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
       onImport={async (file) => {

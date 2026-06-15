@@ -5,6 +5,13 @@ import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
+import {
   IconChevronLeft,
   IconChevronRight,
   IconDownload,
@@ -43,6 +50,7 @@ type Props<T extends { id: string }> = {
   defaultHiddenColumns?: string[];
   renderExpandedRow?: (row: T) => React.ReactNode;
 expandOnRowClick?: boolean;
+onSizeChange?: (size: number) => void;
 };
 
 export default function MasterListPage<T extends { id: string }>({
@@ -55,6 +63,7 @@ export default function MasterListPage<T extends { id: string }>({
   page,
   size,
   onView,
+  onSizeChange,
   onRowClick,
   total,
   onPageChange,
@@ -141,28 +150,54 @@ export default function MasterListPage<T extends { id: string }>({
           />
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>
-            Page {page + 1} of {pageCount}
-          </span>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            onClick={() => onPageChange(page - 1)}
-            disabled={isFirstPage || isLoading}
-            aria-label="Previous page"
-          >
-            <IconChevronLeft size={16} />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            onClick={() => onPageChange(page + 1)}
-            disabled={isLastPage || isLoading}
-            aria-label="Next page"
-          >
-            <IconChevronRight size={16} />
-          </Button>
-        </div>
+  {onSizeChange ? (
+    <div className="flex items-center gap-2">
+      <span>Rows</span>
+
+      <Select
+        value={String(size)}
+        onValueChange={(value) => {
+          onSizeChange(Number(value));
+          onPageChange(0);
+        }}
+      >
+        <SelectTrigger className="h-8 w-[76px]">
+          <SelectValue />
+        </SelectTrigger>
+
+        <SelectContent>
+          <SelectItem value="10">10</SelectItem>
+          <SelectItem value="25">25</SelectItem>
+          <SelectItem value="30">30</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  ) : null}
+
+  <span>
+    Page {page + 1} of {pageCount}
+  </span>
+
+  <Button
+    size="icon-sm"
+    variant="outline"
+    onClick={() => onPageChange(page - 1)}
+    disabled={isFirstPage || isLoading}
+    aria-label="Previous page"
+  >
+    <IconChevronLeft size={16} />
+  </Button>
+
+  <Button
+    size="icon-sm"
+    variant="outline"
+    onClick={() => onPageChange(page + 1)}
+    disabled={isLastPage || isLoading}
+    aria-label="Next page"
+  >
+    <IconChevronRight size={16} />
+  </Button>
+</div>
       </div>
 
     <MasterTable

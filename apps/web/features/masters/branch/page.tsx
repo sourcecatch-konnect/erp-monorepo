@@ -60,7 +60,7 @@ export default function BranchPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
 
   const debouncedSearch = useDebouncedValue(search);
 
@@ -73,12 +73,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const branches = useQuery({
     queryKey: branchKeys.list(listQuery),
@@ -161,6 +161,7 @@ const bulkImport = useMutation({
       onPageChange={setPage}
       selectedIds={selectedIds}
       onSelectedIdsChange={setSelectedIds}
+      onSizeChange={setSize}
       defaultHiddenColumns={[
         "contactPhone",
         "email",

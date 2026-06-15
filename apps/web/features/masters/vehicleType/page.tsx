@@ -28,7 +28,7 @@ export default function VehicleTypePage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
 
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
@@ -38,10 +38,10 @@ export default function VehicleTypePage() {
       sort: "name:asc",
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
-  React.useEffect(() => setPage(0), [debouncedSearch]);
+  React.useEffect(() => setPage(0), [debouncedSearch, size]);
 
   const list = useQuery({
     queryKey: vehicleTypeKeys.list(listQuery),
@@ -92,6 +92,7 @@ export default function VehicleTypePage() {
       onPageChange={setPage}
       selectedIds={selectedIds}
       onSelectedIdsChange={setSelectedIds}
+      onSizeChange={setSize}
       onAdd={() => {
         setSelected(null);
         setOpen(true);

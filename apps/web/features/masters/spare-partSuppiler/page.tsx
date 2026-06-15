@@ -55,7 +55,7 @@ export default function SparePartSupplierPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -65,12 +65,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
       sort: "name:asc",
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const suppliers = useQuery({
     queryKey: sparePartSupplierKeys.list(listQuery),
@@ -166,6 +166,7 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         setSelected(row);
         setOpen(true);
       }}
+      onSizeChange={setSize}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
       onImport={async (file) => {

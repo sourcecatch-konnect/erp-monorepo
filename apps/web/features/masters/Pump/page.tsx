@@ -61,7 +61,7 @@ export default function PumpPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -73,12 +73,12 @@ export default function PumpPage() {
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   // LIST
   const pumps = useQuery({
@@ -182,6 +182,7 @@ const cities = useQuery({
         setSelected(row);
         setOpen(true);
       }}
+      onSizeChange={setSize}
       onView={(row) => {
         setDetailId(row.id);
         setDetailOpen(true);

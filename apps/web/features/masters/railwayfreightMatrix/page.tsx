@@ -54,7 +54,7 @@ export default function RailwayFreightPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -66,12 +66,12 @@ export default function RailwayFreightPage() {
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 const cities = useQuery({
   queryKey: cityKeys.list(),
   queryFn: () => cityApi.list(),
@@ -161,7 +161,7 @@ const wagons = useQuery({
       onPageChange={setPage}
       selectedIds={selectedIds}
       onSelectedIdsChange={setSelectedIds}
-
+      onSizeChange={setSize}
       onAdd={() => {
         setSelected(null);
         setOpen(true);

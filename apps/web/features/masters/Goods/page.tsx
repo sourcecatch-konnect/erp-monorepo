@@ -53,7 +53,7 @@ export default function GoodsPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(() => ({
@@ -63,11 +63,11 @@ export default function GoodsPage() {
     ...(debouncedSearch.trim()
       ? { search: debouncedSearch.trim() }
       : {}),
-  }), [debouncedSearch, page]);
+  }), [debouncedSearch, page, size]);
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   // ---------------- LIST ----------------
   const goods = useQuery({
@@ -155,6 +155,7 @@ const { create, update, remove } = useMasterMutations({
         setSelected(row);
         setOpen(true);
       }}
+      onSizeChange={setSize}
       onView={(row) => {
         setDetailId(row.id);
         setDetailOpen(true);

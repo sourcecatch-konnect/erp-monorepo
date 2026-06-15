@@ -21,6 +21,8 @@ import { agreementApi } from "./agreements.service";
 import { agreementColumns } from "./agreementsTable";
 import AgreementForm from "./agreementsForm";
 import { attachmentApi } from "@/features/attachments/attachment.client";
+import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
+import { ListQuery } from "../_shared/master-api";
 
 export default function AgreementPage() {
   const [open, setOpen] = React.useState(false);
@@ -30,7 +32,8 @@ const [page, setPage] = React.useState(0);
 const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailData, setDetailData] = React.useState<Agreement | null>(null);
-const size = 10;
+const debouncedSearch = useDebouncedValue(search);
+const [size, setSize] = React.useState(10);
   // ================= MASTER DATA =================
   const companies = useQuery({
     queryKey: ["companies"],
@@ -53,16 +56,21 @@ const size = 10;
   });
 
   // ================= AGREEMENTS =================
-const listQuery = React.useMemo(
-  () => ({
-    page,
-    size,
-    sort: "createdAt:desc",
-    ...(search.trim() ? { search: search.trim() } : {}),
-  }),
-  [page, size, search]
-);
 
+  const listQuery = React.useMemo<ListQuery>(
+    () => ({
+      page,
+      size,
+      sort: "createdAt:asc",
+      ...(debouncedSearch.trim()
+        ? { search: debouncedSearch.trim() }
+        : {}),
+    }),
+    [debouncedSearch, page, size]
+  );
+  React.useEffect(() => {
+  setPage(0);
+}, [debouncedSearch, size]);
 const agreements = useQuery({
   queryKey: agreementKeys.list(listQuery),
   queryFn: () => agreementApi.list(listQuery),
@@ -181,7 +189,7 @@ const handleSubmit = async (
     setSelected(row);
     setOpen(true);
   }}
-
+  onSizeChange={setSize}
   onDelete={(id) => remove.mutateAsync(id)}
 
   onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}

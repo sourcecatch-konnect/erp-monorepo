@@ -35,7 +35,7 @@ export default function RoutePage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo(
@@ -47,12 +47,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const routes = useQuery({
     queryKey: routeKeys.list(listQuery),
@@ -120,6 +120,7 @@ const routeDetail = useQuery({
       defaultHiddenColumns={["rateMatrixEntries", "LorryReceipt", "VehicleTrip"]}
       search={search}
       onSearchChange={setSearch}
+      onSizeChange={setSize}
       page={page}
          onView={(row) => {
   setDetailId(row.id);

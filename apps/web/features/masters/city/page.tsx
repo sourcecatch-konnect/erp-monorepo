@@ -30,7 +30,7 @@ export default function CityPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+ const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
     () => ({
@@ -41,12 +41,12 @@ export default function CityPage() {
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const cities = useQuery({
     queryKey: cityKeys.list(listQuery),
@@ -57,10 +57,19 @@ export default function CityPage() {
     queryFn: () => cityApi.detail(detailId!),
     enabled: Boolean(detailOpen && detailId),
   });
-  const states = useQuery({
-    queryKey: stateKeys.list(),
-    queryFn: () => stateApi.list(),
-  });
+const states = useQuery({
+  queryKey: stateKeys.list({
+    page: 0,
+    size: 35,
+    sort: "name:asc",
+  }),
+  queryFn: () =>
+    stateApi.list({
+      page: 0,
+      size: 35,
+      sort: "name:asc",
+    }),
+});
 
 const { create, update, remove } = useMasterMutations({
   api: cityApi,
@@ -141,6 +150,7 @@ const exportCities = useMutation({
       isBulkDeleting={bulkRemove.isPending}
       isImporting={bulkImport.isPending}
       isExporting={exportCities.isPending}
+      onSizeChange={setSize}
     >
       <CityForm
         open={open}

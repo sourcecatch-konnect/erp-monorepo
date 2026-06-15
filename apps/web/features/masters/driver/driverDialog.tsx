@@ -166,12 +166,12 @@ export default function DriverDetailDialog({
             <div>
               <DialogTitle>Driver Details</DialogTitle>
 
-              {!isLoading && data && (
-                <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
-                  <IconCircleCheckFilled size={10} />
-                  Active Profile
-                </div>
-              ) : null}
+             {!isLoading && data ? (
+  <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+    <IconCircleCheckFilled size={10} />
+    Active Profile
+  </div>
+) : null}
             </div>
           </div>
         </div>

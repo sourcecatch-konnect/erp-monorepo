@@ -56,7 +56,7 @@ export default function RateMatrixPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 const agreementListQuery = React.useMemo<ListQuery>(() => {
   return {
@@ -113,9 +113,9 @@ const routes = useQuery({
 
 
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch]);
+React.useEffect(() => {
+  setPage(0);
+}, [debouncedSearch, size]);
 
   /* ================= LIST ================= */
  
@@ -222,6 +222,7 @@ const parsedRows: CreateRateMatrixBody[] = rows.map((row) => ({
       size={size}
       total={agreements.data?.meta?.total ?? 0}
       onPageChange={setPage}
+      onSizeChange={setSize}
       onAdd={() => {
         setSelected(null);
         setOpen(true);

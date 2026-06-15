@@ -14,7 +14,8 @@ import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 
-import { IconBuildingCommunity } from "@tabler/icons-react";
+import { IconBuildingCommunity, IconInfoCircle } from "@tabler/icons-react";
+import { Alert, AlertDescription, AlertTitle } from "@skerp/ui/components/alert";
 
 type Props = {
   open: boolean;
@@ -72,7 +73,14 @@ const filteredCitySuggestions = isCreateMode
       (city) => city.stateId === selectedStateId
     ) ?? []
   : [];
+const exactCityMatch = filteredCitySuggestions.find(
+  (city) =>
+    city.name.trim().toLowerCase() ===
+    trimmedCityName.toLowerCase()
+);
 
+const showCityAlreadyExistsAlert =
+  Boolean(exactCityMatch && !row);
 const firstCitySuggestion = filteredCitySuggestions[0];
   React.useEffect(() => {
     if (!open) return;
@@ -103,28 +111,12 @@ const firstCitySuggestion = filteredCitySuggestions[0];
   title="City Information"
   description="Basic details of the city"
 >
-<div>
   <TextField<CreateCityBody>
     name="name"
     label="City Name"
     placeholder="e.g. Nagpur"
     required
   />
-
-{!row && firstCitySuggestion ? (
-  <p className="mt-1 text-xs text-muted-foreground">
-    Similar city found:{" "}
-    <button
-      type="button"
-      onClick={() => form.setValue("name", firstCitySuggestion.name)}
-      className="font-medium text-primary hover:underline"
-    >
-      {firstCitySuggestion.name}
-    </button>
-  </p>
-) : null}
-</div>
-
 
   <SelectField<CreateCityBody>
     name="stateId"
@@ -135,6 +127,21 @@ const firstCitySuggestion = filteredCitySuggestions[0];
     }))}
     required
   />
+
+  {showCityAlreadyExistsAlert && (
+    <div className="col-span-full">
+      <Alert className="border-amber-200 bg-amber-50">
+        <IconInfoCircle className="h-4 w-4 text-amber-600" />
+        <AlertTitle>
+          City already exists
+        </AlertTitle>
+        <AlertDescription>
+          <strong>{exactCityMatch?.name}</strong> is already
+          available in the selected state.
+        </AlertDescription>
+      </Alert>
+    </div>
+  )}
 </FormSection>
     </MasterFormDialog>
   );

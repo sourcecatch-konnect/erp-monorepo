@@ -59,7 +59,7 @@ export default function LabourPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+  const [size, setSize] = React.useState(10);
 
   const debouncedSearch = useDebouncedValue(search);
 
@@ -68,11 +68,11 @@ export default function LabourPage() {
     size,
     sort: "name:asc",
     ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
-  }), [debouncedSearch, page]);
+  }), [debouncedSearch, page, size]);
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   // ---------------- LIST ----------------
   const labours = useQuery({
@@ -156,6 +156,7 @@ export default function LabourPage() {
       onSearchChange={setSearch}
       page={page}
       size={size}
+      onSizeChange={setSize}
       total={labours.data?.meta?.total ?? 0}
       onPageChange={setPage}
       selectedIds={selectedIds}

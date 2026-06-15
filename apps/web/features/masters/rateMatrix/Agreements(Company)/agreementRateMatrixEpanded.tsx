@@ -58,7 +58,7 @@ export default function AgreementRateMatrixExpanded({
     queryFn: () =>
       rateMatrixApi.list({
         page: 0,
-        size: 1000,
+        size: 10,
         sort: "rate:asc",
         filter: {
           agreementId: agreement.id,
