@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   createTripSchema,
   updateTripSchema,
-  startTripSchema,
+  closeTripSchema,
   cancelTripSchema,
   tripTypeSchema,
   tripStatusSchema,
@@ -14,7 +14,7 @@ export type TripStatus = z.infer<typeof tripStatusSchema>;
 export type CreateTripBody = z.output<typeof createTripSchema>;
 export type CreateTripFormInput = z.input<typeof createTripSchema>;
 export type UpdateTripBody = z.output<typeof updateTripSchema>;
-export type StartTripBody = z.output<typeof startTripSchema>;
+export type CloseTripBody = z.output<typeof closeTripSchema>;
 export type CancelTripBody = z.output<typeof cancelTripSchema>;
 
 export type TripStatusHistoryRow = {
@@ -47,8 +47,8 @@ export type Trip = {
   onwardFreight: string;
   isTripEmpty: boolean;
   rakeDate: string | null;
+  openingKm: number;
   startDateTime: string | null;
-  openingKm: number | null;
   endDateTime: string | null;
   closingKm: number | null;
   cancelReason: string | null;

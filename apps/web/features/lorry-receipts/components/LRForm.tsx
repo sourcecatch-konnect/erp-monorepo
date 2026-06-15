@@ -59,6 +59,8 @@ import {
 
 type Props = {
   orderId?: string;
+  /** Instant LR launched from a Planned trip — preselects that trip. */
+  tripId?: string;
 };
 
 type GoodsFields = {
@@ -343,7 +345,7 @@ function ContextPanel({
 /* Main form                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function LRForm({ orderId }: Props) {
+export default function LRForm({ orderId, tripId }: Props) {
   const router = useRouter();
   const [discardOpen, setDiscardOpen] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -402,6 +404,7 @@ export default function LRForm({ orderId }: Props) {
             source: "INSTANT",
             priority: "Normal",
             isMarketVehicle: false,
+            primaryTripId: tripId,
             goods: [EMPTY_GOODS],
           },
   });

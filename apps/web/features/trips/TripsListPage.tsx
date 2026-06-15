@@ -19,7 +19,7 @@ import type { ListQuery } from "../masters/_shared/master-api";
 import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import TripTable from "./TripTable";
-import StartTripDialog from "./StartTripDialog";
+import CloseTripDialog from "./CloseTripDialog";
 
 export default function TripsListPage() {
   const router = useRouter();
@@ -31,14 +31,16 @@ export default function TripsListPage() {
   const debouncedSearch = useDebouncedValue(search);
   const size = 25;
 
-  const [startTrip, setStartTrip] = React.useState<Trip | null>(null);
+  const [closeTrip, setCloseTrip] = React.useState<Trip | null>(null);
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
   const [deleteTrip, setDeleteTrip] = React.useState<Trip | null>(null);
 
   const canCreate = useCan(PERMS.TRIP.CREATE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
+  const canClose = useCan(PERMS.TRIP.CLOSE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
+  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
@@ -66,12 +68,12 @@ export default function TripsListPage() {
     queryClient.invalidateQueries({ queryKey: tripKeys.all });
   };
 
-  const start = useMutation({
-    mutationFn: (vars: { id: string; openingKm: number }) =>
-      tripApi.start(vars.id, { openingKm: vars.openingKm }),
+  const close = useMutation({
+    mutationFn: (vars: { id: string; closingKm: number }) =>
+      tripApi.close(vars.id, { closingKm: vars.closingKm }),
     onSuccess: () => {
-      toast.success("Trip started");
-      setStartTrip(null);
+      toast.success("Trip closed");
+      setCloseTrip(null);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -121,21 +123,25 @@ export default function TripsListPage() {
         onStatusFilterChange={setStatusFilter}
         counts={counts.data ?? {}}
         isLoading={trips.isLoading}
+        canStart={canCreateLR}
+        canClose={canClose}
         canUpdate={canUpdate}
         canCancel={canCancel}
         canDelete={canDelete}
-        onStart={(t) => setStartTrip(t)}
+        onStart={(t) => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
+        onClose={(t) => setCloseTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
         onDelete={(t) => setDeleteTrip(t)}
       />
 
-      <StartTripDialog
-        open={Boolean(startTrip)}
-        onOpenChange={(open) => !open && setStartTrip(null)}
-        tripNumber={startTrip?.tripNumber}
-        isPending={start.isPending}
-        onConfirm={(openingKm) => {
-          if (startTrip) start.mutate({ id: startTrip.id, openingKm });
+      <CloseTripDialog
+        open={Boolean(closeTrip)}
+        onOpenChange={(open) => !open && setCloseTrip(null)}
+        tripNumber={closeTrip?.tripNumber}
+        openingKm={closeTrip?.openingKm}
+        isPending={close.isPending}
+        onConfirm={(closingKm) => {
+          if (closeTrip) close.mutate({ id: closeTrip.id, closingKm });
         }}
       />
 

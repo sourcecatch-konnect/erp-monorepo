@@ -4,7 +4,7 @@ import type {
   Trip,
   CreateTripBody,
   UpdateTripBody,
-  StartTripBody,
+  CloseTripBody,
   CancelTripBody,
 } from "@skerp/types";
 import {
@@ -55,8 +55,8 @@ export const tripApi = {
     return unwrapApiResponse(res);
   },
 
-  start: async (id: string, body: StartTripBody): Promise<Trip> => {
-    const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/start`, body);
+  close: async (id: string, body: CloseTripBody): Promise<Trip> => {
+    const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/close`, body);
     return unwrapApiResponse(res);
   },
 

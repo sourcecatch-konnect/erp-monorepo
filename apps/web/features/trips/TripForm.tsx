@@ -70,6 +70,7 @@ export default function TripForm({ mode, trip }: Props) {
           tripType: trip.tripType,
           consignorId: trip.consignorId ?? undefined,
           onwardFreight: trip.onwardFreight ? Number(trip.onwardFreight) : undefined,
+          openingKm: trip.openingKm,
           isTripEmpty: trip.isTripEmpty,
           rakeDate: trip.rakeDate ?? undefined,
         }
@@ -202,6 +203,15 @@ export default function TripForm({ mode, trip }: Props) {
               type="number"
               min={0}
               prefix="₹"
+              required
+            />
+
+            <IconTextField<CreateTripFormInput>
+              name="openingKm"
+              label="Opening KM"
+              placeholder="e.g. 145200"
+              type="number"
+              min={1}
               required
             />
 

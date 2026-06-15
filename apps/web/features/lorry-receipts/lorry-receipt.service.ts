@@ -257,8 +257,6 @@ export const lrLookups = {
     const statusLabel: Record<string, string> = {
       Planned: "Planned",
       InTransit: "In Transit",
-      AtDestination: "At Destination",
-      Completed: "Completed",
       Closed: "Closed",
     };
     return unwrapListResponse(res).data.map((t) => {

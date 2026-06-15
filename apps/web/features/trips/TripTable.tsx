@@ -38,6 +38,7 @@ import {
   IconEye,
   IconDotsVertical,
   IconTruckDelivery,
+  IconCircleCheck,
   IconBan,
   IconEdit,
   IconDatabaseOff,
@@ -48,9 +49,14 @@ import { formatMoney } from "@/lib/format";
 import { TripStatusBadge, TRIP_STATUS_ORDER, TRIP_TYPE_LABELS } from "./trip-ui";
 
 export type TripRowActions = {
+  /** Planned trip — routes to the Instant LR form to start (attach) the trip. */
   onStart: (trip: Trip) => void;
+  /** InTransit trip — opens the closing-KM dialog. */
+  onClose: (trip: Trip) => void;
   onCancel: (trip: Trip) => void;
   onDelete: (trip: Trip) => void;
+  canStart: boolean;
+  canClose: boolean;
   canUpdate: boolean;
   canCancel: boolean;
   canDelete: boolean;
@@ -89,8 +95,11 @@ export default function TripTable(props: Props) {
     counts,
     isLoading,
     onStart,
+    onClose,
     onCancel,
     onDelete,
+    canStart,
+    canClose,
     canUpdate,
     canCancel,
     canDelete,
@@ -240,6 +249,7 @@ export default function TripTable(props: Props) {
               table.getRowModel().rows.map((row) => {
                 const t = row.original;
                 const startable = t.status === "Planned";
+                const closeable = t.status === "InTransit";
                 const editable = t.status === "Planned";
                 const deletable = DELETE_ALLOWED_STATUSES.includes(
                   t.status as (typeof DELETE_ALLOWED_STATUSES)[number]
@@ -279,10 +289,16 @@ export default function TripTable(props: Props) {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {canUpdate && startable ? (
+                            {canStart && startable ? (
                               <DropdownMenuItem onClick={() => onStart(t)}>
                                 <IconTruckDelivery size={16} className="mr-2" />{" "}
                                 Start trip
+                              </DropdownMenuItem>
+                            ) : null}
+                            {canClose && closeable ? (
+                              <DropdownMenuItem onClick={() => onClose(t)}>
+                                <IconCircleCheck size={16} className="mr-2" />{" "}
+                                Close trip
                               </DropdownMenuItem>
                             ) : null}
                             {canUpdate && editable ? (

@@ -16,58 +16,63 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tripNumber?: string;
+  openingKm?: number;
   isPending?: boolean;
-  onConfirm: (openingKm: number) => void | Promise<void>;
+  onConfirm: (closingKm: number) => void | Promise<void>;
 };
 
-/** Captures the opening odometer reading when a Planned trip starts. */
-export default function StartTripDialog({
+/** Captures the closing odometer reading when an InTransit trip is closed. */
+export default function CloseTripDialog({
   open,
   onOpenChange,
   tripNumber,
+  openingKm,
   isPending,
   onConfirm,
 }: Props) {
-  const [openingKm, setOpeningKm] = React.useState("");
+  const [closingKm, setClosingKm] = React.useState("");
   const [touched, setTouched] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
-      setOpeningKm("");
+      setClosingKm("");
       setTouched(false);
     }
   }, [open]);
 
-  const value = Number(openingKm);
-  const invalid = !Number.isInteger(value) || value <= 0;
+  const value = Number(closingKm);
+  const belowOpening = openingKm !== undefined && value < openingKm;
+  const invalid = !Number.isInteger(value) || value <= 0 || belowOpening;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Start trip {tripNumber ?? ""}</DialogTitle>
+          <DialogTitle>Close trip {tripNumber ?? ""}</DialogTitle>
           <DialogDescription>
-            Record the vehicle&apos;s opening KM. The trip moves to In Transit and
-            the vehicle is marked On Trip.
+            Record the vehicle&apos;s closing KM. The trip moves to Closed and the
+            vehicle is marked Available.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-1.5">
           <label className="text-xs font-medium text-muted-foreground">
-            Opening KM <span className="text-red-600">*</span>
+            Closing KM <span className="text-red-600">*</span>
           </label>
           <Input
             type="number"
-            min={1}
-            value={openingKm}
-            onChange={(e) => setOpeningKm(e.target.value)}
+            min={openingKm ?? 1}
+            value={closingKm}
+            onChange={(e) => setClosingKm(e.target.value)}
             onBlur={() => setTouched(true)}
-            placeholder="e.g. 145200"
+            placeholder={openingKm ? `≥ ${openingKm}` : "e.g. 145800"}
             aria-invalid={touched && invalid}
           />
           {touched && invalid ? (
             <p className="text-xs text-red-600">
-              Enter a positive opening KM reading.
+              {belowOpening
+                ? `Closing KM can't be less than opening KM (${openingKm}).`
+                : "Enter a positive closing KM reading."}
             </p>
           ) : null}
         </div>
@@ -83,7 +88,7 @@ export default function StartTripDialog({
               if (!invalid) void onConfirm(value);
             }}
           >
-            {isPending ? "Starting…" : "Start trip"}
+            {isPending ? "Closing…" : "Close trip"}
           </Button>
         </DialogFooter>
       </DialogContent>

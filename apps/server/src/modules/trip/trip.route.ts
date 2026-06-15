@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   createTripSchema,
   updateTripSchema,
-  startTripSchema,
+  closeTripSchema,
   cancelTripSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
@@ -113,11 +113,11 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
             : query.filter.status,
         }
       : {}),
-    // Trips with no live LR attached (for the LR trip picker). Cancelled trips
-    // are excluded — you can't dispatch goods on a cancelled trip.
+    // Trips an LR can attach to (for the LR trip picker). One trip = one LR
+    // (full load), so only Planned trips with no live LR are attachable.
     ...(query.filter.unattached === "true"
       ? {
-          status: { not: "Cancelled" },
+          status: "Planned",
           primaryLRs: { none: { deletedAt: null, status: { not: "CANCELLED" } } },
           secondaryLRs: { none: { deletedAt: null, status: { not: "CANCELLED" } } },
         }
@@ -206,6 +206,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         routeId: data.routeId,
         consignorId,
         onwardFreight: data.onwardFreight,
+        openingKm: data.openingKm,
         isTripEmpty: data.isTripEmpty,
         rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
         fyCode,
@@ -266,6 +267,7 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
       routeId: data.routeId,
       consignorId,
       onwardFreight: data.onwardFreight,
+      openingKm: data.openingKm,
       isTripEmpty: data.isTripEmpty,
       rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
       updatedById: me,
@@ -278,43 +280,50 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Start -> InTransit                                                 */
+/* Close -> Closed                                                    */
 /* ------------------------------------------------------------------ */
-router.post("/:id/start", can(PERMS.TRIP.UPDATE), async (req, res) => {
+router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   const id = getParamId(req);
   const existing = await db.vehicleTrip.findFirst({
     where: { id, deletedAt: null },
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
-  if (existing.status !== "Planned") {
-    throw new BadRequestError("Only a Planned trip can be started");
+  if (existing.status !== "InTransit") {
+    throw new BadRequestError("Only an InTransit trip can be closed");
   }
 
-  const parsed = startTripSchema.safeParse(req.body);
+  const parsed = closeTripSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
-  const { openingKm, startDateTime } = parsed.data;
+  const { closingKm, endDateTime } = parsed.data;
+
+  if (closingKm < existing.openingKm) {
+    throw new BadRequestError(
+      `Closing KM (${closingKm}) cannot be less than opening KM (${existing.openingKm})`,
+    );
+  }
   const me = actorId(req);
 
   const updated = await db.$transaction(async (tx) => {
     const row = await tx.vehicleTrip.update({
       where: { id },
       data: {
-        status: "InTransit",
-        openingKm,
-        startDateTime: startDateTime ?? new Date(),
+        status: "Closed",
+        closingKm,
+        endDateTime: endDateTime ?? new Date(),
         updatedById: me,
         version: { increment: 1 },
       },
       include: tripInclude,
     });
+    // Release the vehicle now the trip is done.
     await tx.vehicle.update({
       where: { id: existing.vehicleId },
-      data: { status: "ON_TRIP" },
+      data: { status: "AVAILABLE" },
     });
-    await writeTripStatus(tx, id, me, "InTransit", "Trip started");
+    await writeTripStatus(tx, id, me, "Closed", "Trip closed");
     return row;
   });
 

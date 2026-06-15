@@ -1229,8 +1229,6 @@ model EwayBill {
 enum TripStatus {
   Planned
   InTransit
-  AtDestination
-  Completed
   Closed
   Cancelled
 }
@@ -1258,9 +1256,10 @@ model VehicleTrip {
   isTripEmpty   Boolean   @default(false)
   rakeDate      DateTime? // set when tripType = dc (rake/rail)
 
-  // Stamped on Start (InTransit) / Close — Close is a later phase.
+  // openingKm captured at creation. startDateTime stamped when the first LR
+  // attaches (Planned -> InTransit). endDateTime / closingKm stamped on Close.
+  openingKm     Int
   startDateTime DateTime?
-  openingKm     Int?
   endDateTime   DateTime?
   closingKm     Int?
 
