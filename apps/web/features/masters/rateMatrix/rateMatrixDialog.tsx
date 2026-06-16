@@ -232,33 +232,13 @@ export default function RateMatrixDetailDialog({
 
             <div className="mx-5 border-t" />
 
-            {/* SYSTEM INFO */}
-            <div className="px-5 py-5">
-              <SectionLabel>System Info</SectionLabel>
-
-              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                <Field
-                  label="Created at"
-                  value={formatDate(data?.createdAt)}
-                  icon={<IconCirclePlus size={12} />}
-                />
-
-                <Field
-                  label="Last updated"
-                  value={formatDate(data?.updatedAt)}
-                  icon={<IconClockEdit size={12} />}
-                />
-              </div>
-            </div>
+          
           </div>
         )}
 
         {/* FOOTER */}
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <IconClockEdit size={12} />
-            Updated {formatDate(data?.updatedAt)}
-          </span>
+        
 
           <button
             type="button"

@@ -17,24 +17,16 @@ const optionalNumber = (label: string) =>
     .union([z.string(), z.number()])
     .optional()
     .transform((v) => {
-      if (
-        v === "" ||
-        v === undefined ||
-        v === null
-      ) {
+      if (v === "" || v === undefined || v === null) {
         return undefined;
       }
 
       const num = Number(v);
 
-      return Number.isNaN(num)
-        ? undefined
-        : num;
+      return Number.isNaN(num) ? undefined : num;
     })
     .refine(
-      (v) =>
-        v === undefined ||
-        typeof v === "number",
+      (v) => v === undefined || typeof v === "number",
       {
         message: `${label} must be valid`,
       }
@@ -44,12 +36,62 @@ const optionalString = z
   .string()
   .trim()
   .optional()
-  .transform((v) =>
-    v ? v : undefined
-  );
+  .transform((v) => (v ? v : undefined));
 
 /* -----------------------------
-   RATE MATRIX
+   BASE SCHEMA (REUSABLE)
+------------------------------ */
+
+export const rateMatrixBaseSchema = z.object({
+  agreementId: z.string().min(1, "Please select agreement"),
+
+  routeId: z.string().min(1, "Please select route"),
+
+  vehicleTypeId: z.string().min(1, "Please select vehicle type"),
+
+  unitId: z.string().optional(),
+
+  transportType: z.enum(["RAIL_ROAD", "ROAD"], {
+    message: "Please select transport type",
+  }),
+
+  rate: requiredNumber("Rate").refine(
+    (v) => v > 0,
+    "Rate must be greater than 0"
+  ),
+
+  transitDays: optionalNumber("Transit days"),
+
+  remarks: optionalString,
+});
+
+/* -----------------------------
+   CREATE SCHEMA (WITH BUSINESS RULE)
+------------------------------ */
+
+export const createRateMatrixSchema =
+  rateMatrixBaseSchema.superRefine((data, ctx) => {
+    const isContainer =
+      data.vehicleTypeId?.toLowerCase() === "container";
+
+    if (isContainer && !data.unitId) {
+      ctx.addIssue({
+        path: ["unitId"],
+        code: z.ZodIssueCode.custom,
+        message: "Unit is required for Container vehicle type",
+      });
+    }
+  });
+
+/* -----------------------------
+   UPDATE SCHEMA
+------------------------------ */
+
+export const updateRateMatrixSchema =
+  rateMatrixBaseSchema.partial();
+
+/* -----------------------------
+   RATE MATRIX (DB SCHEMA)
 ------------------------------ */
 
 export const rateMatrixSchema = z.object({
@@ -76,32 +118,9 @@ export const rateMatrixSchema = z.object({
   updatedAt: z.date().optional(),
 });
 
-const rateMatrixFieldsSchema = z.object({
-  agreementId: z.string().min(1, "Please select agreement"),
-
-  routeId: z.string().min(1, "Please select route"),
-
-  vehicleTypeId: optionalString,
-
-  unitId: optionalString,
-
-  transportType: z.enum(["RAIL_ROAD", "ROAD"], {
-    message: "Please select transport type",
-  }),
-
-  rate: requiredNumber("Rate").refine(
-    (v) => v > 0,
-    "Rate must be greater than 0"
-  ),
-
-  transitDays: optionalNumber("Transit days"),
-
-  remarks: optionalString,
-});
-
-export const createRateMatrixSchema = rateMatrixFieldsSchema;
-
-export const updateRateMatrixSchema = rateMatrixFieldsSchema.partial();
+/* -----------------------------
+   RATE UNIT SCHEMA
+------------------------------ */
 
 export const rateUnitSchema = z.object({
   id: z.string(),
@@ -130,4 +149,5 @@ export const createRateUnitSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const updateRateUnitSchema = createRateUnitSchema.partial();
+export const updateRateUnitSchema =
+  createRateUnitSchema.partial();

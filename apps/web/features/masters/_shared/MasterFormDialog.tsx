@@ -121,6 +121,20 @@ if (!hasFieldErrors) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+          onInteractOutside={(event) => {
+      const target = event.target as HTMLElement;
+
+      if (target.closest(".pac-container")) {
+        event.preventDefault();
+      }
+    }}
+    onPointerDownOutside={(event) => {
+      const target = event.target as HTMLElement;
+
+      if (target.closest(".pac-container")) {
+        event.preventDefault();
+      }
+    }}
         className={`${widthClassByColumns[columns]} max-h-[90vh] overflow-hidden`}
       >
         <DialogHeader className="space-y-1">

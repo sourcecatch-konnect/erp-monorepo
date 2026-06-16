@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
@@ -103,13 +103,45 @@ export default function RateMatrixForm({
   const [unitType, setUnitType] = React.useState<UnitType>("HQ");
   const [unitError, setUnitError] = React.useState<string | null>(null);
 
-  const form = useForm<CreateRateMatrixFormInput, unknown, CreateRateMatrixBody>({
-    resolver: zodResolver(createRateMatrixSchema),
-    defaultValues,
-    mode: "onChange",
-    reValidateMode: "onChange",
-  });
+const form = useForm<CreateRateMatrixFormInput>({
+  resolver: zodResolver(createRateMatrixSchema),
+  defaultValues,
+  mode: "onChange",
+  reValidateMode: "onChange",
+});
+const selectedVehicleTypeId = form.watch("vehicleTypeId");
 
+const selectedVehicleType = React.useMemo(
+  () => vehicleTypes.find((v) => v.id === selectedVehicleTypeId),
+  [vehicleTypes, selectedVehicleTypeId]
+);
+
+const isContainerVehicle =
+  selectedVehicleType?.name?.trim().toLowerCase() === "container";
+const handleFormSubmit: SubmitHandler<CreateRateMatrixFormInput> =
+  async (data) => {
+    const payload: CreateRateMatrixBody = {
+      ...data,
+      rate: Number(data.rate),
+      transitDays: data.transitDays
+        ? Number(data.transitDays)
+        : undefined,
+    };
+
+    if (isContainerVehicle && !payload.unitId) {
+      form.setError("unitId", {
+        type: "manual",
+        message: "Unit is required for Container vehicle type",
+      });
+      return;
+    }
+
+    if (!isContainerVehicle) {
+      payload.unitId = undefined;
+    }
+
+    await onSubmit(payload);
+  };
   const createUnitMutation = useMutation({
     mutationFn: (data: { unitValue: number; unitType: UnitType }) =>
       rateMatrixApi.units.create(data),
@@ -156,6 +188,20 @@ export default function RateMatrixForm({
     setUnitError(null);
   }, [form, open, row]);
 
+React.useEffect(() => {
+  if (!isContainerVehicle) {
+    form.setValue("unitId", "", {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+
+    setShowUnitFields(false);
+    setUnitValue("");
+    setUnitType("HQ");
+    setUnitError(null);
+  }
+}, [isContainerVehicle, form]);
   const handleAddUnit = async () => {
     const trimmedValue = unitValue.trim();
     const value = Number(trimmedValue);
@@ -193,7 +239,7 @@ export default function RateMatrixForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Rate Matrix" : "Add Rate Matrix"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleFormSubmit}
       isSubmitting={isSubmitting}
       columns={2}
     >
@@ -205,6 +251,7 @@ export default function RateMatrixForm({
         <SelectField
           name="agreementId"
           label="Agreement"
+          required
           options={agreements.map((a) => ({
             label: a.name ?? a.id,
             value: a.id,
@@ -251,7 +298,7 @@ export default function RateMatrixForm({
         />
       </FormSection>
 
-      {/* UNIT */}
+     {isContainerVehicle ? (
       <div className="col-span-1 md:col-span-2">
         <FormSection
           icon={<IconPackage size={18} />}
@@ -376,7 +423,7 @@ export default function RateMatrixForm({
           )}
         </FormSection>
       </div>
-
+) : null}
       <FormSection
         icon={<IconCurrencyRupee size={18} />}
         title="Pricing & Transit"

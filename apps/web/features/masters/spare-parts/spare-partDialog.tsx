@@ -103,17 +103,35 @@ export default function SparePartDetailDialog({
                   icon={<IconPackage size={12} />}
                 />
 
-                <Field
-                  label="Rate"
-                  value={formatCurrencyFromPaise(data?.rate)}
-                  icon={<IconCurrencyRupee size={12} />}
-                />
+  <Field
+  label="Rate Per Unit"
+  value={
+    data?.rate != null
+      ? `${formatCurrencyFromPaise(data.rate)} / ${data?.unit ?? "unit"}`
+      : "-"
+  }
+  icon={<IconCurrencyRupee size={12} />}
+/>
 
-                <Field
-                  label="Minimum Stock"
-                  value={data?.minimumStock}
-                  icon={<IconStack size={12} />}
-                />
+<Field
+  label="Minimum Stock Qty"
+  value={
+    data?.minimumStock != null
+      ? `${data.minimumStock} ${data?.unit ?? ""}`
+      : "-"
+  }
+  icon={<IconStack size={12} />}
+/>
+
+<Field
+  label="Minimum Stock Amount"
+  value={
+    data?.rate != null && data?.minimumStock != null
+      ? formatCurrencyFromPaise(data.rate * data.minimumStock)
+      : "-"
+  }
+  icon={<IconCurrencyRupee size={12} />}
+/>
 
                 <Field
                   label="Supplier"

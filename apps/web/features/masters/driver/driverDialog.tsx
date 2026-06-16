@@ -253,18 +253,30 @@ export default function DriverDetailDialog({
             <div className="mx-5 border-t" />
 
             {/* Personal Information */}
-            <div className="px-5 py-5">
-              <SectionLabel>Personal Information</SectionLabel>
+            {/* Personal Information */}
+<div className="px-5 py-5">
+  <SectionLabel>Personal Information</SectionLabel>
 
-              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
-                <Field label="Full Name" value={display(data?.name)} icon={<IconUser size={12} />} />
-                <Field label="Driver Type" value={display(data?.type)} icon={<IconTruck size={12} />} />
-                <Field label="Blood Group" value={display(data?.bloodGroup)} icon={<IconShield size={12} />} />
-                <Field label="Birth Date" value={formatDate(data?.birthDate)} icon={<IconCalendar size={12} />} />
-                <Field label="Anniversary Date" value={formatDate(data?.anniversaryDate)} icon={<IconCalendar size={12} />} />
-      
-              </div>
-            </div>
+  <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
+    <Field
+      label="Full Name"
+      value={display(data?.name)}
+      icon={<IconUser size={12} />}
+    />
+
+    <Field
+      label="Birth Date"
+      value={formatDate(data?.birthDate)}
+      icon={<IconCalendar size={12} />}
+    />
+
+    <Field
+      label="Anniversary Date"
+      value={formatDate(data?.anniversaryDate)}
+      icon={<IconCalendar size={12} />}
+    />
+  </div>
+</div>
 
             <div className="mx-5 border-t" />
 

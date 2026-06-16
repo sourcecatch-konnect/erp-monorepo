@@ -9,7 +9,7 @@ const router: Router = createCrudRouter({
   updateSchema: updateAreaSchema,
   permissionKey: "masters.area",
   listOptions: {
-    searchableFields: ["name"],
+    searchableFields: ["name", "formattedAddress"],
     defaultInclude: {
       city: {
         select: {

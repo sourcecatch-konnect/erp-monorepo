@@ -142,6 +142,10 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+.pac-container {
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
 
 @theme {
   --animate-shimmer: shimmer 1.8s linear infinite;

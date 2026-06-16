@@ -26,7 +26,9 @@ import {
   IconTool,
   IconPackage,
   IconTruck,
+  IconCurrencyRupee,
 } from "@tabler/icons-react";
+import IconTextField from "../_shared/fields/IconTextField";
 
 type Props = {
   open: boolean;
@@ -133,7 +135,7 @@ export default function SparePartForm({
           options={partTypeOptions}
           required
         />
-
+  
         <TextField<CreateSparePartFormInput>
           name="unit"
           label="Unit"
@@ -165,29 +167,38 @@ export default function SparePartForm({
 
       {/* PRICING & STOCK */}
       <FormSection
-        icon={<IconTruck size={18} />}
-        title="Stock & Pricing"
-        description="Inventory and pricing details"
-      >
-        <NumberField<CreateSparePartFormInput>
-          control={form.control}
-          name="rate"
-          label="Rate"
-          min={0}
-          max={9999999}
-          step="0.01"
-          required
-        />
+  icon={<IconTruck size={18} />}
+  title="Stock & Pricing"
+  description="Inventory and pricing details"
+>
+  <IconTextField<CreateSparePartFormInput>
+    name="rate"
+    label="Rate"
+    type="number"
+    placeholder="e.g. 1250"
+    icon={<IconCurrencyRupee size={15} />}
+    min={0}
+    max={9999999}
+    step="0.01"
+    inputMode="decimal"
+    valueAsNumber
+    required
+  />
 
-        <NumberField<CreateSparePartFormInput>
-          control={form.control}
-          name="minimumStock"
-          label="Minimum Stock"
-          min={0}
-          max={999999}
-          required
-        />
-      </FormSection>
+  <IconTextField<CreateSparePartFormInput>
+    name="minimumStock"
+    label="Minimum Stock"
+    type="number"
+    placeholder="e.g. 10"
+    icon={<IconPackage size={15} />}
+    min={0}
+    max={999999}
+    step={1}
+    inputMode="numeric"
+    valueAsNumber
+    required
+  />
+</FormSection>
 
       {/* OPTIONS */}
       <FormSection

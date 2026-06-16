@@ -19,7 +19,7 @@ type Props<TFormValues extends FieldValues> = {
   max?: number;
   step?: number | string;
   disabled?: boolean;
-
+   valueAsNumber?: boolean;
   inputMode?: React.InputHTMLAttributes<HTMLInputElement>["inputMode"];
   pattern?: string;
 
@@ -46,6 +46,7 @@ export default function IconTextField<TFormValues extends FieldValues>({
   pattern,
   transformValue,
   onChangeTransform,
+valueAsNumber,
 }: Props<TFormValues>) {
   const {
     register,
@@ -98,12 +99,13 @@ export default function IconTextField<TFormValues extends FieldValues>({
             transformer ? "uppercase" : "",
           ].join(" ")}
           {...register(name, {
-            onChange: (event) => {
-              if (!transformer) return;
+  valueAsNumber,
+  onChange: (event) => {
+    if (!transformer) return;
 
-              event.target.value = transformer(event.target.value);
-            },
-          })}
+    event.target.value = transformer(event.target.value);
+  },
+})}
         />
       </div>
 
