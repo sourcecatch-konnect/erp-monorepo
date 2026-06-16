@@ -41,6 +41,8 @@ import {
   IconBan,
   IconEdit,
   IconDatabaseOff,
+  IconPlus,
+  IconDownload,
 } from "@tabler/icons-react";
 
 import { formatMoney } from "@/lib/format";
@@ -66,6 +68,9 @@ type Props = TripRowActions & {
   onStatusFilterChange: (value: string) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
+  canDownloadPdf: boolean;
+  onDownloadPdf: (trip: Trip) => void;
+
 };
 
 const routeLabel = (t: Trip) =>
@@ -89,6 +94,8 @@ export default function TripTable(props: Props) {
     onCancel,
     canUpdate,
     canCancel,
+    canDownloadPdf,
+    onDownloadPdf,
   } = props;
 
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -162,6 +169,7 @@ export default function TripTable(props: Props) {
 
   const pageCount = Math.max(1, Math.ceil(total / size));
   const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+  const hasAnyAction = canUpdate || canCancel || canDownloadPdf;
 
   return (
     <div className="w-full space-y-3">
@@ -204,9 +212,10 @@ export default function TripTable(props: Props) {
           onChange={(e) => onSearchChange(e.target.value)}
           className="pr-16"
         />
-
-        <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
-          Ctrl+F
+        <kbd className="pointer-events-none font-bold absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+          <span>Ctrl</span>
+          <IconPlus size={10} />
+          <span>F</span>
         </kbd>
       </div>
 
@@ -292,6 +301,7 @@ export default function TripTable(props: Props) {
                               size="icon-sm"
                               variant="ghost"
                               aria-label="Row actions"
+                              disabled={!hasAnyAction}
                             >
                               <IconDotsVertical size={16} />
                             </Button>
@@ -308,6 +318,11 @@ export default function TripTable(props: Props) {
                                 <Link href={`/trips/${t.id}/edit`}>
                                   <IconEdit size={16} className="mr-2" /> Edit
                                 </Link>
+                              </DropdownMenuItem>
+                            ) : null}
+                            {canDownloadPdf ? (
+                              <DropdownMenuItem onClick={() => onDownloadPdf(t)}>
+                                <IconDownload size={16} className="mr-2" /> Download PDF
                               </DropdownMenuItem>
                             ) : null}
                             {canCancel && cancellable ? (
