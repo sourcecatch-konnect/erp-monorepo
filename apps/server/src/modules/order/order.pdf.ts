@@ -1,11 +1,11 @@
 import { Prisma } from "../../../generated/prisma/index.js";
 import type { PdfDocument } from "../../templetes/pdf/pdf.type.js";
 import path from "node:path";
-// import { imageToBase64Src } from "../utils/image-to-base64.js";
 import { imageToBase64Src } from "../_shared/pdf.helper.js";
 import { paiseToRupees } from "../../lib/money.js";
+
 const headerImageSrc = imageToBase64Src(
-  path.resolve(process.cwd(), "public/SKT.jpg")
+  path.resolve(process.cwd(), "public/skt_logo.svg")
 );
 
 export const orderPdfInclude = {
@@ -17,11 +17,11 @@ export const orderPdfInclude = {
   city: true,
   createdBy: true,
   approvedBy: true,
-  items: {
-    include: {
-      goods: true,
-    },
-  },
+  // items: {
+  //   include: {
+  //     goods: true,
+  //   },
+  // },
 } satisfies Prisma.OrderInclude;
 
 export type OrderPdfData = Prisma.OrderGetPayload<{
@@ -30,51 +30,65 @@ export type OrderPdfData = Prisma.OrderGetPayload<{
 
 const formatDate = (date: Date | null | undefined) => {
   if (!date) return "-";
-  return date.toLocaleDateString("en-IN");
+  return new Date(date).toLocaleDateString("en-IN");
+};
+
+const formatDateTime = (date: Date | null | undefined) => {
+  if (!date) return "-";
+  return new Date(date).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 };
 
 const pdfValue = (value: unknown): string | number | null | undefined => {
   if (value === null || value === undefined || value === "") return undefined;
-
-  if (typeof value === "string" || typeof value === "number") {
-    return value;
-  }
-
+  if (typeof value === "string" || typeof value === "number") return value;
   return String(value);
 };
 
-const pdfMoneyFromPaise = (value: unknown): string | number | undefined => {
+const pdfMoneyFromPaise = (value: unknown): string | undefined => {
   if (value === null || value === undefined || value === "") return undefined;
 
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return undefined;
+  const amountInPaise = Number(value);
+  if (Number.isNaN(amountInPaise)) return undefined;
 
-  return paiseToRupees(amount);
+  const amount = paiseToRupees(amountInPaise);
+
+  return `${Number(amount).toLocaleString("en-IN")} /-`;
 };
+
 const userFullName = (
   user:
-    | {
-        firstName: string;
-        middleName?: string | null;
-        lastName: string;
-        userName?: string;
-      }
+    | { firstName: string; middleName?: string | null; lastName: string; userName?: string }
     | null
     | undefined
 ) => {
   if (!user) return undefined;
-
-  return [user.firstName, user.middleName, user.lastName]
-    .filter(Boolean)
-    .join(" ");
+  return [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ");
+};
+const readText = (row: unknown, key: string) => {
+  if (!row || typeof row !== "object") return undefined;
+  const value = (row as Record<string, unknown>)[key];
+  return pdfValue(value);
 };
 export const buildOrderPdfDocument = (order: OrderPdfData): PdfDocument => {
+  const showApprovalDetails = order.status !== "PendingApproval";
   return {
     layout: "compact-form",
 
     title: "Order Details",
     documentNo: order.orderNumber,
-    date: new Date(order.createdAt).toLocaleDateString("en-IN"),
+    date: formatDate(order.createdAt),
+    status: order.status,
+
+    // Meta row below the last table
+    createdAt: formatDateTime(order.createdAt),
+    createdBy: userFullName(order.createdBy) ?? undefined,
 
     company: {
       headerImageSrc,
@@ -96,73 +110,86 @@ export const buildOrderPdfDocument = (order: OrderPdfData): PdfDocument => {
     ],
 
     sections: [
+      // ── Consignor / Consignee ─────────────────────────────────────────
       {
-        title: "Customer Details",
-        columns: 2,
-        fields: [
-          { label: "Customer Name", value: pdfValue(order.customer?.name) },
-          { label: "Contact Person", value: pdfValue(order.contactPersonName) },
-          { label: "Contact Mobile", value: pdfValue(order.contactMobile) },
-          { label: "Contact Email", value: pdfValue(order.contactEmail) },
-        ],
+        title: "Consignor & Consignee",
+        variant: "consignor-consignee",
+        fields: [], // required by type; unused in this variant
+        consignor: {
+          name: pdfValue(order.customer?.name),
+          address:
+            readText(order.customer, "address") ??
+            readText(order.customer, "billingAddress") ??
+            readText(order.customer, "registeredAddress") ??
+            pdfValue(order.pickupAddressOverride),
+          gstin:
+            readText(order.customer, "gstNo") ??
+            readText(order.customer, "gstin"),
+          extra: [
+            { label: "From Branch", value: pdfValue(order.fromBranch?.name) },
+          ],
+        },
+        consignee: {
+          name: pdfValue(order.customerLocation?.name ?? order.customer?.name),
+          address:
+            readText(order.customerLocation, "address") ??
+            readText(order.customerLocation, "deliveryAddress") ??
+            pdfValue(order.city?.name),
+          gstin:
+            readText(order.customerLocation, "gstNo") ??
+            readText(order.customerLocation, "gstin"),
+          extra: [
+            { label: "To Branch", value: pdfValue(order.toBranch?.name) },
+            { label: "Delivery At", value: pdfValue(order.customerLocation?.name ?? order.city?.name) },
+            { label: "By", value: pdfValue(order.orderType) },
+          ],
+        },
       },
+
+      // ── Approval Details (conditional) ───────────────────────────────
+      ...(showApprovalDetails
+        ? [
+          {
+            title: "Approval Details",
+            columns: 2 as const,
+            fields: [
+              { label: "Approved By", value: pdfValue(userFullName(order.approvedBy)) },
+              { label: "Approved At", value: formatDate(order.approvedAt) },
+              { label: "Rejection Reason", value: pdfValue(order.rejectionReason) },
+              { label: "Cancel Reason", value: pdfValue(order.cancelReason) },
+            ],
+          },
+        ]
+        : []),
+
+      // ── Order Details ─────────────────────────────────────────────────
       {
         title: "Order Details",
-        columns: 3,
+        columns: 2,
         fields: [
           { label: "Order No", value: pdfValue(order.orderNumber) },
           { label: "Order Type", value: pdfValue(order.orderType) },
-          { label: "Status", value: pdfValue(order.status) },
-          { label: "Financial Year", value: pdfValue(order.fyCode) },
           { label: "Pickup Date", value: formatDate(order.pickupDate) },
           { label: "Created Date", value: formatDate(order.createdAt) },
+          { label: "Truck Quantity", value: pdfValue(order.truckQuantity) },
+          { label: "Booking Freight", value: pdfMoneyFromPaise(order.bookingFreightAmount) },
+          { label: "Override Reason", value: pdfValue(order.freightOverrideReason) },
         ],
       },
-      {
-        title: "Route Details",
-        columns: 2,
-        fields: [
-          { label: "From Branch", value: pdfValue(order.fromBranch?.name) },
-          { label: "To Branch", value: pdfValue(order.toBranch?.name) },
-          { label: "City", value: pdfValue(order.city?.name) },
-          { label: "Pickup Address", value: pdfValue(order.pickupAddressOverride) },
-        ],
-      },
+
+      // ── Vehicle / Freight ─────────────────────────────────────────────
       {
         title: "Vehicle / Freight Details",
         columns: 2,
         fields: [
           { label: "Vehicle Type", value: pdfValue(order.vehicleType?.name) },
           { label: "Truck Quantity", value: pdfValue(order.truckQuantity) },
-          { label: "Booking Freight Amount", value: pdfMoneyFromPaise(order.bookingFreightAmount) },
-          { label: "Freight Override Reason", value: pdfValue(order.freightOverrideReason) },
-        ],
-      },
-      {
-        title: "Approval Details",
-        columns: 2,
-        fields: [
-          { label: "Created By", value: pdfValue(userFullName(order.createdBy)) },
-          { label: "Approved By", value: pdfValue(userFullName(order.approvedBy)) },
-          { label: "Approved At", value: formatDate(order.approvedAt) },
-          { label: "Rejection Reason", value: pdfValue(order.rejectionReason) },
-          { label: "Cancel Reason", value: pdfValue(order.cancelReason) },
+          { label: "Booking Freight", value: pdfMoneyFromPaise(order.bookingFreightAmount) },
+          { label: "Override Reason", value: pdfValue(order.freightOverrideReason) },
         ],
       },
     ],
 
-    tables: [
-      {
-        title: "Goods Details",
-        columns: ["Goods", "Quantity", "Unit", "Weight"],
-        rows: order.items.map((item) => [
-          pdfValue(item.goods?.name),
-          pdfValue(item.quantity),
-          pdfValue(item.unit),
-          pdfValue(item.weight),
-        ]),
-      },
-    ],
 
     summary: [
       {
@@ -171,12 +198,6 @@ export const buildOrderPdfDocument = (order: OrderPdfData): PdfDocument => {
       },
     ],
 
-    notes: [
-      order.specialInstructions
-        ? `Special Instructions: ${order.specialInstructions}`
-        : "This is a system-generated document.",
-    ],
-
-  
+    notes: order.specialInstructions ? [`Special Instructions: ${order.specialInstructions}`] : [],
   };
 };

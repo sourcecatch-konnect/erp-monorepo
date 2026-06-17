@@ -71,7 +71,7 @@ export default function TripsListPage() {
   const counts = useQuery({
     queryKey: tripKeys.statusCounts,
     queryFn: tripApi.statusCounts,
-    staleTime: 60_000,
+    staleTime: 0,
   });
 
   const invalidate = () => {
@@ -100,6 +100,14 @@ export default function TripsListPage() {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
+  const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
+  const handleDownloadPdf = async (trip: Trip) => {
+    try {
+      await tripApi.downloadPdf(trip.id);
+    } catch {
+      toast.error("Failed to download PDF");
+    }
+  };
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -128,12 +136,15 @@ export default function TripsListPage() {
         canCancel={canCancel}
         onStart={(t) => setStartTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
+        canDownloadPdf={canDownloadPdf}
+        onDownloadPdf={handleDownloadPdf}
       />
 
       <StartTripDialog
         open={Boolean(startTrip)}
         onOpenChange={(open) => !open && setStartTrip(null)}
         tripNumber={startTrip?.tripNumber}
+        vehicleId={startTrip?.vehicleId}
         isPending={start.isPending}
         onConfirm={(openingKm) => {
           if (startTrip) start.mutate({ id: startTrip.id, openingKm });

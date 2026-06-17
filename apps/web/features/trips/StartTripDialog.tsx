@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -11,12 +12,14 @@ import {
 } from "@skerp/ui/components/dialog";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
-
+import { api } from "@/lib/api";
+import type { ApiResponse, Vehicle } from "@skerp/types";
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tripNumber?: string;
   isPending?: boolean;
+  vehicleId?: string;
   onConfirm: (openingKm: number) => void | Promise<void>;
 };
 
@@ -26,6 +29,7 @@ export default function StartTripDialog({
   onOpenChange,
   tripNumber,
   isPending,
+  vehicleId,
   onConfirm,
 }: Props) {
   const [openingKm, setOpeningKm] = React.useState("");
@@ -37,6 +41,19 @@ export default function StartTripDialog({
       setTouched(false);
     }
   }, [open]);
+
+  const vehicleQuery = useQuery({
+    queryKey: ["vehicle-current-km", vehicleId],
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<Vehicle>>(`/vehicles/${vehicleId}`);
+      return res.data.data;
+    },
+    enabled: open && Boolean(vehicleId),
+    staleTime: 0,
+    gcTime: 0,
+  });
+  console.log("vehicle data:", vehicleQuery.data, "currentKM:", vehicleQuery.data?.currentKM);
+  const currentKm = vehicleQuery.data?.currentKM;
 
   const value = Number(openingKm);
   const invalid = !Number.isInteger(value) || value <= 0;
@@ -53,16 +70,36 @@ export default function StartTripDialog({
         </DialogHeader>
 
         <div className="grid gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground">
-            Opening KM <span className="text-red-600">*</span>
-          </label>
+          <div className="flex items-baseline justify-between">
+            <label className="text-xs font-medium text-muted-foreground">
+              Opening KM <span className="text-red-600">*</span>
+            </label>
+            {/* Current KM hint */}
+            {vehicleQuery.isLoading ? (
+              <span className="text-xs text-muted-foreground animate-pulse">
+                Fetching current KM…
+              </span>
+            ) : currentKm != null ? (
+              <span className="text-xs text-muted-foreground">
+                Current KM —{" "}
+                <span className="font-semibold text-foreground">
+                  {Number(currentKm).toLocaleString("en-IN")} km
+                </span>
+              </span>
+            ) : null}
+          </div>
+
           <Input
             type="number"
             min={1}
             value={openingKm}
             onChange={(e) => setOpeningKm(e.target.value)}
             onBlur={() => setTouched(true)}
-            placeholder="e.g. 145200"
+            placeholder={
+              currentKm != null
+                ? `e.g. ${Number(currentKm).toLocaleString("en-IN")}`
+                : "e.g. 145200"
+            }
             aria-invalid={touched && invalid}
           />
           {touched && invalid ? (

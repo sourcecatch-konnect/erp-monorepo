@@ -108,6 +108,16 @@ export const orderApi = {
     );
     return unwrapApiResponse(res);
   },
+  downloadPdf: async (identifier: string): Promise<Blob> => {
+    const res = await api.get(
+      `/orders/${encodeOrderIdentifier(identifier)}/pdf`,
+      {
+        responseType: "blob",
+      }
+    );
+
+    return res.data;
+  },
 
   create: async (body: CreateOrderBody): Promise<Order> => {
     const res = await api.post<ApiResponse<Order>>("/orders", body);
@@ -167,12 +177,12 @@ export const orderApi = {
     return unwrapApiResponse(res);
   },
   delete: async (identifier: string): Promise<Order> => {
-  const res = await api.delete<ApiResponse<Order>>(
-    `/orders/${encodeOrderIdentifier(identifier)}`
-  );
+    const res = await api.delete<ApiResponse<Order>>(
+      `/orders/${encodeOrderIdentifier(identifier)}`
+    );
 
-  return unwrapApiResponse(res);
-},
+    return unwrapApiResponse(res);
+  },
 };
 /* ------------------------------------------------------------------ */
 /* Lookups for the order form (reuse master list endpoints)           */
@@ -203,15 +213,15 @@ export const orderLookups = {
     });
     return unwrapListResponse(res).data;
   },
-routes: async (): Promise<Route[]> => {
-  const res = await api.get<ApiResponse<Route[]>>("/routes", {
-    params: {
-      size: 1000,
-    },
-  });
+  routes: async (): Promise<Route[]> => {
+    const res = await api.get<ApiResponse<Route[]>>("/routes", {
+      params: {
+        size: 1000,
+      },
+    });
 
-  return unwrapListResponse(res).data;
-},
+    return unwrapListResponse(res).data;
+  },
   vehicleTypes: async (): Promise<VehicleTypeRow[]> => {
     const res = await api.get<ApiResponse<VehicleTypeRow[]>>("/vehicle-types", {
       params: LOOKUP_QUERY,

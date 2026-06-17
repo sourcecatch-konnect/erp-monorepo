@@ -25,6 +25,9 @@ import {
   IconCopy,
   IconMail,
   IconAlertCircle,
+  IconCircleCheck,
+  IconClock,
+  IconCircleDot,
   IconLoader2,
 } from "@tabler/icons-react";
 import { useCan } from "@/features/auth";
@@ -139,15 +142,16 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
       setIsDownloadingPdf(true);
       const encodedId = encodeURIComponent(orderIdOrNumber);
 
-      const response = await fetch(
-        `http://localhost:5000/orders/${encodedId}/pdf`,
-        {
-          method: "GET",
-          credentials: "include",
-        },
-      );
-      console.log(response);
+      const API_URL =
+        process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+
+      const response = await fetch(`${API_URL}/orders/${encodedId}/pdf`, {
+        method: "GET",
+        credentials: "include",
+      });
       if (!response.ok) {
+        const text = await response.text();
+        console.log("PDF error:", response.status, text);
         throw new Error("Failed to download PDF");
       }
 
@@ -387,8 +391,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                       value={
                         <span
                           className={`font-medium ${(lrCountsQuery.data ?? 0) >= order.truckQuantity
-                              ? "text-red-600"
-                              : "text-foreground"
+                            ? "text-red-600"
+                            : "text-foreground"
                             }`}
                         >
                           {lrCountsQuery.data ?? "—"} / {order.truckQuantity}
@@ -573,7 +577,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                 size="sm"
                 className="justify-start gap-2 text-sm font-normal"
                 disabled={isDownloadingPdf}
-                onClick={() => handleDownloadOrderPdf(order.orderNumber)}
+                onClick={() => handleDownloadOrderPdf(order.id)}
               >
                 {isDownloadingPdf ? (
                   <IconLoader2 size={14} className="animate-spin" />

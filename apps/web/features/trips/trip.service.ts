@@ -64,6 +64,17 @@ export const tripApi = {
     const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/cancel`, body);
     return unwrapApiResponse(res);
   },
+  downloadPdf: async (id: string): Promise<void> => {
+    const res = await api.get<Blob>(`/trips/${id}/pdf`, {
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `trip-${id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 
 /* ------------------------------------------------------------------ */

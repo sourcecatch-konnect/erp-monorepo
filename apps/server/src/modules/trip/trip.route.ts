@@ -34,6 +34,9 @@ import {
   Prisma,
   TripStatus,
 } from "../../../generated/prisma/index.js";
+import { buildTripPdfDocument, tripPdfInclude } from "./trip.pdf.js";
+import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
+import type { Request, Response } from "express";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -113,6 +116,7 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
   const search = query.search;
 
   const where: Prisma.VehicleTripWhereInput = {
+    deletedAt: null,
     ...(search
       ? {
         OR: [
@@ -196,6 +200,31 @@ router.get("/:id", can(PERMS.TRIP.VIEW), async (req, res) => {
   return sendOk(res, trip);
 });
 
+/* ------------------------------------------------------------------ */
+/* Trip PDF                                                           */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/:id/pdf",
+  can(PERMS.TRIP.VIEW),
+  async (req: Request<{ id: string }>, res: Response) => {
+    const id = getParamId(req);
+    const trip = await db.vehicleTrip.findFirst({
+      where: { id, deletedAt: null },
+      include: tripPdfInclude,
+    });
+    if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+    const pdfDoc = buildTripPdfDocument(trip);
+    const buffer = await generatePdfBuffer(pdfDoc);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="trip-${trip.tripNumber}.pdf"`
+    );
+    return res.send(buffer);
+  }
+);
 /* ------------------------------------------------------------------ */
 /* Create -> Planned                                                  */
 /* ------------------------------------------------------------------ */

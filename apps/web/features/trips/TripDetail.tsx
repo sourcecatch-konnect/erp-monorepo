@@ -196,6 +196,7 @@ export default function TripDetail({ id }: { id: string }) {
         open={startOpen}
         onOpenChange={setStartOpen}
         tripNumber={t.tripNumber}
+        vehicleId={t.vehicleId}
         isPending={start.isPending}
         onConfirm={(openingKm) => start.mutate(openingKm)}
       />
