@@ -57,14 +57,10 @@ export default function TripsListPage() {
     () => ({
       page,
       size,
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
-      ...(statusFilter !== "ALL"
-        ? { filter: { status: statusFilter } }
-        : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
     }),
-    [page, size, debouncedSearch, statusFilter]
+    [page, size, debouncedSearch, statusFilter],
   );
 
   const trips = useQuery({
@@ -76,7 +72,7 @@ export default function TripsListPage() {
   const counts = useQuery({
     queryKey: tripKeys.statusCounts,
     queryFn: tripApi.statusCounts,
-    staleTime: 60_000,
+    staleTime: 0,
   });
 
   const invalidate = () => {
@@ -115,6 +111,25 @@ export default function TripsListPage() {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
+  const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
+
+  const handleDownloadPdf = async (trip: Trip) => {
+    try {
+      const blob = await tripApi.downloadPdf(trip.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `trip-${trip.tripNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download PDF");
+    }
+  };
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -148,6 +163,8 @@ export default function TripsListPage() {
         onClose={(t) => setCloseTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
         onDelete={(t) => setDeleteTrip(t)}
+        canDownloadPdf={canDownloadPdf}
+        onDownloadPdf={handleDownloadPdf}
       />
 
       <CloseTripDialog

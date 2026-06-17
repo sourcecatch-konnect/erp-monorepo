@@ -50,8 +50,8 @@ export default function CloseTripDialog({
         <DialogHeader>
           <DialogTitle>Close trip {tripNumber ?? ""}</DialogTitle>
           <DialogDescription>
-            Record the vehicle&apos;s closing KM. The trip moves to Closed and the
-            vehicle is marked Available.
+            Record the vehicle&apos;s closing KM. The trip moves to Closed and
+            the vehicle is marked Available.
           </DialogDescription>
         </DialogHeader>
 

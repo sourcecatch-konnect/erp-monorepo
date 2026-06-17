@@ -43,11 +43,11 @@ export const buildTripName = (args: {
 /** Columns for the trips list table. */
 export const tripListSelect = {
   id: true,
+  vehicleId: true,
   tripNumber: true,
   tripName: true,
   status: true,
   tripType: true,
-  vehicleId: true,
   driverId: true,
   onwardFreight: true,
   isTripEmpty: true,

@@ -55,12 +55,14 @@ export type OrderRowActions = {
   onReject: (order: Order) => void;
   onCancel: (order: Order) => void;
   onCreateLR: (order: Order) => void;
+  onDownloadPdf: (order: Order) => void;
   canApprove: boolean;
   canReject: boolean;
   canCancel: boolean;
   canUpdate: boolean;
   canCreateLR: boolean;
   canDelete: boolean;
+  canDownloadPdf: boolean;
 };
 
 type Props = OrderRowActions & {
@@ -109,11 +111,13 @@ export default function OrderTable(props: Props) {
     onReject,
     onCancel,
     onCreateLR,
+    onDownloadPdf,
     canApprove,
     canReject,
     canCancel,
     canUpdate,
     canCreateLR,
+    canDownloadPdf,
   } = props;
 
   const columns = React.useMemo<ColumnDef<Order>[]>(
@@ -323,19 +327,19 @@ export default function OrderTable(props: Props) {
                               </DropdownMenuItem>
                             ) : null}
                             {canCreateLR &&
-                            o.status === "Confirmed" &&
-                            o.orderType === "Truck" ? (
+                              o.status === "Confirmed" &&
+                              o.orderType === "Truck" ? (
                               <DropdownMenuItem onClick={() => onCreateLR(o)}>
                                 <IconFileText size={16} className="mr-2" />{" "}
                                 Create LR
                               </DropdownMenuItem>
                             ) : null}
-                            <DropdownMenuItem asChild>
-                              <Link href={`/orders/${o.id}`}>
-                                <IconDownload size={16} className="mr-2" />{" "}
+                            {canDownloadPdf ? (
+                              <DropdownMenuItem onClick={() => onDownloadPdf(o)}>
+                                <IconDownload size={16} className="mr-2" />
                                 Download PDF
-                              </Link>
-                            </DropdownMenuItem>
+                              </DropdownMenuItem>
+                            ) : null}
                             {hasDangerActions ? (
                               <>
                                 <DropdownMenuSeparator />

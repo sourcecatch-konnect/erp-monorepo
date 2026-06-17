@@ -30,7 +30,14 @@ import {
   tripListSelect,
   writeTripStatus,
 } from "./trip.service.js";
-import { Prisma, TripStatus } from "../../../generated/prisma/index.js";
+import {
+  Prisma,
+  TripStatus,
+  TripType,
+} from "../../../generated/prisma/index.js";
+import { buildTripPdfDocument, tripPdfInclude } from "./trip.pdf.js";
+import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
+import type { Request, Response } from "express";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -107,14 +114,45 @@ async function resolveTripName(
 /* ------------------------------------------------------------------ */
 router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
   const query = parseListQuery(req);
-  const where: Record<string, unknown> = {
+  const search = query.search;
+  const status = query.filter.status;
+
+  const where: Prisma.VehicleTripWhereInput = {
     deletedAt: null,
-    // Supports a single status or comma-separated list (e.g. "Planned,InTransit").
-    ...(query.filter.status
+    ...(search
       ? {
-          status: String(query.filter.status).includes(",")
-            ? { in: String(query.filter.status).split(",") }
-            : query.filter.status,
+          OR: [
+            {
+              tripNumber: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              tripName: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              vehicle: {
+                is: {
+                  vehicleNumber: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+
+    ...(status
+      ? {
+          status: status.includes(",")
+            ? { in: status.split(",") as TripStatus[] }
+            : (status as TripStatus),
         }
       : {}),
     // Trips an LR can attach to (for the LR trip picker). One trip = one LR
@@ -130,9 +168,8 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
           },
         }
       : {}),
-    ...(query.filter.tripType ? { tripType: query.filter.tripType } : {}),
-    ...(query.search
-      ? { tripNumber: { contains: query.search, mode: "insensitive" } }
+    ...(query.filter.tripType
+      ? { tripType: query.filter.tripType as TripType }
       : {}),
   };
   const [data, total] = await Promise.all([
@@ -183,6 +220,31 @@ router.get("/:id", can(PERMS.TRIP.VIEW), async (req, res) => {
   return sendOk(res, trip);
 });
 
+/* ------------------------------------------------------------------ */
+/* Trip PDF                                                           */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/:id/pdf",
+  can(PERMS.TRIP.VIEW),
+  async (req: Request<{ id: string }>, res: Response) => {
+    const id = getParamId(req);
+    const trip = await db.vehicleTrip.findFirst({
+      where: { id, deletedAt: null },
+      include: tripPdfInclude,
+    });
+    if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+    const pdfDoc = buildTripPdfDocument(trip);
+    const buffer = await generatePdfBuffer(pdfDoc);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="trip-${trip.tripNumber}.pdf"`,
+    );
+    return res.send(buffer);
+  },
+);
 /* ------------------------------------------------------------------ */
 /* Create -> Planned                                                  */
 /* ------------------------------------------------------------------ */

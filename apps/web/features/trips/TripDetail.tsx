@@ -117,18 +117,25 @@ export default function TripDetail({ id }: { id: string }) {
   const editable = t.status === "Planned";
   const deletable = t.status === "Planned" || t.status === "Cancelled";
   const cancellable = t.status === "Planned" || t.status === "InTransit";
-  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${t.route?.destinationCity?.name ?? "?"
-    }`;
+  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${
+    t.route?.destinationCity?.name ?? "?"
+  }`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon-sm" onClick={() => router.push("/trips")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => router.push("/trips")}
+          >
             <IconArrowLeft size={18} />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">{t.tripName}</h1>
+            <h1 className="text-lg font-semibold tracking-tight">
+              {t.tripName}
+            </h1>
             <p className="text-xs text-muted-foreground">{t.tripNumber}</p>
             <div className="mt-1">
               <TripStatusBadge status={t.status} />
@@ -138,7 +145,10 @@ export default function TripDetail({ id }: { id: string }) {
 
         <div className="flex gap-2">
           {canUpdate && editable ? (
-            <Button variant="outline" onClick={() => router.push(`/trips/${t.id}/edit`)}>
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/trips/${t.id}/edit`)}
+            >
               <IconEdit size={16} className="mr-1" /> Edit
             </Button>
           ) : null}
@@ -164,10 +174,7 @@ export default function TripDetail({ id }: { id: string }) {
             </Button>
           ) : null}
           {canDelete && deletable ? (
-            <Button
-              variant="destructive"
-              onClick={() => setDeleteOpen(true)}
-            >
+            <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
               <IconTrash size={16} className="mr-1" /> Delete
             </Button>
           ) : null}
@@ -220,7 +227,9 @@ export default function TripDetail({ id }: { id: string }) {
                     </span>
                   </div>
                   {h.note ? (
-                    <span className="text-sm text-muted-foreground">{h.note}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {h.note}
+                    </span>
                   ) : null}
                   {h.changedBy ? (
                     <span className="text-xs text-muted-foreground">

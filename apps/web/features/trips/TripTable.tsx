@@ -43,10 +43,16 @@ import {
   IconEdit,
   IconDatabaseOff,
   IconTrash,
+  IconPlus,
+  IconDownload,
 } from "@tabler/icons-react";
 
 import { formatMoney } from "@/lib/format";
-import { TripStatusBadge, TRIP_STATUS_ORDER, TRIP_TYPE_LABELS } from "./trip-ui";
+import {
+  TripStatusBadge,
+  TRIP_STATUS_ORDER,
+  TRIP_TYPE_LABELS,
+} from "./trip-ui";
 
 export type TripRowActions = {
   /** Planned trip — routes to the Instant LR form to start (attach) the trip. */
@@ -75,6 +81,8 @@ type Props = TripRowActions & {
   onStatusFilterChange: (value: string) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
+  canDownloadPdf: boolean;
+  onDownloadPdf: (trip: Trip) => void;
 };
 
 const DELETE_ALLOWED_STATUSES = ["Planned", "Cancelled"] as const;
@@ -105,6 +113,8 @@ export default function TripTable(props: Props) {
     canUpdate,
     canCancel,
     canDelete,
+    canDownloadPdf,
+    onDownloadPdf,
   } = props;
 
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -167,7 +177,7 @@ export default function TripTable(props: Props) {
         cell: ({ row }) => <TripStatusBadge status={row.original.status} />,
       },
     ],
-    []
+    [],
   );
 
   const table = useReactTable({
@@ -191,18 +201,20 @@ export default function TripTable(props: Props) {
               key={tab.key}
               type="button"
               onClick={() => onStatusFilterChange(tab.key)}
-              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted"
-                }`}
+              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
             >
               {tab.label}
               {typeof count === "number" ? (
                 <span
-                  className={`ml-1.5 rounded-sm px-1 text-xs ${active
-                    ? "bg-primary-foreground/20"
-                    : "bg-muted-foreground/10"
-                    }`}
+                  className={`ml-1.5 rounded-sm px-1 text-xs ${
+                    active
+                      ? "bg-primary-foreground/20"
+                      : "bg-muted-foreground/10"
+                  }`}
                 >
                   {count}
                 </span>
@@ -220,9 +232,10 @@ export default function TripTable(props: Props) {
           onChange={(e) => onSearchChange(e.target.value)}
           className="pr-16"
         />
-
-        <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
-          Ctrl+F
+        <kbd className="pointer-events-none font-bold absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+          <span>Ctrl</span>
+          <IconPlus size={10} />
+          <span>F</span>
         </kbd>
       </div>
 
@@ -280,17 +293,24 @@ export default function TripTable(props: Props) {
                 const closeable = t.status === "InTransit";
                 const editable = t.status === "Planned";
                 const deletable = DELETE_ALLOWED_STATUSES.includes(
-                  t.status as (typeof DELETE_ALLOWED_STATUSES)[number]
+                  t.status as (typeof DELETE_ALLOWED_STATUSES)[number],
                 );
                 const cancellable =
                   t.status === "Planned" || t.status === "InTransit";
+                const hasRowAction =
+                  (canStart && startable) ||
+                  (canClose && closeable) ||
+                  (canUpdate && editable) ||
+                  canDownloadPdf ||
+                  (canCancel && cancellable) ||
+                  (canDelete && deletable);
                 return (
                   <TableRow key={row.id} className="hover:bg-muted/30">
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id} className="h-12 text-sm">
                         {flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext()
+                          cell.getContext(),
                         )}
                       </TableCell>
                     ))}
@@ -312,6 +332,7 @@ export default function TripTable(props: Props) {
                               size="icon-sm"
                               variant="ghost"
                               aria-label="Row actions"
+                              disabled={!hasRowAction}
                             >
                               <IconDotsVertical size={16} />
                             </Button>
@@ -334,6 +355,14 @@ export default function TripTable(props: Props) {
                                 <Link href={`/trips/${t.id}/edit`}>
                                   <IconEdit size={16} className="mr-2" /> Edit
                                 </Link>
+                              </DropdownMenuItem>
+                            ) : null}
+                            {canDownloadPdf ? (
+                              <DropdownMenuItem
+                                onClick={() => onDownloadPdf(t)}
+                              >
+                                <IconDownload size={16} className="mr-2" />{" "}
+                                Download PDF
                               </DropdownMenuItem>
                             ) : null}
                             {canCancel && cancellable ? (
