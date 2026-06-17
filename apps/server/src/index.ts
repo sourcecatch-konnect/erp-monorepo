@@ -98,6 +98,10 @@ app.use("/attachments", attachmentRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use(errorMiddleware);
+// Fix BigInt serialization
+app.set("json replacer", (_key: string, value: unknown) =>
+  typeof value === "bigint" ? Number(value) : value
+);
 const PORT = Number(process.env.PORT || 5000);
 const server = createServer(app);
 
