@@ -113,9 +113,15 @@ export default function TripsListPage() {
 
   const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
 
+  const downloadTripPdf = async (id: string) => {
+    const res = await fetch(`/api/trips/${id}/pdf`, { method: "GET" });
+    if (!res.ok) throw new Error("Failed to fetch PDF");
+    return res.blob();
+  };
+
   const handleDownloadPdf = async (trip: Trip) => {
     try {
-      const blob = await tripApi.downloadPdf(trip.id);
+      const blob = await downloadTripPdf(trip.id);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
 
