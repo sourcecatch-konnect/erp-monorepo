@@ -56,15 +56,28 @@ type CrudOptions<Create, Update> = {
 const actionPermission = (action: CrudAction): PermissionAction =>
   action === "view" ? "view" : action;
 
+const coerceFilterValue = (value: string): string | number | boolean => {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
+};
+
 const buildWhere = (
   search: string | undefined,
   searchableFields: string[] | undefined,
   filter: Record<string, string>,
   softDelete?: boolean,
 ) => {
+  const coercedFilter = Object.fromEntries(
+    Object.entries(filter).map(([key, value]) => [
+      key,
+      coerceFilterValue(value),
+    ]),
+  );
+
   return {
     ...(softDelete ? { deletedAt: null } : {}),
-    ...filter,
+    ...coercedFilter,
     ...(search && searchableFields?.length
       ? {
           OR: searchableFields.map((field) => ({

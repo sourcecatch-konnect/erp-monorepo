@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useForm, FormProvider, useFieldArray, useWatch, Controller } from "react-hook-form";
+import {
+  useForm,
+  FormProvider,
+  useFieldArray,
+  useWatch,
+  Controller,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -31,16 +37,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
+import { SuggestInput } from "@skerp/ui/components/suggest-input";
 
 import FormSection from "@/features/masters/_shared/fields/FormSection";
 import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { formatDate, formatMoney } from "@/lib/format";
 
-import { lorryReceiptApi, lrLookups, lrLookupKeys } from "../lorry-receipt.service";
+import {
+  lorryReceiptApi,
+  lrLookups,
+  lrLookupKeys,
+} from "../lorry-receipt.service";
 
 type Props = {
   orderId?: string;
+  /** Instant LR launched from a Planned trip — preselects that trip. */
+  tripId?: string;
 };
 
 type GoodsFields = {
@@ -51,18 +71,18 @@ type GoodsFields = {
   weight?: number | string;
 };
 
-const EMPTY_GOODS: GoodsFields = { name: "", description: "", quantity: "", unit: "", weight: "" };
+const EMPTY_GOODS: GoodsFields = {
+  name: "",
+  description: "",
+  quantity: "",
+  unit: "",
+  weight: "",
+};
 
 // FROM_ORDER: rail-only is never possible — only Road or Road & Rail.
 const TRANSPORT_OPTIONS = [
   { value: "Road", label: "Road" },
   { value: "RoadAndRail", label: "Road & Rail" },
-] as const;
-
-const TRIP_LEG_OPTIONS = [
-  { value: "DIRECT", label: "Direct" },
-  { value: "TO_HUB", label: "To Hub" },
-  { value: "FROM_HUB", label: "From Hub" },
 ] as const;
 
 const PRIORITY_OPTIONS = [
@@ -71,10 +91,22 @@ const PRIORITY_OPTIONS = [
   { value: "Critical", label: "Critical" },
 ] as const;
 
+const tripLegLabel = (value?: string) => {
+  if (value === "FROM_HUB") return "Trip departure from hub";
+  if (value === "TO_HUB") return "To hub";
+  return "Direct";
+};
+
 const errMsg = (errors: unknown, key: string): string | undefined =>
   (errors as Record<string, { message?: string }>)?.[key]?.message;
 
-function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+function FieldLabel({
+  children,
+  required,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+}) {
   return (
     <label className="mb-1 block text-xs font-medium text-muted-foreground">
       {children}
@@ -141,9 +173,15 @@ function RouteBanner({
   return (
     <div className="flex items-stretch gap-3 rounded-lg border bg-card p-3">
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Consignor</p>
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Consignor
+        </p>
         <p className="truncate text-sm font-semibold">{consignorName || "—"}</p>
-        {fromLabel && <p className="truncate text-[11px] text-muted-foreground">{fromLabel}</p>}
+        {fromLabel && (
+          <p className="truncate text-[11px] text-muted-foreground">
+            {fromLabel}
+          </p>
+        )}
       </div>
 
       <div className="flex shrink-0 flex-col items-center justify-center gap-1 px-1">
@@ -155,15 +193,23 @@ function RouteBanner({
           }`}
         >
           <IconTruck size={11} />
-          {vehicleLabel ? `${isMarket ? "Market · " : ""}${vehicleLabel}` : "No vehicle"}
+          {vehicleLabel
+            ? `${isMarket ? "Market · " : ""}${vehicleLabel}`
+            : "No vehicle"}
         </span>
         <IconArrowNarrowRight size={18} className="text-muted-foreground/60" />
       </div>
 
       <div className="min-w-0 flex-1 text-right">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Consignee</p>
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Consignee
+        </p>
         <p className="truncate text-sm font-semibold">{consigneeName || "—"}</p>
-        {toLabel && <p className="truncate text-[11px] text-muted-foreground">{toLabel}</p>}
+        {toLabel && (
+          <p className="truncate text-[11px] text-muted-foreground">
+            {toLabel}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -195,7 +241,9 @@ function SummaryRow({
     <div className="flex items-start gap-2">
       <span className="mt-0.5 text-muted-foreground">{icon}</span>
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
         <p className="truncate text-sm font-medium">{value ?? "—"}</p>
       </div>
     </div>
@@ -205,9 +253,13 @@ function SummaryRow({
 function ContextPanel({
   source,
   order,
+  tripLegLabel,
+  selectedTripName,
 }: {
   source: string;
   order?: OrderSummary | null;
+  tripLegLabel?: string;
+  selectedTripName?: string;
 }) {
   return (
     <div className="sticky top-4 space-y-4">
@@ -222,8 +274,16 @@ function ContextPanel({
             </span>
           </div>
           <div className="space-y-3">
-            <SummaryRow icon={<IconUsers size={13} />} label="Customer" value={order.customerName} />
-            <SummaryRow icon={<IconRoute size={13} />} label="Route" value={order.route} />
+            <SummaryRow
+              icon={<IconUsers size={13} />}
+              label="Customer"
+              value={order.customerName}
+            />
+            <SummaryRow
+              icon={<IconRoute size={13} />}
+              label="Route"
+              value={order.route}
+            />
             <SummaryRow
               icon={<IconCalendar size={13} />}
               label="Pickup date"
@@ -241,6 +301,28 @@ function ContextPanel({
                 value={formatMoney(order.bookingFreightAmount)}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {source === "INSTANT" && (
+        <div className="rounded-lg border bg-card p-4">
+          <div className="mb-3 border-b pb-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Trip summary
+            </p>
+          </div>
+          <div className="space-y-3">
+            <SummaryRow
+              icon={<IconRoute size={13} />}
+              label="Trip type"
+              value={tripLegLabel ?? "Direct"}
+            />
+            <SummaryRow
+              icon={<IconTruck size={13} />}
+              label="Selected trip"
+              value={selectedTripName ?? "Not selected"}
+            />
           </div>
         </div>
       )}
@@ -263,7 +345,7 @@ function ContextPanel({
 /* Main form                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function LRForm({ orderId }: Props) {
+export default function LRForm({ orderId, tripId }: Props) {
   const router = useRouter();
   const [discardOpen, setDiscardOpen] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -274,15 +356,31 @@ export default function LRForm({ orderId }: Props) {
     queryKey: lrLookupKeys.marketVehicles,
     queryFn: lrLookups.marketVehicles,
   });
-  const drivers = useQuery({ queryKey: lrLookupKeys.drivers, queryFn: lrLookups.drivers });
-  const customers = useQuery({ queryKey: lrLookupKeys.customers, queryFn: lrLookups.customers });
-  const branches = useQuery({ queryKey: lrLookupKeys.branches, queryFn: lrLookups.branches });
+  const drivers = useQuery({
+    queryKey: lrLookupKeys.drivers,
+    queryFn: lrLookups.drivers,
+  });
+  const customers = useQuery({
+    queryKey: lrLookupKeys.customers,
+    queryFn: lrLookups.customers,
+  });
+  const branches = useQuery({
+    queryKey: lrLookupKeys.branches,
+    queryFn: lrLookups.branches,
+  });
   const railheads = useQuery({
     queryKey: lrLookupKeys.railheadBranches,
     queryFn: lrLookups.railheadBranches,
     enabled: source === "FROM_ORDER",
   });
-  const trips = useQuery({ queryKey: lrLookupKeys.plannedTrips, queryFn: lrLookups.plannedTrips });
+  const trips = useQuery({
+    queryKey: lrLookupKeys.attachableTrips,
+    queryFn: lrLookups.attachableTrips,
+  });
+  const goodsMaster = useQuery({
+    queryKey: lrLookupKeys.goods,
+    queryFn: lrLookups.goods,
+  });
   const orders = useQuery({
     queryKey: lrLookupKeys.confirmedTruckOrders,
     queryFn: lrLookups.confirmedTruckOrders,
@@ -306,12 +404,15 @@ export default function LRForm({ orderId }: Props) {
             source: "INSTANT",
             priority: "Normal",
             isMarketVehicle: false,
-            tripLegType: "DIRECT",
+            primaryTripId: tripId,
             goods: [EMPTY_GOODS],
           },
   });
 
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: "goods" });
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "goods",
+  });
   const errors = form.formState.errors;
 
   const [
@@ -332,7 +433,7 @@ export default function LRForm({ orderId }: Props) {
       source === "INSTANT" ? "originBranchId" : "orderId",
       source === "INSTANT" ? "destinationBranchId" : "orderId",
       source === "FROM_ORDER" ? "transportType" : "orderId",
-      "tripLegType",
+      source === "FROM_ORDER" ? "tripLegType" : "orderId",
       "isMarketVehicle",
       "primaryTripId",
       "marketVehicleNumber",
@@ -340,10 +441,15 @@ export default function LRForm({ orderId }: Props) {
   });
 
   const customerOptions = customers.data ?? [];
-  const branchOptions = (branches.data ?? []).map((b) => ({ value: b.value, label: b.label }));
+  const branchOptions = (branches.data ?? []).map((b) => ({
+    value: b.value,
+    label: b.label,
+  }));
   const tripOptions = (trips.data ?? []).map((t) => ({
     value: t.id,
-    label: `${t.tripNumber} — ${t.tripName}`,
+    label: t.label,
+    hint: t.hint,
+    badge: t.badge,
   }));
   // Market vehicle number is stored as the plate string, so value === label.
   const marketVehicleOptions = (marketVehicles.data ?? []).map((v) => ({
@@ -357,30 +463,74 @@ export default function LRForm({ orderId }: Props) {
     hint: d.mobile ?? undefined,
   }));
 
-  const orderRow = source === "FROM_ORDER" ? orders.data?.find((o) => o.id === orderId) : undefined;
+  const orderRow =
+    source === "FROM_ORDER"
+      ? orders.data?.find((o) => o.id === orderId)
+      : undefined;
 
   // Route banner labels
-  const consigneeName = customerOptions.find((c) => c.value === watchConsigneeId)?.label;
+  const consigneeName = customerOptions.find(
+    (c) => c.value === watchConsigneeId,
+  )?.label;
   const consignorName =
     source === "INSTANT"
       ? customerOptions.find((c) => c.value === watchConsignorId)?.label
       : orderRow?.customer?.name;
   const fromLabel =
     source === "INSTANT"
-      ? (branches.data ?? []).find((b) => b.value === watchOriginBranchId)?.label
+      ? (branches.data ?? []).find((b) => b.value === watchOriginBranchId)
+          ?.label
       : orderRow?.fromBranch?.shortCode;
   const toLabel =
     source === "INSTANT"
       ? (branches.data ?? []).find((b) => b.value === watchDestBranchId)?.label
       : orderRow?.toBranch?.shortCode;
 
-  const selectedTrip = (trips.data ?? []).find((t) => t.id === watchPrimaryTripId);
+  const selectedTrip = (trips.data ?? []).find(
+    (t) => t.id === watchPrimaryTripId,
+  );
+
+  const headOfficeBranch = (branches.data ?? []).find((b) => b.isHeadOffice);
+  const hubName = headOfficeBranch?.label ?? "HO branch";
+  const tripLegOptions = React.useMemo(
+    () => [
+      { value: "DIRECT", label: "None" },
+      { value: "FROM_HUB", label: `Trip departure from ${hubName}` },
+      { value: "TO_HUB", label: `To ${hubName}` },
+    ],
+    [hubName],
+  );
   const vehicleLabel = watchIsMarket
     ? (watchMarketVehicleNumber as string | undefined) || undefined
     : selectedTrip?.vehicle?.vehicleNumber;
 
-  const showHub = source === "FROM_ORDER" && (watchTransportType as string) === "RoadAndRail";
-  const showSecondaryTrip = watchTripLegType === "TO_HUB" || watchTripLegType === "FROM_HUB";
+  const showRailhead =
+    source === "FROM_ORDER" && (watchTransportType as string) === "RoadAndRail";
+
+  const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
+    value: g.name,
+    hint: g.description ?? undefined,
+  }));
+
+  // When the typed goods name matches a master goods entry, prefill its
+  // description and weight — but never overwrite what the user already typed.
+  const prefillGoodsFromMaster = (idx: number, name: string) => {
+    const match = (goodsMaster.data ?? []).find(
+      (g) => g.name.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
+    if (!match) return;
+    const base = `goods.${idx}` as const;
+    const description = form.getValues(
+      `${base}.description` as never,
+    ) as unknown;
+    if (!description && match.description) {
+      form.setValue(`${base}.description` as never, match.description as never);
+    }
+    const weight = form.getValues(`${base}.weight` as never) as unknown;
+    if ((weight === "" || weight == null) && match.weight != null) {
+      form.setValue(`${base}.weight` as never, match.weight as never);
+    }
+  };
 
   const orderSummary: OrderSummary | null = orderRow
     ? {
@@ -425,7 +575,9 @@ export default function LRForm({ orderId }: Props) {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-lg font-semibold">
-                {source === "FROM_ORDER" ? "Create LR from Order" : "Create Instant LR"}
+                {source === "FROM_ORDER"
+                  ? "Create LR from Order"
+                  : "Create Instant LR"}
               </h1>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {source === "FROM_ORDER"
@@ -433,7 +585,31 @@ export default function LRForm({ orderId }: Props) {
                   : "Standalone Road LR — no parent order."}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <Controller
+                name="priority"
+                control={form.control}
+                render={({ field }) => (
+                  <div className="min-w-36">
+                    <FieldLabel>Priority</FieldLabel>
+                    <Select
+                      value={(field.value as string) ?? "Normal"}
+                      onValueChange={field.onChange as (v: string) => void}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              />
               <Button type="button" variant="outline" onClick={handleCancel}>
                 Cancel
               </Button>
@@ -458,26 +634,59 @@ export default function LRForm({ orderId }: Props) {
             />
 
             {/* Parties */}
-            <FormSection icon={<IconUsers size={16} />} title="Parties" columns={2}>
+            <FormSection
+              icon={<IconUsers size={16} />}
+              title="Parties"
+              columns={2}
+            >
               {source === "INSTANT" && (
                 <>
-                  <ComboboxField name="consignorId" label="Consignor" required options={customerOptions} />
-                  <ComboboxField name="consigneeId" label="Consignee" required options={customerOptions} />
-                  <ComboboxField name="originBranchId" label="Origin branch" required options={branchOptions} />
-                  <ComboboxField name="destinationBranchId" label="Destination branch" required options={branchOptions} />
+                  <ComboboxField
+                    name="consignorId"
+                    label="Consignor"
+                    required
+                    options={customerOptions}
+                  />
+                  <ComboboxField
+                    name="consigneeId"
+                    label="Consignee"
+                    required
+                    options={customerOptions}
+                  />
+                  <ComboboxField
+                    name="originBranchId"
+                    label="Origin branch"
+                    required
+                    options={branchOptions}
+                  />
+                  <ComboboxField
+                    name="destinationBranchId"
+                    label="Destination branch"
+                    required
+                    options={branchOptions}
+                  />
                 </>
               )}
               {source === "FROM_ORDER" && (
                 <div className="col-span-2">
-                  <ComboboxField name="consigneeId" label="Consignee" required options={customerOptions} />
+                  <ComboboxField
+                    name="consigneeId"
+                    label="Consignee"
+                    required
+                    options={customerOptions}
+                  />
                 </div>
               )}
             </FormSection>
 
-            {/* Transport & Trip leg — compact, inline */}
-            <FormSection icon={<IconRoute size={16} />} title="Transport" columns={1}>
-              <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-                {source === "FROM_ORDER" && (
+            {source === "FROM_ORDER" && (
+              <FormSection
+                icon={<IconRoute size={16} />}
+                title="Transport"
+                columns={1}
+              >
+                {/* Mode + Railhead share a row; both are compact controls. */}
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Controller
                     name="transportType"
                     control={form.control}
@@ -489,7 +698,10 @@ export default function LRForm({ orderId }: Props) {
                           onChange={(v) => {
                             field.onChange(v);
                             if (v !== "RoadAndRail")
-                              form.setValue("hubId" as never, undefined as never);
+                              form.setValue(
+                                "railheadBranchId" as never,
+                                undefined as never,
+                              );
                           }}
                           options={TRANSPORT_OPTIONS}
                         />
@@ -497,55 +709,46 @@ export default function LRForm({ orderId }: Props) {
                       </div>
                     )}
                   />
-                )}
 
+                  {showRailhead && (
+                    <ComboboxField
+                      name="railheadBranchId"
+                      label="Railhead branch"
+                      required
+                      options={(railheads.data ?? []).map((b) => ({
+                        value: b.value,
+                        label: b.label,
+                      }))}
+                      emptyText="No railhead branches found"
+                    />
+                  )}
+                </div>
+
+                {/* Trip movement is a wide 3-option control — give it its own row. */}
                 <Controller
                   name="tripLegType"
                   control={form.control}
                   render={({ field }) => (
                     <div>
-                      <FieldLabel>Trip leg</FieldLabel>
+                      <FieldLabel>Trip movement</FieldLabel>
                       <Segmented
                         value={(field.value as string) ?? "DIRECT"}
                         onChange={field.onChange as (v: string) => void}
-                        options={TRIP_LEG_OPTIONS}
+                        options={tripLegOptions}
                       />
                       <FieldError message={errMsg(errors, "tripLegType")} />
                     </div>
                   )}
                 />
-
-                <Controller
-                  name="priority"
-                  control={form.control}
-                  render={({ field }) => (
-                    <div>
-                      <FieldLabel>Priority</FieldLabel>
-                      <Segmented
-                        value={(field.value as string) ?? "Normal"}
-                        onChange={field.onChange as (v: string) => void}
-                        options={PRIORITY_OPTIONS}
-                      />
-                    </div>
-                  )}
-                />
-              </div>
-
-              {showHub && (
-                <div className="mt-1 max-w-sm">
-                  <ComboboxField
-                    name="hubId"
-                    label="Railhead hub"
-                    required
-                    options={(railheads.data ?? []).map((b) => ({ value: b.value, label: b.label }))}
-                    emptyText="No railhead branches found"
-                  />
-                </div>
-              )}
-            </FormSection>
+              </FormSection>
+            )}
 
             {/* Vehicle assignment */}
-            <FormSection icon={<IconTruck size={16} />} title="Vehicle" columns={1}>
+            <FormSection
+              icon={<IconTruck size={16} />}
+              title="Vehicle"
+              columns={1}
+            >
               <Controller
                 name="isMarketVehicle"
                 control={form.control}
@@ -565,45 +768,43 @@ export default function LRForm({ orderId }: Props) {
               />
 
               {!watchIsMarket && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 max-w-2xl">
                   <ComboboxField
                     name="primaryTripId"
-                    label={showSecondaryTrip ? "Trip · leg 1" : "Trip"}
+                    label="Trip"
+                    required
                     options={tripOptions}
-                    emptyText="No planned trips found"
+                    emptyText="No trips available — create a trip first"
                   />
-                  {showSecondaryTrip && (
-                    <ComboboxField
-                      name="secondaryTripId"
-                      label="Trip · leg 2"
-                      options={tripOptions}
-                      emptyText="No planned trips found"
-                    />
-                  )}
-                  <p className="col-span-full text-[11px] text-muted-foreground">
-                    Trip is optional — you can attach it now or later before finalising.
-                  </p>
                 </div>
               )}
 
               {watchIsMarket && (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <FieldLabel required>Vehicle number</FieldLabel>
-                    <Input
-                      {...form.register("marketVehicleNumber")}
-                      list="market-vehicle-list"
-                      placeholder="Search or type — e.g. MH12AB1234"
-                      className="h-9"
-                      autoComplete="off"
-                    />
-                    <datalist id="market-vehicle-list">
-                      {marketVehicleOptions.map((v) => (
-                        <option key={v.value} value={v.value} />
-                      ))}
-                    </datalist>
-                    <FieldError message={errMsg(errors, "marketVehicleNumber")} />
-                  </div>
+                  <Controller
+                    name="marketVehicleNumber"
+                    control={form.control}
+                    render={({ field }) => (
+                      <div>
+                        <FieldLabel required>Vehicle number</FieldLabel>
+                        <SuggestInput
+                          value={(field.value as string) ?? ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          suggestions={marketVehicleOptions.map((v) => ({
+                            value: v.value,
+                          }))}
+                          placeholder="Search or type — e.g. MH12AB1234"
+                          invalid={Boolean(
+                            errMsg(errors, "marketVehicleNumber"),
+                          )}
+                        />
+                        <FieldError
+                          message={errMsg(errors, "marketVehicleNumber")}
+                        />
+                      </div>
+                    )}
+                  />
                   <ComboboxField
                     name="marketDriverName"
                     label="Driver"
@@ -616,13 +817,20 @@ export default function LRForm({ orderId }: Props) {
             </FormSection>
 
             {/* Goods */}
-            <FormSection icon={<IconPackage size={16} />} title="Goods" columns={1}>
+            <FormSection
+              icon={<IconPackage size={16} />}
+              title="Goods"
+              columns={1}
+            >
               <div className="space-y-3">
                 {fields.map((field, idx) => {
                   const base = `goods.${idx}` as const;
                   const gErrors = errors.goods?.[idx];
                   return (
-                    <div key={field.id} className="relative rounded-lg border bg-muted/20 p-3">
+                    <div
+                      key={field.id}
+                      className="relative rounded-lg border bg-muted/20 p-3"
+                    >
                       {fields.length > 1 && (
                         <button
                           type="button"
@@ -636,36 +844,86 @@ export default function LRForm({ orderId }: Props) {
                       <div className="grid gap-3 sm:grid-cols-4">
                         <div className="sm:col-span-2">
                           <FieldLabel required>Goods name</FieldLabel>
-                          <Input {...form.register(`${base}.name`)} placeholder="e.g. Steel coils" className="h-9" />
+                          <Controller
+                            name={`${base}.name`}
+                            control={form.control}
+                            render={({ field }) => (
+                              <SuggestInput
+                                value={(field.value as string) ?? ""}
+                                onChange={(v) => {
+                                  field.onChange(v);
+                                  prefillGoodsFromMaster(idx, v);
+                                }}
+                                onBlur={field.onBlur}
+                                suggestions={goodsSuggestions}
+                                placeholder="Select from master or type — e.g. Steel coils"
+                                invalid={Boolean(gErrors?.name?.message)}
+                              />
+                            )}
+                          />
                           <FieldError message={gErrors?.name?.message} />
                         </div>
                         <div>
                           <FieldLabel required>Qty</FieldLabel>
-                          <Input {...form.register(`${base}.quantity`)} type="number" min={1} placeholder="0" className="h-9" />
-                          <FieldError message={gErrors?.quantity?.message ? String(gErrors.quantity.message) : undefined} />
+                          <Input
+                            {...form.register(`${base}.quantity`)}
+                            type="number"
+                            min={1}
+                            placeholder="0"
+                            className="h-9"
+                          />
+                          <FieldError
+                            message={
+                              gErrors?.quantity?.message
+                                ? String(gErrors.quantity.message)
+                                : undefined
+                            }
+                          />
                         </div>
                         <div>
                           <FieldLabel required>Unit</FieldLabel>
-                          <Input {...form.register(`${base}.unit`)} placeholder="MT / PCS" className="h-9" />
+                          <Input
+                            {...form.register(`${base}.unit`)}
+                            placeholder="MT / PCS"
+                            className="h-9"
+                          />
                           <FieldError message={gErrors?.unit?.message} />
                         </div>
                         <div className="sm:col-span-2">
                           <FieldLabel>Description</FieldLabel>
-                          <Input {...form.register(`${base}.description`)} placeholder="Optional" className="h-9" />
+                          <Input
+                            {...form.register(`${base}.description`)}
+                            placeholder="Optional"
+                            className="h-9"
+                          />
                         </div>
                         <div>
                           <FieldLabel>Weight (kg)</FieldLabel>
-                          <Input {...form.register(`${base}.weight`)} type="number" min={0} step="0.01" placeholder="0" className="h-9" />
+                          <Input
+                            {...form.register(`${base}.weight`)}
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="0"
+                            className="h-9"
+                          />
                         </div>
                       </div>
                     </div>
                   );
                 })}
-                <Button type="button" variant="outline" size="sm" onClick={() => append(EMPTY_GOODS)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => append(EMPTY_GOODS)}
+                >
                   <IconPlus size={14} className="mr-1" /> Add goods line
                 </Button>
                 {typeof errors.goods?.root?.message === "string" && (
-                  <p className="text-xs text-red-600">{errors.goods.root.message}</p>
+                  <p className="text-xs text-red-600">
+                    {errors.goods.root.message}
+                  </p>
                 )}
               </div>
             </FormSection>
@@ -673,7 +931,16 @@ export default function LRForm({ orderId }: Props) {
 
           {/* RIGHT — order summary */}
           <div className="hidden lg:block">
-            <ContextPanel source={source} order={orderSummary} />
+            <ContextPanel
+              source={source}
+              order={orderSummary}
+              tripLegLabel={tripLegLabel(
+                source === "FROM_ORDER"
+                  ? String(watchTripLegType ?? "DIRECT")
+                  : "DIRECT",
+              )}
+              selectedTripName={selectedTrip?.tripName}
+            />
           </div>
         </div>
       </form>
@@ -682,7 +949,9 @@ export default function LRForm({ orderId }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Discard unsaved changes?</DialogTitle>
-            <DialogDescription>You have unsaved changes that will be lost.</DialogDescription>
+            <DialogDescription>
+              You have unsaved changes that will be lost.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDiscardOpen(false)}>
@@ -690,7 +959,9 @@ export default function LRForm({ orderId }: Props) {
             </Button>
             <Button
               className="bg-red-600 text-white hover:bg-red-700"
-              onClick={() => router.push(orderId ? `/orders/${orderId}` : "/lorry-receipts")}
+              onClick={() =>
+                router.push(orderId ? `/orders/${orderId}` : "/lorry-receipts")
+              }
             >
               Discard
             </Button>

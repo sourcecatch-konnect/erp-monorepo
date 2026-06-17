@@ -190,6 +190,9 @@ importers:
         specifier: ^3.24.4
         version: 3.25.76
     devDependencies:
+      '@skerp/dev-tools':
+        specifier: workspace:*
+        version: link:../../packages/dev-tools
       '@skerp/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
@@ -278,6 +281,15 @@ importers:
       eslint:
         specifier: ^9.39.1
         version: 9.39.1(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  packages/dev-tools:
+    devDependencies:
+      '@skerp/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
       typescript:
         specifier: 5.9.2
         version: 5.9.2

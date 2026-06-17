@@ -7,9 +7,17 @@ import { toast } from "sonner";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import { IconArrowLeft, IconEdit, IconTruckDelivery, IconBan } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconBan,
+  IconEdit,
+  IconTrash,
+  IconCircleCheck,
+  IconTruckDelivery,
+} from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { formatMoney, formatDate, formatDateTime } from "@/lib/format";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -17,7 +25,7 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import { TripStatusBadge, TRIP_TYPE_LABELS } from "./trip-ui";
-import StartTripDialog from "./StartTripDialog";
+import CloseTripDialog from "./CloseTripDialog";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -33,11 +41,15 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 export default function TripDetail({ id }: { id: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [startOpen, setStartOpen] = React.useState(false);
+  const [closeOpen, setCloseOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
 
-  const canUpdate = useCan(PERMS.TRIP.UPDATE);
+  const canClose = useCan(PERMS.TRIP.CLOSE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
+  const canDelete = useCan(PERMS.TRIP.DELETE);
+  const canUpdate = useCan(PERMS.TRIP.UPDATE);
+  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 
   const trip = useQuery({
     queryKey: tripKeys.detail(id),
@@ -49,11 +61,11 @@ export default function TripDetail({ id }: { id: string }) {
     queryClient.invalidateQueries({ queryKey: tripKeys.detail(id) });
   };
 
-  const start = useMutation({
-    mutationFn: (openingKm: number) => tripApi.start(id, { openingKm }),
+  const close = useMutation({
+    mutationFn: (closingKm: number) => tripApi.close(id, { closingKm }),
     onSuccess: () => {
-      toast.success("Trip started");
-      setStartOpen(false);
+      toast.success("Trip closed");
+      setCloseOpen(false);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -65,6 +77,17 @@ export default function TripDetail({ id }: { id: string }) {
       toast.success("Trip cancelled");
       setCancelOpen(false);
       invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => tripApi.delete(id),
+    onSuccess: () => {
+      toast.success("Trip deleted");
+      setDeleteOpen(false);
+      queryClient.invalidateQueries({ queryKey: tripKeys.all });
+      router.push("/trips");
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
@@ -87,21 +110,32 @@ export default function TripDetail({ id }: { id: string }) {
   }
 
   const t = trip.data;
+  // A Planned trip is "started" by creating its LR — the LR attach flips it to
+  // InTransit on the server. The button just routes to the Instant LR form.
   const startable = t.status === "Planned";
+  const closeable = t.status === "InTransit";
   const editable = t.status === "Planned";
+  const deletable = t.status === "Planned" || t.status === "Cancelled";
   const cancellable = t.status === "Planned" || t.status === "InTransit";
-  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${t.route?.destinationCity?.name ?? "?"
-    }`;
+  const routeLabel = `${t.route?.sourceCity?.name ?? "?"} → ${
+    t.route?.destinationCity?.name ?? "?"
+  }`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon-sm" onClick={() => router.push("/trips")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => router.push("/trips")}
+          >
             <IconArrowLeft size={18} />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">{t.tripName}</h1>
+            <h1 className="text-lg font-semibold tracking-tight">
+              {t.tripName}
+            </h1>
             <p className="text-xs text-muted-foreground">{t.tripNumber}</p>
             <div className="mt-1">
               <TripStatusBadge status={t.status} />
@@ -111,13 +145,23 @@ export default function TripDetail({ id }: { id: string }) {
 
         <div className="flex gap-2">
           {canUpdate && editable ? (
-            <Button variant="outline" onClick={() => router.push(`/trips/${t.id}/edit`)}>
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/trips/${t.id}/edit`)}
+            >
               <IconEdit size={16} className="mr-1" /> Edit
             </Button>
           ) : null}
-          {canUpdate && startable ? (
-            <Button onClick={() => setStartOpen(true)}>
+          {canCreateLR && startable ? (
+            <Button
+              onClick={() => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
+            >
               <IconTruckDelivery size={16} className="mr-1" /> Start trip
+            </Button>
+          ) : null}
+          {canClose && closeable ? (
+            <Button onClick={() => setCloseOpen(true)}>
+              <IconCircleCheck size={16} className="mr-1" /> Close trip
             </Button>
           ) : null}
           {canCancel && cancellable ? (
@@ -127,6 +171,11 @@ export default function TripDetail({ id }: { id: string }) {
               onClick={() => setCancelOpen(true)}
             >
               <IconBan size={16} className="mr-1" /> Cancel
+            </Button>
+          ) : null}
+          {canDelete && deletable ? (
+            <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+              <IconTrash size={16} className="mr-1" /> Delete
             </Button>
           ) : null}
         </div>
@@ -146,8 +195,10 @@ export default function TripDetail({ id }: { id: string }) {
           {t.tripType === "dc" ? (
             <Field label="Rake date" value={formatDate(t.rakeDate)} />
           ) : null}
-          <Field label="Opening KM" value={t.openingKm ?? "—"} />
+          <Field label="Opening KM" value={t.openingKm} />
           <Field label="Started at" value={formatDateTime(t.startDateTime)} />
+          <Field label="Closing KM" value={t.closingKm ?? "—"} />
+          <Field label="Ended at" value={formatDateTime(t.endDateTime)} />
           <Field
             label="Created by"
             value={
@@ -176,7 +227,9 @@ export default function TripDetail({ id }: { id: string }) {
                     </span>
                   </div>
                   {h.note ? (
-                    <span className="text-sm text-muted-foreground">{h.note}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {h.note}
+                    </span>
                   ) : null}
                   {h.changedBy ? (
                     <span className="text-xs text-muted-foreground">
@@ -192,13 +245,13 @@ export default function TripDetail({ id }: { id: string }) {
         )}
       </section>
 
-      <StartTripDialog
-        open={startOpen}
-        onOpenChange={setStartOpen}
+      <CloseTripDialog
+        open={closeOpen}
+        onOpenChange={setCloseOpen}
         tripNumber={t.tripNumber}
-        vehicleId={t.vehicleId}
-        isPending={start.isPending}
-        onConfirm={(openingKm) => start.mutate(openingKm)}
+        openingKm={t.openingKm}
+        isPending={close.isPending}
+        onConfirm={(closingKm) => close.mutate(closingKm)}
       />
 
       <ReasonDialog
@@ -210,6 +263,18 @@ export default function TripDetail({ id }: { id: string }) {
         destructive
         isPending={cancel.isPending}
         onConfirm={(reason) => cancel.mutate(reason)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`Delete trip ${t.tripNumber}`}
+        description="This will permanently delete the trip. Use this only for wrong, duplicate, or cancelled trips."
+        confirmLabel="Delete trip"
+        pendingLabel="Deleting..."
+        destructive
+        isPending={remove.isPending}
+        onConfirm={() => remove.mutate()}
       />
     </div>
   );

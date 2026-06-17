@@ -35,21 +35,21 @@ export default function ApproveOrderModal({
   order,
   onApproved,
 }: Props) {
-  console.log(order, "orders")
+  console.log(order, "orders");
   const currentUserId = useAppSelector((s) => s.auth.user?.id);
   const disallow = Boolean(
     (order.customer as { disallowNewLRBooking?: boolean } | undefined)
-      ?.disallowNewLRBooking
+      ?.disallowNewLRBooking,
   );
   const selfApprove = order.createdById === currentUserId;
 
   const prefill =
     order.bookingFreightAmount != null
       ? paiseToRupees(Number(order.bookingFreightAmount))
-      : order.freightPreview?.amount ?? null;
+      : (order.freightPreview?.amount ?? null);
 
   const [freight, setFreight] = React.useState<string>(
-    prefill != null ? String(prefill) : ""
+    prefill != null ? String(prefill) : "",
   );
   const [overrideReason, setOverrideReason] = React.useState("");
   const [ack, setAck] = React.useState(false);
@@ -90,7 +90,6 @@ export default function ApproveOrderModal({
 
   const changed = freightEdited;
 
-
   const blockedByDisallow = disallow && !ack;
 
   const freightDiff =
@@ -100,25 +99,20 @@ export default function ApproveOrderModal({
 
   const rateMatrix = order.freightPreview?.rateMatrix;
 
-
   const rateMatrixRoute =
     rateMatrix?.route?.sourceCity?.name &&
-      rateMatrix?.route?.destinationCity?.name
+    rateMatrix?.route?.destinationCity?.name
       ? `${rateMatrix.route.sourceCity.name} → ${rateMatrix.route.destinationCity.name}`
       : routeLabel;
-
-
-
 
   const handleApprove = async () => {
     setPending(true);
     try {
       await orderApi.approve(order.id, {
-        bookingFreightAmount: freight.trim() === "" ? undefined : Number(freight),
+        bookingFreightAmount:
+          freight.trim() === "" ? undefined : Number(freight),
         freightOverrideReason:
-          changed && overrideReason.trim()
-            ? overrideReason.trim()
-            : undefined,
+          changed && overrideReason.trim() ? overrideReason.trim() : undefined,
         acknowledgeDisallow: ack,
       });
       toast.success(`Order ${order.orderNumber} confirmed`);
@@ -130,8 +124,6 @@ export default function ApproveOrderModal({
       setPending(false);
     }
   };
-
-
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -164,8 +156,9 @@ export default function ApproveOrderModal({
               <dt className="text-xs text-muted-foreground">Type</dt>
               <dd>
                 {order.orderType === "Truck"
-                  ? `${order.truckQuantity ?? ""} × ${order.vehicleType?.name ?? "Truck"
-                  }`
+                  ? `${order.truckQuantity ?? ""} × ${
+                      order.vehicleType?.name ?? "Truck"
+                    }`
                   : `${order.items?.length ?? 0} item(s)`}
               </dd>
             </div>
@@ -173,7 +166,9 @@ export default function ApproveOrderModal({
             <div>
               <dt className="text-xs text-muted-foreground">Auto freight</dt>
               <dd className="font-medium">
-                {autoFreight != null ? formatMoney(autoFreight) : "No rate matched"}
+                {autoFreight != null
+                  ? formatMoney(autoFreight)
+                  : "No rate matched"}
               </dd>
             </div>
 
@@ -185,25 +180,27 @@ export default function ApproveOrderModal({
             <div>
               <dt className="text-xs text-muted-foreground">Matrix rate</dt>
               <dd>
-                {rateMatrix?.rate != null ? formatMoneyFromPaise(rateMatrix.rate) : "—"}
+                {rateMatrix?.rate != null
+                  ? formatMoneyFromPaise(rateMatrix.rate)
+                  : "—"}
               </dd>
             </div>
 
             <div>
-              <dt className="text-xs text-muted-foreground">Agreement client</dt>
+              <dt className="text-xs text-muted-foreground">
+                Agreement client
+              </dt>
               <dd>{rateMatrix?.agreement?.client?.name ?? "—"}</dd>
             </div>
           </dl>
-
-
-
 
           {disallow ? (
             <div className="flex items-start gap-2 rounded-md bg-red-50 p-2.5 text-xs text-red-700 ring-1 ring-red-200">
               <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
               <div className="space-y-1.5">
                 <p>
-                  This customer is flagged <strong>disallow new booking</strong>.
+                  This customer is flagged <strong>disallow new booking</strong>
+                  .
                 </p>
                 <label className="flex items-center gap-2">
                   <Checkbox
@@ -222,7 +219,9 @@ export default function ApproveOrderModal({
                 Booking freight (₹)
               </label>
 
-              {freightEdited && autoFreight != null && enteredFreight != null ? (
+              {freightEdited &&
+              autoFreight != null &&
+              enteredFreight != null ? (
                 <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
                   Edited · {freightDiff > 0 ? "+" : ""}
                   {formatMoney(freightDiff)}
@@ -232,7 +231,8 @@ export default function ApproveOrderModal({
 
             {freightEdited && autoFreight != null && enteredFreight != null ? (
               <p className="text-[11px] text-orange-700">
-                Auto {formatMoney(autoFreight)} → New {formatMoney(enteredFreight)}
+                Auto {formatMoney(autoFreight)} → New{" "}
+                {formatMoney(enteredFreight)}
               </p>
             ) : null}
 
@@ -253,7 +253,8 @@ export default function ApproveOrderModal({
           {changed ? (
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Override reason <span className="text-muted-foreground">(optional)</span>
+                Override reason{" "}
+                <span className="text-muted-foreground">(optional)</span>
               </label>
 
               <Textarea

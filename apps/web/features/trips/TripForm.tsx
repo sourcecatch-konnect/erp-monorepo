@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
-import { IconTruck, IconRoute, IconCalendar } from "@tabler/icons-react";
+import { IconTruck, IconRoute } from "@tabler/icons-react";
 
 import FormSection from "../masters/_shared/fields/FormSection";
 import ComboboxField from "../masters/_shared/fields/ComboboxField";
@@ -33,9 +33,6 @@ type Props = {
   mode: "create" | "edit";
   trip?: Trip;
 };
-
-const dateValue = (iso?: string | null) =>
-  iso ? new Date(iso) : undefined;
 
 export default function TripForm({ mode, trip }: Props) {
   const router = useRouter();
@@ -58,27 +55,78 @@ export default function TripForm({ mode, trip }: Props) {
     queryKey: tripLookupKeys.customers,
     queryFn: tripLookups.customers,
   });
+  const activeTrips = useQuery({
+    queryKey: ["trips", "active-assignment-options", trip?.id ?? null],
+    queryFn: () => tripApi.list({ page: 0, size: 1000 }),
+  });
 
   const form = useForm<CreateTripFormInput, unknown, CreateTripBody>({
     resolver: zodResolver(createTripSchema),
     defaultValues: trip
       ? {
-        vehicleId: trip.vehicleId,
-        driverId: trip.driverId,
-        routeId: trip.routeId,
-        tripType: trip.tripType,
-        consignorId: trip.consignorId ?? undefined,
-        onwardFreight: trip.onwardFreight ? Number(trip.onwardFreight) : undefined,
-        isTripEmpty: trip.isTripEmpty,
-        rakeDate: trip.rakeDate ?? undefined,
-      }
+          vehicleId: trip.vehicleId,
+          driverId: trip.driverId,
+          routeId: trip.routeId,
+          tripType: trip.tripType,
+          consignorId: trip.consignorId ?? undefined,
+          onwardFreight: trip.onwardFreight
+            ? Number(trip.onwardFreight)
+            : undefined,
+          openingKm: trip.openingKm,
+          isTripEmpty: trip.isTripEmpty,
+          rakeDate: trip.rakeDate ?? undefined,
+        }
       : {
-        tripType: "lr",
-        isTripEmpty: false,
-      },
+          tripType: "lr",
+          isTripEmpty: false,
+        },
   });
 
   const tripType = form.watch("tripType");
+  const assignedVehicleIds = React.useMemo(
+    () =>
+      new Set(
+        (activeTrips.data?.data ?? [])
+          .filter((row) => row.id !== trip?.id)
+          .filter(
+            (row) => row.status === "Planned" || row.status === "InTransit",
+          )
+          .map((row) => row.vehicleId),
+      ),
+    [activeTrips.data?.data, trip?.id],
+  );
+  const assignedDriverIds = React.useMemo(
+    () =>
+      new Set(
+        (activeTrips.data?.data ?? [])
+          .filter((row) => row.id !== trip?.id)
+          .filter(
+            (row) => row.status === "Planned" || row.status === "InTransit",
+          )
+          .map((row) => row.driverId),
+      ),
+    [activeTrips.data?.data, trip?.id],
+  );
+  const vehicleOptions = React.useMemo(
+    () =>
+      (vehicles.data ?? []).map((option) => ({
+        ...option,
+        badge: assignedVehicleIds.has(option.value)
+          ? "Already assigned"
+          : undefined,
+      })),
+    [assignedVehicleIds, vehicles.data],
+  );
+  const driverOptions = React.useMemo(
+    () =>
+      (drivers.data ?? []).map((option) => ({
+        ...option,
+        badge: assignedDriverIds.has(option.value)
+          ? "Already assigned"
+          : undefined,
+      })),
+    [assignedDriverIds, drivers.data],
+  );
 
   const onSubmit = async (values: CreateTripBody) => {
     setSubmitting(true);
@@ -114,7 +162,9 @@ export default function TripForm({ mode, trip }: Props) {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-lg font-semibold tracking-tight">
-                {mode === "edit" ? `Edit Trip ${trip?.tripNumber}` : "Create New Trip"}
+                {mode === "edit"
+                  ? `Edit Trip ${trip?.tripNumber}`
+                  : "Create New Trip"}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
                 {mode === "edit"
@@ -134,23 +184,31 @@ export default function TripForm({ mode, trip }: Props) {
         </div>
 
         <div className="grid gap-4">
-          <FormSection icon={<IconTruck size={16} />} title="Vehicle & Driver" columns={2}>
+          <FormSection
+            icon={<IconTruck size={16} />}
+            title="Vehicle & Driver"
+            columns={2}
+          >
             <ComboboxField
               name="vehicleId"
               label="Vehicle"
               required
-              options={vehicles.data ?? []}
+              options={vehicleOptions}
               emptyText="No own vehicles found"
             />
             <ComboboxField
               name="driverId"
               label="Driver"
               required
-              options={drivers.data ?? []}
+              options={driverOptions}
             />
           </FormSection>
 
-          <FormSection icon={<IconRoute size={16} />} title="Trip Details" columns={2}>
+          <FormSection
+            icon={<IconRoute size={16} />}
+            title="Trip Details"
+            columns={2}
+          >
             <ComboboxField
               name="routeId"
               label="Route"
@@ -165,6 +223,15 @@ export default function TripForm({ mode, trip }: Props) {
               type="number"
               min={0}
               prefix="₹"
+              required
+            />
+
+            <IconTextField<CreateTripFormInput>
+              name="openingKm"
+              label="Opening KM"
+              placeholder="e.g. 145200"
+              type="number"
+              min={1}
               required
             />
 

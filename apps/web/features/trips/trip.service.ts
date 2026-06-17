@@ -4,7 +4,7 @@ import type {
   Trip,
   CreateTripBody,
   UpdateTripBody,
-  StartTripBody,
+  CloseTripBody,
   CancelTripBody,
 } from "@skerp/types";
 import {
@@ -21,7 +21,8 @@ export const tripApi = {
     if (query?.size !== undefined) params.size = query.size;
     if (query?.search) params.search = query.search;
     if (query?.sort) params.sort = query.sort;
-    if (query?.filter?.status) params["filter[status]"] = String(query.filter.status);
+    if (query?.filter?.status)
+      params["filter[status]"] = String(query.filter.status);
     if (query?.filter?.tripType) {
       params["filter[tripType]"] = String(query.filter.tripType);
     }
@@ -32,7 +33,7 @@ export const tripApi = {
 
   statusCounts: async (): Promise<Record<string, number>> => {
     const res = await api.get<ApiResponse<Record<string, number>>>(
-      "/trips/status-counts"
+      "/trips/status-counts",
     );
     return unwrapApiResponse(res);
   },
@@ -49,14 +50,14 @@ export const tripApi = {
 
   update: async (
     id: string,
-    body: UpdateTripBody & { version?: number }
+    body: UpdateTripBody & { version?: number },
   ): Promise<Trip> => {
     const res = await api.patch<ApiResponse<Trip>>(`/trips/${id}`, body);
     return unwrapApiResponse(res);
   },
 
-  start: async (id: string, body: StartTripBody): Promise<Trip> => {
-    const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/start`, body);
+  close: async (id: string, body: CloseTripBody): Promise<Trip> => {
+    const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/close`, body);
     return unwrapApiResponse(res);
   },
 
@@ -64,16 +65,17 @@ export const tripApi = {
     const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/cancel`, body);
     return unwrapApiResponse(res);
   },
-  downloadPdf: async (id: string): Promise<void> => {
-    const res = await api.get<Blob>(`/trips/${id}/pdf`, {
+
+  delete: async (id: string): Promise<Trip> => {
+    const res = await api.delete<ApiResponse<Trip>>(`/trips/${id}`);
+    return unwrapApiResponse(res);
+  },
+
+  downloadPdf: async (id: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/trips/${encodeURIComponent(id)}/pdf`, {
       responseType: "blob",
     });
-    const url = URL.createObjectURL(res.data);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `trip-${id}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    return res.data;
   },
 };
 

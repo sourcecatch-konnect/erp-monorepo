@@ -5,6 +5,7 @@ import {
   finaliseLRSchema,
   cancelLRSchema,
   addEwayBillSchema,
+  splitLRAtHubSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -18,14 +19,15 @@ import { fyCodeFor } from "../_shared/doc-number.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
+import { Prisma } from "../../../generated/prisma/index.js";
 import type { LRStatus, LRSource } from "../../../generated/prisma/index.js";
 import {
   generateLRNumber,
   assertTruckSlotAvailable,
+  resolveHubBranchId,
   lrListSelect,
   lrDetailInclude,
 } from "./lorry-receipt.service.js";
@@ -34,6 +36,46 @@ const router: Router = Router();
 router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
+
+/**
+ * Attaching an LR dispatches the trip: a Planned trip flips to InTransit, the
+ * start time is stamped and its vehicle is marked On Trip. One trip = one LR
+ * (full load), so this runs once per trip. No-op if the trip isn't Planned.
+ */
+async function dispatchTripOnAttach(
+  tx: Prisma.TransactionClient,
+  vehicleTripId: string,
+  lrNumber: string,
+  userId: string,
+) {
+  const trip = await tx.vehicleTrip.findUnique({
+    where: { id: vehicleTripId },
+    select: { id: true, status: true, vehicleId: true },
+  });
+  if (!trip || trip.status !== "Planned") return;
+
+  await tx.vehicleTrip.update({
+    where: { id: trip.id },
+    data: {
+      status: "InTransit",
+      startDateTime: new Date(),
+      updatedById: userId,
+      version: { increment: 1 },
+    },
+  });
+  await tx.vehicle.update({
+    where: { id: trip.vehicleId },
+    data: { status: "ON_TRIP" },
+  });
+  await tx.tripStatusHistory.create({
+    data: {
+      vehicleTripId: trip.id,
+      userId,
+      status: "InTransit",
+      note: `LR ${lrNumber} attached`,
+    },
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -201,6 +243,9 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       input.source === "FROM_ORDER" ? input.consigneeId : input.consigneeId;
 
     const isMarketVehicle = input.isMarketVehicle ?? false;
+    const tripLegType =
+      input.source === "FROM_ORDER" ? (input.tripLegType ?? "DIRECT") : "DIRECT";
+    const hubId = tripLegType === "DIRECT" ? null : await resolveHubBranchId(tx);
 
     const created = await tx.lorryReceipt.create({
       data: {
@@ -210,14 +255,17 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
         orderId: input.source === "FROM_ORDER" ? input.orderId : null,
         originBranchId,
         destinationBranchId,
-        // Transport
+        // Instant LRs are direct. Order LRs can be direct, to-hub, or from-hub.
         transportType: input.source === "INSTANT" ? "Road" : (input.transportType ?? "Road"),
-        tripLegType: input.source === "INSTANT" ? "DIRECT" : (input.tripLegType ?? "DIRECT"),
-        hubId: input.source === "FROM_ORDER" ? (input.hubId ?? null) : null,
-        // Vehicle
+        tripLegType,
+        hubId,
+        // Railhead: order + RoadAndRail only. Unrelated to the Jalgaon hub.
+        railheadBranchId:
+          input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null,
+        // Vehicle. Only the leg-1 (primary) trip at creation; leg 2 is attached
+        // by the split action.
         isMarketVehicle,
         primaryTripId: !isMarketVehicle ? (input.primaryTripId ?? null) : null,
-        secondaryTripId: !isMarketVehicle ? (input.secondaryTripId ?? null) : null,
         marketVehicleNumber: isMarketVehicle ? (input.marketVehicleNumber ?? null) : null,
         marketDriverName: isMarketVehicle ? (input.marketDriverName ?? null) : null,
         // Parties
@@ -242,6 +290,11 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       },
       include: lrDetailInclude,
     });
+
+    // A non-market LR attached to a Planned trip dispatches it (-> InTransit).
+    if (created.primaryTripId) {
+      await dispatchTripOnAttach(tx, created.primaryTripId, created.lrNumber, me);
+    }
 
     return created;
   });
@@ -282,12 +335,10 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
       data: {
         ...(input.isMarketVehicle !== undefined ? { isMarketVehicle: input.isMarketVehicle } : {}),
         ...(input.primaryTripId !== undefined ? { primaryTripId: input.primaryTripId ?? null } : {}),
-        ...(input.secondaryTripId !== undefined ? { secondaryTripId: input.secondaryTripId ?? null } : {}),
         ...(input.marketVehicleNumber !== undefined ? { marketVehicleNumber: input.marketVehicleNumber ?? null } : {}),
         ...(input.marketDriverName !== undefined ? { marketDriverName: input.marketDriverName ?? null } : {}),
         ...(input.transportType ? { transportType: input.transportType } : {}),
-        ...(input.tripLegType ? { tripLegType: input.tripLegType } : {}),
-        ...(input.hubId !== undefined ? { hubId: input.hubId ?? null } : {}),
+        ...(input.railheadBranchId !== undefined ? { railheadBranchId: input.railheadBranchId ?? null } : {}),
         ...(input.consigneeId ? { consigneeId: input.consigneeId } : {}),
         ...(input.priority ? { priority: input.priority } : {}),
         ...(input.invoiceNumber !== undefined ? { invoiceNumber: input.invoiceNumber ?? null } : {}),
@@ -378,6 +429,83 @@ router.post(
         },
         include: lrDetailInclude,
       });
+    });
+
+    return sendOk(res, updated);
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Split at hub (HO action) — attach leg-2 trip to a FINALISED LR       */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/:id/split-at-hub",
+  can(PERMS.LORRY_RECEIPT.APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.lorryReceipt.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) throw new NotFoundError("Lorry receipt not found");
+    if (existing.status !== "FINALISED") {
+      throw new BadRequestError(
+        "Hub split is only allowed on a finalised lorry receipt",
+      );
+    }
+
+    const parsed = splitLRAtHubSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const { secondaryTripId } = parsed.data;
+    const me = actorId(req);
+
+    const updated = await db.$transaction(async (tx) => {
+      // Hub is always the head-office branch — derived, never sent by client.
+      const hubId = await resolveHubBranchId(tx);
+
+      // Leg 1 must have completed its run before the hub -> destination leg can
+      // pick the goods up: the first trip has to be Closed.
+      if (existing.primaryTripId) {
+        const leg1 = await tx.vehicleTrip.findUnique({
+          where: { id: existing.primaryTripId },
+          select: { status: true },
+        });
+        if (leg1 && leg1.status !== "Closed") {
+          throw new BadRequestError(
+            "The leg 1 trip must be Closed before attaching a leg 2 trip",
+          );
+        }
+      }
+
+      const leg2 = await tx.vehicleTrip.findUnique({
+        where: { id: secondaryTripId },
+        select: { id: true, status: true },
+      });
+      if (!leg2) throw new BadRequestError("Leg 2 trip not found");
+      if (secondaryTripId === existing.primaryTripId) {
+        throw new BadRequestError("Leg 2 trip must differ from the leg 1 trip");
+      }
+      if (leg2.status !== "Planned") {
+        throw new BadRequestError("Leg 2 trip must be a Planned trip");
+      }
+
+      const result = await tx.lorryReceipt.update({
+        where: { id },
+        data: {
+          hubId,
+          secondaryTripId,
+          tripLegType: "FROM_HUB",
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        include: lrDetailInclude,
+      });
+
+      // Dispatch the leg 2 trip (Planned -> InTransit).
+      await dispatchTripOnAttach(tx, secondaryTripId, existing.lrNumber, me);
+
+      return result;
     });
 
     return sendOk(res, updated);

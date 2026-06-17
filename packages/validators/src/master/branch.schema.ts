@@ -45,6 +45,7 @@ export const branchSchema = z.object({
 
   allowLR: z.boolean(),
   isRailHead: z.boolean(),
+  isHeadOffice: z.boolean().optional(),
   allowReceipt: z.boolean(),
 
   companyId: z.string(),
@@ -105,6 +106,8 @@ export const createBranchSchema = z.object({
   allowLR: z.boolean().default(false),
 
   isRailHead: z.boolean().default(false),
+
+  isHeadOffice: z.boolean().default(false),
 
   allowReceipt: z.boolean().default(true),
 

@@ -20,7 +20,7 @@ import OrderTable from "./OrderTable";
 import OrderQuickViewModal from "./OrderQuickViewModal";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
-import ConfirmDialog from "./components/confirmDialog";
+import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 
 export default function OrdersListPage() {
   const router = useRouter();

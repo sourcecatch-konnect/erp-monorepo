@@ -14,17 +14,13 @@ import {
 type ConfirmDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-
   title: string;
   description?: string;
-
   confirmLabel?: string;
   cancelLabel?: string;
   pendingLabel?: string;
-
   destructive?: boolean;
   isPending?: boolean;
-
   onConfirm: () => void;
 };
 
@@ -44,15 +40,12 @@ export default function ConfirmDialog({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!isPending) {
-          onOpenChange(nextOpen);
-        }
+        if (!isPending) onOpenChange(nextOpen);
       }}
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-
           {description ? (
             <DialogDescription>{description}</DialogDescription>
           ) : null}
@@ -67,7 +60,6 @@ export default function ConfirmDialog({
           >
             {cancelLabel}
           </Button>
-
           <Button
             type="button"
             disabled={isPending}

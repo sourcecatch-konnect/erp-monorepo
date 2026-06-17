@@ -1,0 +1,20 @@
+{
+  "name": "@skerp/dev-tools",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./fake/random": "./src/fake/random.ts",
+    "./fake/pan": "./src/fake/pan.ts",
+    "./fake/gstin": "./src/fake/gstin.ts",
+    "./fake/phone": "./src/fake/phone.ts",
+    "./fake/identity": "./src/fake/identity.ts",
+    "./prefill/customer": "./src/prefill/customer.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@skerp/typescript-config": "workspace:*",
+    "typescript": "5.9.2"
+  }
+}

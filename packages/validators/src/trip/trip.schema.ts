@@ -45,8 +45,6 @@ export const tripTypeSchema = z.enum(["lr", "dc"]);
 export const tripStatusSchema = z.enum([
   "Planned",
   "InTransit",
-  "AtDestination",
-  "Completed",
   "Closed",
   "Cancelled",
 ]);
@@ -61,6 +59,8 @@ const tripBaseShape = {
   routeId: z.string().min(1, "Route is required"),
   tripType: tripTypeSchema,
   onwardFreight: moneyField("Onward freight"),
+  // Opening odometer reading, captured when the trip is planned/created.
+  openingKm: positiveIntField("Opening KM"),
   isTripEmpty: z.boolean().optional().default(false),
   // Required only for LR trips (full-load, single client) — see refinement.
   consignorId: optionalString,
@@ -101,9 +101,9 @@ export const updateTripSchema = z
 /* Transitions                                                        */
 /* ------------------------------------------------------------------ */
 
-export const startTripSchema = z.object({
-  openingKm: positiveIntField("Opening KM"),
-  startDateTime: optionalDate,
+export const closeTripSchema = z.object({
+  closingKm: positiveIntField("Closing KM"),
+  endDateTime: optionalDate,
 });
 
 export const cancelTripSchema = z.object({
