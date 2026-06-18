@@ -32,20 +32,28 @@ import {
   IconCircleCheckFilled,
   IconClockEdit,
 } from "@tabler/icons-react";
-
+import { useQuery } from "@tanstack/react-query";
+import { sparePartKeys } from "./spare-parts.key";
+import { sparePartApi } from "./spare-parts.service";
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: SparePart;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 export default function SparePartDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const sparePartDetail = useQuery({
+  queryKey: id ? sparePartKeys.detail(id) : ["spare-part-detail-empty"],
+  queryFn: () => sparePartApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = sparePartDetail.data;
+const isLoading = sparePartDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
@@ -103,17 +111,35 @@ export default function SparePartDetailDialog({
                   icon={<IconPackage size={12} />}
                 />
 
-                <Field
-                  label="Rate"
-                  value={formatCurrencyFromPaise(data?.rate)}
-                  icon={<IconCurrencyRupee size={12} />}
-                />
+  <Field
+  label="Rate Per Unit"
+  value={
+    data?.rate != null
+      ? `${formatCurrencyFromPaise(data.rate)} / ${data?.unit ?? "unit"}`
+      : "-"
+  }
+  icon={<IconCurrencyRupee size={12} />}
+/>
 
-                <Field
-                  label="Minimum Stock"
-                  value={data?.minimumStock}
-                  icon={<IconStack size={12} />}
-                />
+<Field
+  label="Minimum Stock Qty"
+  value={
+    data?.minimumStock != null
+      ? `${data.minimumStock} ${data?.unit ?? ""}`
+      : "-"
+  }
+  icon={<IconStack size={12} />}
+/>
+
+<Field
+  label="Minimum Stock Amount"
+  value={
+    data?.rate != null && data?.minimumStock != null
+      ? formatCurrencyFromPaise(data.rate * data.minimumStock)
+      : "-"
+  }
+  icon={<IconCurrencyRupee size={12} />}
+/>
 
                 <Field
                   label="Supplier"

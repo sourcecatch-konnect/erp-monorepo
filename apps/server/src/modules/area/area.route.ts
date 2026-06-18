@@ -8,9 +8,20 @@ const router: Router = createCrudRouter({
   createSchema: createAreaSchema,
   updateSchema: updateAreaSchema,
   permissionKey: "masters.area",
+  uniqueErrorMessages: {
+    cityId_name: "This area already exists in the selected city.",
+    googlePlaceId: "This Google Place already exists.",
+  },
   listOptions: {
-    searchableFields: ["name"],
-    defaultInclude: {
+    searchableFields: ["name", "formattedAddress"],
+    defaultSelect: {
+      id: true,
+      name: true,
+      cityId: true,
+      googlePlaceId: true,
+      formattedAddress: true,
+      latitude: true,
+      longitude: true,
       city: {
         select: {
           id: true,

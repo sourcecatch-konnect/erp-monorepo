@@ -54,7 +54,7 @@ export default function SparePartPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -66,41 +66,23 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const spareParts = useQuery({
     queryKey: sparePartKeys.list(listQuery),
     queryFn: () => sparePartApi.list(listQuery),
   });
 
-  const categories = useQuery({
-    queryKey: spareCategoryKeys.list(),
-    queryFn: () => spareCategoryApi.list(),
-  });
 
-  const suppliers = useQuery({
-    queryKey: sparePartSupplierKeys.list(),
-    queryFn: () => sparePartSupplierApi.list(),
-  });
-
-const sparePartDetail = useQuery({
-  queryKey: detailId
-    ? sparePartKeys.detail(detailId)
-    : ["spare-part-detail-empty"],
-  queryFn: () => sparePartApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-
- const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: sparePartApi,
   queryKey: sparePartKeys.all,
 });
-
   const bulkRemove = useMutation({
     mutationFn: sparePartApi.bulkRemove,
     onSuccess: () => {
@@ -123,16 +105,7 @@ const sparePartDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateSparePartBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -168,6 +141,7 @@ const sparePartDetail = useQuery({
         setSelected(row);
         setOpen(true);
       }}
+      onSizeChange={setSize}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
       onImport={async (file) => {
@@ -189,20 +163,16 @@ const sparePartDetail = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportData.isPending}
     >
-      <SparePartForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        categories={categories.data?.data ?? []}
-        suppliers={suppliers.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+     <SparePartForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
+
 <SparePartDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={sparePartDetail.data}
-  isLoading={sparePartDetail.isLoading}
+  id={detailId}
 />
     </MasterListPage>
   );

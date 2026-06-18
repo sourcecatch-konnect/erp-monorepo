@@ -61,7 +61,7 @@ export default function PumpPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -73,12 +73,12 @@ export default function PumpPage() {
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   // LIST
   const pumps = useQuery({
@@ -86,25 +86,9 @@ export default function PumpPage() {
     queryFn: () => pumpApi.list(listQuery),
   });
 
-  // DETAIL
-  const pumpDetail = useQuery({
-    queryKey: detailId
-      ? pumpKeys.detail(detailId)
-      : ["pump-detail-empty"],
-    queryFn: () => pumpApi.detail(detailId!),
-    enabled: Boolean(detailOpen && detailId),
-  });
-const states = useQuery({
-  queryKey: stateKeys.list(),
-  queryFn: () => stateApi.list(),
-});
 
-const cities = useQuery({
-  queryKey: cityKeys.list(),
-  queryFn: () => cityApi.list(),
-});
   // CRUD
-  const { create, update, remove } = useMasterMutations({
+  const {  remove } = useMasterMutations({
     api: pumpApi,
     queryKey: pumpKeys.all,
     entityName: "Pump",
@@ -141,16 +125,6 @@ const cities = useQuery({
     onError: (err) => toast.error(getErrorMessage(err)),
   });
 
-  const handleSubmit = async (data: CreatePumpBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -182,6 +156,7 @@ const cities = useQuery({
         setSelected(row);
         setOpen(true);
       }}
+      onSizeChange={setSize}
       onView={(row) => {
         setDetailId(row.id);
         setDetailOpen(true);
@@ -204,8 +179,7 @@ const cities = useQuery({
       <PumpDetailDialog
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        data={pumpDetail.data}
-        isLoading={pumpDetail.isLoading}
+         id={detailId}
       />
 
       {/* FORM */}
@@ -213,10 +187,7 @@ const cities = useQuery({
   open={open}
   onOpenChange={setOpen}
   row={selected}
- states={states.data?.data ?? []}
-cities={cities.data?.data ?? []}
-  onSubmit={handleSubmit}
-  isSubmitting={create.isPending || update.isPending}
+
 />
     </MasterListPage>
   );

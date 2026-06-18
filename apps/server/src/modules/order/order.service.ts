@@ -165,75 +165,74 @@ export const computeFreight = async (args: {
   }
 
   const agreementIds = agreements.map((a) => a.id);
-  // Prefer an exact vehicleType match; fall back to the wildcard (null) row.
-  const match = await db.rateMatrix.findFirst({
-    where: {
-      agreementId: { in: agreementIds },
-      routeId: route.id,
-      OR: [
-        ...(args.vehicleTypeId ? [{ vehicleTypeId: args.vehicleTypeId }] : []),
-        { vehicleTypeId: null },
-      ],
+const match = await db.rateMatrix.findFirst({
+  where: {
+    agreementId: { in: agreementIds },
+    routeId: route.id,
+    OR: [
+      ...(args.vehicleTypeId ? [{ vehicleTypeId: args.vehicleTypeId }] : []),
+      { vehicleTypeId: null },
+    ],
+  },
+  orderBy: {
+    vehicleTypeId: {
+      sort: "desc",
+      nulls: "last",
     },
-    orderBy: {
-      vehicleTypeId: {
-        sort: "desc",
-        nulls: "last",
-      },
-    },
-    include: {
-      agreement: {
-        select: {
-          id: true,
-          company: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          client: {
-            select: {
-              id: true,
-              name: true,
-            },
+  },
+  include: {
+    agreement: {
+      select: {
+        id: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
           },
         },
-      },
-
-      route: {
-        select: {
-          id: true,
-          sourceCity: {
-            select: {
-              id: true,
-              name: true,
-            },
+        client: {
+          select: {
+            id: true,
+            name: true,
           },
-          destinationCity: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      },
-
-      vehicleType: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-
-      unit: {
-        select: {
-          id: true,
-          unitValue: true,
-          unitType: true,
         },
       },
     },
-  });
+
+    route: {
+      select: {
+        id: true,
+        sourceCity: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        destinationCity: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    },
+
+    vehicleType: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+
+    unit: {
+      select: {
+        id: true,
+        unitValue: true,
+        unitType: true,
+      },
+    },
+  },
+});
 
   if (!match) {
     return {

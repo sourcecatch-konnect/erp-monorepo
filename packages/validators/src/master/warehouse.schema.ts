@@ -3,7 +3,8 @@ import { z } from "zod";
 /* -----------------------------
    HELPERS (reuse from vehicle)
 ------------------------------ */
-
+const MAX_STORAGE_CAPACITY_CU_FT = 100_000_000;
+const MAX_DIMENSION_FT = 10_000;
 const optionalString = z
   .string()
   .trim()
@@ -56,6 +57,13 @@ export const warehouseSchema = z.object({
   stateId: z.string(),
   cityId: z.string(),
   branchId: z.string(),
+
+  city: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .optional(),
 
   contactName: z.string().optional(),
   contactPhone: z.string().optional(),
@@ -115,7 +123,7 @@ export const createWarehouseSchema = z.object({
     (v) =>
       !v ||
       /^[0-9]{10,15}$/.test(v),
-    "Enter a valid phone number (10–15 digits)"
+    "Enter a valid phone number"
   ),
 
   monthlyRent: optionalNumber("Monthly rent").refine(
@@ -132,29 +140,41 @@ export const createWarehouseSchema = z.object({
 
   expiryDate: optionalDate,
 
-  length: optionalNumber("Length (feet)").refine(
-    (v) => v === undefined || (v > 0 && v <= 10000),
-    "Length must be between 1 and 10000"
+ length: optionalNumber("Length")
+  .refine((v) => v === undefined || v >= 0, "Length cannot be negative")
+  .refine(
+    (v) => v === undefined || v <= MAX_DIMENSION_FT,
+    "Length cannot be more than 10,000 ft"
   ),
 
-  width: optionalNumber("Width (feet)").refine(
-    (v) => v === undefined || (v > 0 && v <= 10000),
-    "Width must be between 1 and 10000"
+width: optionalNumber("Width")
+  .refine((v) => v === undefined || v >= 0, "Width cannot be negative")
+  .refine(
+    (v) => v === undefined || v <= MAX_DIMENSION_FT,
+    "Width cannot be more than 10,000 ft"
   ),
 
-  breadth: optionalNumber("Breadth (feet)").refine(
-    (v) => v === undefined || (v > 0 && v <= 10000),
-    "Breadth must be between 1 and 10000"
+breadth: optionalNumber("Height")
+  .refine((v) => v === undefined || v >= 0, "Height cannot be negative")
+  .refine(
+    (v) => v === undefined || v <= MAX_DIMENSION_FT,
+    "Height cannot be more than 10,000 ft"
   ),
 
+storageCapacity: optionalNumber("Storage capacity")
+  .refine(
+    (v) => v === undefined || v >= 0,
+    "Storage capacity cannot be negative"
+  )
+  .refine(
+    (v) => v === undefined || v <= MAX_STORAGE_CAPACITY_CU_FT,
+    "Storage capacity cannot be more than 100,000,000 cu ft"
+  ),
   gateNo: optionalString.refine(
     (v) => !v || v.length <= 20,
     "Gate number cannot exceed 20 characters"
   ),
 
-  storageCapacity: optionalNumber("Storage capacity").refine(
-    (v) => v === undefined || v >= 0,
-    "Storage capacity cannot be negative"
-  ),
+
 });
 export const updateWarehouseSchema = createWarehouseSchema.partial();

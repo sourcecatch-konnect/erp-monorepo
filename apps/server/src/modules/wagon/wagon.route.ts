@@ -22,7 +22,9 @@ const router: Router =
 
     permissionKey:
       "masters.wagon",
-
+    uniqueErrorMessages: {
+  name: "This wagon name already exists.",
+},
     listOptions: {
       searchableFields: [
         "name",
@@ -33,28 +35,23 @@ const router: Router =
       },
 
       blockDeleteIfExists: [
-        {
-          model:
-            db.railwayFreightMatrix,
+  {
+    model: db.railwayFreightMatrix,
+    label: "Railway Freight Matrix",
 
-          label:
-            "Railway Freight Matrix",
+    where: (id: string) => ({
+      wagon: {
+        id,
+      },
+    }),
 
-          where: (
-            id: string
-          ) => ({
-            wagonId: id,
-          }),
+    select: {
+      id: true,
+    },
 
-          select: {
-            id: true,
-          },
-
-          getName: (
-            row: any
-          ) => row.id,
-        },
-      ],
+    getName: (row: any) => row.id,
+  },
+],
     },
   });
 

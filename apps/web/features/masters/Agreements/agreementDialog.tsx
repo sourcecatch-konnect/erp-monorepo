@@ -24,30 +24,31 @@ import {
   IconFileDescription,
   IconCircleCheckFilled,
 } from "@tabler/icons-react";
+import { agreementKeys } from "./agreements.key";
+import { agreementApi } from "./agreements.service";
+import { useQuery } from "@tanstack/react-query";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: AgreementWithRelations;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 export default function AgreementDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
-  const daysRemaining = getDaysRemaining(data?.expiryDate);
+  const detailQuery = useQuery({
+    queryKey: id ? agreementKeys.detail(id) : ["agreement-detail-empty"],
+    queryFn: () => agreementApi.detail(id!),
+    enabled: Boolean(open && id),
+  });
 
-  const expiryAccent =
-    daysRemaining === null
-      ? undefined
-      : daysRemaining < 30
-        ? "danger"
-        : daysRemaining < 90
-          ? "warn"
-          : undefined;
+  const data = detailQuery.data as AgreementWithRelations | undefined;
+  const isLoading = detailQuery.isLoading;
+
+  const daysRemaining = getDaysRemaining(data?.expiryDate);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,7 +131,7 @@ export default function AgreementDetailDialog({
                           ? `${daysRemaining} days left`
                           : "Expired"
                         : null,
-                    warn: expiryAccent === "warn" || expiryAccent === "danger",
+                   
                   },
                 ].map((item) => (
                   <div key={item.label} className="relative z-10">

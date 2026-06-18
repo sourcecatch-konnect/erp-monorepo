@@ -32,10 +32,15 @@ type ComboboxProps = {
   searchPlaceholder?: string;
   emptyText?: string;
   disabled?: boolean;
-  /** Render as invalid (red ring) — wire to a form error. */
   invalid?: boolean;
   className?: string;
   id?: string;
+
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  onScrollEnd?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
 };
 
 /**
@@ -54,6 +59,11 @@ export function Combobox({
   invalid,
   className,
   id,
+  searchValue,
+  onSearchChange,
+  onScrollEnd,
+  hasMore,
+  isLoadingMore,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const selected = options.find((o) => o.value === value);
@@ -87,54 +97,69 @@ export function Combobox({
         className="w-[var(--radix-popover-trigger-width)] min-w-[260px] p-0"
         align="start"
       >
-        <Command
-          filter={(itemValue, search) => {
-            // itemValue is the option label (set via CommandItem value).
-            return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-          }}
-        >
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.label}
-                  onSelect={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                  data-checked={option.value === value}
-                >
-                  <CheckIcon
-                    className={cn(
-                      "mr-2 size-4",
-                      option.value === value ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  <span className="flex min-w-0 flex-1 items-start justify-between gap-2">
-                    <span className="flex min-w-0 flex-col">
-                      {/* Wrap, don't truncate — long names (e.g. trip names) must stay readable. */}
-                      <span className="whitespace-normal break-words">{option.label}</span>
-                      {option.hint ? (
-                        <span className="whitespace-normal break-words text-xs text-muted-foreground">
-                          {option.hint}
-                        </span>
-                      ) : null}
-                    </span>
-                    {option.badge ? (
-                      <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-                        {option.badge}
-                      </span>
-                    ) : null}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
+       <Command shouldFilter={!onSearchChange}>
+         <CommandInput
+  placeholder={searchPlaceholder}
+  value={searchValue}
+  onValueChange={onSearchChange}
+/>
+<CommandList
+  className="max-h-60 overflow-y-auto overscroll-contain"
+  onWheel={(event) => {
+    event.stopPropagation();
+  }}
+  onScroll={(event) => {
+    const element = event.currentTarget;
+
+    const reachedBottom =
+      element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+
+    if (reachedBottom && hasMore && !isLoadingMore) {
+      onScrollEnd?.();
+    }
+  }}
+>
+  <CommandEmpty>{emptyText}</CommandEmpty>
+
+  <CommandGroup>
+    {options.map((option) => (
+      <CommandItem
+        key={option.value}
+        value={option.label}
+        onSelect={() => {
+          onChange(option.value);
+          setOpen(false);
+        }}
+        data-checked={option.value === value}
+      >
+        <CheckIcon
+          className={cn(
+            "mr-2 size-4",
+            option.value === value ? "opacity-100" : "opacity-0"
+          )}
+        />
+
+        <span className="flex flex-col">
+          <span>{option.label}</span>
+          {option.hint ? (
+            <span className="text-xs text-muted-foreground">
+              {option.hint}
+            </span>
+          ) : null}
+        </span>
+      </CommandItem>
+    ))}
+
+{hasMore ? (
+  <div className="px-2 py-2 text-center text-sm text-muted-foreground">
+    {isLoadingMore ? "Loading more..." : "Scroll to load more cities"}
+  </div>
+) : null}
+  </CommandGroup>
+</CommandList>
         </Command>
       </PopoverContent>
     </Popover>
   );
 }
+

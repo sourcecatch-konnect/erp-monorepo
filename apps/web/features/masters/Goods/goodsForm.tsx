@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-
+import { Checkbox } from "@skerp/ui/components/checkbox"
 import type {
   Goods,
   CreateGoodsBody,
@@ -22,13 +22,16 @@ import {
   IconRuler,
   IconLayersIntersect,
 } from "@tabler/icons-react";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { goodsApi } from "./goods.service";
+import { goodsKeys } from "./goods.key";
+import SwitchField from "../_shared/fields/SwitchField";
 
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   row?: Goods | null;
-  onSubmit: (data: CreateGoodsBody) => Promise<void>;
-  isSubmitting?: boolean;
+
 };
 const defaultValues: CreateGoodsFormInput = {
   name: "",
@@ -48,15 +51,32 @@ export default function GoodsForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
 }: Props) {
   const form = useForm<CreateGoodsFormInput, unknown, CreateGoodsBody>({
     resolver: zodResolver(createGoodsSchema),
     mode: "onChange",
     defaultValues,
   });
+const { create, update } = useMasterMutations({
+  api: goodsApi,
+  queryKey: goodsKeys.all,
+  entityName: "Goods",
+});
+const handleSubmit = async (data: CreateGoodsBody) => {
+const payload: CreateGoodsBody = {
+  ...data,
+};
 
+  if (row) {
+    await update.mutateAsync({ id: row.id, data: payload });
+  } else {
+    await create.mutateAsync(payload);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -81,7 +101,7 @@ form.reset({
       onOpenChange={onOpenChange}
       title={row ? "Edit Goods" : "Add Goods"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -111,6 +131,7 @@ form.reset({
     placeholder="Enter weight"
     min={0}
     step="0.01"
+    required
   />
 
   <IconTextField
@@ -121,6 +142,7 @@ form.reset({
     placeholder="Enter length"
     min={0}
     step="0.01"
+    required
   />
 
   <IconTextField
@@ -131,6 +153,7 @@ form.reset({
     placeholder="Enter width"
     min={0}
     step="0.01"
+    required
   />
 
   <IconTextField
@@ -141,6 +164,7 @@ form.reset({
     placeholder="Enter height"
     min={0}
     step="0.01"
+    required
   />
 </FormSection>
 
@@ -174,6 +198,11 @@ form.reset({
   { label: "Upper", value: "Upper" },
 ]}
         />
+<SwitchField<CreateGoodsFormInput>
+  name="isStackingAllowed"
+  label="Stacking Allowed"
+  description="Allow stacking of goods"
+/>
       </FormSection>
     </MasterFormDialog>
   );

@@ -1,24 +1,27 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Warehouse,
-  City,
-  State,
-  Branch,
+
   CreateWarehouseBody,
   CreateWarehouseFormInput,
 } from "@skerp/types";
 
 import {
+  IconArrowsHorizontal,
+  IconArrowsVertical,
+  IconBoxSeam,
   IconBuildingWarehouse,
+  IconCalendarEvent,
   IconCurrencyRupee,
   IconMapPin,
   IconPhone,
   IconRulerMeasure,
+  IconUser,
 } from "@tabler/icons-react";
 
 import { createWarehouseSchema } from "@skerp/validators";
@@ -28,23 +31,29 @@ import SelectField from "../_shared/fields/SelectField";
 import IconTextField from "../_shared/fields/IconTextField";
 import FormSection from "../_shared/fields/FormSection";
 import TextAreaField from "../_shared/fields/TextAreaField";
+import { DatePicker } from "@skerp/ui/components/datepicker";
+import { useQuery } from "@tanstack/react-query";
+import { stateApi } from "../state/state.service";
+import { stateKeys } from "../state/state.keys";
+import { branchKeys } from "../branch/branch.key";
+import { branchApi } from "../branch/branch.service";
+import { warehouseApi } from "./warehouse.service";
+import { warehouseKeys } from "./warehouse.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Warehouse | null;
-  cities: City[];
-  states: State[];
-  branches: Branch[];
-  onSubmit: (data: CreateWarehouseBody) => Promise<void>;
-  isSubmitting?: boolean;
+
 };
 
 const defaultValues: CreateWarehouseFormInput = {
   name: "",
   type: "",
   address: "",
-  country: "",
+  country: "India",
   stateId: "",
   cityId: "",
   branchId: "",
@@ -56,6 +65,8 @@ const defaultValues: CreateWarehouseFormInput = {
   width: undefined,
   breadth: undefined,
   gateNo: "",
+  agreementDate: "",
+expiryDate: "",
   storageCapacity: undefined,
 };
 
@@ -63,11 +74,7 @@ export default function WarehouseForm({
   open,
   onOpenChange,
   row,
-  cities,
-  states,
-  branches,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreateWarehouseFormInput, unknown, CreateWarehouseBody>({
     resolver: zodResolver(createWarehouseSchema),
@@ -75,7 +82,36 @@ export default function WarehouseForm({
     reValidateMode: "onChange",
     defaultValues,
   });
+const statesQuery = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
 
+
+
+const branchesQuery = useQuery({
+  queryKey: branchKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => branchApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+const { create, update } = useMasterMutations({
+  api: warehouseApi,
+  queryKey: warehouseKeys.all,
+});
+
+const handleSubmit = async (data: CreateWarehouseBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -83,7 +119,7 @@ export default function WarehouseForm({
       name: row?.name ?? "",
       type: row?.type ?? "",
       address: row?.address ?? "",
-      country: row?.country ?? "",
+      country: row?.country ?? "India",
       stateId: row?.stateId ?? "",
       cityId: row?.cityId ?? "",
       branchId: row?.branchId ?? "",
@@ -98,31 +134,50 @@ export default function WarehouseForm({
       breadth: row?.breadth ?? undefined,
       gateNo: row?.gateNo ?? "",
       storageCapacity: row?.storageCapacity ?? undefined,
+      agreementDate: row?.agreementDate
+  ? new Date(row.agreementDate).toISOString().slice(0, 10)
+  : "",
+
+expiryDate: row?.expiryDate
+  ? new Date(row.expiryDate).toISOString().slice(0, 10)
+  : "",
     });
+    previousStateIdRef.current = row?.stateId ?? "";
   }, [form, open, row]);
+const selectedStateId = form.watch("stateId") ?? "";
 
-  const cityOptions = cities.map((city) => ({
-    label: city.name,
-    value: city.id,
-  }));
+const previousStateIdRef = React.useRef<string>("");
 
-  const stateOptions = states.map((state) => ({
-    label: state.name,
-    value: state.id,
-  }));
+React.useEffect(() => {
+  if (!open) return;
 
-  const branchOptions = branches.map((branch) => ({
-    label: branch.name,
-    value: branch.id,
-  }));
+  const previousStateId = previousStateIdRef.current;
 
+  if (previousStateId && previousStateId !== selectedStateId) {
+    form.setValue("cityId", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  previousStateIdRef.current = selectedStateId;
+}, [form, open, selectedStateId]);
+const stateOptions = (statesQuery.data?.data ?? []).map((state) => ({
+  label: state.name,
+  value: state.id,
+}));
+
+const branchOptions = (branchesQuery.data?.data ?? []).map((branch) => ({
+  label: branch.name,
+  value: branch.id,
+}));
   return (
     <MasterFormDialog<CreateWarehouseFormInput, CreateWarehouseBody>
       open={open}
       onOpenChange={onOpenChange}
       title={row ? "Edit Warehouse" : "Add Warehouse"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -154,12 +209,12 @@ export default function WarehouseForm({
           required
         />
 
-        <IconTextField<CreateWarehouseFormInput>
-          name="gateNo"
-          label="Gate Number"
-          placeholder="Enter gate number"
-          icon={<IconBuildingWarehouse size={16} />}
-        />
+       <IconTextField<CreateWarehouseFormInput>
+  name="gateNo"
+  label="Gate / Dock No."
+  placeholder="e.g. Gate 1, Dock 2, Main Gate"
+  icon={<IconBuildingWarehouse size={16} />}
+/>
       </FormSection>
 
       <FormSection
@@ -182,12 +237,22 @@ export default function WarehouseForm({
           required
         />
 
-        <SelectField<CreateWarehouseFormInput>
-          name="cityId"
-          label="City"
-          options={cityOptions}
-          required
-        />
+        <CitySelectField<CreateWarehouseFormInput>
+  name="cityId"
+  label="City"
+  required
+  disabled={!selectedStateId}
+  stateId={selectedStateId}
+  placeholder={selectedStateId ? "Select city" : "Select state first"}
+initialCity={
+  row?.city
+    ? {
+        id: row.city.id,
+        name: row.city.name,
+      }
+    : null
+}
+/>
 
         <div className="md:col-span-2 xl:col-span-3">
           <TextAreaField<CreateWarehouseFormInput>
@@ -209,13 +274,14 @@ export default function WarehouseForm({
           name="contactName"
           label="Contact Person"
           placeholder="Enter contact person"
-          icon={<IconPhone size={16} />}
+          icon={<IconUser size={16} />}
         />
 
         <IconTextField<CreateWarehouseFormInput>
           name="contactPhone"
           label="Contact Phone"
-          placeholder="Enter contact phone"
+          placeholder="10-digit phone"
+          maxLength={10}
           icon={<IconPhone size={16} />}
         />
       </FormSection>
@@ -228,7 +294,7 @@ export default function WarehouseForm({
         <IconTextField<CreateWarehouseFormInput>
           name="monthlyRent"
           label="Monthly Rent"
-          placeholder="0.00"
+         placeholder="20,000"
           icon={<IconCurrencyRupee size={16} />}
           type="number"
         />
@@ -236,49 +302,85 @@ export default function WarehouseForm({
         <IconTextField<CreateWarehouseFormInput>
           name="securityDeposit"
           label="Security Deposit"
-          placeholder="0.00"
+         placeholder="60,000"
           icon={<IconCurrencyRupee size={16} />}
           type="number"
         />
       </FormSection>
+    <FormSection
+  icon={<IconCalendarEvent size={18} />}
+ title="Rent Agreement Period"
+description="Warehouse rent start and expiry details"
+>
+  <Controller
+    control={form.control}
+    name="agreementDate"
+    render={({ field }) => (
+      <DatePicker
+       label="Rent Start Date"
+        selected={field.value ? new Date(field.value) : undefined}
+        onSelect={(date) =>
+          field.onChange(date ? date.toISOString().slice(0, 10) : "")
+        }
+      />
+    )}
+  />
 
-      <FormSection
-        icon={<IconRulerMeasure size={18} />}
-        title="Dimensions & Capacity"
-        description="Physical size and storage capacity"
-      >
-        <IconTextField<CreateWarehouseFormInput>
-          name="length"
-          label="Length"
-          placeholder="Enter length"
-          icon={<IconRulerMeasure size={16} />}
-          type="number"
-        />
+  <Controller
+    control={form.control}
+    name="expiryDate"
+    render={({ field }) => (
+      <DatePicker
+       label="Rent Expire Date"
+        selected={field.value ? new Date(field.value) : undefined}
+        onSelect={(date) =>
+          field.onChange(date ? date.toISOString().slice(0, 10) : "")
+        }
+      />
+    )}
+  />
+  </FormSection>
+<FormSection
+  icon={<IconRulerMeasure size={18} />}
+  title="Dimensions & Capacity"
+  description="Enter warehouse dimensions in feet and capacity in cubic feet"
+>
+  <IconTextField<CreateWarehouseFormInput>
+    name="length"
+    label="Length"
+    placeholder="100"
+    icon={<IconRulerMeasure size={16} />}
+    type="number"
+    suffix="ft"
+  />
 
-        <IconTextField<CreateWarehouseFormInput>
-          name="width"
-          label="Width"
-          placeholder="Enter width"
-          icon={<IconRulerMeasure size={16} />}
-          type="number"
-        />
+  <IconTextField<CreateWarehouseFormInput>
+    name="width"
+    label="Width"
+    placeholder="60"
+    icon={<IconArrowsHorizontal size={16} />}
+    type="number"
+    suffix="ft"
+  />
 
-        <IconTextField<CreateWarehouseFormInput>
-          name="breadth"
-          label="Breadth"
-          placeholder="Enter breadth"
-          icon={<IconRulerMeasure size={16} />}
-          type="number"
-        />
+  <IconTextField<CreateWarehouseFormInput>
+    name="breadth"
+    label="Height"
+    placeholder="20"
+    icon={<IconArrowsVertical size={16} />}
+    type="number"
+    suffix="ft"
+  />
 
-    <IconTextField<CreateWarehouseFormInput>
-  name="storageCapacity"
-  label="Storage Capacity (Cubic ft.)"
-  placeholder="Enter storage capacity"
-  icon={<IconRulerMeasure size={16} />}
-  type="number"
-/>
-      </FormSection>
+  <IconTextField<CreateWarehouseFormInput>
+    name="storageCapacity"
+    label="Storage Capacity"
+    placeholder="120000"
+    icon={<IconBoxSeam size={16} />}
+    type="number"
+    suffix="cu ft"
+  />
+</FormSection>
     </MasterFormDialog>
   );
 }

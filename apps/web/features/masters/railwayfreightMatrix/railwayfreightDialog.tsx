@@ -20,12 +20,15 @@ import {
   IconCalendar,
 } from "@tabler/icons-react";
 import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
+import { useQuery } from "@tanstack/react-query";
+import { railwayFreightKeys } from "./railwayfreight.key";
+import { railwayFreightApi } from "./railwayfreight.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   data?: RailwayFreightMatrixWithRelations;
-  isLoading?: boolean;
+    id?: string | null;
 };
 
 function DetailItem({
@@ -63,9 +66,18 @@ function DetailItem({
 export default function RailwayFreightDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const freightDetail = useQuery({
+  queryKey: id
+    ? railwayFreightKeys.detail(id)
+    : ["railway-freight-empty"],
+  queryFn: () => railwayFreightApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = freightDetail.data;
+const isLoading = freightDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1100px]">

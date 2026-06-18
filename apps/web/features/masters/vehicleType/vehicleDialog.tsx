@@ -17,16 +17,15 @@ import {
 } from "../_shared/dialog-parts";
 
 import {
-  IconCategory,
-  IconTag,
-  IconFileInvoice,
-  IconCircleCheckFilled,
-  IconClockEdit,
+  IconTruck,
   IconCalendar,
+  IconClockEdit,
+  IconCircleCheckFilled,
+  IconCalendarCheck,
 } from "@tabler/icons-react";
 
-import { spareCategoryApi } from "./spare-cateogry.service";
-import { spareCategoryKeys } from "./spare-category.key";
+import { vehicleTypeApi } from "./vehicleType.service";
+import { vehicleTypeKeys } from "./vehicleType.key";
 
 type Props = {
   open: boolean;
@@ -34,37 +33,39 @@ type Props = {
   id?: string | null;
 };
 
-export default function SpareCategoryDetailDialog({
+export default function VehicleTypeDetailDialog({
   open,
   onOpenChange,
   id,
 }: Props) {
-  const spareCategoryDetail = useQuery({
+  const detail = useQuery({
     queryKey: id
-      ? spareCategoryKeys.detail(id)
-      : ["spare-category-detail-empty"],
-    queryFn: () => spareCategoryApi.detail(id!),
+      ? vehicleTypeKeys.detail(id)
+      : ["vehicle-type-detail-empty"],
+    queryFn: () => vehicleTypeApi.detail(id!),
     enabled: Boolean(open && id),
   });
 
-  const data = spareCategoryDetail.data;
-  const isLoading = spareCategoryDetail.isLoading;
+  const data = detail.data;
+  const isLoading = detail.isLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[92vw] !max-w-[850px] h-[75vh] !max-h-[75vh] gap-0 overflow-hidden rounded-lg p-0">
+      <DialogContent className="w-[92vw] !max-w-[800px] h-[80vh] !max-h-[80vh] gap-0 overflow-hidden rounded-lg p-0">
+        {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-3">
             <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <IconCategory size={20} />
+              <IconTruck size={20} />
             </span>
 
             <div>
-              <DialogTitle>Spare Category Details</DialogTitle>
+              <DialogTitle>Vehicle Type Details</DialogTitle>
+
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10} />
-                  Active Category
+                  Active Record
                 </div>
               )}
             </div>
@@ -74,37 +75,45 @@ export default function SpareCategoryDetailDialog({
         {isLoading ? (
           <SkeletonBody />
         ) : (
-          <div className="h-[calc(75vh-120px)] overflow-y-auto">
+          <div className="h-[calc(80vh-120px)] overflow-y-auto p-2">
+            {/* Vehicle Type Information */}
             <div className="px-5 py-5">
-              <SectionLabel>Category Information</SectionLabel>
+              <SectionLabel>Vehicle Type Information</SectionLabel>
 
-              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
                 <Field
-                  label="Category Name"
+                  label="Code"
+                  value={data?.code}
+                  icon={<IconTruck size={12} />}
+                />
+
+                <Field
+                  label="Name"
                   value={data?.name}
-                  icon={<IconCategory size={12} />}
+                  icon={<IconTruck size={12} />}
                 />
 
                 <Field
-                  label="Category Type"
-                  value={data?.type}
-                  icon={<IconTag size={12} />}
+                  label="Freight Range From"
+                  value={data?.freightRangeFrom}
+                  icon={<IconTruck size={12} />}
                 />
 
                 <Field
-                  label="Ledger Name"
-                  value={data?.ledgerName}
-                  icon={<IconFileInvoice size={12} />}
+                  label="Freight Range To"
+                  value={data?.freightRangeTo}
+                  icon={<IconTruck size={12} />}
                 />
               </div>
             </div>
 
             <div className="mx-5 border-t" />
 
+            {/* System Information */}
             <div className="px-5 py-5">
               <SectionLabel>System Information</SectionLabel>
 
-              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
                 <Field
                   label="Created At"
                   value={formatDate(data?.createdAt)}
@@ -121,9 +130,10 @@ export default function SpareCategoryDetailDialog({
           </div>
         )}
 
+        {/* Footer */}
         <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3">
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <IconClockEdit size={12} />
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <IconCalendarCheck size={12} />
             Updated {formatDate(data?.updatedAt)}
           </span>
 

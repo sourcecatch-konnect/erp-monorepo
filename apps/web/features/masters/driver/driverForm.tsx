@@ -5,15 +5,19 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
+  City,
   CreateDriverBody,
   CreateDriverFormInput,
   Driver,
+  State,
 } from "@skerp/types";
 import {
   IconBan,
   IconBeach,
+  IconCamera,
   IconCurrencyRupee,
   IconDeviceLandlinePhone,
+  IconFileDescription,
   IconHome,
   IconId,
   IconIdBadge2,
@@ -22,6 +26,7 @@ import {
   IconMapPin,
   IconNotes,
   IconPercentage,
+  IconTrash,
   IconUser,
   IconUserCheck,
   IconUserStar,
@@ -34,16 +39,24 @@ import IconTextField from "../_shared/fields/IconTextField";
 import TextAreaField from "../_shared/fields/TextAreaField";
 import SwitchField from "../_shared/fields/SwitchField";
 import FormSection from "../_shared/fields/FormSection";
+import { toast } from "sonner";
+import { Button } from "@skerp/ui/components/button";
+import { driverApi } from "./driver.service";
 import { createDriverSchema } from "@skerp/validators";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { paiseToRupees } from "@/lib/money";
-
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { stateKeys } from "../state/state.keys";
+import { stateApi } from "../state/state.service";
+import { cityKeys } from "../city/city.keys";
+import { cityApi } from "../city/city.service";
+import { driverKeys } from "./driver.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CitySelectField from "../_shared/fields/CitySelectField";
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Driver | null;
-  onSubmit: (data: CreateDriverBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const driverStatusOptions = [
@@ -67,7 +80,14 @@ const bloodGroupOptions = [
   { label: "O+", value: "O+" },
   { label: "O-", value: "O-" },
 ];
+const normalizeLicenseNo = (value: string) =>
+  value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 15);
 
+const normalizeAadharNo = (value: string) =>
+  value.replace(/\D/g, "").slice(0, 12);
 const toDateInput = (value?: string | null) => {
   if (!value) return "";
 
@@ -113,17 +133,95 @@ export default function DriverForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
-  const form = useForm<CreateDriverFormInput, unknown, CreateDriverBody>({
-    resolver: zodResolver(createDriverSchema),
-    defaultValues,
-  });
+  const { data: statesData } = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+
+const states = statesData?.data ?? [];
+
+
+
+const { create, update } = useMasterMutations({
+  api: driverApi,
+  queryKey: driverKeys.all,
+  entityName: "Driver",
+});
+
+const handleSubmit = async (data: CreateDriverBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+const form = useForm<CreateDriverFormInput, unknown, CreateDriverBody>({
+  resolver: zodResolver(createDriverSchema),
+  defaultValues,
+  mode: "onChange",
+  reValidateMode: "onChange",
+});
+const permanentState = form.watch("permanentState");
+const correspondenceState = form.watch("correspondenceState");
+
+const permanentStateId = React.useMemo(() => {
+  return states.find((state) => state.name === permanentState)?.id ?? "";
+}, [states, permanentState]);
+
+const correspondenceStateId = React.useMemo(() => {
+  return states.find((state) => state.name === correspondenceState)?.id ?? "";
+}, [states, correspondenceState]);
+
+
+
+
+
+
+
+
+
+const previousPermanentState = React.useRef<string | undefined>(undefined);
+
+React.useEffect(() => {
+  if (!open) return;
+
+  if (
+    previousPermanentState.current &&
+    previousPermanentState.current !== permanentState
+  ) {
+    form.setValue("permanentCity", "");
+  }
+
+  previousPermanentState.current = permanentState;
+}, [open, permanentState, form]);
+
+const previousCorrespondenceState = React.useRef<string | undefined>(undefined);
+
+React.useEffect(() => {
+  if (!open) return;
+
+  if (
+    previousCorrespondenceState.current &&
+    previousCorrespondenceState.current !== correspondenceState
+  ) {
+    form.setValue("correspondenceCity", "");
+  }
+
+  previousCorrespondenceState.current = correspondenceState;
+}, [open, correspondenceState, form]);
+
 
   const [copyAddress, setCopyAddress] = React.useState(false);
   const [hasReference, setHasReference] = React.useState(false);
-
+  const [photoPreviewUrl, setPhotoPreviewUrl] = React.useState("");
+const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
+const localPhotoPreviewRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (!open) return;
 
@@ -168,7 +266,35 @@ export default function DriverForm({
     setCopyAddress(false);
     setHasReference(Boolean(row?.referencePerson || row?.referenceContactNo));
   }, [form, open, row]);
+React.useEffect(() => {
+  if (!open) return;
 
+  let active = true;
+
+  async function loadPhotoPreview() {
+    setPhotoPreviewUrl("");
+
+    if (!row?.photoPath) return;
+
+    try {
+      const { viewUrl } = await driverApi.getPhotoViewUrl(row.photoPath);
+
+      if (active) {
+        setPhotoPreviewUrl(viewUrl);
+      }
+    } catch {
+      if (active) {
+        setPhotoPreviewUrl("");
+      }
+    }
+  }
+
+  loadPhotoPreview();
+
+  return () => {
+    active = false;
+  };
+}, [open, row?.photoPath]);
   const handleCopyAddressToggle = (checked: boolean) => {
     setCopyAddress(checked);
 
@@ -200,6 +326,98 @@ export default function DriverForm({
       form.setValue("referenceContactNo", "");
     }
   };
+const handlePhotoUpload = async (
+  event: React.ChangeEvent<HTMLInputElement>,
+) => {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+
+  if (!allowedTypes.includes(file.type)) {
+    toast.error("Only JPG, PNG, and WebP driver photos are allowed.");
+    return;
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+    toast.error("Driver photo must be less than 2 MB.");
+    return;
+  }
+
+  try {
+    setIsPhotoUploading(true);
+
+    const localPreview = URL.createObjectURL(file);
+
+    if (localPhotoPreviewRef.current) {
+      URL.revokeObjectURL(localPhotoPreviewRef.current);
+    }
+
+    localPhotoPreviewRef.current = localPreview;
+    setPhotoPreviewUrl(localPreview);
+
+  const { key, uploadUrl } = await driverApi.getPhotoUploadUrl({
+  fileName: file.name,
+  contentType: file.type,
+  fileSize: file.size,
+});
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type,
+      },
+      body: file,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error("Failed to upload driver photo.");
+    }
+
+    form.setValue("photoPath", key, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+
+    toast.success("Driver photo uploaded.");
+  } catch (error) {
+    setPhotoPreviewUrl("");
+    form.setValue("photoPath", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+
+    toast.error(
+      error instanceof Error ? error.message : "Failed to upload driver photo.",
+    );
+  } finally {
+    setIsPhotoUploading(false);
+    event.target.value = "";
+  }
+};
+const handleRemovePhoto = () => {
+  if (localPhotoPreviewRef.current) {
+    URL.revokeObjectURL(localPhotoPreviewRef.current);
+    localPhotoPreviewRef.current = null;
+  }
+
+  setPhotoPreviewUrl("");
+
+  form.setValue("photoPath", null as any, {
+    shouldDirty: true,
+    shouldValidate: true,
+  });
+};
+React.useEffect(() => {
+  return () => {
+    if (localPhotoPreviewRef.current) {
+      URL.revokeObjectURL(localPhotoPreviewRef.current);
+    }
+  };
+}, []);
+
+
 
   return (
     <MasterFormDialog<CreateDriverFormInput, CreateDriverBody>
@@ -207,8 +425,8 @@ export default function DriverForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Driver" : "Add Driver"}
       form={form}
-      onSubmit={onSubmit}
-      isSubmitting={isSubmitting}
+      onSubmit={handleSubmit}
+      isSubmitting={create.isPending || update.isPending}
       columns={3}
     >
       <FormSection
@@ -216,6 +434,56 @@ export default function DriverForm({
         title="Personal Information"
         description="Basic identity and contact details"
       >
+        <input type="hidden" {...form.register("photoPath")} />
+
+<div className="col-span-full flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center">
+  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-white">
+    {photoPreviewUrl ? (
+      <img
+        src={photoPreviewUrl}
+        alt="Driver photo"
+        className="h-full w-full object-cover"
+      />
+    ) : (
+      <IconCamera size={34} className="text-muted-foreground" />
+    )}
+  </div>
+
+  <div className="grid flex-1 gap-2">
+    <div>
+      <p className="text-sm font-medium">Driver Photo</p>
+      <p className="text-xs text-muted-foreground">
+        Upload JPG, PNG or WebP image. Maximum size 500 KB.
+      </p>
+    </div>
+
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="inline-flex cursor-pointer items-center rounded-md border bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-muted">
+        {isPhotoUploading ? "Uploading..." : "Upload Photo"}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          disabled={isPhotoUploading}
+          onChange={handlePhotoUpload}
+        />
+      </label>
+
+      {photoPreviewUrl ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isPhotoUploading}
+          onClick={handleRemovePhoto}
+        >
+          <IconTrash size={15} className="mr-1" />
+          Remove
+        </Button>
+      ) : null}
+    </div>
+  </div>
+</div>
         <IconTextField<CreateDriverFormInput>
           name="name"
           label="Full Name"
@@ -297,14 +565,15 @@ export default function DriverForm({
         title="Driving License"
         description="License details and validity"
       >
-        <IconTextField<CreateDriverFormInput>
-          name="licenseNo"
-          label="License Number"
-          placeholder="e.g. MH1420110012345"
-          icon={<IconLicense size={16} />}
-          required
-          maxLength={20}
-        />
+    <IconTextField<CreateDriverFormInput>
+  name="licenseNo"
+  label="License Number"
+  placeholder="e.g. MH1420110012345"
+  icon={<IconLicense size={16} />}
+  required
+  maxLength={15}
+  transformValue={normalizeLicenseNo}
+/>
 
         <IconTextField<CreateDriverFormInput>
           name="licenseCity"
@@ -312,7 +581,7 @@ export default function DriverForm({
           placeholder="e.g. Pune"
           icon={<IconMapPin size={16} />}
         />
-
+       
         <Controller
           control={form.control}
           name="licenseDate"
@@ -370,17 +639,33 @@ export default function DriverForm({
           icon={<IconMapPin size={16} />}
         />
 
-        <IconTextField<CreateDriverFormInput>
-          name="permanentState"
-          label="State"
-          icon={<IconMapPin size={16} />}
-        />
+        <SelectField<CreateDriverFormInput>
+  name="permanentState"
+  label="State"
+  placeholder="Select state"
+  options={states.map((state) => ({
+    label: state.name,
+    value: state.name,
+  }))}
+/>
 
-        <IconTextField<CreateDriverFormInput>
-          name="permanentCity"
-          label="City"
-          icon={<IconMapPin size={16} />}
-        />
+<CitySelectField<CreateDriverFormInput>
+  name="permanentCity"
+  label="City"
+  placeholder={permanentState ? "Select city" : "Select state first"}
+  disabled={!permanentStateId}
+  stateId={permanentStateId}
+  valueMode="name"
+  initialCity={
+    row?.permanentCity
+      ? {
+          id: row.permanentCity,
+          name: row.permanentCity,
+        }
+      : null
+  }
+/>
+
       </FormSection>
 
       <FormSection
@@ -420,17 +705,32 @@ export default function DriverForm({
               icon={<IconMapPin size={16} />}
             />
 
-            <IconTextField<CreateDriverFormInput>
-              name="correspondenceState"
-              label="State"
-              icon={<IconMapPin size={16} />}
-            />
+          <SelectField<CreateDriverFormInput>
+  name="correspondenceState"
+  label="State"
+  placeholder="Select state"
+  options={states.map((state) => ({
+    label: state.name,
+    value: state.name,
+  }))}
+/>
 
-            <IconTextField<CreateDriverFormInput>
-              name="correspondenceCity"
-              label="City"
-              icon={<IconMapPin size={16} />}
-            />
+<CitySelectField<CreateDriverFormInput>
+  name="correspondenceCity"
+  label="City"
+  placeholder={correspondenceState ? "Select city" : "Select state first"}
+  disabled={!correspondenceStateId}
+  stateId={correspondenceStateId}
+  valueMode="name"
+  initialCity={
+    row?.correspondenceCity
+      ? {
+          id: row.correspondenceCity,
+          name: row.correspondenceCity,
+        }
+      : null
+  }
+/>
 
             <IconTextField<CreateDriverFormInput>
               name="correspondenceLandline"
@@ -482,22 +782,25 @@ export default function DriverForm({
         title="Identification & Payroll"
         description="PAN, Aadhar, salary and TDS settings"
       >
-        <IconTextField<CreateDriverFormInput>
+  
+<IconTextField<CreateDriverFormInput>
           name="panNo"
           label="PAN Number"
           placeholder="ABCDE1234F"
-          icon={<IconIdBadge2 size={16} />}
+          icon={<IconFileDescription size={16} />}
           maxLength={10}
+          onChangeTransform={(value) => value.toUpperCase()}
           hint="10-character PAN"
         />
-
-        <IconTextField<CreateDriverFormInput>
-          name="aadharCardNo"
-          label="Aadhar Number"
-          placeholder="12-digit Aadhar"
-          icon={<IconId size={16} />}
-          maxLength={12}
-        />
+     <IconTextField<CreateDriverFormInput>
+  name="aadharCardNo"
+  label="Aadhar Number"
+  placeholder="12-digit Aadhar"
+  icon={<IconId size={16} />}
+  maxLength={12}
+  transformValue={normalizeAadharNo}
+  inputMode="numeric"
+/>
 
         <IconTextField<CreateDriverFormInput>
           name="salary"
@@ -571,3 +874,4 @@ export default function DriverForm({
     </MasterFormDialog>
   );
 }
+

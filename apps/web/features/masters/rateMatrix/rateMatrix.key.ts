@@ -1,14 +1,11 @@
 import type { ListQuery } from "../_shared/master-api";
 
 export const rateMatrixKeys = {
-  all: ["rateMatrix"] as const,
+  all: ["rate-matrix"] as const,
+  lists: () => [...rateMatrixKeys.all, "list"] as const,
+  list: (query?: unknown) => [...rateMatrixKeys.lists(), query] as const,
+  detail: (id: string) => [...rateMatrixKeys.all, "detail", id] as const,
 
-  list: (query?: ListQuery) =>
-    [...rateMatrixKeys.all, "list", query] as const,
-
-  detail: (id: string) =>
-    [...rateMatrixKeys.all, "detail", id] as const,
-
-  search: (q: string) =>
-    [...rateMatrixKeys.all, "search", q] as const,
+  byAgreement: (agreementId: string) =>
+    [...rateMatrixKeys.all, "by-agreement", agreementId] as const,
 };

@@ -55,7 +55,7 @@ export default function SparePartSupplierPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -65,12 +65,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
       sort: "name:asc",
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const suppliers = useQuery({
     queryKey: sparePartSupplierKeys.list(listQuery),
@@ -84,18 +84,11 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
 
 
 
- const supplierDetail = useQuery({
-  queryKey: detailId
-    ? sparePartSupplierKeys.detail(detailId)
-    : ["spare-part-supplier-detail-empty"],
-  queryFn: () => sparePartSupplierApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-  const { create, update, remove } = useMasterMutations({
-   api: sparePartSupplierApi,
-   queryKey: sparePartSupplierKeys.all,
- });
 
+const { remove } = useMasterMutations({
+  api: sparePartSupplierApi,
+  queryKey: sparePartSupplierKeys.all,
+});
   const bulkRemove = useMutation({
     mutationFn: sparePartSupplierApi.bulkRemove,
     onSuccess: () => {
@@ -118,16 +111,7 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     },
   });
 
-  const handleSubmit = async (data: CreateSparePartSupplierBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -166,6 +150,7 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         setSelected(row);
         setOpen(true);
       }}
+      onSizeChange={setSize}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
       onImport={async (file) => {
@@ -183,20 +168,17 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
       isImporting={bulkImport.isPending}
       isExporting={exportData.isPending}
     >
-  <SparePartSupplierDetailDialog
+<SparePartSupplierDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={supplierDetail.data}
-  isLoading={supplierDetail.isLoading}
+  id={detailId}
 />
-      <SparePartSupplierForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+
+<SparePartSupplierForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

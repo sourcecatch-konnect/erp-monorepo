@@ -107,20 +107,36 @@ export default function MasterFormDialog<
         }
       }
 
-      const message =
-        details?.formErrors?.[0] ||
-        getErrorMessage(error);
+    const hasFieldErrors = Object.keys(details?.fieldErrors ?? {}).length > 0;
 
-      form.setError("root", {
-        type: "server",
-        message,
-      });
+if (!hasFieldErrors) {
+  const message = details?.formErrors?.[0] || getErrorMessage(error);
+
+  form.setError("root", {
+    type: "server",
+    message,
+  });
+}
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+          onInteractOutside={(event) => {
+      const target = event.target as HTMLElement;
+
+      if (target.closest(".pac-container")) {
+        event.preventDefault();
+      }
+    }}
+    onPointerDownOutside={(event) => {
+      const target = event.target as HTMLElement;
+
+      if (target.closest(".pac-container")) {
+        event.preventDefault();
+      }
+    }}
         className={`${widthClassByColumns[columns]} max-h-[90vh] overflow-hidden`}
       >
         <DialogHeader className="space-y-1">

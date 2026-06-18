@@ -315,24 +315,20 @@ model UserPermission {
   userId       String
   permissionId String
   effect       PermissionEffect
-
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permission PermissionDef @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
+  createdAt    DateTime         @default(now())
+  permission   PermissionDef    @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, permissionId])
   @@index([permissionId])
 }
 
 model UserBranch {
-  userId   String
-  branchId String
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
-
+  userId    String
+  branchId  String
   createdAt DateTime @default(now())
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, branchId])
   @@index([branchId])
@@ -347,8 +343,7 @@ model AuditLog {
   before    Json?
   after     Json?
   createdAt DateTime @default(now())
-
-  actor User @relation(fields: [actorId], references: [id])
+  actor     User     @relation(fields: [actorId], references: [id])
 
   @@index([entity, entityId])
   @@index([actorId])
@@ -370,8 +365,7 @@ model NotificationEvent {
   lastError     String?
   createdAt     DateTime                @default(now())
   processedAt   DateTime?
-
-  deliveries NotificationDelivery[]
+  deliveries    NotificationDelivery[]
 
   @@index([eventType])
   @@index([sourceModule])
@@ -395,8 +389,7 @@ model NotificationRule {
   branchId             String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
-
-  template NotificationTemplate? @relation(fields: [templateId], references: [id])
+  template             NotificationTemplate? @relation(fields: [templateId], references: [id])
 
   @@index([eventType])
   @@index([enabled])
@@ -405,28 +398,25 @@ model NotificationRule {
 }
 
 model NotificationTemplate {
-  id        String              @id @default(cuid())
-  code      String
-  channel   NotificationChannel
-  subject   String?
-  body      String
-  meta      Json?
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-
-  // Meta WhatsApp template lifecycle (used only when channel = WHATSAPP)
-  metaName           String?
-  metaLanguage       String?
+  id                 String              @id @default(cuid())
+  code               String
+  channel            NotificationChannel
+  subject            String?
+  body               String
+  meta               Json?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   metaCategory       String?
-  metaStatus         String? // DRAFT | PENDING | APPROVED | REJECTED | DISABLED
-  metaTemplateId     String?
-  metaRejectedReason String?
-  metaParamOrder     String[]  @default([])
   metaFooter         String?
+  metaLanguage       String?
+  metaName           String?
+  metaParamOrder     String[]            @default([])
+  metaRejectedReason String?
+  metaStatus         String?
   metaSubmittedAt    DateTime?
   metaSyncedAt       DateTime?
-
-  rules NotificationRule[]
+  metaTemplateId     String?
+  rules              NotificationRule[]
 
   @@unique([code, channel])
 }
@@ -445,10 +435,9 @@ model NotificationDelivery {
   failedAt          DateTime?
   createdAt         DateTime                   @default(now())
   updatedAt         DateTime                   @updatedAt
-
-  event             NotificationEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  recipient         User               @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
   inAppNotification InAppNotification?
+  event             NotificationEvent          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  recipient         User                       @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, channel, recipientUserId])
   @@index([recipientUserId, status])
@@ -467,9 +456,8 @@ model InAppNotification {
   readAt     DateTime?
   archivedAt DateTime?
   createdAt  DateTime             @default(now())
-
-  delivery NotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
-  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delivery   NotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
   @@index([userId, archivedAt])
@@ -482,12 +470,14 @@ model UserNotificationSubscription {
   subscribed Boolean             @default(true)
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, eventType, channel])
   @@index([eventType, channel])
 }
+
+
+
 
 enum ownershipType {
   Own_Vehicle

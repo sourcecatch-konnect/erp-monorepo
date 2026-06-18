@@ -24,12 +24,6 @@ import { branchKeys } from "./branch.key";
 import { branchColumns } from "./branchTable";
 import BranchForm from "./branchForm";
 import { createBranchSchema } from "@skerp/validators";
-
-import { cityApi } from "../city/city.service";
-import { companyApi } from "../Company/company.service";
-import { companyKeys } from "../Company/company.key";
-import { cityKeys } from "../city/city.keys";
-import { toast } from "sonner";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import BranchDetailDialog from "./branchDialog";
 
@@ -60,7 +54,7 @@ export default function BranchPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
 
   const debouncedSearch = useDebouncedValue(search);
 
@@ -73,33 +67,19 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const branches = useQuery({
     queryKey: branchKeys.list(listQuery),
     queryFn: () => branchApi.list(listQuery),
   });
 
-  const companies = useQuery({
-    queryKey: companyKeys.list({ size: 1000 }),
-    queryFn: () => companyApi.list({ size: 1000 }),
-  });
-
-  const cities = useQuery({
-    queryKey: cityKeys.list({ size: 1000 }),
-    queryFn: () => cityApi.list({ size: 1000 }),
-  });
-const branchDetail = useQuery({
-  queryKey: detailId ? branchKeys.detail(detailId) : ["branch-detail-empty"],
-  queryFn: () => branchApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: branchApi,
   queryKey: branchKeys.all,
 });
@@ -131,21 +111,6 @@ const bulkImport = useMutation({
     },
   });
 
-  const handleSubmit = async (
-    data: CreateBranchBody
-  ) => {
-    if (selected) {
-      await update.mutateAsync({
-        id: selected.id,
-        data,
-      });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -161,6 +126,7 @@ const bulkImport = useMutation({
       onPageChange={setPage}
       selectedIds={selectedIds}
       onSelectedIdsChange={setSelectedIds}
+      onSizeChange={setSize}
       defaultHiddenColumns={[
         "contactPhone",
         "email",
@@ -208,24 +174,17 @@ const bulkImport = useMutation({
       isImporting={bulkImport.isPending}
       isExporting={exportBranches.isPending}
     >
-      <BranchDetailDialog
+ <BranchDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={branchDetail.data}
-  isLoading={branchDetail.isLoading}
+  id={detailId}
 />
-      <BranchForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        companies={companies.data?.data ?? []}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={
-          create.isPending ||
-          update.isPending
-        }
-      />
+
+<BranchForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

@@ -17,6 +17,7 @@ import {
   IconCash,
   IconFileDescription,
   IconMapPin,
+  IconPercentage,
   IconPhone,
   IconUser,
 } from "@tabler/icons-react";
@@ -30,16 +31,22 @@ import SelectField from "../_shared/fields/SelectField";
 import TextAreaField from "../_shared/fields/TextAreaField";
 import SwitchField from "../_shared/fields/SwitchField";
 import CustomerLocationsEditor from "./CustomerLocationsEditor";
+import { useQuery } from "@tanstack/react-query";
+import { stateKeys } from "../state/state.keys";
+import { stateApi } from "../state/state.service";
+
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { customerApi } from "./customer.service";
+import { customerKeys } from "./customer.key";
+import CitySelectField from "../_shared/fields/CitySelectField";
+import { cityKeys } from "../city/city.keys";
+import { cityApi } from "../city/city.service";
 import { usePrefillCustomer } from "@/features/dev-tools/usePrefillCustomer";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Customer | null;
-  states: State[];
-  cities: City[];
-  onSubmit: (data: CreateCustomerBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const defaultValues: CreateCustomerFormInput = {
@@ -66,10 +73,7 @@ export default function CustomerAdvancedForm({
   open,
   onOpenChange,
   row,
-  states,
-  cities,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreateCustomerFormInput, unknown, CreateCustomerBody>({
     resolver: zodResolver(createCustomerSchema),
@@ -77,7 +81,29 @@ export default function CustomerAdvancedForm({
     reValidateMode: "onChange",
     defaultValues,
   });
+const states = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
 
+const { create, update } = useMasterMutations({
+  api: customerApi,
+  queryKey: customerKeys.all,
+  entityName: "Customer",
+});
+
+const handleSubmit = async (data: CreateCustomerBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -106,23 +132,40 @@ export default function CustomerAdvancedForm({
       mobileNo: row?.mobileNo ?? "",
       website: row?.website ?? "",
     });
+    previousStateIdRef.current = row?.stateId ?? "";
   }, [form, open, row]);
+  const cities = useQuery({
+  queryKey: cityKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => cityApi.list({ page: 0, size: 1000 }),
+  enabled: open && Boolean(row?.id),
+});
+const stateOptions = (states.data?.data ?? []).map((state) => ({
+  label: state.name,
+  value: state.id,
+}));
 
   const prefillCustomer = usePrefillCustomer({ states, cities });
 
   const selectedStateId = form.watch("stateId");
+const previousStateIdRef = React.useRef<string>("");
 
-  const stateOptions = states.map((state) => ({
-    label: state.name,
-    value: state.id,
-  }));
+React.useEffect(() => {
+  if (!open) return;
 
-  const cityOptions = cities
-    .filter((city) => !selectedStateId || city.stateId === selectedStateId)
-    .map((city) => ({
-      label: city.name,
-      value: city.id,
-    }));
+  const previousStateId = previousStateIdRef.current;
+
+  if (previousStateId && previousStateId !== selectedStateId) {
+    form.setValue("cityId", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  previousStateIdRef.current = selectedStateId;
+}, [form, open, selectedStateId]);
+
+
+
 
   return (
     <MasterFormDialog<CreateCustomerFormInput, CreateCustomerBody>
@@ -130,7 +173,7 @@ export default function CustomerAdvancedForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Customer" : "Add Customer"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
       footerLeft={
@@ -176,15 +219,15 @@ export default function CustomerAdvancedForm({
         />
   
         <IconTextField<CreateCustomerFormInput>
-          name="gstNo"
-          label="GSTIN"
-          placeholder="27ABCDE1234F1Z5"
-          icon={<IconFileDescription size={16} />}
-          maxLength={15}
-          onChangeTransform={(value) => value.toUpperCase()}
-          hint="Format: 27ABCDE1234F1Z5"
-        />
+  name="gstNo"
+  label="GSTIN"
+  placeholder="27ABCDE1234F1Z5"
+  icon={<IconFileDescription size={16} />}
+  maxLength={15}
+  onChangeTransform={(value) => value.toUpperCase()}
 
+  required
+/>
         <IconTextField<CreateCustomerFormInput>
           name="website"
           label="Website"
@@ -207,22 +250,24 @@ export default function CustomerAdvancedForm({
   min={0}
   step="0.01"
 />
-      <IconTextField<CreateCustomerFormInput>
+  <IconTextField<CreateCustomerFormInput>
   name="interestRateLatePayment"
-  label="Late Payment Interest %"
-  placeholder="0"
-  icon={<IconCash size={16} />}
+  label="Late Payment Interest"
+  placeholder="e.g. 18"
+  icon={<IconPercentage size={16} />}
+  suffix="%"
   type="number"
   min={0}
   max={100}
   step="0.01"
 />
 
-   <IconTextField<CreateCustomerFormInput>
+  <IconTextField<CreateCustomerFormInput>
   name="tdsDeductionRate"
-  label="TDS Deduction %"
-  placeholder="0"
-  icon={<IconCash size={16} />}
+  label="TDS Deduction"
+  placeholder="e.g. 2"
+  icon={<IconPercentage size={16} />}
+  suffix="%"
   type="number"
   min={0}
   max={100}
@@ -256,12 +301,22 @@ export default function CustomerAdvancedForm({
           required
         />
 
-        <SelectField<CreateCustomerFormInput>
-          name="cityId"
-          label="City"
-          options={cityOptions}
-          required
-        />
+      <CitySelectField<CreateCustomerFormInput>
+  name="cityId"
+  label="City"
+  required
+  disabled={!selectedStateId}
+  stateId={selectedStateId}
+  placeholder={selectedStateId ? "Select city" : "Select state first"}
+  initialCity={
+    row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null
+  }
+/>
 
         <div className="md:col-span-2 xl:col-span-3">
           <TextAreaField<CreateCustomerFormInput>
@@ -284,6 +339,7 @@ export default function CustomerAdvancedForm({
           label="Contact Person"
           placeholder="Enter contact person"
           icon={<IconUser size={16} />}
+          required
         />
 
         <IconTextField<CreateCustomerFormInput>
@@ -292,6 +348,7 @@ export default function CustomerAdvancedForm({
           placeholder="10-digit phone"
           icon={<IconPhone size={16} />}
           maxLength={10}
+          required
         />
 
         <IconTextField<CreateCustomerFormInput>
@@ -316,7 +373,7 @@ export default function CustomerAdvancedForm({
           title="Pickup Locations"
           description="Saved pickup points used when booking orders"
         >
-          <CustomerLocationsEditor customerId={row.id} cities={cities} />
+          <CustomerLocationsEditor customerId={row.id} cities={cities.data?.data ?? []} />
         </FormSection>
       ) : null}
 

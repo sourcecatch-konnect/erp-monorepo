@@ -22,12 +22,15 @@ import {
   IconHome,
 } from "@tabler/icons-react";
 import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
+import { useQuery } from "@tanstack/react-query";
+import { pumpKeys } from "./pump.key";
+import { pumpApi } from "./pump.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   data?: Pump;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 function DetailItem({
@@ -64,9 +67,16 @@ function DetailItem({
 export default function PumpDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const pumpDetail = useQuery({
+  queryKey: id ? pumpKeys.detail(id) : ["pump-detail-empty"],
+  queryFn: () => pumpApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = pumpDetail.data;
+const isLoading = pumpDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94vh] w-[98vw] max-w-none overflow-hidden p-0 sm:max-w-[1100px]">
@@ -147,15 +157,15 @@ export default function PumpDetailDialog({
                 value={formatCurrencyFromPaise(data?.currentDieselRate)}
               />
 
-              <DetailItem
-                icon={<IconCalendar size={15} />}
-                label="Rate Last Updated"
-                value={
-                  data?.rateLastUpdated
-                    ? new Date(data.rateLastUpdated).toLocaleDateString()
-                    : "-"
-                }
-              />
+             <DetailItem
+  icon={<IconCalendar size={15} />}
+  label="Rate Last Updated"
+  value={
+    data?.rateLastUpdated
+      ? new Date(data.rateLastUpdated).toLocaleString()
+      : "-"
+  }
+/>
 
               <DetailItem
                 icon={<IconId size={15} />}

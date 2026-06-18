@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Vehicle } from "@skerp/types";
+
 
 import {
   Dialog,
@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
+
 
 import {
   SectionLabel,
@@ -30,20 +30,32 @@ import {
   IconClockEdit,
   IconCalendarCheck,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { vehicleKeys } from "./vehicle.key";
+import { vehicleApi } from "./vehicle.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Vehicle;
-  isLoading?: boolean;
+  id?: string | null
 };
+
+
 
 export default function VehicleDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+
+const vehicleDetail = useQuery({
+  queryKey: id ? vehicleKeys.detail(id) : ["vehicle-detail-empty"],
+  queryFn: () => vehicleApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = vehicleDetail.data;
+const isLoading = vehicleDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
@@ -70,13 +82,18 @@ export default function VehicleDetailDialog({
         {isLoading ? (
           <SkeletonBody />
         ) : (
-          <div className="h-[calc(90vh-120px)] overflow-y-auto">
+          <div className="h-[calc(90vh-120px)] overflow-y-auto p-2">
+{/* Vehicle Overview */}
+
+
+
             {/* Vehicle Information */}
 
             <div className="px-5 py-5">
               <SectionLabel>Vehicle Information</SectionLabel>
 
-              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
+
                 <Field
                   label="Vehicle Number"
                   value={data?.vehicleNumber}

@@ -35,7 +35,7 @@ export default function RoutePage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo(
@@ -47,31 +47,22 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const routes = useQuery({
     queryKey: routeKeys.list(listQuery),
     queryFn: () => routeApi.list(listQuery),
   });
-console.log(routes,"data routes")
-  const cities = useQuery({
-    queryKey: cityKeys.list({ size: 1000 }),
-    queryFn: () => cityApi.list({ size: 1000 }),
-  });
-const routeDetail = useQuery({
-  queryKey: detailId ? routeKeys.detail(detailId) : ["route-detail-empty"],
-  queryFn: () => routeApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
+
+const { remove } = useMasterMutations({
+  api: routeApi,
+  queryKey: routeKeys.all,
 });
-  const { create, update, remove } = useMasterMutations({
-    api: routeApi,
-    queryKey: routeKeys.all,
-  });
 
   const bulkRemove = useMutation({
     mutationFn: routeApi.bulkRemove,
@@ -99,16 +90,7 @@ const routeDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateRouteBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -119,6 +101,7 @@ const routeDetail = useQuery({
       defaultHiddenColumns={["rateMatrixEntries", "LorryReceipt", "VehicleTrip"]}
       search={search}
       onSearchChange={setSearch}
+      onSizeChange={setSize}
       page={page}
          onView={(row) => {
   setDetailId(row.id);
@@ -166,20 +149,17 @@ const routeDetail = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportRoutes.isPending}
     >
-  <RouteDetailDialog
+<RouteDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={routeDetail.data}
-  isLoading={routeDetail.isLoading}
+  id={detailId}
 />
-      <RouteForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+
+<RouteForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

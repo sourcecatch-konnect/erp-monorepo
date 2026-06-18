@@ -30,7 +30,7 @@ export default function CityPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const size = 25;
+ const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
     () => ({
@@ -41,32 +41,24 @@ export default function CityPage() {
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const cities = useQuery({
     queryKey: cityKeys.list(listQuery),
     queryFn: () => cityApi.list(listQuery),
   });
-  const cityDetail = useQuery({
-    queryKey: detailId ? cityKeys.detail(detailId) : ["city-detail-empty"],
-    queryFn: () => cityApi.detail(detailId!),
-    enabled: Boolean(detailOpen && detailId),
-  });
-  const states = useQuery({
-    queryKey: stateKeys.list(),
-    queryFn: () => stateApi.list(),
-  });
 
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: cityApi,
   queryKey: cityKeys.all,
   entityName: "City",
 });
+
 const bulkRemove = useMutation({
   mutationFn: cityApi.bulkRemove,
 onSuccess: () => {
@@ -93,17 +85,7 @@ const exportCities = useMutation({
   },
 });
 
-  const handleSubmit = async (data: CreateCityBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
-
+ 
   return (
     <MasterListPage
       title="Cities"
@@ -141,21 +123,21 @@ const exportCities = useMutation({
       isBulkDeleting={bulkRemove.isPending}
       isImporting={bulkImport.isPending}
       isExporting={exportCities.isPending}
+      onSizeChange={setSize}
     >
-      <CityForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        states={states.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+    <CityForm
+  open={open}
+  onOpenChange={(value) => {
+    setOpen(value);
+    if (!value) setSelected(null);
+  }}
+  row={selected}
+/>
       
-    <CityDetailDialog
+ <CityDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={cityDetail.data}
-  isLoading={cityDetail.isLoading}
+  cityId={detailId}
 />
     </MasterListPage>
   );

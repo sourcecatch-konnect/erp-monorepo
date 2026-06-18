@@ -21,13 +21,15 @@ import {
   IconRulerMeasure,
   IconScale,
 } from "@tabler/icons-react";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { wagonApi } from "./wagon.service";
+import { wagonKeys } from "./wagon.key";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Wagon | null;
-  onSubmit: (data: CreateWagonBody) => Promise<void>;
-  isSubmitting?: boolean;
+
 };
 
 const defaultValues: CreateWagonFormInput = {
@@ -41,14 +43,29 @@ export default function WagonForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreateWagonFormInput, unknown, CreateWagonBody>({
     resolver: zodResolver(createWagonSchema),
     defaultValues,
   });
+const { create, update } = useMasterMutations({
+  api: wagonApi,
+  queryKey: wagonKeys.all,
+  entityName: "Wagon",
+});
 
+const handleSubmit = async (data: CreateWagonBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -66,7 +83,7 @@ export default function WagonForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Wagon" : "Add Wagon"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={2}
     >
@@ -89,21 +106,23 @@ export default function WagonForm({
         title="Wagon Dimensions"
         description="Height and width details of the wagon"
       >
-       <IconTextField<CreateWagonFormInput>
+<IconTextField<CreateWagonFormInput>
   name="height"
-  label="Height (Meter)"
-  placeholder="Enter height in meter"
+  label="Height"
+  placeholder="Enter height"
   icon={<IconRulerMeasure size={16} />}
   type="number"
+  suffix="m"
   required
 />
 
 <IconTextField<CreateWagonFormInput>
   name="width"
-  label="Width (Meter)"
-  placeholder="Enter width in meter"
+  label="Width"
+  placeholder="Enter width"
   icon={<IconRulerMeasure size={16} />}
   type="number"
+  suffix="m"
   required
 />
 
@@ -114,12 +133,13 @@ export default function WagonForm({
         title="Weight Details"
         description="Wagon weight capacity or actual weight"
       >
-      <IconTextField<CreateWagonFormInput>
+<IconTextField<CreateWagonFormInput>
   name="weight"
-  label="Weight (Kg)"
-  placeholder="Enter weight in kg"
+  label="Weight"
+  placeholder="Enter weight"
   icon={<IconScale size={16} />}
   type="number"
+  suffix="kg"
   required
 />
       </FormSection>

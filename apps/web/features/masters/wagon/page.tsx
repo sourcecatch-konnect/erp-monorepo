@@ -35,7 +35,7 @@ export default function WagonPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -47,30 +47,24 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const wagons = useQuery({
     queryKey: wagonKeys.list(listQuery),
     queryFn: () => wagonApi.list(listQuery),
   });
 
-  const { create, update, remove } = useMasterMutations({
+  const { remove } = useMasterMutations({
     api: wagonApi,
     queryKey: wagonKeys.all,
     entityName: "Wagon",
   });
-const wagonDetail = useQuery({
-  queryKey: detailId
-    ? wagonKeys.detail(detailId)
-    : ["wagon-detail-empty"],
-  queryFn: () => wagonApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
+
   const bulkRemove = useMutation({
     mutationFn: wagonApi.bulkRemove,
     onSuccess: () => {
@@ -105,16 +99,7 @@ const wagonDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateWagonBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -124,6 +109,7 @@ const wagonDetail = useQuery({
       isLoading={wagons.isLoading}
       defaultHiddenColumns={[]}
       search={search}
+      onSizeChange={setSize}
       onSearchChange={setSearch}
       page={page}
       size={size}
@@ -160,15 +146,13 @@ const wagonDetail = useQuery({
         <WagonDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={wagonDetail.data}
-  isLoading={wagonDetail.isLoading}
+  id={detailId}
 />
       <WagonForm
         open={open}
         onOpenChange={setOpen}
         row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
+    
       />
     </MasterListPage>
   );

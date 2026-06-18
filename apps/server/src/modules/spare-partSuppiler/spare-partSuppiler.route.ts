@@ -11,6 +11,21 @@ const router: Router = createCrudRouter({
   createSchema: createSparePartSupplierSchema,
   updateSchema: updateSparePartSupplierSchema,
   permissionKey: "masters.spare-part-supplier",
+  hooks: {
+  beforeDelete: async (id) => {
+    const count = await db.sparePart.count({
+      where: {
+        supplierId: id,
+      },
+    });
+
+    if (count > 0) {
+      throw new Error(
+        "Cannot delete supplier because spare parts are assigned to it."
+      );
+    }
+  },
+},
   listOptions: {
     searchableFields: ["name", "shopName", "contactPhone", "mobileNo", "email"],
     defaultInclude: {
@@ -22,6 +37,13 @@ const router: Router = createCrudRouter({
       },
     },
     defaultOrderBy: { name: "asc" },
+      blockDeleteIfExists: [
+  {
+    model: db.sparePart,
+    label: "Spare Parts",
+    where: (id: string) => ({ supplierId: id }),
+  },
+],
   },
 });
 

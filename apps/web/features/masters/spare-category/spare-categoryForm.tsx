@@ -18,13 +18,14 @@ import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 
 import { IconTool } from "@tabler/icons-react";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { spareCategoryApi } from "./spare-cateogry.service";
+import { spareCategoryKeys } from "./spare-category.key";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: SpareCategory | null;
-  onSubmit: (data: CreateSpareCategoryBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const spareTypeOptions = [
@@ -42,8 +43,7 @@ export default function SpareCategoryForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<
     CreateSpareCategoryFormInput,
@@ -55,7 +55,22 @@ export default function SpareCategoryForm({
     reValidateMode: "onChange",
     defaultValues,
   });
+const { create, update } = useMasterMutations({
+  api: spareCategoryApi,
+  queryKey: spareCategoryKeys.all,
+});
 
+const handleSubmit = async (data: CreateSpareCategoryBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -75,7 +90,7 @@ export default function SpareCategoryForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Spare Category" : "Add Spare Category"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={2}
     >
