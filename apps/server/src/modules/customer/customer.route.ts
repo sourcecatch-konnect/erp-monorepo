@@ -23,8 +23,10 @@ const router: Router = createCrudRouter({
   updateSchema: updateCustomerSchema as ZodTypeAny,
   permissionKey: "masters.customer",
   hooks: {
-    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeCreate: async (data: any) =>
+      convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data: any) =>
+      convertRupeeFieldsToPaise(data, moneyFields),
   },
   listOptions: {
     searchableFields: [
@@ -84,26 +86,24 @@ const router: Router = createCrudRouter({
 /* ------------------------------------------------------------------ */
 
 // List a customer's saved pickup locations (used by the Order form dropdown).
-router.get(
-  "/:id/locations",
-  can("masters.customer.view"),
-  async (req, res) => {
-    const customerId = getParamId(req);
-    const locations = await db.customerLocation.findMany({
-      where: { customerId },
-      include: { city: { select: { id: true, name: true } } },
-      orderBy: { name: "asc" },
-    });
-    return sendOk(res, locations);
-  }
-);
+router.get("/:id/locations", can("masters.customer.view"), async (req, res) => {
+  const customerId = getParamId(req);
+  const locations = await db.customerLocation.findMany({
+    where: { customerId },
+    include: { city: { select: { id: true, name: true } } },
+    orderBy: { name: "asc" },
+  });
+  return sendOk(res, locations);
+});
 
 router.post(
   "/:id/locations",
   can("masters.customer.update"),
   async (req, res) => {
     const customerId = getParamId(req);
-    const customer = await db.customer.findUnique({ where: { id: customerId } });
+    const customer = await db.customer.findUnique({
+      where: { id: customerId },
+    });
     if (!customer) throw new NotFoundError("Customer not found");
 
     const parsed = createCustomerLocationSchema.safeParse(req.body);
@@ -116,7 +116,7 @@ router.post(
       include: { city: { select: { id: true, name: true } } },
     });
     return sendOk(res, location, undefined, 201);
-  }
+  },
 );
 
 router.patch(
@@ -144,7 +144,7 @@ router.patch(
       include: { city: { select: { id: true, name: true } } },
     });
     return sendOk(res, location);
-  }
+  },
 );
 
 router.delete(
@@ -192,6 +192,6 @@ router.delete(
     });
 
     return sendOk(res, { success: true });
-  }
+  },
 );
 export default router;

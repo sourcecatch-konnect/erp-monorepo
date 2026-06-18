@@ -1,6 +1,8 @@
 import { Providers } from "./providers";
 import { Toaster } from "@skerp/ui/components/sooner";
+import { TestModeToggle } from "@/features/dev-tools/TestModeToggle";
 import "./globals.css";
+
 export default function RootLayout({
   children,
 }: {
@@ -12,6 +14,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <Toaster />
+          {process.env.NEXT_PUBLIC_TEST_MODE === "true" && <TestModeToggle />}
         </Providers>
       </body>
     </html>

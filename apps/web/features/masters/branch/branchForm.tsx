@@ -19,6 +19,7 @@ import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 import PhoneField from "../_shared/fields/PhoneField";
+import SwitchField from "../_shared/fields/SwitchField";
 
 import {
   IconBuilding,
@@ -28,6 +29,9 @@ import {
   IconMail,
   IconMapPin,
   IconUser,
+  IconReceipt,
+  IconTrain,
+  IconFileText,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { companyApi } from "../Company/company.service";
@@ -37,7 +41,7 @@ import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { branchKeys } from "./branch.key";
 import { branchApi } from "./branch.service";
 import CitySelectField from "../_shared/fields/CitySelectField";
-import SwitchField from "../_shared/fields/SwitchField";
+
 
 type Props = {
   open: boolean;
@@ -74,6 +78,7 @@ const defaultValues: CreateBranchFormInput = {
   workingHours: "",
   allowLR: false,
   isRailHead: false,
+  isHeadOffice: false,
   allowReceipt: true,
   companyId: "",
   warehouseId: "",
@@ -132,6 +137,7 @@ const isSubmitting = create.isPending || update.isPending;
       workingHours: row?.workingHours ?? "",
       allowLR: row?.allowLR ?? false,
       isRailHead: row?.isRailHead ?? false,
+      isHeadOffice: row?.isHeadOffice ?? false,
       allowReceipt: row?.allowReceipt ?? true,
       companyId: row?.companyId ?? "",
       warehouseId: row?.warehouseId ?? "",

@@ -59,46 +59,46 @@ export const vehicleSchema = z.object({
   insuranceIssueDate: z.string().nullable().optional(),
   insuranceDueDate: z.string().nullable().optional(),
   status: vehicleStatusSchema,
-    createdAt: z.coerce.date(),
+  createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
 
 export const createVehicleSchema = z.object({
   vehicleNumber: z
-  .string()
-  .trim()
-  .transform((value) => value.toUpperCase().replace(/\s+/g, ""))
-  .pipe(
-    z
-      .string()
-      .min(1, "Vehicle number is required")
-      .max(15, "Vehicle number cannot exceed 15 characters")
-      .regex(
-        /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/,
-        "Enter valid vehicle number, e.g. MH31AB1234"
-      )
-  ),
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase().replace(/\s+/g, ""))
+    .pipe(
+      z
+        .string()
+        .min(1, "Vehicle number is required")
+        .max(15, "Vehicle number cannot exceed 15 characters")
+        .regex(
+          /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/,
+          "Enter valid vehicle number, e.g. MH31AB1234"
+        )
+    ),
   chasisNumber: z
-  .string()
-  .trim()
-  .transform((value) => value.toUpperCase())
-  .pipe(
-    z
-      .string()
-      .length(17, "Chasis number must be exactly 17 characters")
-      .regex(/^[A-Z0-9]+$/, "Chasis number can only contain letters and numbers")
-  ),
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(
+      z
+        .string()
+        .length(17, "Chasis number must be exactly 17 characters")
+        .regex(/^[A-Z0-9]+$/, "Chasis number can only contain letters and numbers")
+    ),
   engineNumber: z
-  .string()
-  .trim()
-  .transform((value) => value.toUpperCase())
-  .pipe(
-    z
-      .string()
-      .min(6, "Engine number must be at least 6 characters")
-      .max(20, "Engine number cannot exceed 20 characters")
-      .regex(/^[A-Z0-9]+$/, "Engine number can only contain letters and numbers")
-  ),
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(
+      z
+        .string()
+        .min(6, "Engine number must be at least 6 characters")
+        .max(20, "Engine number cannot exceed 20 characters")
+        .regex(/^[A-Z0-9]+$/, "Engine number can only contain letters and numbers")
+    ),
 
   ownershipType: ownershipTypeSchema,
   vehicleTypeId: z.string().min(1, "Vehicle type is required"),
@@ -126,8 +126,8 @@ wheels: z
   }, "Please enter wheels correctly"),
 
   capacityMT: numberField("Capacity is required")
-  .refine((value) => value > 0, "Capacity must be greater than 0")
-  .refine((value) => value <= 100, "Capacity cannot exceed 100 MT"),
+    .refine((value) => value > 0, "Capacity must be greater than 0")
+    .refine((value) => value <= 100, "Capacity cannot exceed 100 MT"),
 
 openingKM: z
   .string()
@@ -145,19 +145,19 @@ currentKM: z
   purchaseDate: optionalDateString,
 
   insuranceNumber: z
-  .string()
-  .trim()
-  .transform((value) => (value ? value.toUpperCase() : undefined))
-  .pipe(
-    z
-      .string()
-      .max(30, "Insurance number cannot exceed 30 characters")
-      .regex(
-        /^[A-Z0-9/-]*$/,
-        "Insurance number can only contain letters, numbers, / and -"
-      )
-      .optional()
-  ),
+    .string()
+    .trim()
+    .transform((value) => (value ? value.toUpperCase() : undefined))
+    .pipe(
+      z
+        .string()
+        .max(30, "Insurance number cannot exceed 30 characters")
+        .regex(
+          /^[A-Z0-9/-]*$/,
+          "Insurance number can only contain letters, numbers, / and -"
+        )
+        .optional()
+    ),
   insuranceCompany: optionalString,
   insuranceIssueDate: optionalDateString,
   insuranceDueDate: optionalDateString,

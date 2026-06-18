@@ -104,12 +104,15 @@ export const createLRFromOrderSchema = z.object({
   orderId: requiredId("Order"),
   consigneeId: requiredId("Consignee"),
   transportType: lrTransportTypeSchema.default("Road"),
-  tripLegType: lrTripLegTypeSchema.default("DIRECT"),
-  hubId: z.string().trim().optional().transform((v) => v || undefined),
+  // Railhead branch (order + RoadAndRail only). Required is enforced in the
+  // discriminated-union superRefine below. Unrelated to the Jalgaon hub.
+  railheadBranchId: z.string().trim().optional().transform((v) => v || undefined),
   priority: lrPrioritySchema.default("Normal"),
   isMarketVehicle: z.boolean().default(false),
+  // Order LRs can be explicitly marked as direct, going to hub, or departing
+  // from hub at creation time.
+  tripLegType: lrTripLegTypeSchema.default("DIRECT"),
   primaryTripId: z.string().trim().optional().transform((v) => v || undefined),
-  secondaryTripId: z.string().trim().optional().transform((v) => v || undefined),
   marketVehicleNumber: z.string().trim().optional().transform((v) => v || undefined),
   marketDriverName: z.string().trim().optional().transform((v) => v || undefined),
   goods: z.array(lrGoodsLineSchema).min(1, "Add at least one goods line"),
@@ -124,15 +127,15 @@ export type CreateLRFromOrderInput = z.infer<typeof createLRFromOrderSchema>;
 export const createInstantLRSchema = z.object({
   source: z.literal("INSTANT"),
   isMarketVehicle: z.boolean().default(false),
+  // Created direct: a single trip. The leg-2 trip is attached later by the HO
+  // "split at hub" action, never at creation.
   primaryTripId: z.string().trim().optional().transform((v) => v || undefined),
-  secondaryTripId: z.string().trim().optional().transform((v) => v || undefined),
   marketVehicleNumber: z.string().trim().optional().transform((v) => v || undefined),
   marketDriverName: z.string().trim().optional().transform((v) => v || undefined),
   consignorId: requiredId("Consignor"),
   consigneeId: requiredId("Consignee"),
   originBranchId: requiredId("Origin branch"),
   destinationBranchId: requiredId("Destination branch"),
-  tripLegType: lrTripLegTypeSchema.default("DIRECT"),
   priority: lrPrioritySchema.default("Normal"),
   goods: z.array(lrGoodsLineSchema).min(1, "Add at least one goods line"),
 });
@@ -145,11 +148,11 @@ const _createLRUnion = z.discriminatedUnion("source", [
 ]);
 
 export const createLRSchema = _createLRUnion.superRefine((d, ctx) => {
-  if (d.source === "FROM_ORDER" && d.transportType === "RoadAndRail" && !d.hubId) {
+  if (d.source === "FROM_ORDER" && d.transportType === "RoadAndRail" && !d.railheadBranchId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Select a railhead hub for Road & Rail transport",
-      path: ["hubId"],
+      message: "Select a railhead branch for Road & Rail transport",
+      path: ["railheadBranchId"],
     });
   }
   if (d.isMarketVehicle && !d.marketVehicleNumber) {
@@ -157,6 +160,15 @@ export const createLRSchema = _createLRUnion.superRefine((d, ctx) => {
       code: z.ZodIssueCode.custom,
       message: "Vehicle number is required for market vehicle",
       path: ["marketVehicleNumber"],
+    });
+  }
+  // Own-vehicle LRs must carry a trip — the trip is how the vehicle/driver and
+  // expenses attach to the LR.
+  if (!d.isMarketVehicle && !d.primaryTripId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Attach a trip for own-vehicle transport",
+      path: ["primaryTripId"],
     });
   }
 });
@@ -169,14 +181,14 @@ export type CreateLRInput = z.infer<typeof createLRSchema>;
 
 export const updateLRSchema = z.object({
   isMarketVehicle: z.boolean().optional(),
+  // Only the primary (leg-1) trip is editable here. Leg 2 / hub / tripLegType
+  // are owned by the "split at hub" action, never the edit form.
   primaryTripId: z.string().trim().optional().transform((v) => v || undefined),
-  secondaryTripId: z.string().trim().optional().transform((v) => v || undefined),
   marketVehicleNumber: z.string().trim().optional().transform((v) => v || undefined),
   marketDriverName: z.string().trim().optional().transform((v) => v || undefined),
   consigneeId: requiredId("Consignee").optional(),
   transportType: lrTransportTypeSchema.optional(),
-  tripLegType: lrTripLegTypeSchema.optional(),
-  hubId: z.string().trim().optional().transform((v) => v || undefined),
+  railheadBranchId: z.string().trim().optional().transform((v) => v || undefined),
   priority: lrPrioritySchema.optional(),
   invoiceNumber: optionalString,
   invoiceAmount: optionalPositiveInt("Invoice amount"),
@@ -184,6 +196,18 @@ export const updateLRSchema = z.object({
 });
 
 export type UpdateLRInput = z.infer<typeof updateLRSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Split at hub (HO action on a FINALISED LR — attaches the leg-2 trip) */
+/* ------------------------------------------------------------------ */
+
+export const splitLRAtHubSchema = z.object({
+  // The leg-2 trip (hub → final destination). Hub itself is derived server-side
+  // from the head-office branch, never sent by the client.
+  secondaryTripId: requiredId("Leg 2 trip"),
+});
+
+export type SplitLRAtHubInput = z.infer<typeof splitLRAtHubSchema>;
 
 /* ------------------------------------------------------------------ */
 /* Finalise                                                            */

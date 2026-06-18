@@ -41,6 +41,7 @@ import { customerKeys } from "./customer.key";
 import CitySelectField from "../_shared/fields/CitySelectField";
 import { cityKeys } from "../city/city.keys";
 import { cityApi } from "../city/city.service";
+import { usePrefillCustomer } from "@/features/dev-tools/usePrefillCustomer";
 
 type Props = {
   open: boolean;
@@ -142,6 +143,9 @@ const stateOptions = (states.data?.data ?? []).map((state) => ({
   label: state.name,
   value: state.id,
 }));
+
+  const prefillCustomer = usePrefillCustomer({ states, cities });
+
   const selectedStateId = form.watch("stateId");
 const previousStateIdRef = React.useRef<string>("");
 
@@ -172,6 +176,18 @@ React.useEffect(() => {
       onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
+      footerLeft={
+        prefillCustomer ? (
+          <button
+            type="button"
+            onClick={() => form.reset(prefillCustomer())}
+            className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 4-1 1"/><path d="m4 15 1-1"/><path d="m10.5 6.5-5 5"/><path d="M6 6l12 12"/><path d="m18 6-1.5 1.5"/><path d="m8.5 18-1 1"/></svg>
+            Fill Test Data
+          </button>
+        ) : undefined
+      }
     >
       <FormSection
         icon={<IconBuildingStore size={18} />}
@@ -360,6 +376,7 @@ React.useEffect(() => {
           <CustomerLocationsEditor customerId={row.id} cities={cities.data?.data ?? []} />
         </FormSection>
       ) : null}
+
     </MasterFormDialog>
   );
 }

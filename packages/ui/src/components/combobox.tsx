@@ -20,6 +20,8 @@ export type ComboboxOption = {
   value: string;
   /** Optional secondary line rendered under the label. */
   hint?: string;
+  /** Optional right-side badge rendered in the option list. */
+  badge?: string;
 };
 
 type ComboboxProps = {
@@ -78,13 +80,16 @@ export function Combobox({
           aria-invalid={invalid || undefined}
           disabled={disabled}
           className={cn(
-            "h-10 w-full justify-between rounded-lg font-normal",
+            // Auto height so a long selected label wraps instead of clipping.
+            "h-auto min-h-10 w-full justify-between rounded-lg font-normal",
             !selected && "text-muted-foreground",
             invalid && "ring-1 ring-destructive",
             className
           )}
         >
-          <span className="truncate">{selected ? selected.label : placeholder}</span>
+          <span className="whitespace-normal break-words text-left">
+            {selected ? selected.label : placeholder}
+          </span>
           <ChevronsUpDownIcon className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>

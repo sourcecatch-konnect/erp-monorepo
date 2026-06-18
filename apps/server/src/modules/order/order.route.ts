@@ -34,7 +34,7 @@ import {
 } from "./order.service.js";
 // import { buildOrderPdfDocument, orderPdfInclude } from "./order.pdf.js";
 import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
-import { buildOrderPdfDocument , orderPdfInclude} from "./order.pdf.js";
+import { buildOrderPdfDocument, orderPdfInclude } from "./order.pdf.js";
 import { basePdfTemplate } from "../../templetes/pdf/template/base-pdf.template.js";
 import { rupeesToPaise } from "../../lib/money.js";
 
@@ -76,11 +76,11 @@ router.get("/", can(PERMS.ORDER.VIEW), async (req, res) => {
     ...(query.filter.status ? { status: query.filter.status } : {}),
     ...(query.search
       ? {
-          OR: [
-            { orderNumber: { contains: query.search, mode: "insensitive" } },
-            { customer: { name: { contains: query.search, mode: "insensitive" } } },
-          ],
-        }
+        OR: [
+          { orderNumber: { contains: query.search, mode: "insensitive" } },
+          { customer: { name: { contains: query.search, mode: "insensitive" } } },
+        ],
+      }
       : {}),
   };
 
@@ -126,37 +126,37 @@ router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
   const identifier = getOrderIdentifier(req);
   const isQuickView = req.query.view === "quick";
   if (isQuickView) {
-  
+
     const order = await db.order.findFirst({
       where: orderWhereByIdentifier(identifier),
       select: orderQuickViewSelect,
     });
-   
+
 
     if (!order) throw new NotFoundError("Order not found");
 
-   
+
     return sendOk(res, order);
   }
 
   const order = await db.order.findFirst({
-     where: orderWhereByIdentifier(identifier),
+    where: orderWhereByIdentifier(identifier),
     include: orderInclude,
   });
 
 
   if (!order) throw new NotFoundError("Order not found");
 
-const freight = await computeFreight({
-  orderType: order.orderType,
-  customerId: order.customerId,
-  fromBranchId: order.fromBranchId,
-  toBranchId: order.toBranchId,
-  routeId: order.routeId,
-  vehicleTypeId: order.vehicleTypeId,
-  truckQuantity: order.truckQuantity,
-});
- 
+  const freight = await computeFreight({
+    orderType: order.orderType,
+    customerId: order.customerId,
+    fromBranchId: order.fromBranchId,
+    toBranchId: order.toBranchId,
+    routeId: order.routeId,
+    vehicleTypeId: order.vehicleTypeId,
+    truckQuantity: order.truckQuantity,
+  });
+
 
   return sendOk(res, { ...order, freightPreview: freight });
 });
@@ -209,13 +209,13 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
         items:
           data.orderType === "Item" && data.items?.length
             ? {
-                create: data.items.map((i) => ({
-                  goodsId: i.goodsId,
-                  quantity: i.quantity,
-                  unit: i.unit,
-                  weight: i.weight,
-                })),
-              }
+              create: data.items.map((i) => ({
+                goodsId: i.goodsId,
+                quantity: i.quantity,
+                unit: i.unit,
+                weight: i.weight,
+              })),
+            }
             : undefined,
       },
       include: orderInclude,
@@ -334,13 +334,13 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
         items:
           data.orderType === "Item" && data.items?.length
             ? {
-                create: data.items.map((i) => ({
-                  goodsId: i.goodsId,
-                  quantity: i.quantity,
-                  unit: i.unit,
-                  weight: i.weight,
-                })),
-              }
+              create: data.items.map((i) => ({
+                goodsId: i.goodsId,
+                quantity: i.quantity,
+                unit: i.unit,
+                weight: i.weight,
+              })),
+            }
             : undefined,
       },
       include: orderInclude,
@@ -415,15 +415,15 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
   // Use the provided freight in rupees, else auto-compute rupees (may be null for unmatched/Item).
   let freightRupees = bookingFreightAmount ?? null;
   if (freightRupees === null) {
-  const computed = await computeFreight({
-  orderType: existing.orderType,
-  customerId: existing.customerId,
-  fromBranchId: existing.fromBranchId,
-  toBranchId: existing.toBranchId,
-  routeId: existing.routeId,
-  vehicleTypeId: existing.vehicleTypeId,
-  truckQuantity: existing.truckQuantity,
-});
+    const computed = await computeFreight({
+      orderType: existing.orderType,
+      customerId: existing.customerId,
+      fromBranchId: existing.fromBranchId,
+      toBranchId: existing.toBranchId,
+      routeId: existing.routeId,
+      vehicleTypeId: existing.vehicleTypeId,
+      truckQuantity: existing.truckQuantity,
+    });
     freightRupees = computed.amount;
   }
 

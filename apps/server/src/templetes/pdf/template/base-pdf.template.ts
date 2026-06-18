@@ -1,665 +1,544 @@
-import type { PdfDocument, PdfFieldValue, PdfSection, PdfTable } from "../pdf.type.js";
+import type { PdfDocument, PdfFieldValue, PdfParty } from "../pdf.type.js";
 
-const safeValue = (value: PdfFieldValue) => {
-  if (value === null || value === undefined || value === "") return "-";
-
-  return String(value)
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+
+const display = (value: PdfFieldValue) => {
+  if (value === null || value === undefined || value === "") return "-";
+  return escapeHtml(value);
 };
 
-const renderHeader = (doc: PdfDocument) => {
-  return `
-    <div class="letterhead">
-      ${
-        doc.company?.cin
-          ? `<div class="header-cin">CIN : ${safeValue(doc.company.cin)}</div>`
-          : ""
-      }
+const normalizeStatus = (status: PdfFieldValue) =>
+  String(status ?? "").replace(/\s+/g, "").toLowerCase();
 
-      ${
-        doc.company?.headerImageSrc
-          ? `<img class="header-image" src="${safeValue(doc.company.headerImageSrc)}" />`
-          : doc.company?.name
-          ? `<div class="company-name">${safeValue(doc.company.name)}</div>`
-          : ""
-      }
+const statusLabel = (status: PdfFieldValue) => {
+  const raw = String(status ?? "");
+  if (!raw) return "-";
 
-      ${
-        doc.company?.address
-          ? `<div class="header-address">${safeValue(doc.company.address)}</div>`
-          : ""
-      }
-    </div>
-  `;
+  return raw
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .trim();
 };
 
-const renderDocumentTitle = (doc: PdfDocument) => {
-  return `
-    <div class="document-title-row">
-      <div class="document-title">
-        ${safeValue(doc.title)}
-        ${doc.subtitle ? `<div class="document-subtitle">${safeValue(doc.subtitle)}</div>` : ""}
-      </div>
+const statusClass = (status: PdfFieldValue) => {
+  const value = normalizeStatus(status);
 
-      <div class="document-meta">
-        ${
-          doc.documentNo
-            ? `
-              <div class="meta-row">
-                <strong>No.</strong>
-                <span>${safeValue(doc.documentNo)}</span>
-              </div>
-            `
-            : ""
-        }
+  if (["completed", "complete"].includes(value)) return "status-completed";
+  if (["cancelled", "canceled"].includes(value)) return "status-cancelled";
+  if (["pending", "pendingapproval", "planned"].includes(value)) return "status-pending";
+  if (["confirmed", "inprogress", "intransit"].includes(value)) return "status-active";
+  if (["rejected"].includes(value)) return "status-rejected";
 
-        ${
-          doc.date
-            ? `
-              <div class="meta-row">
-                <strong>Date</strong>
-                <span>${safeValue(doc.date)}</span>
-              </div>
-            `
-            : ""
-        }
-      </div>
-    </div>
-  `;
+  return "status-default";
 };
 
-const renderSection = (section: PdfSection) => {
-  const columns = section.columns || 2;
-
-  return `
-    <div class="section">
-      ${section.title ? `<div class="section-title">${safeValue(section.title)}</div>` : ""}
-
-      <div class="field-grid cols-${columns}">
-        ${section.fields
-          .map(
-            (field) => `
-              <div class="field">
-                <div class="field-label">${safeValue(field.label)}</div>
-                <div class="field-value">${safeValue(field.value)}</div>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-};
-
-const renderTable = (table: PdfTable) => {
-  return `
-    <div class="table-section">
-      ${table.title ? `<div class="section-title">${safeValue(table.title)}</div>` : ""}
-
-      <table>
-        <thead>
-          <tr>
-            ${table.columns.map((column) => `<th>${safeValue(column)}</th>`).join("")}
-          </tr>
-        </thead>
-
-        <tbody>
-          ${
-            table.rows.length > 0
-              ? table.rows
-                  .map(
-                    (row) => `
-                      <tr>
-                        ${row.map((cell) => `<td>${safeValue(cell)}</td>`).join("")}
-                      </tr>
-                    `
-                  )
-                  .join("")
-              : `
-                <tr>
-                  <td colspan="${table.columns.length}" class="empty-cell">
-                    No records available
-                  </td>
-                </tr>
-              `
-          }
-        </tbody>
-      </table>
-    </div>
-  `;
-};
-
-const renderSummary = (doc: PdfDocument) => {
-  if (!doc.summary || doc.summary.length === 0) return "";
-
-  return `
-    <div class="summary-wrapper">
-      <div class="summary-box">
-        ${doc.summary
-          .map(
-            (item) => `
-              <div class="summary-row">
-                <span>${safeValue(item.label)}</span>
-                <strong>${safeValue(item.value)}</strong>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-};
-
-const renderNotes = (doc: PdfDocument) => {
-  if (!doc.notes || doc.notes.length === 0) return "";
-
-  return `
-    <div class="notes-section">
-      <div class="section-title">Notes / Terms</div>
-      <ol>
-        ${doc.notes.map((note) => `<li>${safeValue(note)}</li>`).join("")}
-      </ol>
-    </div>
-  `;
-};
-
-const renderSignatures = (doc: PdfDocument) => {
-  if (!doc.signatures || doc.signatures.length === 0) return "";
-
-  return `
-    <div class="signatures">
-      ${doc.signatures
-        .map(
-          (signature) => `
-            <div class="signature-box">
-              <div class="signature-space"></div>
-              <div class="signature-line"></div>
-              <div class="signature-label">${safeValue(signature)}</div>
-            </div>
-          `
-        )
-        .join("")}
-    </div>
-  `;
-};
-
-const renderFooter = (doc: PdfDocument) => {
-  const contacts =
-    doc.footerContacts
-      ?.map(
-        (item) => `
-          <span class="footer-contact">
-            ${safeValue(item.city)} : ${safeValue(item.phone)}
-          </span>
-        `
-      )
-      .join("") || "";
-
-  if (!contacts && !doc.company?.email && !doc.company?.website) return "";
-
-  return `
-    <div class="footer">
-      ${
-        contacts
-          ? `
-            <div class="footer-contact-row">
-              ${contacts}
-            </div>
-          `
-          : ""
-      }
-
-      ${
-        doc.company?.email || doc.company?.website
-          ? `
-            <div class="footer-main-row">
-              ${
-                doc.company?.email
-                  ? `<span>E-Mail: ${safeValue(doc.company.email)}</span>`
-                  : ""
-              }
-
-              ${
-                doc.company?.website
-                  ? `<span>Visit us: ${safeValue(doc.company.website)}</span>`
-                  : ""
-              }
-            </div>
-          `
-          : ""
-      }
-    </div>
-  `;
-};
-const baseCss = `
-  * {
-    box-sizing: border-box;
-  }
-
-  @page {
-    size: A4;
-    margin: 0;
-  }
-
-  html,
-  body {
-    margin: 0;
-    padding: 0;
-    font-family: Arial, Helvetica, sans-serif;
-    color: #111;
-    background: #ffffff;
-    font-size: 9.5px;
-  }
-
-  @media screen {
-    body {
-      background: #e5e7eb;
-      padding: 16px 0;
-    }
-
-    .page {
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
-    }
-  }
-
-  @media print {
-    body {
-      background: #ffffff;
-      padding: 0;
-    }
-
-    .page {
-      box-shadow: none;
-      margin: 0;
-    }
-  }
-
- .page {
-  width: 210mm;
-  height: 297mm;
-  margin: 0 auto;
-  background: #ffffff;
-  padding: 5mm 7mm 24mm;
-  position: relative;
-  overflow: hidden;
-}
-
-.content {
-  position: relative;
-  z-index: 1;
-  padding-bottom: 22mm;
-}
-
-  .watermark {
-    position: absolute;
-    top: 132mm;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 70mm;
-    opacity: 0.04;
-    z-index: 0;
-  }
-
-  .letterhead {
-    width: 100%;
-    margin-bottom: 4px;
-  }
-
-  .header-cin {
-  text-align: right;
-  font-size: 10px;
-  font-weight: 800;
-  color: #111;
-  line-height: 1.15;
-  margin-bottom: 2px;
-}
- .header-image {
-  display: block;
-  width: 100%;
-  height: 26mm;
-  max-height: 26mm;
-  object-fit: contain;
-  object-position: center;
-}
-
-  .company-name {
-    text-align: center;
-    font-size: 22px;
-    font-weight: 900;
-    letter-spacing: 0.8px;
-    padding: 8px 0 4px;
-  }
-
-.header-address {
-  text-align: center;
-  font-size: 10px;
-  font-weight: 800;
-  color: #111;
-  line-height: 1.3;
-  margin-top: 2px;
-}
-
-  .document-title-row {
-    display: grid;
-    grid-template-columns: 1fr 52mm;
-    border: 1px solid #111;
-    margin-top: 4px;
-  }
-
-  .document-title {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    text-align: center;
-    font-size: 11px;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.35px;
-    padding: 4px 8px;
-  }
-
-  .document-subtitle {
-    font-size: 8px;
-    font-weight: 700;
-    margin-top: 2px;
-    text-transform: none;
-  }
-
-  .document-meta {
-    border-left: 1px solid #111;
-  }
-
-  .meta-row {
-    display: grid;
-    grid-template-columns: 18mm 1fr;
-    border-bottom: 1px solid #111;
-    min-height: 8mm;
-  }
-
-  .meta-row:last-child {
-    border-bottom: none;
-  }
-
-  .meta-row strong,
-  .meta-row span {
-    padding: 4px 5px;
-  }
-
-  .meta-row strong {
-    border-right: 1px solid #111;
-  }
-
-  .section,
-  .table-section,
-  .notes-section {
-    border-left: 1px solid #111;
-    border-right: 1px solid #111;
-    border-bottom: 1px solid #111;
-    page-break-inside: avoid;
-  }
-
-  .section-title {
-    background: #f5f5f5;
-    border-bottom: 1px solid #111;
-    padding: 4px 6px;
-    font-size: 9px;
-    font-weight: 900;
-    text-transform: uppercase;
-  }
-
-  .field-grid {
-    display: grid;
-  }
-
-  .field-grid.cols-1 {
-    grid-template-columns: 1fr;
-  }
-
-  .field-grid.cols-2 {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .field-grid.cols-3 {
-    grid-template-columns: 1fr 1fr 1fr;
-  }
-
-  .field-grid.cols-4 {
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-  }
-
-  .field {
-    display: grid;
-    grid-template-columns: 35% 65%;
-    min-height: 8mm;
-    border-right: 1px solid #111;
-    border-bottom: 1px solid #111;
-  }
-
-  .field:nth-last-child(-n + 2) {
-    border-bottom: none;
-  }
-
-  .cols-1 .field {
-    border-right: none;
-  }
-
-  .cols-2 .field:nth-child(2n) {
-    border-right: none;
-  }
-
-  .cols-3 .field:nth-child(3n) {
-    border-right: none;
-  }
-
-  .cols-4 .field:nth-child(4n) {
-    border-right: none;
-  }
-
-  .field-label {
-    padding: 4px 5px;
-    font-weight: 900;
-    border-right: 1px solid #111;
-    background: #fafafa;
-  }
-
-  .field-value {
-    padding: 4px 5px;
-    font-weight: 700;
-    word-break: break-word;
-    line-height: 1.25;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  th,
-  td {
-    border-right: 1px solid #111;
-    border-bottom: 1px solid #111;
-    padding: 5px 6px;
-    vertical-align: top;
-    text-align: left;
-    line-height: 1.25;
-    word-break: break-word;
-  }
-
-  th:last-child,
-  td:last-child {
-    border-right: none;
-  }
-
-  tr:last-child td {
-    border-bottom: none;
-  }
-
-  th {
-    font-size: 8.5px;
-    font-weight: 900;
-    text-transform: uppercase;
-    background: #f5f5f5;
-  }
-
-  .empty-cell {
-    text-align: center;
-    color: #777;
-    font-style: italic;
-  }
-
-  .summary-wrapper {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 6px;
-    page-break-inside: avoid;
-  }
-
-  .summary-box {
-    width: 75mm;
-    border: 1px solid #111;
-  }
-
-  .summary-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 5px 7px;
-    border-bottom: 1px solid #111;
-  }
-
-  .summary-row:last-child {
-    border-bottom: none;
-    background: #f5f5f5;
-  }
-
-  .notes-section {
-    margin-top: 6px;
-  }
-
-  .notes-section ol {
-    margin: 0;
-    padding: 6px 8px 6px 18px;
-  }
-
-  .notes-section li {
-    font-size: 8px;
-    line-height: 1.25;
-    margin-bottom: 2px;
-  }
-
-  .signatures {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-    margin-top: 22mm;
-    page-break-inside: avoid;
-  }
-
-  .signature-box {
-    text-align: center;
-  }
-
-  .signature-space {
-    height: 20mm;
-  }
-
-  .signature-line {
-    border-top: 1px solid #111;
-  }
-
-  .signature-label {
-    padding-top: 4px;
-    font-weight: 900;
-  }
-
-
-.footer {
-  position: absolute;
-  left: 7mm;
-  right: 7mm;
-  bottom: 5mm;
-  text-align: center;
-    color: #344d74;
-  line-height: 1.45;
-  z-index: 2;
-}
-.footer-contact-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  column-gap: 8px;
-  row-gap: 2px;
-  margin-bottom: 3px;
-}
-
-.footer-contact {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  font-size: 8.8px;
-  font-weight: 900;
-}
-.footer-contact::before {
-  content: "✣";
-  color: #7f1d1d;
-  font-size: 9px;
-  margin-right: 3px;
-}
-
-.footer-main-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 9px;
-  font-weight: 900;
-  color: #344d74;
-}
+const renderBadge = (status: PdfFieldValue) => `
+  <span class="status-badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>
 `;
 
-export const basePdfTemplate = (doc: PdfDocument) => {
+const isStatusField = (label: string) => label.trim().toLowerCase() === "status";
+const renderParty = (label: string, party: PdfParty | undefined) => {
+  if (!party) return `<div class="cc-party"><div class="cc-party-label">${escapeHtml(label)}</div><div class="cc-empty">—</div></div>`;
+
+  const rows: string[] = [];
+
+  if (party.name)
+    rows.push(`<div class="cc-name">${escapeHtml(String(party.name))}</div>`);
+
+  if (party.address)
+    rows.push(`<div class="cc-row"><span class="cc-row-label">Address</span><span class="cc-row-value">${escapeHtml(String(party.address))}</span></div>`);
+
+  if (party.gstin)
+    rows.push(`<div class="cc-row"><span class="cc-row-label">GSTIN</span><span class="cc-row-value">${escapeHtml(String(party.gstin))}</span></div>`);
+
+  if (party.contact)
+    rows.push(`<div class="cc-row"><span class="cc-row-label">Contact</span><span class="cc-row-value">${escapeHtml(String(party.contact))}</span></div>`);
+
+  for (const ex of party.extra ?? []) {
+    if (ex.value !== null && ex.value !== undefined && ex.value !== "")
+      rows.push(`<div class="cc-row"><span class="cc-row-label">${escapeHtml(ex.label)}</span><span class="cc-row-value">${escapeHtml(String(ex.value))}</span></div>`);
+  }
+
   return `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8" />
+    <div class="cc-party">
+      <div class="cc-party-label">${escapeHtml(label)}</div>
+      ${rows.join("\n")}
+    </div>`;
+};
 
-        <style>
-          ${baseCss}
-        </style>
-      </head>
+export const basePdfTemplate = (doc: PdfDocument) => {
+  const sections = doc.sections ?? [];
+  const tables = doc.tables ?? [];
+  const summary = doc.summary ?? [];
+  const notes = doc.notes ?? [];
+  const signatures = doc.signatures ?? [];
 
-      <body>
-        <div class="page">
-          ${
-            doc.company?.watermarkSrc
-              ? `<img class="watermark" src="${safeValue(doc.company.watermarkSrc)}" />`
-              : ""
-          }
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
 
-          <div class="content">
-            ${renderHeader(doc)}
-            ${renderDocumentTitle(doc)}
+    * {
+      box-sizing: border-box;
+    }
 
-            ${(doc.sections || []).map(renderSection).join("")}
+    body {
+      margin: 0;
+      color: #111827;
+      background: #ffffff;
+      font-family: "Times New Roman", Times, serif;
+      font-size: 12px;
+      line-height: 1.42;
+    }
 
-            ${(doc.tables || []).map(renderTable).join("")}
+    .page {
+      width: 100%;
+    }
 
-            ${renderSummary(doc)}
-            ${renderNotes(doc)}
-            ${renderSignatures(doc)}
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #111827;
+    }
+
+    .brand-name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      color: #991b1b;
+      text-transform: uppercase;
+    }
+
+    .brand-meta {
+      margin-top: 5px;
+      max-width: 470px;
+      color: #4b5563;
+      font-size: 10.5px;
+    }
+
+     .brand { flex: 1; min-width: 0; }
+     .brand-logo {
+      display: block;
+      width: 260px;
+      max-width: 100%;
+      height: 48px;
+      object-fit: contain;
+      object-position: left center;
+      margin-bottom: 5px;
+    }
+    .doc-meta {
+  min-width: 190px;
+  text-align: right;
+}
+
+.doc-title {
+  font-size: 21px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.doc-info-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.meta-line {
+  color: #374151;
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+
+    .status-badge {
+      display: inline-block;
+      margin-top: 7px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .status-pending {
+      color: #92400e;
+      background: #fef3c7;
+      border-color: #f59e0b;
+    }
+
+    .status-completed {
+      color: #065f46;
+      background: #d1fae5;
+      border-color: #10b981;
+    }
+
+    .status-cancelled,
+    .status-rejected {
+      color: #991b1b;
+      background: #fee2e2;
+      border-color: #ef4444;
+    }
+
+    .status-active {
+      color: #1e40af;
+      background: #dbeafe;
+      border-color: #3b82f6;
+    }
+
+    .status-default {
+      color: #374151;
+      background: #f3f4f6;
+      border-color: #d1d5db;
+    }
+
+    .section {
+      margin-top: 13px;
+      break-inside: avoid;
+    }
+
+    .section-title,
+    .table-title,
+    .summary-title,
+    .notes-title {
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #111827;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+    }
+
+    .fields {
+      display: grid;
+      gap: 7px;
+    }
+
+    .cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .field {
+      min-height: 44px;
+      padding: 8px 9px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #ffffff;
+    }
+
+    .label {
+      margin-bottom: 3px;
+      color: #6b7280;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+    }
+
+    .value {
+      color: #111827;
+      font-size: 12px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    /* ── Consignor / Consignee strip ─────────────────────────────────── */
+    .cc-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border: 1px solid #111827;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    /* dividing line between left and right */
+    .cc-party + .cc-party {
+      border-left: 1px solid #111827;
+    }
+
+    .cc-party {
+      padding: 10px 12px;
+      background: #ffffff;
+    }
+
+    .cc-party-label {
+      font-size: 9.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+      background: #111827;
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 2px;
+      margin-bottom: 8px;
+    }
+
+    .cc-name {
+      font-size: 15px;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+
+    .cc-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .cc-row-label {
+      flex-shrink: 0;
+      min-width: 52px;
+      color: #6b7280;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      padding-top: 1px;
+    }
+
+    .cc-row-value {
+      color: #111827;
+      word-break: break-word;
+    }
+
+    .cc-empty { color: #9ca3af; font-style: italic; font-size: 10.5px; }
+   table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 5px;
+      font-size: 12px;
+      break-inside: avoid;
+      font-family: "Times New Roman", Times, serif;
+    }
+
+    th {
+      padding: 7px 8px;
+      text-align: left;
+      color: #ffffff;
+      background: #111827;
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    td {
+      padding: 7px 8px;
+      border: 1px solid #d1d5db;
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    tbody tr:nth-child(even) td { background: #f9fafb; }
+    .summary {
+      margin-top: 13px;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: #f9fafb;
+      break-inside: avoid;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 4px 0;
+      font-size: 11.5px;
+    }
+
+    .summary-row strong { font-size: 13px; }
+
+    /* ── Notes ───────────────────────────────────────────────────────── */
+    .notes { margin-top: 12px; color: #374151; font-size: 12px; }
+    .notes ul { margin: 4px 0 0; padding-left: 16px; }
+
+    /* ── Created row ─────────────────────────────────────────────────── */
+    .created-row {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid #d1d5db;
+      color: #4b5563;
+      font-size: 12px;
+    }
+
+    .created-row {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid #d1d5db;
+      color: #4b5563;
+      font-size: 12px;
+    }
+
+    .signatures {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 34px;
+      break-inside: avoid;
+    }
+
+    .signature {
+      padding-top: 24px;
+      border-top: 1px solid #111827;
+      text-align: center;
+      color: #374151;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .footer {
+      margin-top: 18px;
+      padding-top: 8px;
+      border-top: 1px solid #d1d5db;
+      color: #6b7280;
+      font-size: 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+  <div class="brand">
+    ${doc.company?.headerImageSrc
+      ? `<img class="brand-logo" src="${doc.company.headerImageSrc}" alt="${escapeHtml(doc.company.name)}" />`
+      : `<div class="brand-name">${escapeHtml(doc.company?.name ?? "S K TRANS LINES PVT. LTD.")}</div>`
+    }
+
+    <div class="brand-meta">
+      ${escapeHtml(doc.company?.address ?? "")}
+      ${doc.company?.cin ? ` • CIN: ${escapeHtml(doc.company.cin)}` : ""}
+      ${doc.company?.email ? ` • ${escapeHtml(doc.company.email)}` : ""}
+      ${doc.company?.website ? ` • ${escapeHtml(doc.company.website)}` : ""}
+    </div>
+  </div>
+
+  <div class="doc-meta">
+    <div class="doc-title">${escapeHtml(doc.title)}</div>
+    <div class="doc-info-row">
+  ${doc.documentNo ? `<div class="meta-line"><strong>No:</strong> ${display(doc.documentNo)}</div>` : ""}
+  ${doc.date ? `<div class="meta-line"><strong>Date:</strong> ${display(doc.date)}</div>` : ""}
+  ${doc.status ? `<div>${renderBadge(doc.status)}</div>` : ""}
+</div>
+  </div>
+</header>
+
+    ${sections.map((section) => {
+      // ── Consignor / Consignee variant ──────────────────────────────
+      if (section.variant === "consignor-consignee") {
+        return `
+          <section class="section">
+            ${section.title ? `<div class="section-title">${escapeHtml(section.title)}</div>` : ""}
+            <div class="cc-strip">
+              ${renderParty("Consignor", section.consignor)}
+              ${renderParty("Consignee", section.consignee)}
+            </div>
+          </section>`;
+      }
+
+      // ── Default grid variant ────────────────────────────────────────
+      const cols = section.columns ?? 2;
+      return `
+        <section class="section">
+          ${section.title ? `<div class="section-title">${escapeHtml(section.title)}</div>` : ""}
+          <div class="fields cols-${cols}">
+            ${section.fields.map((field) => `
+              <div class="field" style="${field.width ? `grid-column: span ${escapeHtml(field.width)};` : ""}">
+                <div class="label">${escapeHtml(field.label)}</div>
+                <div class="value">
+                  ${isStatusField(field.label) ? renderBadge(field.value) : display(field.value)}
+                </div>
+              </div>`).join("")}
           </div>
+        </section>`;
+    }).join("")}
 
-          ${renderFooter(doc)}
-        </div>
-      </body>
-    </html>
-  `;
+    <!-- ── Tables ──────────────────────────────────────────────────── -->
+    ${tables.map((table) => `
+      <section class="section">
+        ${table.title ? `<div class="table-title">${escapeHtml(table.title)}</div>` : ""}
+        <table>
+          <thead>
+            <tr>${table.columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${table.rows.length
+        ? table.rows.map((row) => `
+                  <tr>${row.map((cell, i) => {
+          const col = table.columns[i] ?? "";
+          return `<td>${col.toLowerCase() === "status" ? renderBadge(cell) : display(cell)}</td>`;
+        }).join("")}</tr>`).join("")
+        : `<tr><td colspan="${table.columns.length}">No records found</td></tr>`
+      }
+          </tbody>
+        </table>
+      </section>`).join("")}
+
+    <!-- ── Summary ─────────────────────────────────────────────────── -->
+    ${summary.length ? `
+      <section class="summary">
+        <div class="summary-title">Summary</div>
+        ${summary.map((item) => `
+          <div class="summary-row">
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${display(item.value)}</strong>
+          </div>`).join("")}
+      </section>` : ""}
+
+    <!-- ── Notes ───────────────────────────────────────────────────── -->
+    ${notes.length ? `
+      <section class="notes">
+        <div class="notes-title">Notes</div>
+        <ul>${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>
+      </section>` : ""}
+
+    <!-- ── Created row ─────────────────────────────────────────────── -->
+    ${doc.createdAt || doc.createdBy ? `
+      <div class="created-row">
+        ${doc.createdAt ? `<strong>Created:</strong> ${escapeHtml(doc.createdAt)}` : ""}
+        ${doc.createdAt && doc.createdBy ? " &nbsp;&bull;&nbsp; " : ""}
+        ${doc.createdBy ? `<strong>By:</strong> ${escapeHtml(doc.createdBy)}` : ""}
+      </div>` : ""}
+
+    <!-- ── Signatures ───────────────────────────────────────────────── -->
+    ${signatures.length ? `
+      <section class="signatures">
+        ${signatures.map((label) => `<div class="signature">${escapeHtml(label)}</div>`).join("")}
+      </section>` : ""}
+
+    <!-- ── Footer ──────────────────────────────────────────────────── -->
+    ${doc.footerContacts?.length ? `
+      <footer class="footer">
+        ${doc.footerContacts.map((c) => `${escapeHtml(c.city)}: ${escapeHtml(c.phone)}`).join(" | ")}
+      </footer>` : ""}
+
+  </main>
+</body>
+</html>`;
 };

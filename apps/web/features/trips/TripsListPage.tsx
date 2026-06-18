@@ -10,6 +10,7 @@ import { Button } from "@skerp/ui/components/button";
 import { IconPlus } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -18,7 +19,7 @@ import type { ListQuery } from "../masters/_shared/master-api";
 import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import TripTable from "./TripTable";
-import StartTripDialog from "./StartTripDialog";
+import CloseTripDialog from "./CloseTripDialog";
 
 export default function TripsListPage() {
   const router = useRouter();
@@ -30,12 +31,16 @@ export default function TripsListPage() {
   const [statusFilter, setStatusFilter] = React.useState("ALL");
   const debouncedSearch = useDebouncedValue(search);
 
-  const [startTrip, setStartTrip] = React.useState<Trip | null>(null);
+  const [closeTrip, setCloseTrip] = React.useState<Trip | null>(null);
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
+  const [deleteTrip, setDeleteTrip] = React.useState<Trip | null>(null);
 
   const canCreate = useCan(PERMS.TRIP.CREATE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
+  const canClose = useCan(PERMS.TRIP.CLOSE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
+  const canDelete = useCan(PERMS.TRIP.DELETE);
+  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
@@ -52,14 +57,10 @@ export default function TripsListPage() {
     () => ({
       page,
       size,
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
-      ...(statusFilter !== "ALL"
-        ? { filter: { status: statusFilter } }
-        : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
     }),
-    [page, size, debouncedSearch, statusFilter]
+    [page, size, debouncedSearch, statusFilter],
   );
 
   const trips = useQuery({
@@ -71,19 +72,19 @@ export default function TripsListPage() {
   const counts = useQuery({
     queryKey: tripKeys.statusCounts,
     queryFn: tripApi.statusCounts,
-    staleTime: 60_000,
+    staleTime: 0,
   });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: tripKeys.all });
   };
 
-  const start = useMutation({
-    mutationFn: (vars: { id: string; openingKm: number }) =>
-      tripApi.start(vars.id, { openingKm: vars.openingKm }),
+  const close = useMutation({
+    mutationFn: (vars: { id: string; closingKm: number }) =>
+      tripApi.close(vars.id, { closingKm: vars.closingKm }),
     onSuccess: () => {
-      toast.success("Trip started");
-      setStartTrip(null);
+      toast.success("Trip closed");
+      setCloseTrip(null);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -99,6 +100,41 @@ export default function TripsListPage() {
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => tripApi.delete(id),
+    onSuccess: () => {
+      toast.success("Trip deleted");
+      setDeleteTrip(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
+
+  const downloadTripPdf = async (id: string) => {
+    const res = await fetch(`/api/trips/${id}/pdf`, { method: "GET" });
+    if (!res.ok) throw new Error("Failed to fetch PDF");
+    return res.blob();
+  };
+
+  const handleDownloadPdf = async (trip: Trip) => {
+    try {
+      const blob = await downloadTripPdf(trip.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `trip-${trip.tripNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download PDF");
+    }
+  };
 
   return (
     <div className="space-y-4 p-4">
@@ -124,19 +160,27 @@ export default function TripsListPage() {
         onStatusFilterChange={setStatusFilter}
         counts={counts.data ?? {}}
         isLoading={trips.isLoading}
+        canStart={canCreateLR}
+        canClose={canClose}
         canUpdate={canUpdate}
         canCancel={canCancel}
-        onStart={(t) => setStartTrip(t)}
+        canDelete={canDelete}
+        onStart={(t) => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
+        onClose={(t) => setCloseTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
+        onDelete={(t) => setDeleteTrip(t)}
+        canDownloadPdf={canDownloadPdf}
+        onDownloadPdf={handleDownloadPdf}
       />
 
-      <StartTripDialog
-        open={Boolean(startTrip)}
-        onOpenChange={(open) => !open && setStartTrip(null)}
-        tripNumber={startTrip?.tripNumber}
-        isPending={start.isPending}
-        onConfirm={(openingKm) => {
-          if (startTrip) start.mutate({ id: startTrip.id, openingKm });
+      <CloseTripDialog
+        open={Boolean(closeTrip)}
+        onOpenChange={(open) => !open && setCloseTrip(null)}
+        tripNumber={closeTrip?.tripNumber}
+        openingKm={closeTrip?.openingKm}
+        isPending={close.isPending}
+        onConfirm={(closingKm) => {
+          if (closeTrip) close.mutate({ id: closeTrip.id, closingKm });
         }}
       />
 
@@ -150,6 +194,22 @@ export default function TripsListPage() {
         isPending={cancel.isPending}
         onConfirm={(reason) => {
           if (cancelTrip) cancel.mutate({ id: cancelTrip.id, reason });
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTrip)}
+        onOpenChange={(open) => {
+          if (!open && !remove.isPending) setDeleteTrip(null);
+        }}
+        title={`Delete trip ${deleteTrip?.tripNumber ?? ""}`}
+        description="This will permanently delete the trip. Use this only for wrong, duplicate, or cancelled trips."
+        confirmLabel="Delete trip"
+        pendingLabel="Deleting..."
+        destructive
+        isPending={remove.isPending}
+        onConfirm={() => {
+          if (deleteTrip) remove.mutate(deleteTrip.id);
         }}
       />
     </div>

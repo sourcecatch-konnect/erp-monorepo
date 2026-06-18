@@ -1,0 +1,8 @@
+{
+  "extends": "@skerp/typescript-config/react-library.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "noEmit": true
+  },
+  "include": ["src"]
+}

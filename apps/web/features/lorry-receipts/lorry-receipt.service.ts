@@ -7,6 +7,7 @@ import type {
   UpdateLRBody,
   FinaliseLRBody,
   CancelLRBody,
+  SplitLRAtHubBody,
   AddEwayBillBody,
   EwayBill,
 } from "@skerp/types";
@@ -24,39 +25,55 @@ export const lorryReceiptApi = {
     if (query?.size !== undefined) params.size = query.size;
     if (query?.search) params.search = query.search;
     if (query?.sort) params.sort = query.sort;
-    if (query?.filter?.status) params["filter[status]"] = String(query.filter.status);
-    if (query?.filter?.source) params["filter[source]"] = String(query.filter.source);
-    if (query?.filter?.orderId) params["filter[orderId]"] = String(query.filter.orderId);
-    const res = await api.get<ApiResponse<LRListItem[]>>("/lorry-receipts", { params });
+    if (query?.filter?.status)
+      params["filter[status]"] = String(query.filter.status);
+    if (query?.filter?.source)
+      params["filter[source]"] = String(query.filter.source);
+    if (query?.filter?.orderId)
+      params["filter[orderId]"] = String(query.filter.orderId);
+    const res = await api.get<ApiResponse<LRListItem[]>>("/lorry-receipts", {
+      params,
+    });
     return unwrapListResponse(res);
   },
 
   statusCounts: async (): Promise<Record<string, number>> => {
     const res = await api.get<ApiResponse<Record<string, number>>>(
-      "/lorry-receipts/status-counts"
+      "/lorry-receipts/status-counts",
     );
     return unwrapApiResponse(res);
   },
 
   detail: async (id: string): Promise<LorryReceipt> => {
-    const res = await api.get<ApiResponse<LorryReceipt>>(`/lorry-receipts/${id}`);
+    const res = await api.get<ApiResponse<LorryReceipt>>(
+      `/lorry-receipts/${id}`,
+    );
     return unwrapApiResponse(res);
   },
 
   create: async (body: CreateLRBody): Promise<LorryReceipt> => {
-    const res = await api.post<ApiResponse<LorryReceipt>>("/lorry-receipts", body);
+    const res = await api.post<ApiResponse<LorryReceipt>>(
+      "/lorry-receipts",
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
-  update: async (id: string, body: UpdateLRBody & { version?: number }): Promise<LorryReceipt> => {
-    const res = await api.patch<ApiResponse<LorryReceipt>>(`/lorry-receipts/${id}`, body);
+  update: async (
+    id: string,
+    body: UpdateLRBody & { version?: number },
+  ): Promise<LorryReceipt> => {
+    const res = await api.patch<ApiResponse<LorryReceipt>>(
+      `/lorry-receipts/${id}`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
   finalise: async (id: string, body: FinaliseLRBody): Promise<LorryReceipt> => {
     const res = await api.post<ApiResponse<LorryReceipt>>(
       `/lorry-receipts/${id}/finalise`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -64,7 +81,18 @@ export const lorryReceiptApi = {
   cancel: async (id: string, body: CancelLRBody): Promise<LorryReceipt> => {
     const res = await api.post<ApiResponse<LorryReceipt>>(
       `/lorry-receipts/${id}/cancel`,
-      body
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  splitAtHub: async (
+    id: string,
+    body: SplitLRAtHubBody,
+  ): Promise<LorryReceipt> => {
+    const res = await api.post<ApiResponse<LorryReceipt>>(
+      `/lorry-receipts/${id}/split-at-hub`,
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -72,7 +100,7 @@ export const lorryReceiptApi = {
   addEwayBill: async (id: string, body: AddEwayBillBody): Promise<EwayBill> => {
     const res = await api.post<ApiResponse<EwayBill>>(
       `/lorry-receipts/${id}/eway-bills`,
-      body
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -85,7 +113,20 @@ export const lorryReceiptApi = {
 type VehicleRow = { id: string; vehicleNumber: string; ownershipType?: string };
 type DriverRow = { id: string; name: string; mobile?: string | null };
 type CustomerRow = { id: string; name: string; shortName: string | null };
-type BranchRow = { id: string; name: string; branchCode: string; shortCode?: string; isRailHead?: boolean };
+type GoodsRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  weight?: number | null;
+};
+type BranchRow = {
+  id: string;
+  name: string;
+  branchCode: string;
+  shortCode?: string;
+  isRailHead?: boolean;
+  isHeadOffice?: boolean;
+};
 type TripRow = {
   id: string;
   tripNumber: string;
@@ -93,6 +134,11 @@ type TripRow = {
   status: string;
   vehicle?: { id: string; vehicleNumber: string } | null;
   driver?: { id: string; name: string } | null;
+  route?: {
+    id: string;
+    sourceCity?: { id: string; name: string } | null;
+    destinationCity?: { id: string; name: string } | null;
+  } | null;
 };
 type OrderRow = {
   id: string;
@@ -113,8 +159,13 @@ type OrderRow = {
 const LOOKUP_SIZE = { size: 1000 } as const;
 
 export type LROption = { value: string; label: string };
-export type LRTripOption = LROption & TripRow;
-export type LRBranchOption = LROption & { branchCode: string; isRailHead: boolean };
+export type LRTripOption = LROption &
+  TripRow & { hint?: string; badge?: string };
+export type LRBranchOption = LROption & {
+  branchCode: string;
+  isRailHead: boolean;
+  isHeadOffice: boolean;
+};
 
 export const lrLookups = {
   vehicles: async (): Promise<(LROption & VehicleRow)[]> => {
@@ -150,6 +201,17 @@ export const lrLookups = {
     }));
   },
 
+  goods: async (): Promise<(LROption & GoodsRow)[]> => {
+    const res = await api.get<ApiResponse<GoodsRow[]>>("/goods", {
+      params: { ...LOOKUP_SIZE, sort: "name:asc" },
+    });
+    return unwrapListResponse(res).data.map((g) => ({
+      ...g,
+      value: g.id,
+      label: g.name,
+    }));
+  },
+
   customers: async (): Promise<LROption[]> => {
     const res = await api.get<ApiResponse<CustomerRow[]>>("/customers", {
       params: { ...LOOKUP_SIZE, sort: "name:asc" },
@@ -164,11 +226,13 @@ export const lrLookups = {
     const res = await api.get<ApiResponse<BranchRow[]>>("/branches", {
       params: LOOKUP_SIZE,
     });
+
     return unwrapListResponse(res).data.map((b) => ({
       value: b.id,
       label: b.name,
       branchCode: b.branchCode,
       isRailHead: b.isRailHead ?? false,
+      isHeadOffice: b.isHeadOffice ?? false,
     }));
   },
 
@@ -181,18 +245,31 @@ export const lrLookups = {
       label: b.name,
       branchCode: b.branchCode,
       isRailHead: true,
+      isHeadOffice: b.isHeadOffice ?? false,
     }));
   },
 
-  plannedTrips: async (): Promise<LRTripOption[]> => {
-    const res = await api.get<ApiResponse<TripRow[]>>("/vehicle-trips", {
-      params: { ...LOOKUP_SIZE, "filter[status]": "Planned" },
+  /** Trips an LR can attach to: any non-cancelled trip with no live LR on it. */
+  attachableTrips: async (): Promise<LRTripOption[]> => {
+    const res = await api.get<ApiResponse<TripRow[]>>("/trips", {
+      params: { ...LOOKUP_SIZE, "filter[unattached]": "true" },
     });
-    return unwrapListResponse(res).data.map((t) => ({
-      ...t,
-      value: t.id,
-      label: `${t.tripNumber} — ${t.tripName}`,
-    }));
+    const statusLabel: Record<string, string> = {
+      Planned: "Planned",
+      InTransit: "In Transit",
+      Closed: "Closed",
+    };
+    return unwrapListResponse(res).data.map((t) => {
+      const from = t.route?.sourceCity?.name;
+      const to = t.route?.destinationCity?.name;
+      return {
+        ...t,
+        value: t.id,
+        label: t.tripName,
+        hint: from && to ? `${from} → ${to}` : t.tripNumber,
+        badge: statusLabel[t.status] ?? t.status,
+      };
+    });
   },
 
   confirmedTruckOrders: async (): Promise<(LROption & OrderRow)[]> => {
@@ -216,8 +293,9 @@ export const lrLookupKeys = {
   marketVehicles: ["lookup", "market-vehicles"] as const,
   drivers: ["lookup", "drivers"] as const,
   customers: ["lookup", "customers"] as const,
+  goods: ["lookup", "goods"] as const,
   branches: ["lookup", "branches"] as const,
   railheadBranches: ["lookup", "railhead-branches"] as const,
-  plannedTrips: ["lookup", "planned-trips"] as const,
+  attachableTrips: ["lookup", "attachable-trips"] as const,
   confirmedTruckOrders: ["lookup", "confirmed-truck-orders"] as const,
 };

@@ -20,7 +20,7 @@ import OrderTable from "./OrderTable";
 import OrderQuickViewModal from "./OrderQuickViewModal";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
-import ConfirmDialog from "./components/confirmDialog";
+import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 
 export default function OrdersListPage() {
   const router = useRouter();
@@ -122,6 +122,25 @@ export default function OrdersListPage() {
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
+  const handleDownloadPdf = async (order: Order) => {
+    try {
+      const blob = await orderApi.downloadPdf(order.id);
+
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `order-${order.orderNumber}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Could not download order PDF");
+    }
+  };
 
   return (
     <div className="space-y-4 p-4">
@@ -159,6 +178,8 @@ export default function OrdersListPage() {
         onCancel={(o) => setCancelOrder(o)}
         onCreateLR={(o) => router.push(`/lorry-receipts/new?orderId=${o.id}`)}
         onDelete={(o) => setDeleteOrder(o)}
+        onDownloadPdf={handleDownloadPdf}
+        canDownloadPdf={true}
       />
 
 

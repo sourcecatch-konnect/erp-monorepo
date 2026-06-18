@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   createTripSchema,
   updateTripSchema,
-  startTripSchema,
+  closeTripSchema,
   cancelTripSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
@@ -33,7 +33,11 @@ import {
 import {
   Prisma,
   TripStatus,
+  TripType,
 } from "../../../generated/prisma/index.js";
+import { buildTripPdfDocument, tripPdfInclude } from "./trip.pdf.js";
+import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
+import type { Request, Response } from "express";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -111,41 +115,61 @@ async function resolveTripName(
 router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
   const query = parseListQuery(req);
   const search = query.search;
+  const status = query.filter.status;
 
   const where: Prisma.VehicleTripWhereInput = {
+    deletedAt: null,
     ...(search
       ? {
-        OR: [
-          {
-            tripNumber: {
-              contains: search,
-              mode: "insensitive",
+          OR: [
+            {
+              tripNumber: {
+                contains: search,
+                mode: "insensitive",
+              },
             },
-          },
-          {
-            tripName: {
-              contains: search,
-              mode: "insensitive",
+            {
+              tripName: {
+                contains: search,
+                mode: "insensitive",
+              },
             },
-          },
-          {
-            vehicle: {
-              is: {
-                vehicleNumber: {
-                  contains: search,
-                  mode: "insensitive",
+            {
+              vehicle: {
+                is: {
+                  vehicleNumber: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
                 },
               },
             },
-          },
-        ],
-      }
+          ],
+        }
       : {}),
 
-    ...(query.filter.status
+    ...(status
       ? {
-        status: query.filter.status as TripStatus,
-      }
+          status: status.includes(",")
+            ? { in: status.split(",") as TripStatus[] }
+            : (status as TripStatus),
+        }
+      : {}),
+    // Trips an LR can attach to (for the LR trip picker). One trip = one LR
+    // (full load), so only Planned trips with no live LR are attachable.
+    ...(query.filter.unattached === "true"
+      ? {
+          status: "Planned",
+          primaryLRs: {
+            none: { deletedAt: null, status: { not: "CANCELLED" } },
+          },
+          secondaryLRs: {
+            none: { deletedAt: null, status: { not: "CANCELLED" } },
+          },
+        }
+      : {}),
+    ...(query.filter.tripType
+      ? { tripType: query.filter.tripType as TripType }
       : {}),
   };
   const [data, total] = await Promise.all([
@@ -197,6 +221,31 @@ router.get("/:id", can(PERMS.TRIP.VIEW), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Trip PDF                                                           */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/:id/pdf",
+  can(PERMS.TRIP.VIEW),
+  async (req: Request<{ id: string }>, res: Response) => {
+    const id = getParamId(req);
+    const trip = await db.vehicleTrip.findFirst({
+      where: { id, deletedAt: null },
+      include: tripPdfInclude,
+    });
+    if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+    const pdfDoc = buildTripPdfDocument(trip);
+    const buffer = await generatePdfBuffer(pdfDoc);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="trip-${trip.tripNumber}.pdf"`,
+    );
+    return res.send(buffer);
+  },
+);
+/* ------------------------------------------------------------------ */
 /* Create -> Planned                                                  */
 /* ------------------------------------------------------------------ */
 router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
@@ -226,6 +275,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         routeId: data.routeId,
         consignorId,
         onwardFreight: data.onwardFreight,
+        openingKm: data.openingKm,
         isTripEmpty: data.isTripEmpty,
         rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
         fyCode,
@@ -286,6 +336,7 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
       routeId: data.routeId,
       consignorId,
       onwardFreight: data.onwardFreight,
+      openingKm: data.openingKm,
       isTripEmpty: data.isTripEmpty,
       rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
       updatedById: me,
@@ -298,47 +349,95 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Start -> InTransit                                                 */
+/* Close -> Closed                                                    */
 /* ------------------------------------------------------------------ */
-router.post("/:id/start", can(PERMS.TRIP.UPDATE), async (req, res) => {
+router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   const id = getParamId(req);
   const existing = await db.vehicleTrip.findFirst({
     where: { id, deletedAt: null },
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
-  if (existing.status !== "Planned") {
-    throw new BadRequestError("Only a Planned trip can be started");
+  if (existing.status !== "InTransit") {
+    throw new BadRequestError("Only an InTransit trip can be closed");
   }
 
-  const parsed = startTripSchema.safeParse(req.body);
+  const parsed = closeTripSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
-  const { openingKm, startDateTime } = parsed.data;
+  const { closingKm, endDateTime } = parsed.data;
+
+  if (closingKm < existing.openingKm) {
+    throw new BadRequestError(
+      `Closing KM (${closingKm}) cannot be less than opening KM (${existing.openingKm})`,
+    );
+  }
   const me = actorId(req);
 
   const updated = await db.$transaction(async (tx) => {
     const row = await tx.vehicleTrip.update({
       where: { id },
       data: {
-        status: "InTransit",
-        openingKm,
-        startDateTime: startDateTime ?? new Date(),
+        status: "Closed",
+        closingKm,
+        endDateTime: endDateTime ?? new Date(),
         updatedById: me,
         version: { increment: 1 },
       },
       include: tripInclude,
     });
+    // Release the vehicle now the trip is done.
     await tx.vehicle.update({
       where: { id: existing.vehicleId },
-      data: { status: "ON_TRIP" },
+      data: { status: "AVAILABLE" },
     });
-    await writeTripStatus(tx, id, me, "InTransit", "Trip started");
+    await writeTripStatus(tx, id, me, "Closed", "Trip closed");
     return row;
   });
 
   return sendOk(res, updated);
+});
+
+/* ------------------------------------------------------------------ */
+/* Delete (Planned / Cancelled only)                                  */
+/* ------------------------------------------------------------------ */
+router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
+  const id = getParamId(req);
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+  });
+  if (!existing) throw new NotFoundError("Trip not found");
+
+  if (!["Planned", "Cancelled"].includes(existing.status)) {
+    throw new BadRequestError(
+      `A ${existing.status} trip cannot be deleted. Please cancel the trip instead.`,
+      "TRIP_DELETE_NOT_ALLOWED",
+    );
+  }
+
+  const deleted = await db.$transaction(async (tx) => {
+    const lrCount = await tx.lorryReceipt.count({
+      where: {
+        deletedAt: null,
+        OR: [{ primaryTripId: id }, { secondaryTripId: id }],
+      },
+    });
+
+    if (lrCount > 0) {
+      throw new BadRequestError(
+        `This trip cannot be deleted because ${lrCount} LR(s) are linked with this trip.`,
+        "TRIP_DELETE_BLOCKED",
+      );
+    }
+
+    return tx.vehicleTrip.delete({
+      where: { id },
+      include: tripInclude,
+    });
+  });
+
+  return sendOk(res, deleted);
 });
 
 /* ------------------------------------------------------------------ */

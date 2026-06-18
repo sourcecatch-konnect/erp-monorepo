@@ -9,11 +9,15 @@ export const imageToBase64Src = (filePath: string) => {
   const ext = path.extname(filePath).toLowerCase();
 
   const mimeType =
-    ext === ".jpg" || ext === ".jpeg"
-      ? "image/jpeg"
-      : ext === ".png"
-        ? "image/png"
-        : "image/jpeg";
+    ext === ".svg"
+      ? "image/svg+xml"
+      : ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".webp"
+            ? "image/webp"
+            : "application/octet-stream";
 
   const imageBuffer = fs.readFileSync(filePath);
 

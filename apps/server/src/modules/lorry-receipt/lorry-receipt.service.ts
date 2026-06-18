@@ -64,6 +64,27 @@ export const assertTruckSlotAvailable = async (
 };
 
 /* ------------------------------------------------------------------ */
+/* Hub (head-office branch) resolver                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The hub is always the head-office branch (Jalgaon) — never picked. Resolve it
+ * from the singleton `isHeadOffice` flag. Throws if none is configured.
+ */
+export const resolveHubBranchId = async (tx: Tx): Promise<string> => {
+  const ho = await tx.branch.findFirst({
+    where: { isHeadOffice: true },
+    select: { id: true },
+  });
+  if (!ho) {
+    throw new BadRequestError(
+      "No head-office branch is configured. Mark a branch as Head Office to enable hub split.",
+    );
+  }
+  return ho.id;
+};
+
+/* ------------------------------------------------------------------ */
 /* Prisma select shapes                                                */
 /* ------------------------------------------------------------------ */
 
@@ -99,6 +120,7 @@ export const lrListSelect = {
   primaryTrip: { select: tripSelect },
   secondaryTrip: { select: tripSelect },
   hub: { select: { id: true, name: true, branchCode: true } },
+  railheadBranch: { select: { id: true, name: true, branchCode: true } },
   consignor: { select: { id: true, name: true, shortName: true } },
   consignee: { select: { id: true, name: true, shortName: true } },
   originBranch: { select: { id: true, name: true, branchCode: true } },
@@ -111,6 +133,7 @@ export const lrDetailInclude = {
   primaryTrip: { select: tripSelect },
   secondaryTrip: { select: tripSelect },
   hub: { select: { id: true, name: true, branchCode: true } },
+  railheadBranch: { select: { id: true, name: true, branchCode: true } },
   consignor: { select: { id: true, name: true, shortName: true } },
   consignee: { select: { id: true, name: true, shortName: true } },
   originBranch: { select: { id: true, name: true, branchCode: true } },

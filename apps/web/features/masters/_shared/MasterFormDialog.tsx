@@ -31,6 +31,7 @@ type Props<
   isSubmitting?: boolean;
   children: React.ReactNode;
   columns?: 1 | 2 | 3;
+  footerLeft?: React.ReactNode;
 };
 
 const gridClassByColumns = {
@@ -81,6 +82,7 @@ export default function MasterFormDialog<
   isSubmitting,
   children,
   columns = 1,
+  footerLeft,
 }: Props<TFieldValues, TSubmitValues>) {
   const rootError = form.formState.errors.root?.message;
 
@@ -157,6 +159,8 @@ if (!hasFieldErrors) {
             </div>
 
             <DialogFooter className="mt-4 gap-2 border-t pt-4">
+              {footerLeft && <div className="mr-auto">{footerLeft}</div>}
+
               {typeof rootError === "string" ? (
                 <p className="mr-auto text-sm text-red-600">{rootError}</p>
               ) : null}
