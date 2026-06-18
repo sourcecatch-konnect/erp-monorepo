@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Vehicle } from "@skerp/types";
+
 
 import {
   Dialog,
@@ -30,49 +30,32 @@ import {
   IconClockEdit,
   IconCalendarCheck,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { vehicleKeys } from "./vehicle.key";
+import { vehicleApi } from "./vehicle.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Vehicle;
-  isLoading?: boolean;
-};
-const display = (value?: string | number | null) => {
-  if (value === null || value === undefined || value === "") return "-";
-  return String(value);
+  id?: string | null
 };
 
-const formatLabel = (value?: string | null) => {
-  if (!value) return "-";
-
-  return value
-    .replaceAll("_", " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-function VehicleStatusBadge({ status }: { status?: string | null }) {
-  return (
-    <span
-      className={
-        status === "ACTIVE"
-          ? "inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"
-          : "inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700"
-      }
-    >
-      <IconCircleCheckFilled size={12} />
-      {formatLabel(status)}
-    </span>
-  );
-}
 
 
 export default function VehicleDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+
+const vehicleDetail = useQuery({
+  queryKey: id ? vehicleKeys.detail(id) : ["vehicle-detail-empty"],
+  queryFn: () => vehicleApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = vehicleDetail.data;
+const isLoading = vehicleDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">

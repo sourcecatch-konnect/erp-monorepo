@@ -13,7 +13,11 @@ const router: Router = createCrudRouter({
   createSchema: createVehicleSchema as ZodTypeAny,
   updateSchema: updateVehicleSchema as ZodTypeAny,
   permissionKey: "masters.vehicle",
-
+  uniqueErrorMessages: {
+  vehicleNumber: "This vehicle number already exists.",
+  chasisNumber: "This chassis number already exists.",
+  engineNumber: "This engine number already exists.",
+},
   listOptions: {
     searchableFields: [
       "vehicleNumber",

@@ -40,12 +40,13 @@ import {
 
 import { driverApi } from "./driver.service";
 import { paiseToRupees } from "@/lib/money";
+import { useQuery } from "@tanstack/react-query";
+import { driverKeys } from "./driver.key";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Driver;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 const display = (value?: string | number | null) => {
@@ -118,9 +119,16 @@ const formatCurrency = (value?: number | null) => {
 export default function DriverDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const driverDetail = useQuery({
+    queryKey: id ? driverKeys.detail(id) : ["driver-detail-empty"],
+    queryFn: () => driverApi.detail(id!),
+    enabled: Boolean(open && id),
+  });
+
+  const data = driverDetail.data;
+  const isLoading = driverDetail.isLoading;
   const [photoPreviewUrl, setPhotoPreviewUrl] = React.useState("");
 
   React.useEffect(() => {

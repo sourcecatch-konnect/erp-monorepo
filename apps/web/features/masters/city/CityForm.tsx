@@ -16,14 +16,15 @@ import SelectField from "../_shared/fields/SelectField";
 
 import { IconBuildingCommunity, IconInfoCircle } from "@tabler/icons-react";
 import { Alert, AlertDescription, AlertTitle } from "@skerp/ui/components/alert";
+import { stateApi } from "../state/state.service";
+import { stateKeys } from "../state/state.keys";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: City | null;
-  states: State[];
-  onSubmit: (data: CreateCityBody) => Promise<void>;
-  isSubmitting?: boolean;
+
 };
 
 const defaultValues: CreateCityBody = {
@@ -35,14 +36,42 @@ export default function CityForm({
   open,
   onOpenChange,
   row,
-  states,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreateCityBody>({
     resolver: zodResolver(createCitySchema),
     defaultValues,
   });
+  const { create, update } = useMasterMutations({
+  api: cityApi,
+  queryKey: cityKeys.all,
+  entityName: "City",
+});
+
+const states = useQuery({
+  queryKey: stateKeys.list({
+    page: 0,
+    size: 35,
+    sort: "name:asc",
+  }),
+  queryFn: () =>
+    stateApi.list({
+      page: 0,
+      size: 35,
+      sort: "name:asc",
+    }),
+  enabled: open,
+});
+
+const handleSubmit = async (data: CreateCityBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
 const cityName = form.watch("name");
 const selectedStateId = form.watch("stateId");
 
@@ -96,35 +125,35 @@ const firstCitySuggestion = filteredCitySuggestions[0];
 
 
   return (
-    <MasterFormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={row ? "Edit City" : "Add City"}
-      form={form}
-      onSubmit={onSubmit}
-      isSubmitting={isSubmitting}
-      columns={2}
-    >
+   <MasterFormDialog
+  open={open}
+  onOpenChange={onOpenChange}
+  title={row ? "Edit City" : "Add City"}
+  form={form}
+  onSubmit={handleSubmit}
+  isSubmitting={create.isPending || update.isPending}
+  columns={2}
+>
       {/* CITY INFO SECTION */}
      <FormSection
   icon={<IconBuildingCommunity size={18} />}
   title="City Information"
   description="Basic details of the city"
 >
+
+<SelectField<CreateCityBody>
+  name="stateId"
+  label="State"
+  options={(states.data?.data ?? []).map((state) => ({
+    label: state.name,
+    value: state.id,
+  }))}
+  required
+/>
   <TextField<CreateCityBody>
     name="name"
     label="City Name"
     placeholder="e.g. Nagpur"
-    required
-  />
-
-  <SelectField<CreateCityBody>
-    name="stateId"
-    label="State"
-    options={states.map((state) => ({
-      label: state.name,
-      value: state.id,
-    }))}
     required
   />
 

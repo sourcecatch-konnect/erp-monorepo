@@ -78,29 +78,11 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     queryFn: () => sparePartApi.list(listQuery),
   });
 
-  const categories = useQuery({
-    queryKey: spareCategoryKeys.list(),
-    queryFn: () => spareCategoryApi.list(),
-  });
 
-  const suppliers = useQuery({
-    queryKey: sparePartSupplierKeys.list(),
-    queryFn: () => sparePartSupplierApi.list(),
-  });
-
-const sparePartDetail = useQuery({
-  queryKey: detailId
-    ? sparePartKeys.detail(detailId)
-    : ["spare-part-detail-empty"],
-  queryFn: () => sparePartApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-
- const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: sparePartApi,
   queryKey: sparePartKeys.all,
 });
-
   const bulkRemove = useMutation({
     mutationFn: sparePartApi.bulkRemove,
     onSuccess: () => {
@@ -123,16 +105,7 @@ const sparePartDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateSparePartBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -190,20 +163,16 @@ const sparePartDetail = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportData.isPending}
     >
-      <SparePartForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        categories={categories.data?.data ?? []}
-        suppliers={suppliers.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+     <SparePartForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
+
 <SparePartDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={sparePartDetail.data}
-  isLoading={sparePartDetail.isLoading}
+  id={detailId}
 />
     </MasterListPage>
   );

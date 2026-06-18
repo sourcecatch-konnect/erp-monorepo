@@ -59,20 +59,10 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     queryFn: () => routeApi.list(listQuery),
   });
 
-  const cities = useQuery({
-    queryKey: cityKeys.list({ size: 1000 }),
-    queryFn: () => cityApi.list({ size: 1000 }),
-  });
-const routeDetail = useQuery({
-  queryKey: detailId ? routeKeys.detail(detailId) : ["route-detail-empty"],
-  queryFn: () => routeApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
+const { remove } = useMasterMutations({
+  api: routeApi,
+  queryKey: routeKeys.all,
 });
-
-  const { create, update, remove } = useMasterMutations({
-    api: routeApi,
-    queryKey: routeKeys.all,
-  });
 
   const bulkRemove = useMutation({
     mutationFn: routeApi.bulkRemove,
@@ -100,16 +90,7 @@ const routeDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateRouteBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -168,20 +149,17 @@ const routeDetail = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportRoutes.isPending}
     >
-  <RouteDetailDialog
+<RouteDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={routeDetail.data}
-  isLoading={routeDetail.isLoading}
+  id={detailId}
 />
-      <RouteForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+
+<RouteForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

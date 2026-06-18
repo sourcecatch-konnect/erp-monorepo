@@ -3,20 +3,15 @@ import axios from "axios";
 /**
  * Extract clean error message from API response
  */
-export const handleApiError = (error: unknown): Error => {
-  if (axios.isAxiosError(error)) {
-    const message =
-      error.response?.data?.error?.message ||
-      error.response?.data?.message ||
-      error.response?.data?.details ||
-      error.message ||
-      "Something went wrong";
+export function handleApiError(error: any) {
+  const message =
+    error?.response?.data?.error?.message ||
+    error?.response?.data?.message ||
+    error?.message ||
+    "Unexpected error occurred";
 
-    return new Error(message);
-  }
-
-  return new Error("Unexpected error occurred");
-};
+  throw new Error(message); // ✔ KEEP REAL MESSAGE
+}
 
 /**
  * Wrapper to handle async API calls with centralized error handling

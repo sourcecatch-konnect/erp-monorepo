@@ -115,29 +115,33 @@ lengthFeet: optionalString.refine(
   "Length must be between 1 and 100 feet"
 ),
 
- wheels: optionalString.refine(
-  (value) => {
-    if (value === undefined || value === "") return true;
-
+wheels: z
+  .string()
+  .trim()
+  .min(1, "Wheels is required")
+  .refine((value) => {
     const num = Number(value);
 
     return Number.isInteger(num) && num > 0 && num % 2 === 0;
-  },
-  "Please enter wheels correctly"
-),
+  }, "Please enter wheels correctly"),
 
   capacityMT: numberField("Capacity is required")
   .refine((value) => value > 0, "Capacity must be greater than 0")
   .refine((value) => value <= 100, "Capacity cannot exceed 100 MT"),
 
-openingKM: intField("Opening KM is required")
-  .refine((value) => value >= 0, "Opening KM cannot be negative")
-  .refine((value) => value <= 9999999, "Opening KM is too high"),
+openingKM: z
+  .string()
+  .min(1, "Opening KM is required")
+  .transform(Number)
+  .refine(Number.isInteger, "Opening KM must be a whole number")
+  .refine((value) => value >= 0, "Opening KM cannot be negative"),
 
-currentKM: intField("Current KM is required")
-  .refine((value) => value >= 0, "Current KM cannot be negative")
-  .refine((value) => value <= 9999999, "Current KM is too high"),
-
+currentKM: z
+  .string()
+  .min(1, "Current KM is required")
+  .transform(Number)
+  .refine(Number.isInteger, "Current KM must be a whole number")
+  .refine((value) => value >= 0, "Current KM cannot be negative"),
   purchaseDate: optionalDateString,
 
   insuranceNumber: z

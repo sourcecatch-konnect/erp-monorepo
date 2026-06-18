@@ -62,10 +62,17 @@ const router: Router = createCrudRouter({
       {
         model: db.lorryReceipt,
         label: "Lorry Receipts",
-        where: (id: string) => ({ consigneeId: id }),
+        where: (id: string) => ({ consignorId: id }),
         select: { id: true },
         getName: (row: any) => row.id,
-      }
+      },
+      {
+  model: db.vehicleTrip,
+  label: "Vehicle Trips",
+  where: (id: string) => ({ consignorId: id }),
+  select: { id: true },
+  getName: (row: any) => row.id,
+},
       
     ],
   },
@@ -144,19 +151,47 @@ router.delete(
   "/locations/:locationId",
   can("masters.customer.update"),
   async (req, res) => {
-    const locationId = req.params.locationId;
-    if (typeof locationId !== "string" || !locationId) {
+    const locationId = Array.isArray(req.params.locationId)
+      ? req.params.locationId[0]
+      : req.params.locationId;
+
+    if (!locationId) {
       throw new ValidationError("Invalid location id");
     }
 
     const existing = await db.customerLocation.findUnique({
       where: { id: locationId },
     });
-    if (!existing) throw new NotFoundError("Location not found");
 
-    await db.customerLocation.delete({ where: { id: locationId } });
+    if (!existing) {
+      throw new NotFoundError("Location not found");
+    }
+
+    const orderCount = await db.order.count({
+      where: { customerLocationId: locationId },
+    });
+
+    if (orderCount > 0) {
+      throw new ValidationError(
+        `Cannot delete location because it is used in ${orderCount} order(s)`
+      );
+    }
+
+    const unloadingCount = await db.tripUnloadingPoint.count({
+      where: { locationId },
+    });
+
+    if (unloadingCount > 0) {
+      throw new ValidationError(
+        `Cannot delete location because it is used in ${unloadingCount} trip unloading point(s)`
+      );
+    }
+
+    await db.customerLocation.delete({
+      where: { id: locationId },
+    });
+
     return sendOk(res, { success: true });
   }
 );
-
 export default router;

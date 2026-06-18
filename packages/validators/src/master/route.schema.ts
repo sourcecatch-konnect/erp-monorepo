@@ -24,10 +24,26 @@ export const routeSchema = z.object({
   LorryReceipt: z.any().optional(),
   VehicleTrip: z.any().optional(),
 });
-
-export const createRouteSchema = z.object({
+const baseRouteSchema = z.object({
   sourceCityId: z.string().min(1, "Source city is required"),
   destinationCityId: z.string().min(1, "Destination city is required"),
 });
-
-export const updateRouteSchema = createRouteSchema.partial();
+export const createRouteSchema = baseRouteSchema.refine(
+  (data) => data.sourceCityId !== data.destinationCityId,
+  {
+    message: "Source and destination city cannot be the same",
+    path: ["destinationCityId"],
+  }
+);
+export const updateRouteSchema = baseRouteSchema
+  .partial()
+  .refine(
+    (data) => {
+      if (!data.sourceCityId || !data.destinationCityId) return true;
+      return data.sourceCityId !== data.destinationCityId;
+    },
+    {
+      message: "Source and destination city cannot be same",
+      path: ["destinationCityId"],
+    }
+  );

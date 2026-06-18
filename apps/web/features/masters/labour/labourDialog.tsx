@@ -33,12 +33,15 @@ import {
   IconTool,
   IconUser,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { labourKeys } from "./labour.key";
+import { labourApi } from "./labour.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   data?: LabourWithRelations;
-  isLoading?: boolean;
+   id?: string | null;
 };
 
 const display = (value?: string | number | null) => {
@@ -74,9 +77,16 @@ function WorkerTypeBadge({ type }: { type?: string | null }) {
 export default function LabourDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const labourDetail = useQuery({
+  queryKey: id ? labourKeys.detail(id) : ["labour-empty"],
+  queryFn: () => labourApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = labourDetail.data;
+const isLoading = labourDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">

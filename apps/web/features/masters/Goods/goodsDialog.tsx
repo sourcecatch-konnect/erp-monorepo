@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Goods } from "@skerp/types";
+
 
 import {
   Dialog,
@@ -28,20 +28,37 @@ import {
   IconAlignBoxBottomCenter,
   IconCircleCheckFilled,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { goodsKeys } from "./goods.key";
+import { goodsApi } from "./goods.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Goods;
-  isLoading?: boolean;
+  id?: string | null;
 };
+const BooleanBadge = ({ value }: { value?: boolean }) => {
+  if (value === true)
+    return <span className="text-green-600">Yes</span>;
 
+  if (value === false)
+    return <span className="text-red-600">No</span>;
+
+  return <span>-</span>;
+};
 export default function GoodsDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+    const goodsDetail = useQuery({
+    queryKey: id ? goodsKeys.detail(id) : ["goods-empty"],
+    queryFn: () => goodsApi.detail(id!),
+    enabled: Boolean(open && id),
+  });
+
+  const data = goodsDetail.data;
+  const isLoading = goodsDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
@@ -122,11 +139,11 @@ export default function GoodsDetailDialog({
                   icon={<IconAlignBoxBottomCenter size={12} />}
                 />
 
-                <Field
-                  label="Stacking Allowed"
-                  value={data?.isStackingAllowed ? "Yes" : "No"}
-                  icon={<IconStack size={12} />}
-                />
+               <Field
+  label="Stacking Allowed"
+  value={<BooleanBadge value={data?.isStackingAllowed} />}
+  icon={<IconStack size={12} />}
+/>
 
                 <Field
                   label="Description"

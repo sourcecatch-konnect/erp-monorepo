@@ -45,28 +45,20 @@ import { driverApi } from "./driver.service";
 import { createDriverSchema } from "@skerp/validators";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { paiseToRupees } from "@/lib/money";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { stateKeys } from "../state/state.keys";
+import { stateApi } from "../state/state.service";
+import { cityKeys } from "../city/city.keys";
+import { cityApi } from "../city/city.service";
+import { driverKeys } from "./driver.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CitySelectField from "../_shared/fields/CitySelectField";
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Driver | null;
-  states: State[];
-  cities: City[];
-  onSubmit: (data: CreateDriverBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
-function uniqueCitiesByName(cities: City[]) {
-  const map = new Map<string, City>();
 
-  for (const city of cities) {
-    const key = city.name.trim().toLowerCase();
-
-    if (!map.has(key)) {
-      map.set(key, city);
-    }
-  }
-
-  return Array.from(map.values());
-}
 const driverStatusOptions = [
   { label: "Available", value: "AVAILABLE" },
   { label: "On Trip", value: "ON_TRIP" },
@@ -141,12 +133,34 @@ export default function DriverForm({
   open,
   onOpenChange,
   row,
-  states,
-  cities,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
-  
+  const { data: statesData } = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+
+const states = statesData?.data ?? [];
+
+
+
+const { create, update } = useMasterMutations({
+  api: driverApi,
+  queryKey: driverKeys.all,
+  entityName: "Driver",
+});
+
+const handleSubmit = async (data: CreateDriverBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
 const form = useForm<CreateDriverFormInput, unknown, CreateDriverBody>({
   resolver: zodResolver(createDriverSchema),
   defaultValues,
@@ -156,29 +170,14 @@ const form = useForm<CreateDriverFormInput, unknown, CreateDriverBody>({
 const permanentState = form.watch("permanentState");
 const correspondenceState = form.watch("correspondenceState");
 
-const permanentCities = React.useMemo(() => {
-  if (!permanentState) return [];
+const permanentStateId = React.useMemo(() => {
+  return states.find((state) => state.name === permanentState)?.id ?? "";
+}, [states, permanentState]);
 
-  const selectedState = states.find((state) => state.name === permanentState);
-  if (!selectedState) return [];
+const correspondenceStateId = React.useMemo(() => {
+  return states.find((state) => state.name === correspondenceState)?.id ?? "";
+}, [states, correspondenceState]);
 
-  return uniqueCitiesByName(
-    cities.filter((city) => city.stateId === selectedState.id)
-  );
-}, [cities, states, permanentState]);
-
-const correspondenceCities = React.useMemo(() => {
-  if (!correspondenceState) return [];
-
-  const selectedState = states.find(
-    (state) => state.name === correspondenceState
-  );
-  if (!selectedState) return [];
-
-  return uniqueCitiesByName(
-    cities.filter((city) => city.stateId === selectedState.id)
-  );
-}, [cities, states, correspondenceState]);
 
 
 
@@ -417,14 +416,17 @@ React.useEffect(() => {
     }
   };
 }, []);
+
+
+
   return (
     <MasterFormDialog<CreateDriverFormInput, CreateDriverBody>
       open={open}
       onOpenChange={onOpenChange}
       title={row ? "Edit Driver" : "Add Driver"}
       form={form}
-      onSubmit={onSubmit}
-      isSubmitting={isSubmitting}
+      onSubmit={handleSubmit}
+      isSubmitting={create.isPending || update.isPending}
       columns={3}
     >
       <FormSection
@@ -579,7 +581,7 @@ React.useEffect(() => {
           placeholder="e.g. Pune"
           icon={<IconMapPin size={16} />}
         />
-
+       
         <Controller
           control={form.control}
           name="licenseDate"
@@ -647,15 +649,23 @@ React.useEffect(() => {
   }))}
 />
 
-<SelectField<CreateDriverFormInput>
+<CitySelectField<CreateDriverFormInput>
   name="permanentCity"
   label="City"
-  placeholder="Select city"
-  options={permanentCities.map((city) => ({
-    label: city.name,
-    value: city.name,
-  }))}
+  placeholder={permanentState ? "Select city" : "Select state first"}
+  disabled={!permanentStateId}
+  stateId={permanentStateId}
+  valueMode="name"
+  initialCity={
+    row?.permanentCity
+      ? {
+          id: row.permanentCity,
+          name: row.permanentCity,
+        }
+      : null
+  }
 />
+
       </FormSection>
 
       <FormSection
@@ -705,14 +715,21 @@ React.useEffect(() => {
   }))}
 />
 
-<SelectField<CreateDriverFormInput>
+<CitySelectField<CreateDriverFormInput>
   name="correspondenceCity"
   label="City"
-  placeholder="Select city"
-  options={correspondenceCities.map((city) => ({
-    label: city.name,
-    value: city.name,
-  }))}
+  placeholder={correspondenceState ? "Select city" : "Select state first"}
+  disabled={!correspondenceStateId}
+  stateId={correspondenceStateId}
+  valueMode="name"
+  initialCity={
+    row?.correspondenceCity
+      ? {
+          id: row.correspondenceCity,
+          name: row.correspondenceCity,
+        }
+      : null
+  }
 />
 
             <IconTextField<CreateDriverFormInput>
@@ -857,3 +874,4 @@ React.useEffect(() => {
     </MasterFormDialog>
   );
 }
+

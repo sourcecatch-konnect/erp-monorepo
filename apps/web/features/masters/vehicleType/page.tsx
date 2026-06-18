@@ -8,13 +8,15 @@ import type { VehicleType, CreateVehicleTypeBody } from "@skerp/types";
 import MasterListPage from "../_shared/MasterListPage";
 import { downloadBlob, ListQuery, parseCsvRows } from "../_shared/master-api";
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
-import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+
 import { createVehicleTypeSchema } from "@skerp/validators";
 
 import { vehicleTypeApi } from "./vehicleType.service";
 import { vehicleTypeKeys } from "./vehicleType.key";
 import { vehicleTypeColumns } from "./vehicleTypeTable";
 import VehicleTypeForm from "./vehicleTypeForm";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import VehicleTypeDetailDialog from "./vehicleDialog";
 
 type VehicleTypeCsvRow = Record<
   "code" | "name" | "freightRangeFrom" | "freightRangeTo",
@@ -29,7 +31,8 @@ export default function VehicleTypePage() {
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [size, setSize] = React.useState(10);
-
+  const [detailOpen, setDetailOpen] = React.useState(false);
+const [detailId, setDetailId] = React.useState<string | null>(null);
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
     () => ({
@@ -48,12 +51,12 @@ export default function VehicleTypePage() {
     queryFn: () => vehicleTypeApi.list(listQuery),
   });
 
-  const { create, update, remove } = useMasterMutations({
-    api: vehicleTypeApi,
-    queryKey: vehicleTypeKeys.all,
-    entityName: "Vehicle type",
-  });
 
+const { remove } = useMasterMutations({
+  api: vehicleTypeApi,
+  queryKey: vehicleTypeKeys.all,
+  entityName: "Vehicle type",
+});
   const bulkRemove = useMutation({
     mutationFn: vehicleTypeApi.bulkRemove,
     onSuccess: () => {
@@ -71,12 +74,7 @@ export default function VehicleTypePage() {
     onSuccess: (blob) => downloadBlob(blob, "vehicle-types.csv"),
   });
 
-  const handleSubmit = async (data: CreateVehicleTypeBody) => {
-    if (selected) await update.mutateAsync({ id: selected.id, data });
-    else await create.mutateAsync(data);
-    setOpen(false);
-    setSelected(null);
-  };
+
 
   return (
     <MasterListPage
@@ -97,6 +95,10 @@ export default function VehicleTypePage() {
         setSelected(null);
         setOpen(true);
       }}
+      onView={(row) => {
+  setDetailId(row.id);
+  setDetailOpen(true);
+}}
       onEdit={(row) => {
         setSelected(row);
         setOpen(true);
@@ -114,13 +116,16 @@ export default function VehicleTypePage() {
       isImporting={bulkImport.isPending}
       isExporting={exportData.isPending}
     >
-      <VehicleTypeForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+    <VehicleTypeForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
+<VehicleTypeDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  id={detailId}
+/>
     </MasterListPage>
   );
 }

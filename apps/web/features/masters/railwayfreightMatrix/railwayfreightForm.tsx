@@ -8,8 +8,8 @@ import type {
   CreateRailwayFreightMatrixBody,
   CreateRailwayFreightMatrixFormInput,
   RailwayFreightMatrix,
-  City,
-  Wagon,
+  RailwayFreightMatrixWithRelations,
+
 } from "@skerp/types";
 
 import { createRailwayFreightMatrixSchema } from "@skerp/validators";
@@ -25,15 +25,18 @@ import {
   IconMapPin,
   IconCurrencyRupee,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { wagonApi } from "../wagon/wagon.service";
+import { wagonKeys } from "../wagon/wagon.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { railwayFreightApi } from "./railwayfreight.service";
+import { railwayFreightKeys } from "./railwayfreight.key";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  row?: RailwayFreightMatrix | null;
-  onSubmit: (data: CreateRailwayFreightMatrixBody) => Promise<void>;
-  isSubmitting?: boolean;
-  cities: City[];
-  wagons: Wagon[];
+  row?: RailwayFreightMatrixWithRelations | null;
 };
 
 const defaultValues: CreateRailwayFreightMatrixFormInput = {
@@ -47,10 +50,7 @@ export default function RailwayFreightForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
-  cities,
-  wagons,
+
 }: Props) {
   const form = useForm<
     CreateRailwayFreightMatrixFormInput,
@@ -61,6 +61,30 @@ export default function RailwayFreightForm({
     defaultValues,
   });
 
+
+const wagons = useQuery({
+  queryKey: wagonKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => wagonApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+const { create, update } = useMasterMutations({
+  api: railwayFreightApi,
+  queryKey: railwayFreightKeys.all,
+  entityName: "Railway Freight",
+});
+
+const handleSubmit = async (data: CreateRailwayFreightMatrixBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -73,15 +97,11 @@ export default function RailwayFreightForm({
     });
   }, [open, row, form]);
 
-  const cityOptions = cities.map((c) => ({
-    label: c.name,
-    value: c.id,
-  }));
 
-  const wagonOptions = wagons.map((w) => ({
-    label: w.name,
-    value: w.name,
-  }));
+const wagonOptions = (wagons.data?.data ?? []).map((w) => ({
+  label: w.name,
+  value: w.name,
+}));
 
   return (
     <MasterFormDialog<
@@ -92,7 +112,7 @@ export default function RailwayFreightForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Railway Freight" : "Add Railway Freight"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={2}
     >
@@ -127,19 +147,33 @@ export default function RailwayFreightForm({
         title="Route Information"
         description="Source and destination cities"
       >
-        <SelectField<CreateRailwayFreightMatrixFormInput>
-          name="sourceCityId"
-          label="Source City"
-          options={cityOptions}
-          required
-        />
+        <CitySelectField<CreateRailwayFreightMatrixFormInput>
+  name="sourceCityId"
+  label="Source City"
+  required
+  initialCity={
+    row?.sourceCity
+      ? {
+          id: row.sourceCity.id,
+          name: row.sourceCity.name,
+        }
+      : null
+  }
+/>
 
-        <SelectField<CreateRailwayFreightMatrixFormInput>
-          name="destinationCityId"
-          label="Destination City"
-          options={cityOptions}
-          required
-        />
+<CitySelectField<CreateRailwayFreightMatrixFormInput>
+  name="destinationCityId"
+  label="Destination City"
+  required
+  initialCity={
+    row?.destinationCity
+      ? {
+          id: row.destinationCity.id,
+          name: row.destinationCity.name,
+        }
+      : null
+  }
+/>
       </FormSection>
     </MasterFormDialog>
   );

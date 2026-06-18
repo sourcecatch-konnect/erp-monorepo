@@ -69,7 +69,7 @@ type CrudOptions<Create, Update> = {
     defaultInclude?: Record<string, unknown>;
     defaultOrderBy?: object;
     softDelete?: boolean;
-
+    defaultSelect?: Record<string, unknown>;
     blockDeleteIfExists?: {
       model: any;
       label: string;
@@ -163,7 +163,11 @@ export function createCrudRouter<Create, Update>({
   hooks,
 }: CrudOptions<Create, Update>) {
   const router = Router();
-
+  const defaultQueryArgs = listOptions?.defaultSelect
+  ? { select: listOptions.defaultSelect }
+  : listOptions?.defaultInclude
+    ? { include: listOptions.defaultInclude }
+    : {};
   router.use(authMiddleware);
 
   router.get(
@@ -183,7 +187,7 @@ export function createCrudRouter<Create, Update>({
           where,
           skip: query.page * query.size,
           take: query.size,
-          include: listOptions?.defaultInclude,
+          ...defaultQueryArgs,
           orderBy: query.sort
             ? { [query.sort.field]: query.sort.direction }
             : listOptions?.defaultOrderBy,
@@ -214,7 +218,7 @@ export function createCrudRouter<Create, Update>({
       const data = await model.findMany({
         where,
         take: 20,
-        include: listOptions?.defaultInclude,
+        ...defaultQueryArgs,
         orderBy: listOptions?.defaultOrderBy,
       });
 
@@ -235,7 +239,7 @@ export function createCrudRouter<Create, Update>({
       );
       const data = await model.findMany({
         where,
-        include: listOptions?.defaultInclude,
+        ...defaultQueryArgs,
         orderBy: query.sort
           ? { [query.sort.field]: query.sort.direction }
           : listOptions?.defaultOrderBy,
@@ -253,7 +257,7 @@ export function createCrudRouter<Create, Update>({
     async (req, res) => {
       const row = await model.findUnique({
         where: { id: getParamId(req) },
-        include: listOptions?.defaultInclude,
+        ...defaultQueryArgs,
       });
 
       if (!row) {

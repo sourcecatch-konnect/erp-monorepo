@@ -74,24 +74,7 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     queryFn: () => companyApi.list(listQuery),
   });
 
-  const states = useQuery({
-    queryKey: stateKeys.list({ size: 1000 }),
-    queryFn: () => stateApi.list({ size: 1000 }),
-  });
-
-  const cities = useQuery({
-    queryKey: cityKeys.list({ size: 1000 }),
-    queryFn: () => cityApi.list({ size: 1000 }),
-  });
-const companyDetail = useQuery({
-  queryKey: detailId
-    ? companyKeys.detail(detailId)
-    : ["company-detail-empty"],
-  queryFn: () => companyApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-console.log(companyDetail.data,"detail COmapany")
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: companyApi,
   queryKey: companyKeys.all,
   entityName: "Company",
@@ -129,16 +112,7 @@ const exportCompanies = useMutation({
     toast.error(getErrorMessage(error));
   },
 });
-  const handleSubmit = async (data: CreateCompanyBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <>
@@ -203,18 +177,14 @@ const exportCompanies = useMutation({
 <CompanyDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={companyDetail.data}
-  isLoading={companyDetail.isLoading}
+  id={detailId}
 />
-      <CompanyForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        states={states.data?.data ?? []}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+
+<CompanyForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
     </>
   );

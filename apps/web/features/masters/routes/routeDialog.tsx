@@ -11,12 +11,14 @@ import {
 } from "@skerp/ui/components/dialog";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { IconArrowRight, IconMapPin, IconRoute } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { routeKeys } from "./route.key";
+import { routeApi } from "./routes.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Route;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 function CityInfo({
@@ -54,11 +56,18 @@ function CityInfo({
 export default function RouteDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+const routeDetail = useQuery({
+  queryKey: id ? routeKeys.detail(id) : ["route-detail-empty"],
+  queryFn: () => routeApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = routeDetail.data;
   const fromCity = data?.sourceCity?.name ?? "-";
   const toCity = data?.destinationCity?.name ?? "-";
+const isLoading = routeDetail.isLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

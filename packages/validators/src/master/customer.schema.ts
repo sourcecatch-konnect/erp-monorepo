@@ -21,7 +21,14 @@ const optionalNumberField = (message: string) =>
       (value) => value === undefined || !Number.isNaN(value),
       message
     );
-
+const optionalUppercaseRegex = (regex: RegExp, message: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value ? value.toUpperCase() : undefined))
+    .refine((value) => !value || regex.test(value), message);
 export const customerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -71,16 +78,10 @@ export const createCustomerSchema = z.object({
 
   shortName: optionalString,
 
-  customerPAN: z
-    .string()
-    .trim()
-    .transform((value) => (value ? value.toUpperCase() : undefined))
-    .pipe(
-      z
-        .string()
-        .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Enter valid PAN number")
-        .optional()
-    ),
+  customerPAN: optionalUppercaseRegex(
+  /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+  "Enter valid PAN number"
+),
 
   disallowNewLRBooking: z.boolean().default(false),
 
@@ -90,19 +91,10 @@ export const createCustomerSchema = z.object({
       "Interest rate cannot be negative"
     ),
 
-  gstNo: z
-    .string()
-    .trim()
-    .transform((value) => (value ? value.toUpperCase() : undefined))
-    .pipe(
-      z
-        .string()
-        .regex(
-          /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
-          "Enter valid GST number"
-        )
-        .optional()
-    ),
+  gstNo: optionalUppercaseRegex(
+  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+  "Enter valid GST number"
+),
 
   creditLimit: optionalNumberField("Enter valid credit limit")
     .refine(
@@ -154,7 +146,7 @@ export const createCustomerSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
 
-  contactPerson: optionalString,
+  contactPerson: z.string().min(1, "Contact person is required"),
 
 
   website: z

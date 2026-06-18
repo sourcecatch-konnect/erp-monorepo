@@ -59,18 +59,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     queryFn: () => wagonApi.list(listQuery),
   });
 
-  const { create, update, remove } = useMasterMutations({
+  const { remove } = useMasterMutations({
     api: wagonApi,
     queryKey: wagonKeys.all,
     entityName: "Wagon",
   });
-const wagonDetail = useQuery({
-  queryKey: detailId
-    ? wagonKeys.detail(detailId)
-    : ["wagon-detail-empty"],
-  queryFn: () => wagonApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
+
   const bulkRemove = useMutation({
     mutationFn: wagonApi.bulkRemove,
     onSuccess: () => {
@@ -105,16 +99,7 @@ const wagonDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateWagonBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -161,15 +146,13 @@ const wagonDetail = useQuery({
         <WagonDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={wagonDetail.data}
-  isLoading={wagonDetail.isLoading}
+  id={detailId}
 />
       <WagonForm
         open={open}
         onOpenChange={setOpen}
         row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
+    
       />
     </MasterListPage>
   );

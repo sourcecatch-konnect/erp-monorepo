@@ -30,10 +30,15 @@ type ComboboxProps = {
   searchPlaceholder?: string;
   emptyText?: string;
   disabled?: boolean;
-  /** Render as invalid (red ring) — wire to a form error. */
   invalid?: boolean;
   className?: string;
   id?: string;
+
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  onScrollEnd?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
 };
 
 /**
@@ -52,6 +57,11 @@ export function Combobox({
   invalid,
   className,
   id,
+  searchValue,
+  onSearchChange,
+  onScrollEnd,
+  hasMore,
+  isLoadingMore,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const selected = options.find((o) => o.value === value);
@@ -82,46 +92,69 @@ export function Combobox({
         className="w-[var(--radix-popover-trigger-width)] min-w-[260px] p-0"
         align="start"
       >
-        <Command
-          filter={(itemValue, search) => {
-            // itemValue is the option label (set via CommandItem value).
-            return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-          }}
-        >
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.label}
-                  onSelect={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                  data-checked={option.value === value}
-                >
-                  <CheckIcon
-                    className={cn(
-                      "mr-2 size-4",
-                      option.value === value ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  <span className="flex flex-col">
-                    <span>{option.label}</span>
-                    {option.hint ? (
-                      <span className="text-xs text-muted-foreground">
-                        {option.hint}
-                      </span>
-                    ) : null}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
+       <Command shouldFilter={!onSearchChange}>
+         <CommandInput
+  placeholder={searchPlaceholder}
+  value={searchValue}
+  onValueChange={onSearchChange}
+/>
+<CommandList
+  className="max-h-60 overflow-y-auto overscroll-contain"
+  onWheel={(event) => {
+    event.stopPropagation();
+  }}
+  onScroll={(event) => {
+    const element = event.currentTarget;
+
+    const reachedBottom =
+      element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+
+    if (reachedBottom && hasMore && !isLoadingMore) {
+      onScrollEnd?.();
+    }
+  }}
+>
+  <CommandEmpty>{emptyText}</CommandEmpty>
+
+  <CommandGroup>
+    {options.map((option) => (
+      <CommandItem
+        key={option.value}
+        value={option.label}
+        onSelect={() => {
+          onChange(option.value);
+          setOpen(false);
+        }}
+        data-checked={option.value === value}
+      >
+        <CheckIcon
+          className={cn(
+            "mr-2 size-4",
+            option.value === value ? "opacity-100" : "opacity-0"
+          )}
+        />
+
+        <span className="flex flex-col">
+          <span>{option.label}</span>
+          {option.hint ? (
+            <span className="text-xs text-muted-foreground">
+              {option.hint}
+            </span>
+          ) : null}
+        </span>
+      </CommandItem>
+    ))}
+
+{hasMore ? (
+  <div className="px-2 py-2 text-center text-sm text-muted-foreground">
+    {isLoadingMore ? "Loading more..." : "Scroll to load more cities"}
+  </div>
+) : null}
+  </CommandGroup>
+</CommandList>
         </Command>
       </PopoverContent>
     </Popover>
   );
 }
+

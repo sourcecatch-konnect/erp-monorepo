@@ -75,41 +75,17 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, size]);
-
+const warehouses = useQuery({
+  queryKey: warehouseKeys.list(listQuery),
+  queryFn: () => warehouseApi.list(listQuery),
+});
   /* -----------------------------
      LIST
   ------------------------------ */
-  const warehouses = useQuery({
-    queryKey: warehouseKeys.list(listQuery),
-    queryFn: () => warehouseApi.list(listQuery),
-  });
-
-  const statesQuery = useQuery({
-  queryKey: ["states"],
-  queryFn: () => stateApi.list(),
+const { remove } = useMasterMutations({
+  api: warehouseApi,
+  queryKey: warehouseKeys.all,
 });
-
-const citiesQuery = useQuery({
-  queryKey: ["cities"],
-  queryFn: () => cityApi.list(),
-});
-
-const branchesQuery = useQuery({
-  queryKey: ["branches"],
-  queryFn: () => branchApi.list(),
-});
-
-const warehouseDetail = useQuery({
-  queryKey: detailId
-    ? warehouseKeys.detail(detailId)
-    : ["warehouse-detail-empty"],
-  queryFn: () => warehouseApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-  const { create, update, remove } = useMasterMutations({
-    api: warehouseApi,
-    queryKey: warehouseKeys.all,
-  });
 
   /* -----------------------------
      BULK DELETE
@@ -145,16 +121,6 @@ const warehouseDetail = useQuery({
   /* -----------------------------
      SUBMIT
   ------------------------------ */
-  const handleSubmit = async (data: CreateWarehouseBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -218,25 +184,16 @@ const warehouseDetail = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportWarehouses.isPending}
     >
-    <WarehouseDetailDialog
+  <WarehouseDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={
-    warehouseDetail.data as
-      | WarehouseWithRelations
-      | undefined
-  }
-  isLoading={warehouseDetail.isLoading}
+  id={detailId}
 />
-      <WarehouseForm
+
+<WarehouseForm
   open={open}
   onOpenChange={setOpen}
   row={selected}
-  cities={citiesQuery.data?.data ?? []}
-  states={statesQuery.data?.data ?? []}
-  branches={branchesQuery.data?.data ?? []}
-  onSubmit={handleSubmit}
-  isSubmitting={create.isPending || update.isPending}
 />
     </MasterListPage>
   );

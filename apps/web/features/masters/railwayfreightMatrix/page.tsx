@@ -72,32 +72,17 @@ export default function RailwayFreightPage() {
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, size]);
-const cities = useQuery({
-  queryKey: cityKeys.list(),
-  queryFn: () => cityApi.list(),
-});
 
-const wagons = useQuery({
-  queryKey: wagonKeys.list(),
-  queryFn: () => wagonApi.list(),
-});
   // LIST
   const railwayFreights = useQuery({
     queryKey: railwayFreightKeys.list(listQuery),
     queryFn: () => railwayFreightApi.list(listQuery),
   });
 
-  // DETAIL
-  const freightDetail = useQuery({
-    queryKey: detailId
-      ? railwayFreightKeys.detail(detailId)
-      : ["railway-freight-empty"],
-    queryFn: () => railwayFreightApi.detail(detailId!),
-    enabled: Boolean(detailOpen && detailId),
-  });
+
 
   // CRUD
-  const { create, update, remove } = useMasterMutations({
+  const {  remove } = useMasterMutations({
     api: railwayFreightApi,
     queryKey: railwayFreightKeys.all,
     entityName: "Railway Freight",
@@ -134,16 +119,6 @@ const wagons = useQuery({
     onError: (err) => toast.error(getErrorMessage(err)),
   });
 
- const handleSubmit = async (data: CreateRailwayFreightMatrixBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -193,23 +168,16 @@ const wagons = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportFreight.isPending}
     >
-      {/* DETAIL */}
-      <RailwayFreightDetailDialog
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        data={freightDetail.data}
-        isLoading={freightDetail.isLoading}
-      />
+     <RailwayFreightDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  id={detailId}
+/>
 
-      {/* FORM */}
-    <RailwayFreightForm
+<RailwayFreightForm
   open={open}
   onOpenChange={setOpen}
   row={selected}
-  cities={cities.data?.data ?? []}
-  wagons={wagons.data?.data ?? []}
-  onSubmit={handleSubmit}
-  isSubmitting={create.isPending || update.isPending}
 />
     </MasterListPage>
   );

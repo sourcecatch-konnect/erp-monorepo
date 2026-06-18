@@ -13,6 +13,9 @@ const router: Router = createCrudRouter({
   createSchema: createCompanySchema as ZodTypeAny,
   updateSchema: updateCompanySchema as ZodTypeAny,
   permissionKey: "masters.company",
+    uniqueErrorMessages: {
+    name: "This company name already exists.",
+  },
   listOptions: {
     searchableFields: [
       "name",

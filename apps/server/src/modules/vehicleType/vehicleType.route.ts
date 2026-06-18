@@ -18,29 +18,37 @@ const router: Router = createCrudRouter({
   permissionKey: "masters.vehicle-type",
   hooks: {
     beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),  beforeDelete: async (id: string) => {
+    const vehicle = await db.vehicle.findFirst({
+      where: { vehicleTypeId: id },
+      select: { id: true },
+    });
+
+    const order = await db.order.findFirst({
+      where: { vehicleTypeId: id },
+      select: { id: true },
+    });
+
+    const rateMatrix = await db.rateMatrix.findFirst({
+      where: { vehicleTypeId: id },
+      select: { id: true },
+    });
+
+    if (vehicle || order || rateMatrix) {
+      throw new Error(
+        "This vehicle type cannot be deleted because existing Vehicles, Orders, or Rate Matrices are linked to it. To preserve historical data, mark the vehicle type as inactive instead."
+      );
+    }
   },
+    
+  },
+  uniqueErrorMessages: {
+  code: "This vehicle type code already exists.",
+},
   listOptions: {
     searchableFields: ["code", "name"],
     defaultOrderBy: { name: "asc" },
-    blockDeleteIfExists: [
-      {
-        model: db.vehicle,
-        label: "Vehicles",
-        where: (id: string) => ({ vehicleTypeId: id }),
-        select: { id: true, vehicleNumber: true },
-        getName: (row: { vehicleNumber?: string; id: string }) =>
-          row.vehicleNumber ?? row.id,
-      },
-      {
-        model: db.order,
-        label: "Orders",
-        where: (id: string) => ({ vehicleTypeId: id }),
-        select: { id: true, orderNumber: true },
-        getName: (row: { orderNumber?: string; id: string }) =>
-          row.orderNumber ?? row.id,
-      },
-    ],
+ 
   },
 });
 

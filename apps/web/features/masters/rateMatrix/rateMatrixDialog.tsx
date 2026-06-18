@@ -32,12 +32,14 @@ import {
   IconCirclePlus,
   IconId,
 } from "@tabler/icons-react";
+import { rateMatrixKeys } from "./rateMatrix.key";
+import { rateMatrixApi } from "./rateMatrix.service";
+import { useQuery } from "@tanstack/react-query";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: RateMatrixWithRelations;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 const formatTransportType = (value?: string | null) => {
@@ -54,14 +56,23 @@ const formatTransportType = (value?: string | null) => {
 export default function RateMatrixDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
-  console.log(data, "rate maitrix");
+  const detailQuery = useQuery<RateMatrixWithRelations>({
+    queryKey: id ? rateMatrixKeys.detail(id) : ["rateMatrix-detail-empty"],
+    queryFn: () => rateMatrixApi.detail(id!),
+    enabled: Boolean(open && id),
+  });
+
+  const data = detailQuery.data;
+  const isLoading = detailQuery.isLoading;
+  console.log(data,"rate Matrix")
   const unitLabel =
     data?.unit?.unitValue != null && data?.unit?.unitType
       ? `${data.unit.unitValue} ${data.unit.unitType}`
       : "-";
+
+
 
   const routeLabel =
     data?.route?.sourceCity?.name || data?.route?.destinationCity?.name
@@ -142,17 +153,7 @@ export default function RateMatrixDetailDialog({
               <SectionLabel>Route Details</SectionLabel>
 
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                <Field
-                  label="From City"
-                  value={data?.route?.sourceCity?.name}
-                  icon={<IconMapPin size={12} />}
-                />
-
-                <Field
-                  label="To City"
-                  value={data?.route?.destinationCity?.name}
-                  icon={<IconMapPin size={12} />}
-                />
+             
 
                 <Field
                   label="Route"

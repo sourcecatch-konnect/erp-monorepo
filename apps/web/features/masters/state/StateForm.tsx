@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type { CreateStateBody, State } from "@skerp/types";
@@ -22,13 +22,13 @@ import { IconInfoCircle, IconMapPin } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { stateKeys } from "./state.keys";
 import { stateApi } from "./state.service";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: State | null;
-  onSubmit: (data: CreateStateBody) => Promise<void>;
-  isSubmitting?: boolean;
+
 };
 
 const defaultValues: CreateStateBody = {
@@ -39,8 +39,7 @@ export default function StateForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreateStateBody>({
     resolver: zodResolver(createStateSchema),
@@ -50,6 +49,22 @@ const stateName = form.watch("name");
 
 const trimmedStateName = stateName?.trim() ?? "";
 
+
+const { create, update } = useMasterMutations({
+  api: stateApi,
+  queryKey: stateKeys.all,
+  entityName: "State",
+});
+
+const handleSubmit = async (data: CreateStateBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
 const { data: stateSuggestions } = useQuery({
   queryKey: stateKeys.list({
     page: 0,
@@ -84,8 +99,8 @@ const showStateAlreadyExistsAlert = Boolean(exactStateMatch && !row);
       onOpenChange={onOpenChange}
       title={row ? "Edit State" : "Add State"}
       form={form}
-      onSubmit={onSubmit}
-      isSubmitting={isSubmitting}
+      onSubmit={handleSubmit}
+isSubmitting={create.isPending || update.isPending}
       columns={2}
     >
       {/* BASIC INFO SECTION (like DriverForm style) */}

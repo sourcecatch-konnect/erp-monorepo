@@ -26,10 +26,6 @@ import {
 
 import AgreementRateMatrixExpanded from "./Agreements(Company)/agreementRateMatrixEpanded";
 
-type Option = {
-  id: string;
-  name: string;
-};
 
 type Props = {
   agreements: AgreementWithRelations[];
@@ -43,9 +39,7 @@ type Props = {
   total: number;
   onPageChange: (page: number) => void;
 
-  routes: Option[];
-  vehicleTypes: any[];
-  rateUnits: any[];
+
 
   onAdd: () => void;
   onImport: (file: File) => Promise<void>;
@@ -79,9 +73,6 @@ export default function AgreementRateMatrixAccordionList({
   total,
   onPageChange,
   onSizeChange,
-  routes,
-  vehicleTypes,
-  rateUnits,
   onAdd,
   onImport,
   onExport,
@@ -93,7 +84,7 @@ export default function AgreementRateMatrixAccordionList({
   const totalPages = Math.max(1, Math.ceil(total / size));
   const canGoPrev = page > 0;
   const canGoNext = page + 1 < totalPages;
-
+const [expandedAgreementIds, setExpandedAgreementIds] = React.useState<string[]>([]);
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -207,12 +198,17 @@ export default function AgreementRateMatrixAccordionList({
       </p>
     </div>
   ) : (
-    <Accordion type="multiple" className="space-y-3">
+ <Accordion
+  type="multiple"
+  value={expandedAgreementIds}
+  onValueChange={setExpandedAgreementIds}
+  className="space-y-3"
+>
       {agreements.map((agreement) => {
         const companyName = agreement.company?.name;
         const clientName = agreement.client?.name;
         const cityName = agreement.city?.name;
-
+const isExpanded = expandedAgreementIds.includes(agreement.id);
         return (
  <AccordionItem
   key={agreement.id}
@@ -273,13 +269,10 @@ export default function AgreementRateMatrixAccordionList({
               </div>
             </AccordionTrigger>
 
-            <AccordionContent className="border-t bg-background p-0">
-  <AgreementRateMatrixExpanded
-    agreement={agreement}
-    routes={routes}
-    vehicleTypes={vehicleTypes}
-    rateUnits={rateUnits}
-  />
+          <AccordionContent className="border-t bg-background p-0">
+  {isExpanded ? (
+   <AgreementRateMatrixExpanded agreement={agreement} />
+  ) : null}
 </AccordionContent>
           </AccordionItem>
         );

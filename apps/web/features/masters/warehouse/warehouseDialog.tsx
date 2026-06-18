@@ -34,12 +34,15 @@ import {
   IconArrowsVertical,
   IconBoxSeam,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { warehouseApi } from "./warehouse.service";
+import { warehouseKeys } from "./warehouse.key";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   data?: WarehouseWithRelations;
-  isLoading?: boolean;
+   id?: string | null;
 };
 
 const display = (value?: string | number | null) => {
@@ -62,9 +65,16 @@ const formatLabel = (value?: string | null) => {
 export default function WarehouseDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const warehouseDetail = useQuery({
+  queryKey: id ? warehouseKeys.detail(id) : ["warehouse-detail-empty"],
+  queryFn: () => warehouseApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = warehouseDetail.data as WarehouseWithRelations | undefined;
+const isLoading = warehouseDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">

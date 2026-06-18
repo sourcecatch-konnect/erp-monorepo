@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
+
 
 import {
   SectionLabel,
@@ -31,21 +31,32 @@ import {
   IconHome,
   IconCircleCheckFilled,
   IconClockEdit,
+  IconShieldCheck,
+  IconTrain,
+  IconReceipt,
 } from "@tabler/icons-react";
-
+import { useQuery } from "@tanstack/react-query";
+import { branchKeys } from "./branch.key";
+import { branchApi } from "./branch.service";
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Branch;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 export default function BranchDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+    const branchDetail = useQuery({
+    queryKey: id ? branchKeys.detail(id) : ["branch-detail-empty"],
+    queryFn: () => branchApi.detail(id!),
+    enabled: Boolean(open && id),
+  });
+const yesNo = (value?: boolean) => (value ? "Yes" : "No");
+  const data = branchDetail.data;
+  const isLoading = branchDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
@@ -73,25 +84,18 @@ export default function BranchDetailDialog({
         ) : (
           <div className="h-[calc(95vh-120px)] overflow-y-auto">
             {/* Branch Summary */}
-            <div className="px-5 py-5">
-              <SectionLabel>Branch Overview</SectionLabel>
-
-              <PartyCard
-                label="Branch"
-                name={data?.name}
-                subtitle={data?.company?.name}
-                colorClass="bg-violet-100 text-violet-700"
-                icon={<IconBuildingStore size={15} />}
-              />
-            </div>
-
-            <div className="mx-5 border-t" />
+          
 
             {/* Branch Information */}
             <div className="px-5 py-5">
               <SectionLabel>Branch Information</SectionLabel>
 
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                   <Field
+      label="Branch Name"
+      value={data?.name}
+      icon={<IconBuildingStore size={12} />}
+    />
                 <Field
                   label="Branch Code"
                   value={data?.branchCode}
@@ -173,6 +177,37 @@ export default function BranchDetailDialog({
                 </div>
               </div>
             </div>
+            <div className="mx-5 border-t" />
+
+<div className="px-5 py-5">
+  <SectionLabel>Branch Permissions</SectionLabel>
+
+  <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+    <Field
+      label="Allow LR"
+      value={yesNo(data?.allowLR)}
+      icon={<IconReceipt size={12} />}
+    />
+
+    <Field
+      label="Allow Receipt"
+      value={yesNo(data?.allowReceipt)}
+      icon={<IconReceipt size={12} />}
+    />
+
+    <Field
+      label="Rail Head"
+      value={yesNo(data?.isRailHead)}
+      icon={<IconTrain size={12} />}
+    />
+
+    <Field
+      label="Head Office"
+      value={yesNo(data?.isHeadOffice)}
+      icon={<IconShieldCheck size={12} />}
+    />
+  </div>
+</div>
           </div>
         )}
 

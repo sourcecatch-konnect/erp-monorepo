@@ -15,7 +15,30 @@ import { convertRupeeFieldsToPaise } from "../../lib/money.js";
 
 const moneyFields = ["rate"];
 
+async function ensureUniqueRateMatrix(data: any, id?: string) {
+  const existing = await db.rateMatrix.findFirst({
+    where: {
+      agreementId: data.agreementId,
+      routeId: data.routeId,
+      vehicleTypeId: data.vehicleTypeId ?? null,
+      unitId: data.unitId ?? null,
+      transportType: data.transportType ?? "ROAD",
+      ...(id
+        ? {
+            NOT: {
+              id,
+            },
+          }
+        : {}),
+    },
+  });
 
+  if (existing) {
+    throw new Error(
+      "A rate matrix already exists for this Agreement, Route, Vehicle Type, Unit and Transport Type."
+    );
+  }
+}
 const rateMatrixRouter: Router = createCrudRouter({
   model: db.rateMatrix,
 
@@ -24,12 +47,22 @@ const rateMatrixRouter: Router = createCrudRouter({
   updateSchema: updateRateMatrixSchema as ZodTypeAny,
 
   permissionKey: "masters.rate-matrix",
+  uniqueErrorMessages: {
+  agreementId_routeId_vehicleTypeId_unitId_transportType:
+    "A rate matrix already exists for this Agreement, Route, Vehicle Type, Unit and Transport Type.",
+},
+hooks: {
+  beforeCreate: async (data: any) => {
+    await ensureUniqueRateMatrix(data);
 
-  hooks: {
-    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-
-    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    return convertRupeeFieldsToPaise(data, moneyFields);
   },
+  beforeUpdate: async (data: any) => {
+    await ensureUniqueRateMatrix(data, data.id);
+
+    return convertRupeeFieldsToPaise(data, moneyFields);
+  },
+},
 
   listOptions: {
     searchableFields: ["remarks"],
@@ -125,7 +158,9 @@ const rateUnitRouter: Router = createCrudRouter({
   updateSchema: updateRateUnitSchema as ZodTypeAny,
 
   permissionKey: "masters.rate-matrix",
-
+  uniqueErrorMessages: {
+  unitValue_unitType: "This rate unit already exists.",
+},
   listOptions: {
     searchableFields: [],
 

@@ -18,32 +18,32 @@ type Props<TCreate, TUpdate, TResult> = {
   queryKey: readonly unknown[];
   entityName?: string;
 };
-export default function getErrorMessage(
-  error: unknown
-): string {
+export default function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const apiError = error.response?.data?.error;
+    const data = error.response?.data;
 
-    console.log("API Error:", apiError);
+    console.log("FULL API ERROR:", data);
+console.log("ERROR FULL:", error);
+console.log("ERROR RESPONSE:", (error as any)?.response?.data);
+    // Case 1: { error: { message } }
+    if (data?.error?.message) {
+      return data.error.message;
+    }
 
-    // Validation field errors
-    if (
-      apiError?.details &&
-      typeof apiError.details === "object"
-    ) {
-      return Object.entries(apiError.details)
+    // Case 2: { message }
+    if (data?.message) {
+      return data.message;
+    }
+
+    // Case 3: validation errors
+    if (data?.error?.details && typeof data.error.details === "object") {
+      return Object.entries(data.error.details)
         .flatMap(([field, messages]) =>
           (messages as string[]).map(
-            (message) =>
-              `${field}: ${message}`
+            (msg) => `${field}: ${msg}`
           )
         )
         .join("\n");
-    }
-
-    // fallback message
-    if (apiError?.message) {
-      return apiError.message;
     }
   }
 
@@ -51,7 +51,7 @@ export default function getErrorMessage(
     return error.message;
   }
 
-  return "Something went wrong";
+  return "Unexpected error";
 }
 export function useMasterMutations<TCreate, TUpdate, TResult>({
   api,
@@ -67,8 +67,12 @@ export function useMasterMutations<TCreate, TUpdate, TResult>({
       queryClient.invalidateQueries({ queryKey });
     },
     onError: (error: unknown) => {
-      toast.error(getErrorMessage(error));
-    },
+  console.log("FULL ERROR OBJECT:", error);
+  console.log("RESPONSE:", (error as any)?.response);
+  console.log("DATA:", (error as any)?.response?.data);
+
+  toast.error(getErrorMessage(error));
+},
   });
 
   const update = useMutation<

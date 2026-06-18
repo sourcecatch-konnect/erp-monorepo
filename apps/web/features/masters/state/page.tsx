@@ -15,7 +15,6 @@ import { stateColumns } from "./StateTable";
 import { stateKeys } from "./state.keys";
 import { stateApi } from "./state.service";
 import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import StateDetailDialog from "./stateDialog";
 import { toast } from "sonner";
 
@@ -50,16 +49,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     queryKey: stateKeys.list(listQuery),
     queryFn: () => stateApi.list(listQuery),
   });
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: stateApi,
   queryKey: stateKeys.all,
   entityName: "State",
 });
-const stateDetail = useQuery({
-  queryKey: detailId ? stateKeys.detail(detailId) : ["state-detail-empty"],
-  queryFn: () => stateApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
+
 const bulkRemove = useMutation({
   mutationFn: stateApi.bulkRemove,
   onSuccess: (result) => {
@@ -85,17 +80,6 @@ const bulkRemove = useMutation({
       downloadBlob(blob, "states.csv");
     },
   });
-
-  const handleSubmit = async (data: CreateStateBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -141,14 +125,12 @@ onSizeChange={setSize}
         open={open}
         onOpenChange={setOpen}
         row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
+ 
       />
      <StateDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={stateDetail.data}
-  isLoading={stateDetail.isLoading}
+  stateId={detailId}
 />
     </MasterListPage>
   );

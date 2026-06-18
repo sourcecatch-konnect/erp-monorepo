@@ -2,27 +2,9 @@ import { Router } from "express";
 import { createStateSchema, updateStateSchema } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
-import { ZodTypeAny } from "zod";
+import { normalizeName ,  createDuplicateError} from "../_shared/NameNormalized.js";
 
-function normalizeStateName(name: string) {
-  return name
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-function duplicateStateError(name: string) {
-  const error = new Error(`State "${name}" already exists`);
 
-  (error as any).statusCode = 409;
-  (error as any).details = {
-    fieldErrors: {
-      name: [`State "${name}" already exists`],
-    },
-  };
-
-  return error;
-}
 
 const router: Router = createCrudRouter({
   model: db.state,
@@ -32,7 +14,8 @@ const router: Router = createCrudRouter({
 
   hooks: {
     beforeCreate: async (data: any) => {
-      const name = normalizeStateName(data.name);
+      const name = normalizeName(data.name);
+
 
       const existing = await db.state.findFirst({
         where: {
@@ -44,7 +27,10 @@ const router: Router = createCrudRouter({
       });
 
       if (existing) {
-        throw duplicateStateError(name);
+        throw createDuplicateError(
+  "name",
+  `State "${name}" already exists`
+);
       }
 
       data.name = name;
@@ -55,7 +41,7 @@ const router: Router = createCrudRouter({
     beforeUpdate: async (data: any, row: any) => {
       if (!data.name) return data;
 
-      const name = normalizeStateName(data.name);
+      const name = normalizeName(data.name);
 
       const existing = await db.state.findFirst({
         where: {
@@ -69,8 +55,11 @@ const router: Router = createCrudRouter({
         },
       });
 
-      if (existing) {
-        throw duplicateStateError(name);
+       if (existing) {
+        throw createDuplicateError(
+  "name",
+  `State "${name}" already exists`
+);
       }
 
       data.name = name;

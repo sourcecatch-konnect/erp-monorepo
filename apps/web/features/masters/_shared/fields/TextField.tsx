@@ -10,6 +10,7 @@ type Props<TFormValues extends FieldValues> = {
   placeholder?: string;
   required?: boolean;
   inputRef?: React.Ref<HTMLInputElement>;
+  disabled?: boolean;
 };
 
 function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
@@ -29,6 +30,7 @@ export default function TextField<TFormValues extends FieldValues>({
   placeholder,
   required,
   inputRef,
+  disabled
 }: Props<TFormValues>) {
   const {
     register,
@@ -53,6 +55,7 @@ export default function TextField<TFormValues extends FieldValues>({
           field.ref(element);
           assignRef(inputRef, element);
         }}
+        disabled={disabled}
       />
 
       {typeof error === "string" ? (

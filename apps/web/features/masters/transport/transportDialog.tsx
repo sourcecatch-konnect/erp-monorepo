@@ -24,12 +24,15 @@ import {
   Field,
   SkeletonBody,
 } from "../_shared/dialog-parts";
+import { useQuery } from "@tanstack/react-query";
+import { transportKeys } from "./transport.key";
+import { transportApi } from "./transport.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   data?: Transport;
-  isLoading?: boolean;
+    id?: string | null;
 };
 
 type RelationName = {
@@ -60,9 +63,16 @@ export default function TransportDetailDialog({
   open,
   onOpenChange,
   data,
-  isLoading,
+  id,
 }: Props) {
-  const transport = data as TransportDetail | undefined;
+   const detailQuery = useQuery({
+    queryKey: id ? transportKeys.detail(id) : ["transport-detail-empty"],
+    queryFn: () => transportApi.detail(id!),
+    enabled: Boolean(open && id),
+  });
+
+  const transport = detailQuery.data as TransportDetail | undefined;
+  const isLoading = detailQuery.isLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

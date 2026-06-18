@@ -18,10 +18,8 @@ import { driverColumns } from "./driverTable";
 import DriverForm from "./driverForm";
 import { createDriverSchema } from "@skerp/validators";
 import DriverDetailDialog from "./driverDialog";
-import { stateKeys } from "../state/state.keys";
-import { stateApi } from "../state/state.service";
-import { cityApi } from "../city/city.service";
-import { cityKeys } from "../city/city.keys";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+
 
 type DriverCsvRow = Record<string, string>;
 
@@ -58,49 +56,17 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     queryKey: driverKeys.list(listQuery),
     queryFn: () => driverApi.list(listQuery),
   });
-const driverDetail = useQuery({
-  queryKey: detailId ? driverKeys.detail(detailId) : ["driver-detail-empty"],
-  queryFn: () => driverApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
+
+
+
+
+
+
+const { remove } = useMasterMutations({
+  api: driverApi,
+  queryKey: driverKeys.all,
+  entityName: "Driver",
 });
-const { data: statesData } = useQuery({
-  queryKey: stateKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
-});
-
-const { data: citiesData } = useQuery({
-  queryKey: cityKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => cityApi.list({ page: 0, size: 1000 }),
-});
-
-const states = statesData?.data ?? [];
-const cities = citiesData?.data ?? [];
-  const create = useMutation({
-    mutationFn: driverApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: driverKeys.all });
-    },
-  });
-
-  const update = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: CreateDriverBody;
-    }) => driverApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: driverKeys.all });
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: driverApi.remove,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: driverKeys.all });
-    },
-  });
 
   const bulkRemove = useMutation({
     mutationFn: driverApi.bulkRemove,
@@ -124,16 +90,6 @@ const cities = citiesData?.data ?? [];
     },
   });
 
-  const handleSubmit = async (data: CreateDriverBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -185,20 +141,16 @@ const cities = citiesData?.data ?? [];
       isImporting={bulkImport.isPending}
       isExporting={exportDrivers.isPending}
     >
-      <DriverDetailDialog
+   <DriverDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={driverDetail.data}
-  isLoading={driverDetail.isLoading}
+  id={detailId}
 />
+
 <DriverForm
   open={open}
   onOpenChange={setOpen}
   row={selected}
-  states={states}
-  cities={cities}
-  onSubmit={handleSubmit}
-  isSubmitting={create.isPending || update.isPending}
 />
     </MasterListPage>
   );

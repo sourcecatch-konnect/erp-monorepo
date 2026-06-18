@@ -52,30 +52,13 @@ export default function CityPage() {
     queryKey: cityKeys.list(listQuery),
     queryFn: () => cityApi.list(listQuery),
   });
-  const cityDetail = useQuery({
-    queryKey: detailId ? cityKeys.detail(detailId) : ["city-detail-empty"],
-    queryFn: () => cityApi.detail(detailId!),
-    enabled: Boolean(detailOpen && detailId),
-  });
-const states = useQuery({
-  queryKey: stateKeys.list({
-    page: 0,
-    size: 35,
-    sort: "name:asc",
-  }),
-  queryFn: () =>
-    stateApi.list({
-      page: 0,
-      size: 35,
-      sort: "name:asc",
-    }),
-});
 
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: cityApi,
   queryKey: cityKeys.all,
   entityName: "City",
 });
+
 const bulkRemove = useMutation({
   mutationFn: cityApi.bulkRemove,
 onSuccess: () => {
@@ -102,17 +85,7 @@ const exportCities = useMutation({
   },
 });
 
-  const handleSubmit = async (data: CreateCityBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
-
+ 
   return (
     <MasterListPage
       title="Cities"
@@ -152,20 +125,19 @@ const exportCities = useMutation({
       isExporting={exportCities.isPending}
       onSizeChange={setSize}
     >
-      <CityForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        states={states.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+    <CityForm
+  open={open}
+  onOpenChange={(value) => {
+    setOpen(value);
+    if (!value) setSelected(null);
+  }}
+  row={selected}
+/>
       
-    <CityDetailDialog
+ <CityDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={cityDetail.data}
-  isLoading={cityDetail.isLoading}
+  cityId={detailId}
 />
     </MasterListPage>
   );

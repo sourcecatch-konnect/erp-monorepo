@@ -3,26 +3,9 @@ import { createCitySchema, updateCitySchema } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
 import { ZodTypeAny } from "zod";
+import { createDuplicateError, normalizeName } from "../_shared/NameNormalized.js";
 
-function normalizeCityName(name: string) {
-  return name
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-function duplicateCityError(name: string) {
-  const error = new Error(`City "${name}" already exists in selected state`);
-
-  (error as any).statusCode = 409;
-  (error as any).details = {
-    fieldErrors: {
-      name: [`City "${name}" already exists in selected state`],
-    },
-  };
-
-  return error;
-}
+  
 const router: Router = createCrudRouter({
   model: db.city,
   createSchema: createCitySchema as ZodTypeAny,
@@ -31,7 +14,7 @@ const router: Router = createCrudRouter({
 
   hooks: {
   beforeCreate: async (data: any) => {
-    const name = normalizeCityName(data.name);
+    const name = normalizeName(data.name);
 
     const existing = await db.city.findFirst({
       where: {
@@ -44,14 +27,34 @@ const router: Router = createCrudRouter({
     });
 
     if (existing) {
-      throw duplicateCityError(name);
+ throw createDuplicateError(
+  "name",
+  `City "${name}" already exists in selected state`
+);
     }
 
     data.name = name;
 
     return data;
   },
+  beforeDelete: async (id) => {
+  const usedInRailwayFreightMatrix =
+    await db.railwayFreightMatrix.findFirst({
+      where: {
+        OR: [
+          { sourceCityId: id },
+          { destinationCityId: id },
+        ],
+      },
+      select: { id: true },
+    });
 
+  if (usedInRailwayFreightMatrix) {
+    throw new Error(
+      "Cannot delete this city because it is used in Railway Freight Matrix."
+    );
+  }
+},
   beforeUpdate: async (data: any, row: any) => {
     const currentCity = row as {
       id: string;
@@ -60,7 +63,7 @@ const router: Router = createCrudRouter({
     };
 
     const name = data.name
-      ? normalizeCityName(data.name)
+      ? normalizeName(data.name)
       : currentCity.name;
 
     const stateId = data.stateId ?? currentCity.stateId;
@@ -79,7 +82,10 @@ const router: Router = createCrudRouter({
     });
 
     if (existing) {
-      throw duplicateCityError(name);
+      throw createDuplicateError(
+  "name",
+  `City "${name}" already exists in selected state`
+);
     }
 
     data.name = name;
@@ -131,6 +137,11 @@ const router: Router = createCrudRouter({
         label: "Areas",
         where: (id: string) => ({ cityId: id }),
       },
+        {
+    model: db.sparePartSupplier,
+    label: "Spare Part Suppliers",
+    where: (id: string) => ({ cityId: id }),
+  },
     ],
   },
 });

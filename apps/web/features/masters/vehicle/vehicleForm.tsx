@@ -12,7 +12,7 @@ import type {
 
 import { createVehicleSchema } from "@skerp/validators";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
@@ -40,13 +40,15 @@ import {
   IconWheel,
 } from "@tabler/icons-react";
 import IconTextField from "../_shared/fields/IconTextField";
+import { vehicleApi } from "./vehicle.service";
+import { vehicleKeys } from "./vehicle.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Vehicle | null;
-  onSubmit: (data: CreateVehicleBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const ownershipOptions = [
@@ -88,9 +90,23 @@ export default function VehicleForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
 }: Props) {
+
+
+const { create, update } = useMasterMutations({
+  api: vehicleApi,
+  queryKey: vehicleKeys.all,
+});
+
+const handleSubmit = async (data: CreateVehicleBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
   const form = useForm<CreateVehicleFormInput, unknown, CreateVehicleBody>({
     resolver: zodResolver(createVehicleSchema),
     mode: "onChange",
@@ -108,7 +124,7 @@ export default function VehicleForm({
     label: vt.name,
     value: vt.id,
   }));
-
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -139,7 +155,7 @@ export default function VehicleForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Vehicle" : "Add Vehicle"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -215,6 +231,7 @@ export default function VehicleForm({
   placeholder="0.00"
   icon={<IconScale size={16} />}
   type="number"
+  suffix="MT"
   required
 />
 
@@ -224,6 +241,7 @@ export default function VehicleForm({
   placeholder="Enter the Lenght Feet"
   icon={<IconRuler size={16} />}
   type="number"
+   suffix="ft"
 />
       </FormSection>
 
@@ -240,6 +258,7 @@ export default function VehicleForm({
   icon={<IconGauge size={16} />}
   type="number"
   required
+  suffix="KM"
 />
 
        <IconTextField<CreateVehicleFormInput>
@@ -249,6 +268,7 @@ export default function VehicleForm({
   icon={<IconGasStation size={16} />}
   type="number"
   required
+  suffix="KM"
 />
       </FormSection>
 

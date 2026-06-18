@@ -5,9 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
-  City,
   CreateTransportBody,
-  State,
   Transport,
 } from "@skerp/types";
 
@@ -15,20 +13,23 @@ import { createTransportSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
-import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 
 import { IconPhone, IconTruck, IconTruckDelivery, IconWorld } from "@tabler/icons-react";
 import IconTextField from "../_shared/fields/IconTextField";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { useQuery } from "@tanstack/react-query";
+
+import { stateApi } from "../state/state.service";
+import { stateKeys } from "../state/state.keys";
+import { transportKeys } from "./transport.key";
+import { transportApi } from "./transport.service";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Transport | null;
-  states: State[];
-  cities: City[];
-  onSubmit: (data: CreateTransportBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const defaultValues: CreateTransportBody = {
@@ -43,34 +44,68 @@ export default function TransportForm({
   open,
   onOpenChange,
   row,
-  states,
-  cities,
-  onSubmit,
-  isSubmitting,
 }: Props) {
   const form = useForm<CreateTransportBody>({
     resolver: zodResolver(createTransportSchema),
     defaultValues,
   });
+const states = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 35 }),
+  queryFn: () => stateApi.list({ page: 0, size: 35 }),
+  enabled: open,
+});
 
-  const selectedStateId = form.watch("stateId");
 
-  const filteredCities = React.useMemo(() => {
-    if (!selectedStateId) return cities;
-    return cities.filter((city) => city.stateId === selectedStateId);
-  }, [cities, selectedStateId]);
+const { create, update } = useMasterMutations({
+  api: transportApi,
+  queryKey: transportKeys.all,
+});
 
-  React.useEffect(() => {
-    if (!open) return;
+const handleSubmit = async (data: CreateTransportBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
 
-    form.reset({
-      name: row?.name ?? "",
-      stateId: row?.stateId ?? "",
-      cityId: row?.cityId ?? "",
-      country: "India",
-      phoneNo: row?.phoneNo ?? "",
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
+
+
+
+const selectedStateId = form.watch("stateId");
+const previousStateIdRef = React.useRef<string>("");
+
+React.useEffect(() => {
+  if (!open) return;
+
+  const previousStateId = previousStateIdRef.current;
+
+  if (previousStateId && previousStateId !== selectedStateId) {
+    form.setValue("cityId", "", {
+      shouldDirty: true,
+      shouldValidate: true,
     });
-  }, [form, open, row]);
+  }
+
+  previousStateIdRef.current = selectedStateId;
+}, [form, open, selectedStateId]);
+
+React.useEffect(() => {
+  if (!open) return;
+
+  form.reset({
+    name: row?.name ?? "",
+    stateId: row?.stateId ?? "",
+    cityId: row?.cityId ?? "",
+    country: "India",
+    phoneNo: row?.phoneNo ?? "",
+  });
+
+  previousStateIdRef.current = row?.stateId ?? "";
+}, [form, open, row]);
 
   return (
     <MasterFormDialog
@@ -78,7 +113,7 @@ export default function TransportForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Transport" : "Add Transport"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={2}
     >
@@ -101,7 +136,7 @@ export default function TransportForm({
                   placeholder="10-digit phone"
                   icon={<IconPhone size={16} />}
                   maxLength={10}
-                  
+                  required
                 />
     
       </FormSection>
@@ -115,22 +150,29 @@ export default function TransportForm({
         <SelectField<CreateTransportBody>
           name="stateId"
           label="State"
-          options={states.map((state) => ({
-            label: state.name,
-            value: state.id,
-          }))}
+         options={(states.data?.data ?? []).map((state) => ({
+  label: state.name,
+  value: state.id,
+}))}
           required
         />
 
-        <SelectField<CreateTransportBody>
-          name="cityId"
-          label="City"
-          options={filteredCities.map((city) => ({
-            label: city.name,
-            value: city.id,
-          }))}
-          required
-        />
+      <CitySelectField<CreateTransportBody>
+  name="cityId"
+  label="City"
+  required
+  disabled={!selectedStateId}
+  stateId={selectedStateId}
+  placeholder={selectedStateId ? "Select city" : "Select state first"}
+  initialCity={
+    row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null
+  }
+/>
 
         <IconTextField<CreateTransportBody>
           name="country"

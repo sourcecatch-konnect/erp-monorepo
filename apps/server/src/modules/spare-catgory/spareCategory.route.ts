@@ -15,7 +15,21 @@ const router: Router = createCrudRouter({
   updateSchema: updateSpareCategorySchema,
 
   permissionKey: "masters.spare-category",
+   hooks: {
+  beforeDelete: async (id) => {
+  const partsCount = await db.sparePart.count({
+    where: {
+      categoryId: id,
+    },
+  });
 
+  if (partsCount > 0) {
+    throw new Error(
+      "Cannot delete spare category because spare parts are assigned to it."
+    );
+  }
+},
+  },
   listOptions: {
     searchableFields: [
       "name",
@@ -24,7 +38,16 @@ const router: Router = createCrudRouter({
     defaultOrderBy: {
       name: "asc",
     },
+     blockDeleteIfExists: [
+  {
+    model: db.sparePart,
+    label: "Spare Parts",
+    where: (id: string) => ({ categoryId: id }),
   },
+],
+  },
+ 
+   
 });
 
 export default router;

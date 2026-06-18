@@ -55,29 +55,15 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, size]);
-const transportDetail = useQuery({
-  queryKey: detailId
-    ? transportKeys.detail(detailId)
-    : ["transport-detail-empty"],
-  queryFn: () => transportApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
+
   const transports = useQuery({
     queryKey: transportKeys.list(listQuery),
     queryFn: () => transportApi.list(listQuery),
   });
 
-  const states = useQuery({
-    queryKey: stateKeys.list(),
-    queryFn: () => stateApi.list(),
-  });
 
-  const cities = useQuery({
-    queryKey: cityKeys.list(),
-    queryFn: () => cityApi.list(),
-  });
 
-  const { create, update, remove } = useMasterMutations({
+  const {  remove } = useMasterMutations({
    api: transportApi,
    queryKey: transportKeys.all,
  });
@@ -104,16 +90,7 @@ const transportDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateTransportBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -157,17 +134,13 @@ const transportDetail = useQuery({
 <TransportDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={transportDetail.data}
-  isLoading={transportDetail.isLoading}
+  id={detailId}
 />
       <TransportForm
         open={open}
         onOpenChange={setOpen}
         row={selected}
-        states={states.data?.data ?? []}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
+
       />
     </MasterListPage>
   );

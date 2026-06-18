@@ -15,20 +15,33 @@ import {
   IconBuildingCommunity,
   IconCircleCheckFilled,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { areaKeys } from "./area.key";
+import { areaApi } from "./area.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Area;
-  isLoading?: boolean;
+  areaId: string | null;
 };
-
 export default function AreaDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+ areaId,
 }: Props) {
+  const areaDetail = useQuery({
+    queryKey: areaId ? areaKeys.detail(areaId) : ["area-detail-empty"],
+    queryFn: () => areaApi.detail(areaId!),
+    enabled: open && Boolean(areaId),
+  });
+
+  const data = areaDetail.data;
+  const isLoading = areaDetail.isLoading;
+
+  const latitude = data?.latitude;
+  const longitude = data?.longitude;
+  const hasMapLocation =
+    typeof latitude === "number" && typeof longitude === "number";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[700px] max-h-[90vh] gap-0 overflow-hidden rounded-2xl p-0">
@@ -57,23 +70,51 @@ export default function AreaDetailDialog({
           <div className="max-h-[calc(90vh-120px)] overflow-y-auto">
             <div className="mx-5 border-t" />
 
-            <div className="px-5 py-5">
-              <SectionLabel>Area Information</SectionLabel>
+        <div className="px-5 py-5">
+  <SectionLabel>Area Information</SectionLabel>
 
-              <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                <Field
-                  label="Area Name"
-                  value={data?.name}
-                  icon={<IconMapPin size={12} />}
-                />
+  <div className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
+    <Field
+      label="Area Name"
+      value={data?.name}
+      icon={<IconMapPin size={12} />}
+    />
 
-                <Field
-                  label="City"
-                  value={data?.city?.name}
-                  icon={<IconBuildingCommunity size={12} />}
-                />
-              </div>
-            </div>
+    <Field
+      label="City"
+      value={data?.city?.name}
+      icon={<IconBuildingCommunity size={12} />}
+    />
+
+    <Field
+      label="State"
+      value={data?.city?.state?.name}
+      icon={<IconBuildingCommunity size={12} />}
+    />
+  </div>
+</div>
+
+<div className="px-5 pb-5">
+  <SectionLabel>Google Location</SectionLabel>
+
+  {hasMapLocation ? (
+  <div className="col-span-2 overflow-hidden rounded-lg border bg-muted/20">
+    <div className="border-b px-3 py-2">
+      <p className="text-sm font-medium">Location Preview</p>
+      <p className="text-xs text-muted-foreground">
+        Map preview based on the selected Google location
+      </p>
+    </div>
+
+    <iframe
+      title="Area location map"
+      className="h-[220px] w-full border-0"
+      loading="lazy"
+      src={`https://www.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`}
+    />
+  </div>
+) : null}
+</div>
           </div>
         )}
 

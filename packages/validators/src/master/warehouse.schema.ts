@@ -58,6 +58,13 @@ export const warehouseSchema = z.object({
   cityId: z.string(),
   branchId: z.string(),
 
+  city: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .optional(),
+
   contactName: z.string().optional(),
   contactPhone: z.string().optional(),
 

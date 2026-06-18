@@ -40,19 +40,17 @@ import { toast } from "sonner";
 import { Button } from "@skerp/ui/components/button";
 import RateMatrixDetailDialog from "../rateMatrixDialog";
 import RateMatrixForm from "../rateMatrixForm";
+import { routeApi } from "../../routes/routes.service";
+import { vehicleTypeApi } from "../../vehicleType/vehicleType.service";
 
 type Props = {
   agreement: AgreementWithRelations;
-  routes: { id: string; name?: string }[];
-  vehicleTypes: VehicleType[];
-  rateUnits: RateUnit[];
 };
 export default function AgreementRateMatrixExpanded({
   agreement,
-  routes,
-  vehicleTypes,
-  rateUnits,
+
 }: Props) {
+
   const query = useQuery({
     queryKey: rateMatrixKeys.byAgreement(agreement.id),
     queryFn: () =>
@@ -344,32 +342,18 @@ const handleDelete = (rate: RateMatrixWithRelations) => {
       )}
     </div>
 
-    <RateMatrixDetailDialog
-      open={detailOpen}
-      onOpenChange={setDetailOpen}
-      data={selectedRate ?? undefined}
-    />
+  <RateMatrixDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  id={selectedRate?.id}
+/>
 
-    <RateMatrixForm
-      open={formOpen}
-      onOpenChange={setFormOpen}
-      row={selectedRate}
-      onSubmit={async (values) => {
-        await saveMutation.mutateAsync(values);
-      }}
-      isSubmitting={saveMutation.isPending}
-      agreements={[
-        {
-          id: agreement.id,
-          name: `${agreement.company?.name ?? "-"} - ${
-            agreement.client?.name ?? "-"
-          }`,
-        },
-      ]}
-      routes={routes}
-      vehicleTypes={vehicleTypes}
-      rateUnits={rateUnits}
-    />
+   <RateMatrixForm
+  open={formOpen}
+  onOpenChange={setFormOpen}
+  row={selectedRate}
+  agreementId={agreement.id}
+/>
   </TooltipProvider>
 );
 }

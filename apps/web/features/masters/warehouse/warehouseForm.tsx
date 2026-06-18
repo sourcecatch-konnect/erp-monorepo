@@ -6,9 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Warehouse,
-  City,
-  State,
-  Branch,
+
   CreateWarehouseBody,
   CreateWarehouseFormInput,
 } from "@skerp/types";
@@ -34,16 +32,21 @@ import IconTextField from "../_shared/fields/IconTextField";
 import FormSection from "../_shared/fields/FormSection";
 import TextAreaField from "../_shared/fields/TextAreaField";
 import { DatePicker } from "@skerp/ui/components/datepicker";
+import { useQuery } from "@tanstack/react-query";
+import { stateApi } from "../state/state.service";
+import { stateKeys } from "../state/state.keys";
+import { branchKeys } from "../branch/branch.key";
+import { branchApi } from "../branch/branch.service";
+import { warehouseApi } from "./warehouse.service";
+import { warehouseKeys } from "./warehouse.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Warehouse | null;
-  cities: City[];
-  states: State[];
-  branches: Branch[];
-  onSubmit: (data: CreateWarehouseBody) => Promise<void>;
-  isSubmitting?: boolean;
+
 };
 
 const defaultValues: CreateWarehouseFormInput = {
@@ -71,11 +74,7 @@ export default function WarehouseForm({
   open,
   onOpenChange,
   row,
-  cities,
-  states,
-  branches,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreateWarehouseFormInput, unknown, CreateWarehouseBody>({
     resolver: zodResolver(createWarehouseSchema),
@@ -83,7 +82,36 @@ export default function WarehouseForm({
     reValidateMode: "onChange",
     defaultValues,
   });
+const statesQuery = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
 
+
+
+const branchesQuery = useQuery({
+  queryKey: branchKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => branchApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+const { create, update } = useMasterMutations({
+  api: warehouseApi,
+  queryKey: warehouseKeys.all,
+});
+
+const handleSubmit = async (data: CreateWarehouseBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -114,30 +142,42 @@ expiryDate: row?.expiryDate
   ? new Date(row.expiryDate).toISOString().slice(0, 10)
   : "",
     });
+    previousStateIdRef.current = row?.stateId ?? "";
   }, [form, open, row]);
+const selectedStateId = form.watch("stateId") ?? "";
 
-  const cityOptions = cities.map((city) => ({
-    label: city.name,
-    value: city.id,
-  }));
+const previousStateIdRef = React.useRef<string>("");
 
-  const stateOptions = states.map((state) => ({
-    label: state.name,
-    value: state.id,
-  }));
+React.useEffect(() => {
+  if (!open) return;
 
-  const branchOptions = branches.map((branch) => ({
-    label: branch.name,
-    value: branch.id,
-  }));
+  const previousStateId = previousStateIdRef.current;
 
+  if (previousStateId && previousStateId !== selectedStateId) {
+    form.setValue("cityId", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  previousStateIdRef.current = selectedStateId;
+}, [form, open, selectedStateId]);
+const stateOptions = (statesQuery.data?.data ?? []).map((state) => ({
+  label: state.name,
+  value: state.id,
+}));
+
+const branchOptions = (branchesQuery.data?.data ?? []).map((branch) => ({
+  label: branch.name,
+  value: branch.id,
+}));
   return (
     <MasterFormDialog<CreateWarehouseFormInput, CreateWarehouseBody>
       open={open}
       onOpenChange={onOpenChange}
       title={row ? "Edit Warehouse" : "Add Warehouse"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -197,12 +237,22 @@ expiryDate: row?.expiryDate
           required
         />
 
-        <SelectField<CreateWarehouseFormInput>
-          name="cityId"
-          label="City"
-          options={cityOptions}
-          required
-        />
+        <CitySelectField<CreateWarehouseFormInput>
+  name="cityId"
+  label="City"
+  required
+  disabled={!selectedStateId}
+  stateId={selectedStateId}
+  placeholder={selectedStateId ? "Select city" : "Select state first"}
+initialCity={
+  row?.city
+    ? {
+        id: row.city.id,
+        name: row.city.name,
+      }
+    : null
+}
+/>
 
         <div className="md:col-span-2 xl:col-span-3">
           <TextAreaField<CreateWarehouseFormInput>

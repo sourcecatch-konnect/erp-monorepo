@@ -28,9 +28,28 @@ const router: Router =
     permissionKey: "masters.railway-freight",
 
     hooks: {
-      beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-      beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-    },
+  beforeCreate: async (data: any) => {
+    const exists = await db.railwayFreightMatrix.findFirst({
+      where: {
+        wagonType: data.wagonType,
+        sourceCityId: data.sourceCityId,
+        destinationCityId: data.destinationCityId,
+      },
+      select: { id: true },
+    });
+
+    if (exists) {
+      throw new Error(
+        "Railway freight already exists for this wagon and route."
+      );
+    }
+
+    return convertRupeeFieldsToPaise(data, moneyFields);
+  },
+
+  beforeUpdate: async (data: any) =>
+    convertRupeeFieldsToPaise(data, moneyFields),
+},
 
     listOptions: {
       searchableFields: [

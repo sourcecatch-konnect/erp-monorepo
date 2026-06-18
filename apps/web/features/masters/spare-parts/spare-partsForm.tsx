@@ -29,15 +29,19 @@ import {
   IconCurrencyRupee,
 } from "@tabler/icons-react";
 import IconTextField from "../_shared/fields/IconTextField";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { spareCategoryKeys } from "../spare-category/spare-category.key";
+import { spareCategoryApi } from "../spare-category/spare-cateogry.service";
+import { sparePartSupplierKeys } from "../spare-partSuppiler/spare-partSupplier.key";
+import { sparePartSupplierApi } from "../spare-partSuppiler/spare-partSupplier.service";
+import { sparePartApi } from "./spare-parts.service";
+import { sparePartKeys } from "./spare-parts.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: SparePart | null;
-  categories: SpareCategory[];
-  suppliers: SparePartSupplier[];
-  onSubmit: (data: CreateSparePartBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const partTypeOptions = [
@@ -50,8 +54,8 @@ const defaultValues: CreateSparePartFormInput = {
   type: "Item",
   categoryId: "",
   supplierId: "",
-  rate: "",
-  minimumStock: "",
+  rate: undefined as any,
+minimumStock: undefined as any,
   unit: "",
   isRecyclable: false,
   isBatchTracked: false,
@@ -62,10 +66,7 @@ export default function SparePartForm({
   open,
   onOpenChange,
   row,
-  categories,
-  suppliers,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<
     CreateSparePartFormInput,
@@ -86,25 +87,55 @@ export default function SparePartForm({
       type: row?.type ?? "Item",
       categoryId: row?.categoryId ?? "",
       supplierId: row?.supplierId ?? "",
-      rate: row?.rate != null ? String(paiseToRupees(row.rate)) : "",
-      minimumStock:
-        row?.minimumStock != null ? String(row.minimumStock) : "",
+      rate: row?.rate != null ? paiseToRupees(row.rate) : 0,
+minimumStock: row?.minimumStock ?? 0,
       unit: row?.unit ?? "",
       isRecyclable: row?.isRecyclable ?? false,
       isBatchTracked: row?.isBatchTracked ?? false,
       description: row?.description ?? "",
     });
   }, [form, open, row]);
+const queryClient = useQueryClient();
 
-  const categoryOptions = categories.map((c) => ({
-    label: c.name,
-    value: c.id,
-  }));
+const categories = useQuery({
+  queryKey: spareCategoryKeys.list(),
+  queryFn: () => spareCategoryApi.list(),
+  enabled: open,
+});
 
-  const supplierOptions = suppliers.map((s) => ({
-    label: s.shopName ? `${s.name} - ${s.shopName}` : s.name,
-    value: s.id,
-  }));
+const suppliers = useQuery({
+  queryKey: sparePartSupplierKeys.list(),
+  queryFn: () => sparePartSupplierApi.list(),
+  enabled: open,
+});
+
+
+const { create, update } = useMasterMutations({
+  api: sparePartApi,
+  queryKey: sparePartKeys.all,
+});
+
+const handleSubmit = async (data: CreateSparePartBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+const isSubmitting = create.isPending || update.isPending;
+
+
+const categoryOptions = (categories.data?.data ?? []).map((c) => ({
+  label: c.name,
+  value: c.id,
+}));
+
+const supplierOptions = (suppliers.data?.data ?? []).map((s) => ({
+  label: s.shopName ? `${s.name} - ${s.shopName}` : s.name,
+  value: s.id,
+}));
 
   return (
     <MasterFormDialog<CreateSparePartFormInput, CreateSparePartBody>
@@ -112,7 +143,7 @@ export default function SparePartForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Spare Part" : "Add Spare Part"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -181,7 +212,6 @@ export default function SparePartForm({
     max={9999999}
     step="0.01"
     inputMode="decimal"
-    valueAsNumber
     required
   />
 
@@ -195,7 +225,6 @@ export default function SparePartForm({
     max={999999}
     step={1}
     inputMode="numeric"
-    valueAsNumber
     required
   />
 </FormSection>

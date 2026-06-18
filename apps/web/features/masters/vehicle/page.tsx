@@ -17,9 +17,8 @@ import { vehicleKeys } from "./vehicle.key";
 import { vehicleColumns } from "./vehicleTable";
 import VehicleForm from "./vehicleForm";
 import { createVehicleSchema } from "@skerp/validators";
-import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import VehicleDetailDialog from "./vehicleDialog";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 type VehicleCsvRow = Record<
   | "vehicleNumber"
   | "chasisNumber"
@@ -64,13 +63,7 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     }),
     [debouncedSearch, page, size]
   );
-const vehicleDetail = useQuery({
-  queryKey: detailId
-    ? vehicleKeys.detail(detailId)
-    : ["vehicle-detail-empty"],
-  queryFn: () => vehicleApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
+
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, size]);
@@ -80,11 +73,11 @@ const vehicleDetail = useQuery({
     queryFn: () => vehicleApi.list(listQuery),
   });
 
-    const { create, update, remove } = useMasterMutations({
-     api: vehicleApi,
-     queryKey: vehicleKeys.all,
-   });
 
+ const {  remove } = useMasterMutations({
+   api: vehicleApi,
+   queryKey: vehicleKeys.all,
+ });
   const bulkRemove = useMutation({
     mutationFn: vehicleApi.bulkRemove,
     onSuccess: () => {
@@ -107,16 +100,6 @@ const vehicleDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateVehicleBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -180,18 +163,16 @@ await bulkImport.mutateAsync(parsedRows);
       isImporting={bulkImport.isPending}
       isExporting={exportVehicles.isPending}
     >
-      <VehicleForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+ <VehicleForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
+
 <VehicleDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={vehicleDetail.data}
-  isLoading={vehicleDetail.isLoading}
+  id={detailId}
 />
     </MasterListPage>
   );

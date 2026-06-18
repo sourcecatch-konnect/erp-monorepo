@@ -5,30 +5,23 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { RateMatrix, CreateRateMatrixBody } from "@skerp/types";
 import type { AgreementWithRelations } from "@skerp/types";
-import { agreementColumns } from "../Agreements/agreementsTable";
-import MasterListPage from "../_shared/MasterListPage";
+
 import {
   downloadBlob,
   ListQuery,
   parseCsvRows,
 } from "../_shared/master-api";
+
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
-import { rateMatrixApi } from "./rateMatrix.service";
-import { rateMatrixKeys } from "./rateMatrix.key";
-import { rateMatrixColumns } from "./rateMatrixTable";
-
-import RateMatrixForm from "./rateMatrixForm";
-import RateMatrixDetailDialog from "./rateMatrixDialog";
-
-import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
 import { agreementApi } from "../Agreements/agreements.service";
-import { routeApi } from "../routes/routes.service";
-import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
+import { rateMatrixApi } from "./rateMatrix.service";
+import { rateMatrixKeys } from "./rateMatrix.key";
 import { agreementKeys } from "../Agreements/agreements.key";
-import AgreementRateMatrixExpanded from "./Agreements(Company)/agreementRateMatrixEpanded";
+
 import AgreementRateMatrixAccordionList from "./agreementList";
+import RateMatrixForm from "./rateMatrixForm";
 
 /* ================= CSV TYPE ================= */
 type CreateRateMatrixCsvRow = {
@@ -51,10 +44,6 @@ export default function RateMatrixPage() {
 
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
-  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
-  const [detailOpen, setDetailOpen] = React.useState(false);
-  const [detailId, setDetailId] = React.useState<string | null>(null);
 
   const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
@@ -82,75 +71,13 @@ const agreements = useQuery({
   queryFn: () => agreementApi.list(agreementListQuery),
 });
 
-const agreementOptions = useQuery({
-  queryKey: agreementKeys.list({
-    page: 0,
-    size: 1000,
-    sort: "createdAt:desc",
-  }),
-  queryFn: () =>
-    agreementApi.list({
-      page: 0,
-      size: 1000,
-      sort: "createdAt:desc",
-    }),
-});
-
-const vehicleTypes = useQuery({
-  queryKey: ["vehicleTypes"],
-  queryFn: () => vehicleTypeApi.list(),
-});
-
-const rateUnits = useQuery({
-  queryKey: ["rateMatrix", "units"],
-  queryFn: () => rateMatrixApi.units.list(),
-});
-
-const routes = useQuery({
-  queryKey: ["routes"],
-  queryFn: () => routeApi.list(),
-});
-
-
-
 React.useEffect(() => {
   setPage(0);
 }, [debouncedSearch, size]);
 
-  /* ================= LIST ================= */
- 
-
-  /* ================= DETAIL ================= */
-  const rateMatrixDetail = useQuery({
-    queryKey: detailId
-      ? rateMatrixKeys.detail(detailId)
-      : ["rateMatrix-detail-empty"],
-    queryFn: () => rateMatrixApi.detail(detailId as string),
-    enabled: Boolean(detailOpen && detailId),
-  });
-
-  /* ================= MASTER DATA ================= */
 
 
-  /* ================= MUTATIONS ================= */
-  const { create, update, remove } = useMasterMutations({
-    api: rateMatrixApi,
-    queryKey: rateMatrixKeys.all,
-    entityName: "Rate Matrix",
-    
-  });
 
-  const bulkDeleteMutation = React.useMemo(
-    () => ({
-      mutateAsync: async (ids: string[]) => {
-        await rateMatrixApi.bulkRemove(ids);
-        queryClient.invalidateQueries({ queryKey: rateMatrixKeys.all });
-        setSelectedIds([]);
-      },
-      isPending: false,
-    }),
-    [queryClient]
-  );
 
   const bulkImportMutation = React.useMemo(
     () => ({
@@ -176,17 +103,7 @@ React.useEffect(() => {
   );
 
   /* ================= SUBMIT ================= */
-  const handleSubmit = async (data: CreateRateMatrixBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
-
+ 
   /* ================= IMPORT ================= */
   const handleImport = async (file: File) => {
     const text = await file.text();
@@ -231,46 +148,11 @@ const parsedRows: CreateRateMatrixBody[] = rows.map((row) => ({
       onExport={() => exportMutation.mutate(rateMatrixListQuery)}
       isImporting={bulkImportMutation.isPending}
       isExporting={exportMutation.isPending}
-      routes={(routes.data?.data ?? []).map((r) => ({
-        id: r.id,
-        name: `${r.sourceCity?.name ?? "-"} to ${
-          r.destinationCity?.name ?? "-"
-        }`,
-      }))}
-      vehicleTypes={vehicleTypes.data?.data ?? []}
-      rateUnits={rateUnits.data?.data ?? []}
-    />
 
-    <RateMatrixDetailDialog
-      open={detailOpen}
-      onOpenChange={setDetailOpen}
-      data={rateMatrixDetail.data}
-      isLoading={rateMatrixDetail.isLoading}
+ 
     />
+<RateMatrixForm open={open} onOpenChange={setOpen} row={selected} />
 
-    <RateMatrixForm
-      open={open}
-      onOpenChange={setOpen}
-      row={selected}
-      onSubmit={handleSubmit}
-      isSubmitting={create.isPending || update.isPending}
-      agreements={(
-        (agreementOptions.data?.data ?? []) as AgreementWithRelations[]
-      ).map((a) => ({
-        id: a.id,
-        name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
-      }))}
-      routes={
-        routes.data?.data.map((r) => ({
-          id: r.id,
-          name: `${r.sourceCity?.name ?? "-"} to ${
-            r.destinationCity?.name ?? "-"
-          }`,
-        })) ?? []
-      }
-      vehicleTypes={vehicleTypes.data?.data ?? []}
-      rateUnits={rateUnits.data?.data ?? []}
-    />
   </>
 );
 }

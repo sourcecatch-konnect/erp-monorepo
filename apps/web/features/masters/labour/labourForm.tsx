@@ -10,6 +10,7 @@ import type {
   Branch,
   CreateLabourBody,
   CreateLabourFormInput,
+  LabourWithRelations,
 } from "@skerp/types";
 
 import { createLabourSchema } from "@skerp/validators";
@@ -32,20 +33,18 @@ import IconTextField from "../_shared/fields/IconTextField";
 import SelectField from "../_shared/fields/SelectField";
 import TextAreaField from "../_shared/fields/TextAreaField";
 import { DatePicker } from "@skerp/ui/components/datepicker";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { labourApi } from "./labour.service";
+import { labourKeys } from "./labour.key";
+import { branchApi } from "../branch/branch.service";
+import { branchKeys } from "../branch/branch.key";
+import { useQuery } from "@tanstack/react-query";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  row?: Labour | null;
-
-  cities: City[];
-  branches: Branch[];
-
-  onSubmit: (
-    data: CreateLabourBody
-  ) => Promise<void>;
-
-  isSubmitting?: boolean;
+  row?: LabourWithRelations | null;
 };
 
 const defaultValues: CreateLabourFormInput = {
@@ -75,10 +74,6 @@ export default function LabourAdvancedForm({
   open,
   onOpenChange,
   row,
-  cities,
-  branches,
-  onSubmit,
-  isSubmitting,
 }: Props) {
   const form = useForm<
     CreateLabourFormInput,
@@ -93,6 +88,30 @@ export default function LabourAdvancedForm({
     defaultValues,
   });
 
+
+const branches = useQuery({
+  queryKey: branchKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => branchApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+const { create, update } = useMasterMutations({
+  api: labourApi,
+  queryKey: labourKeys.all,
+  entityName: "Labour",
+});
+
+const handleSubmit = async (data: CreateLabourBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -156,22 +175,10 @@ export default function LabourAdvancedForm({
     });
   }, [open, row, form]);
 
-  const cityOptions =
-    cities.map((city) => ({
-      label: city.name,
-      value: city.id,
-    }));
-
-  const branchOptions =
-    branches.map(
-      (branch) => ({
-        label:
-          branch.name,
-        value:
-          branch.id,
-      })
-    );
-
+const branchOptions = (branches.data?.data ?? []).map((branch) => ({
+  label: branch.name,
+  value: branch.id,
+}));
   return (
     <MasterFormDialog<
       CreateLabourFormInput,
@@ -188,7 +195,7 @@ export default function LabourAdvancedForm({
       }
       form={form}
       onSubmit={
-        onSubmit
+        handleSubmit
       }
       isSubmitting={
         isSubmitting
@@ -298,14 +305,19 @@ export default function LabourAdvancedForm({
         title="Address"
         description="Address details"
       >
-        <SelectField<CreateLabourFormInput>
-          name="cityId"
-          label="City"
-          options={
-            cityOptions
-          }
-          required
-        />
+      <CitySelectField<CreateLabourFormInput>
+  name="cityId"
+  label="City"
+  required
+  initialCity={
+    row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null
+  }
+/>
 
         <div className="col-span-2">
           <TextAreaField<CreateLabourFormInput>

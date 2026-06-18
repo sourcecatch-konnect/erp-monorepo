@@ -76,15 +76,7 @@ export default function GoodsPage() {
   });
 
   // ---------------- DETAIL ----------------
-  const goodsDetail = useQuery({
-    queryKey: detailId ? goodsKeys.detail(detailId) : ["goods-empty"],
-    queryFn: () => goodsApi.detail(detailId!),
-    enabled: Boolean(detailOpen && detailId),
-  });
-
-  // ---------------- MUTATIONS ----------------
-  // ---------------- MUTATIONS ----------------
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: goodsApi,
   queryKey: goodsKeys.all,
   entityName: "Goods",
@@ -121,17 +113,7 @@ const { create, update, remove } = useMasterMutations({
     onError: (err) => toast.error(getErrorMessage(err)),
   });
 
-  // ---------------- SUBMIT ----------------
-  const handleSubmit = async (data: CreateGoodsBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -184,18 +166,16 @@ const { create, update, remove } = useMasterMutations({
       isExporting={exportGoods.isPending}
     >
       <GoodsDetailDialog
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        data={goodsDetail.data}
-        isLoading={goodsDetail.isLoading}
-      />
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  id={detailId}
+/>
 
       <GoodsForm
         open={open}
         onOpenChange={setOpen}
         row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
+
       />
     </MasterListPage>
   );

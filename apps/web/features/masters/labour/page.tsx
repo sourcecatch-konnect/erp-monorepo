@@ -22,8 +22,7 @@ import { createLabourSchema } from "@skerp/validators";
 import LabourAdvancedForm from "./labourForm";
 import LabourDetailDialog from "./labourDialog";
 
-import { cityApi } from "../city/city.service";
-import { branchApi } from "../branch/branch.service";
+
 
 import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 
@@ -80,24 +79,10 @@ export default function LabourPage() {
     queryFn: () => labourApi.list(listQuery),
   });
 
-  const cities = useQuery({
-    queryKey: ["cities"],
-    queryFn: () => cityApi.list({ size: 1000 }),
-  });
 
-  const branches = useQuery({
-    queryKey: ["branches"],
-    queryFn: () => branchApi.list({ size: 1000 }),
-  });
-
-  const labourDetail = useQuery({
-    queryKey: detailId ? labourKeys.detail(detailId) : ["labour-empty"],
-    queryFn: () => labourApi.detail(detailId!),
-    enabled: Boolean(detailOpen && detailId),
-  });
 
   // ---------------- MASTER MUTATIONS ----------------
-  const { create, update, remove } = useMasterMutations({
+  const { remove } = useMasterMutations({
     api: labourApi,
     queryKey: labourKeys.all,
     entityName: "Labour",
@@ -135,16 +120,7 @@ export default function LabourPage() {
   });
 
   // ---------------- SUBMIT ----------------
-  const handleSubmit = async (data: CreateLabourBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -187,22 +163,17 @@ export default function LabourPage() {
       }}
       onExport={() => exportLabour.mutate(listQuery)}
     >
-      <LabourDetailDialog
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        data={labourDetail.data}
-        isLoading={labourDetail.isLoading}
-      />
+  <LabourDetailDialog
+  open={detailOpen}
+  onOpenChange={setDetailOpen}
+  id={detailId}
+/>
 
-      <LabourAdvancedForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        cities={cities.data?.data ?? []}
-        branches={branches.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+<LabourAdvancedForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

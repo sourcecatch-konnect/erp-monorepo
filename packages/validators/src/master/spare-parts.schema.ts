@@ -7,13 +7,13 @@ const optionalString = z
   .transform((value) => (value ? value : undefined));
 
 const numberField = (message: string) =>
-  z
-    .union([z.string(), z.number()])
-    .transform((value) => Number(value))
-    .refine((value) => !Number.isNaN(value), message);
+  z.coerce.number().refine(
+    (value) => !Number.isNaN(value),
+    { message }
+  );
 
 const intField = (message: string) =>
-  numberField(message).refine((value) => Number.isInteger(value), message);
+  z.coerce.number().int(message);
 export const createSparePartSchema = z.object({
   name: z
     .string()
