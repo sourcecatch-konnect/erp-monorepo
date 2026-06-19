@@ -13,19 +13,27 @@ import {
   IconUsers,
   IconCoin,
   IconRouteOff,
+  IconPlus,
+  IconPencil,
+  IconTrash,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { formatMoney } from "@/lib/format";
+import { paiseToRupees } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { lrGroupApi } from "./lr-group.service";
 import { lrGroupKeys } from "./lr-group.keys";
+import { lorryReceiptApi } from "./lorry-receipt.service";
 import { LRStatusBadge, SOURCE_LABELS } from "./lorry-receipt-ui";
 import FinaliseDialog from "./components/FinaliseDialog";
 import SplitAtHubDialog from "./components/SplitAtHubDialog";
 import EwayBillSection from "./components/EwayBillSection";
+import EditGroupDialog from "./components/EditGroupDialog";
+import LRLineDialog, { type LinePayload } from "./components/LRLineDialog";
+import type { LRGroup } from "@skerp/types";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -45,6 +53,9 @@ export default function LRDetail({ id }: { id: string }) {
   const [finaliseOpen, setFinaliseOpen] = React.useState(false);
   const [splitOpen, setSplitOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [editGroupOpen, setEditGroupOpen] = React.useState(false);
+  const [addLineOpen, setAddLineOpen] = React.useState(false);
+  const [editLine, setEditLine] = React.useState<LRGroup["lorryReceipts"][number] | null>(null);
 
   const canApprove = useCan(PERMS.LORRY_RECEIPT.APPROVE);
   const canCancel = useCan(PERMS.LORRY_RECEIPT.CANCEL);
@@ -88,6 +99,58 @@ export default function LRDetail({ id }: { id: string }) {
     onSuccess: () => {
       toast.success("Group cancelled");
       setCancelOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const updateGroup = useMutation({
+    mutationFn: (body: Parameters<typeof lrGroupApi.update>[1]) =>
+      lrGroupApi.update(id, body),
+    onSuccess: () => {
+      toast.success("Group updated");
+      setEditGroupOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const addLine = useMutation({
+    mutationFn: (payload: LinePayload) =>
+      lrGroupApi.addLorryReceipt(id, {
+        loadingLocationId: payload.loadingLocationId,
+        unloadingLocationId: payload.unloadingLocationId,
+        goods: payload.goods,
+      }),
+    onSuccess: () => {
+      toast.success("LR added");
+      setAddLineOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const updateLine = useMutation({
+    mutationFn: (vars: { lrId: string; payload: LinePayload }) =>
+      lorryReceiptApi.update(vars.lrId, {
+        loadingLocationId: vars.payload.loadingLocationId,
+        unloadingLocationId: vars.payload.unloadingLocationId,
+        goods: vars.payload.goods,
+        invoiceNumber: vars.payload.invoiceNumber,
+        invoiceAmount: vars.payload.invoiceAmount,
+      }),
+    onSuccess: () => {
+      toast.success("LR updated");
+      setEditLine(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const removeLine = useMutation({
+    mutationFn: (lrId: string) => lorryReceiptApi.remove(lrId),
+    onSuccess: () => {
+      toast.success("LR removed");
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -149,6 +212,11 @@ export default function LRDetail({ id }: { id: string }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {g.status === "DRAFT" && canUpdate && (
+            <Button variant="outline" onClick={() => setEditGroupOpen(true)}>
+              Edit group
+            </Button>
+          )}
           {g.status === "DRAFT" && canApprove && (
             <Button onClick={() => setFinaliseOpen(true)}>
               Finalise group
@@ -222,7 +290,14 @@ export default function LRDetail({ id }: { id: string }) {
 
       {/* Lorry receipts */}
       <div className="space-y-3">
-        <p className="text-sm font-semibold">Lorry receipts</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Lorry receipts</p>
+          {g.status === "DRAFT" && canUpdate && (
+            <Button size="sm" variant="outline" onClick={() => setAddLineOpen(true)}>
+              <IconPlus size={14} className="mr-1" /> Add LR
+            </Button>
+          )}
+        </div>
         {g.lorryReceipts.map((lr) => (
           <div key={lr.id} className="rounded-lg border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -233,11 +308,35 @@ export default function LRDetail({ id }: { id: string }) {
                   {lr.unloadingLocation?.name ?? "—"}
                 </p>
               </div>
-              <div className="text-right text-xs text-muted-foreground">
-                {lr.invoiceNumber ? <p>Invoice {lr.invoiceNumber}</p> : null}
-                {lr.invoiceAmount != null ? (
-                  <p>{formatMoney(lr.invoiceAmount)}</p>
-                ) : null}
+              <div className="flex items-start gap-3">
+                <div className="text-right text-xs text-muted-foreground">
+                  {lr.invoiceNumber ? <p>Invoice {lr.invoiceNumber}</p> : null}
+                  {lr.invoiceAmount != null ? (
+                    <p>{formatMoney(lr.invoiceAmount)}</p>
+                  ) : null}
+                </div>
+                {g.status === "DRAFT" && canUpdate && (
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Edit LR"
+                      onClick={() => setEditLine(lr)}
+                    >
+                      <IconPencil size={15} />
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Remove LR"
+                      className="text-red-600 hover:bg-red-50"
+                      disabled={removeLine.isPending || g.lorryReceipts.length <= 1}
+                      onClick={() => removeLine.mutate(lr.id)}
+                    >
+                      <IconTrash size={15} />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -273,7 +372,11 @@ export default function LRDetail({ id }: { id: string }) {
           loadingLocation: lr.loadingLocation,
           unloadingLocation: lr.unloadingLocation,
         }))}
-        defaultFreight={null}
+        defaultFreight={
+          g.order?.bookingFreightAmount != null
+            ? paiseToRupees(g.order.bookingFreightAmount)
+            : null
+        }
         isPending={finalise.isPending}
         onConfirm={(data) => finalise.mutate(data)}
       />
@@ -296,6 +399,52 @@ export default function LRDetail({ id }: { id: string }) {
         destructive
         isPending={cancel.isPending}
         onConfirm={(reason) => cancel.mutate(reason)}
+      />
+
+      <EditGroupDialog
+        open={editGroupOpen}
+        onOpenChange={setEditGroupOpen}
+        group={g}
+        isPending={updateGroup.isPending}
+        onConfirm={(data) => updateGroup.mutate(data)}
+      />
+
+      <LRLineDialog
+        open={addLineOpen}
+        onOpenChange={setAddLineOpen}
+        mode="add"
+        consignorId={g.consignorId}
+        consigneeId={g.consigneeId}
+        isPending={addLine.isPending}
+        onSubmit={(payload) => addLine.mutate(payload)}
+      />
+
+      <LRLineDialog
+        open={Boolean(editLine)}
+        onOpenChange={(o) => !o && setEditLine(null)}
+        mode="edit"
+        consignorId={g.consignorId}
+        consigneeId={g.consigneeId}
+        initial={
+          editLine
+            ? {
+                loadingLocationId: editLine.loadingLocationId ?? undefined,
+                unloadingLocationId: editLine.unloadingLocationId ?? undefined,
+                goodsName: editLine.goods[0]?.name ?? "",
+                quantity: editLine.goods[0]?.quantity != null ? String(editLine.goods[0].quantity) : "",
+                unit: editLine.goods[0]?.unit ?? "",
+                invoiceNumber: editLine.invoiceNumber ?? "",
+                invoiceAmount:
+                  editLine.invoiceAmount != null
+                    ? String(paiseToRupees(editLine.invoiceAmount))
+                    : "",
+              }
+            : undefined
+        }
+        isPending={updateLine.isPending}
+        onSubmit={(payload) =>
+          editLine && updateLine.mutate({ lrId: editLine.id, payload })
+        }
       />
     </div>
   );

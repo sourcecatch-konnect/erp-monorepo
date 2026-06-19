@@ -5,6 +5,7 @@ import {
   finaliseGroupSchema,
   splitGroupAtHubSchema,
   cancelGroupSchema,
+  lrGroupLineSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -511,6 +512,65 @@ router.post("/:id/split-at-hub", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, r
   });
 
   return sendOk(res, updated);
+});
+
+/* ------------------------------------------------------------------ */
+/* Add an LR (consignment line) to a DRAFT group                        */
+/* ------------------------------------------------------------------ */
+router.post("/:id/lorry-receipts", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
+  const id = getParamId(req);
+  const group = await db.lRGroup.findFirst({
+    where: { id, deletedAt: null },
+    select: {
+      id: true,
+      status: true,
+      fyCode: true,
+      originBranchId: true,
+      originBranch: { select: { branchCode: true } },
+    },
+  });
+  if (!group) throw new NotFoundError("Lorry receipt group not found");
+  if (group.status !== "DRAFT") {
+    throw new BadRequestError("LRs can only be added to a DRAFT group");
+  }
+  assertBranchAccess(req, group.originBranchId);
+
+  const parsed = lrGroupLineSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+  const line = parsed.data;
+  const me = actorId(req);
+
+  const updated = await db.$transaction(async (tx) => {
+    const lrNumber = await generateLRNumber(tx, group.originBranch.branchCode, group.fyCode);
+    await tx.lorryReceipt.create({
+      data: {
+        lrNumber,
+        fyCode: group.fyCode,
+        groupId: group.id,
+        loadingLocationId: line.loadingLocationId ?? null,
+        unloadingLocationId: line.unloadingLocationId ?? null,
+        status: "DRAFT",
+        createdById: me,
+        goods: {
+          create: line.goods.map((g) => ({
+            name: g.name,
+            description: g.description ?? null,
+            quantity: g.quantity,
+            unit: g.unit,
+            weight: g.weight ?? null,
+            length: g.length ?? null,
+            width: g.width ?? null,
+            height: g.height ?? null,
+          })),
+        },
+      },
+    });
+    return tx.lRGroup.findUniqueOrThrow({ where: { id }, include: groupDetailInclude });
+  });
+
+  return sendOk(res, updated, undefined, 201);
 });
 
 /* ------------------------------------------------------------------ */

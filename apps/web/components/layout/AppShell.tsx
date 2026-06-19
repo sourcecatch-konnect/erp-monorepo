@@ -34,8 +34,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="min-w-0 flex-1 overflow-x-hidden p-6">
-            <div className="min-w-0 w-full max-w-full overflow-x-hidden">
+          {/* Fixed-height internal scroll region: keeps the topbar in place and
+              lets pages pin their own sticky footers/headers reliably. */}
+          <main className="h-[calc(100svh-3.5rem)] min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+            <div className="min-w-0 w-full max-w-full overflow-x-hidden p-6">
               {children}
             </div>
           </main>
