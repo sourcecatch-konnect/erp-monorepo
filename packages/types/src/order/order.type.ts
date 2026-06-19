@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   orderItemSchema,
+  orderConsignmentSchema,
   createOrderSchema,
   updateOrderSchema,
   approveOrderSchema,
@@ -14,6 +15,7 @@ export type OrderType = z.infer<typeof orderTypeSchema>;
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 
 export type OrderItemInput = z.input<typeof orderItemSchema>;
+export type OrderConsignmentFormInput = z.input<typeof orderConsignmentSchema>;
 
 export type CreateOrderBody = z.output<typeof createOrderSchema>;
 export type CreateOrderFormInput = z.input<typeof createOrderSchema>;
@@ -47,11 +49,34 @@ export type OrderItemRow = {
   goods?: Ref;
 };
 
+export type OrderConsignmentGoodsRow = {
+  id: string;
+  consignmentId: string;
+  goodsId: string;
+  quantity: number;
+  unit: string;
+  weight: string | null;
+  goods?: Ref;
+};
+
+/** A consignment line on a Truck order (multi-loading); one line -> one LR. */
+export type OrderConsignmentRow = {
+  id: string;
+  orderId: string;
+  truckIndex: number;
+  loadingLocationId: string | null;
+  unloadingLocationId: string | null;
+  loadingLocation?: { id: string; name: string } | null;
+  unloadingLocation?: { id: string; name: string } | null;
+  goods?: OrderConsignmentGoodsRow[];
+};
+
 /** Order as returned by the API (Decimal/Date serialised to string on the wire). */
 export type Order = {
   id: string;
   orderNumber: string;
   customerId: string;
+  consigneeId: string | null;
   fromBranchId: string;
   toBranchId: string;
   pickupDate: string;
@@ -80,6 +105,7 @@ export type Order = {
   updatedAt: string;
 
   customer?: Ref;
+  consignee?: Ref | null;
   fromBranch?: { id: string; name: string; shortCode: string };
   toBranch?: { id: string; name: string; shortCode: string };
   vehicleType?: { id: string; code: string; name: string } | null;
@@ -87,6 +113,7 @@ export type Order = {
   createdBy?: { id: string; firstName: string; lastName: string };
   approvedBy?: { id: string; firstName: string; lastName: string } | null;
   items?: OrderItemRow[];
+  consignments?: OrderConsignmentRow[];
   events?: OrderEvent[];
 };
 

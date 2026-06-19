@@ -34,8 +34,8 @@ import { useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
-import { lorryReceiptApi } from "@/features/lorry-receipts/lorry-receipt.service";
-import { lrKeys } from "@/features/lorry-receipts/lorry-receipt.keys";
+import { lrGroupApi } from "@/features/lorry-receipts/lr-group.service";
+import { lrGroupKeys } from "@/features/lorry-receipts/lr-group.keys";
 import {
   StatusBadge,
   formatDate,
@@ -128,10 +128,10 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
   });
 
   const lrCountsQuery = useQuery({
-    queryKey: [...lrKeys.all, "order-counts", orderId],
-    queryFn: () => lorryReceiptApi.list({ size: 1, filter: { orderId } }),
+    queryKey: [...lrGroupKeys.all, "order-counts", order?.id ?? orderId],
+    queryFn: () => lrGroupApi.list({ size: 1, filter: { orderId: order?.id ?? "" } }),
     enabled: Boolean(
-      order?.orderType === "Truck" && order?.status === "Confirmed",
+      order?.id && order?.orderType === "Truck" && order?.status === "Confirmed",
     ),
     select: (res) => res.meta?.total ?? 0,
   });

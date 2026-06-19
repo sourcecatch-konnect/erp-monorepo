@@ -89,63 +89,99 @@ Compliance / Misc: 17. **E-way Bill** (manual attach + NIC API for Part-B + vali
 
 ### 4.2 LR (Lorry Receipt)
 
-**Entity:** `LR(lrNumber, orderId nullable, fromBranchId, toBranchId, consignorCustomerId, consigneeCustomerId, consignorPartySnapshot json, consigneePartySnapshot json, mode: Road|RoadRail, paymentMode: Paid|ToPay|TBB, currentTripId nullable, currentVehicleNo denormalised, operationalStatus, billingStatus, fyCode, finalisedAt, ...)`.
+> **Model name is `LorryReceipt`** (not `LR`). Branches are `originBranchId` / `destinationBranchId` (not from/to). The entity below reflects what is **implemented**; a "Planned (not yet on the model)" note at the end lists the spec items still to be added.
+
+**Entity:** `LorryReceipt(lrNumber, fyCode, source, orderId nullable, originBranchId, destinationBranchId, transportType: Road|Rail|RoadAndRail, tripLegType: DIRECT|TO_HUB|FROM_HUB, hubId nullable, railheadBranchId nullable, isMarketVehicle, primaryTripId nullable, secondaryTripId nullable, marketVehicleNumber nullable, marketDriverName nullable, consignorId, consigneeId, sealNumber nullable, invoiceNumber nullable, invoiceAmount nullable, priority: Normal|Express|Critical, status: DRAFT|FINALISED|CANCELLED, cancelReason nullable, finalisedAt, finalisedById, createdById, updatedById, version, deletedAt, ...)`.
+
+**Transport type & routing:**
+
+- `transportType` is three-valued: **`Road` | `Rail` | `RoadAndRail`** (not the earlier `Road|RoadRail`).
+- **Railhead** (`railheadBranchId`) — order LRs only; **required when `transportType = RoadAndRail`**. A user-picked branch where `Branch.isRailHead = true`. Distinct from hub.
+
+**Hub / split-at-hub:**
+
+- **Hub is always Jalgaon / HO** (a branch flagged as the hub). `hubId` is **never picked in a form** — it is set only by the **"split at hub" action on a FINALISED LR**, which sets `tripLegType = FROM_HUB`.
+- `tripLegType`: `DIRECT` (single leg, default) | `TO_HUB` (origin → hub leg) | `FROM_HUB` (hub → destination leg, created by the split). A hub-routed consignment is therefore two legs riding two trips.
+
+**Vehicle attachment (own vs market):**
+
+- **Own vehicle** — attach via `primaryTripId` (and `secondaryTripId` for the second leg of a hub split) → `VehicleTrip`.
+- **Market vehicle** — `isMarketVehicle = true`; `marketVehicleNumber` + `marketDriverName` entered directly on the LR, **with no `VehicleTrip` row**.
 
 **Two creation paths:**
 
-- **From Order** — most LRs; copies consignor/consignee + items from order.
-- **Instant LR** — ad-hoc / walk-in freight, no parent order. `orderId IS NULL`.
+- **From Order** (`source = ORDER`) — most LRs; copies consignor/consignee + goods from the order.
+- **Instant LR** (`source = INSTANT`) — ad-hoc / walk-in freight, no parent order. `orderId IS NULL`.
 
-**Children:**
+**Children (implemented):**
 
-- `LRItem(lrId, goodsId, qty, unit, weight, ...)` — copy-on-create from `OrderItem`; can diverge after creation.
-- `LRCharge(lrId, type: BaseFreight|Loading|Unloading|Detention|Courier|Retention|Handling|Other, amount, isDeduction, taxable)` — structured charge lines.
-- `LRTripAssignmentHistory(lrId, tripId, assignedAt, unassignedAt, actorId)` — rare reassignment audit.
-- `LRFreightRevision(lrId, oldAmount, newAmount, reason, actorId, revisedAt)` — post-finalisation freight changes (new permission `lr.freight.revise` for customer-care role). Existing bills NOT auto-updated — credit-note path required.
-- `LRAcknowledgement(lrId, receivedQty, damageQty, shortageQty, observedDetentionDays, acknowledgedBy, ackAt, remarks)` — destination branch fills.
-- `PODDispatch(lrId, courierName, docketNumber, courierCharges, retentionAmount, dispatchedAt, receivedAtHOAt, status)` — sub-tracker for paperwork courier shipping signed POD back to origin/HO.
+- `LRGoods(lorryReceiptId, name, description, quantity, unit, weight, length, width, height)` — goods lines with optional dimensions; copy-on-create from the order, can diverge after.
+- `LRCharge(lorryReceiptId, chargeType, amount, description)` — currently only `BASE_FREIGHT` (added at finalisation).
+- `EwayBill(lorryReceiptId, ewayBillNo, generatedAt, expiresAt, generatedBy, documentUrl)` — multiple per LR.
 
-**Status (two orthogonal axes):**
+**Implemented actions / routes:** list, status-counts, get, create, update (DRAFT), **finalise** (DRAFT → FINALISED; stamps base freight + seal/invoice/eway), **split-at-hub** (on a FINALISED LR), **cancel**, add eway-bills.
 
-- `operationalStatus`: `Draft → Finalised → InTransit → AtDestination → Acknowledged → Delivered → Closed` (+ `Cancelled`).
-- `billingStatus`: `NotBillable → ReadyToBill → Billed → Paid` (+ `Disputed`).
-- `ReadyToBill` requires: `Delivered` + POD attachment present.
+**Status (implemented):** flat `DRAFT → FINALISED → CANCELLED`.
 
 **Rules:**
 
-- **Draft fully editable; Finalised only soft fields** (consignee contact, special notes). Ack data captured via dedicated Ack screen, not via row edit.
-- Consignor/consignee FK + **frozen party snapshot** (name + address + GSTIN) at Finalisation — bills + EWB use the snapshot even if master changes later.
-- `truckNo` set at trip attachment (Road) or VP Loading (RoadRail); denormalised on LR for fast reports.
-- **Branch-scoped operations** — From Branch users: create + finalise + cancel; Destination Branch users: acknowledge + deliver + POD upload. **HO is just a branch** — multi-branch user assignment (`UserBranchAssignment`) gives HO super-users access to all branches via normal permission checks. No HO-special code paths.
-- POD upload required for `ReadyToBill`.
+- **Draft fully editable; Finalised only soft fields.**
+- Finalisation requires origin-branch access (`assertOriginAccess`) and stamps the `BASE_FREIGHT` charge + seal/invoice/eway data.
+- **Branch-scoped operations** — Origin branch users: create + finalise + cancel. **HO is just a branch** — multi-branch user assignment (`UserBranchAssignment`) gives HO super-users access to all branches via normal permission checks. No HO-special code paths.
 
 **Numbering:** `SKT/<branch>/<FY>/<seq>` — same scheme as Order, separate counter.
 
+**Planned (not yet on the model / not yet built):**
+
+- **Dual status axes** — `operationalStatus` (`Draft → Finalised → InTransit → AtDestination → Acknowledged → Delivered → Closed`) and `billingStatus` (`NotBillable → ReadyToBill → Billed → Paid` + `Disputed`). Current `status` is the flat 3-value enum only.
+- **Frozen party snapshots** (`consignorPartySnapshot` / `consigneePartySnapshot` — name + address + GSTIN at finalisation) — only FKs exist today.
+- **`paymentMode`** (`Paid | ToPay | TBB`) and **`currentVehicleNo`** denormalisation.
+- Richer **`LRChargeType`** (Loading/Unloading/Detention/Courier/Retention/Handling/Other + `isDeduction`/`taxable`).
+- `LRAcknowledgement(lrId, receivedQty, damageQty, shortageQty, observedDetentionDays, acknowledgedBy, ackAt, remarks)` — destination-branch Ack screen.
+- `PODDispatch(lrId, courierName, docketNumber, courierCharges, retentionAmount, dispatchedAt, receivedAtHOAt, status)` — POD courier sub-tracker; POD attachment required for `ReadyToBill`.
+- `LRFreightRevision(lrId, oldAmount, newAmount, reason, actorId, revisedAt)` — post-finalisation freight changes (new permission `lr.freight.revise`). Existing bills NOT auto-updated — credit-note path required.
+- `LRTripAssignmentHistory(lrId, tripId, assignedAt, unassignedAt, actorId)` — reassignment audit.
+- Destination-branch acknowledge + deliver + POD-upload flow.
+
 ### 4.3 Vehicle Trip / Container
 
-**Entity:** `VehicleTrip(tripNumber, vehicleId, ownership: Own|Market, primaryDriverId, cleanerDriverId nullable, startDateTime, openingKm, endDateTime, closingKm, status, brokerId nullable, finalisedAt, ...)`. Ownership derived from `Vehicle.isOwn` but stored for query efficiency.
+> A **trip** is the unit of vehicle movement. "Container" in the heading refers to the rail leg — modelled here as a trip with `tripType = dc` (the rake/DC movement), **not** a separate entity. There is no road-container concept. The entity below reflects what is **implemented**; the "Planned (not yet built)" note lists the spec items still to be added.
 
-**Children:**
+**Full-load / single-customer rule:** SK trips are **full-load — one trip carries one client** (no part-load). Hence `consignorId` lives on the trip (required for `lr` trips, null for `dc`/rake trips).
 
-- `TripUnloadingPoint(tripId, sequence, cityId, locationId, plannedDate, actualDate)` — ordered drops. LR.destination auto-resolves to a TripUnloadingPoint when attached. Trip closure requires `actualDate` on each point.
+**Entity:** `VehicleTrip(tripNumber, tripName, status: Planned|InTransit|Closed|Cancelled, tripType: lr|dc, vehicleId, driverId, routeId, consignorId nullable, onwardFreight, isTripEmpty, rakeDate nullable, openingKm, startDateTime nullable, endDateTime nullable, closingKm nullable, cancelReason nullable, fyCode, rateMatrixId nullable, createdById, updatedById, version, deletedAt, ...)`.
+
+- **`tripType`** — `lr` (road LR trip) or `dc` (rake / rail movement; `rakeDate` set). One model serves both; the rail-specific Rake/VP/DC chain (§4.4) is still unbuilt, so `dc` is currently a stub.
+- **`routeId`** → `Route` master (source + destination city) drives distance + the freight lookup; **`rateMatrixId`** links the matched rate row. (Add `Route` to the §9 masters list.)
+- **`onwardFreight`** — freight carried on the trip itself. **`isTripEmpty`** flags an empty / repositioning run.
+- **KM/time lifecycle:** `openingKm` captured at creation; `startDateTime` stamped when the first LR attaches (Planned → InTransit); `endDateTime` / `closingKm` stamped on Close.
+
+**`tripName` (auto-generated, human-readable):**
+
+- `lr` : `<FromCity>-<ToCity>/<TruckNumber>/<CustomerShortCode>/<DDMMYYHHmm>`
+- `dc` : `<FromCity>-<ToCity>/<TruckNumber>/RAKE(<DDMMYY>)/<DDMMYYHHmm>`
+
+**LR ↔ Trip attachment:** an LR attaches via `LorryReceipt.primaryTripId` (and `secondaryTripId` for the second leg of a hub split). A trip therefore exposes `primaryLRs` + `secondaryLRs`. (No single `currentTripId` / `LRTripAssignmentHistory` — the two-leg model replaces it.)
+
+**Children (implemented):**
+
+- `TripUnloadingPoint(vehicleTripId, sequence, cityId, locationId, plannedDate, actualDate)` — ordered drops.
+- `TripStatusHistory(vehicleTripId, status, changedAt, userId, note)` — status-transition log.
+
+**Status machine (implemented):** `Planned → InTransit → Closed` (+ `Cancelled`). (No `AtDestination` / `Completed` yet.)
+
+**Implemented actions / routes:** list, status-counts, get, **PDF**, create, update, **close**, delete (Planned/Cancelled only), **cancel**. Trip numbering uses a single **global per-FY** counter (`TRIP` sequence key — trips are not branch-scoped). Close currently sets `Closed`, stamps `closingKm`/`endDateTime` (validates `closingKm ≥ openingKm`), and releases the vehicle (`Vehicle.status = AVAILABLE`).
+
+**Planned (not yet built):**
+
 - `TripExpense(tripId, category: Fuel|Toll|Loading|Unloading|DriverAdvance|Repair|Misc|Hamali|Other, amount, paymentMode, counterpartyId, receiptAttachmentId)` — typed expense lines.
-- `DriverAdvance(tripId, driverId, amount, paymentMode, settledAt, settledAmount, settlementNote)` — per-trip advances. Settlement on trip Close: advance − actual expenses reconciled, posts to driver ledger.
-- `TripEvent(tripId, ...)` — audit timeline.
-
-**Status machine:** `Planned → InTransit → AtDestination → Completed → Closed` (+ `Cancelled`).
-
-- Legacy states ("Trip Not Closed", "GRN Pending", "LR Not Finalized", "Unused Trip") become **close blockers**, not states. UI surfaces the blocker reason.
-- **Log Slip generated synchronously** on Trip Close — no 10-min wait (legacy artefact). All calcs (expense totals, KM, distance, P&L) run in one transaction. UI shows "Log Slip ready" immediately.
-
-**Market-vehicle path:**
-
-- Skips Log Slip + TripExpense for own-vehicle settlement; instead generates **TransporterPayment** via 3-stage workflow primitive.
-
-**Vehicle availability:**
-
-- `Vehicle.currentStatus: Available | OnTrip | InMaintenance | Decommissioned` — denormalised column, updated by service-layer on trip + maintenance state changes. Trip-create validates "vehicle is Available". Periodic reconciliation job catches drift.
-
-**Doc expiry blocks trip-create:** if driver's DL expired or vehicle's RC/Insurance/Permit/Fitness expired → block. 60/30/7-day-before notifications via Notifications module.
+- `DriverAdvance(tripId, driverId, amount, paymentMode, settledAt, settledAmount, settlementNote)` — per-trip advances; reconciled on Close → driver ledger.
+- `TripEvent` — full event timeline (only `TripStatusHistory` exists today).
+- **Log Slip on Close** — synchronous calc of expense totals, KM, distance, P&L in one transaction. **Close does none of this yet.**
+- **Close blockers** — legacy states ("GRN Pending", "LR Not Finalised", "Unused Trip", missing `TripUnloadingPoint.actualDate`) surfaced as blockers; Close currently only checks `closingKm`.
+- **Market-vehicle path** — `TransporterPayment` via the 3-stage workflow primitive (instead of Log Slip + own-vehicle settlement).
+- **Vehicle availability reconciliation** — status is toggled inline on close; no periodic drift-catch job yet.
+- **Doc-expiry blocks trip-create** — driver DL or vehicle RC/Insurance/Permit/Fitness expired → block, with 60/30/7-day-before notifications.
 
 ### 4.4 Rail Operations
 
@@ -377,6 +413,7 @@ SK is **transporter**, not consignor. Customer (consignor) generates the EWB. SK
 | Master                                | Purpose                                                                                                                               |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `CustomerLocation`                    | Per-customer pickup points (child of Customer).                                                                                       |
+| `Route`                               | Source + destination city pair; drives trip distance + freight (RateMatrix) lookup. (Implemented.)                                    |
 | `VehicleType`                         | 32HQ / 38LQ / 6Wheeler / 407 etc., with default freight ranges + detention slab match keys.                                           |
 | `Broker`                              | Transporter/clearing-agent parties (LDC broker ack, transporter payments). (Confirm against existing `transport` master — may merge.) |
 | `DetentionSlab` + `DetentionSlabTier` | Rule-tree for detention calculation.                                                                                                  |

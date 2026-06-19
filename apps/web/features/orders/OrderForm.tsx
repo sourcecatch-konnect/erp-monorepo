@@ -34,6 +34,7 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { orderApi, orderLookups, orderLookupKeys } from "./order.service";
 
 import ItemLinesEditor from "./components/ItemLinesEditor";
+import ConsignmentLinesEditor from "./components/ConsignmentLinesEditor";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import IconTextField from "../masters/_shared/fields/IconTextField";
 import { useState } from "react";
@@ -82,6 +83,7 @@ const routes = useQuery({
     defaultValues: order
       ? {
           customerId: order.customerId,
+          consigneeId: order.consigneeId ?? undefined,
           fromBranchId: order.fromBranchId,
           toBranchId: order.toBranchId,
           pickupDate: dateInputValue(order.pickupDate),
@@ -102,21 +104,42 @@ const routes = useQuery({
               unit: i.unit,
               weight: i.weight ? Number(i.weight) : undefined,
             })) ?? [],
+          consignments:
+            order.consignments?.map((c) => ({
+              truckIndex: c.truckIndex,
+              loadingLocationId: c.loadingLocationId ?? undefined,
+              unloadingLocationId: c.unloadingLocationId ?? undefined,
+              goods: (c.goods ?? []).slice(0, 1).map((g) => ({
+                goodsId: g.goodsId,
+                quantity: g.quantity,
+                unit: g.unit,
+                weight: g.weight ? Number(g.weight) : undefined,
+              })),
+            })) ?? [],
         }
       : {
           orderType: "Truck",
           truckQuantity: 1,
           items: [],
+          consignments: [],
         },
   });
 
   const orderType = form.watch("orderType");
   const customerId = form.watch("customerId");
+  const consigneeId = form.watch("consigneeId");
 
   const locations = useQuery({
     queryKey: orderLookupKeys.customerLocations(customerId ?? ""),
     queryFn: () => orderApi.customerLocations(customerId as string),
     enabled: Boolean(customerId),
+  });
+
+  // Consignee's saved locations feed the consignment editor's unloading points.
+  const consigneeLocations = useQuery({
+    queryKey: orderLookupKeys.customerLocations(consigneeId ?? ""),
+    queryFn: () => orderApi.customerLocations(consigneeId as string),
+    enabled: Boolean(consigneeId),
   });
 
   const [submitting, setSubmitting] = React.useState(false);
@@ -201,9 +224,17 @@ const routes = useQuery({
 >
   <ComboboxField
     name="customerId"
-    label="Customer"
+    label="Customer (Consignor)"
     required
     options={toOptions(customers.data ?? [])}
+    disabled={softOnly}
+  />
+
+  <ComboboxField
+    name="consigneeId"
+    label="Consignee"
+    options={toOptions(customers.data ?? [])}
+    emptyText="No customers found"
     disabled={softOnly}
   />
 
@@ -347,6 +378,24 @@ const routes = useQuery({
         disabled={softOnly}
       />
     </div>
+
+    {!softOnly && (
+      <div className="mt-4">
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          Consignment lines (multi-loading)
+        </p>
+        <ConsignmentLinesEditor
+          goodsOptions={toOptions(goods.data ?? [])}
+          loadingOptions={toOptions(
+            (locations.data ?? []).map((l) => ({ id: l.id, name: l.name })),
+          )}
+          unloadingOptions={toOptions(
+            (consigneeLocations.data ?? []).map((l) => ({ id: l.id, name: l.name })),
+          )}
+          consigneeChosen={Boolean(consigneeId)}
+        />
+      </div>
+    )}
   </div>
 ) : (
   <div className="col-span-full">

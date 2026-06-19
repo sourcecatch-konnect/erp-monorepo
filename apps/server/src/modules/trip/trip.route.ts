@@ -417,16 +417,16 @@ router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
   }
 
   const deleted = await db.$transaction(async (tx) => {
-    const lrCount = await tx.lorryReceipt.count({
+    const groupCount = await tx.lRGroup.count({
       where: {
         deletedAt: null,
         OR: [{ primaryTripId: id }, { secondaryTripId: id }],
       },
     });
 
-    if (lrCount > 0) {
+    if (groupCount > 0) {
       throw new BadRequestError(
-        `This trip cannot be deleted because ${lrCount} LR(s) are linked with this trip.`,
+        `This trip cannot be deleted because ${groupCount} LR group(s) are linked with this trip.`,
         "TRIP_DELETE_BLOCKED",
       );
     }

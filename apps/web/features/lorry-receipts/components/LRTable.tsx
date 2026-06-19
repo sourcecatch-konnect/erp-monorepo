@@ -8,7 +8,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type { LRListItem } from "@skerp/types";
+import type { LRGroupListItem } from "@skerp/types";
 import {
   Table,
   TableBody,
@@ -24,7 +24,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@skerp/ui/components/dropdown";
 import {
@@ -41,10 +40,11 @@ import {
   IconDatabaseOff,
 } from "@tabler/icons-react";
 
+import { formatMoney } from "@/lib/format";
 import { LRStatusBadge, SOURCE_LABELS, LR_STATUS_ORDER } from "../lorry-receipt-ui";
 
 type Props = {
-  data: LRListItem[];
+  data: LRGroupListItem[];
   total: number;
   page: number;
   size: number;
@@ -56,7 +56,7 @@ type Props = {
   counts: Record<string, number>;
   isLoading?: boolean;
   canCancel: boolean;
-  onCancel: (lr: LRListItem) => void;
+  onCancel: (group: LRGroupListItem) => void;
 };
 
 export default function LRTable(props: Props) {
@@ -68,52 +68,45 @@ export default function LRTable(props: Props) {
     canCancel, onCancel,
   } = props;
 
-  const columns = React.useMemo<ColumnDef<LRListItem>[]>(
+  const columns = React.useMemo<ColumnDef<LRGroupListItem>[]>(
     () => [
       {
-        header: "LR Number",
+        header: "Group #",
         cell: ({ row }) => (
           <Link href={`/lorry-receipts/${row.original.id}`} className="block">
             <span className="font-medium text-primary hover:underline">
-              {row.original.lrNumber}
+              {row.original.groupNumber}
             </span>
           </Link>
         ),
       },
-      {
-        header: "Consignor",
-        cell: ({ row }) => row.original.consignor?.name ?? "—",
-      },
-      {
-        header: "Consignee",
-        cell: ({ row }) => row.original.consignee?.name ?? "—",
-      },
-      {
-        header: "Origin",
-        cell: ({ row }) => row.original.originBranch?.name ?? "—",
-      },
-      {
-        header: "Destination",
-        cell: ({ row }) => row.original.destinationBranch?.name ?? "—",
-      },
+      { header: "Consignor", cell: ({ row }) => row.original.consignor?.name ?? "—" },
+      { header: "Consignee", cell: ({ row }) => row.original.consignee?.name ?? "—" },
+      { header: "Origin", cell: ({ row }) => row.original.originBranch?.name ?? "—" },
+      { header: "Destination", cell: ({ row }) => row.original.destinationBranch?.name ?? "—" },
       {
         header: "Vehicle",
         cell: ({ row }) => {
-          const lr = row.original;
-          if (lr.isMarketVehicle) return lr.marketVehicleNumber ?? "—";
-          return lr.primaryTrip?.vehicle?.vehicleNumber ?? "—";
+          const g = row.original;
+          if (g.isMarketVehicle) return g.marketVehicleNumber ?? "—";
+          return g.primaryTrip?.vehicle?.vehicleNumber ?? "—";
         },
       },
       {
-        header: "Source",
-        cell: ({ row }) => SOURCE_LABELS[row.original.source],
+        header: "LRs",
+        cell: ({ row }) => row.original.lrCount ?? "—",
       },
       {
-        header: "Status",
-        cell: ({ row }) => <LRStatusBadge status={row.original.status} />,
+        header: "Freight",
+        cell: ({ row }) =>
+          row.original.baseFreightAmount != null
+            ? formatMoney(row.original.baseFreightAmount)
+            : "—",
       },
+      { header: "Source", cell: ({ row }) => SOURCE_LABELS[row.original.source] },
+      { header: "Status", cell: ({ row }) => <LRStatusBadge status={row.original.status} /> },
     ],
-    []
+    [],
   );
 
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
@@ -121,7 +114,6 @@ export default function LRTable(props: Props) {
 
   return (
     <div className="w-full space-y-3">
-      {/* Status tabs */}
       <div className="flex flex-wrap items-center gap-1">
         {LR_STATUS_ORDER.map((tab) => {
           const active = statusFilter === tab.key;
@@ -156,7 +148,7 @@ export default function LRTable(props: Props) {
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search LR number…"
+          placeholder="Search group number…"
           className="h-9 max-w-xs"
         />
       </div>
@@ -204,14 +196,14 @@ export default function LRTable(props: Props) {
                     <div className="flex size-10 items-center justify-center rounded-full bg-muted">
                       <IconDatabaseOff size={18} />
                     </div>
-                    <span className="text-sm font-medium">No lorry receipts found</span>
+                    <span className="text-sm font-medium">No LR groups found</span>
                   </div>
                 </TableCell>
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => {
-                const lr = row.original;
-                const cancellable = lr.status === "DRAFT";
+                const g = row.original;
+                const cancellable = g.status === "DRAFT";
                 return (
                   <TableRow key={row.id} className="hover:bg-muted/30">
                     {row.getVisibleCells().map((cell) => (
@@ -221,8 +213,8 @@ export default function LRTable(props: Props) {
                     ))}
                     <TableCell className="w-16 text-right">
                       <div className="flex justify-end gap-1">
-                        <Button size="icon-sm" variant="ghost" aria-label="View LR" asChild>
-                          <Link href={`/lorry-receipts/${lr.id}`}>
+                        <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
+                          <Link href={`/lorry-receipts/${g.id}`}>
                             <IconEye size={16} />
                           </Link>
                         </Button>
@@ -234,11 +226,7 @@ export default function LRTable(props: Props) {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-red-600"
-                                onClick={() => onCancel(lr)}
-                              >
+                              <DropdownMenuItem className="text-red-600" onClick={() => onCancel(g)}>
                                 <IconBan size={16} className="mr-2" /> Cancel
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -256,7 +244,7 @@ export default function LRTable(props: Props) {
 
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {total} LR{total === 1 ? "" : "s"} · page {page + 1} of {pageCount}
+          {total} group{total === 1 ? "" : "s"} · page {page + 1} of {pageCount}
         </p>
         <Pagination className="mx-0 w-auto">
           <PaginationContent>

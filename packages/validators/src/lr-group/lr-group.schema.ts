@@ -1,0 +1,219 @@
+import { z } from "zod";
+import {
+  lrTransportTypeSchema,
+  lrTripLegTypeSchema,
+  lrPrioritySchema,
+  lrGoodsLineSchema,
+  ewayBillSchema,
+} from "../lorry-receipt/lorry-receipt.schema.js";
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+const requiredId = (label: string) => z.string().min(1, `${label} is required`);
+
+const optionalString = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v ? v : undefined));
+
+const optionalId = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => v || undefined);
+
+const positivePaise = (label: string) =>
+  z
+    .union([z.string(), z.number()])
+    .transform((v) => Number(v))
+    .refine(
+      (v) => Number.isInteger(v) && v > 0,
+      `${label} must be a positive whole number (paisa)`,
+    );
+
+const truckIndexField = z
+  .union([z.string(), z.number()])
+  .optional()
+  .transform((v) => {
+    if (v === "" || v === undefined || v === null) return 1;
+    return Number(v);
+  })
+  .refine((v) => Number.isInteger(v) && v > 0, "Truck index must be a positive whole number");
+
+/* ------------------------------------------------------------------ */
+/* Consignment line — only needed for INSTANT groups (no parent order).*/
+/* FROM_ORDER groups read their lines from the order's OrderConsignment.*/
+/* ------------------------------------------------------------------ */
+
+export const lrGroupLineSchema = z.object({
+  loadingLocationId: optionalId,
+  unloadingLocationId: optionalId,
+  goods: z.array(lrGoodsLineSchema).min(1, "Add at least one goods line"),
+});
+
+export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Create — from an order (one truck of it)                            */
+/* ------------------------------------------------------------------ */
+
+const vehicleShape = {
+  isMarketVehicle: z.boolean().default(false),
+  // The leg-1 trip the whole group rides. Leg 2 is attached later by the
+  // group "split at hub" action, never at creation.
+  primaryTripId: optionalId,
+  marketVehicleNumber: optionalId,
+  marketDriverName: optionalId,
+};
+
+export const createGroupFromOrderSchema = z.object({
+  source: z.literal("FROM_ORDER"),
+  orderId: requiredId("Order"),
+  truckIndex: truckIndexField,
+  transportType: lrTransportTypeSchema.default("Road"),
+  // Order groups can be marked direct, to-hub, or from-hub at creation.
+  tripLegType: lrTripLegTypeSchema.default("DIRECT"),
+  // Railhead branch (order + RoadAndRail only). Unrelated to the Jalgaon hub.
+  railheadBranchId: optionalId,
+  priority: lrPrioritySchema.default("Normal"),
+  ...vehicleShape,
+});
+
+export type CreateGroupFromOrderInput = z.infer<typeof createGroupFromOrderSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Create — instant (road-only, no parent order)                       */
+/* ------------------------------------------------------------------ */
+
+export const createInstantGroupSchema = z.object({
+  source: z.literal("INSTANT"),
+  consignorId: requiredId("Consignor"),
+  consigneeId: requiredId("Consignee"),
+  originBranchId: requiredId("Origin branch"),
+  destinationBranchId: requiredId("Destination branch"),
+  transportType: lrTransportTypeSchema.default("Road"),
+  priority: lrPrioritySchema.default("Normal"),
+  ...vehicleShape,
+  // Instant groups declare their consignments inline (no order to read from).
+  lrs: z.array(lrGroupLineSchema).min(1, "Add at least one consignment"),
+});
+
+export type CreateInstantGroupInput = z.infer<typeof createInstantGroupSchema>;
+
+const _createGroupUnion = z.discriminatedUnion("source", [
+  createGroupFromOrderSchema,
+  createInstantGroupSchema,
+]);
+
+export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
+  if (
+    d.source === "FROM_ORDER" &&
+    d.transportType === "RoadAndRail" &&
+    !d.railheadBranchId
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select a railhead branch for Road & Rail transport",
+      path: ["railheadBranchId"],
+    });
+  }
+  if (d.isMarketVehicle && !d.marketVehicleNumber) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Vehicle number is required for market vehicle",
+      path: ["marketVehicleNumber"],
+    });
+  }
+  // Own-vehicle groups must carry a trip — the trip is how the vehicle/driver
+  // and expenses attach to the whole truckload.
+  if (!d.isMarketVehicle && !d.primaryTripId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Attach a trip for own-vehicle transport",
+      path: ["primaryTripId"],
+    });
+  }
+});
+
+export type CreateLRGroupInput = z.infer<typeof createLRGroupSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Update (DRAFT group only — group-level fields)                      */
+/* ------------------------------------------------------------------ */
+
+export const updateLRGroupSchema = z.object({
+  consigneeId: optionalId,
+  transportType: lrTransportTypeSchema.optional(),
+  railheadBranchId: optionalId,
+  priority: lrPrioritySchema.optional(),
+  isMarketVehicle: z.boolean().optional(),
+  // Only the leg-1 trip is editable here. Leg 2 / hub / tripLegType are owned
+  // by the "split at hub" action, never the edit form.
+  primaryTripId: optionalId,
+  marketVehicleNumber: optionalId,
+  marketDriverName: optionalId,
+});
+
+export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Finalise — one atomic action over the whole group                   */
+/*                                                                    */
+/* The single base freight + seal are entered once for the truckload; */
+/* each LR carries its own invoice + e-way bill. All LRs flip          */
+/* DRAFT -> FINALISED together (all-or-nothing).                       */
+/* ------------------------------------------------------------------ */
+
+export const finaliseGroupLineSchema = z.object({
+  lrId: requiredId("Lorry receipt"),
+  invoiceNumber: optionalString,
+  invoiceAmount: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((v) => {
+      if (v === "" || v === undefined || v === null) return undefined;
+      return Number(v);
+    })
+    .refine(
+      (v) => v === undefined || (Number.isInteger(v) && v > 0),
+      "Invoice amount must be a positive whole number (paisa)",
+    ),
+  ewayBill: ewayBillSchema,
+});
+
+export const finaliseGroupSchema = z.object({
+  baseFreightAmount: positivePaise("Base freight amount"),
+  sealNumber: optionalString,
+  lrs: z.array(finaliseGroupLineSchema).min(1, "At least one lorry receipt is required"),
+});
+
+export type FinaliseGroupInput = z.infer<typeof finaliseGroupSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Split at hub (HO action on a FINALISED group — attaches leg-2 trip) */
+/* ------------------------------------------------------------------ */
+
+export const splitGroupAtHubSchema = z.object({
+  // The leg-2 trip (hub -> final destination). Hub itself is derived
+  // server-side from the head-office branch, never sent by the client.
+  secondaryTripId: requiredId("Leg 2 trip"),
+});
+
+export type SplitGroupAtHubInput = z.infer<typeof splitGroupAtHubSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Cancel                                                              */
+/* ------------------------------------------------------------------ */
+
+export const cancelGroupSchema = z.object({
+  cancelReason: z
+    .string()
+    .trim()
+    .min(3, "Please give a reason (min 3 characters)")
+    .max(500, "Reason too long"),
+});
+
+export type CancelGroupInput = z.infer<typeof cancelGroupSchema>;

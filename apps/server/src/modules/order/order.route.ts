@@ -190,6 +190,7 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
       data: {
         orderNumber,
         customerId: data.customerId,
+        consigneeId: data.consigneeId ?? null,
         fromBranchId: data.fromBranchId,
         routeId: data.routeId,
         toBranchId: data.toBranchId,
@@ -214,6 +215,24 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
                 quantity: i.quantity,
                 unit: i.unit,
                 weight: i.weight,
+              })),
+            }
+            : undefined,
+        consignments:
+          data.orderType === "Truck" && data.consignments?.length
+            ? {
+              create: data.consignments.map((c) => ({
+                truckIndex: c.truckIndex,
+                loadingLocationId: c.loadingLocationId ?? null,
+                unloadingLocationId: c.unloadingLocationId ?? null,
+                goods: {
+                  create: c.goods.map((g) => ({
+                    goodsId: g.goodsId,
+                    quantity: g.quantity,
+                    unit: g.unit,
+                    weight: g.weight,
+                  })),
+                },
               })),
             }
             : undefined,
@@ -306,14 +325,16 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
       return row;
     }
 
-    // PendingApproval or Rejected → full edit. Replace item lines.
+    // PendingApproval or Rejected → full edit. Replace item + consignment lines.
     assertBranchAccess(req, data.fromBranchId);
     await tx.orderItem.deleteMany({ where: { orderId: id } });
+    await tx.orderConsignment.deleteMany({ where: { orderId: id } });
 
     const row = await tx.order.update({
       where: { id },
       data: {
         customerId: data.customerId,
+        consigneeId: data.consigneeId ?? null,
         fromBranchId: data.fromBranchId,
         toBranchId: data.toBranchId,
         routeId: data.routeId,
@@ -339,6 +360,24 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
                 quantity: i.quantity,
                 unit: i.unit,
                 weight: i.weight,
+              })),
+            }
+            : undefined,
+        consignments:
+          data.orderType === "Truck" && data.consignments?.length
+            ? {
+              create: data.consignments.map((c) => ({
+                truckIndex: c.truckIndex,
+                loadingLocationId: c.loadingLocationId ?? null,
+                unloadingLocationId: c.unloadingLocationId ?? null,
+                goods: {
+                  create: c.goods.map((g) => ({
+                    goodsId: g.goodsId,
+                    quantity: g.quantity,
+                    unit: g.unit,
+                    weight: g.weight,
+                  })),
+                },
               })),
             }
             : undefined,

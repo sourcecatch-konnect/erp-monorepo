@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PERMS } from "@skerp/types";
-import type { LRListItem } from "@skerp/types";
+import type { LRGroupListItem } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { IconPlus, IconFileText } from "@tabler/icons-react";
+import { IconFileText } from "@tabler/icons-react";
 import LRFromOrderPickerDialog from "./components/LRFromOrderPickerDialog";
 
 import { useCan } from "@/features/auth";
@@ -16,8 +16,8 @@ import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import type { ListQuery } from "../masters/_shared/master-api";
 
-import { lorryReceiptApi } from "./lorry-receipt.service";
-import { lrKeys } from "./lorry-receipt.keys";
+import { lrGroupApi } from "./lr-group.service";
+import { lrGroupKeys } from "./lr-group.keys";
 import LRTable from "./components/LRTable";
 
 export default function LRListPage() {
@@ -30,7 +30,7 @@ export default function LRListPage() {
   const debouncedSearch = useDebouncedValue(search);
   const size = 25;
 
-  const [cancelLR, setCancelLR] = React.useState<LRListItem | null>(null);
+  const [cancelGroup, setCancelGroup] = React.useState<LRGroupListItem | null>(null);
   const [orderPickerOpen, setOrderPickerOpen] = React.useState(false);
 
   const canCreate = useCan(PERMS.LORRY_RECEIPT.CREATE);
@@ -45,27 +45,27 @@ export default function LRListPage() {
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
     }),
-    [page, debouncedSearch, statusFilter]
+    [page, debouncedSearch, statusFilter],
   );
 
-  const lrList = useQuery({
-    queryKey: lrKeys.list(listQuery),
-    queryFn: () => lorryReceiptApi.list(listQuery),
+  const groupList = useQuery({
+    queryKey: lrGroupKeys.list(listQuery),
+    queryFn: () => lrGroupApi.list(listQuery),
   });
 
   const counts = useQuery({
-    queryKey: lrKeys.statusCounts,
-    queryFn: lorryReceiptApi.statusCounts,
+    queryKey: lrGroupKeys.statusCounts,
+    queryFn: lrGroupApi.statusCounts,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: lrKeys.all });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
 
   const cancel = useMutation({
     mutationFn: (vars: { id: string; reason: string }) =>
-      lorryReceiptApi.cancel(vars.id, { cancelReason: vars.reason }),
+      lrGroupApi.cancel(vars.id, { cancelReason: vars.reason }),
     onSuccess: () => {
-      toast.success("LR cancelled");
-      setCancelLR(null);
+      toast.success("Group cancelled");
+      setCancelGroup(null);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -78,18 +78,18 @@ export default function LRListPage() {
         {canCreate ? (
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setOrderPickerOpen(true)}>
-              <IconFileText size={16} className="mr-1" /> Create LR from Order
+              <IconFileText size={16} className="mr-1" /> Create from Order
             </Button>
             <Button onClick={() => router.push("/lorry-receipts/new")}>
-              <IconPlus size={16} className="mr-1" /> Create Instant LR
+              Create Instant Group
             </Button>
           </div>
         ) : null}
       </div>
 
       <LRTable
-        data={lrList.data?.data ?? []}
-        total={lrList.data?.meta?.total ?? 0}
+        data={groupList.data?.data ?? []}
+        total={groupList.data?.meta?.total ?? 0}
         page={page}
         size={size}
         onPageChange={setPage}
@@ -98,28 +98,25 @@ export default function LRListPage() {
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         counts={counts.data ?? {}}
-        isLoading={lrList.isLoading}
+        isLoading={groupList.isLoading}
         canCancel={canCancel}
-        onCancel={(lr) => setCancelLR(lr)}
+        onCancel={(g) => setCancelGroup(g)}
       />
 
       <ReasonDialog
-        open={Boolean(cancelLR)}
-        onOpenChange={(open) => !open && setCancelLR(null)}
-        title={`Cancel LR ${cancelLR?.lrNumber ?? ""}`}
-        description="This can't be undone. A cancelled LR frees up the truck slot."
-        confirmLabel="Cancel LR"
+        open={Boolean(cancelGroup)}
+        onOpenChange={(open) => !open && setCancelGroup(null)}
+        title={`Cancel group ${cancelGroup?.groupNumber ?? ""}`}
+        description="This cancels the group and all its LRs, and frees up the truck slot."
+        confirmLabel="Cancel group"
         destructive
         isPending={cancel.isPending}
         onConfirm={(reason) => {
-          if (cancelLR) cancel.mutate({ id: cancelLR.id, reason });
+          if (cancelGroup) cancel.mutate({ id: cancelGroup.id, reason });
         }}
       />
 
-      <LRFromOrderPickerDialog
-        open={orderPickerOpen}
-        onOpenChange={setOrderPickerOpen}
-      />
+      <LRFromOrderPickerDialog open={orderPickerOpen} onOpenChange={setOrderPickerOpen} />
     </div>
   );
 }
