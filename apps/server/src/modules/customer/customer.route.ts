@@ -62,20 +62,21 @@ const router: Router = createCrudRouter({
         getName: (row: any) => row.orderNumber ?? row.id,
       },
       {
-        model: db.lorryReceipt,
-        label: "Lorry Receipts",
+        model: db.lRGroup,
+        label: "LR Groups",
+        where: (id: string) => ({
+          OR: [{ consignorId: id }, { consigneeId: id }],
+        }),
+        select: { id: true, groupNumber: true },
+        getName: (row: any) => row.groupNumber ?? row.id,
+      },
+      {
+        model: db.vehicleTrip,
+        label: "Vehicle Trips",
         where: (id: string) => ({ consignorId: id }),
         select: { id: true },
         getName: (row: any) => row.id,
       },
-      {
-  model: db.vehicleTrip,
-  label: "Vehicle Trips",
-  where: (id: string) => ({ consignorId: id }),
-  select: { id: true },
-  getName: (row: any) => row.id,
-},
-      
     ],
   },
 });
@@ -173,7 +174,7 @@ router.delete(
 
     if (orderCount > 0) {
       throw new ValidationError(
-        `Cannot delete location because it is used in ${orderCount} order(s)`
+        `Cannot delete location because it is used in ${orderCount} order(s)`,
       );
     }
 
@@ -183,7 +184,7 @@ router.delete(
 
     if (unloadingCount > 0) {
       throw new ValidationError(
-        `Cannot delete location because it is used in ${unloadingCount} trip unloading point(s)`
+        `Cannot delete location because it is used in ${unloadingCount} trip unloading point(s)`,
       );
     }
 

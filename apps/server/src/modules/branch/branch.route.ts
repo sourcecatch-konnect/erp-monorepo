@@ -1,8 +1,5 @@
 import { Router } from "express";
-import {
-  createBranchSchema,
-  updateBranchSchema,
-} from "@skerp/validators";
+import { createBranchSchema, updateBranchSchema } from "@skerp/validators";
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
@@ -10,7 +7,7 @@ import { ZodTypeAny } from "zod";
 import { BadRequestError } from "../../lib/error.js";
 
 const plural = (count: number, singular: string, pluralName?: string) =>
-  `${count} ${count === 1 ? singular : pluralName ?? `${singular}s`}`;
+  `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
 
 const router: Router = createCrudRouter({
   model: db.branch,
@@ -70,19 +67,19 @@ const router: Router = createCrudRouter({
           where: { toBranchId: id },
         }),
 
-        db.lorryReceipt.count({
+        db.lRGroup.count({
           where: { originBranchId: id },
         }),
 
-        db.lorryReceipt.count({
+        db.lRGroup.count({
           where: { destinationBranchId: id },
         }),
 
-        db.lorryReceipt.count({
+        db.lRGroup.count({
           where: { hubId: id },
         }),
 
-        db.lorryReceipt.count({
+        db.lRGroup.count({
           where: { railheadBranchId: id },
         }),
 
@@ -97,7 +94,7 @@ const router: Router = createCrudRouter({
 
       if (branch.isHeadOffice) {
         throw new BadRequestError(
-          "This branch is marked as Head Office and cannot be deleted."
+          "This branch is marked as Head Office and cannot be deleted.",
         );
       }
 
@@ -106,9 +103,7 @@ const router: Router = createCrudRouter({
       if (users) dependencies.push(plural(users, "user"));
 
       if (userBranches) {
-        dependencies.push(
-          plural(userBranches, "user branch access record")
-        );
+        dependencies.push(plural(userBranches, "user branch access record"));
       }
 
       if (warehouses) {
@@ -154,8 +149,8 @@ const router: Router = createCrudRouter({
       if (dependencies.length) {
         throw new BadRequestError(
           `This branch cannot be deleted because it is linked with ${dependencies.join(
-            ", "
-          )}. Please remove or update those records first.`
+            ", ",
+          )}. Please remove or update those records first.`,
         );
       }
     },
@@ -179,19 +174,19 @@ const router: Router = createCrudRouter({
     ],
 
     defaultInclude: {
-  company: {
-    select: {
-      id: true,
-      name: true,
+      company: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      city: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
-  },
-  city: {
-    select: {
-      id: true,
-      name: true,
-    },
-  },
-},
   },
 });
 

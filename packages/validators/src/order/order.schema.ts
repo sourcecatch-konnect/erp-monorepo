@@ -64,11 +64,39 @@ export const orderItemSchema = z.object({
 });
 
 /* ------------------------------------------------------------------ */
+/* Consignment line (Truck orders, multi-loading-point)               */
+/*                                                                    */
+/* One line -> one LR at generation. Loading/unloading points are     */
+/* CustomerLocations and may repeat across lines (N loads -> 1 drop,  */
+/* or 1 load -> M drops). Lines sharing a truckIndex become one       */
+/* LRGroup. Consignor/consignee are order-level, not on the line.     */
+/* ------------------------------------------------------------------ */
+
+export const orderConsignmentSchema = z.object({
+  truckIndex: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((v) => {
+      if (v === "" || v === undefined || v === null) return 1;
+      return Number(v);
+    })
+    .refine((v) => Number.isInteger(v) && v > 0, "Truck index must be a positive whole number"),
+  loadingLocationId: optionalString,
+  unloadingLocationId: optionalString,
+  goods: z.array(orderItemSchema).min(1, "Add at least one goods line"),
+});
+
+export type OrderConsignmentInput = z.infer<typeof orderConsignmentSchema>;
+
+/* ------------------------------------------------------------------ */
 /* Create / Update                                                    */
 /* ------------------------------------------------------------------ */
 
 const orderBaseShape = {
   customerId: z.string().min(1, "Customer is required"),
+  // Consignee (receiver). Constant for the order; mirrors consignor on every
+  // LRGroup generated from this order. Optional at draft, firmed before LRs.
+  consigneeId: optionalString,
   fromBranchId: z.string().min(1, "From branch is required"),
   toBranchId: z.string().min(1, "To branch is required"),
   pickupDate: requiredDate,
@@ -91,7 +119,9 @@ const orderBaseShape = {
     )
     .transform((value) => (value ? value : undefined)),
   contactEmail: optionalEmail,
+  // Item orders carry `items`; Truck multi-loading orders carry `consignments`.
   items: z.array(orderItemSchema).optional(),
+  consignments: z.array(orderConsignmentSchema).optional(),
 };
 
 const typeRefinement = (

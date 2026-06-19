@@ -18,9 +18,7 @@ import {
 export type ComboboxOption = {
   label: string;
   value: string;
-  /** Optional secondary line rendered under the label. */
   hint?: string;
-  /** Optional right-side badge rendered in the option list. */
   badge?: string;
 };
 
@@ -35,7 +33,6 @@ type ComboboxProps = {
   invalid?: boolean;
   className?: string;
   id?: string;
-
   searchValue?: string;
   onSearchChange?: (value: string) => void;
   onScrollEnd?: () => void;
@@ -43,17 +40,12 @@ type ComboboxProps = {
   isLoadingMore?: boolean;
 };
 
-/**
- * Searchable single-select. Built on the Command (cmdk) + Popover primitives,
- * so arrow-key navigation and Enter-to-select work out of the box. Prefer this
- * over a plain Select for any list that benefits from type-ahead.
- */
 export function Combobox({
   options,
   value,
   onChange,
-  placeholder = "Select…",
-  searchPlaceholder = "Search…",
+  placeholder = "Select...",
+  searchPlaceholder = "Search...",
   emptyText = "No results found",
   disabled,
   invalid,
@@ -66,7 +58,7 @@ export function Combobox({
   isLoadingMore,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
-  const selected = options.find((o) => o.value === value);
+  const selected = options.find((option) => option.value === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -80,11 +72,10 @@ export function Combobox({
           aria-invalid={invalid || undefined}
           disabled={disabled}
           className={cn(
-            // Auto height so a long selected label wraps instead of clipping.
             "h-auto min-h-10 w-full justify-between rounded-lg font-normal",
             !selected && "text-muted-foreground",
             invalid && "ring-1 ring-destructive",
-            className
+            className,
           )}
         >
           <span className="whitespace-normal break-words text-left">
@@ -97,69 +88,82 @@ export function Combobox({
         className="w-[var(--radix-popover-trigger-width)] min-w-[260px] p-0"
         align="start"
       >
-       <Command shouldFilter={!onSearchChange}>
-         <CommandInput
-  placeholder={searchPlaceholder}
-  value={searchValue}
-  onValueChange={onSearchChange}
-/>
-<CommandList
-  className="max-h-60 overflow-y-auto overscroll-contain"
-  onWheel={(event) => {
-    event.stopPropagation();
-  }}
-  onScroll={(event) => {
-    const element = event.currentTarget;
+        <Command
+          shouldFilter={!onSearchChange}
+          filter={(itemValue, search) =>
+            itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+          }
+        >
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={searchValue}
+            onValueChange={onSearchChange}
+          />
+          <CommandList
+            className="max-h-60 overflow-y-auto overscroll-contain"
+            onWheel={(event) => {
+              event.stopPropagation();
+            }}
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              const reachedBottom =
+                element.scrollHeight -
+                  element.scrollTop -
+                  element.clientHeight <
+                24;
 
-    const reachedBottom =
-      element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+              if (reachedBottom && hasMore && !isLoadingMore) {
+                onScrollEnd?.();
+              }
+            }}
+          >
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.label}
+                  onSelect={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  data-checked={option.value === value}
+                >
+                  <CheckIcon
+                    className={cn(
+                      "mr-2 size-4",
+                      option.value === value ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span className="flex min-w-0 flex-1 items-start justify-between gap-2">
+                    <span className="flex min-w-0 flex-col">
+                      <span className="whitespace-normal break-words">
+                        {option.label}
+                      </span>
+                      {option.hint ? (
+                        <span className="whitespace-normal break-words text-xs text-muted-foreground">
+                          {option.hint}
+                        </span>
+                      ) : null}
+                    </span>
+                    {option.badge ? (
+                      <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                        {option.badge}
+                      </span>
+                    ) : null}
+                  </span>
+                </CommandItem>
+              ))}
 
-    if (reachedBottom && hasMore && !isLoadingMore) {
-      onScrollEnd?.();
-    }
-  }}
->
-  <CommandEmpty>{emptyText}</CommandEmpty>
-
-  <CommandGroup>
-    {options.map((option) => (
-      <CommandItem
-        key={option.value}
-        value={option.label}
-        onSelect={() => {
-          onChange(option.value);
-          setOpen(false);
-        }}
-        data-checked={option.value === value}
-      >
-        <CheckIcon
-          className={cn(
-            "mr-2 size-4",
-            option.value === value ? "opacity-100" : "opacity-0"
-          )}
-        />
-
-        <span className="flex flex-col">
-          <span>{option.label}</span>
-          {option.hint ? (
-            <span className="text-xs text-muted-foreground">
-              {option.hint}
-            </span>
-          ) : null}
-        </span>
-      </CommandItem>
-    ))}
-
-{hasMore ? (
-  <div className="px-2 py-2 text-center text-sm text-muted-foreground">
-    {isLoadingMore ? "Loading more..." : "Scroll to load more cities"}
-  </div>
-) : null}
-  </CommandGroup>
-</CommandList>
+              {hasMore ? (
+                <div className="px-2 py-2 text-center text-sm text-muted-foreground">
+                  {isLoadingMore ? "Loading more..." : "Scroll to load more"}
+                </div>
+              ) : null}
+            </CommandGroup>
+          </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
   );
 }
-

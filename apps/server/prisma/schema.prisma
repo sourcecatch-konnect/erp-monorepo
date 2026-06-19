@@ -153,7 +153,9 @@ model User {
 
   createdLR         LorryReceipt[]      @relation("CreatedLR")
   updatedLR         LorryReceipt[]      @relation("UpdatedLR")
-  finalisedLR       LorryReceipt[]      @relation("FinalisedLR")
+  createdLRGroups   LRGroup[]           @relation("CreatedLRGroup")
+  updatedLRGroups   LRGroup[]           @relation("UpdatedLRGroup")
+  finalisedLRGroups LRGroup[]           @relation("FinalisedLRGroup")
   createdTrips      VehicleTrip[]       @relation("CreatedTrips")
   updatedTrips      VehicleTrip[]       @relation("UpdatedTrips")
   TripStatusHistory TripStatusHistory[]
@@ -225,10 +227,10 @@ model Branch {
   updatedAt      DateTime       @updatedAt
   fromOrders     Order[]        @relation("FromBranch")
   toOrders       Order[]        @relation("ToBranch")
-  originLRs      LorryReceipt[] @relation("LROrigin")
-  destinationLRs LorryReceipt[] @relation("LRDestination")
-  hubLRs         LorryReceipt[] @relation("LRHub")
-  railheadLRs    LorryReceipt[] @relation("LRRailhead")
+  originGroups      LRGroup[] @relation("GroupOrigin")
+  destinationGroups LRGroup[] @relation("GroupDestination")
+  hubGroups         LRGroup[] @relation("GroupHub")
+  railheadGroups    LRGroup[] @relation("GroupRailhead")
 }
 
 model Warehouse {
@@ -554,11 +556,12 @@ model Customer {
   city         City               @relation(fields: [cityId], references: [id])
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
-  orders       Order[]
-  locations    CustomerLocation[]
-  consignorLRs LorryReceipt[]     @relation("LRConsignor")
-  consigneeLRs LorryReceipt[]     @relation("LRConsignee")
-  vehicleTrips VehicleTrip[]
+  orders          Order[]            @relation("OrderCustomer")
+  consigneeOrders Order[]            @relation("OrderConsignee")
+  locations       CustomerLocation[]
+  consignorGroups LRGroup[]          @relation("GroupConsignor")
+  consigneeGroups LRGroup[]          @relation("GroupConsignee")
+  vehicleTrips    VehicleTrip[]
 }
 
 model Agreement {
@@ -724,7 +727,8 @@ model Goods {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orderItems OrderItem[]
+  orderItems       OrderItem[]
+  consignmentGoods OrderConsignmentGoods[]
 }
 
 model Labour {
@@ -936,6 +940,7 @@ model Order {
   id                    String      @id @default(cuid())
   orderNumber           String      @unique
   customerId            String
+  consigneeId           String?
   fromBranchId          String
   toBranchId            String
   pickupDate            DateTime
@@ -964,7 +969,8 @@ model Order {
   updatedAt             DateTime    @updatedAt
   deletedAt             DateTime?
 
-  customer         Customer          @relation(fields: [customerId], references: [id])
+  customer         Customer          @relation("OrderCustomer", fields: [customerId], references: [id])
+  consignee        Customer?         @relation("OrderConsignee", fields: [consigneeId], references: [id])
   fromBranch       Branch            @relation("FromBranch", fields: [fromBranchId], references: [id])
   toBranch         Branch            @relation("ToBranch", fields: [toBranchId], references: [id])
   vehicleType      VehicleType?      @relation(fields: [vehicleTypeId], references: [id])
@@ -976,9 +982,10 @@ model Order {
   updatedBy        User?             @relation("UpdatedOrders", fields: [updatedById], references: [id])
   route            Route?            @relation(fields: [routeId], references: [id])
 
-  items         OrderItem[]
-  events        OrderEvent[]
-  lorryReceipts LorryReceipt[]
+  items        OrderItem[]
+  consignments OrderConsignment[]
+  events       OrderEvent[]
+  lrGroups     LRGroup[]
 
   @@index([status])
   @@index([fromBranchId])
@@ -987,6 +994,8 @@ model Order {
   @@index([routeId])
 }
 
+// Item-order goods. Only Truck orders use consignment lines; Item orders use
+// these. Kept separate from OrderConsignmentGoods — different order types.
 model OrderItem {
   id       String   @id @default(cuid())
   orderId  String
@@ -999,6 +1008,45 @@ model OrderItem {
   goods Goods @relation(fields: [goodsId], references: [id])
 
   @@index([orderId])
+}
+
+// A consignment line declared on the order at booking. One line -> one LR at
+// generation. Loading/unloading points are CustomerLocations and may repeat
+// across lines (N loads -> 1 drop, or 1 load -> M drops). All lines of one
+// truck (truckIndex) become one LRGroup. The consignor/consignee are constant
+// for the order, so they live on the Order/LRGroup, not the line.
+model OrderConsignment {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  truckIndex Int @default(1)
+
+  loadingLocationId   String?
+  unloadingLocationId String?
+  loadingLocation     CustomerLocation? @relation("ConsignmentLoading", fields: [loadingLocationId], references: [id])
+  unloadingLocation   CustomerLocation? @relation("ConsignmentUnloading", fields: [unloadingLocationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  goods OrderConsignmentGoods[]
+
+  @@index([orderId])
+}
+
+model OrderConsignmentGoods {
+  id            String           @id @default(cuid())
+  consignmentId String
+  consignment   OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+
+  goodsId  String
+  goods    Goods    @relation(fields: [goodsId], references: [id])
+  quantity Int
+  unit     String
+  weight   Decimal?
+
+  @@index([consignmentId])
 }
 
 model OrderEvent {
@@ -1048,6 +1096,11 @@ model CustomerLocation {
   orders              Order[]
   tripUnloadingPoints TripUnloadingPoint[]
 
+  loadingLRs            LorryReceipt[]     @relation("LRLoadingLocation")
+  unloadingLRs          LorryReceipt[]     @relation("LRUnloadingLocation")
+  consignmentLoadings   OrderConsignment[] @relation("ConsignmentLoading")
+  consignmentUnloadings OrderConsignment[] @relation("ConsignmentUnloading")
+
   @@index([customerId])
 }
 
@@ -1068,8 +1121,10 @@ enum LRStatus {
   CANCELLED
 }
 
-enum LRChargeType {
-  BASE_FREIGHT
+enum LRGroupStatus {
+  DRAFT
+  FINALISED
+  CANCELLED
 }
 
 enum LRSource {
@@ -1095,62 +1150,106 @@ enum LRPriority {
   Critical
 }
 
+// An LRGroup is one truckload: one consignor -> one consignee, full load, one
+// vehicle. All constant-per-truck facts live here (parties, branches, transport
+// type, hub/railhead, vehicle/trip, the single base freight and seal). It holds
+// 1..N LorryReceipts, one per consignment/invoice (loading or unloading point).
+// A normal single-pickup shipment is a group of one. Group key = order + truck.
+model LRGroup {
+  id          String @id @default(cuid())
+  groupNumber String @unique
+  fyCode      String
+
+  source     LRSource
+  orderId    String?
+  order      Order?   @relation(fields: [orderId], references: [id])
+  truckIndex Int      @default(1)
+
+  originBranchId      String
+  destinationBranchId String
+  originBranch        Branch @relation("GroupOrigin", fields: [originBranchId], references: [id])
+  destinationBranch   Branch @relation("GroupDestination", fields: [destinationBranchId], references: [id])
+
+  consignorId String
+  consigneeId String
+  consignor   Customer @relation("GroupConsignor", fields: [consignorId], references: [id])
+  consignee   Customer @relation("GroupConsignee", fields: [consigneeId], references: [id])
+
+  transportType LRTransportType @default(Road)
+  priority      LRPriority      @default(Normal)
+
+  // Own vehicle: attach VehicleTrip(s). The whole group rides one trip.
+  isMarketVehicle     Boolean @default(false)
+  primaryTripId       String?
+  secondaryTripId     String?
+  primaryTrip         VehicleTrip? @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
+  secondaryTrip       VehicleTrip? @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
+  marketVehicleNumber String?
+  marketDriverName    String?
+
+  // Hub (always Jalgaon/HO): set ONLY by the "split at hub" action on a
+  // FINALISED group. Never picked in a form. tripLegType becomes FROM_HUB then.
+  tripLegType LRTripLegType @default(DIRECT)
+  hubId       String?
+  hub         Branch?       @relation("GroupHub", fields: [hubId], references: [id])
+
+  // Railhead: order groups only, required when transportType = RoadAndRail.
+  railheadBranchId String?
+  railheadBranch   Branch? @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
+
+  // The single combined client freight + seal for the whole truckload, entered
+  // once at group finalise. Freight defaults from Order.bookingFreightAmount.
+  baseFreightAmount BigInt?
+  sealNumber        String?
+
+  status       LRGroupStatus @default(DRAFT)
+  cancelReason String?
+
+  finalisedAt   DateTime?
+  finalisedById String?
+  finalisedBy   User?     @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
+
+  createdById String
+  updatedById String?
+  createdBy   User    @relation("CreatedLRGroup", fields: [createdById], references: [id])
+  updatedBy   User?   @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  lorryReceipts LorryReceipt[]
+
+  @@index([status])
+  @@index([orderId])
+  @@index([originBranchId])
+  @@index([destinationBranchId])
+  @@index([fyCode])
+}
+
+// One consignment / invoice within a group. Carries only what varies per
+// invoice: its loading & unloading CustomerLocation, goods, invoice + e-way.
+// Parties, branches, transport, hub, vehicle, freight and seal all live on the
+// parent LRGroup.
 model LorryReceipt {
   id       String @id @default(cuid())
   lrNumber String @unique
   fyCode   String
 
-  source  LRSource
-  orderId String?
-  order   Order?   @relation(fields: [orderId], references: [id])
+  groupId String
+  group   LRGroup @relation(fields: [groupId], references: [id])
 
-  originBranchId      String
-  destinationBranchId String
-  originBranch        Branch @relation("LROrigin", fields: [originBranchId], references: [id])
-  destinationBranch   Branch @relation("LRDestination", fields: [destinationBranchId], references: [id])
-
-  isMarketVehicle Boolean @default(false)
-
-  // Own vehicle: attach VehicleTrip(s)
-  primaryTripId   String?
-  secondaryTripId String?
-  primaryTrip     VehicleTrip? @relation("LRPrimaryTrip", fields: [primaryTripId], references: [id])
-  secondaryTrip   VehicleTrip? @relation("LRSecondaryTrip", fields: [secondaryTripId], references: [id])
-
-  // Market vehicle: manually entered / searched
-  marketVehicleNumber String?
-  marketDriverName    String?
-
-  transportType LRTransportType @default(Road)
-
-  // Hub (always Jalgaon/HO): set ONLY by the "split at hub" action on a
-  // FINALISED LR. Never picked in a form. tripLegType becomes FROM_HUB then.
-  tripLegType LRTripLegType @default(DIRECT)
-  hubId       String?
-  hub         Branch?       @relation("LRHub", fields: [hubId], references: [id])
-
-  // Railhead: order LRs only, required when transportType = RoadAndRail.
-  // A user-picked branch where isRailHead = true. Unrelated to hub.
-  railheadBranchId String?
-  railheadBranch   Branch? @relation("LRRailhead", fields: [railheadBranchId], references: [id])
-
-  consignorId String
-  consigneeId String
-  consignor   Customer @relation("LRConsignor", fields: [consignorId], references: [id])
-  consignee   Customer @relation("LRConsignee", fields: [consigneeId], references: [id])
-
-  sealNumber String?
+  loadingLocationId   String?
+  unloadingLocationId String?
+  loadingLocation     CustomerLocation? @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
+  unloadingLocation   CustomerLocation? @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
 
   status       LRStatus @default(DRAFT)
   cancelReason String?
 
   invoiceNumber String?
   invoiceAmount BigInt?
-  priority      LRPriority @default(Normal)
-
-  finalisedAt   DateTime?
-  finalisedById String?
-  finalisedBy   User?     @relation("FinalisedLR", fields: [finalisedById], references: [id])
 
   createdById String
   updatedById String?
@@ -1163,13 +1262,10 @@ model LorryReceipt {
   deletedAt DateTime?
 
   goods     LRGoods[]
-  charges   LRCharge[]
   ewayBills EwayBill[]
 
   @@index([status])
-  @@index([orderId])
-  @@index([originBranchId])
-  @@index([destinationBranchId])
+  @@index([groupId])
   @@index([fyCode])
 }
 
@@ -1186,21 +1282,6 @@ model LRGoods {
   length      Float?
   width       Float?
   height      Float?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([lorryReceiptId])
-}
-
-model LRCharge {
-  id             String       @id @default(cuid())
-  lorryReceiptId String
-  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
-
-  chargeType  LRChargeType
-  amount      BigInt
-  description String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1280,8 +1361,8 @@ model VehicleTrip {
   createdBy User      @relation("CreatedTrips", fields: [createdById], references: [id])
   updatedBy User?     @relation("UpdatedTrips", fields: [updatedById], references: [id])
 
-  primaryLRs         LorryReceipt[]       @relation("LRPrimaryTrip")
-  secondaryLRs       LorryReceipt[]       @relation("LRSecondaryTrip")
+  primaryGroups      LRGroup[]            @relation("GroupPrimaryTrip")
+  secondaryGroups    LRGroup[]            @relation("GroupSecondaryTrip")
   TripStatusHistory  TripStatusHistory[]
   TripUnloadingPoint TripUnloadingPoint[]
   rateMatrix         RateMatrix?          @relation(fields: [rateMatrixId], references: [id])

@@ -3,7 +3,7 @@
 Authoritative reference for the role-based access control system. Read this
 before touching `Role`, `Permission`, `requirePermission`, or any auth flow.
 
-> Status: Phase 0 (foundations) in progress on branch `ERP-28/rbacSetup`.
+> Status: **Done.** Permission registry, server gating (`requirePermission` / `can`), branch scoping, permission cache, and the admin surface (roles / access / audit-log) are all implemented and in use. This doc remains the authoritative reference for the model.
 
 ---
 

@@ -3,11 +3,7 @@ import type {
   ApiResponse,
   LorryReceipt,
   LRListItem,
-  CreateLRBody,
   UpdateLRBody,
-  FinaliseLRBody,
-  CancelLRBody,
-  SplitLRAtHubBody,
   AddEwayBillBody,
   EwayBill,
 } from "@skerp/types";
@@ -18,6 +14,11 @@ import {
   unwrapListResponse,
 } from "../masters/_shared/master-api";
 
+/**
+ * LR-level API. An LR is a single consignment within an LRGroup — creation,
+ * finalise, hub-split and cancel are group-level actions (see lr-group.service).
+ * This service is read + the per-LR draft edits and extra e-way bills.
+ */
 export const lorryReceiptApi = {
   list: async (query?: ListQuery): Promise<ListResult<LRListItem>> => {
     const params: Record<string, string | number> = {};
@@ -27,34 +28,17 @@ export const lorryReceiptApi = {
     if (query?.sort) params.sort = query.sort;
     if (query?.filter?.status)
       params["filter[status]"] = String(query.filter.status);
-    if (query?.filter?.source)
-      params["filter[source]"] = String(query.filter.source);
-    if (query?.filter?.orderId)
-      params["filter[orderId]"] = String(query.filter.orderId);
+    if (query?.filter?.groupId)
+      params["filter[groupId]"] = String(query.filter.groupId);
     const res = await api.get<ApiResponse<LRListItem[]>>("/lorry-receipts", {
       params,
     });
     return unwrapListResponse(res);
   },
 
-  statusCounts: async (): Promise<Record<string, number>> => {
-    const res = await api.get<ApiResponse<Record<string, number>>>(
-      "/lorry-receipts/status-counts",
-    );
-    return unwrapApiResponse(res);
-  },
-
   detail: async (id: string): Promise<LorryReceipt> => {
     const res = await api.get<ApiResponse<LorryReceipt>>(
       `/lorry-receipts/${id}`,
-    );
-    return unwrapApiResponse(res);
-  },
-
-  create: async (body: CreateLRBody): Promise<LorryReceipt> => {
-    const res = await api.post<ApiResponse<LorryReceipt>>(
-      "/lorry-receipts",
-      body,
     );
     return unwrapApiResponse(res);
   },
@@ -65,33 +49,6 @@ export const lorryReceiptApi = {
   ): Promise<LorryReceipt> => {
     const res = await api.patch<ApiResponse<LorryReceipt>>(
       `/lorry-receipts/${id}`,
-      body,
-    );
-    return unwrapApiResponse(res);
-  },
-
-  finalise: async (id: string, body: FinaliseLRBody): Promise<LorryReceipt> => {
-    const res = await api.post<ApiResponse<LorryReceipt>>(
-      `/lorry-receipts/${id}/finalise`,
-      body,
-    );
-    return unwrapApiResponse(res);
-  },
-
-  cancel: async (id: string, body: CancelLRBody): Promise<LorryReceipt> => {
-    const res = await api.post<ApiResponse<LorryReceipt>>(
-      `/lorry-receipts/${id}/cancel`,
-      body,
-    );
-    return unwrapApiResponse(res);
-  },
-
-  splitAtHub: async (
-    id: string,
-    body: SplitLRAtHubBody,
-  ): Promise<LorryReceipt> => {
-    const res = await api.post<ApiResponse<LorryReceipt>>(
-      `/lorry-receipts/${id}/split-at-hub`,
       body,
     );
     return unwrapApiResponse(res);
@@ -286,6 +243,13 @@ export const lrLookups = {
       label: o.orderNumber,
     }));
   },
+
+  customerLocations: async (customerId: string): Promise<LROption[]> => {
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      `/customers/${customerId}/locations`,
+    );
+    return unwrapApiResponse(res).map((l) => ({ value: l.id, label: l.name }));
+  },
 };
 
 export const lrLookupKeys = {
@@ -298,4 +262,6 @@ export const lrLookupKeys = {
   railheadBranches: ["lookup", "railhead-branches"] as const,
   attachableTrips: ["lookup", "attachable-trips"] as const,
   confirmedTruckOrders: ["lookup", "confirmed-truck-orders"] as const,
+  customerLocations: (customerId: string) =>
+    ["lookup", "customer-locations", customerId] as const,
 };

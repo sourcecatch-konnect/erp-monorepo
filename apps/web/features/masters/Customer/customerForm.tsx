@@ -6,8 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Customer,
-  State,
-  City,
   CreateCustomerBody,
   CreateCustomerFormInput,
 } from "@skerp/types";
@@ -73,7 +71,6 @@ export default function CustomerAdvancedForm({
   open,
   onOpenChange,
   row,
-
 }: Props) {
   const form = useForm<CreateCustomerFormInput, unknown, CreateCustomerBody>({
     resolver: zodResolver(createCustomerSchema),
@@ -81,29 +78,39 @@ export default function CustomerAdvancedForm({
     reValidateMode: "onChange",
     defaultValues,
   });
-const states = useQuery({
-  queryKey: stateKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
-  enabled: open,
-});
+  const selectedStateId = form.watch("stateId") ?? "";
+  const previousStateIdRef = React.useRef<string>("");
 
-const { create, update } = useMasterMutations({
-  api: customerApi,
-  queryKey: customerKeys.all,
-  entityName: "Customer",
-});
+  const states = useQuery({
+    queryKey: stateKeys.list({ page: 0, size: 1000 }),
+    queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+    enabled: open,
+  });
 
-const handleSubmit = async (data: CreateCustomerBody) => {
-  if (row) {
-    await update.mutateAsync({ id: row.id, data });
-  } else {
-    await create.mutateAsync(data);
-  }
+  const cities = useQuery({
+    queryKey: cityKeys.list({ page: 0, size: 1000 }),
+    queryFn: () => cityApi.list({ page: 0, size: 1000 }),
+    enabled: open,
+  });
 
-  onOpenChange(false);
-};
+  const { create, update } = useMasterMutations({
+    api: customerApi,
+    queryKey: customerKeys.all,
+    entityName: "Customer",
+  });
 
-const isSubmitting = create.isPending || update.isPending;
+  const handleSubmit = async (data: CreateCustomerBody) => {
+    if (row) {
+      await update.mutateAsync({ id: row.id, data });
+    } else {
+      await create.mutateAsync(data);
+    }
+
+    onOpenChange(false);
+  };
+
+  const isSubmitting = create.isPending || update.isPending;
+
   React.useEffect(() => {
     if (!open) return;
 
@@ -117,11 +124,10 @@ const isSubmitting = create.isPending || update.isPending;
           ? String(row.interestRateLatePayment)
           : "",
       gstNo: row?.gstNo ?? "",
-      creditLimit: row?.creditLimit != null ? String(paiseToRupees(row.creditLimit)) : "",
+      creditLimit:
+        row?.creditLimit != null ? String(paiseToRupees(row.creditLimit)) : "",
       tdsDeductionRate:
-        row?.tdsDeductionRate != null
-          ? String(row.tdsDeductionRate)
-          : "",
+        row?.tdsDeductionRate != null ? String(row.tdsDeductionRate) : "",
       address: row?.address ?? "",
       country: row?.country ?? "India",
       stateId: row?.stateId ?? "",
@@ -134,38 +140,34 @@ const isSubmitting = create.isPending || update.isPending;
     });
     previousStateIdRef.current = row?.stateId ?? "";
   }, [form, open, row]);
-  const cities = useQuery({
-  queryKey: cityKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => cityApi.list({ page: 0, size: 1000 }),
-  enabled: open && Boolean(row?.id),
-});
-const stateOptions = (states.data?.data ?? []).map((state) => ({
-  label: state.name,
-  value: state.id,
-}));
 
-  const prefillCustomer = usePrefillCustomer({ states, cities });
+  const statesList = states.data?.data ?? [];
+  const citiesList = cities.data?.data ?? [];
 
-  const selectedStateId = form.watch("stateId");
-const previousStateIdRef = React.useRef<string>("");
+  const stateOptions = statesList.map((state) => ({
+    label: state.name,
+    value: state.id,
+  }));
 
-React.useEffect(() => {
-  if (!open) return;
+  const prefillCustomer = usePrefillCustomer({
+    states: statesList,
+    cities: citiesList,
+  });
 
-  const previousStateId = previousStateIdRef.current;
+  React.useEffect(() => {
+    if (!open) return;
 
-  if (previousStateId && previousStateId !== selectedStateId) {
-    form.setValue("cityId", "", {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  }
+    const previousStateId = previousStateIdRef.current;
 
-  previousStateIdRef.current = selectedStateId;
-}, [form, open, selectedStateId]);
+    if (previousStateId && previousStateId !== selectedStateId) {
+      form.setValue("cityId", "", {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
 
-
-
+    previousStateIdRef.current = selectedStateId;
+  }, [form, open, selectedStateId]);
 
   return (
     <MasterFormDialog<CreateCustomerFormInput, CreateCustomerBody>
@@ -183,7 +185,24 @@ React.useEffect(() => {
             onClick={() => form.reset(prefillCustomer())}
             className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 4-1 1"/><path d="m4 15 1-1"/><path d="m10.5 6.5-5 5"/><path d="M6 6l12 12"/><path d="m18 6-1.5 1.5"/><path d="m8.5 18-1 1"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 4-1 1" />
+              <path d="m4 15 1-1" />
+              <path d="m10.5 6.5-5 5" />
+              <path d="M6 6l12 12" />
+              <path d="m18 6-1.5 1.5" />
+              <path d="m8.5 18-1 1" />
+            </svg>
             Fill Test Data
           </button>
         ) : undefined
@@ -217,17 +236,16 @@ React.useEffect(() => {
           maxLength={10}
           onChangeTransform={(value) => value.toUpperCase()}
         />
-  
-        <IconTextField<CreateCustomerFormInput>
-  name="gstNo"
-  label="GSTIN"
-  placeholder="27ABCDE1234F1Z5"
-  icon={<IconFileDescription size={16} />}
-  maxLength={15}
-  onChangeTransform={(value) => value.toUpperCase()}
 
-  required
-/>
+        <IconTextField<CreateCustomerFormInput>
+          name="gstNo"
+          label="GSTIN"
+          placeholder="27ABCDE1234F1Z5"
+          icon={<IconFileDescription size={16} />}
+          maxLength={15}
+          onChangeTransform={(value) => value.toUpperCase()}
+          required
+        />
         <IconTextField<CreateCustomerFormInput>
           name="website"
           label="Website"
@@ -242,37 +260,37 @@ React.useEffect(() => {
         description="Credit, interest and TDS information"
       >
         <IconTextField<CreateCustomerFormInput>
-  name="creditLimit"
-  label="Credit Limit"
-  placeholder="0.00"
-  icon={<IconCash size={16} />}
-  type="number"
-  min={0}
-  step="0.01"
-/>
-  <IconTextField<CreateCustomerFormInput>
-  name="interestRateLatePayment"
-  label="Late Payment Interest"
-  placeholder="e.g. 18"
-  icon={<IconPercentage size={16} />}
-  suffix="%"
-  type="number"
-  min={0}
-  max={100}
-  step="0.01"
-/>
+          name="creditLimit"
+          label="Credit Limit"
+          placeholder="0.00"
+          icon={<IconCash size={16} />}
+          type="number"
+          min={0}
+          step="0.01"
+        />
+        <IconTextField<CreateCustomerFormInput>
+          name="interestRateLatePayment"
+          label="Late Payment Interest"
+          placeholder="e.g. 18"
+          icon={<IconPercentage size={16} />}
+          suffix="%"
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+        />
 
-  <IconTextField<CreateCustomerFormInput>
-  name="tdsDeductionRate"
-  label="TDS Deduction"
-  placeholder="e.g. 2"
-  icon={<IconPercentage size={16} />}
-  suffix="%"
-  type="number"
-  min={0}
-  max={100}
-  step="0.01"
-/>
+        <IconTextField<CreateCustomerFormInput>
+          name="tdsDeductionRate"
+          label="TDS Deduction"
+          placeholder="e.g. 2"
+          icon={<IconPercentage size={16} />}
+          suffix="%"
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+        />
         <SwitchField<CreateCustomerFormInput>
           name="disallowNewLRBooking"
           label="Disallow New LR Booking"
@@ -301,22 +319,22 @@ React.useEffect(() => {
           required
         />
 
-      <CitySelectField<CreateCustomerFormInput>
-  name="cityId"
-  label="City"
-  required
-  disabled={!selectedStateId}
-  stateId={selectedStateId}
-  placeholder={selectedStateId ? "Select city" : "Select state first"}
-  initialCity={
-    row?.city
-      ? {
-          id: row.city.id,
-          name: row.city.name,
-        }
-      : null
-  }
-/>
+        <CitySelectField<CreateCustomerFormInput>
+          name="cityId"
+          label="City"
+          required
+          disabled={!selectedStateId}
+          stateId={selectedStateId}
+          placeholder={selectedStateId ? "Select city" : "Select state first"}
+          initialCity={
+            row?.city
+              ? {
+                  id: row.city.id,
+                  name: row.city.name,
+                }
+              : null
+          }
+        />
 
         <div className="md:col-span-2 xl:col-span-3">
           <TextAreaField<CreateCustomerFormInput>
@@ -373,10 +391,12 @@ React.useEffect(() => {
           title="Pickup Locations"
           description="Saved pickup points used when booking orders"
         >
-          <CustomerLocationsEditor customerId={row.id} cities={cities.data?.data ?? []} />
+          <CustomerLocationsEditor
+            customerId={row.id}
+            cities={cities.data?.data ?? []}
+          />
         </FormSection>
       ) : null}
-
     </MasterFormDialog>
   );
 }

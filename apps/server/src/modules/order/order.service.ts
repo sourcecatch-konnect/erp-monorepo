@@ -351,6 +351,7 @@ export const orderQuickViewSelect = {
 /** Standard include for returning a fully-hydrated order to the client. */
 export const orderInclude = {
   customer: { select: { id: true, name: true, disallowNewLRBooking: true } },
+  consignee: { select: { id: true, name: true } },
   fromBranch: { select: { id: true, name: true, shortCode: true } },
   toBranch: { select: { id: true, name: true, shortCode: true } },
 
@@ -367,6 +368,13 @@ export const orderInclude = {
   createdBy: { select: { id: true, firstName: true, lastName: true } },
   approvedBy: { select: { id: true, firstName: true, lastName: true } },
   items: { include: { goods: { select: { id: true, name: true } } } },
+  consignments: {
+    include: {
+      loadingLocation: { select: { id: true, name: true } },
+      unloadingLocation: { select: { id: true, name: true } },
+      goods: { include: { goods: { select: { id: true, name: true } } } },
+    },
+  },
   events: {
     orderBy: { createdAt: "asc" as const },
     include: {

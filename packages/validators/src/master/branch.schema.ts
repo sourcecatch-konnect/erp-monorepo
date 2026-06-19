@@ -20,10 +20,8 @@ const optionalEmail = z
   .optional()
   .transform((value) => (value ? value.toLowerCase() : undefined))
   .refine(
-    (value) =>
-      value === undefined ||
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
-    "Invalid email"
+    (value) => value === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+    "Invalid email",
   );
 
 const optionalGstNo = z
@@ -35,7 +33,7 @@ const optionalGstNo = z
     (value) =>
       value === undefined ||
       /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(value),
-    "Invalid GST number"
+    "Invalid GST number",
   );
 
 const weeklyOffDaySchema = z
@@ -62,7 +60,7 @@ const optionalPhone = (label: string) =>
         value === undefined ||
         /^[6-9][0-9]{9}$/.test(value) ||
         /^\+?[1-9][0-9]{7,14}$/.test(value),
-      `${label} is not valid`
+      `${label} is not valid`,
     );
 export const branchSchema = z.object({
   id: z.string(),
@@ -87,7 +85,6 @@ export const branchSchema = z.object({
 
   companyId: z.string(),
   warehouseId: z.string().nullable().optional(),
-isHeadOffice: z.boolean().default(false),
   company: z
     .object({
       id: z.string(),
@@ -117,7 +114,10 @@ export const createBranchSchema = z.object({
         .string()
         .min(1, "Branch code is required")
         .max(20, "Branch code cannot exceed 20 characters")
-        .regex(/^[A-Z0-9-]+$/, "Branch code can only contain letters, numbers and -")
+        .regex(
+          /^[A-Z0-9-]+$/,
+          "Branch code can only contain letters, numbers and -",
+        ),
     ),
 
   shortCode: z
@@ -129,7 +129,10 @@ export const createBranchSchema = z.object({
         .string()
         .min(1, "Short code is required")
         .max(10, "Short code cannot exceed 10 characters")
-        .regex(/^[A-Z0-9-]+$/, "Short code can only contain letters, numbers and -")
+        .regex(
+          /^[A-Z0-9-]+$/,
+          "Short code can only contain letters, numbers and -",
+        ),
     ),
 
   name: z
@@ -144,7 +147,7 @@ export const createBranchSchema = z.object({
 
   contactName: optionalLimitedString(
     100,
-    "Contact name cannot exceed 100 characters"
+    "Contact name cannot exceed 100 characters",
   ),
 
   contactPhone: optionalPhone("Contact phone"),
@@ -157,7 +160,7 @@ export const createBranchSchema = z.object({
 
   workingHours: optionalLimitedString(
     50,
-    "Working hours cannot exceed 50 characters"
+    "Working hours cannot exceed 50 characters",
   ),
 
   allowLR: z.boolean().default(false),
@@ -171,8 +174,6 @@ export const createBranchSchema = z.object({
   companyId: z.string().min(1, "Company is required"),
 
   warehouseId: optionalString,
-  isHeadOffice: z.boolean().default(false),
 });
 
-export const updateBranchSchema =
-  createBranchSchema.partial();
+export const updateBranchSchema = createBranchSchema.partial();

@@ -1,12 +1,5 @@
 import { Router } from "express";
-import {
-  createLRSchema,
-  updateLRSchema,
-  finaliseLRSchema,
-  cancelLRSchema,
-  addEwayBillSchema,
-  splitLRAtHubSchema,
-} from "@skerp/validators";
+import { updateLRSchema, addEwayBillSchema } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
 import { db } from "../../../prisma/prisma.js";
@@ -15,22 +8,14 @@ import { can } from "../../auth/can.middleware.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
-import { fyCodeFor } from "../_shared/doc-number.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
-import { Prisma } from "../../../generated/prisma/index.js";
-import type { LRStatus, LRSource } from "../../../generated/prisma/index.js";
-import {
-  generateLRNumber,
-  assertTruckSlotAvailable,
-  resolveHubBranchId,
-  lrListSelect,
-  lrDetailInclude,
-} from "./lorry-receipt.service.js";
+import type { LRStatus } from "../../../generated/prisma/index.js";
+import { lrListSelect, lrDetailInclude } from "./lorry-receipt.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -38,70 +23,25 @@ router.use(authMiddleware);
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 /**
- * Attaching an LR dispatches the trip: a Planned trip flips to InTransit, the
- * start time is stamped and its vehicle is marked On Trip. One trip = one LR
- * (full load), so this runs once per trip. No-op if the trip isn't Planned.
+ * LR-level branch access is enforced via its group's origin branch. An LR is a
+ * single consignment within an LRGroup; creation, finalise, hub-split and cancel
+ * are all group-level actions (see modules/lr-group). This router only exposes
+ * read + the per-LR draft edits (location/goods/invoice) and extra e-way bills.
  */
-async function dispatchTripOnAttach(
-  tx: Prisma.TransactionClient,
-  vehicleTripId: string,
-  lrNumber: string,
-  userId: string,
-) {
-  const trip = await tx.vehicleTrip.findUnique({
-    where: { id: vehicleTripId },
-    select: { id: true, status: true, vehicleId: true },
-  });
-  if (!trip || trip.status !== "Planned") return;
-
-  await tx.vehicleTrip.update({
-    where: { id: trip.id },
-    data: {
-      status: "InTransit",
-      startDateTime: new Date(),
-      updatedById: userId,
-      version: { increment: 1 },
-    },
-  });
-  await tx.vehicle.update({
-    where: { id: trip.vehicleId },
-    data: { status: "ON_TRIP" },
-  });
-  await tx.tripStatusHistory.create({
-    data: {
-      vehicleTripId: trip.id,
-      userId,
-      status: "InTransit",
-      note: `LR ${lrNumber} attached`,
-    },
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
-
-/** LR list: user can view if they have origin OR destination branch. */
 const lrBranchFilter = (req: Parameters<typeof assertBranchAccess>[0]) => {
   if (!req.ctx) return {};
   if (req.ctx.branchScope === "ALL") return {};
   if (req.ctx.branchIds.length === 0) {
-    return { id: { in: [] } }; // impossible filter — sees nothing
+    return { id: { in: [] as string[] } };
   }
   return {
-    OR: [
-      { originBranchId: { in: req.ctx.branchIds } },
-      { destinationBranchId: { in: req.ctx.branchIds } },
-    ],
+    group: {
+      OR: [
+        { originBranchId: { in: req.ctx.branchIds } },
+        { destinationBranchId: { in: req.ctx.branchIds } },
+      ],
+    },
   };
-};
-
-/** Throw if the user's branches don't include the LR's origin branch. */
-const assertOriginAccess = (
-  req: Parameters<typeof assertBranchAccess>[0],
-  originBranchId: string,
-) => {
-  assertBranchAccess(req, originBranchId);
 };
 
 /* ------------------------------------------------------------------ */
@@ -113,8 +53,7 @@ router.get("/", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
     deletedAt: null,
     ...lrBranchFilter(req),
     ...(query.filter.status ? { status: query.filter.status as LRStatus } : {}),
-    ...(query.filter.source ? { source: query.filter.source as LRSource } : {}),
-    ...(query.filter.orderId ? { orderId: query.filter.orderId } : {}),
+    ...(query.filter.groupId ? { groupId: query.filter.groupId } : {}),
     ...(query.search
       ? { lrNumber: { contains: query.search, mode: "insensitive" as const } }
       : {}),
@@ -137,30 +76,6 @@ router.get("/", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Status counts                                                       */
-/* ------------------------------------------------------------------ */
-router.get(
-  "/status-counts",
-  can(PERMS.LORRY_RECEIPT.VIEW),
-  async (req, res) => {
-    const where = { deletedAt: null, ...lrBranchFilter(req) };
-    const grouped = await db.lorryReceipt.groupBy({
-      by: ["status"],
-      where,
-      _count: { _all: true },
-    });
-    const counts: Record<string, number> = {};
-    let all = 0;
-    for (const g of grouped) {
-      counts[g.status] = g._count._all;
-      all += g._count._all;
-    }
-    counts.ALL = all;
-    return sendOk(res, counts);
-  },
-);
-
-/* ------------------------------------------------------------------ */
 /* Detail                                                              */
 /* ------------------------------------------------------------------ */
 router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
@@ -174,148 +89,19 @@ router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Create draft                                                        */
-/* ------------------------------------------------------------------ */
-router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
-  const parsed = createLRSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ValidationError(parsed.error.flatten().fieldErrors);
-  }
-  const input = parsed.data;
-  const me = actorId(req);
-
-  const lr = await db.$transaction(async (tx) => {
-    let originBranchId: string;
-    let destinationBranchId: string;
-    let consignorId: string;
-
-    if (input.source === "FROM_ORDER") {
-      const order = await tx.order.findUnique({
-        where: { id: input.orderId },
-        select: {
-          id: true,
-          customerId: true,
-          fromBranchId: true,
-          toBranchId: true,
-          orderType: true,
-          truckQuantity: true,
-          status: true,
-        },
-      });
-      if (!order) throw new BadRequestError("Order not found");
-      if (order.status !== "Confirmed") {
-        throw new BadRequestError("LR can only be created for a Confirmed order");
-      }
-      if (order.orderType !== "Truck") {
-        throw new BadRequestError(
-          "Item orders are not supported for LR creation in this release",
-        );
-      }
-      if (!order.truckQuantity) {
-        throw new BadRequestError("Order has no truck quantity set");
-      }
-
-      await assertTruckSlotAvailable(tx, order.id, order.truckQuantity);
-
-      originBranchId = order.fromBranchId;
-      destinationBranchId = order.toBranchId;
-      consignorId = order.customerId;
-    } else {
-      originBranchId = input.originBranchId;
-      destinationBranchId = input.destinationBranchId;
-      consignorId = input.consignorId;
-    }
-
-    // Origin-branch access check
-    assertOriginAccess(req, originBranchId);
-
-    const originBranch = await tx.branch.findUnique({
-      where: { id: originBranchId },
-      select: { branchCode: true },
-    });
-    if (!originBranch) throw new BadRequestError("Origin branch not found");
-
-    const now = new Date();
-    const fyCode = fyCodeFor(now);
-    const lrNumber = await generateLRNumber(tx, originBranch.branchCode, fyCode);
-
-    const consigneeId =
-      input.source === "FROM_ORDER" ? input.consigneeId : input.consigneeId;
-
-    const isMarketVehicle = input.isMarketVehicle ?? false;
-    const tripLegType =
-      input.source === "FROM_ORDER" ? (input.tripLegType ?? "DIRECT") : "DIRECT";
-    const hubId = tripLegType === "DIRECT" ? null : await resolveHubBranchId(tx);
-
-    const created = await tx.lorryReceipt.create({
-      data: {
-        lrNumber,
-        fyCode,
-        source: input.source,
-        orderId: input.source === "FROM_ORDER" ? input.orderId : null,
-        originBranchId,
-        destinationBranchId,
-        // Instant LRs are direct. Order LRs can be direct, to-hub, or from-hub.
-        transportType: input.source === "INSTANT" ? "Road" : (input.transportType ?? "Road"),
-        tripLegType,
-        hubId,
-        // Railhead: order + RoadAndRail only. Unrelated to the Jalgaon hub.
-        railheadBranchId:
-          input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null,
-        // Vehicle. Only the leg-1 (primary) trip at creation; leg 2 is attached
-        // by the split action.
-        isMarketVehicle,
-        primaryTripId: !isMarketVehicle ? (input.primaryTripId ?? null) : null,
-        marketVehicleNumber: isMarketVehicle ? (input.marketVehicleNumber ?? null) : null,
-        marketDriverName: isMarketVehicle ? (input.marketDriverName ?? null) : null,
-        // Parties
-        consignorId,
-        consigneeId,
-        // Meta (invoice captured at finalisation)
-        priority: input.priority ?? "Normal",
-        status: "DRAFT",
-        createdById: me,
-        goods: {
-          create: input.goods.map((g) => ({
-            name: g.name,
-            description: g.description ?? null,
-            quantity: g.quantity,
-            unit: g.unit,
-            weight: g.weight ?? null,
-            length: g.length ?? null,
-            width: g.width ?? null,
-            height: g.height ?? null,
-          })),
-        },
-      },
-      include: lrDetailInclude,
-    });
-
-    // A non-market LR attached to a Planned trip dispatches it (-> InTransit).
-    if (created.primaryTripId) {
-      await dispatchTripOnAttach(tx, created.primaryTripId, created.lrNumber, me);
-    }
-
-    return created;
-  });
-
-  return sendOk(res, lr, undefined, 201);
-});
-
-/* ------------------------------------------------------------------ */
-/* Update draft                                                        */
+/* Update draft (per-LR: location / goods / invoice)                   */
 /* ------------------------------------------------------------------ */
 router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
   const id = getParamId(req);
   const existing = await db.lorryReceipt.findFirst({
     where: { id, deletedAt: null },
+    include: { group: { select: { originBranchId: true } } },
   });
   if (!existing) throw new NotFoundError("Lorry receipt not found");
   if (existing.status !== "DRAFT") {
     throw new BadRequestError("Only a DRAFT lorry receipt can be edited");
   }
-
-  assertOriginAccess(req, existing.originBranchId);
+  assertBranchAccess(req, existing.group.originBranchId);
 
   const parsed = updateLRSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -326,23 +112,23 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
 
   const updated = await db.$transaction(async (tx) => {
     if (input.goods) {
-      // Replace goods lines atomically
       await tx.lRGoods.deleteMany({ where: { lorryReceiptId: id } });
     }
-
     return tx.lorryReceipt.update({
       where: { id },
       data: {
-        ...(input.isMarketVehicle !== undefined ? { isMarketVehicle: input.isMarketVehicle } : {}),
-        ...(input.primaryTripId !== undefined ? { primaryTripId: input.primaryTripId ?? null } : {}),
-        ...(input.marketVehicleNumber !== undefined ? { marketVehicleNumber: input.marketVehicleNumber ?? null } : {}),
-        ...(input.marketDriverName !== undefined ? { marketDriverName: input.marketDriverName ?? null } : {}),
-        ...(input.transportType ? { transportType: input.transportType } : {}),
-        ...(input.railheadBranchId !== undefined ? { railheadBranchId: input.railheadBranchId ?? null } : {}),
-        ...(input.consigneeId ? { consigneeId: input.consigneeId } : {}),
-        ...(input.priority ? { priority: input.priority } : {}),
-        ...(input.invoiceNumber !== undefined ? { invoiceNumber: input.invoiceNumber ?? null } : {}),
-        ...(input.invoiceAmount !== undefined ? { invoiceAmount: input.invoiceAmount ?? null } : {}),
+        ...(input.loadingLocationId !== undefined
+          ? { loadingLocationId: input.loadingLocationId ?? null }
+          : {}),
+        ...(input.unloadingLocationId !== undefined
+          ? { unloadingLocationId: input.unloadingLocationId ?? null }
+          : {}),
+        ...(input.invoiceNumber !== undefined
+          ? { invoiceNumber: input.invoiceNumber ?? null }
+          : {}),
+        ...(input.invoiceAmount !== undefined
+          ? { invoiceAmount: input.invoiceAmount ?? null }
+          : {}),
         ...(input.goods
           ? {
               goods: {
@@ -370,191 +156,6 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Finalise -> FINALISED                                               */
-/* ------------------------------------------------------------------ */
-router.post(
-  "/:id/finalise",
-  can(PERMS.LORRY_RECEIPT.APPROVE),
-  async (req, res) => {
-    const id = getParamId(req);
-    const existing = await db.lorryReceipt.findFirst({
-      where: { id, deletedAt: null },
-    });
-    if (!existing) throw new NotFoundError("Lorry receipt not found");
-    if (existing.status !== "DRAFT") {
-      throw new BadRequestError("Only a DRAFT lorry receipt can be finalised");
-    }
-
-    assertOriginAccess(req, existing.originBranchId);
-
-    const parsed = finaliseLRSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
-    const { sealNumber, invoiceNumber, invoiceAmount, baseFreightAmount, ewayBill } =
-      parsed.data;
-    const me = actorId(req);
-
-    const updated = await db.$transaction(async (tx) => {
-      await tx.lRCharge.create({
-        data: {
-          lorryReceiptId: id,
-          chargeType: "BASE_FREIGHT",
-          amount: baseFreightAmount,
-        },
-      });
-
-      await tx.ewayBill.create({
-        data: {
-          lorryReceiptId: id,
-          ewayBillNo: ewayBill.ewayBillNo,
-          generatedAt: ewayBill.generatedAt,
-          expiresAt: ewayBill.expiresAt,
-          generatedBy: ewayBill.generatedBy ?? null,
-          documentUrl: ewayBill.documentUrl ?? null,
-        },
-      });
-
-      return tx.lorryReceipt.update({
-        where: { id },
-        data: {
-          status: "FINALISED",
-          sealNumber: sealNumber ?? null,
-          invoiceNumber: invoiceNumber ?? null,
-          invoiceAmount: invoiceAmount ?? null,
-          finalisedAt: new Date(),
-          finalisedById: me,
-          updatedById: me,
-          version: { increment: 1 },
-        },
-        include: lrDetailInclude,
-      });
-    });
-
-    return sendOk(res, updated);
-  },
-);
-
-/* ------------------------------------------------------------------ */
-/* Split at hub (HO action) — attach leg-2 trip to a FINALISED LR       */
-/* ------------------------------------------------------------------ */
-router.post(
-  "/:id/split-at-hub",
-  can(PERMS.LORRY_RECEIPT.APPROVE),
-  async (req, res) => {
-    const id = getParamId(req);
-    const existing = await db.lorryReceipt.findFirst({
-      where: { id, deletedAt: null },
-    });
-    if (!existing) throw new NotFoundError("Lorry receipt not found");
-    if (existing.status !== "FINALISED") {
-      throw new BadRequestError(
-        "Hub split is only allowed on a finalised lorry receipt",
-      );
-    }
-
-    const parsed = splitLRAtHubSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
-    const { secondaryTripId } = parsed.data;
-    const me = actorId(req);
-
-    const updated = await db.$transaction(async (tx) => {
-      // Hub is always the head-office branch — derived, never sent by client.
-      const hubId = await resolveHubBranchId(tx);
-
-      // Leg 1 must have completed its run before the hub -> destination leg can
-      // pick the goods up: the first trip has to be Closed.
-      if (existing.primaryTripId) {
-        const leg1 = await tx.vehicleTrip.findUnique({
-          where: { id: existing.primaryTripId },
-          select: { status: true },
-        });
-        if (leg1 && leg1.status !== "Closed") {
-          throw new BadRequestError(
-            "The leg 1 trip must be Closed before attaching a leg 2 trip",
-          );
-        }
-      }
-
-      const leg2 = await tx.vehicleTrip.findUnique({
-        where: { id: secondaryTripId },
-        select: { id: true, status: true },
-      });
-      if (!leg2) throw new BadRequestError("Leg 2 trip not found");
-      if (secondaryTripId === existing.primaryTripId) {
-        throw new BadRequestError("Leg 2 trip must differ from the leg 1 trip");
-      }
-      if (leg2.status !== "Planned") {
-        throw new BadRequestError("Leg 2 trip must be a Planned trip");
-      }
-
-      const result = await tx.lorryReceipt.update({
-        where: { id },
-        data: {
-          hubId,
-          secondaryTripId,
-          tripLegType: "FROM_HUB",
-          updatedById: me,
-          version: { increment: 1 },
-        },
-        include: lrDetailInclude,
-      });
-
-      // Dispatch the leg 2 trip (Planned -> InTransit).
-      await dispatchTripOnAttach(tx, secondaryTripId, existing.lrNumber, me);
-
-      return result;
-    });
-
-    return sendOk(res, updated);
-  },
-);
-
-/* ------------------------------------------------------------------ */
-/* Cancel -> CANCELLED                                                 */
-/* ------------------------------------------------------------------ */
-router.post(
-  "/:id/cancel",
-  can(PERMS.LORRY_RECEIPT.CANCEL),
-  async (req, res) => {
-    const id = getParamId(req);
-    const existing = await db.lorryReceipt.findFirst({
-      where: { id, deletedAt: null },
-    });
-    if (!existing) throw new NotFoundError("Lorry receipt not found");
-    if (existing.status === "CANCELLED") {
-      throw new BadRequestError("Lorry receipt is already cancelled");
-    }
-    if (existing.status === "FINALISED") {
-      throw new BadRequestError("A finalised lorry receipt cannot be cancelled");
-    }
-
-    assertOriginAccess(req, existing.originBranchId);
-
-    const parsed = cancelLRSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
-    const me = actorId(req);
-
-    const updated = await db.lorryReceipt.update({
-      where: { id },
-      data: {
-        status: "CANCELLED",
-        cancelReason: parsed.data.cancelReason,
-        updatedById: me,
-        version: { increment: 1 },
-      },
-      include: lrDetailInclude,
-    });
-
-    return sendOk(res, updated);
-  },
-);
-
-/* ------------------------------------------------------------------ */
 /* Add e-way bill (additional, post-finalise)                          */
 /* ------------------------------------------------------------------ */
 router.post(
@@ -564,13 +165,13 @@ router.post(
     const id = getParamId(req);
     const existing = await db.lorryReceipt.findFirst({
       where: { id, deletedAt: null },
+      include: { group: { select: { originBranchId: true } } },
     });
     if (!existing) throw new NotFoundError("Lorry receipt not found");
     if (existing.status === "CANCELLED") {
       throw new BadRequestError("Cannot add e-way bill to a cancelled LR");
     }
-
-    assertOriginAccess(req, existing.originBranchId);
+    assertBranchAccess(req, existing.group.originBranchId);
 
     const parsed = addEwayBillSchema.safeParse(req.body);
     if (!parsed.success) {
