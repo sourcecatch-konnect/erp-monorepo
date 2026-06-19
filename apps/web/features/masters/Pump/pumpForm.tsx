@@ -6,8 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Pump,
-  State,
-  City,
   CreatePumpBody,
   CreatePumpFormInput,
 } from "@skerp/types";
@@ -31,15 +29,19 @@ import IconTextField from "../_shared/fields/IconTextField";
 import SelectField from "../_shared/fields/SelectField";
 import SwitchField from "../_shared/fields/SwitchField";
 import TextAreaField from "../_shared/fields/TextAreaField";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { pumpApi } from "./pump.service";
+import { pumpKeys } from "./pump.key";
+import { useQuery } from "@tanstack/react-query";
+
+import { stateKeys } from "../state/state.keys";
+import { stateApi } from "../state/state.service";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Pump | null;
-  states: State[];
-  cities: City[];
-  onSubmit: (data: CreatePumpBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const defaultValues: CreatePumpFormInput = {
@@ -68,17 +70,38 @@ export default function PumpAdvancedForm({
   open,
   onOpenChange,
   row,
-  states,
-  cities,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreatePumpFormInput, unknown, CreatePumpBody>({
     resolver: zodResolver(createPumpSchema),
     mode: "onChange",
     defaultValues,
   });
+const states = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
 
+
+
+const { create, update } = useMasterMutations({
+  api: pumpApi,
+  queryKey: pumpKeys.all,
+  entityName: "Pump",
+});
+
+const handleSubmit = async (data: CreatePumpBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -112,17 +135,10 @@ export default function PumpAdvancedForm({
 
   const selectedStateId = form.watch("stateId");
 
-  const stateOptions = states.map((s) => ({
-    label: s.name,
-    value: s.id,
-  }));
-
-  const cityOptions = cities
-    .filter((c) => !selectedStateId || c.stateId === selectedStateId)
-    .map((c) => ({
-      label: c.name,
-      value: c.id,
-    }));
+const stateOptions = (states.data?.data ?? []).map((state) => ({
+  label: state.name,
+  value: state.id,
+}));
 
   return (
   <MasterFormDialog<CreatePumpFormInput, CreatePumpBody>
@@ -130,7 +146,7 @@ export default function PumpAdvancedForm({
   onOpenChange={onOpenChange}
   title={row ? "Edit Pump" : "Add Pump"}
   form={form}
-  onSubmit={onSubmit}
+  onSubmit={handleSubmit}
   isSubmitting={isSubmitting}
   columns={3}
 >
@@ -170,12 +186,22 @@ export default function PumpAdvancedForm({
       required
     />
 
-    <SelectField<CreatePumpFormInput>
-      name="cityId"
-      label="City"
-      options={cityOptions}
-      required
-    />
+  <CitySelectField<CreatePumpFormInput>
+  name="cityId"
+  label="City"
+  required
+  stateId={selectedStateId}
+  disabled={!selectedStateId}
+  placeholder={selectedStateId ? "Select city" : "Select state first"}
+  initialCity={
+    row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null
+  }
+/>
 
     <IconTextField<CreatePumpFormInput>
       name="country"
@@ -231,6 +257,12 @@ export default function PumpAdvancedForm({
       min={0}
       step="0.01"
     />
+          {row?.rateLastUpdated && (
+    <div className="text-xs text-muted-foreground mt-2">
+      Last Updated:{" "}
+      {new Date(row.rateLastUpdated).toLocaleString()}
+    </div>
+  )}
   </FormSection>
 
   <FormSection

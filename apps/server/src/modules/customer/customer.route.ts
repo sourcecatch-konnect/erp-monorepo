@@ -62,11 +62,13 @@ const router: Router = createCrudRouter({
         getName: (row: any) => row.orderNumber ?? row.id,
       },
       {
-        model: db.lorryReceipt,
-        label: "Lorry Receipts",
-        where: (id: string) => ({ consigneeId: id }),
-        select: { id: true },
-        getName: (row: any) => row.id,
+        model: db.lRGroup,
+        label: "LR Groups",
+        where: (id: string) => ({
+          OR: [{ consignorId: id }, { consigneeId: id }],
+        }),
+        select: { id: true, groupNumber: true },
+        getName: (row: any) => row.groupNumber ?? row.id,
       },
       {
         model: db.vehicleTrip,
@@ -150,19 +152,47 @@ router.delete(
   "/locations/:locationId",
   can("masters.customer.update"),
   async (req, res) => {
-    const locationId = req.params.locationId;
-    if (typeof locationId !== "string" || !locationId) {
+    const locationId = Array.isArray(req.params.locationId)
+      ? req.params.locationId[0]
+      : req.params.locationId;
+
+    if (!locationId) {
       throw new ValidationError("Invalid location id");
     }
 
     const existing = await db.customerLocation.findUnique({
       where: { id: locationId },
     });
-    if (!existing) throw new NotFoundError("Location not found");
 
-    await db.customerLocation.delete({ where: { id: locationId } });
+    if (!existing) {
+      throw new NotFoundError("Location not found");
+    }
+
+    const orderCount = await db.order.count({
+      where: { customerLocationId: locationId },
+    });
+
+    if (orderCount > 0) {
+      throw new ValidationError(
+        `Cannot delete location because it is used in ${orderCount} order(s)`,
+      );
+    }
+
+    const unloadingCount = await db.tripUnloadingPoint.count({
+      where: { locationId },
+    });
+
+    if (unloadingCount > 0) {
+      throw new ValidationError(
+        `Cannot delete location because it is used in ${unloadingCount} trip unloading point(s)`,
+      );
+    }
+
+    await db.customerLocation.delete({
+      where: { id: locationId },
+    });
+
     return sendOk(res, { success: true });
   },
 );
-
 export default router;

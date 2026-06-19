@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
+
 
 import {
   SectionLabel,
@@ -31,20 +31,31 @@ import {
   IconCircleCheckFilled,
   IconClockEdit,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { sparePartSupplierKeys } from "./spare-partSupplier.key";
+import { sparePartSupplierApi } from "./spare-partSupplier.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: SparePartSupplier;
-  isLoading?: boolean;
+ id?: string | null;
 };
 
 export default function SparePartSupplierDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id
 }: Props) {
+    const supplierDetail = useQuery({
+    queryKey: id
+      ? sparePartSupplierKeys.detail(id)
+      : ["spare-part-supplier-detail-empty"],
+    queryFn: () => sparePartSupplierApi.detail(id!),
+    enabled: Boolean(open && id),
+  });
+
+  const data = supplierDetail.data;
+  const isLoading = supplierDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
@@ -74,25 +85,7 @@ export default function SparePartSupplierDetailDialog({
           <div className="h-[calc(90vh-120px)] overflow-y-auto">
             {/* Overview */}
 
-            <div className="px-5 py-5">
-              <SectionLabel>Supplier Overview</SectionLabel>
-
-              <div className="rounded-lg border p-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <IconTruck size={18} />
-                  </span>
-
-                  <div>
-                    <p className="font-medium">{data?.name ?? "-"}</p>
-
-                    <p className="text-xs text-muted-foreground">
-                      {data?.shopName ?? "-"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+      
 
             <div className="mx-5 border-t" />
 

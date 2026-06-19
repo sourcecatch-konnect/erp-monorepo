@@ -50,7 +50,15 @@ type Props = {
 const EMPTY_LINE = {
   loadingLocationId: undefined as string | undefined,
   unloadingLocationId: undefined as string | undefined,
-  goods: [{ name: "", description: "", quantity: "" as unknown as number, unit: "", weight: "" as unknown as number }],
+  goods: [
+    {
+      name: "",
+      description: "",
+      quantity: "" as unknown as number,
+      unit: "",
+      weight: "" as unknown as number,
+    },
+  ],
 };
 
 const TRANSPORT_OPTIONS = [
@@ -64,7 +72,13 @@ const PRIORITY_OPTIONS = [
   { value: "Critical", label: "Critical" },
 ] as const;
 
-function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+function FieldLabel({
+  children,
+  required,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+}) {
   return (
     <label className="mb-1 block text-xs font-medium text-muted-foreground">
       {children}
@@ -108,15 +122,27 @@ export default function LRForm({ orderId, tripId }: Props) {
 
   const source = orderId ? "FROM_ORDER" : "INSTANT";
 
-  const customers = useQuery({ queryKey: lrLookupKeys.customers, queryFn: lrLookups.customers });
-  const branches = useQuery({ queryKey: lrLookupKeys.branches, queryFn: lrLookups.branches });
+  const customers = useQuery({
+    queryKey: lrLookupKeys.customers,
+    queryFn: lrLookups.customers,
+  });
+  const branches = useQuery({
+    queryKey: lrLookupKeys.branches,
+    queryFn: lrLookups.branches,
+  });
   const railheads = useQuery({
     queryKey: lrLookupKeys.railheadBranches,
     queryFn: lrLookups.railheadBranches,
     enabled: source === "FROM_ORDER",
   });
-  const trips = useQuery({ queryKey: lrLookupKeys.attachableTrips, queryFn: lrLookups.attachableTrips });
-  const goodsMaster = useQuery({ queryKey: lrLookupKeys.goods, queryFn: lrLookups.goods });
+  const trips = useQuery({
+    queryKey: lrLookupKeys.attachableTrips,
+    queryFn: lrLookups.attachableTrips,
+  });
+  const goodsMaster = useQuery({
+    queryKey: lrLookupKeys.goods,
+    queryFn: lrLookups.goods,
+  });
 
   const form = useForm<CreateLRGroupFormInput, unknown, CreateLRGroupBody>({
     resolver: zodResolver(createLRGroupSchema),
@@ -140,18 +166,22 @@ export default function LRForm({ orderId, tripId }: Props) {
           },
   });
 
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: "lrs" });
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "lrs",
+  });
   const errors = form.formState.errors;
 
-  const [watchIsMarket, watchTransport, watchConsignor, watchConsignee] = useWatch({
-    control: form.control,
-    name: [
-      "isMarketVehicle",
-      source === "FROM_ORDER" ? "transportType" : "transportType",
-      source === "INSTANT" ? "consignorId" : "orderId",
-      source === "INSTANT" ? "consigneeId" : "orderId",
-    ],
-  });
+  const [watchIsMarket, watchTransport, watchConsignor, watchConsignee] =
+    useWatch({
+      control: form.control,
+      name: [
+        "isMarketVehicle",
+        source === "FROM_ORDER" ? "transportType" : "transportType",
+        source === "INSTANT" ? "consignorId" : "orderId",
+        source === "INSTANT" ? "consigneeId" : "orderId",
+      ],
+    });
 
   // Instant lines pick loading/unloading from the parties' saved locations.
   const consignorLocations = useQuery({
@@ -166,7 +196,10 @@ export default function LRForm({ orderId, tripId }: Props) {
   });
 
   const customerOptions = customers.data ?? [];
-  const branchOptions = (branches.data ?? []).map((b) => ({ value: b.value, label: b.label }));
+  const branchOptions = (branches.data ?? []).map((b) => ({
+    value: b.value,
+    label: b.label,
+  }));
   const tripOptions = (trips.data ?? []).map((t) => ({
     value: t.id,
     label: t.label,
@@ -177,10 +210,17 @@ export default function LRForm({ orderId, tripId }: Props) {
     value: g.name,
     hint: g.description ?? undefined,
   }));
-  const loadingOptions = (consignorLocations.data ?? []).map((l) => ({ value: l.value, label: l.label }));
-  const unloadingOptions = (consigneeLocations.data ?? []).map((l) => ({ value: l.value, label: l.label }));
+  const loadingOptions = (consignorLocations.data ?? []).map((l) => ({
+    value: l.value,
+    label: l.label,
+  }));
+  const unloadingOptions = (consigneeLocations.data ?? []).map((l) => ({
+    value: l.value,
+    label: l.label,
+  }));
 
-  const showRailhead = source === "FROM_ORDER" && (watchTransport as string) === "RoadAndRail";
+  const showRailhead =
+    source === "FROM_ORDER" && (watchTransport as string) === "RoadAndRail";
 
   const onSubmit = async (values: CreateLRGroupBody) => {
     setSubmitting(true);
@@ -204,7 +244,9 @@ export default function LRForm({ orderId, tripId }: Props) {
         <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg font-semibold">
-              {source === "FROM_ORDER" ? "Create LR Group from Order" : "Create Instant LR Group"}
+              {source === "FROM_ORDER"
+                ? "Create LR Group from Order"
+                : "Create Instant LR Group"}
             </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {source === "FROM_ORDER"
@@ -240,7 +282,9 @@ export default function LRForm({ orderId, tripId }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(orderId ? `/orders/${orderId}` : "/lorry-receipts")}
+              onClick={() =>
+                router.push(orderId ? `/orders/${orderId}` : "/lorry-receipts")
+              }
             >
               Cancel
             </Button>
@@ -251,10 +295,19 @@ export default function LRForm({ orderId, tripId }: Props) {
         </div>
 
         {source === "FROM_ORDER" && (
-          <FormSection icon={<IconRoute size={16} />} title="Truck & transport" columns={2}>
+          <FormSection
+            icon={<IconRoute size={16} />}
+            title="Truck & transport"
+            columns={2}
+          >
             <div>
               <FieldLabel required>Truck #</FieldLabel>
-              <Input {...form.register("truckIndex")} type="number" min={1} className="h-9" />
+              <Input
+                {...form.register("truckIndex")}
+                type="number"
+                min={1}
+                className="h-9"
+              />
             </div>
             <Controller
               name="transportType"
@@ -267,7 +320,10 @@ export default function LRForm({ orderId, tripId }: Props) {
                     onChange={(v) => {
                       field.onChange(v);
                       if (v !== "RoadAndRail")
-                        form.setValue("railheadBranchId" as never, undefined as never);
+                        form.setValue(
+                          "railheadBranchId" as never,
+                          undefined as never,
+                        );
                     }}
                     options={TRANSPORT_OPTIONS}
                   />
@@ -279,7 +335,10 @@ export default function LRForm({ orderId, tripId }: Props) {
                 name="railheadBranchId"
                 label="Railhead branch"
                 required
-                options={(railheads.data ?? []).map((b) => ({ value: b.value, label: b.label }))}
+                options={(railheads.data ?? []).map((b) => ({
+                  value: b.value,
+                  label: b.label,
+                }))}
                 emptyText="No railhead branches found"
               />
             )}
@@ -287,10 +346,29 @@ export default function LRForm({ orderId, tripId }: Props) {
         )}
 
         {source === "INSTANT" && (
-          <FormSection icon={<IconUsers size={16} />} title="Parties" columns={2}>
-            <ComboboxField name="consignorId" label="Consignor" required options={customerOptions} />
-            <ComboboxField name="consigneeId" label="Consignee" required options={customerOptions} />
-            <ComboboxField name="originBranchId" label="Origin branch" required options={branchOptions} />
+          <FormSection
+            icon={<IconUsers size={16} />}
+            title="Parties"
+            columns={2}
+          >
+            <ComboboxField
+              name="consignorId"
+              label="Consignor"
+              required
+              options={customerOptions}
+            />
+            <ComboboxField
+              name="consigneeId"
+              label="Consignee"
+              required
+              options={customerOptions}
+            />
+            <ComboboxField
+              name="originBranchId"
+              label="Origin branch"
+              required
+              options={branchOptions}
+            />
             <ComboboxField
               name="destinationBranchId"
               label="Destination branch"
@@ -370,7 +448,11 @@ export default function LRForm({ orderId, tripId }: Props) {
 
         {/* Consignment lines (INSTANT only — FROM_ORDER reads from the order) */}
         {source === "INSTANT" && (
-          <FormSection icon={<IconPackage size={16} />} title="Consignments (one LR each)" columns={1}>
+          <FormSection
+            icon={<IconPackage size={16} />}
+            title="Consignments (one LR each)"
+            columns={1}
+          >
             <div className="space-y-3">
               {fields.map((field, idx) => {
                 const base = `lrs.${idx}` as const;
@@ -382,7 +464,10 @@ export default function LRForm({ orderId, tripId }: Props) {
                 ).lrs;
                 const lineErr = lrsErrors?.[idx];
                 return (
-                  <div key={field.id} className="relative rounded-lg border bg-muted/20 p-3">
+                  <div
+                    key={field.id}
+                    className="relative rounded-lg border bg-muted/20 p-3"
+                  >
                     {fields.length > 1 && (
                       <button
                         type="button"
@@ -398,13 +483,21 @@ export default function LRForm({ orderId, tripId }: Props) {
                         name={`${base}.loadingLocationId`}
                         label="Loading point"
                         options={loadingOptions}
-                        emptyText={watchConsignor ? "No saved locations" : "Pick a consignor first"}
+                        emptyText={
+                          watchConsignor
+                            ? "No saved locations"
+                            : "Pick a consignor first"
+                        }
                       />
                       <ComboboxField
                         name={`${base}.unloadingLocationId`}
                         label="Unloading point"
                         options={unloadingOptions}
-                        emptyText={watchConsignee ? "No saved locations" : "Pick a consignee first"}
+                        emptyText={
+                          watchConsignee
+                            ? "No saved locations"
+                            : "Pick a consignee first"
+                        }
                       />
                     </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-4">
@@ -420,24 +513,40 @@ export default function LRForm({ orderId, tripId }: Props) {
                               onBlur={field.onBlur}
                               suggestions={goodsSuggestions}
                               placeholder="Select or type goods"
-                              invalid={Boolean(lineErr?.goods?.[0]?.name?.message)}
+                              invalid={Boolean(
+                                lineErr?.goods?.[0]?.name?.message,
+                              )}
                             />
                           )}
                         />
                       </div>
                       <div>
                         <FieldLabel required>Qty</FieldLabel>
-                        <Input {...form.register(`${base}.goods.0.quantity`)} type="number" min={1} className="h-9" />
+                        <Input
+                          {...form.register(`${base}.goods.0.quantity`)}
+                          type="number"
+                          min={1}
+                          className="h-9"
+                        />
                       </div>
                       <div>
                         <FieldLabel required>Unit</FieldLabel>
-                        <Input {...form.register(`${base}.goods.0.unit`)} placeholder="MT / PCS" className="h-9" />
+                        <Input
+                          {...form.register(`${base}.goods.0.unit`)}
+                          placeholder="MT / PCS"
+                          className="h-9"
+                        />
                       </div>
                     </div>
                   </div>
                 );
               })}
-              <Button type="button" variant="outline" size="sm" onClick={() => append(EMPTY_LINE)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => append(EMPTY_LINE)}
+              >
                 <IconPlus size={14} className="mr-1" /> Add consignment line
               </Button>
             </div>

@@ -19,20 +19,30 @@ import {
   IconScale,
   IconCircleCheckFilled,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { wagonKeys } from "./wagon.key";
+import { wagonApi } from "./wagon.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   data?: Wagon;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 export default function WagonDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const wagonDetail = useQuery({
+  queryKey: id ? wagonKeys.detail(id) : ["wagon-detail-empty"],
+  queryFn: () => wagonApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = wagonDetail.data;
+const isLoading = wagonDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[50vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">

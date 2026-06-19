@@ -21,6 +21,8 @@ import { agreementApi } from "./agreements.service";
 import { agreementColumns } from "./agreementsTable";
 import AgreementForm from "./agreementsForm";
 import { attachmentApi } from "@/features/attachments/attachment.client";
+import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
+import { ListQuery } from "../_shared/master-api";
 
 export default function AgreementPage() {
   const [open, setOpen] = React.useState(false);
@@ -29,47 +31,35 @@ const [search, setSearch] = React.useState("");
 const [page, setPage] = React.useState(0);
 const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
-const [detailData, setDetailData] = React.useState<Agreement | null>(null);
-const size = 10;
+const [detailId, setDetailId] = React.useState<string | null>(null);
+const debouncedSearch = useDebouncedValue(search);
+const [size, setSize] = React.useState(10);
   // ================= MASTER DATA =================
-  const companies = useQuery({
-    queryKey: ["companies"],
-    queryFn: () => companyApi.list(),
-  });
 
-  const customers = useQuery({
-    queryKey: ["customers"],
-    queryFn: () => customerApi.list(),
-  });
-
-  const cities = useQuery({
-    queryKey: ["cities"],
-    queryFn: () => cityApi.list(),
-  });
-
-  const branches = useQuery({
-    queryKey: ["branches"],
-    queryFn: () => branchApi.list(),
-  });
 
   // ================= AGREEMENTS =================
-const listQuery = React.useMemo(
-  () => ({
-    page,
-    size,
-    sort: "createdAt:desc",
-    ...(search.trim() ? { search: search.trim() } : {}),
-  }),
-  [page, size, search]
-);
 
+  const listQuery = React.useMemo<ListQuery>(
+    () => ({
+      page,
+      size,
+      sort: "createdAt:asc",
+      ...(debouncedSearch.trim()
+        ? { search: debouncedSearch.trim() }
+        : {}),
+    }),
+    [debouncedSearch, page, size]
+  );
+  React.useEffect(() => {
+  setPage(0);
+}, [debouncedSearch, size]);
 const agreements = useQuery({
   queryKey: agreementKeys.list(listQuery),
   queryFn: () => agreementApi.list(listQuery),
 });
 
   // ================= MASTER MUTATIONS =================
-  const { create, update, remove } = useMasterMutations({
+  const { remove } = useMasterMutations({
     api: agreementApi,
     queryKey: agreementKeys.all,
     entityName: "Agreement",
@@ -89,67 +79,7 @@ const exportAgreements = useMutation({
   mutationFn: agreementApi.export,
 });
   // ================= SUBMIT =================
-const [isUploadingAgreementFile, setIsUploadingAgreementFile] =
-  React.useState(false);
 
-const handleSubmit = async (
-  data: CreateAgreementBody,
-  agreementFile?: File | null,
-) => {
-  let agreementId = selected?.id;
-
-  try {
-    if (selected) {
-      await update.mutateAsync({
-        id: selected.id,
-        data,
-      });
-
-      agreementId = selected.id;
-    } else {
-      const createdAgreement = await create.mutateAsync(data);
-
-      agreementId = createdAgreement?.id;
-
-      if (!agreementId) {
-        toast.error("Agreement created but agreement ID was not returned.");
-        return;
-      }
-    }
-
-    if (agreementFile && agreementId) {
-      try {
-        setIsUploadingAgreementFile(true);
-
-        await attachmentApi.upload(
-          {
-            entityType: "agreement",
-            entityId: agreementId,
-            originalName: agreementFile.name,
-            mime: agreementFile.type || "application/pdf",
-            sizeBytes: agreementFile.size,
-          },
-          agreementFile,
-        );
-
-        toast.success("Agreement file uploaded successfully");
-      } catch (uploadError) {
-        console.error("Agreement file upload failed:", uploadError);
-
-        toast.warning(
-          "Agreement saved, but file upload failed. Please configure S3 bucket and upload again.",
-        );
-      } finally {
-        setIsUploadingAgreementFile(false);
-      }
-    }
-
-    setOpen(false);
-    setSelected(null);
-  } catch (error) {
-    toast.error(getErrorMessage(error));
-  }
-};
 
   return (
    <MasterListPage
@@ -158,7 +88,7 @@ const handleSubmit = async (
   columns={agreementColumns}
   isLoading={agreements.isLoading}
     onView={(row) => {
-  setDetailData(row);
+  setDetailId(row.id);
   setDetailOpen(true);
 }}
   search={search}
@@ -181,7 +111,7 @@ const handleSubmit = async (
     setSelected(row);
     setOpen(true);
   }}
-
+  onSizeChange={setSize}
   onDelete={(id) => remove.mutateAsync(id)}
 
   onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
@@ -196,24 +126,16 @@ const handleSubmit = async (
 
   isBulkDeleting={bulkRemove.isPending}
 >
-  <AgreementDetailDialog
+<AgreementDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={detailData ?? undefined}
-  isLoading={false}
+  id={detailId}
 />
-   <AgreementForm
+
+<AgreementForm
   open={open}
   onOpenChange={setOpen}
   row={selected}
-  onSubmit={handleSubmit}
-  isSubmitting={
-    create.isPending || update.isPending || isUploadingAgreementFile
-  }
-  companies={companies.data?.data ?? []}
-  customers={customers.data?.data ?? []}
-  cities={cities.data?.data ?? []}
-  branches={branches.data?.data ?? []}
 />
     </MasterListPage>
   );

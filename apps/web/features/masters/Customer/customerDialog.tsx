@@ -34,20 +34,29 @@ import {
   IconCircleCheckFilled,
   IconClockEdit,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { customerKeys } from "./customer.key";
+import { customerApi } from "./customer.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: Customer;
-  isLoading?: boolean;
+  id?: string | null;
 };
 
 export default function CustomerDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+ id,
 }: Props) {
+  const customerDetail = useQuery({
+  queryKey: id ? customerKeys.detail(id) : ["customer-detail-empty"],
+  queryFn: () => customerApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = customerDetail.data;
+const isLoading = customerDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">

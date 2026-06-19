@@ -6,12 +6,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Agreement,
+  AgreementWithRelations,
   CreateAgreementBody,
   CreateAgreementFormInput,
-  Company,
-  Customer,
-  City,
-  Branch,
+
 } from "@skerp/types";
 
 import { createAgreementSchema } from "@skerp/validators";
@@ -27,26 +25,28 @@ import {
   IconTruck,
   IconX,
   IconFileUpload,
+  IconUser,
+  IconBuildingStore,
 } from "@tabler/icons-react";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { Button } from "@skerp/ui/components/button";
 import { attachmentApi } from "@/features/attachments/attachment.client";
 import { AttachmentPanel } from "@skerp/attachments-web";
+import { toast } from "sonner";
+import { agreementApi } from "./agreements.service";
+import { useQuery } from "@tanstack/react-query";
+
+import { customerApi } from "../Customer/customer.service";
+import { companyApi } from "../Company/company.service";
+import { branchApi } from "../branch/branch.service";
+import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { agreementKeys } from "./agreements.key";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  row?: Agreement | null;
-  onSubmit: (
-  data: CreateAgreementBody,
-  agreementFile?: File | null,
-) => Promise<void>;
-  isSubmitting?: boolean;
-
-  companies: Company[];
-  customers: Customer[];
-  cities: City[];
-  branches: Branch[];
+  row?: AgreementWithRelations | null;
 };
 
 const defaultValues: CreateAgreementFormInput = {
@@ -64,12 +64,7 @@ export default function AgreementForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
-  companies,
-  customers,
-  cities,
-  branches,
+
 }: Props) {
 const form = useForm<CreateAgreementFormInput, unknown, CreateAgreementBody>({
   resolver: zodResolver(createAgreementSchema),
@@ -77,6 +72,83 @@ const form = useForm<CreateAgreementFormInput, unknown, CreateAgreementBody>({
   mode: "onChange",
   reValidateMode: "onChange",
 });
+const companies = useQuery({
+  queryKey: ["companies"],
+  queryFn: () => companyApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+const customers = useQuery({
+  queryKey: ["customers"],
+  queryFn: () => customerApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+
+
+const branches = useQuery({
+  queryKey: ["branches"],
+  queryFn: () => branchApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
+
+const { create, update } = useMasterMutations({
+  api: agreementApi,
+  queryKey: agreementKeys.all,
+  entityName: "Agreement",
+});
+
+const [isUploadingAgreementFile, setIsUploadingAgreementFile] =
+  React.useState(false);
+
+const handleSubmit = async (
+  data: CreateAgreementBody,
+  file?: File | null
+) => {
+  let agreementId = row?.id;
+
+  try {
+    if (row) {
+      await update.mutateAsync({ id: row.id, data });
+      agreementId = row.id;
+    } else {
+      const createdAgreement = await create.mutateAsync(data);
+      agreementId = createdAgreement?.id;
+
+      if (!agreementId) {
+        toast.error("Agreement created but agreement ID was not returned.");
+        return;
+      }
+    }
+
+    if (file && agreementId) {
+      setIsUploadingAgreementFile(true);
+
+      await attachmentApi.upload(
+        {
+          entityType: "agreement",
+          entityId: agreementId,
+          originalName: file.name,
+          mime: file.type || "application/pdf",
+          sizeBytes: file.size,
+        },
+        file
+      );
+
+      toast.success("Agreement file uploaded successfully");
+    }
+
+    setAgreementFile(null);
+    onOpenChange(false);
+  } catch (error) {
+    toast.error(getErrorMessage(error));
+  } finally {
+    setIsUploadingAgreementFile(false);
+  }
+};
+
+const isSubmitting =
+  create.isPending || update.isPending || isUploadingAgreementFile;
 const [agreementFile, setAgreementFile] = React.useState<File | null>(null);
   React.useEffect(() => {
     if (!open) return;
@@ -101,7 +173,7 @@ const agreementFileInputRef = React.useRef<HTMLInputElement | null>(null);
       title={row ? "Edit Agreement" : "Add Agreement"}
       form={form}
       onSubmit={async (data) => {
-  await onSubmit(data, agreementFile);
+  await handleSubmit(data, agreementFile);
   setAgreementFile(null);
 }}
       isSubmitting={isSubmitting}
@@ -114,22 +186,26 @@ const agreementFileInputRef = React.useRef<HTMLInputElement | null>(null);
         description="Company and customer involved in agreement"
       >
         <SelectField
-          name="companyId"
-          label="Company"
-          options={companies.map((c) => ({
-            label: c.name,
-            value: c.id,
-          }))}
-        />
+  name="companyId"
+  label="Company"
+  options={(companies.data?.data ?? []).map((c) => ({
+    label: c.name,
+    value: c.id,
+  }))}
+  icon={<IconBuilding size={16} />}
+  required
+/>
 
-        <SelectField
-          name="clientId"
-          label="Consigner"
-          options={customers.map((c) => ({
-            label: c.name,
-            value: c.id,
-          }))}
-        />
+<SelectField
+  name="clientId"
+  label="Consigner"
+  options={(customers.data?.data ?? []).map((c) => ({
+    label: c.name,
+    value: c.id,
+  }))}
+  icon={<IconUser size={16} />}
+  required
+/>
       </FormSection>
 
       {/* ================= LOCATION ================= */}
@@ -138,23 +214,30 @@ const agreementFileInputRef = React.useRef<HTMLInputElement | null>(null);
         title="City and branch responsible for agreement"
         description="Location Details"
       >
-        <SelectField
-          name="cityId"
-          label="City"
-          options={cities.map((c) => ({
-            label: c.name,
-            value: c.id,
-          }))}
-        />
+<CitySelectField<CreateAgreementFormInput>
+  name="cityId"
+  label="City"
+  required
+  initialCity={
+    row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null
+  }
+/>
 
-        <SelectField
-          name="leadGeneratedByBranchId"
-          label="Branch"
-          options={branches.map((b) => ({
-            label: b.name,
-            value: b.id,
-          }))}
-        />
+<SelectField
+  name="leadGeneratedByBranchId"
+  label="Branch"
+  options={(branches.data?.data ?? []).map((b) => ({
+    label: b.name,
+    value: b.id,
+  }))}
+  icon={<IconBuildingStore size={16} />}
+  required
+/>
       </FormSection>
 
       {/* ================= AGREEMENT TIMELINE ================= */}
@@ -189,7 +272,7 @@ const agreementFileInputRef = React.useRef<HTMLInputElement | null>(null);
     render={({ field }) => (
       <div>
       <DatePicker
-        label="Agreement Date"
+        label="Agreement Date *"
         selected={field.value ? new Date(field.value) : undefined}
        onSelect={(date) => {
   field.onChange(date ? date.toISOString().slice(0, 10) : "");

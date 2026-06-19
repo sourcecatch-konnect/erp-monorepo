@@ -37,7 +37,7 @@ export default function RateMatrixCompanyAgreementsPage({
   const [selectedAgreement, setSelectedAgreement] =
     React.useState<AgreementWithRelations | null>(null);
 
-  const size = 25;
+const [size, setSize] = React.useState(10);
 
   const rateMatrixDetail = useQuery({
     queryKey: rateMatrixKeys.detail(rateMatrixId),

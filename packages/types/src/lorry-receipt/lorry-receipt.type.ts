@@ -19,7 +19,6 @@ export type UpdateLRBody = z.output<typeof updateLRSchema>;
 export type AddEwayBillBody = z.output<typeof addEwayBillSchema>;
 export type AddEwayBillFormInput = z.input<typeof addEwayBillSchema>;
 
-/** Lightweight CustomerLocation reference used on the LR's loading/unloading. */
 export type LocationRef = {
   id: string;
   name: string;
@@ -27,7 +26,6 @@ export type LocationRef = {
   city?: { id: string; name: string } | null;
 };
 
-/** Minimal parent-group reference carried on an LR row (avoids deep nesting). */
 export type LRGroupRef = {
   id: string;
   groupNumber: string;
@@ -61,7 +59,6 @@ export type EwayBill = {
   updatedAt: string;
 };
 
-/** Lorry receipt as returned by the list endpoint (select shape). */
 export type LRListItem = {
   id: string;
   lrNumber: string;
@@ -76,7 +73,6 @@ export type LRListItem = {
   group?: LRGroupRef | null;
 };
 
-/** Lorry receipt as returned by the detail endpoint (include shape). */
 export type LorryReceipt = LRListItem & {
   loadingLocationId: string | null;
   unloadingLocationId: string | null;

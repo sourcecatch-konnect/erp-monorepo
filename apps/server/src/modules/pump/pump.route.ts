@@ -27,10 +27,27 @@ const router: Router =
     permissionKey:
       "masters.pump",
 
-    hooks: {
-      beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-      beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-    },
+hooks: {
+  beforeCreate: async (data: any) => {
+    convertRupeeFieldsToPaise(data, moneyFields);
+
+    if (data.currentDieselRate != null) {
+      data.rateLastUpdated = new Date();
+    }
+
+    return data;
+  },
+
+  beforeUpdate: async (data: any) => {
+    convertRupeeFieldsToPaise(data, moneyFields);
+
+    if (data.currentDieselRate != null) {
+      data.rateLastUpdated = new Date();
+    }
+
+    return data;
+  },
+},
 
     listOptions: {
       searchableFields: [

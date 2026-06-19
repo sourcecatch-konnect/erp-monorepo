@@ -1,43 +1,67 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-
 import type {
   Branch,
-  Company,
-  City,
   CreateBranchBody,
   CreateBranchFormInput,
 } from "@skerp/types";
+import {
+  IconBuilding,
+  IconCalendar,
+  IconClock,
+  IconFileText,
+  IconId,
+  IconMail,
+  IconMapPin,
+  IconReceipt,
+  IconTrain,
+  IconUser,
+} from "@tabler/icons-react";
 
 import { createBranchSchema } from "@skerp/validators";
-
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
-import TextField from "../_shared/fields/TextField";
+import IconTextField from "../_shared/fields/IconTextField";
 import SelectField from "../_shared/fields/SelectField";
 import PhoneField from "../_shared/fields/PhoneField";
 import SwitchField from "../_shared/fields/SwitchField";
-
-import {
-  IconBuilding,
-  IconMapPin,
-  IconUser,
-  IconReceipt,
-  IconTrain,
-  IconFileText,
-} from "@tabler/icons-react";
+import CitySelectField from "../_shared/fields/CitySelectField";
+import { companyApi } from "../Company/company.service";
+import { companyKeys } from "../Company/company.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { branchApi } from "./branch.service";
+import { branchKeys } from "./branch.key";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Branch | null;
-  companies: Company[];
-  cities: City[];
-  onSubmit: (data: CreateBranchBody) => Promise<void>;
-  isSubmitting?: boolean;
+};
+
+const weeklyOffDays = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+type WeeklyOffDay = (typeof weeklyOffDays)[number];
+
+const isWeeklyOffDay = (value?: string | null): value is WeeklyOffDay =>
+  typeof value === "string" &&
+  (weeklyOffDays as readonly string[]).includes(value);
+
+const toWeeklyOffDay = (
+  value?: string | null,
+): CreateBranchFormInput["weeklyOffDay"] => {
+  return isWeeklyOffDay(value) ? value : "";
 };
 
 const defaultValues: CreateBranchFormInput = {
@@ -60,21 +84,37 @@ const defaultValues: CreateBranchFormInput = {
   warehouseId: "",
 };
 
-export default function BranchForm({
-  open,
-  onOpenChange,
-  row,
-  companies,
-  cities,
-  onSubmit,
-  isSubmitting,
-}: Props) {
+export default function BranchForm({ open, onOpenChange, row }: Props) {
   const form = useForm<CreateBranchFormInput, unknown, CreateBranchBody>({
     resolver: zodResolver(createBranchSchema),
     mode: "onChange",
     reValidateMode: "onChange",
     defaultValues,
   });
+
+  const companies = useQuery({
+    queryKey: companyKeys.list({ page: 0, size: 1000 }),
+    queryFn: () => companyApi.list({ page: 0, size: 1000 }),
+    enabled: open,
+  });
+
+  const { create, update } = useMasterMutations({
+    api: branchApi,
+    queryKey: branchKeys.all,
+    entityName: "Branch",
+  });
+
+  const handleSubmit = async (data: CreateBranchBody) => {
+    if (row) {
+      await update.mutateAsync({ id: row.id, data });
+    } else {
+      await create.mutateAsync(data);
+    }
+
+    onOpenChange(false);
+  };
+
+  const isSubmitting = create.isPending || update.isPending;
 
   React.useEffect(() => {
     if (!open) return;
@@ -88,7 +128,7 @@ export default function BranchForm({
       contactName: row?.contactName ?? "",
       contactPhone: row?.contactPhone ?? "",
       email: row?.email ?? "",
-      weeklyOffDay: row?.weeklyOffDay ?? "",
+      weeklyOffDay: toWeeklyOffDay(row?.weeklyOffDay),
       gstNo: row?.gstNo ?? "",
       workingHours: row?.workingHours ?? "",
       allowLR: row?.allowLR ?? false,
@@ -100,14 +140,9 @@ export default function BranchForm({
     });
   }, [form, open, row]);
 
-  const companyOptions = companies.map((c) => ({
-    label: c.name,
-    value: c.id,
-  }));
-
-  const cityOptions = cities.map((c) => ({
-    label: c.name,
-    value: c.id,
+  const companyOptions = (companies.data?.data ?? []).map((company) => ({
+    label: company.name,
+    value: company.id,
   }));
 
   return (
@@ -116,36 +151,42 @@ export default function BranchForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Branch" : "Add Branch"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
     >
-      {/* BASIC INFO */}
       <FormSection
         icon={<IconBuilding size={18} />}
         title="Branch Information"
         description="Basic branch identity details"
       >
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="branchCode"
           label="Branch Code"
+          placeholder="Enter branch code"
+          icon={<IconId size={16} />}
+          onChangeTransform={(value) => value.toUpperCase()}
           required
         />
 
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="shortCode"
           label="Short Code"
+          placeholder="Enter short code"
+          icon={<IconId size={16} />}
+          onChangeTransform={(value) => value.toUpperCase()}
           required
         />
 
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="name"
           label="Branch Name"
+          placeholder="Enter branch name"
+          icon={<IconBuilding size={16} />}
           required
         />
       </FormSection>
 
-      {/* LOCATION */}
       <FormSection
         icon={<IconMapPin size={18} />}
         title="Location Details"
@@ -154,30 +195,42 @@ export default function BranchForm({
         <SelectField<CreateBranchFormInput>
           name="companyId"
           label="Company"
+          icon={<IconBuilding size={16} />}
           options={companyOptions}
+          required
         />
 
-        <SelectField<CreateBranchFormInput>
+        <CitySelectField<CreateBranchFormInput>
           name="cityId"
           label="City"
-          options={cityOptions}
+          initialCity={
+            row?.city
+              ? {
+                  id: row.city.id,
+                  name: row.city.name,
+                }
+              : null
+          }
         />
 
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="address"
           label="Address"
+          placeholder="Enter address"
+          icon={<IconMapPin size={16} />}
         />
       </FormSection>
 
-      {/* CONTACT */}
       <FormSection
         icon={<IconUser size={18} />}
         title="Contact Information"
         description="Branch contact person details"
       >
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="contactName"
           label="Contact Name"
+          placeholder="Enter contact name"
+          icon={<IconUser size={16} />}
         />
 
         <PhoneField<CreateBranchFormInput>
@@ -186,59 +239,78 @@ export default function BranchForm({
           label="Contact Phone"
         />
 
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="email"
           label="Email"
+          placeholder="Enter email"
+          type="email"
+          icon={<IconMail size={16} />}
         />
       </FormSection>
 
-      {/* BUSINESS INFO */}
       <FormSection
         icon={<IconBuilding size={18} />}
         title="Business Settings"
         description="Operational configuration"
       >
-        <TextField<CreateBranchFormInput>
+        <SelectField<CreateBranchFormInput>
           name="weeklyOffDay"
           label="Weekly Off Day"
+          icon={<IconCalendar size={16} />}
+          options={weeklyOffDays.map((day) => ({
+            label: day,
+            value: day,
+          }))}
         />
 
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="gstNo"
           label="GST Number"
+          placeholder="27ABCDE1234F1Z5"
+          maxLength={15}
+          icon={<IconId size={16} />}
+          onChangeTransform={(value) => value.toUpperCase()}
         />
 
-        <TextField<CreateBranchFormInput>
+        <IconTextField<CreateBranchFormInput>
           name="workingHours"
           label="Working Hours"
+          placeholder="10:00 AM - 7:00 PM"
+          icon={<IconClock size={16} />}
         />
+      </FormSection>
 
+      <FormSection
+        icon={<IconBuilding size={18} />}
+        title="Branch Permissions"
+        description="Control branch operational permissions"
+      >
         <SwitchField<CreateBranchFormInput>
           name="allowLR"
           label="Allow LR"
-          description="Allow lorry receipts from this branch"
+          description="Allow lorry receipt creation from this branch"
           icon={<IconFileText size={14} />}
-        />
-
-        <SwitchField<CreateBranchFormInput>
-          name="isRailHead"
-          label="Is this a Rail Head?"
-          description="Selectable as the railhead for Road & Rail order LRs"
-          icon={<IconTrain size={14} />}
-        />
-
-        <SwitchField<CreateBranchFormInput>
-          name="isHeadOffice"
-          label="Is this the Head Office (hub)?"
-          description="The HO/hub branch (Jalgaon). LR hub splits attach to this branch — set on exactly one branch."
-          icon={<IconBuilding size={14} />}
         />
 
         <SwitchField<CreateBranchFormInput>
           name="allowReceipt"
           label="Allow Receipt"
-          description="Allow receipts at this branch"
+          description="Allow receipt entry for this branch"
           icon={<IconReceipt size={14} />}
+        />
+
+        <SwitchField<CreateBranchFormInput>
+          name="isRailHead"
+          label="Rail Head"
+          description="Mark this branch as rail head"
+          icon={<IconTrain size={14} />}
+        />
+
+        <SwitchField<CreateBranchFormInput>
+          name="isHeadOffice"
+          label="Head Office"
+          description="Mark this branch as HO / hub branch"
+          icon={<IconBuilding size={14} />}
         />
       </FormSection>
     </MasterFormDialog>

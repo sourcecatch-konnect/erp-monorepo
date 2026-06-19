@@ -28,15 +28,19 @@ import SelectField from "../_shared/fields/SelectField";
 import FormSection from "../_shared/fields/FormSection";
 import IconTextField from "../_shared/fields/IconTextField";
 import TextAreaField from "../_shared/fields/TextAreaField";
+import { useQuery } from "@tanstack/react-query";
+import { stateKeys } from "../state/state.keys";
+import { stateApi } from "../state/state.service";
+
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { companyApi } from "./company.service";
+import { companyKeys } from "./company.key";
+import CitySelectField from "../_shared/fields/CitySelectField";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Company | null;
-  states: State[];
-  cities: City[];
-  onSubmit: (data: CreateCompanyBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const defaultValues: CreateCompanyFormInput = {
@@ -56,10 +60,7 @@ export default function CompanyForm({
   open,
   onOpenChange,
   row,
-  states,
-  cities,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<CreateCompanyFormInput, unknown, CreateCompanyBody>({
     resolver: zodResolver(createCompanySchema),
@@ -67,7 +68,31 @@ export default function CompanyForm({
     reValidateMode: "onChange",
     defaultValues,
   });
+const states = useQuery({
+  queryKey: stateKeys.list({ page: 0, size: 1000 }),
+  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  enabled: open,
+});
 
+
+
+const { create, update } = useMasterMutations({
+  api: companyApi,
+  queryKey: companyKeys.all,
+  entityName: "Company",
+});
+
+const handleSubmit = async (data: CreateCompanyBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -85,21 +110,31 @@ export default function CompanyForm({
       mainLogoPath: row?.mainLogoPath ?? "",
       companyTAN: row?.companyTAN ?? "",
     });
+    previousStateIdRef.current = row?.stateId ?? "";
   }, [form, open, row]);
 
-  const selectedStateId = form.watch("stateId");
+  const selectedStateId = form.watch("stateId") ?? "";
+const previousStateIdRef = React.useRef<string>("");
 
-  const stateOptions = states.map((state) => ({
-    label: state.name,
-    value: state.id,
-  }));
+React.useEffect(() => {
+  if (!open) return;
 
-  const cityOptions = cities
-    .filter((city) => !selectedStateId || city.stateId === selectedStateId)
-    .map((city) => ({
-      label: city.name,
-      value: city.id,
-    }));
+  const previousStateId = previousStateIdRef.current;
+
+  if (previousStateId && previousStateId !== selectedStateId) {
+    form.setValue("cityId", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  previousStateIdRef.current = selectedStateId;
+}, [form, open, selectedStateId]);
+  const stateOptions = (states.data?.data ?? []).map((state) => ({
+  label: state.name,
+  value: state.id,
+}));
+
 
   return (
     <MasterFormDialog<CreateCompanyFormInput, CreateCompanyBody>
@@ -107,7 +142,9 @@ export default function CompanyForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Company" : "Add Company"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit
+        
+      }
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -181,11 +218,21 @@ export default function CompanyForm({
           options={stateOptions}
         />
 
-        <SelectField<CreateCompanyFormInput>
-          name="cityId"
-          label="City"
-          options={cityOptions}
-        />
+       <CitySelectField<CreateCompanyFormInput>
+  name="cityId"
+  label="City"
+  disabled={!selectedStateId}
+  stateId={selectedStateId}
+  placeholder={selectedStateId ? "Select city" : "Select state first"}
+  initialCity={
+    row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null
+  }
+/>
 
         <div className="md:col-span-2 xl:col-span-3">
           <TextAreaField<CreateCompanyFormInput>

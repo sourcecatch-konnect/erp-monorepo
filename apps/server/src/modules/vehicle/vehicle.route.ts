@@ -11,8 +11,13 @@ import { ZodTypeAny } from "zod";
 const router: Router = createCrudRouter({
   model: db.vehicle,
   createSchema: createVehicleSchema as ZodTypeAny,
-  updateSchema: updateVehicleSchema,
+  updateSchema: updateVehicleSchema as ZodTypeAny,
   permissionKey: "masters.vehicle",
+  uniqueErrorMessages: {
+  vehicleNumber: "This vehicle number already exists.",
+  chasisNumber: "This chassis number already exists.",
+  engineNumber: "This engine number already exists.",
+},
   listOptions: {
     searchableFields: [
       "vehicleNumber",
@@ -22,9 +27,39 @@ const router: Router = createCrudRouter({
       "insuranceCompany",
     ],
     defaultInclude: {
-      vehicleTypeRef: { select: { id: true, name: true, code: true } },
+      vehicleTypeRef: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
     },
-    defaultOrderBy: { vehicleNumber: "asc" },
+    defaultOrderBy: {
+      vehicleNumber: "asc",
+    },
+  },
+
+  hooks: {
+    beforeDelete: async (id: string) => {
+      const usedInTrip = await db.vehicleTrip.findFirst({
+        where: {
+          vehicleId: id,
+        },
+        select: {
+          id: true,
+          tripNumber: true,
+        },
+      });
+
+      if (usedInTrip) {
+        throw new Error(
+          `Cannot delete this vehicle because it is already used in vehicle trip ${
+            usedInTrip.tripNumber ?? usedInTrip.id
+          }.`
+        );
+      }
+    },
   },
 });
 

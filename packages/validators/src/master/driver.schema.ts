@@ -40,7 +40,16 @@ const optionalBoolean = z
     if (value === "false") return false;
     return false;
   });
+const optionalNullableString = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value === null) return null;
+    if (typeof value !== "string") return undefined;
 
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  });
 export const driverStatusSchema = z.enum(["AVAILABLE", "ON_TRIP"]);
 
 export const driverTypeSchema = z.enum(["Permanent", "Contract", "Owner"]);
@@ -59,8 +68,32 @@ export const bloodGroupSchema = z.enum([
 const mobileRegex = /^[6-9][0-9]{9}$/;
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const aadharRegex = /^[2-9][0-9]{11}$/;
-const licenseRegex = /^[A-Z]{2}[0-9]{2}[0-9 -]{6,14}$/;
+const licenseRegex = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
+const licenseNoSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+  .pipe(
+    z
+      .string()
+      .length(15, "License number must be 15 characters. Example: MH1420110012345")
+      .regex(
+        licenseRegex,
+        "Enter valid license number. Example: MH1420110012345"
+      )
+  );
 
+const aadharNoSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value.replace(/\D/g, "") : undefined))
+  .pipe(
+    z
+      .string()
+      .regex(aadharRegex, "Aadhar must be a valid 12-digit number")
+      .optional()
+  );
 export const driverSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -111,7 +144,7 @@ export const createDriverSchema = z
         "Name can only contain letters, spaces, dots, apostrophes and hyphens"
       ),
 
-    photoPath: optionalString,
+    photoPath: optionalNullableString,
 
     status: driverStatusSchema,
 
@@ -146,21 +179,7 @@ export const createDriverSchema = z
           .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
           .optional()
       ),
-
-    licenseNo: z
-      .string()
-      .trim()
-      .transform((value) => value.toUpperCase())
-      .pipe(
-        z
-          .string()
-          .min(8, "License number must be at least 8 characters")
-          .max(20, "License number cannot exceed 20 characters")
-          .regex(
-            licenseRegex,
-            "Enter a valid license number (e.g. MH1420110012345)"
-          )
-      ),
+licenseNo: licenseNoSchema,
 
     licenseDate: optionalDateString,
     licenseExpiryDate: optionalDateString,
@@ -240,17 +259,7 @@ export const createDriverSchema = z
           .optional()
       ),
 
-    aadharCardNo: z
-      .string()
-      .trim()
-      .optional()
-      .transform((value) => (value ? value.replace(/\s+/g, "") : undefined))
-      .pipe(
-        z
-          .string()
-          .regex(aadharRegex, "Aadhar must be a valid 12-digit number")
-          .optional()
-      ),
+    aadharCardNo: aadharNoSchema,
 
     noTDSApplyAmount: optionalPositiveNumber("TDS threshold must be a number"),
 
@@ -293,7 +302,7 @@ export const createDriverSchema = z
 export const updateDriverSchema = z
   .object({
     name: z.string().trim().min(2).max(80).optional(),
-    photoPath: optionalString,
+    photoPath: optionalNullableString,
     status: driverStatusSchema.optional(),
     type: z.string().trim().min(1).max(40).optional(),
     birthDate: optionalDateString,
@@ -304,12 +313,7 @@ export const updateDriverSchema = z
       .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
       .optional(),
     alternateMobile: optionalString,
-    licenseNo: z
-      .string()
-      .trim()
-      .transform((value) => value.toUpperCase())
-      .pipe(z.string().regex(licenseRegex, "Enter a valid license number"))
-      .optional(),
+    licenseNo: licenseNoSchema,
     licenseDate: optionalDateString,
     licenseExpiryDate: optionalDateString,
     licenseCity: optionalString,
@@ -328,7 +332,7 @@ export const updateDriverSchema = z
     otherDetails: optionalString,
     salary: optionalPositiveNumber("Salary must be a valid number"),
     panNo: optionalString,
-    aadharCardNo: optionalString,
+    aadharCardNo: aadharNoSchema,
     noTDSApplyAmount: optionalPositiveNumber("TDS threshold must be a number"),
     tdsRate: numberField("TDS rate must be a number").optional(),
     onLeave: optionalBoolean,

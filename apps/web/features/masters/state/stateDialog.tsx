@@ -22,20 +22,28 @@ import {
   IconCircleCheckFilled,
   IconClockEdit,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { stateKeys } from "./state.keys";
+import { stateApi } from "./state.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: State;
-  isLoading?: boolean;
+  stateId: string | null;
 };
 
 export default function StateDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  stateId,
 }: Props) {
+   const stateDetail = useQuery({
+    queryKey: stateId ? stateKeys.detail(stateId) : ["state-detail-empty"],
+    queryFn: () => stateApi.detail(stateId!),
+    enabled: open && Boolean(stateId),
+  });
+   const data = stateDetail.data;
+   const isLoading = stateDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[700px] max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">

@@ -41,20 +41,28 @@ import {
   IconClock,
   IconRoute,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { companyKeys } from "./company.key";
+import { companyApi } from "./company.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: CompanyWithRelations;
-  isLoading?: boolean;
+  id?: string | null;
 };
-
 export default function CompanyDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  id,
 }: Props) {
+  const companyDetail = useQuery({
+  queryKey: id ? companyKeys.detail(id) : ["company-detail-empty"],
+  queryFn: () => companyApi.detail(id!),
+  enabled: Boolean(open && id),
+});
+
+const data = companyDetail.data;
+const isLoading = companyDetail.isLoading;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[1000px] h-[90vh] !max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">

@@ -18,6 +18,8 @@ import { driverColumns } from "./driverTable";
 import DriverForm from "./driverForm";
 import { createDriverSchema } from "@skerp/validators";
 import DriverDetailDialog from "./driverDialog";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+
 
 type DriverCsvRow = Record<string, string>;
 
@@ -31,7 +33,7 @@ export default function DriverPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -43,48 +45,28 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const drivers = useQuery({
     queryKey: driverKeys.list(listQuery),
     queryFn: () => driverApi.list(listQuery),
   });
-const driverDetail = useQuery({
-  queryKey: detailId ? driverKeys.detail(detailId) : ["driver-detail-empty"],
-  queryFn: () => driverApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
+
+
+
+
+
+
+const { remove } = useMasterMutations({
+  api: driverApi,
+  queryKey: driverKeys.all,
+  entityName: "Driver",
 });
-  const create = useMutation({
-    mutationFn: driverApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: driverKeys.all });
-    },
-  });
-
-  const update = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: CreateDriverBody;
-    }) => driverApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: driverKeys.all });
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: driverApi.remove,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: driverKeys.all });
-    },
-  });
 
   const bulkRemove = useMutation({
     mutationFn: driverApi.bulkRemove,
@@ -108,16 +90,6 @@ const driverDetail = useQuery({
     },
   });
 
-  const handleSubmit = async (data: CreateDriverBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -137,6 +109,7 @@ const driverDetail = useQuery({
       onPageChange={setPage}
       selectedIds={selectedIds}
       onSelectedIdsChange={setSelectedIds}
+      onSizeChange={setSize}
       onAdd={() => {
         setSelected(null);
         setOpen(true);
@@ -168,19 +141,17 @@ const driverDetail = useQuery({
       isImporting={bulkImport.isPending}
       isExporting={exportDrivers.isPending}
     >
-      <DriverDetailDialog
+   <DriverDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={driverDetail.data}
-  isLoading={driverDetail.isLoading}
+  id={detailId}
 />
-      <DriverForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+
+<DriverForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

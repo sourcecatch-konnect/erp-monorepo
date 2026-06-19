@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
-  City,
+
   SparePartSupplier,
   CreateSparePartSupplierBody,
   CreateSparePartSupplierFormInput,
@@ -28,13 +28,16 @@ import IconTextField from "../_shared/fields/IconTextField";
 import TextAreaField from "../_shared/fields/TextAreaField";
 import FormSection from "../_shared/fields/FormSection";
 
+
+import { sparePartSupplierApi } from "./spare-partSupplier.service";
+import { sparePartSupplierKeys } from "./spare-partSupplier.key";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import CitySelectField from "../_shared/fields/CitySelectField";
+
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: SparePartSupplier | null;
-  cities: City[];
-  onSubmit: (data: CreateSparePartSupplierBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const supplierTypeOptions = [
@@ -60,9 +63,7 @@ export default function SparePartSupplierForm({
   open,
   onOpenChange,
   row,
-  cities,
-  onSubmit,
-  isSubmitting,
+
 }: Props) {
   const form = useForm<
     CreateSparePartSupplierFormInput,
@@ -75,6 +76,26 @@ export default function SparePartSupplierForm({
     defaultValues,
   });
 
+
+
+
+
+
+const { create, update } = useMasterMutations({
+  api: sparePartSupplierApi,
+  queryKey: sparePartSupplierKeys.all,
+});
+const handleSubmit = async (data: CreateSparePartSupplierBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  onOpenChange(false);
+};
+
+const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -93,10 +114,7 @@ export default function SparePartSupplierForm({
     });
   }, [form, open, row]);
 
-  const cityOptions = cities.map((city) => ({
-    label: city.name,
-    value: city.id,
-  }));
+;
 
   return (
     <MasterFormDialog<
@@ -107,7 +125,7 @@ export default function SparePartSupplierForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Spare Part Supplier" : "Add Spare Part Supplier"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
     >
@@ -139,12 +157,19 @@ export default function SparePartSupplierForm({
           required
         />
 
-        <SelectField<CreateSparePartSupplierFormInput>
-          name="cityId"
-          label="City"
-          options={cityOptions}
-          required
-        />
+        <CitySelectField<CreateSparePartSupplierFormInput>
+  name="cityId"
+  label="City"
+  required
+  initialCity={
+    row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null
+  }
+/>
       </FormSection>
 
       <FormSection

@@ -28,10 +28,25 @@ const router: Router = createCrudRouter({
       "contactPhone",
     ],
 
-    defaultInclude: {
-      branch: true,
-      state: true,
-      city: true,
+       defaultInclude: {
+      city: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      state: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      branch: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   },
 
@@ -40,17 +55,23 @@ const router: Router = createCrudRouter({
 
     beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
 
-    beforeDelete: async (id) => {
-      const branches = await db.branch.count({
-        where: { warehouseId: id },
-      });
+   beforeDelete: async (id) => {
+  const branches = await db.branch.count({
+    where: { warehouseId: id },
+  });
 
-      if (branches) {
-        throw new BadRequestError(
-          `Cannot delete Warehouse. Linked records: ${branches} Branches`
-        );
-      }
-    },
+  const dependencies: string[] = [];
+
+  if (branches) {
+    dependencies.push(`${branches} Branches`);
+  }
+
+  if (dependencies.length) {
+    throw new BadRequestError(
+      `Cannot delete Warehouse. Linked records: ${dependencies.join(", ")}`
+    );
+  }
+},
   },
 });
 

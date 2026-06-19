@@ -4,7 +4,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
-  CreateSpareCategoryBody,
+
   SpareCategory,
 } from "@skerp/types";
 
@@ -24,7 +24,7 @@ import SpareCategoryForm from "./spare-categoryForm";
 import { spareCategoryColumns } from "./spare-categoryTable";
 import { createSpareCategorySchema } from "@skerp/validators";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
+
 import SpareCategoryDetailDialog from "./spare-categoryDialog";
 
 type SpareCategoryCsvRow = Record<
@@ -45,7 +45,7 @@ export default function SpareCategoryPage() {
     React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
 
   const debouncedSearch =
     useDebouncedValue(search);
@@ -63,12 +63,12 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
           }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const spareCategories = useQuery({
     queryKey:
@@ -81,18 +81,11 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         listQuery
       ),
   });
-const spareCategoryDetail = useQuery({
-  queryKey: detailId
-    ? spareCategoryKeys.detail(detailId)
-    : ["spare-category-detail-empty"],
-  queryFn: () => spareCategoryApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
- const { create, update, remove } = useMasterMutations({
+
+const { remove } = useMasterMutations({
   api: spareCategoryApi,
   queryKey: spareCategoryKeys.all,
 });
-
   const bulkRemove =
     useMutation({
       mutationFn:
@@ -134,24 +127,6 @@ const spareCategoryDetail = useQuery({
       },
     });
 
-  const handleSubmit =
-    async (
-      data: CreateSpareCategoryBody
-    ) => {
-      if (selected) {
-        await update.mutateAsync({
-          id: selected.id,
-          data,
-        });
-      } else {
-        await create.mutateAsync(
-          data
-        );
-      }
-
-      setOpen(false);
-      setSelected(null);
-    };
 
   return (
     <MasterListPage
@@ -176,6 +151,7 @@ const spareCategoryDetail = useQuery({
         spareCategories.data
           ?.meta?.total ?? 0
       }
+      onSizeChange={setSize}
       onPageChange={
         setPage
       }
@@ -245,23 +221,14 @@ const spareCategoryDetail = useQuery({
 <SpareCategoryDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={spareCategoryDetail.data}
-  isLoading={spareCategoryDetail.isLoading}
+  id={detailId}
 />
-      <SpareCategoryForm
-        open={open}
-        onOpenChange={
-          setOpen
-        }
-        row={selected}
-        onSubmit={
-          handleSubmit
-        }
-        isSubmitting={
-          create.isPending ||
-          update.isPending
-        }
-      />
+
+<SpareCategoryForm
+  open={open}
+  onOpenChange={setOpen}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

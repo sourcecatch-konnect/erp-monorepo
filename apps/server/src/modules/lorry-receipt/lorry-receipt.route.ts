@@ -9,7 +9,11 @@ import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
-import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
 import type { LRStatus } from "../../../generated/prisma/index.js";
 import { lrListSelect, lrDetailInclude } from "./lorry-receipt.service.js";
 
@@ -154,36 +158,40 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Add e-way bill (additional, post-finalise)                          */
 /* ------------------------------------------------------------------ */
-router.post("/:id/eway-bills", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
-  const id = getParamId(req);
-  const existing = await db.lorryReceipt.findFirst({
-    where: { id, deletedAt: null },
-    include: { group: { select: { originBranchId: true } } },
-  });
-  if (!existing) throw new NotFoundError("Lorry receipt not found");
-  if (existing.status === "CANCELLED") {
-    throw new BadRequestError("Cannot add e-way bill to a cancelled LR");
-  }
-  assertBranchAccess(req, existing.group.originBranchId);
+router.post(
+  "/:id/eway-bills",
+  can(PERMS.LORRY_RECEIPT.UPDATE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.lorryReceipt.findFirst({
+      where: { id, deletedAt: null },
+      include: { group: { select: { originBranchId: true } } },
+    });
+    if (!existing) throw new NotFoundError("Lorry receipt not found");
+    if (existing.status === "CANCELLED") {
+      throw new BadRequestError("Cannot add e-way bill to a cancelled LR");
+    }
+    assertBranchAccess(req, existing.group.originBranchId);
 
-  const parsed = addEwayBillSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ValidationError(parsed.error.flatten().fieldErrors);
-  }
-  const input = parsed.data;
+    const parsed = addEwayBillSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const input = parsed.data;
 
-  const ewayBill = await db.ewayBill.create({
-    data: {
-      lorryReceiptId: id,
-      ewayBillNo: input.ewayBillNo,
-      generatedAt: input.generatedAt,
-      expiresAt: input.expiresAt,
-      generatedBy: input.generatedBy ?? null,
-      documentUrl: input.documentUrl ?? null,
-    },
-  });
+    const ewayBill = await db.ewayBill.create({
+      data: {
+        lorryReceiptId: id,
+        ewayBillNo: input.ewayBillNo,
+        generatedAt: input.generatedAt,
+        expiresAt: input.expiresAt,
+        generatedBy: input.generatedBy ?? null,
+        documentUrl: input.documentUrl ?? null,
+      },
+    });
 
-  return sendOk(res, ewayBill, undefined, 201);
-});
+    return sendOk(res, ewayBill, undefined, 201);
+  },
+);
 
 export default router;

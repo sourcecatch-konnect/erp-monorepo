@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { City } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
@@ -14,12 +13,14 @@ import {
   IconCircleCheckFilled,
   IconClockEdit,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { cityApi } from "./city.service";
+import { cityKeys } from "./city.keys";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
-  data?: City;
-  isLoading?: boolean;
+  cityId: string | null;
 };
 
 function DetailItem({
@@ -53,9 +54,17 @@ function formatDate(value?: string | Date | null) {
 export default function CityDetailDialog({
   open,
   onOpenChange,
-  data,
-  isLoading,
+  cityId,
 }: Props) {
+  const cityDetail = useQuery({
+    queryKey: cityId ? cityKeys.detail(cityId) : ["city-detail-empty"],
+    queryFn: () => cityApi.detail(cityId!),
+    enabled: open && Boolean(cityId),
+  });
+
+  const data = cityDetail.data;
+  const isLoading = cityDetail.isLoading;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] !max-w-[620px] max-h-[90vh] gap-0 overflow-hidden rounded-lg p-0">
@@ -66,8 +75,7 @@ export default function CityDetailDialog({
             </span>
 
             <div>
-
-<DialogTitle>City Details</DialogTitle>
+              <DialogTitle>City Details</DialogTitle>
               {!isLoading && data && (
                 <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
                   <IconCircleCheckFilled size={10} />

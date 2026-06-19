@@ -15,7 +15,6 @@ import { stateColumns } from "./StateTable";
 import { stateKeys } from "./state.keys";
 import { stateApi } from "./state.service";
 import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import StateDetailDialog from "./stateDialog";
 import { toast } from "sonner";
 
@@ -28,7 +27,7 @@ export default function StatePage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+ const [size, setSize] = React.useState(30); 
   const debouncedSearch = useDebouncedValue(search);
   const listQuery = React.useMemo<ListQuery>(
     () => ({
@@ -39,27 +38,23 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page,size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const states = useQuery({
     queryKey: stateKeys.list(listQuery),
     queryFn: () => stateApi.list(listQuery),
   });
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: stateApi,
   queryKey: stateKeys.all,
   entityName: "State",
 });
-const stateDetail = useQuery({
-  queryKey: detailId ? stateKeys.detail(detailId) : ["state-detail-empty"],
-  queryFn: () => stateApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
+
 const bulkRemove = useMutation({
   mutationFn: stateApi.bulkRemove,
   onSuccess: (result) => {
@@ -86,17 +81,6 @@ const bulkRemove = useMutation({
     },
   });
 
-  const handleSubmit = async (data: CreateStateBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
-
-    setOpen(false);
-    setSelected(null);
-  };
-
   return (
     <MasterListPage
       title="States"
@@ -122,7 +106,9 @@ const bulkRemove = useMutation({
       onView={(row) => {
   setDetailId(row.id);
   setDetailOpen(true);
+  
 }}
+onSizeChange={setSize}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
       onImport={async (file) => {
@@ -139,14 +125,12 @@ const bulkRemove = useMutation({
         open={open}
         onOpenChange={setOpen}
         row={selected}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
+ 
       />
      <StateDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={stateDetail.data}
-  isLoading={stateDetail.isLoading}
+  stateId={detailId}
 />
     </MasterListPage>
   );

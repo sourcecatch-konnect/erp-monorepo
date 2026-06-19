@@ -1,13 +1,13 @@
 import { Router } from "express";
-import {
-  createBranchSchema,
-  updateBranchSchema,
-} from "@skerp/validators";
+import { createBranchSchema, updateBranchSchema } from "@skerp/validators";
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
 import { ZodTypeAny } from "zod";
 import { BadRequestError } from "../../lib/error.js";
+
+const plural = (count: number, singular: string, pluralName?: string) =>
+  `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
 
 const router: Router = createCrudRouter({
   model: db.branch,
@@ -18,55 +18,147 @@ const router: Router = createCrudRouter({
   hooks: {
     beforeDelete: async (id) => {
       const [
+        branch,
         users,
+        userBranches,
         warehouses,
         agreements,
         workers,
         fromOrders,
         toOrders,
+        originLRs,
+        destinationLRs,
+        hubLRs,
+        railheadLRs,
+        attachments,
       ] = await Promise.all([
-        db.user.count({ where: { branchId: id } }),
-        db.warehouse.count({ where: { branchId: id } }),
+        db.branch.findUnique({
+          where: { id },
+          select: {
+            isHeadOffice: true,
+          },
+        }),
+
+        db.user.count({
+          where: { branchId: id },
+        }),
+
+        db.userBranch.count({
+          where: { branchId: id },
+        }),
+
+        db.warehouse.count({
+          where: { branchId: id },
+        }),
+
         db.agreement.count({
           where: { leadGeneratedByBranchId: id },
         }),
-        db.labour.count({ where: { branchId: id } }),
+
+        db.labour.count({
+          where: { branchId: id },
+        }),
+
         db.order.count({
           where: { fromBranchId: id },
         }),
+
         db.order.count({
           where: { toBranchId: id },
         }),
+
+        db.lRGroup.count({
+          where: { originBranchId: id },
+        }),
+
+        db.lRGroup.count({
+          where: { destinationBranchId: id },
+        }),
+
+        db.lRGroup.count({
+          where: { hubId: id },
+        }),
+
+        db.lRGroup.count({
+          where: { railheadBranchId: id },
+        }),
+
+        db.attachment.count({
+          where: { branchId: id },
+        }),
       ]);
+
+      if (!branch) {
+        throw new BadRequestError("Branch not found.");
+      }
+
+      if (branch.isHeadOffice) {
+        throw new BadRequestError(
+          "This branch is marked as Head Office and cannot be deleted.",
+        );
+      }
 
       const dependencies: string[] = [];
 
-      if (users)
-        dependencies.push(`${users} Users`);
+      if (users) dependencies.push(plural(users, "user"));
 
-      if (warehouses)
-        dependencies.push(`${warehouses} Warehouses`);
+      if (userBranches) {
+        dependencies.push(plural(userBranches, "user branch access record"));
+      }
 
-      if (agreements)
-        dependencies.push(`${agreements} Agreements`);
+      if (warehouses) {
+        dependencies.push(plural(warehouses, "warehouse"));
+      }
 
-      if (workers)
-        dependencies.push(`${workers} Workers`);
+      if (agreements) {
+        dependencies.push(plural(agreements, "agreement"));
+      }
 
-      if (fromOrders)
-        dependencies.push(`${fromOrders} From Orders`);
+      if (workers) {
+        dependencies.push(plural(workers, "worker"));
+      }
 
-      if (toOrders)
-        dependencies.push(`${toOrders} To Orders`);
+      if (fromOrders) {
+        dependencies.push(`${plural(fromOrders, "order")} as origin`);
+      }
+
+      if (toOrders) {
+        dependencies.push(`${plural(toOrders, "order")} as destination`);
+      }
+
+      if (originLRs) {
+        dependencies.push(`${plural(originLRs, "LR")} as origin`);
+      }
+
+      if (destinationLRs) {
+        dependencies.push(`${plural(destinationLRs, "LR")} as destination`);
+      }
+
+      if (hubLRs) {
+        dependencies.push(`${plural(hubLRs, "LR")} as hub`);
+      }
+
+      if (railheadLRs) {
+        dependencies.push(`${plural(railheadLRs, "LR")} as railhead`);
+      }
+
+      if (attachments) {
+        dependencies.push(plural(attachments, "attachment"));
+      }
 
       if (dependencies.length) {
         throw new BadRequestError(
-          `Cannot delete Branch. Linked records: ${dependencies.join(
-            ", "
-          )}`
+          `This branch cannot be deleted because it is linked with ${dependencies.join(
+            ", ",
+          )}. Please remove or update those records first.`,
         );
       }
     },
+  },
+
+  uniqueErrorMessages: {
+    branchCode: "This branch code already exists.",
+    shortCode: "This short code already exists.",
   },
 
   listOptions: {
@@ -80,6 +172,21 @@ const router: Router = createCrudRouter({
       "email",
       "gstNo",
     ],
+
+    defaultInclude: {
+      company: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      city: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
   },
 });
 

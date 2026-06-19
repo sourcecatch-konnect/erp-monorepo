@@ -14,7 +14,10 @@ const router: Router = createCrudRouter({
   createSchema: createRouteSchema as ZodTypeAny,
   updateSchema: updateRouteSchema as ZodTypeAny,
   permissionKey: "masters.route",
-
+    uniqueErrorMessages: {
+    sourceCityId_destinationCityId:
+      "This route already exists.",
+  },
   listOptions: {
     searchableFields: [],
     defaultInclude: {

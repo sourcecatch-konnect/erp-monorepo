@@ -30,7 +30,9 @@ import EwayBillSection from "./components/EwayBillSection";
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p className="text-sm font-medium">{value ?? "—"}</p>
     </div>
   );
@@ -70,7 +72,8 @@ export default function LRDetail({ id }: { id: string }) {
   });
 
   const split = useMutation({
-    mutationFn: (secondaryTripId: string) => lrGroupApi.splitAtHub(id, { secondaryTripId }),
+    mutationFn: (secondaryTripId: string) =>
+      lrGroupApi.splitAtHub(id, { secondaryTripId }),
     onSuccess: () => {
       toast.success("Leg 2 trip attached");
       setSplitOpen(false);
@@ -80,7 +83,8 @@ export default function LRDetail({ id }: { id: string }) {
   });
 
   const cancel = useMutation({
-    mutationFn: (reason: string) => lrGroupApi.cancel(id, { cancelReason: reason }),
+    mutationFn: (reason: string) =>
+      lrGroupApi.cancel(id, { cancelReason: reason }),
     onSuccess: () => {
       toast.success("Group cancelled");
       setCancelOpen(false);
@@ -104,7 +108,10 @@ export default function LRDetail({ id }: { id: string }) {
       <div className="flex flex-col items-center gap-2 p-16 text-muted-foreground">
         <IconRouteOff size={24} />
         <p className="text-sm">LR group not found.</p>
-        <Button variant="outline" onClick={() => router.push("/lorry-receipts")}>
+        <Button
+          variant="outline"
+          onClick={() => router.push("/lorry-receipts")}
+        >
           Back to list
         </Button>
       </div>
@@ -113,15 +120,19 @@ export default function LRDetail({ id }: { id: string }) {
 
   const g = group.data;
   const vehicle = g.isMarketVehicle
-    ? g.marketVehicleNumber ?? "Market vehicle"
-    : g.primaryTrip?.vehicle?.vehicleNumber ?? "—";
+    ? (g.marketVehicleNumber ?? "Market vehicle")
+    : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
       {/* Header */}
       <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <Button size="icon-sm" variant="ghost" onClick={() => router.push("/lorry-receipts")}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => router.push("/lorry-receipts")}
+          >
             <IconArrowLeft size={18} />
           </Button>
           <div>
@@ -139,7 +150,9 @@ export default function LRDetail({ id }: { id: string }) {
 
         <div className="flex flex-wrap gap-2">
           {g.status === "DRAFT" && canApprove && (
-            <Button onClick={() => setFinaliseOpen(true)}>Finalise group</Button>
+            <Button onClick={() => setFinaliseOpen(true)}>
+              Finalise group
+            </Button>
           )}
           {g.status === "FINALISED" && canApprove && (
             <Button variant="outline" onClick={() => setSplitOpen(true)}>
@@ -182,7 +195,9 @@ export default function LRDetail({ id }: { id: string }) {
             <Field label="Vehicle" value={vehicle} />
             <Field label="Transport" value={g.transportType} />
             <Field label="Trip" value={g.primaryTrip?.tripName} />
-            {g.secondaryTrip && <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />}
+            {g.secondaryTrip && (
+              <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />
+            )}
           </div>
         </div>
 
@@ -193,7 +208,11 @@ export default function LRDetail({ id }: { id: string }) {
           <div className="space-y-3">
             <Field
               label="Base freight"
-              value={g.baseFreightAmount != null ? formatMoney(g.baseFreightAmount) : "—"}
+              value={
+                g.baseFreightAmount != null
+                  ? formatMoney(g.baseFreightAmount)
+                  : "—"
+              }
             />
             <Field label="Seal number" value={g.sealNumber} />
             <Field label="Priority" value={g.priority} />
@@ -210,19 +229,25 @@ export default function LRDetail({ id }: { id: string }) {
               <div>
                 <p className="text-sm font-semibold">{lr.lrNumber}</p>
                 <p className="text-xs text-muted-foreground">
-                  {lr.loadingLocation?.name ?? "—"} → {lr.unloadingLocation?.name ?? "—"}
+                  {lr.loadingLocation?.name ?? "—"} →{" "}
+                  {lr.unloadingLocation?.name ?? "—"}
                 </p>
               </div>
               <div className="text-right text-xs text-muted-foreground">
                 {lr.invoiceNumber ? <p>Invoice {lr.invoiceNumber}</p> : null}
-                {lr.invoiceAmount != null ? <p>{formatMoney(lr.invoiceAmount)}</p> : null}
+                {lr.invoiceAmount != null ? (
+                  <p>{formatMoney(lr.invoiceAmount)}</p>
+                ) : null}
               </div>
             </div>
 
             {lr.goods.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {lr.goods.map((gd) => (
-                  <span key={gd.id} className="rounded-sm bg-muted px-2 py-0.5 text-xs">
+                  <span
+                    key={gd.id}
+                    className="rounded-sm bg-muted px-2 py-0.5 text-xs"
+                  >
                     {gd.name} · {gd.quantity} {gd.unit}
                   </span>
                 ))}

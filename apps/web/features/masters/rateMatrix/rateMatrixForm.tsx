@@ -1,16 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
-  RateMatrix,
-  RateUnit,
-  VehicleType,
   CreateRateMatrixBody,
   CreateRateMatrixFormInput,
+  AgreementWithRelations,
+  RateMatrixWithRelations,
 } from "@skerp/types";
 
 import { createRateMatrixSchema } from "@skerp/validators";
@@ -32,21 +31,19 @@ import {
   IconPlus,
   IconX,
 } from "@tabler/icons-react";
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { rateMatrixKeys } from "./rateMatrix.key";
+import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
+import { routeApi } from "../routes/routes.service";
+import { agreementApi } from "../Agreements/agreements.service";
+import { agreementKeys } from "../Agreements/agreements.key";
 
 type Props = {
   open: boolean;
-  onOpenChange: (value: boolean) => void;
-  row?: RateMatrix | null;
-  onSubmit: (data: CreateRateMatrixBody) => Promise<void>;
-  isSubmitting?: boolean;
-
-  vehicleTypes: VehicleType[];
-  rateUnits: RateUnit[];
-
-  agreements: { id: string; name?: string }[];
-  routes: { id: string; name?: string }[];
+  onOpenChange: (open: boolean) => void;
+  row?: RateMatrixWithRelations | null;
+  agreementId?: string;
 };
-
 const defaultValues: CreateRateMatrixFormInput = {
   agreementId: "",
   routeId: "",
@@ -89,12 +86,7 @@ export default function RateMatrixForm({
   open,
   onOpenChange,
   row,
-  onSubmit,
-  isSubmitting,
-  agreements,
-  routes,
-  vehicleTypes,
-  rateUnits,
+  agreementId,
 }: Props) {
   const queryClient = useQueryClient();
 
@@ -102,14 +94,125 @@ export default function RateMatrixForm({
   const [unitValue, setUnitValue] = React.useState("");
   const [unitType, setUnitType] = React.useState<UnitType>("HQ");
   const [unitError, setUnitError] = React.useState<string | null>(null);
+const routesQuery = useQuery({
+  queryKey: ["routes"],
+  queryFn: () => routeApi.list(),
+  enabled: open,
+});
 
-  const form = useForm<CreateRateMatrixFormInput, unknown, CreateRateMatrixBody>({
-    resolver: zodResolver(createRateMatrixSchema),
-    defaultValues,
-    mode: "onChange",
-    reValidateMode: "onChange",
+const vehicleTypesQuery = useQuery({
+  queryKey: ["vehicleTypes"],
+  queryFn: () => vehicleTypeApi.list(),
+  enabled: open,
+});
+
+const rateUnitsQuery = useQuery({
+  queryKey: ["rateMatrix", "units"],
+  queryFn: () => rateMatrixApi.units.list(),
+  enabled: open,
+});
+
+const routeOptions = (routesQuery.data?.data ?? []).map((route) => ({
+  id: route.id,
+  name: `${route.sourceCity?.name ?? "-"} to ${
+    route.destinationCity?.name ?? "-"
+  }`,
+}));
+
+const vehicleTypeOptions = vehicleTypesQuery.data?.data ?? [];
+
+const rateUnitOptions = rateUnitsQuery.data?.data ?? [];
+
+
+const form = useForm<CreateRateMatrixFormInput>({
+  resolver: zodResolver(createRateMatrixSchema),
+  defaultValues,
+  mode: "onChange",
+  reValidateMode: "onChange",
+});
+const agreementOptions = useQuery({
+  queryKey: agreementKeys.list({
+    page: 0,
+    size: 1000,
+    sort: "createdAt:desc",
+  }),
+  queryFn: () =>
+    agreementApi.list({
+      page: 0,
+      size: 1000,
+      sort: "createdAt:desc",
+    }),
+  enabled: open,
+});
+
+
+
+const { create, update } = useMasterMutations({
+  api: rateMatrixApi,
+  queryKey: rateMatrixKeys.all,
+  entityName: "Rate Matrix",
+});
+
+const handleSubmit = async (data: CreateRateMatrixBody) => {
+  if (row) {
+    await update.mutateAsync({ id: row.id, data });
+  } else {
+    await create.mutateAsync(data);
+  }
+
+  await queryClient.invalidateQueries({
+    queryKey: rateMatrixKeys.byAgreement(data.agreementId),
   });
 
+  await queryClient.invalidateQueries({
+    queryKey: rateMatrixKeys.all,
+  });
+
+  onOpenChange(false);
+};
+const isSubmitting = create.isPending || update.isPending;
+const agreements = (
+  (agreementOptions.data?.data ?? []) as AgreementWithRelations[]
+).map((a) => ({
+  id: a.id,
+  name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
+}));
+
+
+
+const selectedVehicleTypeId = form.watch("vehicleTypeId");
+
+const selectedVehicleType = React.useMemo(
+  () => vehicleTypeOptions.find((v) => v.id === selectedVehicleTypeId),
+  [vehicleTypeOptions, selectedVehicleTypeId]
+);
+
+const isContainerVehicle =
+  selectedVehicleType?.name?.trim().toLowerCase() === "container";
+const handleFormSubmit: SubmitHandler<CreateRateMatrixFormInput> =
+  async (data) => {
+    const payload: CreateRateMatrixBody = {
+      ...data,
+      rate: Number(data.rate),
+      transitDays: data.transitDays
+        ? Number(data.transitDays)
+        : undefined,
+    };
+
+    if (isContainerVehicle && !payload.unitId) {
+      form.setError("unitId", {
+        type: "manual",
+        message: "Unit is required for Container vehicle type",
+      });
+      return;
+    }
+
+    if (!isContainerVehicle) {
+      payload.unitId = undefined;
+    }
+
+    await handleSubmit(payload);
+  };
   const createUnitMutation = useMutation({
     mutationFn: (data: { unitValue: number; unitType: UnitType }) =>
       rateMatrixApi.units.create(data),
@@ -140,7 +243,7 @@ export default function RateMatrixForm({
     if (!open) return;
 
     form.reset({
-      agreementId: row?.agreementId ?? "",
+      agreementId: row?.agreementId ?? agreementId ?? "",
       routeId: row?.routeId ?? "",
       vehicleTypeId: row?.vehicleTypeId ?? "",
       unitId: row?.unitId ?? "",
@@ -154,8 +257,22 @@ export default function RateMatrixForm({
     setUnitValue("");
     setUnitType("HQ");
     setUnitError(null);
-  }, [form, open, row]);
+  }, [form, open, row, agreementId]);
 
+React.useEffect(() => {
+  if (!isContainerVehicle) {
+    form.setValue("unitId", "", {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+
+    setShowUnitFields(false);
+    setUnitValue("");
+    setUnitType("HQ");
+    setUnitError(null);
+  }
+}, [isContainerVehicle, form]);
   const handleAddUnit = async () => {
     const trimmedValue = unitValue.trim();
     const value = Number(trimmedValue);
@@ -165,7 +282,7 @@ export default function RateMatrixForm({
       return;
     }
 
-    const alreadyExists = rateUnits.some((unit) => {
+    const alreadyExists = rateUnitOptions.some((unit) => {
       const existingValue = Number(unit.unitValue);
       const existingType = String(unit.unitType).trim().toUpperCase();
 
@@ -193,7 +310,7 @@ export default function RateMatrixForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Rate Matrix" : "Add Rate Matrix"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleFormSubmit}
       isSubmitting={isSubmitting}
       columns={2}
     >
@@ -205,6 +322,7 @@ export default function RateMatrixForm({
         <SelectField
           name="agreementId"
           label="Agreement"
+          required
           options={agreements.map((a) => ({
             label: a.name ?? a.id,
             value: a.id,
@@ -214,10 +332,11 @@ export default function RateMatrixForm({
         <SelectField
           name="routeId"
           label="Route"
-          options={routes.map((r) => ({
-            label: r.name ?? r.id,
-            value: r.id,
-          }))}
+          options={routeOptions.map((r) => ({
+  label: r.name,
+  value: r.id,
+}))}
+required
         />
       </FormSection>
 
@@ -229,10 +348,11 @@ export default function RateMatrixForm({
         <SelectField
           name="vehicleTypeId"
           label="Vehicle Type"
-          options={vehicleTypes.map((v) => ({
-            label: v.name,
-            value: v.id,
-          }))}
+          required
+      options={vehicleTypeOptions.map((v) => ({
+  label: v.name,
+  value: v.id,
+}))}
         />
 
         <SelectField
@@ -251,7 +371,7 @@ export default function RateMatrixForm({
         />
       </FormSection>
 
-      {/* UNIT */}
+     {isContainerVehicle ? (
       <div className="col-span-1 md:col-span-2">
         <FormSection
           icon={<IconPackage size={18} />}
@@ -263,10 +383,10 @@ export default function RateMatrixForm({
             <SelectField
               name="unitId"
               label="Unit"
-              options={rateUnits.map((unit) => ({
-                label: `${unit.unitValue} ${unit.unitType}`,
-                value: unit.id,
-              }))}
+             options={rateUnitOptions.map((unit) => ({
+  label: `${unit.unitValue} ${unit.unitType}`,
+  value: unit.id,
+}))}
             />
           </div>
 
@@ -376,7 +496,7 @@ export default function RateMatrixForm({
           )}
         </FormSection>
       </div>
-
+) : null}
       <FormSection
         icon={<IconCurrencyRupee size={18} />}
         title="Pricing & Transit"

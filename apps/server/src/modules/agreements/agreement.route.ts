@@ -165,6 +165,7 @@ const crudRouter: Router = createCrudRouter({
 
         getName: (row: any) => row.id,
       },
+      
     ],
   },
 });

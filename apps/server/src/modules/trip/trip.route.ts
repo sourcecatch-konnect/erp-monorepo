@@ -160,10 +160,10 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
     ...(query.filter.unattached === "true"
       ? {
           status: "Planned",
-          primaryLRs: {
+          primaryGroups: {
             none: { deletedAt: null, status: { not: "CANCELLED" } },
           },
-          secondaryLRs: {
+          secondaryGroups: {
             none: { deletedAt: null, status: { not: "CANCELLED" } },
           },
         }

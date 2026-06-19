@@ -35,7 +35,7 @@ export default function AreaPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+   const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -47,28 +47,20 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const areas = useQuery({
     queryKey: areaKeys.list(listQuery),
     queryFn: () => areaApi.list(listQuery),
   });
-const areaDetail = useQuery({
-  queryKey: detailId ? areaKeys.detail(detailId) : ["area-detail-empty"],
-  queryFn: () => areaApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-  const cities = useQuery({
-    queryKey: cityKeys.list(),
-    queryFn: () => cityApi.list(),
-  });
 
-  const { create, update, remove } = useMasterMutations({
+
+const { remove } = useMasterMutations({
   api: areaApi,
   queryKey: areaKeys.all,
   entityName: "Area",
@@ -108,16 +100,7 @@ const exportAreas = useMutation({
   },
 });
 
-  const handleSubmit = async (data: CreateAreaBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -145,13 +128,25 @@ const exportAreas = useMutation({
         setSelected(row);
         setOpen(true);
       }}
+      onSizeChange={setSize}
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
-      onImport={async (file) => {
-        const text = await file.text();
-        const rows = parseCsvRows<CreateAreaBody>(text);
-        await bulkImport.mutateAsync(rows);
-      }}
+onImport={async (file) => {
+  const text = await file.text();
+
+  const rows: CreateAreaBody[] = parseCsvRows<Record<string, string>>(text).map(
+    (row) => ({
+      name: row.name ?? "",
+      cityId: row.cityId ?? "",
+      googlePlaceId: row.googlePlaceId || null,
+      formattedAddress: row.formattedAddress || null,
+      latitude: row.latitude ? Number(row.latitude) : null,
+      longitude: row.longitude ? Number(row.longitude) : null,
+    })
+  );
+
+  await bulkImport.mutateAsync(rows);
+}}
       onExport={() => exportAreas.mutate(listQuery)}
       isBulkDeleting={bulkRemove.isPending}
       isImporting={bulkImport.isPending}
@@ -160,17 +155,16 @@ const exportAreas = useMutation({
 <AreaDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={areaDetail.data}
-  isLoading={areaDetail.isLoading}
+  areaId={detailId}
 />
-      <AreaForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-        cities={cities.data?.data ?? []}
-        onSubmit={handleSubmit}
-        isSubmitting={create.isPending || update.isPending}
-      />
+    <AreaForm
+  open={open}
+  onOpenChange={(value) => {
+    setOpen(value);
+    if (!value) setSelected(null);
+  }}
+  row={selected}
+/>
     </MasterListPage>
   );
 }

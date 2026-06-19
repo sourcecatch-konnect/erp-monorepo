@@ -58,7 +58,7 @@ export default function CustomerPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
-  const size = 25;
+  const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -70,39 +70,25 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         ? { search: debouncedSearch.trim() }
         : {}),
     }),
-    [debouncedSearch, page]
+    [debouncedSearch, page, size]
   );
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, size]);
 
   const customers = useQuery({
     queryKey: customerKeys.list(listQuery),
     queryFn: () => customerApi.list(listQuery),
   });
 
-  const states = useQuery({
-    queryKey: stateKeys.list({ size: 1000 }),
-    queryFn: () => stateApi.list({ size: 1000 }),
-  });
 
-  const cities = useQuery({
-    queryKey: cityKeys.list({ size: 1000 }),
-    queryFn: () => cityApi.list({ size: 1000 }),
-  });
-const customerDetail = useQuery({
-  queryKey: detailId
-    ? customerKeys.detail(detailId)
-    : ["customer-detail-empty"],
-  queryFn: () => customerApi.detail(detailId!),
-  enabled: Boolean(detailOpen && detailId),
-});
-const { create, update, remove } = useMasterMutations({
+const { remove } = useMasterMutations({
   api: customerApi,
   queryKey: customerKeys.all,
   entityName: "Customer",
 });
+
 const bulkRemove = useMutation({
   mutationFn: customerApi.bulkRemove,
   onSuccess: () => {
@@ -150,16 +136,7 @@ const bulkRemove = useMutation({
   },
 });
 
-  const handleSubmit = async (data: CreateCustomerBody) => {
-    if (selected) {
-      await update.mutateAsync({ id: selected.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
 
-    setOpen(false);
-    setSelected(null);
-  };
 
   return (
     <MasterListPage
@@ -167,6 +144,7 @@ const bulkRemove = useMutation({
       data={customers.data?.data ?? []}
       columns={customerColumns}
       isLoading={customers.isLoading}
+      onSizeChange={setSize}
       defaultHiddenColumns={[
         "address",
         "country",
@@ -222,20 +200,16 @@ const bulkRemove = useMutation({
       isImporting={bulkImport.isPending}
       isExporting={exportCustomers.isPending}
     >
-    <CustomerDetailDialog
+<CustomerDetailDialog
   open={detailOpen}
   onOpenChange={setDetailOpen}
-  data={customerDetail.data}
-  isLoading={customerDetail.isLoading}
+  id={detailId}
 />
+
 <CustomerAdvancedForm
   open={open}
   onOpenChange={setOpen}
   row={selected}
-  states={states.data?.data ?? []}
-  cities={cities.data?.data ?? []}
-  onSubmit={handleSubmit}
-  isSubmitting={create.isPending || update.isPending}
 />
     </MasterListPage>
   );

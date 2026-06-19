@@ -6,6 +6,49 @@ const optionalString = z
   .optional()
   .transform((value) => (value ? value : undefined));
 
+const optionalLimitedString = (max: number, message: string) =>
+  z
+    .string()
+    .trim()
+    .max(max, message)
+    .optional()
+    .transform((value) => (value ? value : undefined));
+
+const optionalEmail = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value.toLowerCase() : undefined))
+  .refine(
+    (value) => value === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+    "Invalid email",
+  );
+
+const optionalGstNo = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value.toUpperCase() : undefined))
+  .refine(
+    (value) =>
+      value === undefined ||
+      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(value),
+    "Invalid GST number",
+  );
+
+const weeklyOffDaySchema = z
+  .enum([
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ])
+  .or(z.literal(""))
+  .optional()
+  .transform((value) => (value ? value : undefined));
 const optionalPhone = (label: string) =>
   z
     .string()
@@ -17,16 +60,8 @@ const optionalPhone = (label: string) =>
         value === undefined ||
         /^[6-9][0-9]{9}$/.test(value) ||
         /^\+?[1-9][0-9]{7,14}$/.test(value),
-      `${label} is not valid`
+      `${label} is not valid`,
     );
-
-const optionalEmail = z
-  .string()
-  .trim()
-  .email("Invalid email")
-  .optional()
-  .or(z.literal(""));
-
 export const branchSchema = z.object({
   id: z.string(),
 
@@ -50,7 +85,6 @@ export const branchSchema = z.object({
 
   companyId: z.string(),
   warehouseId: z.string().nullable().optional(),
-
   company: z
     .object({
       id: z.string(),
@@ -74,12 +108,32 @@ export const createBranchSchema = z.object({
   branchCode: z
     .string()
     .trim()
-    .min(1, "Branch code is required"),
+    .transform((value) => value.toUpperCase().replace(/\s+/g, ""))
+    .pipe(
+      z
+        .string()
+        .min(1, "Branch code is required")
+        .max(20, "Branch code cannot exceed 20 characters")
+        .regex(
+          /^[A-Z0-9-]+$/,
+          "Branch code can only contain letters, numbers and -",
+        ),
+    ),
 
   shortCode: z
     .string()
     .trim()
-    .min(1, "Short code is required"),
+    .transform((value) => value.toUpperCase().replace(/\s+/g, ""))
+    .pipe(
+      z
+        .string()
+        .min(1, "Short code is required")
+        .max(10, "Short code cannot exceed 10 characters")
+        .regex(
+          /^[A-Z0-9-]+$/,
+          "Short code can only contain letters, numbers and -",
+        ),
+    ),
 
   name: z
     .string()
@@ -89,19 +143,25 @@ export const createBranchSchema = z.object({
 
   cityId: optionalString,
 
-  address: optionalString,
+  address: optionalLimitedString(250, "Address cannot exceed 250 characters"),
 
-  contactName: optionalString,
+  contactName: optionalLimitedString(
+    100,
+    "Contact name cannot exceed 100 characters",
+  ),
 
   contactPhone: optionalPhone("Contact phone"),
 
   email: optionalEmail,
 
-  weeklyOffDay: optionalString,
+  weeklyOffDay: weeklyOffDaySchema,
 
-  gstNo: optionalString,
+  gstNo: optionalGstNo,
 
-  workingHours: optionalString,
+  workingHours: optionalLimitedString(
+    50,
+    "Working hours cannot exceed 50 characters",
+  ),
 
   allowLR: z.boolean().default(false),
 
@@ -116,5 +176,4 @@ export const createBranchSchema = z.object({
   warehouseId: optionalString,
 });
 
-export const updateBranchSchema =
-  createBranchSchema.partial();
+export const updateBranchSchema = createBranchSchema.partial();

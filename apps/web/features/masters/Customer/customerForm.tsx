@@ -6,8 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Customer,
-  State,
-  City,
   CreateCustomerBody,
   CreateCustomerFormInput,
 } from "@skerp/types";
@@ -17,6 +15,7 @@ import {
   IconCash,
   IconFileDescription,
   IconMapPin,
+  IconPercentage,
   IconPhone,
   IconUser,
 } from "@tabler/icons-react";
@@ -30,16 +29,22 @@ import SelectField from "../_shared/fields/SelectField";
 import TextAreaField from "../_shared/fields/TextAreaField";
 import SwitchField from "../_shared/fields/SwitchField";
 import CustomerLocationsEditor from "./CustomerLocationsEditor";
+import { useQuery } from "@tanstack/react-query";
+import { stateKeys } from "../state/state.keys";
+import { stateApi } from "../state/state.service";
+
+import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { customerApi } from "./customer.service";
+import { customerKeys } from "./customer.key";
+import CitySelectField from "../_shared/fields/CitySelectField";
+import { cityKeys } from "../city/city.keys";
+import { cityApi } from "../city/city.service";
 import { usePrefillCustomer } from "@/features/dev-tools/usePrefillCustomer";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Customer | null;
-  states: State[];
-  cities: City[];
-  onSubmit: (data: CreateCustomerBody) => Promise<void>;
-  isSubmitting?: boolean;
 };
 
 const defaultValues: CreateCustomerFormInput = {
@@ -66,10 +71,6 @@ export default function CustomerAdvancedForm({
   open,
   onOpenChange,
   row,
-  states,
-  cities,
-  onSubmit,
-  isSubmitting,
 }: Props) {
   const form = useForm<CreateCustomerFormInput, unknown, CreateCustomerBody>({
     resolver: zodResolver(createCustomerSchema),
@@ -77,6 +78,38 @@ export default function CustomerAdvancedForm({
     reValidateMode: "onChange",
     defaultValues,
   });
+  const selectedStateId = form.watch("stateId") ?? "";
+  const previousStateIdRef = React.useRef<string>("");
+
+  const states = useQuery({
+    queryKey: stateKeys.list({ page: 0, size: 1000 }),
+    queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+    enabled: open,
+  });
+
+  const cities = useQuery({
+    queryKey: cityKeys.list({ page: 0, size: 1000 }),
+    queryFn: () => cityApi.list({ page: 0, size: 1000 }),
+    enabled: open,
+  });
+
+  const { create, update } = useMasterMutations({
+    api: customerApi,
+    queryKey: customerKeys.all,
+    entityName: "Customer",
+  });
+
+  const handleSubmit = async (data: CreateCustomerBody) => {
+    if (row) {
+      await update.mutateAsync({ id: row.id, data });
+    } else {
+      await create.mutateAsync(data);
+    }
+
+    onOpenChange(false);
+  };
+
+  const isSubmitting = create.isPending || update.isPending;
 
   React.useEffect(() => {
     if (!open) return;
@@ -91,11 +124,10 @@ export default function CustomerAdvancedForm({
           ? String(row.interestRateLatePayment)
           : "",
       gstNo: row?.gstNo ?? "",
-      creditLimit: row?.creditLimit != null ? String(paiseToRupees(row.creditLimit)) : "",
+      creditLimit:
+        row?.creditLimit != null ? String(paiseToRupees(row.creditLimit)) : "",
       tdsDeductionRate:
-        row?.tdsDeductionRate != null
-          ? String(row.tdsDeductionRate)
-          : "",
+        row?.tdsDeductionRate != null ? String(row.tdsDeductionRate) : "",
       address: row?.address ?? "",
       country: row?.country ?? "India",
       stateId: row?.stateId ?? "",
@@ -106,23 +138,36 @@ export default function CustomerAdvancedForm({
       mobileNo: row?.mobileNo ?? "",
       website: row?.website ?? "",
     });
+    previousStateIdRef.current = row?.stateId ?? "";
   }, [form, open, row]);
 
-  const prefillCustomer = usePrefillCustomer({ states, cities });
+  const statesList = states.data?.data ?? [];
+  const citiesList = cities.data?.data ?? [];
 
-  const selectedStateId = form.watch("stateId");
-
-  const stateOptions = states.map((state) => ({
+  const stateOptions = statesList.map((state) => ({
     label: state.name,
     value: state.id,
   }));
 
-  const cityOptions = cities
-    .filter((city) => !selectedStateId || city.stateId === selectedStateId)
-    .map((city) => ({
-      label: city.name,
-      value: city.id,
-    }));
+  const prefillCustomer = usePrefillCustomer({
+    states: statesList,
+    cities: citiesList,
+  });
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const previousStateId = previousStateIdRef.current;
+
+    if (previousStateId && previousStateId !== selectedStateId) {
+      form.setValue("cityId", "", {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+
+    previousStateIdRef.current = selectedStateId;
+  }, [form, open, selectedStateId]);
 
   return (
     <MasterFormDialog<CreateCustomerFormInput, CreateCustomerBody>
@@ -130,7 +175,7 @@ export default function CustomerAdvancedForm({
       onOpenChange={onOpenChange}
       title={row ? "Edit Customer" : "Add Customer"}
       form={form}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
       footerLeft={
@@ -140,7 +185,24 @@ export default function CustomerAdvancedForm({
             onClick={() => form.reset(prefillCustomer())}
             className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 4-1 1"/><path d="m4 15 1-1"/><path d="m10.5 6.5-5 5"/><path d="M6 6l12 12"/><path d="m18 6-1.5 1.5"/><path d="m8.5 18-1 1"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 4-1 1" />
+              <path d="m4 15 1-1" />
+              <path d="m10.5 6.5-5 5" />
+              <path d="M6 6l12 12" />
+              <path d="m18 6-1.5 1.5" />
+              <path d="m8.5 18-1 1" />
+            </svg>
             Fill Test Data
           </button>
         ) : undefined
@@ -174,7 +236,7 @@ export default function CustomerAdvancedForm({
           maxLength={10}
           onChangeTransform={(value) => value.toUpperCase()}
         />
-  
+
         <IconTextField<CreateCustomerFormInput>
           name="gstNo"
           label="GSTIN"
@@ -182,9 +244,8 @@ export default function CustomerAdvancedForm({
           icon={<IconFileDescription size={16} />}
           maxLength={15}
           onChangeTransform={(value) => value.toUpperCase()}
-          hint="Format: 27ABCDE1234F1Z5"
+          required
         />
-
         <IconTextField<CreateCustomerFormInput>
           name="website"
           label="Website"
@@ -199,35 +260,37 @@ export default function CustomerAdvancedForm({
         description="Credit, interest and TDS information"
       >
         <IconTextField<CreateCustomerFormInput>
-  name="creditLimit"
-  label="Credit Limit"
-  placeholder="0.00"
-  icon={<IconCash size={16} />}
-  type="number"
-  min={0}
-  step="0.01"
-/>
-      <IconTextField<CreateCustomerFormInput>
-  name="interestRateLatePayment"
-  label="Late Payment Interest %"
-  placeholder="0"
-  icon={<IconCash size={16} />}
-  type="number"
-  min={0}
-  max={100}
-  step="0.01"
-/>
+          name="creditLimit"
+          label="Credit Limit"
+          placeholder="0.00"
+          icon={<IconCash size={16} />}
+          type="number"
+          min={0}
+          step="0.01"
+        />
+        <IconTextField<CreateCustomerFormInput>
+          name="interestRateLatePayment"
+          label="Late Payment Interest"
+          placeholder="e.g. 18"
+          icon={<IconPercentage size={16} />}
+          suffix="%"
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+        />
 
-   <IconTextField<CreateCustomerFormInput>
-  name="tdsDeductionRate"
-  label="TDS Deduction %"
-  placeholder="0"
-  icon={<IconCash size={16} />}
-  type="number"
-  min={0}
-  max={100}
-  step="0.01"
-/>
+        <IconTextField<CreateCustomerFormInput>
+          name="tdsDeductionRate"
+          label="TDS Deduction"
+          placeholder="e.g. 2"
+          icon={<IconPercentage size={16} />}
+          suffix="%"
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+        />
         <SwitchField<CreateCustomerFormInput>
           name="disallowNewLRBooking"
           label="Disallow New LR Booking"
@@ -256,11 +319,21 @@ export default function CustomerAdvancedForm({
           required
         />
 
-        <SelectField<CreateCustomerFormInput>
+        <CitySelectField<CreateCustomerFormInput>
           name="cityId"
           label="City"
-          options={cityOptions}
           required
+          disabled={!selectedStateId}
+          stateId={selectedStateId}
+          placeholder={selectedStateId ? "Select city" : "Select state first"}
+          initialCity={
+            row?.city
+              ? {
+                  id: row.city.id,
+                  name: row.city.name,
+                }
+              : null
+          }
         />
 
         <div className="md:col-span-2 xl:col-span-3">
@@ -284,6 +357,7 @@ export default function CustomerAdvancedForm({
           label="Contact Person"
           placeholder="Enter contact person"
           icon={<IconUser size={16} />}
+          required
         />
 
         <IconTextField<CreateCustomerFormInput>
@@ -292,6 +366,7 @@ export default function CustomerAdvancedForm({
           placeholder="10-digit phone"
           icon={<IconPhone size={16} />}
           maxLength={10}
+          required
         />
 
         <IconTextField<CreateCustomerFormInput>
@@ -316,10 +391,12 @@ export default function CustomerAdvancedForm({
           title="Pickup Locations"
           description="Saved pickup points used when booking orders"
         >
-          <CustomerLocationsEditor customerId={row.id} cities={cities} />
+          <CustomerLocationsEditor
+            customerId={row.id}
+            cities={cities.data?.data ?? []}
+          />
         </FormSection>
       ) : null}
-
     </MasterFormDialog>
   );
 }
