@@ -8,6 +8,7 @@ import type {
   FinaliseGroupBody,
   SplitGroupAtHubBody,
   CancelGroupBody,
+  LRGroupLineInput,
 } from "@skerp/types";
 import {
   type ListQuery,
@@ -66,6 +67,11 @@ export const lrGroupApi = {
 
   cancel: async (id: string, body: CancelGroupBody): Promise<LRGroup> => {
     const res = await api.post<ApiResponse<LRGroup>>(`/lr-groups/${id}/cancel`, body);
+    return unwrapApiResponse(res);
+  },
+
+  addLorryReceipt: async (id: string, body: LRGroupLineInput): Promise<LRGroup> => {
+    const res = await api.post<ApiResponse<LRGroup>>(`/lr-groups/${id}/lorry-receipts`, body);
     return unwrapApiResponse(res);
   },
 };

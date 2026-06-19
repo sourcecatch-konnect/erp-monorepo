@@ -31,7 +31,12 @@ export type LRGroupLineInput = z.input<typeof lrGroupLineSchema>;
 type CustomerRef = { id: string; name: string; shortName: string | null };
 type BranchRef = { id: string; name: string; branchCode: string };
 type UserRef = { id: string; firstName: string; lastName: string };
-type OrderRef = { id: string; orderNumber: string; truckQuantity?: number | null };
+type OrderRef = {
+  id: string;
+  orderNumber: string;
+  truckQuantity?: number | null;
+  bookingFreightAmount?: number | null;
+};
 type VehicleRef = { id: string; vehicleNumber: string };
 type DriverRef = { id: string; name: string };
 

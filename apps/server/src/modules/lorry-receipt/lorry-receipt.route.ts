@@ -156,6 +156,36 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Remove a DRAFT LR from its (DRAFT) group                            */
+/* ------------------------------------------------------------------ */
+router.delete("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
+  const id = getParamId(req);
+  const existing = await db.lorryReceipt.findFirst({
+    where: { id, deletedAt: null },
+    include: { group: { select: { id: true, status: true, originBranchId: true } } },
+  });
+  if (!existing) throw new NotFoundError("Lorry receipt not found");
+  if (existing.status !== "DRAFT" || existing.group.status !== "DRAFT") {
+    throw new BadRequestError("Only a DRAFT LR in a DRAFT group can be removed");
+  }
+  assertBranchAccess(req, existing.group.originBranchId);
+
+  const remaining = await db.lorryReceipt.count({
+    where: { groupId: existing.group.id, deletedAt: null },
+  });
+  if (remaining <= 1) {
+    throw new BadRequestError("A group must keep at least one lorry receipt");
+  }
+
+  await db.lorryReceipt.update({
+    where: { id },
+    data: { deletedAt: new Date(), updatedById: actorId(req) },
+  });
+
+  return sendOk(res, { id });
+});
+
+/* ------------------------------------------------------------------ */
 /* Add e-way bill (additional, post-finalise)                          */
 /* ------------------------------------------------------------------ */
 router.post(

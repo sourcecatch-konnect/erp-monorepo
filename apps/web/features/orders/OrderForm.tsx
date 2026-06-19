@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm, FormProvider, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 
 import { createOrderSchema } from "@skerp/validators";
@@ -23,7 +24,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
-import { IconUser, IconTruck, IconPhone, IconMapPin, IconUserCircle, IconMail, IconTrash, IconUserPlus } from "@tabler/icons-react";
+import {
+  IconUser,
+  IconTruck,
+  IconPhone,
+  IconMapPin,
+  IconUserCircle,
+  IconMail,
+  IconTrash,
+  IconUserPlus,
+} from "@tabler/icons-react";
 
 import FormSection from "../masters/_shared/fields/FormSection";
 import ComboboxField from "../masters/_shared/fields/ComboboxField";
@@ -53,9 +63,11 @@ const dateInputValue = (iso?: string | null) =>
 export default function OrderForm({ mode, order }: Props) {
   const router = useRouter();
   const [discardOpen, setDiscardOpen] = React.useState(false);
-const [showContactFields, setShowContactFields] = useState(
-  Boolean(order?.contactPersonName || order?.contactMobile || order?.contactEmail),
-);
+  const [showContactFields, setShowContactFields] = useState(
+    Boolean(
+      order?.contactPersonName || order?.contactMobile || order?.contactEmail,
+    ),
+  );
   const softOnly = mode === "edit" && order?.status === "Confirmed";
 
   const customers = useQuery({
@@ -74,12 +86,13 @@ const [showContactFields, setShowContactFields] = useState(
     queryKey: orderLookupKeys.vehicleTypes,
     queryFn: orderLookups.vehicleTypes,
   });
-const routes = useQuery({
-  queryKey: orderLookupKeys.routes,
-  queryFn: orderLookups.routes,
-});
+  const routes = useQuery({
+    queryKey: orderLookupKeys.routes,
+    queryFn: orderLookups.routes,
+  });
   const form = useForm<CreateOrderFormInput, unknown, CreateOrderBody>({
     resolver: zodResolver(createOrderSchema),
+    mode: "onTouched",
     defaultValues: order
       ? {
           customerId: order.customerId,
@@ -109,12 +122,22 @@ const routes = useQuery({
               truckIndex: c.truckIndex,
               loadingLocationId: c.loadingLocationId ?? undefined,
               unloadingLocationId: c.unloadingLocationId ?? undefined,
-              goods: (c.goods ?? []).slice(0, 1).map((g) => ({
-                goodsId: g.goodsId,
-                quantity: g.quantity,
-                unit: g.unit,
-                weight: g.weight ? Number(g.weight) : undefined,
-              })),
+              goods:
+                c.goods && c.goods.length
+                  ? c.goods.map((g) => ({
+                      goodsId: g.goodsId,
+                      quantity: g.quantity,
+                      unit: g.unit,
+                      weight: g.weight ? Number(g.weight) : undefined,
+                    }))
+                  : [
+                      {
+                        goodsId: "",
+                        quantity: 1,
+                        unit: "MT",
+                        weight: undefined,
+                      },
+                    ],
             })) ?? [],
         }
       : {
@@ -128,6 +151,8 @@ const routes = useQuery({
   const orderType = form.watch("orderType");
   const customerId = form.watch("customerId");
   const consigneeId = form.watch("consigneeId");
+  const consignments = form.watch("consignments");
+  const items = form.watch("items");
 
   const locations = useQuery({
     queryKey: orderLookupKeys.customerLocations(customerId ?? ""),
@@ -145,6 +170,8 @@ const routes = useQuery({
   const [submitting, setSubmitting] = React.useState(false);
 
   const onSubmit = async (values: CreateOrderBody) => {
+    console.log("got trigger");
+
     setSubmitting(true);
     try {
       if (mode === "edit" && order) {
@@ -174,326 +201,397 @@ const routes = useQuery({
     else router.push("/orders");
   };
 
+  // Live summary shown on the left of the sticky action bar.
+  const footerSummary = React.useMemo(() => {
+    if (orderType === "Truck") {
+      const lines = consignments?.length ?? 0;
+      const trucks = new Set(
+        (consignments ?? [])
+          .map((c) => Number(c?.truckIndex) || 1)
+          .filter((n) => Number.isFinite(n)),
+      ).size;
+      if (lines === 0) return "Add a consignment line to continue";
+      return `${lines} line${lines === 1 ? "" : "s"} · ${trucks} truck${trucks === 1 ? "" : "s"}`;
+    }
+    const count = items?.length ?? 0;
+    return count === 0
+      ? "Add an item to continue"
+      : `${count} item${count === 1 ? "" : "s"}`;
+  }, [orderType, consignments, items]);
+
   return (
     <FormProvider {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-       className="mx-auto max-w-6xl space-y-5 p-4 md:p-6"
+        className="mx-auto w-full max-w-4xl space-y-5 pb-20"
       >
-       <div className="rounded-lg border bg-background p-4 shadow-sm">
-  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-    <div>
-      <h1 className="text-lg font-semibold tracking-tight">
-        {mode === "edit" ? `Edit Order ${order?.orderNumber}` : "Create New Order"}
-      </h1>
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">
+            {mode === "edit"
+              ? `Edit Order ${order?.orderNumber}`
+              : "Create New Order"}
+          </h1>
 
-      <p className="mt-1 text-xs text-muted-foreground">
-        {mode === "edit"
-          ? "Update order details and save changes."
-          : "Create a new booking request and submit it for approval."}
-      </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {mode === "edit"
+              ? "Update order details and save changes."
+              : "Create a new booking request and submit it for approval."}
+          </p>
 
-      {softOnly ? (
-        <p className="mt-2 rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
-          Confirmed order — only contact details and instructions are editable.
-        </p>
-      ) : null}
-    </div>
-
-    <div className="flex gap-2">
-      <Button type="button" variant="outline" onClick={handleCancel}>
-        Cancel
-      </Button>
-
-      <Button type="submit" disabled={submitting}>
-        {submitting
-          ? "Saving…"
-          : mode === "edit" && order?.status === "Rejected"
-            ? "Resubmit"
-            : "Save Order"}
-      </Button>
-    </div>
-  </div>
-</div>
+          {softOnly ? (
+            <p className="mt-2 rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
+              Confirmed order — only contact details and instructions are
+              editable.
+            </p>
+          ) : null}
+        </div>
 
         <div className="grid gap-4">
-       <FormSection
-  icon={<IconUser size={16} />}
-  title="Customer & Route"
-  columns={2}
->
-  <ComboboxField
-    name="customerId"
-    label="Customer (Consignor)"
-    required
-    options={toOptions(customers.data ?? [])}
-    disabled={softOnly}
-  />
+          <FormSection
+            icon={<IconUser size={16} />}
+            title="Customer & Route"
+            columns={2}
+          >
+            <ComboboxField
+              name="customerId"
+              label="Customer (Consignor)"
+              required
+              options={toOptions(customers.data ?? [])}
+              disabled={softOnly}
+            />
 
-  <ComboboxField
-    name="consigneeId"
-    label="Consignee"
-    options={toOptions(customers.data ?? [])}
-    emptyText="No customers found"
-    disabled={softOnly}
-  />
+            <ComboboxField
+              name="consigneeId"
+              label="Consignee"
+              options={toOptions(customers.data ?? [])}
+              emptyText="No customers found"
+              disabled={softOnly}
+            />
 
-  <Controller
-    control={form.control}
-    name="pickupDate"
-    render={({ field }) => (
-      <div className="grid gap-1.5">
-        <label className="text-xs font-medium text-muted-foreground">
-          Pickup date <span className="text-red-600">*</span>
-        </label>
+            <Controller
+              control={form.control}
+              name="pickupDate"
+              render={({ field }) => (
+                <div className="grid gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Pickup date <span className="text-red-600">*</span>
+                  </label>
 
-        <DatePicker
-          selected={
-            field.value
-              ? field.value instanceof Date
-                ? field.value
-                : new Date(field.value)
-              : undefined
-          }
-          onSelect={(date) => field.onChange(date)}
-          disabled={{ before: new Date() }}
-        />
+                  <DatePicker
+                    selected={
+                      field.value
+                        ? field.value instanceof Date
+                          ? field.value
+                          : new Date(field.value)
+                        : undefined
+                    }
+                    onSelect={(date) => field.onChange(date)}
+                    disabled={{ before: new Date() }}
+                  />
 
-        {form.formState.errors.pickupDate?.message ? (
-          <p className="text-xs text-red-600">
-            {String(form.formState.errors.pickupDate.message)}
-          </p>
-        ) : null}
-      </div>
-    )}
-  />
+                  {form.formState.errors.pickupDate?.message ? (
+                    <p className="text-xs text-red-600">
+                      {String(form.formState.errors.pickupDate.message)}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            />
 
-  <ComboboxField
-    name="fromBranchId"
-    label="From branch"
-    required
-    options={toOptions(branches.data ?? [])}
-    disabled={softOnly}
-  />
+            <ComboboxField
+              name="fromBranchId"
+              label="From branch"
+              required
+              options={toOptions(branches.data ?? [])}
+              disabled={softOnly}
+            />
 
-  <ComboboxField
-    name="toBranchId"
-    label="To branch"
-    required
-    options={toOptions(branches.data ?? [])}
-    disabled={softOnly}
-  />
-<ComboboxField
-  name="routeId"
-  label="Route"
-  required
-  options={(routes.data ?? []).map((route) => ({
-    label: `${route.sourceCity?.name ?? "-"} → ${route.destinationCity?.name ?? "-"}`,
-    value: route.id,
-  }))}
-  emptyText="No routes found"
-  disabled={softOnly}
-/>
-  <ComboboxField
-    name="customerLocationId"
-    label="Saved pickup location"
-    options={toOptions(
-      (locations.data ?? []).map((l) => ({ id: l.id, name: l.name })),
-    )}
-    emptyText={customerId ? "No saved locations" : "Select a customer first"}
-    disabled={softOnly || !customerId}
-  />
+            <ComboboxField
+              name="toBranchId"
+              label="To branch"
+              required
+              options={toOptions(branches.data ?? [])}
+              disabled={softOnly}
+            />
+            <ComboboxField
+              name="routeId"
+              label="Route"
+              required
+              options={(routes.data ?? []).map((route) => ({
+                label: `${route.sourceCity?.name ?? "-"} → ${route.destinationCity?.name ?? "-"}`,
+                value: route.id,
+              }))}
+              emptyText="No routes found"
+              disabled={softOnly}
+            />
+            {orderType === "Item" && (
+              <>
+                <ComboboxField
+                  name="customerLocationId"
+                  label="Saved pickup location"
+                  options={toOptions(
+                    (locations.data ?? []).map((l) => ({
+                      id: l.id,
+                      name: l.name,
+                    })),
+                  )}
+                  emptyText={
+                    customerId
+                      ? "No saved locations"
+                      : "Select a customer first"
+                  }
+                  disabled={softOnly || !customerId}
+                />
 
-  <IconTextField<CreateOrderFormInput>
-    name="pickupAddressOverride"
-    label="Pickup address override"
-    placeholder="Use only if pickup address is different"
-    icon={<IconMapPin size={16} />}
-  />
-</FormSection>
+                <IconTextField<CreateOrderFormInput>
+                  name="pickupAddressOverride"
+                  label="Pickup address override"
+                  placeholder="Use only if pickup address is different"
+                  icon={<IconMapPin size={16} />}
+                />
+              </>
+            )}
+          </FormSection>
 
           <FormSection
             icon={<IconTruck size={16} />}
             title="Order Details"
             columns={2}
           >
-         <div className="col-span-full grid gap-3 md:grid-cols-2">
-  {(["Truck", "Item"] as const).map((t) => {
-    const active = orderType === t;
+            {/* Order type — segmented control with an animated active pill. */}
+            <div className="col-span-full">
+              <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+                {(["Truck", "Item"] as const).map((t) => {
+                  const active = orderType === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      disabled={softOnly}
+                      onClick={() =>
+                        form.setValue("orderType", t, { shouldDirty: true })
+                      }
+                      className={[
+                        "relative rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+                        active
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                        softOnly ? "cursor-not-allowed opacity-60" : "",
+                      ].join(" ")}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="orderTypePill"
+                          transition={{
+                            type: "spring",
+                            stiffness: 400,
+                            damping: 32,
+                          }}
+                          className="absolute inset-0 -z-0 rounded-md bg-background shadow-sm ring-1 ring-border"
+                        />
+                      )}
+                      <span className="relative z-10 inline-flex items-center gap-1.5">
+                        <IconTruck
+                          size={15}
+                          className={active ? "text-primary" : ""}
+                        />
+                        {t === "Truck" ? "Truck hire" : "Item / Goods"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {orderType === "Truck"
+                  ? "Book one or more trucks by vehicle type, then add consignment lines."
+                  : "Add goods line items with quantity and weight."}
+              </p>
+            </div>
 
-    return (
-      <button
-        key={t}
-        type="button"
-        disabled={softOnly}
-        onClick={() => form.setValue("orderType", t, { shouldDirty: true })}
-        className={[
-          "rounded-lg border p-4 text-left transition",
-          active
-            ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-            : "bg-background hover:bg-muted/40",
-          softOnly ? "cursor-not-allowed opacity-60" : "",
-        ].join(" ")}
-      >
-        <div className="flex items-center gap-2">
-          <IconTruck size={16} className={active ? "text-primary" : ""} />
-          <p className="text-sm font-medium">
-            {t === "Truck" ? "Truck hire" : "Item / Goods"}
-          </p>
-        </div>
+            {orderType === "Truck" ? (
+              <div className="col-span-full space-y-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <ComboboxField
+                    name="vehicleTypeId"
+                    label="Vehicle type"
+                    required
+                    options={toOptions(
+                      (vehicleTypes.data ?? []).map((v) => ({
+                        id: v.id,
+                        name: v.name,
+                      })),
+                    )}
+                    disabled={softOnly}
+                  />
 
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t === "Truck"
-            ? "Book one or more trucks by vehicle type."
-            : "Add goods line items with quantity and weight."}
-        </p>
-      </button>
-    );
-  })}
-</div>
-          {orderType === "Truck" ? (
-  <div className="col-span-full rounded-lg border bg-muted/10 p-4">
-    <div className="grid gap-4 md:grid-cols-2">
-      <ComboboxField
-        name="vehicleTypeId"
-        label="Vehicle type"
-        required
-        options={toOptions(
-          (vehicleTypes.data ?? []).map((v) => ({
-            id: v.id,
-            name: v.name,
-          })),
-        )}
-        disabled={softOnly}
-      />
+                  <IconTextField<CreateOrderFormInput>
+                    name="truckQuantity"
+                    label="Truck quantity"
+                    placeholder="1"
+                    type="number"
+                    min={1}
+                    suffix="trucks"
+                    required
+                    disabled={softOnly}
+                  />
+                </div>
 
-      <IconTextField<CreateOrderFormInput>
-        name="truckQuantity"
-        label="Truck quantity"
-        placeholder="1"
-        type="number"
-        min={1}
-        suffix="trucks"
-        required
-        disabled={softOnly}
-      />
-    </div>
-
-    {!softOnly && (
-      <div className="mt-4">
-        <p className="mb-2 text-xs font-medium text-muted-foreground">
-          Consignment lines (multi-loading)
-        </p>
-        <ConsignmentLinesEditor
-          goodsOptions={toOptions(goods.data ?? [])}
-          loadingOptions={toOptions(
-            (locations.data ?? []).map((l) => ({ id: l.id, name: l.name })),
-          )}
-          unloadingOptions={toOptions(
-            (consigneeLocations.data ?? []).map((l) => ({ id: l.id, name: l.name })),
-          )}
-          consigneeChosen={Boolean(consigneeId)}
-        />
-      </div>
-    )}
-  </div>
-) : (
-  <div className="col-span-full">
-    <ItemLinesEditor goodsOptions={toOptions(goods.data ?? [])} />
-  </div>
-)}
+                {!softOnly && (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium">Consignment lines</p>
+                      <p className="text-xs text-muted-foreground">
+                        One LR per line. Add a line for each loading → unloading
+                        pair; list every invoice for that pair as a goods row on
+                        the same line.
+                      </p>
+                    </div>
+                    <ConsignmentLinesEditor
+                      goodsOptions={toOptions(goods.data ?? [])}
+                      loadingOptions={toOptions(
+                        (locations.data ?? []).map((l) => ({
+                          id: l.id,
+                          name: l.name,
+                        })),
+                      )}
+                      unloadingOptions={toOptions(
+                        (consigneeLocations.data ?? []).map((l) => ({
+                          id: l.id,
+                          name: l.name,
+                        })),
+                      )}
+                      consigneeChosen={Boolean(consigneeId)}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="col-span-full">
+                <ItemLinesEditor goodsOptions={toOptions(goods.data ?? [])} />
+              </div>
+            )}
           </FormSection>
 
-    <FormSection
-  icon={<IconPhone size={16} />}
-  title="Contact & Notes"
-  columns={2}
->
-  {!showContactFields ? (
-    <div className="col-span-full rounded-lg border border-dashed bg-muted/20 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium">Additional contact details</p>
-          <p className="text-xs text-muted-foreground">
-            Add a pickup contact person if different from the customer.
-          </p>
+          <FormSection
+            icon={<IconPhone size={16} />}
+            title="Contact & Notes"
+            columns={2}
+          >
+            {!showContactFields ? (
+              <div className="col-span-full rounded-lg border border-dashed bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">
+                      Additional contact details
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Add a pickup contact person if different from the
+                      customer.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setShowContactFields(true)}
+                  >
+                    <IconUserPlus size={14} />
+                    Add contact
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="col-span-full rounded-lg border bg-muted/10 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Contact details</p>
+                    <p className="text-xs text-muted-foreground">
+                      Used for pickup and delivery coordination.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                    onClick={() => {
+                      setShowContactFields(false);
+                      form.setValue("contactPersonName", "", {
+                        shouldDirty: true,
+                      });
+                      form.setValue("contactMobile", "", { shouldDirty: true });
+                      form.setValue("contactEmail", "", { shouldDirty: true });
+                    }}
+                  >
+                    <IconTrash size={14} />
+                    Remove
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <IconTextField<CreateOrderFormInput>
+                    name="contactPersonName"
+                    label="Contact person"
+                    placeholder="Enter name"
+                    icon={<IconUserCircle size={16} />}
+                  />
+
+                  <IconTextField<CreateOrderFormInput>
+                    name="contactMobile"
+                    label="Mobile number"
+                    placeholder="10-digit mobile"
+                    prefix="+91"
+                    maxLength={10}
+                  />
+
+                  <IconTextField<CreateOrderFormInput>
+                    name="contactEmail"
+                    label="Email address"
+                    placeholder="example@company.com"
+                    type="email"
+                    icon={<IconMail size={16} />}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="col-span-full">
+              <TextAreaField
+                name="specialInstructions"
+                label="Special instructions"
+                placeholder="Any pickup, delivery, billing, or handling notes"
+              />
+            </div>
+          </FormSection>
         </div>
 
-<Button
-  type="button"
-  variant="default"
-  size="sm"
-  className="gap-1.5"
-  onClick={() => setShowContactFields(true)}
->
-  <IconUserPlus size={14} />
-  Add contact
-</Button>
-      </div>
-    </div>
-  ) : (
-    <div className="col-span-full rounded-lg border bg-muted/10 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium">Contact details</p>
-          <p className="text-xs text-muted-foreground">
-            Used for pickup and delivery coordination.
-          </p>
-        </div>
+        <motion.div
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="sticky bottom-0 z-20 border-t border-border/70 bg-background/80 py-3 backdrop-blur-md"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">{footerSummary}</p>
 
-    <Button
-  type="button"
-  variant="ghost"
-  size="sm"
-  className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-  onClick={() => {
-    setShowContactFields(false);
-    form.setValue("contactPersonName", "", { shouldDirty: true });
-    form.setValue("contactMobile", "", { shouldDirty: true });
-    form.setValue("contactEmail", "", { shouldDirty: true });
-  }}
->
-  <IconTrash size={14} />
-  Remove
-</Button>
-      </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" onClick={handleCancel}>
+                Cancel
+              </Button>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <IconTextField<CreateOrderFormInput>
-          name="contactPersonName"
-          label="Contact person"
-          placeholder="Enter name"
-          icon={<IconUserCircle size={16} />}
-        />
-
-        <IconTextField<CreateOrderFormInput>
-          name="contactMobile"
-          label="Mobile number"
-          placeholder="10-digit mobile"
-          prefix="+91"
-          maxLength={10}
-        />
-
-        <IconTextField<CreateOrderFormInput>
-          name="contactEmail"
-          label="Email address"
-          placeholder="example@company.com"
-          type="email"
-          icon={<IconMail size={16} />}
-        />
-      </div>
-    </div>
-  )}
-
-  <div className="col-span-full">
-    <TextAreaField
-      name="specialInstructions"
-      label="Special instructions"
-      placeholder="Any pickup, delivery, billing, or handling notes"
-    />
-  </div>
-</FormSection>
-        </div>
+              <Button type="submit" disabled={submitting} className="min-w-28">
+                {submitting
+                  ? "Saving…"
+                  : mode === "edit" && order?.status === "Rejected"
+                    ? "Resubmit"
+                    : "Save Order"}
+              </Button>
+            </div>
+          </div>
+        </motion.div>
       </form>
 
       <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>

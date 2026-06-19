@@ -61,6 +61,11 @@ export const lorryReceiptApi = {
     );
     return unwrapApiResponse(res);
   },
+
+  remove: async (id: string): Promise<{ id: string }> => {
+    const res = await api.delete<ApiResponse<{ id: string }>>(`/lorry-receipts/${id}`);
+    return unwrapApiResponse(res);
+  },
 };
 
 /* ------------------------------------------------------------------ */

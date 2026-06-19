@@ -15,7 +15,8 @@ const positiveInt = (label: string) =>
       `${label} must be a positive whole number`,
     );
 
-const optionalPositiveInt = (label: string) =>
+// Money entered in rupees on the UI/wire, stored as paise.
+const optionalRupeesToPaise = (label: string) =>
   z
     .union([z.string(), z.number()])
     .optional()
@@ -23,12 +24,11 @@ const optionalPositiveInt = (label: string) =>
       if (value === "" || value === undefined || value === null) {
         return undefined;
       }
-
-      return Number(value);
+      return Math.round(Number(value) * 100);
     })
     .refine(
       (value) => value === undefined || (Number.isInteger(value) && value > 0),
-      `${label} must be a positive whole number`,
+      `${label} must be a positive amount`,
     );
 
 const requiredDate = z
@@ -75,7 +75,7 @@ export const updateLRSchema = z.object({
   loadingLocationId: optionalString,
   unloadingLocationId: optionalString,
   invoiceNumber: optionalString,
-  invoiceAmount: optionalPositiveInt("Invoice amount"),
+  invoiceAmount: optionalRupeesToPaise("Invoice amount"),
   goods: z
     .array(lrGoodsLineSchema)
     .min(1, "Add at least one goods line")
