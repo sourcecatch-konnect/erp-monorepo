@@ -98,39 +98,44 @@ model Company {
 }
 
 model Branch {
-  id                String       @id @default(cuid())
-  branchCode        String       @unique
-  shortCode         String       @unique
-  name              String
-  address           String?
-  contactName       String?
-  contactPhone      String?
-  email             String?
-  weeklyOffDay      String?
-  gstNo             String?
-  workingHours      String?
-  allowLR           Boolean      @default(false)
-  isRailHead        Boolean      @default(false)
-  allowReceipt      Boolean      @default(true)
-  companyId         String
-  warehouseId       String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  cityId            String?
-  isHeadOffice      Boolean      @default(false)
-  agreements        Agreement[]  @relation("BranchAgreement")
-  city              City?        @relation(fields: [cityId], references: [id])
-  company           Company      @relation(fields: [companyId], references: [id])
-  destinationGroups LRGroup[]    @relation("GroupDestination")
-  hubGroups         LRGroup[]    @relation("GroupHub")
-  originGroups      LRGroup[]    @relation("GroupOrigin")
-  railheadGroups    LRGroup[]    @relation("GroupRailhead")
-  workers           Labour[]     @relation("WorkerBranch")
-  fromOrders        Order[]      @relation("FromBranch")
-  toOrders          Order[]      @relation("ToBranch")
-  users             User[]
-  userBranches      UserBranch[]
-  warehouses        Warehouse[]  @relation("BranchWarehouses")
+  id           String  @id @default(cuid())
+  branchCode   String  @unique
+  name         String
+  cityId       String?
+  address      String?
+  contactName  String?
+  contactPhone String?
+  email        String?
+  weeklyOffDay String?
+  gstNo        String?
+  workingHours String?
+
+  allowLR      Boolean @default(false)
+  isRailHead   Boolean @default(false)
+  allowReceipt Boolean @default(true)
+  // Marks the HO / hub branch (Jalgaon). Hub on an LR is derived from this,
+  // never picked. Exactly one branch should have this set.
+  isHeadOffice Boolean @default(false)
+
+  companyId   String
+  warehouseId String?
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  warehouses Warehouse[] @relation("BranchWarehouses")
+  agreements Agreement[] @relation("BranchAgreement")
+  workers    Labour[]    @relation("WorkerBranch")
+
+  users          User[]
+  userBranches   UserBranch[]
+  city           City?          @relation(fields: [cityId], references: [id])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  fromOrders     Order[]        @relation("FromBranch")
+  toOrders       Order[]        @relation("ToBranch")
+  originGroups      LRGroup[] @relation("GroupOrigin")
+  destinationGroups LRGroup[] @relation("GroupDestination")
+  hubGroups         LRGroup[] @relation("GroupHub")
+  railheadGroups    LRGroup[] @relation("GroupRailhead")
 }
 
 model Warehouse {
@@ -606,8 +611,8 @@ model Area {
   googlePlaceId    String? @unique
   latitude         Float?
   longitude        Float?
-  city             City    @relation(fields: [cityId], references: [id])
   customerLocations CustomerLocation[]
+  city City @relation(fields: [cityId], references: [id])
 
   @@unique([cityId, name])
 }
@@ -854,29 +859,28 @@ model VehicleType {
 }
 
 model CustomerLocation {
-  id                    String               @id @default(cuid())
-  customerId            String
-  name                  String
-  address               String?
-  cityId                String
-  areaId                String?
-  contactName           String?
-  contactPhone          String?
-  gstNo                 String?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  id           String   @id @default(cuid())
+  customerId   String
+  name         String
+  address      String?
+  areaId       String?
+  cityId       String
+  contactName  String?
+  contactPhone String?
+  gstNo        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  city                  City                 @relation(fields: [cityId], references: [id])
-  area                  Area?                @relation(fields: [areaId], references: [id])
-  customer              Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  loadingLRs            LorryReceipt[]       @relation("LRLoadingLocation")
-  unloadingLRs          LorryReceipt[]       @relation("LRUnloadingLocation")
-  orders                Order[]
-  consignmentLoadings   OrderConsignment[]   @relation("ConsignmentLoading")
-  consignmentUnloadings OrderConsignment[]   @relation("ConsignmentUnloading")
-  tripUnloadingPoints   TripUnloadingPoint[]
-
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  city                City                 @relation(fields: [cityId], references: [id])
+  orders              Order[]
+  tripUnloadingPoints TripUnloadingPoint[]
+  area                 Area? @relation(fields: [areaId], references: [id])
+  loadingLRs            LorryReceipt[]     @relation("LRLoadingLocation")
+  unloadingLRs          LorryReceipt[]     @relation("LRUnloadingLocation")
+  consignmentLoadings   OrderConsignment[] @relation("ConsignmentLoading")
+  consignmentUnloadings OrderConsignment[] @relation("ConsignmentUnloading")
+  
   @@index([customerId])
   @@index([areaId])
 }

@@ -21,6 +21,13 @@ export const cityApi = {
 
     return unwrapListResponse(res);
   },
+  listByState: async (stateId: string): Promise<City[]> => {
+  const res = await api.get<ApiResponse<City[]>>(
+    `/cities/by-state/${stateId}`
+  );
+
+  return unwrapApiResponse(res);
+},
 
   detail: async (id: string): Promise<City> => {
     const res = await api.get<ApiResponse<City>>(`/cities/${id}`);

@@ -17,6 +17,7 @@ import {
   IconId,
   IconMail,
   IconMapPin,
+  IconPhone,
   IconReceipt,
   IconTrain,
   IconUser,
@@ -66,7 +67,6 @@ const toWeeklyOffDay = (
 
 const defaultValues: CreateBranchFormInput = {
   branchCode: "",
-  shortCode: "",
   name: "",
   cityId: "",
   address: "",
@@ -121,7 +121,6 @@ export default function BranchForm({ open, onOpenChange, row }: Props) {
 
     form.reset({
       branchCode: row?.branchCode ?? "",
-      shortCode: row?.shortCode ?? "",
       name: row?.name ?? "",
       cityId: row?.cityId ?? "",
       address: row?.address ?? "",
@@ -169,14 +168,6 @@ export default function BranchForm({ open, onOpenChange, row }: Props) {
           required
         />
 
-        <IconTextField<CreateBranchFormInput>
-          name="shortCode"
-          label="Short Code"
-          placeholder="Enter short code"
-          icon={<IconId size={16} />}
-          onChangeTransform={(value) => value.toUpperCase()}
-          required
-        />
 
         <IconTextField<CreateBranchFormInput>
           name="name"
@@ -233,10 +224,12 @@ export default function BranchForm({ open, onOpenChange, row }: Props) {
           icon={<IconUser size={16} />}
         />
 
-        <PhoneField<CreateBranchFormInput>
-          control={form.control}
+        <IconTextField<CreateBranchFormInput>
           name="contactPhone"
           label="Contact Phone"
+          placeholder="10-digit phone"
+          maxLength={10}
+          icon={<IconPhone size={16} />}
         />
 
         <IconTextField<CreateBranchFormInput>
