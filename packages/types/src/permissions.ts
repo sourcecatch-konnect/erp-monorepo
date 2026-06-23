@@ -68,6 +68,8 @@ type EwaybillPermissionKey =
   | "ewaybill.extend"
   | "ewaybill.cancel";
 
+type TrackingPermissionKey = "tracking.view";
+
 type AdminPermissionKey =
   | "admin.rbac.manage"
   | "admin.audit_log.view";
@@ -90,6 +92,7 @@ export type PermissionKey =
   | TripPermissionKey
   | OrderPermissionKey
   | EwaybillPermissionKey
+  | TrackingPermissionKey
   | AdminPermissionKey
   | NotificationPermissionKey
   | AttachmentPermissionKey;
@@ -170,6 +173,9 @@ export const PERMS = {
     DELETE: "ewaybill.delete",
     EXTEND: "ewaybill.extend",
     CANCEL: "ewaybill.cancel",
+  },
+  TRACKING: {
+    VIEW: "tracking.view",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",

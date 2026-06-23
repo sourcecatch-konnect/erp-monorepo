@@ -173,7 +173,9 @@ export const groupDetailInclude = {
   consignee: { select: { id: true, name: true, shortName: true } },
   originBranch: { select: { id: true, name: true, branchCode: true } },
   destinationBranch: { select: { id: true, name: true, branchCode: true } },
-  order: { select: { id: true, orderNumber: true, truckQuantity: true } },
+  order: {
+    select: { id: true, orderNumber: true, truckQuantity: true, bookingFreightAmount: true },
+  },
   lorryReceipts: {
     where: { deletedAt: null },
     include: {

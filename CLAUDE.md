@@ -79,6 +79,34 @@ Helpers in `apps/server/src/modules/_shared/response.ts` (`sendOk`). Errors thro
 
 When adding a master, follow `modules/`. Don't move old routers preemptively.
 
+### Database transactions
+
+Prisma interactive transactions (`db.$transaction(async (tx) => …)`) have a **5s
+default timeout**. A transaction that does many sequential awaits will blow it
+(symptom: `Transaction API error: A query cannot be executed on an expired
+transaction` — and it points at whichever query happened to run after the clock
+expired, not the slow one). Follow this shape for any multi-step write:
+
+- **Keep the transaction to writes only.** Do all read-only work — lookups,
+  permission/branch checks (`assertBranchAccess`), validation, slot guards,
+  document-number generation — _before_ opening the transaction, against `db`.
+  (Sequence generation via `DocumentSequence` upserts is atomic per statement and
+  gap-tolerant, so it's safe outside the transaction; a rolled-back write just
+  leaves a number gap.)
+- **Don't materialise heavy reads inside the transaction.** Have the `create` /
+  `update` return a minimal `select: { id: true }`, then re-fetch the full
+  `include` detail _after_ the transaction commits.
+- **Avoid N sequential round-trips.** Don't `await` a per-row query in a loop
+  (e.g. one document number per line). Reserve a block in a single upsert
+  instead — see `generateLRNumbers` (bumps the sequence by N, returns the first
+  reserved value, formats the rest in memory) vs the single-row `generateLRNumber`.
+- **Add an explicit budget as a safety net**, not a substitute for the above:
+  `db.$transaction(fn, { timeout: 15000, maxWait: 10000 })`.
+
+Reference implementation: `modules/lr-group/lr-group.route.ts` `POST /` (create).
+Helpers typed `Prisma.TransactionClient` accept the base `db` client too, so the
+same function works inside and outside a transaction.
+
 ### Auth
 
 - Tokens are **httpOnly cookies** (`accessToken` ~15m, `refreshToken` 7d) set by the server. Frontend never reads or stores tokens — relies on `axios` with `withCredentials: true`.

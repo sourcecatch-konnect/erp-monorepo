@@ -177,6 +177,19 @@ Original step list (for reference):
   freight + one seal, three LRs each with own invoice + e-way; truck-slot count = 1.
 - Confirm hub-split moves the whole group to a leg-2 trip.
 
+## Transaction shape (create path)
+
+`POST /lr-groups` create was hitting Prisma's 5s interactive-transaction timeout
+(many sequential reads + a per-line LR-number loop + a heavy `include`, all inside
+one `$transaction`). Restructured to the pattern now documented in CLAUDE.md
+("Database transactions"): all reads / branch checks / `generateGroupNumber` /
+`generateLRNumbers` run against `db` _before_ the transaction; the transaction
+only creates the group + LRs (returning `select: { id }`) and dispatches the trip;
+the detail `include` is re-fetched after commit. LR numbers are reserved as one
+block (`generateLRNumbers`) instead of N single upserts. A
+`{ timeout: 15000, maxWait: 10000 }` budget is set as a backstop. **Apply the same
+shape to the finalise / split / cancel transactions if they grow.**
+
 ## Open (flagged, not blocking)
 
 - **Accounts vs Ops separation**: reused `LORRY_RECEIPT.*`. Split into `LR_GROUP.*` only if

@@ -29,6 +29,8 @@ import {
   IconClock,
   IconCircleDot,
   IconLoader2,
+  IconArrowRight,
+  IconPackage,
 } from "@tabler/icons-react";
 import { useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -129,9 +131,12 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
 
   const lrCountsQuery = useQuery({
     queryKey: [...lrGroupKeys.all, "order-counts", order?.id ?? orderId],
-    queryFn: () => lrGroupApi.list({ size: 1, filter: { orderId: order?.id ?? "" } }),
+    queryFn: () =>
+      lrGroupApi.list({ size: 1, filter: { orderId: order?.id ?? "" } }),
     enabled: Boolean(
-      order?.id && order?.orderType === "Truck" && order?.status === "Confirmed",
+      order?.id &&
+      order?.orderType === "Truck" &&
+      order?.status === "Confirmed",
     ),
     select: (res) => res.meta?.total ?? 0,
   });
@@ -364,12 +369,14 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               <Field label="From branch" value={order.fromBranch?.name} />
               <Field label="To branch" value={order.toBranch?.name} />
               <Field label="Pickup date" value={formatDate(order.pickupDate)} />
-              <Field
-                label="Pickup location"
-                value={
-                  order.customerLocation?.name ?? order.pickupAddressOverride
-                }
-              />
+              {order.orderType !== "Truck" && (
+                <Field
+                  label="Pickup location"
+                  value={
+                    order.customerLocation?.name ?? order.pickupAddressOverride
+                  }
+                />
+              )}
               <Field
                 label="Order type"
                 value={
@@ -397,10 +404,11 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                       label="LRs created"
                       value={
                         <span
-                          className={`font-medium ${(lrCountsQuery.data ?? 0) >= order.truckQuantity
-                            ? "text-red-600"
-                            : "text-foreground"
-                            }`}
+                          className={`font-medium ${
+                            (lrCountsQuery.data ?? 0) >= order.truckQuantity
+                              ? "text-red-600"
+                              : "text-foreground"
+                          }`}
                         >
                           {lrCountsQuery.data ?? "—"} / {order.truckQuantity}
                           {(lrCountsQuery.data ?? 0) >= order.truckQuantity && (
@@ -458,7 +466,9 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                     Total booking freight
                   </p>
                   <p className="mt-1 text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
-                    {displayedFreight}
+                    {order.status === "PendingApproval"
+                      ? `Order not confirmed yet`
+                      : ` ${formatMoneyFromPaise(order.bookingFreightAmount)} `}
                   </p>
                 </div>
 
@@ -482,8 +492,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               </div>
 
               {freightWasEdited &&
-                autoFreight != null &&
-                approvedFreight != null ? (
+              autoFreight != null &&
+              approvedFreight != null ? (
                 <div className="mt-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div>
@@ -525,6 +535,84 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               ) : null}
             </div>
           </CardSection>
+
+          {order.orderType === "Truck" &&
+          (order.consignments?.length ?? 0) > 0 ? (
+            <CardSection
+              title="Consignment Lines"
+              icon={<IconPackage size={14} />}
+              action={
+                <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                  {order.consignments!.length}{" "}
+                  {order.consignments!.length === 1 ? "line" : "lines"}
+                </span>
+              }
+            >
+              <div className="space-y-3">
+                {order.consignments!.map((c, idx) => (
+                  <div key={c.id} className="rounded-lg border bg-muted/20 p-4">
+                    <div className="mb-3 flex flex-wrap items-center gap-2.5">
+                      <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                        LR {idx + 1}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Truck #{c.truckIndex}
+                      </span>
+                      <div className="ml-auto flex items-center gap-2 text-sm">
+                        <span className="font-medium">
+                          {c.loadingLocation?.name ?? (
+                            <span className="text-muted-foreground/50">—</span>
+                          )}
+                        </span>
+                        <IconArrowRight
+                          size={15}
+                          className="shrink-0 text-muted-foreground"
+                        />
+                        <span className="font-medium">
+                          {c.unloadingLocation?.name ?? (
+                            <span className="text-muted-foreground/50">—</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="overflow-hidden rounded-lg border bg-card">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/40 hover:bg-muted/40">
+                            <TableHead className="text-xs uppercase">
+                              Goods
+                            </TableHead>
+                            <TableHead className="text-xs uppercase">
+                              Qty
+                            </TableHead>
+                            <TableHead className="text-xs uppercase">
+                              Unit
+                            </TableHead>
+                            <TableHead className="text-xs uppercase">
+                              Weight
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(c.goods ?? []).map((g) => (
+                            <TableRow key={g.id}>
+                              <TableCell className="font-medium">
+                                {g.goods?.name ?? "—"}
+                              </TableCell>
+                              <TableCell>{g.quantity}</TableCell>
+                              <TableCell>{g.unit}</TableCell>
+                              <TableCell>{g.weight ?? "—"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardSection>
+          ) : null}
 
           <CardSection title="Contact & Freight Details">
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -603,20 +691,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
 
                 {isDownloadingPdf ? "Downloading..." : "Download PDF"}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="justify-start gap-2 text-sm font-normal"
-              >
-                <IconCopy size={14} /> Duplicate order
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="justify-start gap-2 text-sm font-normal"
-              >
-                <IconMail size={14} /> Notify customer
-              </Button>
+
               {canCreateLR &&
                 order.orderType === "Truck" &&
                 order.status === "Confirmed" && (

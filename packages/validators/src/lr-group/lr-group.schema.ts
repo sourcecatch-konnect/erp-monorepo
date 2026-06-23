@@ -25,13 +25,25 @@ const optionalId = z
   .optional()
   .transform((v) => v || undefined);
 
-const positivePaise = (label: string) =>
+// Money fields are entered in rupees on the wire/UI and stored as paise. These
+// transform rupees -> paise so the input is honest (₹) and the output is paise.
+const rupeesToPaise = (label: string) =>
   z
     .union([z.string(), z.number()])
-    .transform((v) => Number(v))
+    .transform((v) => Math.round(Number(v) * 100))
+    .refine((v) => Number.isInteger(v) && v > 0, `${label} must be a positive amount`);
+
+const optionalRupeesToPaise = (label: string) =>
+  z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((v) => {
+      if (v === "" || v === undefined || v === null) return undefined;
+      return Math.round(Number(v) * 100);
+    })
     .refine(
-      (v) => Number.isInteger(v) && v > 0,
-      `${label} must be a positive whole number (paisa)`,
+      (v) => v === undefined || (Number.isInteger(v) && v > 0),
+      `${label} must be a positive amount`,
     );
 
 const truckIndexField = z
@@ -170,22 +182,14 @@ export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
 export const finaliseGroupLineSchema = z.object({
   lrId: requiredId("Lorry receipt"),
   invoiceNumber: optionalString,
-  invoiceAmount: z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform((v) => {
-      if (v === "" || v === undefined || v === null) return undefined;
-      return Number(v);
-    })
-    .refine(
-      (v) => v === undefined || (Number.isInteger(v) && v > 0),
-      "Invoice amount must be a positive whole number (paisa)",
-    ),
+  // Entered in rupees, stored as paise.
+  invoiceAmount: optionalRupeesToPaise("Invoice amount"),
   ewayBill: ewayBillSchema,
 });
 
 export const finaliseGroupSchema = z.object({
-  baseFreightAmount: positivePaise("Base freight amount"),
+  // Entered in rupees, stored as paise.
+  baseFreightAmount: rupeesToPaise("Base freight amount"),
   sealNumber: optionalString,
   lrs: z.array(finaliseGroupLineSchema).min(1, "At least one lorry receipt is required"),
 });

@@ -1,16 +1,13 @@
 {
   "tailwindCSS.experimental.configFile": {
-    "apps/admin-web/app/globals.css": [
-      "apps/admin-web/**/*.{js,ts,jsx,tsx}",
-      "packages/ui/src/**/*.{js,ts,jsx,tsx}",
-      "packages/notifications-web/src/**/*.{js,ts,jsx,tsx}",
-      "packages/attachments-web/src/**/*.{js,ts,jsx,tsx}"
-    ],
-    "apps/employee-web/app/globals.css": [
-      "apps/employee-web/**/*.{js,ts,jsx,tsx}",
+    "apps/web/app/globals.css": [
+      "apps/web/**/*.{js,ts,jsx,tsx,mdx}",
       "packages/ui/src/**/*.{js,ts,jsx,tsx}",
       "packages/notifications-web/src/**/*.{js,ts,jsx,tsx}",
       "packages/attachments-web/src/**/*.{js,ts,jsx,tsx}"
     ]
+  },
+  "editor.quickSuggestions": {
+    "strings": "on"
   }
 }

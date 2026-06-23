@@ -85,7 +85,7 @@ export function DatePicker({
 
   return (
     <Field className="w-full">
-      <FieldLabel htmlFor="date-picker">{label}</FieldLabel>
+      {label ? <FieldLabel htmlFor="date-picker">{label}</FieldLabel> : null}
 
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>

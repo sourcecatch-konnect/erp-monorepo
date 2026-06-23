@@ -45,6 +45,7 @@ import {
   IconFileText,
   IconDownload,
   IconTrash,
+  IconListDetails,
 } from "@tabler/icons-react";
 
 import { StatusBadge, formatDate, formatMoneyFromPaise, STATUS_ORDER } from "./order-ui";
@@ -309,6 +310,15 @@ export default function OrderTable(props: Props) {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link
+                                href={`/orders/${encodeURIComponent(o.orderNumber)}`}
+                              >
+                                <IconListDetails size={16} className="mr-2" />{" "}
+                                View details
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             {canApprove && isPending ? (
                               <DropdownMenuItem onClick={() => onApprove(o)}>
                                 <IconCheck size={16} className="mr-2" /> Approve
@@ -321,7 +331,9 @@ export default function OrderTable(props: Props) {
                             ) : null}
                             {canUpdate && editable ? (
                               <DropdownMenuItem asChild>
-                                <Link href={`/orders/${o.id}/edit`}>
+                                <Link
+                                  href={`/orders/${encodeURIComponent(o.orderNumber)}/edit`}
+                                >
                                   <IconEdit size={16} className="mr-2" /> Edit
                                 </Link>
                               </DropdownMenuItem>

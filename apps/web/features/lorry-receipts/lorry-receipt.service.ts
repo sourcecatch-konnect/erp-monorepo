@@ -61,6 +61,11 @@ export const lorryReceiptApi = {
     );
     return unwrapApiResponse(res);
   },
+
+  remove: async (id: string): Promise<{ id: string }> => {
+    const res = await api.delete<ApiResponse<{ id: string }>>(`/lorry-receipts/${id}`);
+    return unwrapApiResponse(res);
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -111,6 +116,55 @@ type OrderRow = {
   customer?: { id: string; name: string } | null;
   fromBranch?: { id: string; name?: string; shortCode: string } | null;
   toBranch?: { id: string; name?: string; shortCode: string } | null;
+};
+
+/** Slim shape of GET /orders/:id we read for FROM_ORDER LR context. */
+type OrderContextRow = {
+  orderNumber: string;
+  status?: string | null;
+  truckQuantity?: number | null;
+  bookingFreightAmount?: string | number | null;
+  customer?: { id: string; name: string } | null;
+  consignee?: { id: string; name: string } | null;
+  fromBranch?: { id: string; name: string; shortCode: string } | null;
+  toBranch?: { id: string; name: string; shortCode: string } | null;
+  route?: {
+    sourceCity?: { id: string; name: string } | null;
+    destinationCity?: { id: string; name: string } | null;
+  } | null;
+  consignments?: {
+    truckIndex: number;
+    loadingLocation?: { id: string; name: string } | null;
+    unloadingLocation?: { id: string; name: string } | null;
+    goods?: {
+      quantity: number;
+      unit: string;
+      goods?: { id: string; name: string } | null;
+    }[];
+  }[];
+};
+
+/** One consignment line as the LR create summary renders it. */
+export type LROrderContextLine = {
+  truckIndex: number;
+  loadingLocation: string | null;
+  unloadingLocation: string | null;
+  goods: { name: string; quantity: number; unit: string }[];
+};
+
+/** Order context that drives the truck selector + LR create summary panel. */
+export type LROrderContext = {
+  orderNumber: string;
+  status: string | null;
+  truckQuantity: number | null;
+  bookingFreightAmount: number | null;
+  consignor: string | null;
+  consignee: string | null;
+  fromBranch: { name: string; shortCode: string } | null;
+  toBranch: { name: string; shortCode: string } | null;
+  route: { source: string | null; destination: string | null } | null;
+  trucks: { truckIndex: number; lineCount: number }[];
+  lines: LROrderContextLine[];
 };
 
 const LOOKUP_SIZE = { size: 1000 } as const;
@@ -250,6 +304,62 @@ export const lrLookups = {
     );
     return unwrapApiResponse(res).map((l) => ({ value: l.id, label: l.name }));
   },
+
+  /**
+   * Context for a FROM_ORDER LR group: the order's parties, route, freight, and
+   * its consignment lines grouped per truck. Drives both the truck selector
+   * (offer only trucks that actually have lines, with counts) and the create
+   * summary panel (show exactly what will be generated for the chosen truck).
+   */
+  orderContext: async (orderId: string): Promise<LROrderContext> => {
+    const res = await api.get<ApiResponse<OrderContextRow>>(
+      `/orders/${orderId}`,
+    );
+    const order = unwrapApiResponse(res);
+
+    const lines: LROrderContextLine[] = (order.consignments ?? []).map((c) => ({
+      truckIndex: c.truckIndex,
+      loadingLocation: c.loadingLocation?.name ?? null,
+      unloadingLocation: c.unloadingLocation?.name ?? null,
+      goods: (c.goods ?? []).map((g) => ({
+        name: g.goods?.name ?? "—",
+        quantity: g.quantity,
+        unit: g.unit,
+      })),
+    }));
+
+    const counts = new Map<number, number>();
+    for (const l of lines) counts.set(l.truckIndex, (counts.get(l.truckIndex) ?? 0) + 1);
+    const trucks = [...counts.entries()]
+      .map(([truckIndex, lineCount]) => ({ truckIndex, lineCount }))
+      .sort((a, b) => a.truckIndex - b.truckIndex);
+
+    return {
+      orderNumber: order.orderNumber,
+      status: order.status ?? null,
+      truckQuantity: order.truckQuantity ?? null,
+      bookingFreightAmount:
+        order.bookingFreightAmount != null
+          ? Number(order.bookingFreightAmount)
+          : null,
+      consignor: order.customer?.name ?? null,
+      consignee: order.consignee?.name ?? null,
+      fromBranch: order.fromBranch
+        ? { name: order.fromBranch.name, shortCode: order.fromBranch.shortCode }
+        : null,
+      toBranch: order.toBranch
+        ? { name: order.toBranch.name, shortCode: order.toBranch.shortCode }
+        : null,
+      route: order.route
+        ? {
+            source: order.route.sourceCity?.name ?? null,
+            destination: order.route.destinationCity?.name ?? null,
+          }
+        : null,
+      trucks,
+      lines,
+    };
+  },
 };
 
 export const lrLookupKeys = {
@@ -264,4 +374,6 @@ export const lrLookupKeys = {
   confirmedTruckOrders: ["lookup", "confirmed-truck-orders"] as const,
   customerLocations: (customerId: string) =>
     ["lookup", "customer-locations", customerId] as const,
+  orderContext: (orderId: string) =>
+    ["lookup", "order-context", orderId] as const,
 };

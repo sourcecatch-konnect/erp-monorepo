@@ -125,7 +125,13 @@ const orderBaseShape = {
 };
 
 const typeRefinement = (
-  data: { orderType: "Truck" | "Item"; truckQuantity?: number; vehicleTypeId?: string; items?: unknown[] },
+  data: {
+    orderType: "Truck" | "Item";
+    truckQuantity?: number;
+    vehicleTypeId?: string;
+    items?: unknown[];
+    consignments?: OrderConsignmentInput[];
+  },
   ctx: z.RefinementCtx
 ) => {
   if (data.orderType === "Truck") {
@@ -143,6 +149,36 @@ const typeRefinement = (
         path: ["vehicleTypeId"],
       });
     }
+    // A loading -> unloading pair must not repeat within the same truck: put
+    // multiple goods on a single line instead of cloning the line. Different
+    // trucks may share a lane (e.g. two trucks booked for A -> B), so the key
+    // is scoped by truckIndex. Incomplete lines (missing either point) are
+    // skipped — they fail their own required checks elsewhere.
+    const seen = new Map<string, number>();
+    (data.consignments ?? []).forEach((c, index) => {
+      // A line can't be assigned to a truck beyond the booked quantity. This is
+      // the source-of-truth guard: it keeps every consignment's truckIndex within
+      // 1..truckQuantity so LR generation never finds an orphaned/empty truck.
+      if (data.truckQuantity && c.truckIndex > data.truckQuantity) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Truck #${c.truckIndex} exceeds the booked truck quantity (${data.truckQuantity})`,
+          path: ["consignments", index, "truckIndex"],
+        });
+      }
+      if (!c.loadingLocationId || !c.unloadingLocationId) return;
+      const key = `${c.truckIndex}|${c.loadingLocationId}|${c.unloadingLocationId}`;
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "This loading and unloading point pair already exists for this truck — add the goods to that line instead",
+          path: ["consignments", index, "unloadingLocationId"],
+        });
+      } else {
+        seen.set(key, index);
+      }
+    });
   } else if (data.orderType === "Item") {
     if (!data.items || data.items.length === 0) {
       ctx.addIssue({
