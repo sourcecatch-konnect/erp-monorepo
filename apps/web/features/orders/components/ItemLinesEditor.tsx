@@ -34,7 +34,8 @@ export default function ItemLinesEditor({
 }) {
   const {
     control,
-    formState: { errors },
+    trigger,
+    formState: { errors, isSubmitted },
   } = useFormContext<FormValues>();
 
   const { fields, append, remove } = useFieldArray<FormValues, "items">({
@@ -46,6 +47,14 @@ export default function ItemLinesEditor({
     () => append({ goodsId: "", quantity: 1, unit: "MT", weight: undefined }),
     [append]
   );
+
+  // After a save attempt, re-run the resolver on remove so the removed row's
+  // stale error doesn't linger in formState.errors.
+  const removeRow = (index: number) => {
+    if (fields.length <= 1) return;
+    remove(index);
+    if (isSubmitted) void trigger("items");
+  };
 
   React.useEffect(() => {
     if (fields.length === 0) addRow();
@@ -161,7 +170,7 @@ export default function ItemLinesEditor({
                       size="icon-sm"
                       variant="ghost"
                       className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                      onClick={() => (fields.length > 1 ? remove(index) : null)}
+                      onClick={() => removeRow(index)}
                       disabled={fields.length === 1}
                       aria-label="Remove item"
                     >
