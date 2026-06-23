@@ -262,7 +262,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   const trip = await db.$transaction(async (tx) => {
     const fyCode = fyCodeFor(now);
     const seq = await nextSequence(tx, TRIP_SEQ_KEY, fyCode, "TRIP");
-    const tripNumber = formatDocNumber(TRIP_SEQ_KEY, fyCode, seq);
+    const tripNumber = formatDocNumber(TRIP_SEQ_KEY, fyCode, seq, "SKV");
 
     const created = await tx.vehicleTrip.create({
       data: {

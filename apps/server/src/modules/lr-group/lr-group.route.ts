@@ -26,6 +26,7 @@ import { Prisma } from "../../../generated/prisma/index.js";
 import type { LRGroupStatus } from "../../../generated/prisma/index.js";
 import {
   generateLRNumber,
+  generateLRNumbers,
   resolveHubBranchId,
 } from "../lorry-receipt/lorry-receipt.service.js";
 import {
@@ -149,173 +150,188 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   const input = parsed.data;
   const me = actorId(req);
 
-  const group = await db.$transaction(async (tx) => {
-    let originBranchId: string;
-    let destinationBranchId: string;
-    let consignorId: string;
-    let consigneeId: string;
-    let orderId: string | null = null;
-    let truckIndex = 1;
-    // Each LR is one consignment: its loading/unloading location + goods lines.
-    let lines: {
-      loadingLocationId: string | null;
-      unloadingLocationId: string | null;
-      goods: LRGoodsCreate[];
-    }[];
+  // ---- Resolve everything read-only BEFORE opening a transaction. Reads,
+  // branch checks and sequence generation all run outside the write transaction
+  // so the interactive transaction stays tiny and well under Prisma's 5s budget
+  // (see "Database transactions" in CLAUDE.md). ----
+  let originBranchId: string;
+  let destinationBranchId: string;
+  let consignorId: string;
+  let consigneeId: string;
+  let orderId: string | null = null;
+  let truckIndex = 1;
+  // Each LR is one consignment: its loading/unloading location + goods lines.
+  let lines: {
+    loadingLocationId: string | null;
+    unloadingLocationId: string | null;
+    goods: LRGoodsCreate[];
+  }[];
 
-    if (input.source === "FROM_ORDER") {
-      const order = await tx.order.findUnique({
-        where: { id: input.orderId },
-        select: {
-          id: true,
-          customerId: true,
-          consigneeId: true,
-          fromBranchId: true,
-          toBranchId: true,
-          orderType: true,
-          truckQuantity: true,
-          status: true,
-        },
-      });
-      if (!order) throw new BadRequestError("Order not found");
-      if (order.status !== "Confirmed") {
-        throw new BadRequestError("A group can only be created for a Confirmed order");
-      }
-      if (order.orderType !== "Truck") {
-        throw new BadRequestError("Only Truck orders support group creation");
-      }
-      if (!order.truckQuantity) {
-        throw new BadRequestError("Order has no truck quantity set");
-      }
-      if (!order.consigneeId) {
-        throw new BadRequestError("Set the order's consignee before creating a group");
-      }
-
-      truckIndex = input.truckIndex ?? 1;
-      await assertGroupSlotAvailable(tx, order.id, order.truckQuantity, truckIndex);
-
-      const consignments = await tx.orderConsignment.findMany({
-        where: { orderId: order.id, truckIndex },
-        include: { goods: { include: { goods: { select: { name: true } } } } },
-      });
-      if (consignments.length === 0) {
-        throw new BadRequestError(
-          `Order has no consignment lines for truck #${truckIndex}`,
-        );
-      }
-
-      originBranchId = order.fromBranchId;
-      destinationBranchId = order.toBranchId;
-      consignorId = order.customerId;
-      consigneeId = order.consigneeId;
-      orderId = order.id;
-      lines = consignments.map((c) => ({
-        loadingLocationId: c.loadingLocationId,
-        unloadingLocationId: c.unloadingLocationId,
-        goods: c.goods.map((g) => ({
-          name: g.goods.name,
-          description: null,
-          quantity: g.quantity,
-          unit: g.unit,
-          weight: g.weight ? Number(g.weight) : null,
-          length: null,
-          width: null,
-          height: null,
-        })),
-      }));
-    } else {
-      originBranchId = input.originBranchId;
-      destinationBranchId = input.destinationBranchId;
-      consignorId = input.consignorId;
-      consigneeId = input.consigneeId;
-      lines = input.lrs.map((l) => ({
-        loadingLocationId: l.loadingLocationId ?? null,
-        unloadingLocationId: l.unloadingLocationId ?? null,
-        goods: l.goods.map((g) => ({
-          name: g.name,
-          description: g.description ?? null,
-          quantity: g.quantity,
-          unit: g.unit,
-          weight: g.weight ?? null,
-          length: g.length ?? null,
-          width: g.width ?? null,
-          height: g.height ?? null,
-        })),
-      }));
-    }
-
-    // Origin-branch access check.
-    assertBranchAccess(req, originBranchId);
-
-    const originBranch = await tx.branch.findUnique({
-      where: { id: originBranchId },
-      select: { branchCode: true },
-    });
-    if (!originBranch) throw new BadRequestError("Origin branch not found");
-
-    const now = new Date();
-    const fyCode = fyCodeFor(now);
-    const groupNumber = await generateGroupNumber(tx, originBranch.branchCode, fyCode);
-
-    const isMarketVehicle = input.isMarketVehicle ?? false;
-    const transportType =
-      input.source === "INSTANT" ? "Road" : (input.transportType ?? "Road");
-    const tripLegType =
-      input.source === "FROM_ORDER" ? (input.tripLegType ?? "DIRECT") : "DIRECT";
-    const hubId = tripLegType === "DIRECT" ? null : await resolveHubBranchId(tx);
-    const railheadBranchId =
-      input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null;
-    const primaryTripId = !isMarketVehicle ? (input.primaryTripId ?? null) : null;
-
-    // Generate an LR number per line up front (one consignment = one LR).
-    const lrNumbers: string[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      lrNumbers.push(await generateLRNumber(tx, originBranch.branchCode, fyCode));
-    }
-
-    const created = await tx.lRGroup.create({
-      data: {
-        groupNumber,
-        fyCode,
-        source: input.source,
-        orderId,
-        truckIndex,
-        originBranchId,
-        destinationBranchId,
-        consignorId,
-        consigneeId,
-        transportType,
-        priority: input.priority ?? "Normal",
-        tripLegType,
-        hubId,
-        railheadBranchId,
-        isMarketVehicle,
-        primaryTripId,
-        marketVehicleNumber: isMarketVehicle ? (input.marketVehicleNumber ?? null) : null,
-        marketDriverName: isMarketVehicle ? (input.marketDriverName ?? null) : null,
-        status: "DRAFT",
-        createdById: me,
-        lorryReceipts: {
-          create: lines.map((line, i) => ({
-            lrNumber: lrNumbers[i]!,
-            fyCode,
-            loadingLocationId: line.loadingLocationId,
-            unloadingLocationId: line.unloadingLocationId,
-            status: "DRAFT",
-            createdById: me,
-            goods: { create: line.goods },
-          })),
-        },
+  if (input.source === "FROM_ORDER") {
+    const order = await db.order.findUnique({
+      where: { id: input.orderId },
+      select: {
+        id: true,
+        customerId: true,
+        consigneeId: true,
+        fromBranchId: true,
+        toBranchId: true,
+        orderType: true,
+        truckQuantity: true,
+        status: true,
       },
-      include: groupDetailInclude,
     });
-
-    // Own-vehicle group attached to a Planned trip dispatches it (-> InTransit).
-    if (primaryTripId) {
-      await dispatchTripOnAttach(tx, primaryTripId, created.groupNumber, me);
+    if (!order) throw new BadRequestError("Order not found");
+    if (order.status !== "Confirmed") {
+      throw new BadRequestError("A group can only be created for a Confirmed order");
+    }
+    if (order.orderType !== "Truck") {
+      throw new BadRequestError("Only Truck orders support group creation");
+    }
+    if (!order.truckQuantity) {
+      throw new BadRequestError("Order has no truck quantity set");
+    }
+    if (!order.consigneeId) {
+      throw new BadRequestError("Set the order's consignee before creating a group");
     }
 
-    return created;
+    truckIndex = input.truckIndex ?? 1;
+    await assertGroupSlotAvailable(db, order.id, order.truckQuantity, truckIndex);
+
+    const consignments = await db.orderConsignment.findMany({
+      where: { orderId: order.id, truckIndex },
+      include: { goods: { include: { goods: { select: { name: true } } } } },
+    });
+    if (consignments.length === 0) {
+      throw new BadRequestError(
+        `Order has no consignment lines for truck #${truckIndex}`,
+      );
+    }
+
+    originBranchId = order.fromBranchId;
+    destinationBranchId = order.toBranchId;
+    consignorId = order.customerId;
+    consigneeId = order.consigneeId;
+    orderId = order.id;
+    lines = consignments.map((c) => ({
+      loadingLocationId: c.loadingLocationId,
+      unloadingLocationId: c.unloadingLocationId,
+      goods: c.goods.map((g) => ({
+        name: g.goods.name,
+        description: null,
+        quantity: g.quantity,
+        unit: g.unit,
+        weight: g.weight ? Number(g.weight) : null,
+        length: null,
+        width: null,
+        height: null,
+      })),
+    }));
+  } else {
+    originBranchId = input.originBranchId;
+    destinationBranchId = input.destinationBranchId;
+    consignorId = input.consignorId;
+    consigneeId = input.consigneeId;
+    lines = input.lrs.map((l) => ({
+      loadingLocationId: l.loadingLocationId ?? null,
+      unloadingLocationId: l.unloadingLocationId ?? null,
+      goods: l.goods.map((g) => ({
+        name: g.name,
+        description: g.description ?? null,
+        quantity: g.quantity,
+        unit: g.unit,
+        weight: g.weight ?? null,
+        length: g.length ?? null,
+        width: g.width ?? null,
+        height: g.height ?? null,
+      })),
+    }));
+  }
+
+  // Origin-branch access check.
+  assertBranchAccess(req, originBranchId);
+
+  const originBranch = await db.branch.findUnique({
+    where: { id: originBranchId },
+    select: { branchCode: true },
+  });
+  if (!originBranch) throw new BadRequestError("Origin branch not found");
+
+  const now = new Date();
+  const fyCode = fyCodeFor(now);
+  const groupNumber = await generateGroupNumber(db, originBranch.branchCode, fyCode);
+  // One upsert reserves a contiguous block of LR numbers (no per-line round-trip).
+  const lrNumbers = await generateLRNumbers(
+    db,
+    originBranch.branchCode,
+    fyCode,
+    lines.length,
+  );
+
+  const isMarketVehicle = input.isMarketVehicle ?? false;
+  const transportType =
+    input.source === "INSTANT" ? "Road" : (input.transportType ?? "Road");
+  const tripLegType =
+    input.source === "FROM_ORDER" ? (input.tripLegType ?? "DIRECT") : "DIRECT";
+  const hubId = tripLegType === "DIRECT" ? null : await resolveHubBranchId(db);
+  const railheadBranchId =
+    input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null;
+  const primaryTripId = !isMarketVehicle ? (input.primaryTripId ?? null) : null;
+
+  // ---- Writes only: create the group + its LRs and dispatch the trip. The
+  // heavy detail include is fetched AFTER commit, not inside the transaction. ----
+  const created = await db.$transaction(
+    async (tx) => {
+      const group = await tx.lRGroup.create({
+        data: {
+          groupNumber,
+          fyCode,
+          source: input.source,
+          orderId,
+          truckIndex,
+          originBranchId,
+          destinationBranchId,
+          consignorId,
+          consigneeId,
+          transportType,
+          priority: input.priority ?? "Normal",
+          tripLegType,
+          hubId,
+          railheadBranchId,
+          isMarketVehicle,
+          primaryTripId,
+          marketVehicleNumber: isMarketVehicle ? (input.marketVehicleNumber ?? null) : null,
+          marketDriverName: isMarketVehicle ? (input.marketDriverName ?? null) : null,
+          status: "DRAFT",
+          createdById: me,
+          lorryReceipts: {
+            create: lines.map((line, i) => ({
+              lrNumber: lrNumbers[i]!,
+              fyCode,
+              loadingLocationId: line.loadingLocationId,
+              unloadingLocationId: line.unloadingLocationId,
+              status: "DRAFT",
+              createdById: me,
+              goods: { create: line.goods },
+            })),
+          },
+        },
+        select: { id: true, groupNumber: true },
+      });
+
+      // Own-vehicle group attached to a Planned trip dispatches it (-> InTransit).
+      if (primaryTripId) {
+        await dispatchTripOnAttach(tx, primaryTripId, group.groupNumber, me);
+      }
+
+      return group;
+    },
+    { timeout: 15000, maxWait: 10000 },
+  );
+
+  const group = await db.lRGroup.findUniqueOrThrow({
+    where: { id: created.id },
+    include: groupDetailInclude,
   });
 
   return sendOk(res, group, undefined, 201);

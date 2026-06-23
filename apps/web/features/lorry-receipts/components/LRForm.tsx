@@ -40,6 +40,7 @@ import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation"
 
 import { lrGroupApi } from "../lr-group.service";
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
+import LRCreateSummary from "./LRCreateSummary";
 
 type Props = {
   orderId?: string;
@@ -144,12 +145,13 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryFn: lrLookups.goods,
   });
 
-  // FROM_ORDER: the trucks this order has consignment lines for (with counts),
-  // and the groups already created against it — so we offer only trucks that
-  // both have lines and aren't already grouped.
-  const orderTrucks = useQuery({
-    queryKey: lrLookupKeys.orderTrucks(orderId ?? ""),
-    queryFn: () => lrLookups.orderTrucks(orderId as string),
+  // FROM_ORDER: the order's context (parties, route, freight, consignment lines
+  // per truck) and the groups already created against it — so we offer only
+  // trucks that both have lines and aren't already grouped, and can summarise
+  // exactly what will be generated.
+  const orderContext = useQuery({
+    queryKey: lrLookupKeys.orderContext(orderId ?? ""),
+    queryFn: () => lrLookups.orderContext(orderId as string),
     enabled: source === "FROM_ORDER" && Boolean(orderId),
   });
   const orderGroups = useQuery({
@@ -232,6 +234,15 @@ export default function LRForm({ orderId, tripId }: Props) {
     value: l.value,
     label: l.label,
   }));
+  // Union of both parties' locations — lets the summary resolve INSTANT line
+  // loading/unloading ids to names regardless of which party they came from.
+  const locationOptions = React.useMemo(() => {
+    const seen = new Map<string, { value: string; label: string }>();
+    for (const o of [...loadingOptions, ...unloadingOptions]) {
+      if (!seen.has(o.value)) seen.set(o.value, o);
+    }
+    return [...seen.values()];
+  }, [loadingOptions, unloadingOptions]);
 
   // Trucks already claimed by a live (non-cancelled) group can't be reused.
   const takenTrucks = React.useMemo(
@@ -245,15 +256,15 @@ export default function LRForm({ orderId, tripId }: Props) {
   );
   const truckOptions = React.useMemo(
     () =>
-      (orderTrucks.data?.trucks ?? [])
+      (orderContext.data?.trucks ?? [])
         .filter((t) => !takenTrucks.has(t.truckIndex))
         .map((t) => ({
           value: String(t.truckIndex),
           label: `Truck #${t.truckIndex} · ${t.lineCount} LR${t.lineCount === 1 ? "" : "s"}`,
         })),
-    [orderTrucks.data, takenTrucks],
+    [orderContext.data, takenTrucks],
   );
-  const trucksLoading = orderTrucks.isLoading || orderGroups.isLoading;
+  const trucksLoading = orderContext.isLoading || orderGroups.isLoading;
 
   // Keep truckIndex on a valid, available truck: preselect the first option, and
   // re-point if the current pick got taken or has no lines.
@@ -288,9 +299,10 @@ export default function LRForm({ orderId, tripId }: Props) {
 
   return (
     <FormProvider {...form}>
+      <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="mx-auto max-w-4xl space-y-5 p-4 md:p-6"
+        className="order-2 min-w-0 space-y-5 lg:order-1"
       >
         <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -385,7 +397,7 @@ export default function LRForm({ orderId, tripId }: Props) {
                   </Select>
                   {!trucksLoading && truckOptions.length === 0 && (
                     <p className="mt-1 text-xs text-amber-600">
-                      {(orderTrucks.data?.trucks?.length ?? 0) === 0
+                      {(orderContext.data?.trucks?.length ?? 0) === 0
                         ? "This order has no consignment lines — add them on the order first."
                         : "All trucks for this order already have a group."}
                     </p>
@@ -637,6 +649,19 @@ export default function LRForm({ orderId, tripId }: Props) {
           </FormSection>
         )}
       </form>
+
+        <div className="order-1 lg:order-2">
+          <LRCreateSummary
+            source={source}
+            order={orderContext.data}
+            orderLoading={source === "FROM_ORDER" && orderContext.isLoading}
+            customerOptions={customerOptions}
+            branchOptions={branchOptions}
+            tripOptions={tripOptions}
+            locationOptions={locationOptions}
+          />
+        </div>
+      </div>
     </FormProvider>
   );
 }
