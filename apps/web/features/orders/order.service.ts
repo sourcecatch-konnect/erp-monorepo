@@ -189,7 +189,7 @@ export const orderApi = {
 /* ------------------------------------------------------------------ */
 
 type NamedRow = { id: string; name: string };
-type BranchRow = { id: string; name: string; shortCode: string };
+type BranchRow = { id: string; name: string; shortCode: string;};
 type VehicleTypeRow = { id: string; name: string; code: string; isActive: boolean };
 
 const LOOKUP_QUERY = { size: 1000, sort: "name:asc" } as const;

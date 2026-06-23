@@ -19,32 +19,68 @@ type Props<TCreate, TUpdate, TResult> = {
   entityName?: string;
 };
 export default function getErrorMessage(error: unknown): string {
+  const formatValue = (value: unknown): string | null => {
+    if (!value) return null;
+
+    if (typeof value === "string") return value;
+
+    if (Array.isArray(value)) {
+      return value.map(String).join("\n");
+    }
+
+    if (typeof value === "object") {
+      const messages = Object.entries(value)
+        .flatMap(([field, fieldValue]) => {
+          if (Array.isArray(fieldValue)) {
+            return fieldValue.map((msg) => `${field}: ${msg}`);
+          }
+
+          if (typeof fieldValue === "string") {
+            return [`${field}: ${fieldValue}`];
+          }
+
+          if (fieldValue && typeof fieldValue === "object") {
+            return [formatValue(fieldValue)].filter(Boolean) as string[];
+          }
+
+          return [];
+        })
+        .filter(Boolean);
+
+      return messages.length > 0 ? messages.join("\n") : null;
+    }
+
+    return String(value);
+  };
+
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
 
-    console.log("FULL API ERROR:", data);
-console.log("ERROR FULL:", error);
-console.log("ERROR RESPONSE:", (error as any)?.response?.data);
-    // Case 1: { error: { message } }
-    if (data?.error?.message) {
+    console.log("API ERROR DATA:", data);
+
+    const detailsMessage =
+      formatValue(data?.details) ||
+      formatValue(data?.error?.details) ||
+      formatValue(data?.errors) ||
+      formatValue(data?.error?.errors);
+
+    if (detailsMessage) {
+      return detailsMessage;
+    }
+
+    if (typeof data?.error?.message === "string") {
       return data.error.message;
     }
 
-    // Case 2: { message }
-    if (data?.message) {
+    if (typeof data?.message === "string") {
       return data.message;
     }
 
-    // Case 3: validation errors
-    if (data?.error?.details && typeof data.error.details === "object") {
-      return Object.entries(data.error.details)
-        .flatMap(([field, messages]) =>
-          (messages as string[]).map(
-            (msg) => `${field}: ${msg}`
-          )
-        )
-        .join("\n");
+    if (typeof data?.error === "string") {
+      return data.error;
     }
+
+    return error.message || "Unexpected error";
   }
 
   if (error instanceof Error) {

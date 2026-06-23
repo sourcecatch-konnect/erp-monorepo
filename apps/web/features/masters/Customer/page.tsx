@@ -17,15 +17,13 @@ import { customerKeys } from "./customer.key";
 import { customerColumns } from "./customerTable";
 import { createCustomerSchema } from "@skerp/validators";
 
-import { stateApi } from "../state/state.service";
-import { cityApi } from "../city/city.service";
-import { stateKeys } from "../state/state.keys";
-import { cityKeys } from "../city/city.keys";
 import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import CustomerAdvancedForm from "./customerForm";
 import CustomerDetailDialog from "./customerDialog";
 import { toast } from "sonner";
-
+import { DropdownMenuItem } from "@skerp/ui/components/dropdown";
+import { IconMapPin } from "@tabler/icons-react";
+import CustomerPickupLocationDialog from "./pickuplocationDialog";
 
 type CustomerCsvRow = Record<
   | "name"
@@ -59,6 +57,9 @@ export default function CustomerPage() {
 const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
   const [size, setSize] = React.useState(10);
+  const [pickupLocationOpen, setPickupLocationOpen] = React.useState(false);
+const [pickupLocationCustomer, setPickupLocationCustomer] =
+  React.useState<Customer | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
   const listQuery = React.useMemo<ListQuery>(
@@ -155,6 +156,17 @@ const bulkRemove = useMutation({
         "createdAt",
         "updatedAt",
       ]}
+      extraRowActions={(row) => (
+  <DropdownMenuItem
+    onClick={() => {
+      setPickupLocationCustomer(row);
+      setPickupLocationOpen(true);
+    }}
+  >
+    <IconMapPin size={16} className="mr-2" />
+    Add Pickup Location
+  </DropdownMenuItem>
+)}
       onView={(row) => {
   setDetailId(row.id);
   setDetailOpen(true);
@@ -205,7 +217,11 @@ const bulkRemove = useMutation({
   onOpenChange={setDetailOpen}
   id={detailId}
 />
-
+<CustomerPickupLocationDialog
+  open={pickupLocationOpen}
+  onOpenChange={setPickupLocationOpen}
+  customer={pickupLocationCustomer}
+/>
 <CustomerAdvancedForm
   open={open}
   onOpenChange={setOpen}

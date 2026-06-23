@@ -143,26 +143,13 @@ const [expandedAgreementIds, setExpandedAgreementIds] = React.useState<string[]>
           </div>
         </div>
 
-        {/* Search */}
-        <div className="relative mt-4 max-w-md">
-          <IconSearch
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-
-          <Input
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search agreement, company, client..."
-            className="pl-9"
-          />
-        </div>
+     
       </div>
 
       {/* Accordion List */}
       {/* Agreement List */}
 <div className="space-y-3">
- <div className="flex items-center justify-between">
+ <div className="flex items-center justify-between px-2">
   <div>
     <h2 className="text-sm font-semibold text-foreground">
       Agreement List

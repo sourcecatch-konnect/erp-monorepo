@@ -51,7 +51,7 @@ export function DatePicker({
   selected: selectedProp,
   onSelect: onSelectProp,
   disabled,
-  label = "Date",
+  label,
   placeholder = "Pick a date",
   fromYear = 1950,
   toYear = new Date().getFullYear() + 20,

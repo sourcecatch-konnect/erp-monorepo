@@ -136,8 +136,8 @@ export default function DriverForm({
 
 }: Props) {
   const { data: statesData } = useQuery({
-  queryKey: stateKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  queryKey: stateKeys.list({ page: 0, size: 35 }),
+  queryFn: () => stateApi.list({ page: 0, size: 35 }),
   enabled: open,
 });
 

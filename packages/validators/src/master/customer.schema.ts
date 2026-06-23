@@ -172,8 +172,17 @@ export const customerLocationSchema = z.object({
   contactName: z.string().nullable().optional(),
   contactPhone: z.string().nullable().optional(),
   gstNo: z.string().nullable().optional(),
+  areaId: z.string().nullable().optional(),
   city: z
     .object({ id: z.string(), name: z.string() })
+    .optional(),
+    area: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      cityId: z.string(),
+      formattedAddress: z.string().nullable().optional(),
+    })
     .optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -187,6 +196,7 @@ export const createCustomerLocationSchema = z.object({
     .max(100, "Location name cannot exceed 100 characters"),
   address: optionalString,
   cityId: z.string().min(1, "City is required"),
+  areaId: z.string().optional().nullable(),
   contactName: optionalString,
   contactPhone: z
     .string()
