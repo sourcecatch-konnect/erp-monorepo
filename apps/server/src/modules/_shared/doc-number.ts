@@ -37,10 +37,16 @@ export const nextSequence = async (
 };
 
 /**
- * Build a document number: SKT/<branchCode>/<fyCode>/<00001>.
+ * Build a document number: <prefix>/<branchCode>/<fyCode>/<00001>.
+ *
+ * Each document type carries its own human-readable prefix so numbers are
+ * distinguishable at a glance even though they live in separate sequences:
+ * orders `SKO`, lorry receipts `SKT`, LR groups `SKG`, trips `SKV/TRIP/...`.
+ * The DB never collides (separate `docType`); the prefix is purely for humans.
  */
 export const formatDocNumber = (
   branchCode: string,
   fyCode: string,
   seq: number,
-) => `SKT/${branchCode}/${fyCode}/${String(seq).padStart(5, "0")}`;
+  prefix = "SKT",
+) => `${prefix}/${branchCode}/${fyCode}/${String(seq).padStart(5, "0")}`;

@@ -28,6 +28,36 @@ export const generateLRNumber = async (
   return `SKT/${branchCode}/${fyCode}/${String(seq).padStart(5, "0")}`;
 };
 
+/**
+ * Reserve a contiguous block of `count` LR numbers in a SINGLE upsert (bumps the
+ * sequence by `count` and returns the first reserved value), then format them in
+ * memory. This replaces calling `generateLRNumber` in a loop — one DB round-trip
+ * instead of N — which matters because the create path generates one LR per
+ * consignment line. The block is reserved atomically, so concurrent group
+ * creates never overlap. Numbering follows the gap-tolerant DocumentSequence
+ * contract (a rolled-back create simply leaves a gap, same as the single form).
+ */
+export const generateLRNumbers = async (
+  tx: Tx,
+  branchCode: string,
+  fyCode: string,
+  count: number,
+): Promise<string[]> => {
+  if (count <= 0) return [];
+  const rows = await tx.$queryRaw<{ startSeq: number }[]>`
+    INSERT INTO "DocumentSequence" ("id", "branchCode", "fyCode", "docType", "nextSeq", "updatedAt")
+    VALUES (gen_random_uuid()::text, ${branchCode}, ${fyCode}, ${"LR"}, ${count + 1}, now())
+    ON CONFLICT ("branchCode", "fyCode", "docType")
+    DO UPDATE SET "nextSeq" = "DocumentSequence"."nextSeq" + ${count}, "updatedAt" = now()
+    RETURNING ("nextSeq" - ${count}) AS "startSeq"
+  `;
+  const start = Number(rows[0]?.startSeq ?? 1);
+  return Array.from(
+    { length: count },
+    (_, i) => `SKT/${branchCode}/${fyCode}/${String(start + i).padStart(5, "0")}`,
+  );
+};
+
 /* ------------------------------------------------------------------ */
 /* Hub (head-office branch) resolver                                    */
 /* ------------------------------------------------------------------ */
