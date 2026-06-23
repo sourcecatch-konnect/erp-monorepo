@@ -226,6 +226,9 @@ export default function OrderForm({ mode, order }: Props) {
   const consigneeId = form.watch("consigneeId");
   const consignments = form.watch("consignments");
   const items = form.watch("items");
+  const truckQuantity = form.watch("truckQuantity");
+  // Bounds the per-line truck selector; falls back to 1 until a quantity is set.
+  const truckCount = Math.max(1, Number(truckQuantity) || 1);
 
   const locations = useQuery({
     queryKey: orderLookupKeys.customerLocations(customerId ?? ""),
@@ -560,6 +563,7 @@ export default function OrderForm({ mode, order }: Props) {
                         })),
                       )}
                       consigneeChosen={Boolean(consigneeId)}
+                      truckCount={truckCount}
                     />
                   </div>
                 )}

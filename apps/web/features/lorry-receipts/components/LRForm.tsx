@@ -144,6 +144,20 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryFn: lrLookups.goods,
   });
 
+  // FROM_ORDER: the trucks this order has consignment lines for (with counts),
+  // and the groups already created against it — so we offer only trucks that
+  // both have lines and aren't already grouped.
+  const orderTrucks = useQuery({
+    queryKey: lrLookupKeys.orderTrucks(orderId ?? ""),
+    queryFn: () => lrLookups.orderTrucks(orderId as string),
+    enabled: source === "FROM_ORDER" && Boolean(orderId),
+  });
+  const orderGroups = useQuery({
+    queryKey: ["lr-groups", "by-order", orderId ?? ""] as const,
+    queryFn: () => lrGroupApi.list({ filter: { orderId: orderId! } }),
+    enabled: source === "FROM_ORDER" && Boolean(orderId),
+  });
+
   const form = useForm<CreateLRGroupFormInput, unknown, CreateLRGroupBody>({
     resolver: zodResolver(createLRGroupSchema),
     defaultValues:
@@ -218,6 +232,43 @@ export default function LRForm({ orderId, tripId }: Props) {
     value: l.value,
     label: l.label,
   }));
+
+  // Trucks already claimed by a live (non-cancelled) group can't be reused.
+  const takenTrucks = React.useMemo(
+    () =>
+      new Set(
+        (orderGroups.data?.data ?? [])
+          .filter((g) => g.status !== "CANCELLED")
+          .map((g) => g.truckIndex),
+      ),
+    [orderGroups.data],
+  );
+  const truckOptions = React.useMemo(
+    () =>
+      (orderTrucks.data?.trucks ?? [])
+        .filter((t) => !takenTrucks.has(t.truckIndex))
+        .map((t) => ({
+          value: String(t.truckIndex),
+          label: `Truck #${t.truckIndex} · ${t.lineCount} LR${t.lineCount === 1 ? "" : "s"}`,
+        })),
+    [orderTrucks.data, takenTrucks],
+  );
+  const trucksLoading = orderTrucks.isLoading || orderGroups.isLoading;
+
+  // Keep truckIndex on a valid, available truck: preselect the first option, and
+  // re-point if the current pick got taken or has no lines.
+  React.useEffect(() => {
+    if (source !== "FROM_ORDER" || trucksLoading || truckOptions.length === 0) {
+      return;
+    }
+    const current = String(form.getValues("truckIndex") ?? "");
+    if (!truckOptions.some((o) => o.value === current)) {
+      form.setValue("truckIndex", Number(truckOptions[0]!.value) as never, {
+        shouldValidate: true,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, trucksLoading, truckOptions]);
 
   const showRailhead =
     source === "FROM_ORDER" && (watchTransport as string) === "RoadAndRail";
@@ -300,15 +351,48 @@ export default function LRForm({ orderId, tripId }: Props) {
             title="Truck & transport"
             columns={2}
           >
-            <div>
-              <FieldLabel required>Truck #</FieldLabel>
-              <Input
-                {...form.register("truckIndex")}
-                type="number"
-                min={1}
-                className="h-9"
-              />
-            </div>
+            <Controller
+              name="truckIndex"
+              control={form.control}
+              render={({ field }) => (
+                <div>
+                  <FieldLabel required>Truck #</FieldLabel>
+                  <Select
+                    value={
+                      field.value != null && truckOptions.some(
+                        (o) => o.value === String(field.value),
+                      )
+                        ? String(field.value)
+                        : undefined
+                    }
+                    onValueChange={(v) => field.onChange(Number(v))}
+                    disabled={trucksLoading || truckOptions.length === 0}
+                  >
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue
+                        placeholder={
+                          trucksLoading ? "Loading trucks…" : "Select truck"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {truckOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!trucksLoading && truckOptions.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      {(orderTrucks.data?.trucks?.length ?? 0) === 0
+                        ? "This order has no consignment lines — add them on the order first."
+                        : "All trucks for this order already have a group."}
+                    </p>
+                  )}
+                </div>
+              )}
+            />
             <Controller
               name="transportType"
               control={form.control}

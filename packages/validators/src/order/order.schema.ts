@@ -156,6 +156,16 @@ const typeRefinement = (
     // skipped — they fail their own required checks elsewhere.
     const seen = new Map<string, number>();
     (data.consignments ?? []).forEach((c, index) => {
+      // A line can't be assigned to a truck beyond the booked quantity. This is
+      // the source-of-truth guard: it keeps every consignment's truckIndex within
+      // 1..truckQuantity so LR generation never finds an orphaned/empty truck.
+      if (data.truckQuantity && c.truckIndex > data.truckQuantity) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Truck #${c.truckIndex} exceeds the booked truck quantity (${data.truckQuantity})`,
+          path: ["consignments", index, "truckIndex"],
+        });
+      }
       if (!c.loadingLocationId || !c.unloadingLocationId) return;
       const key = `${c.truckIndex}|${c.loadingLocationId}|${c.unloadingLocationId}`;
       if (seen.has(key)) {

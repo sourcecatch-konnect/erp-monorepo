@@ -7,6 +7,13 @@ import type { CreateOrderFormInput } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
 import { IconTrash, IconPlus, IconArrowRight } from "@tabler/icons-react";
 
 type FormValues = CreateOrderFormInput;
@@ -49,11 +56,14 @@ export default function ConsignmentLinesEditor({
   loadingOptions,
   unloadingOptions,
   consigneeChosen,
+  truckCount,
 }: {
   goodsOptions: ComboboxOption[];
   loadingOptions: ComboboxOption[];
   unloadingOptions: ComboboxOption[];
   consigneeChosen: boolean;
+  /** Booked truck quantity — bounds the per-line truck selector to 1..N. */
+  truckCount: number;
 }) {
   const {
     control,
@@ -106,6 +116,7 @@ export default function ConsignmentLinesEditor({
               loadingOptions={loadingOptions}
               unloadingOptions={unloadingOptions}
               consigneeChosen={consigneeChosen}
+              truckCount={truckCount}
               onRemove={() => removeLine(index)}
               canRemove={fields.length > 1}
             />
@@ -137,6 +148,7 @@ function ConsignmentLineCard({
   loadingOptions,
   unloadingOptions,
   consigneeChosen,
+  truckCount,
   onRemove,
   canRemove,
 }: {
@@ -145,6 +157,7 @@ function ConsignmentLineCard({
   loadingOptions: ComboboxOption[];
   unloadingOptions: ComboboxOption[];
   consigneeChosen: boolean;
+  truckCount: number;
   onRemove: () => void;
   canRemove: boolean;
 }) {
@@ -170,6 +183,13 @@ function ConsignmentLineCard({
 
   const lineErr = errors.consignments?.[index];
 
+  // Truck selector is bounded by the booked quantity (at least 1), so a line can
+  // never be pinned to a truck that won't exist at LR generation.
+  const truckChoices = React.useMemo(
+    () => Array.from({ length: Math.max(1, truckCount) }, (_, i) => i + 1),
+    [truckCount],
+  );
+
   // Selecting a location should run the cross-line duplicate check immediately
   // (Combobox fires no native blur), so we touch the field on change.
   const touchOnChange =
@@ -193,13 +213,21 @@ function ConsignmentLineCard({
               control={control}
               name={`consignments.${index}.truckIndex`}
               render={({ field: f }) => (
-                <Input
-                  type="number"
-                  min={1}
-                  className="h-8 w-16"
-                  value={(f.value as number | string) ?? 1}
-                  onChange={(e) => f.onChange(e.target.value)}
-                />
+                <Select
+                  value={String(f.value ?? 1)}
+                  onValueChange={(v) => f.onChange(v)}
+                >
+                  <SelectTrigger className="h-8 w-[4.5rem]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {truckChoices.map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
             />
           </div>

@@ -255,6 +255,35 @@ export const lrLookups = {
     );
     return unwrapApiResponse(res).map((l) => ({ value: l.id, label: l.name }));
   },
+
+  /**
+   * Trucks an order actually has consignment lines for. A FROM_ORDER group is
+   * generated per truck from these lines, so the LR create form offers exactly
+   * these truck numbers (with their line counts) — never a raw 1..truckQuantity
+   * range that could include an empty truck.
+   */
+  orderTrucks: async (
+    orderId: string,
+  ): Promise<{
+    truckQuantity: number | null;
+    trucks: { truckIndex: number; lineCount: number }[];
+  }> => {
+    const res = await api.get<
+      ApiResponse<{
+        truckQuantity: number | null;
+        consignments?: { truckIndex: number }[];
+      }>
+    >(`/orders/${orderId}`);
+    const order = unwrapApiResponse(res);
+    const counts = new Map<number, number>();
+    for (const c of order.consignments ?? []) {
+      counts.set(c.truckIndex, (counts.get(c.truckIndex) ?? 0) + 1);
+    }
+    const trucks = [...counts.entries()]
+      .map(([truckIndex, lineCount]) => ({ truckIndex, lineCount }))
+      .sort((a, b) => a.truckIndex - b.truckIndex);
+    return { truckQuantity: order.truckQuantity ?? null, trucks };
+  },
 };
 
 export const lrLookupKeys = {
@@ -269,4 +298,6 @@ export const lrLookupKeys = {
   confirmedTruckOrders: ["lookup", "confirmed-truck-orders"] as const,
   customerLocations: (customerId: string) =>
     ["lookup", "customer-locations", customerId] as const,
+  orderTrucks: (orderId: string) =>
+    ["lookup", "order-trucks", orderId] as const,
 };
