@@ -20,7 +20,12 @@ const UNIT_OPTIONS: ComboboxOption[] = [
   { label: "Pallets", value: "Pallets" },
 ];
 
-const emptyGoods = () => ({ goodsId: "", quantity: 1, unit: "MT", weight: undefined });
+const emptyGoods = () => ({
+  goodsId: "",
+  quantity: 1,
+  unit: "MT",
+  weight: undefined,
+});
 
 const lineMotion = {
   initial: { opacity: 0, y: 8 },
@@ -50,12 +55,26 @@ export default function ConsignmentLinesEditor({
   unloadingOptions: ComboboxOption[];
   consigneeChosen: boolean;
 }) {
-  const { control } = useFormContext<FormValues>();
+  const {
+    control,
+    trigger,
+    formState: { isSubmitted },
+  } = useFormContext<FormValues>();
 
   const { fields, append, remove } = useFieldArray<FormValues, "consignments">({
     control,
     name: "consignments",
   });
+
+  // After a save attempt, removing a line must re-run the resolver — otherwise
+  // the stale error for the removed line lingers in formState.errors.
+  const removeLine = React.useCallback(
+    (index: number) => {
+      remove(index);
+      if (isSubmitted) void trigger("consignments");
+    },
+    [remove, trigger, isSubmitted],
+  );
 
   const addLine = React.useCallback(
     () =>
@@ -71,6 +90,8 @@ export default function ConsignmentLinesEditor({
   // Every truck order needs at least one line (one line = one LR), so seed one.
   React.useEffect(() => {
     if (fields.length === 0) addLine();
+    console.log("got executed ");
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -85,14 +106,20 @@ export default function ConsignmentLinesEditor({
               loadingOptions={loadingOptions}
               unloadingOptions={unloadingOptions}
               consigneeChosen={consigneeChosen}
-              onRemove={() => remove(index)}
+              onRemove={() => removeLine(index)}
               canRemove={fields.length > 1}
             />
           </motion.div>
         ))}
       </AnimatePresence>
 
-      <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={addLine}
+        className="gap-1.5"
+      >
         <IconPlus size={16} /> Add consignment line
       </Button>
     </div>
@@ -123,7 +150,8 @@ function ConsignmentLineCard({
 }) {
   const {
     control,
-    formState: { errors },
+    trigger,
+    formState: { errors, isSubmitted },
   } = useFormContext<FormValues>();
 
   const { fields, append, remove } = useFieldArray<
@@ -134,14 +162,22 @@ function ConsignmentLineCard({
     name: `consignments.${index}.goods`,
   });
 
+  const removeGoods = (gIndex: number) => {
+    if (fields.length <= 1) return;
+    remove(gIndex);
+    if (isSubmitted) void trigger(`consignments.${index}.goods`);
+  };
+
   const lineErr = errors.consignments?.[index];
 
   // Selecting a location should run the cross-line duplicate check immediately
   // (Combobox fires no native blur), so we touch the field on change.
-  const touchOnChange = (f: { onChange: (v: string) => void; onBlur: () => void }) => (val: string) => {
-    f.onChange(val);
-    f.onBlur();
-  };
+  const touchOnChange =
+    (f: { onChange: (v: string) => void; onBlur: () => void }) =>
+    (val: string) => {
+      f.onChange(val);
+      f.onBlur();
+    };
 
   return (
     <div className="rounded-lg border bg-card p-4 transition-shadow hover:shadow-sm">
@@ -185,7 +221,9 @@ function ConsignmentLineCard({
       {/* Loading -> Unloading */}
       <div className="grid items-end gap-3 md:grid-cols-[1fr_auto_1fr]">
         <div className="grid gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Loading point</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Loading point
+          </label>
           <Controller
             control={control}
             name={`consignments.${index}.loadingLocationId`}
@@ -206,7 +244,9 @@ function ConsignmentLineCard({
         </div>
 
         <div className="grid gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Unloading point</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Unloading point
+          </label>
           <Controller
             control={control}
             name={`consignments.${index}.unloadingLocationId`}
@@ -215,7 +255,9 @@ function ConsignmentLineCard({
                 options={unloadingOptions}
                 value={typeof f.value === "string" ? f.value : undefined}
                 onChange={touchOnChange(f)}
-                placeholder={consigneeChosen ? "Drop location" : "Pick consignee first"}
+                placeholder={
+                  consigneeChosen ? "Drop location" : "Pick consignee first"
+                }
                 invalid={Boolean(lineErr?.unloadingLocationId)}
               />
             )}
@@ -223,7 +265,9 @@ function ConsignmentLineCard({
         </div>
       </div>
       {lineErr?.unloadingLocationId?.message ? (
-        <p className="mt-1.5 text-xs text-red-600">{lineErr.unloadingLocationId.message}</p>
+        <p className="mt-1.5 text-xs text-red-600">
+          {lineErr.unloadingLocationId.message}
+        </p>
       ) : null}
 
       {/* Goods */}
@@ -262,7 +306,9 @@ function ConsignmentLineCard({
                       render={({ field: f }) => (
                         <Combobox
                           options={goodsOptions}
-                          value={typeof f.value === "string" ? f.value : undefined}
+                          value={
+                            typeof f.value === "string" ? f.value : undefined
+                          }
                           onChange={f.onChange}
                           placeholder="Select goods"
                           invalid={Boolean(goodsErr?.goodsId)}
@@ -270,7 +316,9 @@ function ConsignmentLineCard({
                       )}
                     />
                     {goodsErr?.goodsId?.message ? (
-                      <p className="mt-1 text-xs text-red-600">{goodsErr.goodsId.message}</p>
+                      <p className="mt-1 text-xs text-red-600">
+                        {goodsErr.goodsId.message}
+                      </p>
                     ) : null}
                   </div>
 
@@ -295,7 +343,9 @@ function ConsignmentLineCard({
                     render={({ field: f }) => (
                       <Combobox
                         options={UNIT_OPTIONS}
-                        value={typeof f.value === "string" ? f.value : undefined}
+                        value={
+                          typeof f.value === "string" ? f.value : undefined
+                        }
                         onChange={f.onChange}
                         placeholder="Unit"
                         invalid={Boolean(goodsErr?.unit)}
@@ -329,7 +379,7 @@ function ConsignmentLineCard({
                     size="icon-sm"
                     variant="ghost"
                     className="justify-self-end text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                    onClick={() => (fields.length > 1 ? remove(gIndex) : null)}
+                    onClick={() => removeGoods(gIndex)}
                     disabled={fields.length === 1}
                     aria-label="Remove goods row"
                   >

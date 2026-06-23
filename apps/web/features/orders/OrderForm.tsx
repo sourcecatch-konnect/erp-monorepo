@@ -33,6 +33,7 @@ import {
   IconMail,
   IconTrash,
   IconUserPlus,
+  IconAlertTriangle,
 } from "@tabler/icons-react";
 
 import FormSection from "../masters/_shared/fields/FormSection";
@@ -59,6 +60,78 @@ const toOptions = (rows: { id: string; name: string }[]): ComboboxOption[] =>
 
 const dateInputValue = (iso?: string | null) =>
   iso ? new Date(iso).toISOString().slice(0, 10) : "";
+
+// Human labels for the validation summary shown above the footer.
+const FIELD_LABELS: Record<string, string> = {
+  customerId: "Customer (Consignor)",
+  consigneeId: "Consignee",
+  pickupDate: "Pickup date",
+  fromBranchId: "From branch",
+  toBranchId: "To branch",
+  routeId: "Route",
+  customerLocationId: "Saved pickup location",
+  pickupAddressOverride: "Pickup address override",
+  orderType: "Order type",
+  vehicleTypeId: "Vehicle type",
+  truckQuantity: "Truck quantity",
+  contactPersonName: "Contact person",
+  contactMobile: "Mobile number",
+  contactEmail: "Email address",
+  specialInstructions: "Special instructions",
+  items: "Item lines",
+  consignments: "Consignment lines",
+  goods: "Goods",
+  goodsId: "Goods",
+  quantity: "Quantity",
+  unit: "Unit",
+  weight: "Weight",
+  loadingLocationId: "Loading location",
+  unloadingLocationId: "Unloading location",
+  truckIndex: "Truck",
+};
+
+// Singular label used when a key is followed by an array index.
+const ARRAY_ITEM_LABELS: Record<string, string> = {
+  items: "Item",
+  consignments: "Consignment line",
+  goods: "Goods",
+};
+
+type FlatError = { label: string; message: string };
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null;
+
+const humanLabel = (path: string[]): string => {
+  const parts: string[] = [];
+  for (let i = 0; i < path.length; i++) {
+    const seg = path[i];
+    if (seg === undefined || /^\d+$/.test(seg)) continue;
+    const next = path[i + 1];
+    if (next && /^\d+$/.test(next)) {
+      const base = ARRAY_ITEM_LABELS[seg] ?? FIELD_LABELS[seg] ?? seg;
+      parts.push(`${base} ${Number(next) + 1}`);
+    } else {
+      parts.push(FIELD_LABELS[seg] ?? seg);
+    }
+  }
+  return parts.join(" · ");
+};
+
+// Walk react-hook-form's nested error tree into a flat list of issues.
+const collectErrors = (node: unknown, path: string[] = []): FlatError[] => {
+  if (!isRecord(node)) return [];
+  const msg = node.message;
+  if (typeof msg === "string" && msg.length > 0) {
+    return [{ label: humanLabel(path), message: msg }];
+  }
+  const out: FlatError[] = [];
+  for (const key of Object.keys(node)) {
+    if (key === "ref" || key === "type" || key === "message") continue;
+    out.push(...collectErrors(node[key], [...path, key]));
+  }
+  return out;
+};
 
 export default function OrderForm({ mode, order }: Props) {
   const router = useRouter();
@@ -169,6 +242,23 @@ export default function OrderForm({ mode, order }: Props) {
 
   const [submitting, setSubmitting] = React.useState(false);
 
+  // When the user flips order type, drop the other type's lines. Both editors
+  // seed an empty row on mount, so without this the hidden array's blank rows
+  // (e.g. a goods row with no goodsId) keep failing Zod even though that type
+  // isn't active. The first run only clears errors (loaded edit data, which is
+  // already correct for its type, must not be marked dirty or wiped).
+  const didInitOrderType = React.useRef(false);
+  React.useEffect(() => {
+    const interaction = didInitOrderType.current;
+    // Truck orders use `consignments`; Item orders use `items`. Clear the other.
+    const inactive = orderType === "Truck" ? "items" : "consignments";
+    if (interaction) {
+      form.setValue(inactive, [], { shouldDirty: true, shouldValidate: false });
+    }
+    form.clearErrors(inactive);
+    didInitOrderType.current = true;
+  }, [orderType, form]);
+
   const onSubmit = async (values: CreateOrderBody) => {
     console.log("got trigger");
 
@@ -219,11 +309,20 @@ export default function OrderForm({ mode, order }: Props) {
       : `${count} item${count === 1 ? "" : "s"}`;
   }, [orderType, consignments, items]);
 
+  // Flattened validation issues, surfaced above the footer once a save is
+  // attempted so the user can see everything they missed at a glance.
+  const { errors, submitCount } = form.formState;
+  const validationIssues = React.useMemo(
+    () => collectErrors(errors),
+    [errors, submitCount],
+  );
+  const showValidationSummary = submitCount > 0 && validationIssues.length > 0;
+
   return (
     <FormProvider {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="mx-auto w-full max-w-4xl space-y-5 pb-20"
+        className="mx-auto relative w-full max-w-4xl space-y-5 pb-20"
       >
         <div>
           <h1 className="text-lg font-semibold tracking-tight">
@@ -574,6 +673,35 @@ export default function OrderForm({ mode, order }: Props) {
           transition={{ duration: 0.25, ease: "easeOut" }}
           className="sticky bottom-0 z-20 border-t border-border/70 bg-background/80 py-3 backdrop-blur-md"
         >
+          {showValidationSummary ? (
+            <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <div className="flex items-start gap-2">
+                <IconAlertTriangle
+                  size={16}
+                  className="mt-0.5 shrink-0 text-destructive"
+                />
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium text-destructive">
+                    Please fix {validationIssues.length}{" "}
+                    {validationIssues.length === 1 ? "issue" : "issues"} before
+                    saving
+                  </p>
+                  <ul className="space-y-0.5">
+                    {validationIssues.map((issue, i) => (
+                      <li
+                        key={`${issue.label}-${i}`}
+                        className="text-xs text-destructive/90"
+                      >
+                        <span className="font-medium">{issue.label}:</span>{" "}
+                        {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">{footerSummary}</p>
 
