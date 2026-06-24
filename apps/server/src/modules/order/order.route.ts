@@ -177,16 +177,17 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
   const me = actorId(req);
 
   const order = await db.$transaction(async (tx) => {
-    const fromBranch = await tx.branch.findUnique({
-      where: { id: data.fromBranchId },
-      select: { shortCode: true },
-    });
-    if (!fromBranch) throw new BadRequestError("From branch not found");
+const fromBranch = await tx.branch.findUnique({
+  where: { id: data.fromBranchId },
+  select: { branchCode: true },
+});
 
-    const fyCode = fyCodeFor(new Date());
-    const seq = await nextSequence(tx, fromBranch.shortCode, fyCode, "ORDER");
-    const orderNumber = formatDocNumber(fromBranch.shortCode, fyCode, seq, "SKO");
+if (!fromBranch) throw new BadRequestError("From branch not found");
 
+const fyCode = fyCodeFor(new Date());
+
+const seq = await nextSequence(tx, fromBranch.branchCode, fyCode, "ORDER");
+const orderNumber = formatDocNumber(fromBranch.branchCode, fyCode, seq, "SKO");
     const created = await tx.order.create({
       data: {
         orderNumber,

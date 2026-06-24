@@ -47,10 +47,13 @@ export default function CustomerLocationsEditor({ customerId, cities }: Props) {
 
   const selectedArea = areas.data?.data.find((area) => area.id === areaId);
 
-  const locations = useQuery({
-    queryKey: customerLocationKeys.list(customerId),
-    queryFn: () => customerLocationApi.list(customerId),
-  });
+const locations = useQuery({
+  queryKey: customerLocationKeys.list(customerId, cityId || undefined),
+  queryFn: () =>
+    customerLocationApi.list(customerId, {
+      cityId: cityId || undefined,
+    }),
+});
 
   const invalidate = () =>
     queryClient.invalidateQueries({

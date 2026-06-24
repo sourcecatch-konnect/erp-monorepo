@@ -36,6 +36,15 @@ const router: Router = createCrudRouter({
       },
     },
     defaultOrderBy: { name: "asc" },
+
+    extraWhere: (req) => {
+      const cityId =
+        typeof req.query.cityId === "string" && req.query.cityId.trim()
+          ? req.query.cityId.trim()
+          : undefined;
+
+      return cityId ? { cityId } : {};
+    },
   },
 });
 

@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import type {
   ApiResponse,
   Order,
+  OrderQuickView,
   CreateOrderBody,
   UpdateOrderBody,
   ApproveOrderBody,
@@ -10,6 +11,8 @@ import type {
   FreightPreview,
   CustomerLocation,
   Route,
+  OrderBranchLite,
+  OrderRouteDetail,
 } from "@skerp/types";
 import {
   ListQuery,
@@ -18,22 +21,11 @@ import {
   unwrapListResponse,
 } from "../masters/_shared/master-api";
 
-type OrderCityLite = {
-  id: string;
-  name: string;
-};
 
-type OrderBranchLite = {
-  id: string;
-  name?: string | null;
-  shortCode?: string | null;
-};
 
-type OrderRouteDetail = {
-  id: string;
-  sourceCity?: OrderCityLite | null;
-  destinationCity?: OrderCityLite | null;
-};
+
+
+
 
 type OrderRateMatrixDetail = {
   id?: string;
@@ -238,24 +230,4 @@ export const orderLookupKeys = {
   vehicleTypes: ["lookup", "vehicle-types"] as const,
   customerLocations: (customerId: string) =>
     ["lookup", "customer-locations", customerId] as const,
-};
-export type OrderQuickView = Pick<
-  Order,
-  | "id"
-  | "orderNumber"
-  | "status"
-  | "pickupDate"
-  | "orderType"
-  | "truckQuantity"
-  | "bookingFreightAmount"
-  | "contactPersonName"
-  | "contactMobile"
-  | "contactEmail"
-  | "pickupAddressOverride"
-> & {
-  customer: { id: string; name: string } | null;
-  fromBranch: { id: string; shortCode: string } | null;
-  toBranch: { id: string; shortCode: string } | null;
-  vehicleType: { id: string; name: string } | null;
-  customerLocation: { id: string; name: string } | null;
 };
