@@ -256,7 +256,7 @@ async function main() {
     branch = await db.branch.create({
       data: {
         branchCode: "HO",
-        shortCode: "HO",
+     
         name: "Head Office",
         cityId: city!.id,
         companyId: company.id,
