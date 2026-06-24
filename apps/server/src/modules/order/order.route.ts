@@ -14,7 +14,6 @@ import { can } from "../../auth/can.middleware.js";
 import { branchFilter, assertBranchAccess } from "../../auth/branch-scope.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
-import { getParamId } from "../_shared/param.js";
 import {
   BadRequestError,
   ConflictError,
@@ -35,7 +34,6 @@ import {
 // import { buildOrderPdfDocument, orderPdfInclude } from "./order.pdf.js";
 import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
 import { buildOrderPdfDocument, orderPdfInclude } from "./order.pdf.js";
-import { basePdfTemplate } from "../../templetes/pdf/template/base-pdf.template.js";
 import { rupeesToPaise } from "../../lib/money.js";
 
 const router: Router = Router();
@@ -55,15 +53,11 @@ const getOrderIdentifier = (req: { params: { id?: string } }) => {
 
 const orderWhereByIdentifier = (identifier: string) => ({
   deletedAt: null,
-  OR: [
-    { id: identifier },
-    { orderNumber: identifier },
-  ],
+  OR: [{ id: identifier }, { orderNumber: identifier }],
 });
 
 const orderLink = (orderNumber: string) =>
   `/orders/${encodeURIComponent(orderNumber)}`;
-
 
 /* ------------------------------------------------------------------ */
 /* List                                                               */
@@ -76,11 +70,15 @@ router.get("/", can(PERMS.ORDER.VIEW), async (req, res) => {
     ...(query.filter.status ? { status: query.filter.status } : {}),
     ...(query.search
       ? {
-        OR: [
-          { orderNumber: { contains: query.search, mode: "insensitive" } },
-          { customer: { name: { contains: query.search, mode: "insensitive" } } },
-        ],
-      }
+          OR: [
+            { orderNumber: { contains: query.search, mode: "insensitive" } },
+            {
+              customer: {
+                name: { contains: query.search, mode: "insensitive" },
+              },
+            },
+          ],
+        }
       : {}),
   };
 
@@ -126,15 +124,12 @@ router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
   const identifier = getOrderIdentifier(req);
   const isQuickView = req.query.view === "quick";
   if (isQuickView) {
-
     const order = await db.order.findFirst({
       where: orderWhereByIdentifier(identifier),
       select: orderQuickViewSelect,
     });
 
-
     if (!order) throw new NotFoundError("Order not found");
-
 
     return sendOk(res, order);
   }
@@ -143,7 +138,6 @@ router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
     where: orderWhereByIdentifier(identifier),
     include: orderInclude,
   });
-
 
   if (!order) throw new NotFoundError("Order not found");
 
@@ -157,10 +151,8 @@ router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
     truckQuantity: order.truckQuantity,
   });
 
-
   return sendOk(res, { ...order, freightPreview: freight });
 });
-
 
 /* ------------------------------------------------------------------ */
 /* Create -> PendingApproval                                          */
@@ -178,13 +170,18 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
   const order = await db.$transaction(async (tx) => {
     const fromBranch = await tx.branch.findUnique({
       where: { id: data.fromBranchId },
-      select: { shortCode: true },
+      select: { branchCode: true },
     });
     if (!fromBranch) throw new BadRequestError("From branch not found");
 
     const fyCode = fyCodeFor(new Date());
-    const seq = await nextSequence(tx, fromBranch.shortCode, fyCode, "ORDER");
-    const orderNumber = formatDocNumber(fromBranch.shortCode, fyCode, seq, "SKO");
+    const seq = await nextSequence(tx, fromBranch.branchCode, fyCode, "ORDER");
+    const orderNumber = formatDocNumber(
+      fromBranch.branchCode,
+      fyCode,
+      seq,
+      "SKO",
+    );
 
     const created = await tx.order.create({
       data: {
@@ -210,31 +207,31 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
         items:
           data.orderType === "Item" && data.items?.length
             ? {
-              create: data.items.map((i) => ({
-                goodsId: i.goodsId,
-                quantity: i.quantity,
-                unit: i.unit,
-                weight: i.weight,
-              })),
-            }
+                create: data.items.map((i) => ({
+                  goodsId: i.goodsId,
+                  quantity: i.quantity,
+                  unit: i.unit,
+                  weight: i.weight,
+                })),
+              }
             : undefined,
         consignments:
           data.orderType === "Truck" && data.consignments?.length
             ? {
-              create: data.consignments.map((c) => ({
-                truckIndex: c.truckIndex,
-                loadingLocationId: c.loadingLocationId ?? null,
-                unloadingLocationId: c.unloadingLocationId ?? null,
-                goods: {
-                  create: c.goods.map((g) => ({
-                    goodsId: g.goodsId,
-                    quantity: g.quantity,
-                    unit: g.unit,
-                    weight: g.weight,
-                  })),
-                },
-              })),
-            }
+                create: data.consignments.map((c) => ({
+                  truckIndex: c.truckIndex,
+                  loadingLocationId: c.loadingLocationId ?? null,
+                  unloadingLocationId: c.unloadingLocationId ?? null,
+                  goods: {
+                    create: c.goods.map((g) => ({
+                      goodsId: g.goodsId,
+                      quantity: g.quantity,
+                      unit: g.unit,
+                      weight: g.weight,
+                    })),
+                  },
+                })),
+              }
             : undefined,
       },
       include: orderInclude,
@@ -245,7 +242,7 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
       created.id,
       me,
       "submitted",
-      "Order created and submitted for approval"
+      "Order created and submitted for approval",
     );
 
     return created;
@@ -289,7 +286,9 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
   const clientVersion =
     typeof req.body?.version === "number" ? req.body.version : undefined;
   if (clientVersion !== undefined && clientVersion !== existing.version) {
-    throw new ConflictError("This order changed in another tab — reload and retry");
+    throw new ConflictError(
+      "This order changed in another tab — reload and retry",
+    );
   }
 
   const frozen = ["Cancelled", "InProgress", "Completed"];
@@ -321,7 +320,13 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
         },
         include: orderInclude,
       });
-      await writeOrderEvent(tx, id, me, "edited", "Contact / instructions updated");
+      await writeOrderEvent(
+        tx,
+        id,
+        me,
+        "edited",
+        "Contact / instructions updated",
+      );
       return row;
     }
 
@@ -355,31 +360,31 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
         items:
           data.orderType === "Item" && data.items?.length
             ? {
-              create: data.items.map((i) => ({
-                goodsId: i.goodsId,
-                quantity: i.quantity,
-                unit: i.unit,
-                weight: i.weight,
-              })),
-            }
+                create: data.items.map((i) => ({
+                  goodsId: i.goodsId,
+                  quantity: i.quantity,
+                  unit: i.unit,
+                  weight: i.weight,
+                })),
+              }
             : undefined,
         consignments:
           data.orderType === "Truck" && data.consignments?.length
             ? {
-              create: data.consignments.map((c) => ({
-                truckIndex: c.truckIndex,
-                loadingLocationId: c.loadingLocationId ?? null,
-                unloadingLocationId: c.unloadingLocationId ?? null,
-                goods: {
-                  create: c.goods.map((g) => ({
-                    goodsId: g.goodsId,
-                    quantity: g.quantity,
-                    unit: g.unit,
-                    weight: g.weight,
-                  })),
-                },
-              })),
-            }
+                create: data.consignments.map((c) => ({
+                  truckIndex: c.truckIndex,
+                  loadingLocationId: c.loadingLocationId ?? null,
+                  unloadingLocationId: c.unloadingLocationId ?? null,
+                  goods: {
+                    create: c.goods.map((g) => ({
+                      goodsId: g.goodsId,
+                      quantity: g.quantity,
+                      unit: g.unit,
+                      weight: g.weight,
+                    })),
+                  },
+                })),
+              }
             : undefined,
       },
       include: orderInclude,
@@ -390,7 +395,9 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
       id,
       me,
       isResubmit ? "resubmitted" : "edited",
-      isResubmit ? "Order edited and resubmitted for approval" : "Order updated"
+      isResubmit
+        ? "Order edited and resubmitted for approval"
+        : "Order updated",
     );
     return row;
   });
@@ -447,7 +454,7 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
   if (existing.customer.disallowNewLRBooking && !acknowledgeDisallow) {
     throw new BadRequestError(
       "This customer is flagged disallow-new-booking. Confirm to proceed.",
-      "DISALLOW_NOT_ACKNOWLEDGED"
+      "DISALLOW_NOT_ACKNOWLEDGED",
     );
   }
 
@@ -489,7 +496,7 @@ router.post("/:id/approve", can(PERMS.ORDER.APPROVE), async (req, res) => {
       me,
       "confirmed",
       selfApprove ? "Approved by creator (self-approval)" : "Order approved",
-      freightOverrideReason ? { freightOverrideReason } : undefined
+      freightOverrideReason ? { freightOverrideReason } : undefined,
     );
     return row;
   });
@@ -587,7 +594,7 @@ router.post("/:id/cancel", can(PERMS.ORDER.CANCEL), async (req, res) => {
 
   if (!["PendingApproval", "Confirmed"].includes(existing.status)) {
     throw new BadRequestError(
-      "Only a PendingApproval or Confirmed order can be cancelled"
+      "Only a PendingApproval or Confirmed order can be cancelled",
     );
   }
 
@@ -639,11 +646,11 @@ router.get(
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="order-${order.orderNumber || order.id}.pdf"`
+      `attachment; filename="order-${order.orderNumber || order.id}.pdf"`,
     );
 
     return res.send(pdfBuffer);
-  }
+  },
 );
 /* ------------------------------------------------------------------ */
 /* Delete                                             */
@@ -669,7 +676,7 @@ router.delete("/:id", can(PERMS.ORDER.DELETE), async (req, res) => {
   if (!["PendingApproval", "Rejected", "Cancelled"].includes(existing.status)) {
     throw new BadRequestError(
       `A ${existing.status} order cannot be deleted. Please cancel the order instead.`,
-      "ORDER_DELETE_NOT_ALLOWED"
+      "ORDER_DELETE_NOT_ALLOWED",
     );
   }
 
@@ -691,7 +698,7 @@ router.delete("/:id", can(PERMS.ORDER.DELETE), async (req, res) => {
     if (attachmentCount > 0) {
       throw new BadRequestError(
         `This order cannot be deleted because ${attachmentCount} attachment(s) are linked with this order.`,
-        "ORDER_DELETE_BLOCKED"
+        "ORDER_DELETE_BLOCKED",
       );
     }
 
@@ -705,7 +712,7 @@ router.delete("/:id", can(PERMS.ORDER.DELETE), async (req, res) => {
     if (lrGroupCount > 0) {
       throw new BadRequestError(
         `This order cannot be deleted because ${lrGroupCount} LR group(s) are linked with this order.`,
-        "ORDER_DELETE_BLOCKED"
+        "ORDER_DELETE_BLOCKED",
       );
     }
 
@@ -719,13 +726,7 @@ router.delete("/:id", can(PERMS.ORDER.DELETE), async (req, res) => {
       include: orderInclude,
     });
 
-    await writeOrderEvent(
-      tx,
-      existing.id,
-      me,
-      "deleted",
-      "Order soft deleted"
-    );
+    await writeOrderEvent(tx, existing.id, me, "deleted", "Order soft deleted");
 
     return row;
   });

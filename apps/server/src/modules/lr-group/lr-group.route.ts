@@ -22,7 +22,6 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
-import { Prisma } from "../../../generated/prisma/index.js";
 import type { LRGroupStatus } from "../../../generated/prisma/index.js";
 import {
   generateLRNumber,
