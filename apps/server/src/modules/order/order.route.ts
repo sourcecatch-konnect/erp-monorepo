@@ -663,10 +663,10 @@ router.delete("/:id", can(PERMS.ORDER.DELETE), async (req, res) => {
 
   /**
    * ERP safety rule:
-   * Only non-operational orders can be deleted.
+   * Only non-operational/cancelled orders can be deleted.
    * Confirmed / InProgress / Completed orders should not be deleted.
    */
-  if (!["PendingApproval", "Rejected"].includes(existing.status)) {
+  if (!["PendingApproval", "Rejected", "Cancelled"].includes(existing.status)) {
     throw new BadRequestError(
       `A ${existing.status} order cannot be deleted. Please cancel the order instead.`,
       "ORDER_DELETE_NOT_ALLOWED"
@@ -691,6 +691,20 @@ router.delete("/:id", can(PERMS.ORDER.DELETE), async (req, res) => {
     if (attachmentCount > 0) {
       throw new BadRequestError(
         `This order cannot be deleted because ${attachmentCount} attachment(s) are linked with this order.`,
+        "ORDER_DELETE_BLOCKED"
+      );
+    }
+
+    const lrGroupCount = await tx.lRGroup.count({
+      where: {
+        orderId: existing.id,
+        deletedAt: null,
+      },
+    });
+
+    if (lrGroupCount > 0) {
+      throw new BadRequestError(
+        `This order cannot be deleted because ${lrGroupCount} LR group(s) are linked with this order.`,
         "ORDER_DELETE_BLOCKED"
       );
     }

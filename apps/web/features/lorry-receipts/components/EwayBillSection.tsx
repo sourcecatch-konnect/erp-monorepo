@@ -24,14 +24,16 @@ import { formatDate } from "@/lib/format";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { lorryReceiptApi } from "../lorry-receipt.service";
 import { lrKeys } from "../lorry-receipt.keys";
+import { lrGroupKeys } from "../lr-group.keys";
 
 type Props = {
   lrId: string;
-  ewayBills: EwayBill[];
+  groupId: string;
+  ewayBill: EwayBill | null;
   canAdd: boolean;
 };
 
-export default function EwayBillSection({ lrId, ewayBills, canAdd }: Props) {
+export default function EwayBillSection({ lrId, groupId, ewayBill, canAdd }: Props) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = React.useState(false);
 
@@ -53,6 +55,9 @@ export default function EwayBillSection({ lrId, ewayBills, canAdd }: Props) {
       setAddOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: lrKeys.detail(lrId) });
+      queryClient.invalidateQueries({ queryKey: lrKeys.all });
+      queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(groupId) });
+      queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
@@ -62,34 +67,30 @@ export default function EwayBillSection({ lrId, ewayBills, canAdd }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase text-muted-foreground">E-Way Bills</p>
-        {canAdd && (
+        <p className="text-xs font-semibold uppercase text-muted-foreground">E-Way Bill</p>
+        {canAdd && !ewayBill && (
           <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
             <IconPlus size={14} className="mr-1" /> Add
           </Button>
         )}
       </div>
 
-      {ewayBills.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No e-way bills.</p>
+      {!ewayBill ? (
+        <p className="text-sm text-muted-foreground">No e-way bill.</p>
       ) : (
-        <div className="space-y-2">
-          {ewayBills.map((eb) => (
-            <div key={eb.id} className="rounded-lg border bg-muted/20 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{eb.ewayBillNo}</span>
-                <span
-                  className={`text-xs ${new Date(eb.expiresAt) < new Date() ? "text-red-600" : "text-muted-foreground"}`}
-                >
-                  Expires {formatDate(eb.expiresAt)}
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                Generated {formatDate(eb.generatedAt)}
-                {eb.generatedBy ? ` by ${eb.generatedBy}` : ""}
-              </div>
-            </div>
-          ))}
+        <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium">{ewayBill.ewayBillNo}</span>
+            <span
+              className={`text-xs ${new Date(ewayBill.expiresAt) < new Date() ? "text-red-600" : "text-muted-foreground"}`}
+            >
+              Expires {formatDate(ewayBill.expiresAt)}
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            Generated {formatDate(ewayBill.generatedAt)}
+            {ewayBill.generatedBy ? ` by ${ewayBill.generatedBy}` : ""}
+          </div>
         </div>
       )}
 

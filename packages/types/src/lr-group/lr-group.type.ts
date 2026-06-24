@@ -13,7 +13,10 @@ import type {
   LRTransportType,
   LRTripLegType,
   LRPriority,
+  LRStatus,
   LorryReceipt,
+  LocationRef,
+  EwayBill,
 } from "../lorry-receipt/lorry-receipt.type.js";
 
 export type LRGroupStatus = "DRAFT" | "FINALISED" | "CANCELLED";
@@ -39,6 +42,17 @@ type OrderRef = {
 };
 type VehicleRef = { id: string; vehicleNumber: string };
 type DriverRef = { id: string; name: string };
+
+export type LRGroupListReceipt = {
+  id: string;
+  lrNumber: string;
+  status: LRStatus;
+  loadingLocation: LocationRef | null;
+  unloadingLocation: LocationRef | null;
+  invoiceNumber: string | null;
+  invoiceAmount: number | null;
+  ewayBill: EwayBill | null;
+};
 
 export type TripRef = {
   id: string;
@@ -81,10 +95,11 @@ export type LRGroupListItem = {
   destinationBranch: BranchRef | null;
   order: OrderRef | null;
   lrCount?: number;
+  lorryReceipts?: LRGroupListReceipt[];
 };
 
 /** LRGroup as returned by the detail endpoint (include shape). */
-export type LRGroup = LRGroupListItem & {
+export type LRGroup = Omit<LRGroupListItem, "lorryReceipts"> & {
   orderId: string | null;
   primaryTripId: string | null;
   secondaryTripId: string | null;

@@ -38,9 +38,11 @@ import {
   IconDotsVertical,
   IconBan,
   IconDatabaseOff,
+  IconChevronDown,
+  IconChevronRight,
 } from "@tabler/icons-react";
 
-import { formatMoney } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { LRStatusBadge, SOURCE_LABELS, LR_STATUS_ORDER } from "../lorry-receipt-ui";
 
 type Props = {
@@ -67,9 +69,34 @@ export default function LRTable(props: Props) {
     counts, isLoading,
     canCancel, onCancel,
   } = props;
+  const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
 
   const columns = React.useMemo<ColumnDef<LRGroupListItem>[]>(
     () => [
+      {
+        id: "expand",
+        header: "",
+        cell: ({ row }) => {
+          const lrs = row.original.lorryReceipts ?? [];
+          const isExpanded = Boolean(expanded[row.original.id]);
+          return (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={isExpanded ? "Collapse LRs" : "Expand LRs"}
+              disabled={lrs.length === 0}
+              onClick={() =>
+                setExpanded((current) => ({
+                  ...current,
+                  [row.original.id]: !current[row.original.id],
+                }))
+              }
+            >
+              {isExpanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+            </Button>
+          );
+        },
+      },
       {
         header: "Group #",
         cell: ({ row }) => (
@@ -106,7 +133,7 @@ export default function LRTable(props: Props) {
       { header: "Source", cell: ({ row }) => SOURCE_LABELS[row.original.source] },
       { header: "Status", cell: ({ row }) => <LRStatusBadge status={row.original.status} /> },
     ],
-    [],
+    [expanded],
   );
 
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
@@ -204,37 +231,106 @@ export default function LRTable(props: Props) {
               table.getRowModel().rows.map((row) => {
                 const g = row.original;
                 const cancellable = g.status === "DRAFT";
+                const childRows = g.lorryReceipts ?? [];
+                const isExpanded = Boolean(expanded[g.id]);
                 return (
-                  <TableRow key={row.id} className="hover:bg-muted/30">
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="h-12 text-sm">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  <React.Fragment key={row.id}>
+                    <TableRow className="hover:bg-muted/30">
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className="h-12 text-sm">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                      <TableCell className="w-16 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
+                            <Link href={`/lorry-receipts/${g.id}`}>
+                              <IconEye size={16} />
+                            </Link>
+                          </Button>
+                          {canCancel && cancellable ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="icon-sm" variant="ghost" aria-label="Row actions">
+                                  <IconDotsVertical size={16} />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem className="text-red-600" onClick={() => onCancel(g)}>
+                                  <IconBan size={16} className="mr-2" /> Cancel
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
+                        </div>
                       </TableCell>
-                    ))}
-                    <TableCell className="w-16 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
-                          <Link href={`/lorry-receipts/${g.id}`}>
-                            <IconEye size={16} />
-                          </Link>
-                        </Button>
-                        {canCancel && cancellable ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="icon-sm" variant="ghost" aria-label="Row actions">
-                                <IconDotsVertical size={16} />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem className="text-red-600" onClick={() => onCancel(g)}>
-                                <IconBan size={16} className="mr-2" /> Cancel
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                    </TableRow>
+                    {isExpanded ? (
+                      <TableRow className="bg-muted/20 hover:bg-muted/20">
+                        <TableCell colSpan={columns.length + 1} className="p-0">
+                          <div className="px-4 py-3">
+                            <div className="overflow-x-auto rounded-md border bg-background">
+                              <table className="w-full min-w-[720px] text-sm">
+                                <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+                                  <tr>
+                                    <th className="px-3 py-2 font-semibold">LR #</th>
+                                    <th className="px-3 py-2 font-semibold">Route</th>
+                                    <th className="px-3 py-2 font-semibold">Invoice</th>
+                                    <th className="px-3 py-2 font-semibold">E-way bill</th>
+                                    <th className="px-3 py-2 font-semibold">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {childRows.map((lr) => (
+                                    <tr key={lr.id} className="border-t">
+                                      <td className="px-3 py-2 font-medium text-primary">
+                                        <Link href={`/lorry-receipts/${g.id}`} className="hover:underline">
+                                          {lr.lrNumber}
+                                        </Link>
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground">
+                                        {lr.loadingLocation?.name ?? "-"} -&gt;{" "}
+                                        {lr.unloadingLocation?.name ?? "-"}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {lr.invoiceNumber ? (
+                                          <div>
+                                            <p>{lr.invoiceNumber}</p>
+                                            {lr.invoiceAmount != null ? (
+                                              <p className="text-xs text-muted-foreground">
+                                                {formatMoney(lr.invoiceAmount)}
+                                              </p>
+                                            ) : null}
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted-foreground">-</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {lr.ewayBill ? (
+                                          <div>
+                                            <p>{lr.ewayBill.ewayBillNo}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              Expires {formatDate(lr.ewayBill.expiresAt)}
+                                            </p>
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted-foreground">-</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <LRStatusBadge status={lr.status} />
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </React.Fragment>
                 );
               })
             )}

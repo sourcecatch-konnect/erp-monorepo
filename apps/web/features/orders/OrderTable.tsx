@@ -271,7 +271,9 @@ export default function OrderTable(props: Props) {
                   o.status === "PendingApproval" || o.status === "Rejected";
 
                 const deletable =
-                  o.status === "PendingApproval" || o.status === "Rejected";
+                  o.status === "PendingApproval" ||
+                  o.status === "Rejected" ||
+                  o.status === "Cancelled";
 
                 const cancellable =
                   o.status === "PendingApproval" || o.status === "Confirmed";

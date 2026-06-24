@@ -90,7 +90,7 @@ router.get("/", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
       : {}),
   };
 
-  const [data, total] = await Promise.all([
+  const [groups, total] = await Promise.all([
     db.lRGroup.findMany({
       where,
       skip: query.page * query.size,
@@ -102,6 +102,10 @@ router.get("/", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
     }),
     db.lRGroup.count({ where }),
   ]);
+  const data = groups.map((group) => ({
+    ...group,
+    lrCount: group.lorryReceipts.length,
+  }));
 
   return sendOk(res, data, { page: query.page, size: query.size, total });
 });
@@ -394,7 +398,10 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
   const existing = await db.lRGroup.findFirst({
     where: { id, deletedAt: null },
     include: {
-      lorryReceipts: { where: { deletedAt: null }, select: { id: true, status: true } },
+      lorryReceipts: {
+        where: { deletedAt: null },
+        select: { id: true, status: true, ewayBill: { select: { id: true } } },
+      },
     },
   });
   if (!existing) throw new NotFoundError("Lorry receipt group not found");
@@ -423,17 +430,31 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
   }
 
   const updated = await db.$transaction(async (tx) => {
+    const existingLrsById = new Map(existing.lorryReceipts.map((lr) => [lr.id, lr]));
+
     for (const line of lrs) {
-      await tx.ewayBill.create({
-        data: {
-          lorryReceiptId: line.lrId,
-          ewayBillNo: line.ewayBill.ewayBillNo,
-          generatedAt: line.ewayBill.generatedAt,
-          expiresAt: line.ewayBill.expiresAt,
-          generatedBy: line.ewayBill.generatedBy ?? null,
-          documentUrl: line.ewayBill.documentUrl ?? null,
-        },
-      });
+      const lr = existingLrsById.get(line.lrId);
+
+      if (line.existingEwayBillId) {
+        if (lr?.ewayBill?.id !== line.existingEwayBillId) {
+          throw new BadRequestError("Existing e-way bill does not belong to this LR");
+        }
+      } else if (line.ewayBill) {
+        if (lr?.ewayBill) {
+          throw new BadRequestError("This LR already has an e-way bill");
+        }
+        await tx.ewayBill.create({
+          data: {
+            lorryReceiptId: line.lrId,
+            ewayBillNo: line.ewayBill.ewayBillNo,
+            generatedAt: line.ewayBill.generatedAt,
+            expiresAt: line.ewayBill.expiresAt,
+            generatedBy: line.ewayBill.generatedBy ?? null,
+            documentUrl: line.ewayBill.documentUrl ?? null,
+          },
+        });
+      }
+
       await tx.lorryReceipt.update({
         where: { id: line.lrId },
         data: {

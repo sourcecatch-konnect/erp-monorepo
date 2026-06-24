@@ -1262,7 +1262,7 @@ model LorryReceipt {
   deletedAt DateTime?
 
   goods     LRGoods[]
-  ewayBills EwayBill[]
+  ewayBill  EwayBill?
 
   @@index([status])
   @@index([groupId])
@@ -1291,7 +1291,7 @@ model LRGoods {
 
 model EwayBill {
   id             String       @id @default(cuid())
-  lorryReceiptId String
+  lorryReceiptId String       @unique
   lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
 
   ewayBillNo  String
