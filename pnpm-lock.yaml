@@ -83,6 +83,9 @@ importers:
       socket.io:
         specifier: ^4.8.3
         version: 4.8.3
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
       zod:
         specifier: ^3.24.4
         version: 3.25.76
@@ -111,6 +114,9 @@ importers:
       '@types/node':
         specifier: ^22.15.3
         version: 22.15.3
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       eslint:
         specifier: ^9.39.1
         version: 9.39.1(jiti@2.7.0)
@@ -186,6 +192,9 @@ importers:
       react-redux:
         specifier: ^9.2.0
         version: 9.3.0(@types/react@19.2.2)(react@19.2.0)(redux@5.0.1)
+      socket.io-client:
+        specifier: ^4.8.3
+        version: 4.8.3
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -9510,7 +9519,7 @@ snapshots:
       sirv: 3.0.2
       tinyrainbow: 3.1.0
       vitest: 4.1.6(@types/node@22.15.3)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(msw@2.14.6(@types/node@22.15.3)(typescript@5.9.2))(vite@8.0.12(@types/node@22.15.3)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0))
-      ws: 8.20.1
+      ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
       - msw
@@ -12777,7 +12786,7 @@ snapshots:
       recast: 0.23.11
       semver: 7.7.3
       use-sync-external-store: 1.6.0(react@19.2.0)
-      ws: 8.20.1
+      ws: 8.21.0
     optionalDependencies:
       '@types/react': 19.2.2
       prettier: 3.7.4

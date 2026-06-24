@@ -41,6 +41,7 @@ import notificationRoute from "./modules/notifications/notification.route.js";
 import attachmentRoute from "./modules/attachments/attachment.route.js";
 import trackingRoute from "./modules/tracking/tracking.route.js";
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
+import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
 import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
@@ -113,7 +114,8 @@ const server = createServer(app);
 async function bootstrap() {
   await ensurePermissionCatalog();
 
-  initNotificationRealtime(server);
+  const io = initNotificationRealtime(server);
+  initTrackingRealtime(io);
   startNotificationWorkers();
 
   seedNotificationDefaults().catch((error) => {

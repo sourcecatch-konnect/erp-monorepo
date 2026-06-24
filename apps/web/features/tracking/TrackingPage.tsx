@@ -1,138 +1,263 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { IconMapPin, IconRefresh, IconSearch } from "@tabler/icons-react";
-import { Input } from "@skerp/ui/components/input";
-import { Skeleton } from "@skerp/ui/components/skeleton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconRefresh } from "@tabler/icons-react";
+import type { FleetVehicle, LivePosition } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { cn } from "@/lib/utils";
 
 import { trackingApi } from "./tracking.service";
 import { trackingKeys } from "./tracking.keys";
 import { FleetMap } from "./FleetMap";
-import { StatusBadge, formatLastUpdate } from "./tracking-ui";
+import { WagonList, type StatusFilter } from "./WagonList";
+import { WagonPanel } from "./WagonPanel";
+import { useTrackingSocket } from "./useTrackingSocket";
+import { LiveBadge, toLocalInputValue } from "./tracking-ui";
 
-const REFRESH_MS = 20_000;
+/** Metadata safety-net refetch; live positions arrive over the socket. */
+const FLEET_REFRESH_MS = 60_000;
+const PLAYBACK_MS = 400;
+
+type Mode = "live" | "history";
+
+/** Merge a batch of live positions into the cached fleet list. */
+function mergePositions(
+  fleet: FleetVehicle[] | undefined,
+  positions: LivePosition[],
+): FleetVehicle[] {
+  if (!fleet) return [];
+  const byId = new Map(positions.map((p) => [p.deviceId, p]));
+  return fleet.map((v) => {
+    const p = byId.get(v.id);
+    if (!p) return v;
+    return {
+      ...v,
+      status: "online",
+      lastUpdate: p.fixTime ?? new Date().toISOString(),
+      position: {
+        positionId: v.position?.positionId ?? 0,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        speedKmph: p.speedKmph,
+        course: p.course,
+        address: null,
+        fixTime: p.fixTime,
+      },
+    };
+  });
+}
 
 export default function TrackingPage() {
-  const [search, setSearch] = React.useState("");
-  const [selectedId, setSelectedId] = React.useState<number | null>(null);
+  const queryClient = useQueryClient();
 
-  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
+  const [search, setSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
+  const [selectedId, setSelectedId] = React.useState<number | null>(null);
+  const [mode, setMode] = React.useState<Mode>("live");
+
+  // History state
+  const [from, setFrom] = React.useState("");
+  const [to, setTo] = React.useState("");
+  const [range, setRange] = React.useState<{ from: string; to: string } | null>(
+    null,
+  );
+  const [playIndex, setPlayIndex] = React.useState(0);
+  const [playing, setPlaying] = React.useState(false);
+
+  const fleetQuery = useQuery({
     queryKey: trackingKeys.fleet,
     queryFn: trackingApi.fleet,
-    refetchInterval: REFRESH_MS,
+    refetchInterval: FLEET_REFRESH_MS,
   });
 
-  const vehicles = React.useMemo(() => data ?? [], [data]);
+  const onPositions = React.useCallback(
+    (positions: LivePosition[]) => {
+      queryClient.setQueryData<FleetVehicle[]>(trackingKeys.fleet, (old) =>
+        mergePositions(old, positions),
+      );
+    },
+    [queryClient],
+  );
+  const connected = useTrackingSocket(onPositions);
+
+  const vehicles = React.useMemo(
+    () => fleetQuery.data ?? [],
+    [fleetQuery.data],
+  );
+
+  const counts = React.useMemo<Record<StatusFilter, number>>(
+    () => ({
+      all: vehicles.length,
+      online: vehicles.filter((v) => v.status === "online").length,
+      offline: vehicles.filter((v) => v.status !== "online").length,
+    }),
+    [vehicles],
+  );
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return vehicles;
-    return vehicles.filter(
-      (v) =>
+    return vehicles.filter((v) => {
+      if (statusFilter === "online" && v.status !== "online") return false;
+      if (statusFilter === "offline" && v.status === "online") return false;
+      if (!q) return true;
+      return (
         v.name.toLowerCase().includes(q) ||
         (v.vehicleNumber ?? "").toLowerCase().includes(q) ||
-        v.uniqueId.includes(q),
-    );
-  }, [vehicles, search]);
+        v.uniqueId.includes(q)
+      );
+    });
+  }, [vehicles, search, statusFilter]);
 
-  const onlineCount = vehicles.filter((v) => v.status === "online").length;
+  const selected = vehicles.find((v) => v.id === selectedId) ?? null;
+
+  // History trail
+  const historyQuery = useQuery({
+    queryKey: range
+      ? trackingKeys.history(selectedId ?? 0, range.from, range.to)
+      : ["tracking", "history", "idle"],
+    queryFn: () => trackingApi.history(selectedId!, range!.from, range!.to),
+    enabled: mode === "history" && !!range && selectedId != null,
+  });
+  const trail = range ? (historyQuery.data ?? null) : null;
+
+  // Advance playback
+  React.useEffect(() => {
+    if (!playing || !trail || trail.length === 0) return;
+    const timer = setInterval(() => {
+      setPlayIndex((i) => {
+        if (i >= trail.length - 1) {
+          setPlaying(false);
+          return i;
+        }
+        return i + 1;
+      });
+    }, PLAYBACK_MS);
+    return () => clearInterval(timer);
+  }, [playing, trail]);
+
+  const selectWagon = (id: number) => {
+    setSelectedId(id);
+    setMode("live");
+    setRange(null);
+    setPlaying(false);
+  };
+
+  const closePanel = () => {
+    setSelectedId(null);
+    setMode("live");
+    setRange(null);
+    setPlaying(false);
+  };
+
+  const openHistory = () => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    setFrom(toLocalInputValue(start));
+    setTo(toLocalInputValue(now));
+    setRange(null);
+    setPlayIndex(0);
+    setPlaying(false);
+    setMode("history");
+  };
+
+  const exitHistory = () => {
+    setMode("live");
+    setRange(null);
+    setPlaying(false);
+  };
+
+  const loadHistory = () => {
+    if (!from || !to) return;
+    setPlayIndex(0);
+    setPlaying(false);
+    setRange({
+      from: new Date(from).toISOString(),
+      to: new Date(to).toISOString(),
+    });
+  };
 
   return (
     <div className="flex flex-col gap-4 p-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">
-            Wagon Tracking
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-foreground">
+              Wagon Tracking
+            </h1>
+            <LiveBadge connected={connected} />
+          </div>
           <p className="text-sm text-muted-foreground">
-            {vehicles.length} wagon{vehicles.length === 1 ? "" : "s"} ·{" "}
-            {onlineCount} online
+            {counts.all} wagon{counts.all === 1 ? "" : "s"} · {counts.online}{" "}
+            online
           </p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
+          onClick={() => fleetQuery.refetch()}
+          disabled={fleetQuery.isFetching}
         >
-          <IconRefresh className={cn("size-4", isFetching && "animate-spin")} />
+          <IconRefresh
+            className={cn("size-4", fleetQuery.isFetching && "animate-spin")}
+          />
           Refresh
         </Button>
       </div>
 
       <div className="grid h-[calc(100vh-10rem)] grid-cols-1 gap-4 lg:grid-cols-[22rem_1fr]">
-        <div className="flex min-h-0 flex-col gap-3 rounded-md border border-border bg-card p-3">
-          <div className="relative">
-            <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search wagon…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
-            />
-          </div>
-
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="space-y-2 rounded-md border border-border p-3"
-                >
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-3 w-40" />
-                </div>
-              ))
-            ) : isError ? (
-              <p className="px-1 py-6 text-center text-sm text-destructive">
-                {(error as Error)?.message ?? "Failed to load fleet"}
-              </p>
-            ) : filtered.length === 0 ? (
-              <p className="px-1 py-6 text-center text-sm text-muted-foreground">
-                No devices found.
-              </p>
-            ) : (
-              filtered.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => setSelectedId(v.id)}
-                  className={cn(
-                    "w-full rounded-md border border-border p-3 text-left transition-colors hover:bg-accent",
-                    selectedId === v.id && "border-primary ring-1 ring-primary",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium text-foreground">
-                      {v.name}
-                    </span>
-                    <StatusBadge status={v.status} />
-                  </div>
-                  <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                    <IconMapPin className="size-3.5" />
-                    {v.position ? `${v.position.speedKmph} km/h` : "No position"}
-                    <span>· {formatLastUpdate(v.lastUpdate)}</span>
-                  </div>
-                  {v.vehicleNumber && (
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {v.vehicleNumber}
-                    </p>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
+        <div className="flex min-h-0 flex-col rounded-md border border-border bg-card p-3">
+          <WagonList
+            vehicles={filtered}
+            counts={counts}
+            isLoading={fleetQuery.isLoading}
+            isError={fleetQuery.isError}
+            errorMessage={(fleetQuery.error as Error | null)?.message}
+            selectedId={selectedId}
+            onSelect={selectWagon}
+            search={search}
+            onSearch={setSearch}
+            statusFilter={statusFilter}
+            onStatusFilter={setStatusFilter}
+          />
         </div>
 
-        <div className="min-h-0 overflow-hidden rounded-md border border-border">
+        <div className="relative min-h-0 overflow-hidden rounded-md border border-border">
           <FleetMap
             vehicles={filtered}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={(id) => (id == null ? closePanel() : selectWagon(id))}
+            trail={mode === "history" ? trail : null}
+            trailIndex={playIndex}
           />
+
+          {selected && (
+            <div className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-center sm:justify-start">
+              <WagonPanel
+                vehicle={selected}
+                mode={mode}
+                onClose={closePanel}
+                onOpenHistory={openHistory}
+                onExitHistory={exitHistory}
+                from={from}
+                to={to}
+                onFrom={setFrom}
+                onTo={setTo}
+                onLoadHistory={loadHistory}
+                historyLoading={historyQuery.isFetching}
+                historyError={(historyQuery.error as Error | null)?.message}
+                trail={trail}
+                playIndex={playIndex}
+                playing={playing}
+                onPlayToggle={() => setPlaying((p) => !p)}
+                onSeek={(i) => {
+                  setPlaying(false);
+                  setPlayIndex(i);
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
