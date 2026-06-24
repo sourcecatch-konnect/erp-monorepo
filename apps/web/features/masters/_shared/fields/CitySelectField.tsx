@@ -56,19 +56,19 @@ valueMode = "id",
 
 const cities = useInfiniteQuery({
   queryKey: cityKeys.list({
-    search: debouncedSearch,
-    size: PAGE_SIZE,
-    sort: "name:asc",
-    stateId,
-  } as any),
+  search: debouncedSearch,
+  size: PAGE_SIZE,
+  sort: "name:asc",
+  filter: stateId ? { stateId } : undefined,
+} as any),
   queryFn: ({ pageParam = 0 }) =>
-    cityApi.list({
-      page: pageParam,
-      size: PAGE_SIZE,
-      search: debouncedSearch,
-      sort: "name:asc",
-      ...(stateId ? { stateId } : {}),
-    } as any),
+  cityApi.list({
+    page: pageParam,
+    size: PAGE_SIZE,
+    search: debouncedSearch,
+    sort: "name:asc",
+    ...(stateId ? { filter: { stateId } } : {}),
+  } as any),
   initialPageParam: 0,
   getNextPageParam: (lastPage, allPages) => {
     const loaded = allPages.flatMap((page) => page.data).length;

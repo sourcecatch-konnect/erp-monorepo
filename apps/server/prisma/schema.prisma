@@ -194,7 +194,6 @@ model Company {
 model Branch {
   id           String  @id @default(cuid())
   branchCode   String  @unique
-  shortCode    String  @unique
   name         String
   cityId       String?
   address      String?
@@ -794,7 +793,7 @@ model Area {
   formattedAddress String?
   latitude         Float?
   longitude        Float?
-
+  customerLocations CustomerLocation[]
   city City @relation(fields: [cityId], references: [id])
 
   @@unique([cityId, name])
@@ -1084,6 +1083,7 @@ model CustomerLocation {
   customerId   String
   name         String
   address      String?
+  areaId       String?
   cityId       String
   contactName  String?
   contactPhone String?
@@ -1095,13 +1095,14 @@ model CustomerLocation {
   city                City                 @relation(fields: [cityId], references: [id])
   orders              Order[]
   tripUnloadingPoints TripUnloadingPoint[]
-
+  area                 Area? @relation(fields: [areaId], references: [id])
   loadingLRs            LorryReceipt[]     @relation("LRLoadingLocation")
   unloadingLRs          LorryReceipt[]     @relation("LRUnloadingLocation")
   consignmentLoadings   OrderConsignment[] @relation("ConsignmentLoading")
   consignmentUnloadings OrderConsignment[] @relation("ConsignmentUnloading")
-
+  
   @@index([customerId])
+  @@index([areaId])
 }
 
 model DocumentSequence {

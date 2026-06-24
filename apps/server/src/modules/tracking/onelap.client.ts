@@ -155,7 +155,9 @@ export async function getHistory(
   );
 
   return points
-    .filter((p) => typeof p.latitude === "number" && typeof p.longitude === "number")
+    .filter(
+      (p) => typeof p.latitude === "number" && typeof p.longitude === "number",
+    )
     .map((p) => ({
       latitude: p.latitude,
       longitude: p.longitude,
@@ -184,7 +186,9 @@ export async function loginForSocket(): Promise<string> {
   });
   if (!res.ok) throw new Error(`Onelap login failed (HTTP ${res.status})`);
 
-  const match = (res.headers.get("set-cookie") ?? "").match(/JSESSIONID=([^;]+)/);
+  const match = (res.headers.get("set-cookie") ?? "").match(
+    /JSESSIONID=([^;]+)/,
+  );
   if (!match) throw new Error("Onelap login did not return a session cookie");
   return `JSESSIONID=${match[1]}`;
 }

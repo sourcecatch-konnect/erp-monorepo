@@ -129,18 +129,10 @@ wheels: z
     .refine((value) => value > 0, "Capacity must be greater than 0")
     .refine((value) => value <= 100, "Capacity cannot exceed 100 MT"),
 
-openingKM: z
-  .string()
-  .min(1, "Opening KM is required")
-  .transform(Number)
-  .refine(Number.isInteger, "Opening KM must be a whole number")
+openingKM: intField("Opening KM is required")
   .refine((value) => value >= 0, "Opening KM cannot be negative"),
 
-currentKM: z
-  .string()
-  .min(1, "Current KM is required")
-  .transform(Number)
-  .refine(Number.isInteger, "Current KM must be a whole number")
+currentKM: intField("Current KM is required")
   .refine((value) => value >= 0, "Current KM cannot be negative"),
   purchaseDate: optionalDateString,
 
