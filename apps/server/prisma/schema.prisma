@@ -74,6 +74,8 @@ model User {
   userPermissions             UserPermission[]
   createdTrips                VehicleTrip[]                  @relation("CreatedTrips")
   updatedTrips                VehicleTrip[]                  @relation("UpdatedTrips")
+  createdVPSchedules          VPSchedule[]                   @relation("CreatedVPSchedules")
+  updatedVPSchedules          VPSchedule[]                   @relation("UpdatedVPSchedules")
 }
 
 model Company {
@@ -125,17 +127,19 @@ model Branch {
   agreements Agreement[] @relation("BranchAgreement")
   workers    Labour[]    @relation("WorkerBranch")
 
-  users          User[]
-  userBranches   UserBranch[]
-  city           City?          @relation(fields: [cityId], references: [id])
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  fromOrders     Order[]        @relation("FromBranch")
-  toOrders       Order[]        @relation("ToBranch")
-  originGroups      LRGroup[] @relation("GroupOrigin")
-  destinationGroups LRGroup[] @relation("GroupDestination")
-  hubGroups         LRGroup[] @relation("GroupHub")
-  railheadGroups    LRGroup[] @relation("GroupRailhead")
+  users             User[]
+  userBranches      UserBranch[]
+  city              City?        @relation(fields: [cityId], references: [id])
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  fromOrders        Order[]      @relation("FromBranch")
+  toOrders          Order[]      @relation("ToBranch")
+  originGroups      LRGroup[]    @relation("GroupOrigin")
+  destinationGroups LRGroup[]    @relation("GroupDestination")
+  hubGroups         LRGroup[]    @relation("GroupHub")
+  railheadGroups    LRGroup[]    @relation("GroupRailhead")
+  vpSchedulesFrom   VPSchedule[] @relation("VPScheduleFromBranch")
+  vpSchedulesTo     VPSchedule[] @relation("VPScheduleToBranch")
 }
 
 model Warehouse {
@@ -604,17 +608,21 @@ model City {
 }
 
 model Area {
-  id               String  @id @default(cuid())
-  name             String
-  cityId           String
-  formattedAddress String?
-  googlePlaceId    String? @unique
-  latitude         Float?
-  longitude        Float?
-  customerLocations CustomerLocation[]
-  city City @relation(fields: [cityId], references: [id])
+  id                       String             @id @default(cuid())
+  name                     String
+  cityId                   String
+  formattedAddress         String?
+  googlePlaceId            String?            @unique
+  isRailHead               Boolean            @default(false)
+  latitude                 Float?
+  longitude                Float?
+  customerLocations        CustomerLocation[]
+  city                     City               @relation(fields: [cityId], references: [id])
+  vpSchedulesAsSource      VPSchedule[]       @relation("VPScheduleSourceArea")
+  vpSchedulesAsDestination VPSchedule[]       @relation("VPScheduleDestinationArea")
 
   @@unique([cityId, name])
+  @@index([isRailHead])
 }
 
 model State {
@@ -653,12 +661,19 @@ model RailwayFreightMatrix {
 }
 
 model Wagon {
-  id                   String                 @id @default(cuid())
-  name                 String                 @unique
-  height               Float
-  width                Float
-  weight               Float
+  id   String @id @default(cuid())
+  name String @unique
+
+  height Float
+  width  Float
+  weight Float
+
+  totalCft   Float?
+  capacityMt Float?
+  isActive   Boolean @default(true)
+
   RailwayFreightMatrix RailwayFreightMatrix[]
+  vpScheduleCounts     VPScheduleWagonCount[]
 }
 
 model Pump {
@@ -871,16 +886,16 @@ model CustomerLocation {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  city                City                 @relation(fields: [cityId], references: [id])
-  orders              Order[]
-  tripUnloadingPoints TripUnloadingPoint[]
-  area                 Area? @relation(fields: [areaId], references: [id])
-  loadingLRs            LorryReceipt[]     @relation("LRLoadingLocation")
-  unloadingLRs          LorryReceipt[]     @relation("LRUnloadingLocation")
-  consignmentLoadings   OrderConsignment[] @relation("ConsignmentLoading")
-  consignmentUnloadings OrderConsignment[] @relation("ConsignmentUnloading")
-  
+  customer              Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  city                  City                 @relation(fields: [cityId], references: [id])
+  orders                Order[]
+  tripUnloadingPoints   TripUnloadingPoint[]
+  area                  Area?                @relation(fields: [areaId], references: [id])
+  loadingLRs            LorryReceipt[]       @relation("LRLoadingLocation")
+  unloadingLRs          LorryReceipt[]       @relation("LRUnloadingLocation")
+  consignmentLoadings   OrderConsignment[]   @relation("ConsignmentLoading")
+  consignmentUnloadings OrderConsignment[]   @relation("ConsignmentUnloading")
+
   @@index([customerId])
   @@index([areaId])
 }
@@ -1080,6 +1095,79 @@ model TripStatusHistory {
   trip          VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Cascade)
 }
 
+model VPSchedule {
+  id String @id @default(cuid())
+
+  scheduleNumber String   @unique
+  scheduleDate   DateTime
+  scheduleName   String
+
+  fromBranchId String
+  toBranchId   String
+
+  sourceAreaId      String
+  destinationAreaId String
+
+  status VPScheduleStatus @default(DRAFT)
+
+  totalWagonCount  Int    @default(0)
+  totalCapacityCft Float? @default(0)
+  totalCapacityMt  Float? @default(0)
+
+  remarks String?
+
+  createdById String
+  updatedById String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  fromBranch Branch @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
+  toBranch   Branch @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
+
+  sourceArea      Area @relation("VPScheduleSourceArea", fields: [sourceAreaId], references: [id])
+  destinationArea Area @relation("VPScheduleDestinationArea", fields: [destinationAreaId], references: [id])
+
+  createdBy User  @relation("CreatedVPSchedules", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedVPSchedules", fields: [updatedById], references: [id])
+
+  wagonCounts VPScheduleWagonCount[]
+
+  @@index([scheduleDate])
+  @@index([status])
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([sourceAreaId])
+  @@index([destinationAreaId])
+  @@index([deletedAt])
+}
+
+model VPScheduleWagonCount {
+  id String @id @default(cuid())
+
+  vpScheduleId String
+  wagonId      String
+
+  count Int @default(0)
+
+  capacityCft Float?
+  capacityMt  Float?
+  totalCft    Float?
+  totalMt     Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vpSchedule VPSchedule @relation(fields: [vpScheduleId], references: [id], onDelete: Cascade)
+  wagon      Wagon      @relation(fields: [wagonId], references: [id])
+
+  @@unique([vpScheduleId, wagonId])
+  @@index([vpScheduleId])
+  @@index([wagonId])
+}
+
 enum WorkerType {
   Supervisor
   Hamal
@@ -1254,4 +1342,10 @@ enum TripStatus {
 enum TripType {
   lr
   dc
+}
+
+enum VPScheduleStatus {
+  DRAFT
+  PLANNED
+  CANCELLED
 }
