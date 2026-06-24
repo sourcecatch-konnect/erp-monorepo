@@ -27,7 +27,7 @@ router.get(
   async (_req, res, next) => {
     try {
       const branches = await db.branch.findMany({
-        select: { id: true, name: true, branchCode: true, shortCode: true },
+        select: { id: true, name: true, branchCode: true },
         orderBy: { name: "asc" },
       });
       sendOk(res, branches);

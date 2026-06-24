@@ -249,6 +249,13 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
     order.bookingFreightAmount != null
       ? paiseToRupees(Number(order.bookingFreightAmount))
       : null;
+  const hasApprovedFreight = approvedFreight != null;
+  const displayedFreight =
+    hasApprovedFreight && order.bookingFreightAmount != null
+      ? formatMoneyFromPaise(order.bookingFreightAmount)
+      : autoFreight != null
+        ? formatMoney(autoFreight)
+        : "-";
 
   const freightWasEdited =
     approvedFreight != null &&
@@ -465,7 +472,15 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                   </p>
                 </div>
 
-                {freightWasEdited ? (
+                {!hasApprovedFreight && autoFreight != null ? (
+                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                    Auto Preview
+                  </span>
+                ) : !hasApprovedFreight ? (
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                    No Rate
+                  </span>
+                ) : freightWasEdited ? (
                   <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700">
                     Edited
                   </span>
@@ -513,8 +528,9 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
 
               {!freightWasEdited && autoFreight != null ? (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Freight matched with rate matrix and was approved without
-                  manual change.
+                  {hasApprovedFreight
+                    ? "Freight matched with rate matrix and was approved without manual change."
+                    : "Freight matched with rate matrix. It will be saved when the order is approved."}
                 </p>
               ) : null}
             </div>

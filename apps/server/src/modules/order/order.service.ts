@@ -1,7 +1,19 @@
 import { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { paiseToRupees } from "../../lib/money.js";
-
+import type {
+  ApiResponse,
+  Order,
+  OrderQuickView,
+  CreateOrderBody,
+  UpdateOrderBody,
+  ApproveOrderBody,
+  RejectOrderBody,
+  CancelOrderBody,
+  FreightPreview,
+  CustomerLocation,
+  Route,
+} from "@skerp/types";
 // Shared document-numbering helpers live in _shared so every transactional
 // module (orders, trips, …) reuses one implementation. Re-exported here so
 // existing order imports keep working.
@@ -91,10 +103,7 @@ export const computeFreight = async (args: {
     const [fromBranch, toBranch] = await Promise.all([
       db.branch.findUnique({
         where: { id: args.fromBranchId },
-        select: {
-          id: true,
-          name: true,
-          shortCode: true,
+        select: {branchCode: true,
           cityId: true,
           city: { select: { id: true, name: true } },
         },
@@ -104,7 +113,7 @@ export const computeFreight = async (args: {
         select: {
           id: true,
           name: true,
-          shortCode: true,
+          branchCode: true,
           cityId: true,
           city: { select: { id: true, name: true } },
         },
@@ -287,14 +296,14 @@ export const orderListSelect = {
   fromBranch: {
     select: {
       id: true,
-      shortCode: true,
+      branchCode: true,
     },
   },
 
   toBranch: {
     select: {
       id: true,
-      shortCode: true,
+      branchCode: true,
     },
   },
 
@@ -312,6 +321,26 @@ export const orderListSelect = {
       lastName: true,
     },
   },
+    route: {
+    select: {
+      id: true,
+      sourceCityId: true,
+      destinationCityId: true,
+      sourceCity: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      destinationCity: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
+
 
   _count: {
     select: {
@@ -331,15 +360,32 @@ export const orderQuickViewSelect = {
   contactMobile: true,
   contactEmail: true,
   pickupAddressOverride: true,
-
+  routeId: true,
+route: {
+  select: {
+    id: true,
+    sourceCity: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+    destinationCity: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  },
+},
   customer: {
     select: { id: true, name: true },
   },
   fromBranch: {
-    select: { id: true, shortCode: true },
+    select: { id: true, branchCode: true },
   },
   toBranch: {
-    select: { id: true, shortCode: true },
+    select: { id: true, branchCode: true },
   },
   vehicleType: {
     select: { id: true, name: true },
@@ -352,8 +398,8 @@ export const orderQuickViewSelect = {
 export const orderInclude = {
   customer: { select: { id: true, name: true, disallowNewLRBooking: true } },
   consignee: { select: { id: true, name: true } },
-  fromBranch: { select: { id: true, name: true, shortCode: true } },
-  toBranch: { select: { id: true, name: true, shortCode: true } },
+  fromBranch: { select: { id: true, name: true, branchCode: true } },
+  toBranch: { select: { id: true, name: true, branchCode: true } },
 
   route: {
     select: {

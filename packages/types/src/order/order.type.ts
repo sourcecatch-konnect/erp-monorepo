@@ -27,7 +27,11 @@ export type CancelOrderBody = z.output<typeof cancelOrderSchema>;
 
 /** A lightweight reference shape (id + name) used in nested includes. */
 type Ref = { id: string; name: string };
-
+type RouteRef = {
+  id: string;
+  sourceCity?: Ref | null;
+  destinationCity?: Ref | null;
+};
 export type OrderEvent = {
   id: string;
   orderId: string;
@@ -70,7 +74,22 @@ export type OrderConsignmentRow = {
   unloadingLocation?: { id: string; name: string } | null;
   goods?: OrderConsignmentGoodsRow[];
 };
+export type OrderCityLite = {
+  id: string;
+  name: string;
+};
 
+export type OrderBranchLite = {
+  id: string;
+  name?: string | null;
+  shortCode?: string | null;
+};
+
+export type OrderRouteDetail = {
+  id: string;
+  sourceCity?: OrderCityLite | null;
+  destinationCity?: OrderCityLite | null;
+};
 /** Order as returned by the API (Decimal/Date serialised to string on the wire). */
 export type Order = {
   id: string;
@@ -80,7 +99,10 @@ export type Order = {
   fromBranchId: string;
   toBranchId: string;
   pickupDate: string;
+
   routeId: string | null;
+  route?: OrderRouteDetail | null;
+
   customerLocationId: string | null;
   pickupAddressOverride: string | null;
   specialInstructions: string | null;
@@ -106,9 +128,9 @@ export type Order = {
 
   customer?: Ref;
   consignee?: Ref | null;
-  fromBranch?: { id: string; name: string; shortCode: string };
-  toBranch?: { id: string; name: string; shortCode: string };
-  vehicleType?: { id: string; code: string; name: string } | null;
+  fromBranch?: OrderBranchLite | null;
+  toBranch?: OrderBranchLite | null;
+  vehicleType?: { id: string; code?: string | null; name: string } | null;
   customerLocation?: { id: string; name: string } | null;
   createdBy?: { id: string; firstName: string; lastName: string };
   approvedBy?: { id: string; firstName: string; lastName: string } | null;
@@ -116,10 +138,31 @@ export type Order = {
   consignments?: OrderConsignmentRow[];
   events?: OrderEvent[];
 };
-
 /** Freight preview returned by the detail endpoint / freight lookup. */
 export type FreightPreview = {
   amount: number | null;
   matched: boolean;
   source: "RateMatrix" | "Manual" | "None";
+};
+export type OrderQuickView = Pick<
+  Order,
+  | "id"
+  | "orderNumber"
+  | "status"
+  | "pickupDate"
+  | "orderType"
+  | "truckQuantity"
+  | "bookingFreightAmount"
+  | "contactPersonName"
+  | "contactMobile"
+  | "contactEmail"
+  | "pickupAddressOverride"
+  | "routeId"
+> & {
+  customer: { id: string; name: string } | null;
+  fromBranch: { id: string; shortCode: string } | null;
+  toBranch: { id: string; shortCode: string } | null;
+  vehicleType: { id: string; name: string } | null;
+  customerLocation: { id: string; name: string } | null;
+  route?: OrderRouteDetail | null;
 };

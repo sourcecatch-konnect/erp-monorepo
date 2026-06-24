@@ -85,15 +85,39 @@ const router: Router = createCrudRouter({
 /* CustomerLocation (inline-lite saved pickup points)                 */
 /* Nested under /customers. authMiddleware already applied by factory. */
 /* ------------------------------------------------------------------ */
-
+const customerLocationInclude = {
+  city: { select: { id: true, name: true } },
+  area: {
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      formattedAddress: true,
+    },
+  },
+};
 // List a customer's saved pickup locations (used by the Order form dropdown).
 router.get("/:id/locations", can("masters.customer.view"), async (req, res) => {
   const customerId = getParamId(req);
+  console.log("CUSTOMER LOCATION FILTER:", {
+    customerId,
+    query: req.query,
+  });
+
+  const cityId =
+    typeof req.query.cityId === "string" && req.query.cityId.trim()
+      ? req.query.cityId.trim()
+      : undefined;
+
   const locations = await db.customerLocation.findMany({
-    where: { customerId },
-    include: { city: { select: { id: true, name: true } } },
+    where: {
+      customerId,
+      ...(cityId ? { cityId } : {}),
+    },
+    include: customerLocationInclude,
     orderBy: { name: "asc" },
   });
+
   return sendOk(res, locations);
 });
 
@@ -114,7 +138,7 @@ router.post(
 
     const location = await db.customerLocation.create({
       data: { ...parsed.data, customerId },
-      include: { city: { select: { id: true, name: true } } },
+      include: customerLocationInclude,
     });
     return sendOk(res, location, undefined, 201);
   },
@@ -142,7 +166,7 @@ router.patch(
     const location = await db.customerLocation.update({
       where: { id: locationId },
       data: parsed.data,
-      include: { city: { select: { id: true, name: true } } },
+      include: customerLocationInclude,
     });
     return sendOk(res, location);
   },
