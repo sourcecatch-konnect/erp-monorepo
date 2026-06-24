@@ -66,10 +66,11 @@ export default function ConsignmentLinesEditor({
   truckCount: number;
 }) {
   const {
-    control,
-    trigger,
-    formState: { isSubmitted },
-  } = useFormContext<FormValues>();
+  control,
+  trigger,
+  getValues,
+  formState: { isSubmitted },
+} = useFormContext<FormValues>();
 
   const { fields, append, remove } = useFieldArray<FormValues, "consignments">({
     control,
@@ -97,14 +98,25 @@ export default function ConsignmentLinesEditor({
     [append],
   );
 
-  // Every truck order needs at least one line (one line = one LR), so seed one.
   React.useEffect(() => {
-    if (fields.length === 0) addLine();
-    console.log("got executed ");
+  const current = getValues("consignments") ?? [];
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  if (current.length === 0) {
+    append({
+      truckIndex: 1,
+      loadingLocationId: undefined,
+      unloadingLocationId: undefined,
+      goods: [emptyGoods()],
+    });
+  }
+}, [append, getValues]);
+React.useEffect(() => {
+  const current = getValues("consignments") ?? [];
 
+  if (truckCount === 1 && current.length > 1) {
+    remove(1);
+  }
+}, [truckCount, getValues, remove]);
   return (
     <div className="space-y-3">
       <AnimatePresence initial={false}>

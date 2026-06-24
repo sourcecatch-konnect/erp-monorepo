@@ -231,6 +231,7 @@ When proposing infra: lead with lean option, present enterprise upgrades only as
 | AWS deployment topology? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §12 |
 | How to verify a phase ships correctly? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §13 |
 | Master CRUD architecture, no-dynamic-engine rule? | [MASTER_MODULE_PLAN.md](MASTER_MODULE_PLAN.md) |
+| How do I manually understand/test the current Order -> LR flow? | [CURRENT_ORDER_LR_FLOW_GUIDE.md](CURRENT_ORDER_LR_FLOW_GUIDE.md) |
 | Auth/permission/branch-scoping patterns? | [RBAC_PLAN.md](RBAC_PLAN.md) |
 | Stack + design system + folder rules? | [../CLAUDE.md](../CLAUDE.md) |
 | Domain meaning of LR/VP/DC/Hamali/etc.? | **This file, §2** |

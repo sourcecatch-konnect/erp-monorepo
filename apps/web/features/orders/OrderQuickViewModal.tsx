@@ -85,13 +85,14 @@ const { data: order, isLoading } = useQuery({
     </div>
 
     <span className="font-medium text-foreground">
-      {order.fromBranch?.shortCode ?? "—"}
+      {order.route?.sourceCity?.name ?? "?"}
     </span>
 
     <IconArrowRight size={14} className="text-muted-foreground" />
 
     <span className="font-medium text-foreground">
-      {order.toBranch?.shortCode ?? "—"}
+    
+      {order.route?.destinationCity?.name ?? "?"}
     </span>
   </div>
 </div>

@@ -49,6 +49,7 @@ type Props<T extends { id: string }> = {
   children?: React.ReactNode;
   defaultHiddenColumns?: string[];
   renderExpandedRow?: (row: T) => React.ReactNode;
+  extraRowActions?: (row: T) => React.ReactNode;
 expandOnRowClick?: boolean;
 onSizeChange?: (size: number) => void;
 };
@@ -60,6 +61,7 @@ export default function MasterListPage<T extends { id: string }>({
   isLoading,
   search,
   onSearchChange,
+  extraRowActions,
   page,
   size,
   onView,
@@ -209,12 +211,14 @@ export default function MasterListPage<T extends { id: string }>({
   onAddNew={onAdd}
   onView={onView}
   onRowClick={onRowClick}
+  
   selectedIds={selectedIds}
   onSelectedIdsChange={onSelectedIdsChange}
   isLoading={isLoading}
   defaultHiddenColumns={defaultHiddenColumns}
   renderExpandedRow={renderExpandedRow}
-  expandOnRowClick
+  expandOnRowClick={expandOnRowClick}
+  extraRowActions={extraRowActions}
 />
 
       <input

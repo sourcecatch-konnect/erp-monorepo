@@ -41,7 +41,7 @@ export const branchColumns: ColumnDef<Branch>[] = [
         <div className="flex flex-col">
           <span className="font-medium">{row.original.name}</span>
           <span className="text-xs text-muted-foreground">
-            {row.original.branchCode ?? "-"} · {row.original.shortCode ?? "-"}
+            {row.original.branchCode ?? "-"}
           </span>
         </div>
       </div>

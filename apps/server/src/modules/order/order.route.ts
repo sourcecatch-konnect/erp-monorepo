@@ -176,13 +176,13 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
 
     const fyCode = fyCodeFor(new Date());
     const seq = await nextSequence(tx, fromBranch.branchCode, fyCode, "ORDER");
+
     const orderNumber = formatDocNumber(
       fromBranch.branchCode,
       fyCode,
       seq,
       "SKO",
     );
-
     const created = await tx.order.create({
       data: {
         orderNumber,

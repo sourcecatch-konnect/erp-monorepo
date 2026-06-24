@@ -69,8 +69,8 @@ export default function CompanyForm({
     defaultValues,
   });
 const states = useQuery({
-  queryKey: stateKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  queryKey: stateKeys.list({ page: 0, size: 35 }),
+  queryFn: () => stateApi.list({ page: 0, size: 35 }),
   enabled: open,
 });
 

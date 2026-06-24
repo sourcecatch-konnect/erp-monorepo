@@ -101,10 +101,6 @@ React.useEffect(() => {
     }),
     []
   );
-
-  /* ================= SUBMIT ================= */
- 
-  /* ================= IMPORT ================= */
   const handleImport = async (file: File) => {
     const text = await file.text();
 
