@@ -355,7 +355,8 @@ export default function LRDetail({ id }: { id: string }) {
 
             <EwayBillSection
               lrId={lr.id}
-              ewayBills={lr.ewayBills}
+              groupId={g.id}
+              ewayBill={lr.ewayBill}
               canAdd={canUpdate && g.status !== "CANCELLED"}
             />
           </div>
@@ -371,6 +372,9 @@ export default function LRDetail({ id }: { id: string }) {
           lrNumber: lr.lrNumber,
           loadingLocation: lr.loadingLocation,
           unloadingLocation: lr.unloadingLocation,
+          invoiceNumber: lr.invoiceNumber,
+          invoiceAmount: lr.invoiceAmount,
+          ewayBill: lr.ewayBill,
         }))}
         defaultFreight={
           g.order?.bookingFreightAmount != null

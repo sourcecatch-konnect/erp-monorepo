@@ -967,7 +967,7 @@ model LorryReceipt {
   groupId             String
   loadingLocationId   String?
   unloadingLocationId String?
-  ewayBills           EwayBill[]
+  ewayBill            EwayBill?
   goods               LRGoods[]
   createdBy           User              @relation("CreatedLR", fields: [createdById], references: [id])
   group               LRGroup           @relation(fields: [groupId], references: [id])
@@ -999,7 +999,7 @@ model LRGoods {
 }
 
 model EwayBill {
-  lorryReceiptId String
+  lorryReceiptId String       @unique
   createdAt      DateTime     @default(now())
   documentUrl    String?
   ewayBillNo     String

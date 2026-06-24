@@ -115,7 +115,7 @@ export const lrDetailInclude = {
   unloadingLocation: { select: locationSelect },
   group: { select: groupRefSelect },
   goods: true,
-  ewayBills: { orderBy: { generatedAt: "asc" as const } },
+  ewayBill: true,
   createdBy: { select: { id: true, firstName: true, lastName: true } },
   updatedBy: { select: { id: true, firstName: true, lastName: true } },
 } satisfies Prisma.LorryReceiptInclude;

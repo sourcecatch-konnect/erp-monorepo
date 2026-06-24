@@ -83,5 +83,5 @@ export type LorryReceipt = LRListItem & {
   updatedAt: string;
   deletedAt: string | null;
   goods: LRGoods[];
-  ewayBills: EwayBill[];
+  ewayBill: EwayBill | null;
 };

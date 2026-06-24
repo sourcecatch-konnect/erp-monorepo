@@ -24,6 +24,25 @@ export type DevicePosition = {
   fixTime: string | null;
 };
 
+/** A single breadcrumb in a history trail (`/api/reports/mini-route`). */
+export type TrailPoint = {
+  latitude: number;
+  longitude: number;
+  speedKmph: number;
+  course: number;
+  fixTime: string | null;
+};
+
+/** Live position pushed over the WebSocket; merged into the fleet by deviceId. */
+export type LivePosition = {
+  deviceId: number;
+  latitude: number;
+  longitude: number;
+  speedKmph: number;
+  course: number;
+  fixTime: string | null;
+};
+
 export type FleetVehicle = {
   /** Onelap device id. */
   id: number;

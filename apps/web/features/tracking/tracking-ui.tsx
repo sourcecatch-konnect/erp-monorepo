@@ -28,6 +28,33 @@ export function StatusBadge({ status }: { status: DeviceStatus }) {
   );
 }
 
+/** Pulsing dot + label that reflects the live-socket connection. */
+export function LiveBadge({ connected }: { connected: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium",
+        connected
+          ? "border-green-500/20 bg-green-500/10 text-green-700"
+          : "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      <span className="relative flex size-1.5">
+        {connected && (
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-500/70" />
+        )}
+        <span
+          className={cn(
+            "relative inline-flex size-1.5 rounded-full",
+            connected ? "bg-green-600" : "bg-muted-foreground",
+          )}
+        />
+      </span>
+      {connected ? "Live" : "Offline"}
+    </span>
+  );
+}
+
 /** Human-friendly "x minutes ago" for an ISO timestamp. */
 export function formatLastUpdate(iso: string | null): string {
   if (!iso) return "Never";
@@ -43,4 +70,26 @@ export function formatLastUpdate(iso: string | null): string {
 
   const days = Math.round(hours / 24);
   return `${days}d ago`;
+}
+
+/** Absolute local datetime, e.g. "23 Jun, 14:05". */
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Value for an <input type="datetime-local">, in local time. */
+export function toLocalInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
 }

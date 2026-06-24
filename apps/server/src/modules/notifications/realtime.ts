@@ -57,3 +57,6 @@ export const emitInAppNotification = (
 ) => {
   io?.to(`user:${userId}`).emit("notification:new", notification);
 };
+
+/** The shared Socket.IO server, for other realtime features (e.g. tracking). */
+export const getIo = (): Server | null => io;

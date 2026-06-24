@@ -161,7 +161,20 @@ export const groupListSelect = {
   originBranch: { select: { id: true, name: true, branchCode: true } },
   destinationBranch: { select: { id: true, name: true, branchCode: true } },
   order: { select: { id: true, orderNumber: true } },
-  _count: { select: { lorryReceipts: true } },
+  lorryReceipts: {
+    where: { deletedAt: null },
+    orderBy: { createdAt: "asc" as const },
+    select: {
+      id: true,
+      lrNumber: true,
+      status: true,
+      invoiceNumber: true,
+      invoiceAmount: true,
+      loadingLocation: { select: locationSelect },
+      unloadingLocation: { select: locationSelect },
+      ewayBill: true,
+    },
+  },
 } satisfies Prisma.LRGroupSelect;
 
 export const groupDetailInclude = {
@@ -182,7 +195,7 @@ export const groupDetailInclude = {
       loadingLocation: { select: locationSelect },
       unloadingLocation: { select: locationSelect },
       goods: true,
-      ewayBills: { orderBy: { generatedAt: "asc" as const } },
+      ewayBill: true,
     },
   },
   createdBy: { select: { id: true, firstName: true, lastName: true } },
