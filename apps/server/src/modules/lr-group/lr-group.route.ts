@@ -41,7 +41,7 @@ const router: Router = Router();
 router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
-const LR_GROUP_TRANSACTION_OPTIONS = { timeout: 15_000 };
+
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -460,7 +460,7 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
       },
       include: groupDetailInclude,
     });
-  }, LR_GROUP_TRANSACTION_OPTIONS);
+  });
 
   return sendOk(res, updated);
 });
@@ -526,7 +526,7 @@ router.post("/:id/split-at-hub", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, r
     await dispatchTripOnAttach(tx, secondaryTripId, existing.groupNumber, me);
 
     return result;
-  }, LR_GROUP_TRANSACTION_OPTIONS);
+  });
 
   return sendOk(res, updated);
 });
@@ -626,7 +626,7 @@ router.post("/:id/cancel", can(PERMS.LORRY_RECEIPT.CANCEL), async (req, res) => 
       },
       include: groupDetailInclude,
     });
-  }, LR_GROUP_TRANSACTION_OPTIONS);
+  });
 
   return sendOk(res, updated);
 });
