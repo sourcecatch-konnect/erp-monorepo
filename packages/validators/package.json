@@ -57,6 +57,26 @@
     "./lr-group": {
       "types": "./src/lr-group/lr-group.schema.ts",
       "import": "./dist/lr-group/lr-group.schema.js"
+    },
+    "./cash/creditor": {
+      "types": "./src/cash/creditor.schema.ts",
+      "import": "./dist/cash/creditor.schema.js"
+    },
+    "./cash/cash-account": {
+      "types": "./src/cash/cash-account.schema.ts",
+      "import": "./dist/cash/cash-account.schema.js"
+    },
+    "./cash/cash-payment": {
+      "types": "./src/cash/cash-payment.schema.ts",
+      "import": "./dist/cash/cash-payment.schema.js"
+    },
+    "./cash/cash-day": {
+      "types": "./src/cash/cash-day.schema.ts",
+      "import": "./dist/cash/cash-day.schema.js"
+    },
+    "./cash/cash-receivable": {
+      "types": "./src/cash/cash-receivable.schema.ts",
+      "import": "./dist/cash/cash-receivable.schema.js"
     }
   },
   "scripts": {

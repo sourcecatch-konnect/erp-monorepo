@@ -1,0 +1,3 @@
+name,type,bankName,accountLast4,isActive
+ICICI Current A/C,BANK,ICICI Bank,1234,true
+Cash - Jalgaon,CASH,,,true
