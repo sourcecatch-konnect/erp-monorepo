@@ -129,17 +129,19 @@ model Branch {
 
   users             User[]
   userBranches      UserBranch[]
-  city              City?        @relation(fields: [cityId], references: [id])
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  fromOrders        Order[]      @relation("FromBranch")
-  toOrders          Order[]      @relation("ToBranch")
-  originGroups      LRGroup[]    @relation("GroupOrigin")
-  destinationGroups LRGroup[]    @relation("GroupDestination")
-  hubGroups         LRGroup[]    @relation("GroupHub")
-  railheadGroups    LRGroup[]    @relation("GroupRailhead")
-  vpSchedulesFrom   VPSchedule[] @relation("VPScheduleFromBranch")
-  vpSchedulesTo     VPSchedule[] @relation("VPScheduleToBranch")
+  city              City?         @relation(fields: [cityId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  fromOrders        Order[]       @relation("FromBranch")
+  toOrders          Order[]       @relation("ToBranch")
+  originGroups      LRGroup[]     @relation("GroupOrigin")
+  destinationGroups LRGroup[]     @relation("GroupDestination")
+  hubGroups         LRGroup[]     @relation("GroupHub")
+  railheadGroups    LRGroup[]     @relation("GroupRailhead")
+  vpSchedulesFrom   VPSchedule[]  @relation("VPScheduleFromBranch")
+  vpSchedulesTo     VPSchedule[]  @relation("VPScheduleToBranch")
+  creditors         Creditor[]    @relation("BranchCreditor")
+  cashPayments      CashPayment[] @relation("BranchCashPayment")
 }
 
 model Warehouse {
@@ -1166,6 +1168,128 @@ model VPScheduleWagonCount {
   @@unique([vpScheduleId, wagonId])
   @@index([vpScheduleId])
   @@index([wagonId])
+}
+
+// ── Cash Planning ─────────────────────────────────────────────────────────
+// Global, single-tenant (not company/branch scoped). One CashPlanDay per date.
+// Money stored as paise in BigInt (see lib/bigint-json.ts, lib/money.ts).
+
+model Creditor {
+  id          String           @id @default(cuid())
+  name        String
+  category    CreditorCategory
+  defaultMode PaymentMode?
+  branchId    String?
+  phone       String?
+  isActive    Boolean          @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  branch   Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
+  payments CashPayment[]
+}
+
+model CashAccount {
+  id           String          @id @default(cuid())
+  name         String
+  type         CashAccountType
+  bankName     String?
+  accountLast4 String?
+  isActive     Boolean         @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  balances CashAccountBalance[]
+  payments CashPayment[]
+}
+
+model CashPlanDay {
+  id         String        @id @default(cuid())
+  date       DateTime      @unique @db.Date
+  status     CashDayStatus @default(OPEN)
+  closedAt   DateTime?
+  closedById String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  balances CashAccountBalance[]
+  payments CashPayment[]
+}
+
+model CashAccountBalance {
+  id             String  @id @default(cuid())
+  dayId          String
+  accountId      String
+  openingBalance BigInt // paise; seeded from prior closing, editable
+  carriedOpening BigInt? // paise; what carry-forward proposed (for delta flag)
+
+  day     CashPlanDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  account CashAccount @relation(fields: [accountId], references: [id])
+
+  @@unique([dayId, accountId])
+}
+
+model CashPayment {
+  id            String           @id @default(cuid())
+  dayId         String
+  creditorId    String?
+  payeeName     String
+  amount        BigInt // paise
+  category      CreditorCategory
+  mode          PaymentMode
+  branchId      String?
+  fromAccountId String?
+  status        PaymentStatus    @default(PENDING)
+  isLate        Boolean          @default(false)
+  note          String?
+  approvedById  String?
+  approvedAt    DateTime?
+  createdById   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  day         CashPlanDay  @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  creditor    Creditor?    @relation(fields: [creditorId], references: [id])
+  fromAccount CashAccount? @relation(fields: [fromAccountId], references: [id])
+  branch      Branch?      @relation("BranchCashPayment", fields: [branchId], references: [id])
+
+  @@index([dayId])
+  @@index([status])
+}
+
+enum CreditorCategory {
+  DIESEL
+  RENT
+  FREIGHT
+  EXPENSE
+  REPAIR
+  OTHER
+}
+
+enum CashAccountType {
+  BANK
+  CASH
+}
+
+enum CashDayStatus {
+  OPEN
+  CLOSED
+}
+
+enum PaymentMode {
+  CASH
+  BANK
+  UPI
+  CHEQUE
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  HOLD
+  REJECTED
 }
 
 enum WorkerType {
