@@ -616,15 +616,19 @@ model Area {
   isRailHead               Boolean            @default(false)
   latitude                 Float?
   longitude                Float?
+
   customerLocations        CustomerLocation[]
   city                     City               @relation(fields: [cityId], references: [id])
+
   vpSchedulesAsSource      VPSchedule[]       @relation("VPScheduleSourceArea")
   vpSchedulesAsDestination VPSchedule[]       @relation("VPScheduleDestinationArea")
+
+  railwayFreightAsSource      RailwayFreightMatrix[] @relation("RailwayFreightSourceArea")
+  railwayFreightAsDestination RailwayFreightMatrix[] @relation("RailwayFreightDestinationArea")
 
   @@unique([cityId, name])
   @@index([isRailHead])
 }
-
 model State {
   id         String      @id @default(cuid())
   name       String      @unique
@@ -649,15 +653,33 @@ model Transport {
 
 model RailwayFreightMatrix {
   id                String   @id @default(cuid())
+
   wagonType         String
+
   sourceCityId      String
   destinationCityId String
+
+  sourceAreaId      String?
+  destinationAreaId String?
+
   freightAmount     BigInt
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  destinationCity   City     @relation("DestinationCity", fields: [destinationCityId], references: [id])
+
   sourceCity        City     @relation("SourceCity", fields: [sourceCityId], references: [id])
+  destinationCity   City     @relation("DestinationCity", fields: [destinationCityId], references: [id])
+
+  sourceArea        Area?    @relation("RailwayFreightSourceArea", fields: [sourceAreaId], references: [id])
+  destinationArea   Area?    @relation("RailwayFreightDestinationArea", fields: [destinationAreaId], references: [id])
+
   wagon             Wagon    @relation(fields: [wagonType], references: [name])
+
+  @@index([wagonType])
+  @@index([sourceCityId])
+  @@index([destinationCityId])
+  @@index([sourceAreaId])
+  @@index([destinationAreaId])
 }
 
 model Wagon {

@@ -57,6 +57,11 @@ type TripPermissionKey =
   | "trip.close"
   | "trip.cancel";
 
+type VPSchedulePermissionKey =
+  | `vp_schedule.${CrudAction}`
+  | "vp_schedule.confirm"
+  | "vp_schedule.cancel";
+
 type OrderPermissionKey =
   | `order.${CrudAction}`
   | "order.approve"
@@ -93,6 +98,7 @@ export type PermissionKey =
   | OrderPermissionKey
   | EwaybillPermissionKey
   | TrackingPermissionKey
+  | VPSchedulePermissionKey
   | AdminPermissionKey
   | NotificationPermissionKey
   | AttachmentPermissionKey;
@@ -157,6 +163,14 @@ export const PERMS = {
     CLOSE: "trip.close",
     CANCEL: "trip.cancel",
   },
+  VP_SCHEDULE: {
+  VIEW: "vp_schedule.view",
+  CREATE: "vp_schedule.create",
+  UPDATE: "vp_schedule.update",
+  DELETE: "vp_schedule.delete",
+  CONFIRM: "vp_schedule.confirm",
+  CANCEL: "vp_schedule.cancel",
+},
   ORDER: {
     VIEW: "order.view",
     CREATE: "order.create",

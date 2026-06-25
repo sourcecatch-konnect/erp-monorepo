@@ -40,6 +40,7 @@ import adminRoute from "./modules/admin/admin.route.js";
 import notificationRoute from "./modules/notifications/notification.route.js";
 import attachmentRoute from "./modules/attachments/attachment.route.js";
 import trackingRoute from "./modules/tracking/tracking.route.js";
+import vpScheduleRoute from "./modules/vp-schedule/vp-schedule.route.js"
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
@@ -101,6 +102,7 @@ app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);
 app.use("/attachments", attachmentRoute);
+app.use("/vp-schedules", vpScheduleRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use(errorMiddleware);

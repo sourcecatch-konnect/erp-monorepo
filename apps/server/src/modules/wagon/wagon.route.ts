@@ -38,17 +38,25 @@ const router: Router =
   {
     model: db.railwayFreightMatrix,
     label: "Railway Freight Matrix",
-
     where: (id: string) => ({
       wagon: {
         id,
       },
     }),
-
     select: {
       id: true,
     },
-
+    getName: (row: any) => row.id,
+  },
+  {
+    model: db.vPScheduleWagonCount,
+    label: "VP Schedule",
+    where: (id: string) => ({
+      wagonId: id,
+    }),
+    select: {
+      id: true,
+    },
     getName: (row: any) => row.id,
   },
 ],
