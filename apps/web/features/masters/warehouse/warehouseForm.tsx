@@ -83,16 +83,16 @@ export default function WarehouseForm({
     defaultValues,
   });
 const statesQuery = useQuery({
-  queryKey: stateKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => stateApi.list({ page: 0, size: 1000 }),
+  queryKey: stateKeys.list({ page: 0, size: 35 }),
+  queryFn: () => stateApi.list({ page: 0, size: 35 }),
   enabled: open,
 });
 
 
 
 const branchesQuery = useQuery({
-  queryKey: branchKeys.list({ page: 0, size: 1000 }),
-  queryFn: () => branchApi.list({ page: 0, size: 1000 }),
+  queryKey: branchKeys.list({ page: 0, size: 100 }),
+  queryFn: () => branchApi.list({ page: 0, size: 100 }),
   enabled: open,
 });
 

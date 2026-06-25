@@ -158,13 +158,12 @@ const router: Router = createCrudRouter({
 
   uniqueErrorMessages: {
     branchCode: "This branch code already exists.",
-    shortCode: "This short code already exists.",
+
   },
 
   listOptions: {
     searchableFields: [
       "branchCode",
-      "shortCode",
       "name",
       "address",
       "contactName",

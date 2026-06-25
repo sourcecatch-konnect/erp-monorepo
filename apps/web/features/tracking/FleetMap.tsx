@@ -64,7 +64,10 @@ function LiveCamera({
     if (!map || selectedId == null) return;
     const target = vehicles.find((v) => v.id === selectedId);
     if (!target?.position) return;
-    map.panTo({ lat: target.position.latitude, lng: target.position.longitude });
+    map.panTo({
+      lat: target.position.latitude,
+      lng: target.position.longitude,
+    });
     if ((map.getZoom() ?? 0) < 12) map.setZoom(13);
   }, [map, selectedId, vehicles]);
 
@@ -128,7 +131,9 @@ function WagonGlyph({ online }: { online: boolean }) {
       className={cn(
         "flex size-8 translate-y-1/2 items-center justify-center rounded-full",
         "border-2 bg-card shadow-md",
-        online ? "border-green-600 text-green-700" : "border-primary text-primary",
+        online
+          ? "border-green-600 text-green-700"
+          : "border-primary text-primary",
       )}
     >
       <IconTrain className="size-5" />

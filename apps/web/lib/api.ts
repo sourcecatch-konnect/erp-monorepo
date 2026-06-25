@@ -41,12 +41,15 @@ const refreshSession = (): Promise<void> => {
 };
 
 type ApiErrorResponse = {
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  details?: unknown;
   error?: {
     code?: string;
     message?: string;
     details?: unknown;
   };
-  message?: string;
 };
 
 export type ApiRequestError = Error & {
@@ -55,20 +58,57 @@ export type ApiRequestError = Error & {
   details?: unknown;
 };
 
+const formatDetails = (details: unknown): string | null => {
+  if (!details) return null;
+
+  if (typeof details === "string") return details;
+
+  if (Array.isArray(details)) {
+    return details.map(String).join("\n");
+  }
+
+  if (typeof details === "object") {
+    const messages = Object.entries(details)
+      .flatMap(([field, value]) => {
+        if (Array.isArray(value)) {
+          return value.map((msg) => `${field}: ${msg}`);
+        }
+
+        if (typeof value === "string") {
+          return [`${field}: ${value}`];
+        }
+
+        return [];
+      })
+      .filter(Boolean);
+
+    return messages.length > 0 ? messages.join("\n") : null;
+  }
+
+  return String(details);
+};
+
 const toError = (error: AxiosError): ApiRequestError => {
   const data = error.response?.data as ApiErrorResponse | undefined;
   const apiError = data?.error;
+
+  const details = apiError?.details ?? data?.details;
+  const detailsMessage = formatDetails(details);
+
   const normalized = new Error(
-    apiError?.message || data?.message || error.message || "Something went wrong"
+    detailsMessage ||
+      apiError?.message ||
+      data?.message ||
+      error.message ||
+      "Something went wrong"
   ) as ApiRequestError;
 
   normalized.status = error.response?.status;
-  normalized.code = apiError?.code;
-  normalized.details = apiError?.details;
+  normalized.code = apiError?.code ?? data?.code;
+  normalized.details = details;
 
   return normalized;
 };
-
 type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 api.interceptors.response.use(

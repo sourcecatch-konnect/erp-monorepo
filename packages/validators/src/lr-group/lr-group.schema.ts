@@ -31,7 +31,10 @@ const rupeesToPaise = (label: string) =>
   z
     .union([z.string(), z.number()])
     .transform((v) => Math.round(Number(v) * 100))
-    .refine((v) => Number.isInteger(v) && v > 0, `${label} must be a positive amount`);
+    .refine(
+      (v) => Number.isInteger(v) && v > 0,
+      `${label} must be a positive amount`,
+    );
 
 const optionalRupeesToPaise = (label: string) =>
   z
@@ -53,7 +56,10 @@ const truckIndexField = z
     if (v === "" || v === undefined || v === null) return 1;
     return Number(v);
   })
-  .refine((v) => Number.isInteger(v) && v > 0, "Truck index must be a positive whole number");
+  .refine(
+    (v) => Number.isInteger(v) && v > 0,
+    "Truck index must be a positive whole number",
+  );
 
 /* ------------------------------------------------------------------ */
 /* Consignment line — only needed for INSTANT groups (no parent order).*/
@@ -94,7 +100,9 @@ export const createGroupFromOrderSchema = z.object({
   ...vehicleShape,
 });
 
-export type CreateGroupFromOrderInput = z.infer<typeof createGroupFromOrderSchema>;
+export type CreateGroupFromOrderInput = z.infer<
+  typeof createGroupFromOrderSchema
+>;
 
 /* ------------------------------------------------------------------ */
 /* Create — instant (road-only, no parent order)                       */
@@ -179,19 +187,35 @@ export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
 /* DRAFT -> FINALISED together (all-or-nothing).                       */
 /* ------------------------------------------------------------------ */
 
-export const finaliseGroupLineSchema = z.object({
-  lrId: requiredId("Lorry receipt"),
-  invoiceNumber: optionalString,
-  // Entered in rupees, stored as paise.
-  invoiceAmount: optionalRupeesToPaise("Invoice amount"),
-  ewayBill: ewayBillSchema,
-});
+export const finaliseGroupLineSchema = z
+  .object({
+    lrId: requiredId("Lorry receipt"),
+    invoiceNumber: optionalString,
+    // Entered in rupees, stored as paise.
+    invoiceAmount: optionalRupeesToPaise("Invoice amount"),
+    existingEwayBillId: optionalId,
+    ewayBill: ewayBillSchema.optional(),
+  })
+  .superRefine((line, ctx) => {
+    const hasExisting = Boolean(line.existingEwayBillId);
+    const hasNew = Boolean(line.ewayBill);
+
+    if (hasExisting === hasNew) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ewayBill"],
+        message: "Provide exactly one e-way bill for this LR",
+      });
+    }
+  });
 
 export const finaliseGroupSchema = z.object({
   // Entered in rupees, stored as paise.
   baseFreightAmount: rupeesToPaise("Base freight amount"),
   sealNumber: optionalString,
-  lrs: z.array(finaliseGroupLineSchema).min(1, "At least one lorry receipt is required"),
+  lrs: z
+    .array(finaliseGroupLineSchema)
+    .min(1, "At least one lorry receipt is required"),
 });
 
 export type FinaliseGroupInput = z.infer<typeof finaliseGroupSchema>;

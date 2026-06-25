@@ -195,11 +195,17 @@ router.post(
     const id = getParamId(req);
     const existing = await db.lorryReceipt.findFirst({
       where: { id, deletedAt: null },
-      include: { group: { select: { originBranchId: true } } },
+      include: {
+        group: { select: { originBranchId: true } },
+        ewayBill: { select: { id: true } },
+      },
     });
     if (!existing) throw new NotFoundError("Lorry receipt not found");
     if (existing.status === "CANCELLED") {
       throw new BadRequestError("Cannot add e-way bill to a cancelled LR");
+    }
+    if (existing.ewayBill) {
+      throw new BadRequestError("This LR already has an e-way bill");
     }
     assertBranchAccess(req, existing.group.originBranchId);
 

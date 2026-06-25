@@ -83,8 +83,16 @@ type Props = OrderRowActions & {
   onDelete: (order: Order) => void;
 };
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
-const routeLabel = (o: Order) =>
-  `${o.fromBranch?.shortCode ?? "?"} → ${o.toBranch?.shortCode ?? "?"}`;
+const routeLabel = (o: Order) => {
+  const source = o.route?.sourceCity?.name;
+  const destination = o.route?.destinationCity?.name;
+
+  if (source || destination) {
+    return `${source ?? "?"} → ${destination ?? "?"}`;
+  }
+
+  return "—";
+};
 
 const typeLabel = (o: Order) =>
   o.orderType === "Truck"
@@ -120,7 +128,7 @@ export default function OrderTable(props: Props) {
     canCreateLR,
     canDownloadPdf,
   } = props;
-
+console.log(data, "order List")
   const columns = React.useMemo<ColumnDef<Order>[]>(
     () => [
       {
@@ -271,7 +279,9 @@ export default function OrderTable(props: Props) {
                   o.status === "PendingApproval" || o.status === "Rejected";
 
                 const deletable =
-                  o.status === "PendingApproval" || o.status === "Rejected";
+                  o.status === "PendingApproval" ||
+                  o.status === "Rejected" ||
+                  o.status === "Cancelled";
 
                 const cancellable =
                   o.status === "PendingApproval" || o.status === "Confirmed";

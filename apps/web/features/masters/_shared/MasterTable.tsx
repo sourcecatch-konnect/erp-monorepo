@@ -24,6 +24,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@skerp/ui/components/dropdown";
 import { Button } from "@skerp/ui/components/button";
 import { Checkbox } from "@skerp/ui/components/checkbox";
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -33,11 +41,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@skerp/ui/components/tooltip";
-import { DropdownMenu,
-   DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger, } from "@skerp/ui/components/dropdown";
-import { IconDatabaseOff, IconEdit, IconEye, IconTrash, IconChevronDown } from "@tabler/icons-react";
+
+import { IconDatabaseOff, IconEdit, IconEye, IconTrash, IconChevronDown, IconDotsVertical } from "@tabler/icons-react";
 
 type Props<T extends { id: string }> = {
   title?: string;
@@ -52,7 +57,7 @@ type Props<T extends { id: string }> = {
   isLoading?: boolean;
   defaultHiddenColumns?: string[];
   onView?: (row: T) => void;
-
+  extraRowActions?: (row: T) => React.ReactNode;
   // NEW
   renderExpandedRow?: (row: T) => React.ReactNode;
   expandOnRowClick?: boolean;
@@ -69,11 +74,12 @@ export default function MasterTable<T extends { id: string }>({
   selectedIds = [],
   onSelectedIdsChange,
   isLoading,
+  extraRowActions,
   defaultHiddenColumns,
   renderExpandedRow,
 expandOnRowClick = false,
 }: Props<T>) {
- const hasActions = Boolean(onView || onEdit || onDelete);
+ const hasActions = Boolean(onView || onEdit || onDelete || extraRowActions);
   const hasSelection = Boolean(onSelectedIdsChange);
   const [deleteRow, setDeleteRow] = React.useState<T | null>(null);
   const [expandedRowId, setExpandedRowId] = React.useState<string | null>(null);
@@ -210,11 +216,11 @@ const [columnVisibility, setColumnVisibility] =
                 </TableHead>
               ))}
 
-              {hasActions && (
-                <TableHead className="sticky right-0 h-10 w-[104px] bg-muted/40 pr-4 text-right text-sm font-medium text-muted-foreground">
-                  Actions
-                </TableHead>
-              )}
+      {hasActions && (
+  <TableHead className="sticky right-0 z-20 h-10 w-[96px] min-w-[96px] bg-muted pr-4 text-right text-sm font-medium text-muted-foreground shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.35)]">
+    Actions
+  </TableHead>
+)}
             </TableRow>
           ))}
         </TableHeader>
@@ -353,70 +359,63 @@ const [columnVisibility, setColumnVisibility] =
         ))}
 
         {hasActions && (
-          <TableCell className="sticky right-0 w-[104px] bg-white pr-4 text-right">
-            <div className="flex items-center justify-end gap-1">
-              {onView && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      className="text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onView(row.original);
-                      }}
-                      aria-label="View row"
-                    >
-                      <IconEye size={16} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>View</TooltipContent>
-                </Tooltip>
-              )}
+  <TableCell className="sticky right-0 w-[72px] bg-white pr-4 text-right">
+    <div className="flex items-center justify-end">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="text-muted-foreground"
+            onClick={(event) => event.stopPropagation()}
+            aria-label="Open row actions"
+          >
+            <IconDotsVertical size={16} />
+          </Button>
+        </DropdownMenuTrigger>
 
-              {onEdit && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      className="text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEdit(row.original);
-                      }}
-                      aria-label="Edit row"
-                    >
-                      <IconEdit size={16} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit</TooltipContent>
-                </Tooltip>
-              )}
+        <DropdownMenuContent
+          align="end"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {onView ? (
+            <DropdownMenuItem onClick={() => onView(row.original)}>
+              <IconEye size={16} className="mr-2" />
+              View
+            </DropdownMenuItem>
+          ) : null}
 
-              {onDelete && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setDeleteRow(row.original);
-                      }}
-                      aria-label="Delete row"
-                    >
-                      <IconTrash size={16} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Delete</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          </TableCell>
-        )}
+          {onEdit ? (
+            <DropdownMenuItem onClick={() => onEdit(row.original)}>
+              <IconEdit size={16} className="mr-2" />
+              Edit
+            </DropdownMenuItem>
+          ) : null}
+
+          {extraRowActions ? (
+            <>
+              {(onView || onEdit || onDelete) ? <DropdownMenuSeparator /> : null}
+              {extraRowActions(row.original)}
+            </>
+          ) : null}
+
+          {onDelete ? (
+            <>
+              {(onView || onEdit || extraRowActions) ? <DropdownMenuSeparator /> : null}
+              <DropdownMenuItem
+                className="text-red-600 focus:text-red-600"
+                onClick={() => setDeleteRow(row.original)}
+              >
+                <IconTrash size={16} className="mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  </TableCell>
+)}
       </TableRow>
 
       {hasExpandedRow && isExpanded ? (

@@ -66,7 +66,6 @@ export const branchSchema = z.object({
   id: z.string(),
 
   branchCode: z.string(),
-  shortCode: z.string(),
   name: z.string(),
 
   cityId: z.string().nullable().optional(),
@@ -117,21 +116,6 @@ export const createBranchSchema = z.object({
         .regex(
           /^[A-Z0-9-]+$/,
           "Branch code can only contain letters, numbers and -",
-        ),
-    ),
-
-  shortCode: z
-    .string()
-    .trim()
-    .transform((value) => value.toUpperCase().replace(/\s+/g, ""))
-    .pipe(
-      z
-        .string()
-        .min(1, "Short code is required")
-        .max(10, "Short code cannot exceed 10 characters")
-        .regex(
-          /^[A-Z0-9-]+$/,
-          "Short code can only contain letters, numbers and -",
         ),
     ),
 

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router , type Request } from "express";
 import { ZodType, ZodTypeDef } from "zod";
 import { PermissionAction } from "@skerp/types";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
@@ -70,6 +70,7 @@ type CrudOptions<Create, Update> = {
     defaultOrderBy?: object;
     softDelete?: boolean;
     defaultSelect?: Record<string, unknown>;
+    extraWhere?: (req: Request) => Record<string, unknown>;
     blockDeleteIfExists?: {
       model: any;
       label: string;
@@ -188,12 +189,19 @@ export function createCrudRouter<Create, Update>({
     requirePermission(permissionKey, actionPermission("view")),
     async (req, res) => {
       const query = parseListQuery(req);
-      const where = buildWhere(
-        query.search,
-        listOptions?.searchableFields,
-        query.filter,
-        listOptions?.softDelete,
-      );
+      const baseWhere = buildWhere(
+  query.search,
+  listOptions?.searchableFields,
+  query.filter,
+  listOptions?.softDelete,
+);
+
+const extraWhere = listOptions?.extraWhere?.(req) ?? {};
+
+const where = {
+  ...baseWhere,
+  ...extraWhere,
+};
 
       const [data, total] = await Promise.all([
         model.findMany({
@@ -221,12 +229,19 @@ export function createCrudRouter<Create, Update>({
     requirePermission(permissionKey, actionPermission("view")),
     async (req, res) => {
       const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-      const where = buildWhere(
-        q,
-        listOptions?.searchableFields,
-        {},
-        listOptions?.softDelete,
-      );
+     const baseWhere = buildWhere(
+  q,
+  listOptions?.searchableFields,
+  {},
+  listOptions?.softDelete,
+);
+
+const extraWhere = listOptions?.extraWhere?.(req) ?? {};
+
+const where = {
+  ...baseWhere,
+  ...extraWhere,
+};
 
       const data = await model.findMany({
         where,
@@ -244,12 +259,19 @@ export function createCrudRouter<Create, Update>({
     requirePermission(permissionKey, actionPermission("view")),
     async (req, res) => {
       const query = parseListQuery(req);
-      const where = buildWhere(
-        query.search,
-        listOptions?.searchableFields,
-        query.filter,
-        listOptions?.softDelete,
-      );
+      const baseWhere = buildWhere(
+  query.search,
+  listOptions?.searchableFields,
+  query.filter,
+  listOptions?.softDelete,
+);
+
+const extraWhere = listOptions?.extraWhere?.(req) ?? {};
+
+const where = {
+  ...baseWhere,
+  ...extraWhere,
+};
       const data = await model.findMany({
         where,
         ...defaultQueryArgs,

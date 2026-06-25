@@ -102,11 +102,7 @@ const yesNo = (value?: boolean) => (value ? "Yes" : "No");
                   icon={<IconId size={12} />}
                 />
 
-                <Field
-                  label="Short Code"
-                  value={data?.shortCode}
-                  icon={<IconId size={12} />}
-                />
+       
 
                 <Field
                   label="Company"

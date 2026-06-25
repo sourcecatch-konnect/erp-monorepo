@@ -8,12 +8,17 @@ import type {
 import { unwrapApiResponse } from "../_shared/master-api";
 
 export const customerLocationApi = {
-  list: async (customerId: string): Promise<CustomerLocation[]> => {
-    const res = await api.get<ApiResponse<CustomerLocation[]>>(
-      `/customers/${customerId}/locations`
-    );
-    return unwrapApiResponse(res);
-  },
+ list: async (
+  customerId: string,
+  params?: { cityId?: string }
+): Promise<CustomerLocation[]> => {
+  const res = await api.get<ApiResponse<CustomerLocation[]>>(
+    `/customers/${customerId}/locations`,
+    { params }
+  );
+
+  return unwrapApiResponse(res);
+},
   create: async (
     customerId: string,
     body: CreateCustomerLocationBody
@@ -41,8 +46,7 @@ export const customerLocationApi = {
     unwrapApiResponse(res);
   },
 };
-
 export const customerLocationKeys = {
-  list: (customerId: string) =>
-    ["customer-locations", customerId] as const,
+  list: (customerId: string, cityId?: string) =>
+    ["customer-locations", customerId, cityId ?? "all"] as const,
 };
