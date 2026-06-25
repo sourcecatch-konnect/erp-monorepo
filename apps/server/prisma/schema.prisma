@@ -1175,16 +1175,19 @@ model VPScheduleWagonCount {
 // Money stored as paise in BigInt (see lib/bigint-json.ts, lib/money.ts).
 
 model Creditor {
-  id          String           @id @default(cuid())
-  name        String
-  category    CreditorCategory
-  defaultMode PaymentMode?
-  branchId    String?
-  phone       String?
-  isActive    Boolean          @default(true)
-  deletedAt   DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                 String           @id @default(cuid())
+  name               String
+  category           CreditorCategory
+  defaultMode        PaymentMode?
+  branchId           String?
+  phone              String?
+  // Outstanding amount owed (paise). Ledger view groups by category and
+  // auto-totals; approving a linked payment draws this down.
+  outstandingBalance BigInt           @default(0)
+  isActive           Boolean          @default(true)
+  deletedAt          DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   branch   Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
   payments CashPayment[]
@@ -1214,8 +1217,9 @@ model CashPlanDay {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  balances CashAccountBalance[]
-  payments CashPayment[]
+  balances    CashAccountBalance[]
+  payments    CashPayment[]
+  receivables CashReceivable[]
 }
 
 model CashAccountBalance {
@@ -1239,6 +1243,9 @@ model CashPayment {
   amount        BigInt // paise
   category      CreditorCategory
   mode          PaymentMode
+  segment       CashSegment? // Road / Rail / FCI business segment tag
+  projectCode   String? // e.g. "A-52" site/project bucket
+  priority      Int              @default(0) // queue ordering; lower = pay first
   branchId      String?
   fromAccountId String?
   status        PaymentStatus    @default(PENDING)
@@ -1257,6 +1264,23 @@ model CashPayment {
 
   @@index([dayId])
   @@index([status])
+}
+
+model CashReceivable {
+  id             String    @id @default(cuid())
+  dayId          String
+  partyName      String
+  amount         BigInt // expected amount (paise)
+  expectedDate   DateTime? @db.Date
+  receivedAmount BigInt? // actual received (paise), null until received
+  ackReceived    Boolean   @default(false)
+  note           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  day CashPlanDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+
+  @@index([dayId])
 }
 
 enum CreditorCategory {
@@ -1290,6 +1314,12 @@ enum PaymentStatus {
   APPROVED
   HOLD
   REJECTED
+}
+
+enum CashSegment {
+  ROAD
+  RAIL
+  FCI
 }
 
 enum WorkerType {
