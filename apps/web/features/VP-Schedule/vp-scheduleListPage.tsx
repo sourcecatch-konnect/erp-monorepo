@@ -13,6 +13,7 @@ import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebounced
 import type { ListQuery } from "@/features/masters/_shared/master-api";
 import { useVPSchedules } from "./hook/useVPSchedule";
 import VPScheduleTable from "./vp-scheduleTable";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@skerp/ui/components/select";
 
 
 export function VPScheduleListPage() {
@@ -48,10 +49,7 @@ export function VPScheduleListPage() {
   const hasPrevPage = page > 0;
   const hasNextPage = page + 1 < totalPages;
 
-  const handleReset = () => {
-    setSearch("");
-    setPage(0);
-  };
+
 
   const handleSizeChange = (nextSize: number) => {
     setSize(nextSize);
@@ -83,9 +81,7 @@ export function VPScheduleListPage() {
             className="sm:max-w-sm"
           />
 
-          <Button variant="outline" onClick={handleReset}>
-            Reset
-          </Button>
+    
         </div>
       </div>
 
@@ -95,40 +91,44 @@ export function VPScheduleListPage() {
         <div className="text-sm text-muted-foreground">
           Showing {data.length} of {total} schedules
         </div>
+<div className="flex items-center gap-2">
+  <Select
+    value={String(size)}
+    onValueChange={(value) => handleSizeChange(Number(value))}
+  >
+    <SelectTrigger className="h-9 w-[90px] bg-background">
+      <SelectValue placeholder="Size" />
+    </SelectTrigger>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={size}
-            onChange={(event) => handleSizeChange(Number(event.target.value))}
-            className="h-9 rounded-md border bg-white px-2 text-sm"
-          >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
-            <option value={30}>30</option>
-          </select>
+    <SelectContent>
+      <SelectItem value="10">10</SelectItem>
+      <SelectItem value="25">25</SelectItem>
+      <SelectItem value="30">30</SelectItem>
+    </SelectContent>
+  </Select>
 
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasPrevPage}
-            onClick={() => setPage((current) => Math.max(current - 1, 0))}
-          >
-            Previous
-          </Button>
+  <Button
+    variant="outline"
+    size="sm"
+    disabled={!hasPrevPage}
+    onClick={() => setPage((current) => Math.max(current - 1, 0))}
+  >
+    Previous
+  </Button>
 
-          <span className="text-sm text-muted-foreground">
-            Page {page + 1} of {totalPages || 1}
-          </span>
+  <span className="text-sm text-muted-foreground">
+    Page {page + 1} of {totalPages || 1}
+  </span>
 
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasNextPage}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Next
-          </Button>
-        </div>
+  <Button
+    variant="outline"
+    size="sm"
+    disabled={!hasNextPage}
+    onClick={() => setPage((current) => current + 1)}
+  >
+    Next
+  </Button>
+</div>
       </div>
     </div>
   );

@@ -139,10 +139,16 @@ export default function VPScheduleTable({
       id: "scheduleNumber",
       header: "Schedule No",
       cell: ({ row }) => (
-        <Link
-          href={`/operations/vp-schedule/${row.original.id}`}
-          className="font-medium text-primary hover:underline"
-        >
+
+      
+  <Link
+  href={`/operations/vp-schedule/${encodeURIComponent(
+    String(row.original.scheduleNumber || row.original.id)
+  )}`}
+  className="font-medium text-primary hover:underline"
+>
+
+        
           {row.original.scheduleNumber ?? "—"}
         </Link>
       ),
@@ -286,9 +292,13 @@ export default function VPScheduleTable({
 
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link
-                              href={`/operations/vp-schedule/${schedule.id}`}
-                            >
+                         <Link
+  href={`/operations/vp-schedule/${encodeURIComponent(
+    String(schedule.scheduleNumber || schedule.id)
+  )}`}
+  className="font-medium text-primary hover:underline"
+>
+                               
                               <IconEye size={16} className="mr-2" />
                               View details
                             </Link>

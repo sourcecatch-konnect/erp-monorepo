@@ -116,17 +116,21 @@ export const vpScheduleInclude = {
   },
 
   wagonCounts: {
-    include: {
-      wagon: {
-        select: {
-          id: true,
-          name: true,
-          totalCft: true,
-          capacityMt: true,
-        },
+  include: {
+    wagon: {
+      select: {
+        id: true,
+        name: true,
+        height: true,
+        width: true,
+        weight: true,
+        totalCft: true,
+        capacityMt: true,
+        isActive: true,
       },
     },
   },
+},
 
   createdBy: {
     select: {

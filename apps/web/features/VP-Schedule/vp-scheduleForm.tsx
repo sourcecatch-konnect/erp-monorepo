@@ -7,6 +7,7 @@ import {
   FormProvider,
   useFieldArray,
   useForm,
+  UseFormReturn,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
@@ -144,50 +145,64 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
     queryKey: vpScheduleLookupKeys.wagons,
     queryFn: vpScheduleLookups.wagons,
   });
+const isResettingEditFormRef = React.useRef(false);
+const previousFromBranchIdRef = React.useRef("");
+const previousToBranchIdRef = React.useRef("");
 
-  const form = useForm<CreateVPScheduleFormInput, unknown, CreateVPScheduleBody>(
-    {
-      resolver: zodResolver(createVPScheduleSchema),
-      mode: "onTouched",
-      defaultValues: {
-        scheduleDate: "",
-        scheduleName: "",
-        fromBranchId: "",
-        toBranchId: "",
-        sourceAreaId: "",
-        destinationAreaId: "",
-        remarks: "",
-        wagonCounts: [emptyWagonRow],
-      },
-    },
-  );
+const form: UseFormReturn<
+  CreateVPScheduleFormInput,
+  unknown,
+  CreateVPScheduleBody
+> = useForm<CreateVPScheduleFormInput, unknown, CreateVPScheduleBody>({
+  resolver: zodResolver(createVPScheduleSchema),
+  mode: "onTouched",
+  defaultValues: {
+    scheduleDate: "",
+    scheduleName: "",
+    fromBranchId: "",
+    toBranchId: "",
+    sourceAreaId: "",
+    destinationAreaId: "",
+    remarks: "",
+    wagonCounts: [emptyWagonRow],
+  },
+});
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "wagonCounts",
   });
 
-  React.useEffect(() => {
-    const schedule = detailQuery.data;
-    if (!isEdit || !schedule) return;
+React.useEffect(() => {
+  const schedule = detailQuery.data;
+  if (!isEdit || !schedule) return;
 
-    form.reset({
-      scheduleDate: schedule.scheduleDate ?? "",
-      scheduleName: schedule.scheduleName ?? "",
-      fromBranchId: schedule.fromBranchId ?? "",
-      toBranchId: schedule.toBranchId ?? "",
-      sourceAreaId: schedule.sourceAreaId ?? "",
-      destinationAreaId: schedule.destinationAreaId ?? "",
-      remarks: schedule.remarks ?? "",
-      wagonCounts: schedule.wagonCounts?.length
-        ? schedule.wagonCounts.map((wagonCount) => ({
-            id: wagonCount.id,
-            wagonId: wagonCount.wagonId,
-            count: wagonCount.count,
-          }))
-        : [emptyWagonRow],
-    });
-  }, [detailQuery.data, form, isEdit]);
+  isResettingEditFormRef.current = true;
+
+  previousFromBranchIdRef.current = schedule.fromBranchId ?? "";
+  previousToBranchIdRef.current = schedule.toBranchId ?? "";
+
+  form.reset({
+    scheduleDate: schedule.scheduleDate ?? "",
+    scheduleName: schedule.scheduleName ?? "",
+    fromBranchId: schedule.fromBranchId ?? "",
+    toBranchId: schedule.toBranchId ?? "",
+    sourceAreaId: schedule.sourceAreaId ?? "",
+    destinationAreaId: schedule.destinationAreaId ?? "",
+    remarks: schedule.remarks ?? "",
+    wagonCounts: schedule.wagonCounts?.length
+      ? schedule.wagonCounts.map((wagonCount) => ({
+          id: wagonCount.id,
+          wagonId: wagonCount.wagonId,
+          count: wagonCount.count,
+        }))
+      : [emptyWagonRow],
+  });
+
+  queueMicrotask(() => {
+    isResettingEditFormRef.current = false;
+  });
+}, [detailQuery.data, form, isEdit]);
   
 const watchedScheduleDate = form.watch("scheduleDate");
 const watchedSourceAreaId = form.watch("sourceAreaId");
@@ -237,19 +252,52 @@ const destinationAreaOptions =
     label: area.name,
     value: area.id,
   })) ?? [];
-  React.useEffect(() => {
-  form.setValue("sourceAreaId", "", {
-    shouldDirty: true,
-    shouldValidate: true,
-  });
-}, [watchedFromBranchId, form]);
+  
+
 
 React.useEffect(() => {
-  form.setValue("destinationAreaId", "", {
-    shouldDirty: true,
-    shouldValidate: true,
-  });
+  if (isResettingEditFormRef.current) {
+    previousFromBranchIdRef.current = watchedFromBranchId;
+    return;
+  }
+
+  if (!previousFromBranchIdRef.current) {
+    previousFromBranchIdRef.current = watchedFromBranchId;
+    return;
+  }
+
+  if (previousFromBranchIdRef.current !== watchedFromBranchId) {
+    form.setValue("sourceAreaId", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  previousFromBranchIdRef.current = watchedFromBranchId;
+}, [watchedFromBranchId, form]);
+
+
+React.useEffect(() => {
+  if (isResettingEditFormRef.current) {
+    previousToBranchIdRef.current = watchedToBranchId;
+    return;
+  }
+
+  if (!previousToBranchIdRef.current) {
+    previousToBranchIdRef.current = watchedToBranchId;
+    return;
+  }
+
+  if (previousToBranchIdRef.current !== watchedToBranchId) {
+    form.setValue("destinationAreaId", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  previousToBranchIdRef.current = watchedToBranchId;
 }, [watchedToBranchId, form]);
+
 const formatScheduleDate = (value?: string) => {
   if (!value) return "";
 
@@ -330,26 +378,36 @@ React.useEffect(() => {
   const showValidationSummary = submitCount > 0 && validationIssues.length > 0;
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
-  const onSubmit = async (values: CreateVPScheduleBody) => {
-    try {
-      if (isEdit && scheduleId) {
-        await updateMutation.mutateAsync({
-          id: scheduleId,
-          body: values as UpdateVPScheduleBody,
-        });
+const onSubmit = async (values: CreateVPScheduleBody) => {
+  try {
+    if (isEdit && scheduleId) {
+      await updateMutation.mutateAsync({
+        id: scheduleId,
+        body: values as UpdateVPScheduleBody,
+      });
 
-        toast.success("VP schedule updated");
-        router.push(`/operations/vp-schedule/${scheduleId}`);
-        return;
-      }
+      toast.success("VP schedule updated");
 
-      const created = await createMutation.mutateAsync(values);
-      toast.success("VP schedule created");
-      router.push(`/operations/vp-schedule/${created.id}`);
-    } catch (error) {
-      toast.error(getErrorMessage(error));
+      router.push(
+        `/operations/vp-schedule/${encodeURIComponent(
+          detailQuery.data?.scheduleNumber ?? scheduleId
+        )}`
+      );
+
+      return;
     }
-  };
+
+    const created = await createMutation.mutateAsync(values);
+
+    toast.success("VP schedule created");
+
+    router.push(
+      `/operations/vp-schedule/${encodeURIComponent(created.scheduleNumber)}`
+    );
+  } catch (error) {
+    toast.error(getErrorMessage(error));
+  }
+};
 
   const handleCancel = () => {
     router.push("/operations/vp-schedule");

@@ -110,7 +110,7 @@ export default function VPScheduleDetail({
   const cancel = useCancelVPSchedule();
 
   const schedule = scheduleQuery.data;
-
+  console.log(schedule,"Detail schedule")
   if (scheduleQuery.isLoading || !schedule) {
     return (
       <div className="mx-auto max-w-5xl space-y-4 p-4">
@@ -310,56 +310,80 @@ const wagonCounts = schedule.wagonCounts ?? [];
               />
             </dl>
           </CardSection>
+<CardSection
+  title="Wagon Details"
+  icon={<IconPackage size={14} />}
+  action={
+<div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
+  <span className="text-xs font-medium text-muted-foreground">
+    Total Wagons
+  </span>
+  <span className="text-sm font-semibold text-foreground">
+    {schedule.totalWagonCount ?? 0}
+  </span>
+</div>
+  }
+>
+  {wagonCounts.length ? (
+    <div className="overflow-hidden rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <TableHead className="text-xs uppercase">Wagon</TableHead>
+            <TableHead className="text-xs uppercase">Count</TableHead>
+            <TableHead className="text-xs uppercase">Height</TableHead>
+            <TableHead className="text-xs uppercase">Width</TableHead>
+            <TableHead className="text-xs uppercase">Weight</TableHead>
+            <TableHead className="text-xs uppercase">Capacity MT</TableHead>
+            <TableHead className="text-xs uppercase">Capacity CFT</TableHead>
+            <TableHead className="text-xs uppercase">Total MT</TableHead>
+            <TableHead className="text-xs uppercase">Total CFT</TableHead>
+          </TableRow>
+        </TableHeader>
 
-          <CardSection
-            title="Wagon Details"
-            icon={<IconPackage size={14} />}
-            action={
-              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                {schedule.totalWagonCount ?? 0} wagons
-              </span>
-            }
-          >
-            {wagonCounts.length ? (
-              <div className="overflow-hidden rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="text-xs uppercase">Wagon</TableHead>
-                      <TableHead className="text-xs uppercase">Count</TableHead>
-                      <TableHead className="text-xs uppercase">
-                        Capacity MT
-                      </TableHead>
-                      <TableHead className="text-xs uppercase">
-                        Capacity CFT
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
+        <TableBody>
+          {wagonCounts.map((wagon: any) => (
+            <TableRow key={wagon.id}>
+              <TableCell className="font-medium">
+                {wagon.wagon?.name ?? wagon.wagonName ?? "—"}
+              </TableCell>
 
-                  <TableBody>
-                    {wagonCounts.map((wagon: any) => (
-                      <TableRow key={wagon.id}>
-                        <TableCell className="font-medium">
-                          {wagon.wagon?.name ?? wagon.wagonName ?? "—"}
-                        </TableCell>
-                        <TableCell>{wagon.count ?? wagon.quantity ?? "—"}</TableCell>
-                        <TableCell>
-                          {wagon.capacityMt ?? wagon.totalCapacityMt ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          {wagon.capacityCft ?? wagon.totalCapacityCft ?? "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-                No wagon rows added.
-              </div>
-            )}
-          </CardSection>
+              <TableCell>{wagon.count ?? wagon.quantity ?? "—"}</TableCell>
+
+              <TableCell>
+                {wagon.wagon?.height != null ? wagon.wagon.height : "—"}
+              </TableCell>
+
+              <TableCell>
+                {wagon.wagon?.width != null ? wagon.wagon.width : "—"}
+              </TableCell>
+
+              <TableCell>
+                {wagon.wagon?.weight != null ? wagon.wagon.weight : "—"}
+              </TableCell>
+
+              <TableCell>
+                {wagon.capacityMt ?? wagon.wagon?.capacityMt ?? "—"}
+              </TableCell>
+
+              <TableCell>
+                {wagon.capacityCft ?? wagon.wagon?.totalCft ?? "—"}
+              </TableCell>
+
+              <TableCell>{wagon.totalMt ?? "—"}</TableCell>
+
+              <TableCell>{wagon.totalCft ?? "—"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  ) : (
+    <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+      No wagon rows added.
+    </div>
+  )}
+</CardSection>
 
           <CardSection title="Remarks" icon={<IconInfoCircle size={14} />}>
             {schedule.remarks ? (
