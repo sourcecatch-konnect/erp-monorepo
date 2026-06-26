@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import type {
   ApiResponse,
   RailwayFreightMatrix,
+  RailwayFreightMatrixWithRelations,
   CreateRailwayFreightMatrixBody,
   UpdateRailwayFreightMatrixBody,
 } from "@skerp/types";
@@ -17,8 +18,8 @@ import {
 export const railwayFreightApi = {
   list: async (
     query?: ListQuery
-  ): Promise<ListResult<RailwayFreightMatrix>> => {
-    const res = await api.get<ApiResponse<RailwayFreightMatrix[]>>(
+  ): Promise<ListResult<RailwayFreightMatrixWithRelations>> => {
+    const res = await api.get<ApiResponse<RailwayFreightMatrixWithRelations[]>>(
       "/railway-freight",
       { params: query }
     );
@@ -26,8 +27,8 @@ export const railwayFreightApi = {
     return unwrapListResponse(res);
   },
 
-  detail: async (id: string): Promise<RailwayFreightMatrix> => {
-    const res = await api.get<ApiResponse<RailwayFreightMatrix>>(
+  detail: async (id: string): Promise<RailwayFreightMatrixWithRelations> => {
+    const res = await api.get<ApiResponse<RailwayFreightMatrixWithRelations>>(
       `/railway-freight/${id}`
     );
 
@@ -94,8 +95,8 @@ export const railwayFreightApi = {
     return res.data;
   },
 
-  search: async (q: string): Promise<RailwayFreightMatrix[]> => {
-    const res = await api.get<ApiResponse<RailwayFreightMatrix[]>>(
+  search: async (q: string): Promise<RailwayFreightMatrixWithRelations[]> => {
+    const res = await api.get<ApiResponse<RailwayFreightMatrixWithRelations[]>>(
       "/railway-freight/search",
       { params: { q } }
     );

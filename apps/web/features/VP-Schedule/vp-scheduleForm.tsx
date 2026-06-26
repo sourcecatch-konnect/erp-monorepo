@@ -56,6 +56,7 @@ import {
   vpScheduleLookups,
   type VPScheduleWagonOption,
 } from "./vp-schedule.lookup";
+import { areaApi } from "../masters/area/area.service";
 
 type Props = {
   mode: "create" | "edit";
@@ -138,10 +139,7 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
     queryKey: vpScheduleLookupKeys.branches,
     queryFn: vpScheduleLookups.branches,
   });
-  const areas = useQuery({
-    queryKey: vpScheduleLookupKeys.areas,
-    queryFn: vpScheduleLookups.areas,
-  });
+
   const wagons = useQuery({
     queryKey: vpScheduleLookupKeys.wagons,
     queryFn: vpScheduleLookups.wagons,
@@ -194,7 +192,64 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
 const watchedScheduleDate = form.watch("scheduleDate");
 const watchedSourceAreaId = form.watch("sourceAreaId");
 const watchedDestinationAreaId = form.watch("destinationAreaId");
+const watchedFromBranchId = form.watch("fromBranchId");
+const watchedToBranchId = form.watch("toBranchId");
 
+const selectedFromBranch = branches.data?.find(
+  (branch) => branch.value === watchedFromBranchId,
+);
+
+const selectedToBranch = branches.data?.find(
+  (branch) => branch.value === watchedToBranchId,
+);
+
+const sourceCityId = selectedFromBranch?.cityId;
+const destinationCityId = selectedToBranch?.cityId;
+const sourceAreas = useQuery({
+  queryKey: ["vp-schedule-source-areas", sourceCityId],
+  queryFn: () =>
+    areaApi.list({
+      page: 0,
+      size: 1000,
+      cityId: sourceCityId,
+    } as any),
+  enabled: Boolean(sourceCityId),
+});
+
+const destinationAreas = useQuery({
+  queryKey: ["vp-schedule-destination-areas", destinationCityId],
+  queryFn: () =>
+    areaApi.list({
+      page: 0,
+      size: 1000,
+      cityId: destinationCityId,
+    } as any),
+  enabled: Boolean(destinationCityId),
+});
+const sourceAreaOptions =
+  sourceAreas.data?.data.map((area) => ({
+    label: area.name,
+    value: area.id,
+  })) ?? [];
+
+const destinationAreaOptions =
+  destinationAreas.data?.data.map((area) => ({
+    label: area.name,
+    value: area.id,
+  })) ?? [];
+  React.useEffect(() => {
+  form.setValue("sourceAreaId", "", {
+    shouldDirty: true,
+    shouldValidate: true,
+  });
+}, [watchedFromBranchId, form]);
+
+React.useEffect(() => {
+  form.setValue("destinationAreaId", "", {
+    shouldDirty: true,
+    shouldValidate: true,
+  });
+}, [watchedToBranchId, form]);
 const formatScheduleDate = (value?: string) => {
   if (!value) return "";
 
@@ -208,21 +263,6 @@ const formatScheduleDate = (value?: string) => {
   });
 };
 
-const extractCityName = (label?: string) => {
-  if (!label) return "";
-
-  const parts = label
-    .split("-")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  const cityPart = parts.at(-1) ?? label;
-
-  return cityPart
-    .split(",")
-    .at(-1)
-    ?.trim() ?? "";
-};
 
 const createCityCode = (city?: string) => {
   if (!city) return "";
@@ -238,25 +278,20 @@ const createCityCode = (city?: string) => {
 React.useEffect(() => {
   if (isEdit) return;
 
-  const sourceArea = areas.data?.find(
-    (item) => item.value === watchedSourceAreaId,
-  );
-
-  const destinationArea = areas.data?.find(
-    (item) => item.value === watchedDestinationAreaId,
-  );
-
   const formattedDate = formatScheduleDate(watchedScheduleDate);
 
-  if (!sourceArea || !destinationArea || !formattedDate) {
+  if (
+    !selectedFromBranch ||
+    !selectedToBranch ||
+    !watchedSourceAreaId ||
+    !watchedDestinationAreaId ||
+    !formattedDate
+  ) {
     return;
   }
 
-  const sourceCity = extractCityName(sourceArea.label);
-  const destinationCity = extractCityName(destinationArea.label);
-
-  const sourceCode = createCityCode(sourceCity);
-  const destinationCode = createCityCode(destinationCity);
+  const sourceCode = createCityCode(selectedFromBranch.label);
+  const destinationCode = createCityCode(selectedToBranch.label);
 
   if (!sourceCode || !destinationCode) {
     return;
@@ -271,12 +306,12 @@ React.useEffect(() => {
 }, [
   isEdit,
   form,
-  areas.data,
+  selectedFromBranch,
+  selectedToBranch,
   watchedScheduleDate,
   watchedSourceAreaId,
   watchedDestinationAreaId,
 ]);
-
   const watchedWagons = form.watch("wagonCounts") ?? [];
   const wagonOptions = wagons.data ?? [];
   const wagonMap = React.useMemo(
@@ -407,21 +442,23 @@ React.useEffect(() => {
               required
             />
 
-            <ComboboxField<CreateVPScheduleFormInput>
-              name="sourceAreaId"
-              label="Source area"
-              options={areas.data ?? []}
-              emptyText="No areas found"
-              required
-            />
+         <ComboboxField<CreateVPScheduleFormInput>
+  name="sourceAreaId"
+  label="Source area"
+  options={sourceAreaOptions}
+  emptyText="No source areas found"
+  disabled={!sourceCityId}
+  required
+/>
 
-            <ComboboxField<CreateVPScheduleFormInput>
-              name="destinationAreaId"
-              label="Destination area"
-              options={areas.data ?? []}
-              emptyText="No areas found"
-              required
-            />
+<ComboboxField<CreateVPScheduleFormInput>
+  name="destinationAreaId"
+  label="Destination area"
+  options={destinationAreaOptions}
+  emptyText="No destination areas found"
+  disabled={!destinationCityId}
+  required
+/>
           </FormSection>
 
           <FormSection

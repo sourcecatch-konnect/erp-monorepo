@@ -18,25 +18,21 @@ import getErrorMessage, {
 import { toast } from "sonner";
 
 import type {
-  RailwayFreightMatrix,
-  CreateRailwayFreightMatrixBody,
+  RailwayFreightMatrixWithRelations,
 } from "@skerp/types";
 import { railwayFreightApi } from "./railwayfreight.service";
 import { railwayFreightKeys } from "./railwayfreight.key";
 import { railwayFreightColumns } from "./railwayfreightTable";
 import RailwayFreightDetailDialog from "./railwayfreightDialog";
 import RailwayFreightForm from "./railwayfreightForm";
-import { cityKeys } from "../city/city.keys";
-import { cityApi } from "../city/city.service";
-import { wagonKeys } from "../wagon/wagon.key";
-import { wagonApi } from "../wagon/wagon.service";
+
 
 
 
 
 
 type RailwayFreightCsvRow = Record<
-  "wagonType" | "sourceCityId" | "destinationCityId" | "freightAmount",
+  "wagonId" | "sourceCityId" | "destinationCityId" | "freightAmount",
   string
 >;
 
@@ -45,7 +41,7 @@ export default function RailwayFreightPage() {
 
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] =
-    React.useState<RailwayFreightMatrix | null>(null);
+    React.useState<RailwayFreightMatrixWithRelations | null>(null);
 
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
@@ -79,7 +75,7 @@ export default function RailwayFreightPage() {
     queryFn: () => railwayFreightApi.list(listQuery),
   });
 
-
+  console.log(railwayFreights.data,"railway freight")
 
   // CRUD
   const {  remove } = useMasterMutations({

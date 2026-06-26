@@ -9,6 +9,17 @@ import {
 
 type Tx = Prisma.TransactionClient;
 
+type VPScheduleWagonInput = {
+  wagonId: string;
+  count: number;
+};
+
+type VPScheduleFreightMatrixInput = {
+  sourceAreaId: string;
+  destinationAreaId: string;
+  wagonCounts: VPScheduleWagonInput[];
+};
+
 export const vpScheduleListSelect = {
   id: true,
   scheduleNumber: true,
@@ -160,10 +171,7 @@ export const generateVPScheduleNumber = async (
 
 export const calculateVPScheduleTotals = async (
   tx: Tx,
-  wagonCounts: {
-    wagonId: string;
-    count: number;
-  }[],
+  wagonCounts: VPScheduleWagonInput[],
 ) => {
   const wagonIds = wagonCounts.map((item) => item.wagonId);
 
@@ -205,6 +213,121 @@ export const calculateVPScheduleTotals = async (
   };
 };
 
+export const assertVPScheduleFreightMatrices = async (
+  tx: Tx,
+  data: VPScheduleFreightMatrixInput,
+) => {
+  const [sourceArea, destinationArea, wagons] = await Promise.all([
+    tx.area.findUnique({
+      where: { id: data.sourceAreaId },
+      select: {
+        id: true,
+        name: true,
+        cityId: true,
+        city: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    }),
+
+    tx.area.findUnique({
+      where: { id: data.destinationAreaId },
+      select: {
+        id: true,
+        name: true,
+        cityId: true,
+        city: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    }),
+
+    tx.wagon.findMany({
+      where: {
+        id: {
+          in: data.wagonCounts.map((item) => item.wagonId),
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    }),
+  ]);
+
+  if (!sourceArea) {
+    throw new BadRequestError("Source area not found");
+  }
+
+  if (!destinationArea) {
+    throw new BadRequestError("Destination area not found");
+  }
+
+  const wagonMap = new Map(wagons.map((wagon) => [wagon.id, wagon]));
+  const wagonIds = [...new Set(data.wagonCounts.map((item) => item.wagonId))];
+
+  if (wagonIds.some((wagonId) => !wagonMap.has(wagonId))) {
+    throw new BadRequestError("Selected wagon not found");
+  }
+
+  const freightMatrices = await tx.railwayFreightMatrix.findMany({
+    where: {
+      wagonId: {
+        in: wagonIds,
+      },
+      sourceCityId: sourceArea.cityId,
+      destinationCityId: destinationArea.cityId,
+      OR: [
+        {
+          sourceAreaId: sourceArea.id,
+          destinationAreaId: destinationArea.id,
+        },
+        {
+          sourceAreaId: sourceArea.id,
+          destinationAreaId: null,
+        },
+        {
+          sourceAreaId: null,
+          destinationAreaId: destinationArea.id,
+        },
+        {
+          sourceAreaId: null,
+          destinationAreaId: null,
+        },
+      ],
+    },
+    select: {
+      wagonId: true,
+    },
+  });
+
+  const wagonIdsWithRate = new Set(
+    freightMatrices.map((matrix) => matrix.wagonId),
+  );
+
+  const missing = data.wagonCounts
+    .map((item) => item.wagonId)
+    .filter((wagonId, index, ids) => ids.indexOf(wagonId) === index)
+    .filter((wagonId) => !wagonIdsWithRate.has(wagonId))
+    .map((wagonId) => wagonMap.get(wagonId)?.name)
+    .filter((name): name is string => Boolean(name));
+
+  if (!missing.length) return;
+
+  const routeLabel = `${sourceArea.name}-${sourceArea.city.name} to ${destinationArea.name}-${destinationArea.city.name}`;
+  const missingLines = missing.map((wagonName) => `${wagonName} (${routeLabel})`);
+
+  throw new BadRequestError(
+    `Railway Freight not found for below Route and Wagon:\n${missingLines.join(
+      "\n",
+    )}`,
+  );
+};
+
 export const assertVPScheduleReferences = async (
   tx: Tx,
   data: {
@@ -212,10 +335,7 @@ export const assertVPScheduleReferences = async (
     toBranchId?: string;
     sourceAreaId?: string;
     destinationAreaId?: string;
-    wagonCounts?: {
-      wagonId: string;
-      count: number;
-    }[];
+    wagonCounts?: VPScheduleWagonInput[];
   },
 ) => {
   const [
@@ -291,5 +411,61 @@ export const assertVPScheduleReferences = async (
     if (missingWagon) {
       throw new BadRequestError("Selected wagon not found");
     }
+  }
+};
+
+export const assertVPScheduleBranchAreaAlignment = async (
+  tx: Tx,
+  data: {
+    fromBranchId: string;
+    toBranchId: string;
+    sourceAreaId: string;
+    destinationAreaId: string;
+  },
+) => {
+  const [fromBranch, toBranch, sourceArea, destinationArea] =
+    await Promise.all([
+      tx.branch.findUnique({
+        where: { id: data.fromBranchId },
+        select: { cityId: true },
+      }),
+      tx.branch.findUnique({
+        where: { id: data.toBranchId },
+        select: { cityId: true },
+      }),
+      tx.area.findUnique({
+        where: { id: data.sourceAreaId },
+        select: { cityId: true },
+      }),
+      tx.area.findUnique({
+        where: { id: data.destinationAreaId },
+        select: { cityId: true },
+      }),
+    ]);
+
+  if (!fromBranch?.cityId) {
+    throw new BadRequestError("From branch city not found");
+  }
+
+  if (!toBranch?.cityId) {
+    throw new BadRequestError("To branch city not found");
+  }
+
+  if (!sourceArea?.cityId) {
+    throw new BadRequestError("Source area city not found");
+  }
+
+  if (!destinationArea?.cityId) {
+    throw new BadRequestError("Destination area city not found");
+  }
+
+  if (sourceArea.cityId !== fromBranch.cityId) {
+    throw new BadRequestError("Source area must belong to the from branch city");
+  }
+
+  if (destinationArea.cityId !== toBranch.cityId) {
+    throw new BadRequestError(
+      "Destination area must belong to the to branch city",
+    );
   }
 };

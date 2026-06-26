@@ -176,7 +176,7 @@ const wagonCounts = schedule.wagonCounts ?? [];
       },
       {
         onSuccess: () => {
-          toast.success("VP schedule planned");
+          toast.success("VP schedule opened");
         },
         onError: (error) => {
           toast.error(getErrorMessage(error));
@@ -267,7 +267,7 @@ const wagonCounts = schedule.wagonCounts ?? [];
               onClick={handleConfirm}
             >
               <IconCircleCheck size={14} className="mr-1.5" />
-              {confirm.isPending ? "Planning..." : "Mark Planned"}
+              {confirm.isPending ? "Opening..." : "Mark Open"}
             </Button>
           ) : null}
         </div>
@@ -418,9 +418,9 @@ const wagonCounts = schedule.wagonCounts ?? [];
                 <div className="flex gap-3">
                   <div className="mt-1 size-2 rounded-full bg-green-500" />
                   <div>
-                    <p className="font-medium">Planned</p>
+                    <p className="font-medium">Open</p>
                     <p className="text-xs text-muted-foreground">
-                      Schedule confirmed for next railway process.
+                      Schedule is open for the next railway process.
                     </p>
                   </div>
                 </div>

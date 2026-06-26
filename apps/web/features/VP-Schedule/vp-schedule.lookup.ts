@@ -6,6 +6,7 @@ import { wagonApi } from "../masters/wagon/wagon.service";
 export type VPScheduleOption = {
   value: string;
   label: string;
+  cityId?: string | null;
 };
 
 export type VPScheduleWagonOption = VPScheduleOption & {
@@ -22,6 +23,7 @@ export const vpScheduleLookups = {
     return result.data.map((branch) => ({
       value: branch.id,
       label: branch.name,
+      cityId: branch.cityId,
     }));
   },
 
@@ -33,6 +35,7 @@ export const vpScheduleLookups = {
       label: area.city?.name
         ? `${area.name} - ${area.city.name}`
         : area.name,
+      cityId: area.cityId,
     }));
   },
 

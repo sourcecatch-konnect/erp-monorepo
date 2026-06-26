@@ -6,7 +6,7 @@ export type VPScheduleStatus = VPSchedule["status"];
 
 const STATUS_LABELS: Record<VPScheduleStatus, string> = {
   DRAFT: "Draft",
-  PLANNED: "Planned",
+  PLANNED: "Open",
   CANCELLED: "Cancelled",
 };
 
@@ -62,7 +62,7 @@ export const VP_SCHEDULE_STATUS_ORDER: {
 }[] = [
   { key: "ALL", label: "All" },
   { key: "DRAFT", label: "Draft" },
-  { key: "PLANNED", label: "Planned" },
+  { key: "PLANNED", label: "Open" },
   { key: "CANCELLED", label: "Cancelled" },
 ];
 

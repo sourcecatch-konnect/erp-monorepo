@@ -21,7 +21,9 @@ import {
 } from "../../lib/error.js";
 
 import {
-    assertVPScheduleReferences,
+  assertVPScheduleBranchAreaAlignment,
+  assertVPScheduleFreightMatrices,
+  assertVPScheduleReferences,
   calculateVPScheduleTotals,
   generateVPScheduleNumber,
   vpScheduleInclude,
@@ -252,7 +254,9 @@ router.post("/", can(PERMS.VP_SCHEDULE.CREATE), async (req, res) => {
   const me = actorId(req);
 
   const schedule = await db.$transaction(async (tx) => {
-     await assertVPScheduleReferences(tx, data);
+    await assertVPScheduleReferences(tx, data);
+    await assertVPScheduleBranchAreaAlignment(tx, data);
+
     const { scheduleNumber } = await generateVPScheduleNumber(
       tx,
       data.fromBranchId,
@@ -306,6 +310,14 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
 
   const existing = await db.vPSchedule.findFirst({
     where: vpScheduleWhereByIdentifier(identifier),
+    include: {
+      wagonCounts: {
+        select: {
+          wagonId: true,
+          count: true,
+        },
+      },
+    },
   });
 
   if (!existing) {
@@ -342,6 +354,13 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
 
   const updated = await db.$transaction(async (tx) => {
     await assertVPScheduleReferences(tx, data);
+    await assertVPScheduleBranchAreaAlignment(tx, {
+      fromBranchId: data.fromBranchId ?? existing.fromBranchId,
+      toBranchId: data.toBranchId ?? existing.toBranchId,
+      sourceAreaId: data.sourceAreaId ?? existing.sourceAreaId,
+      destinationAreaId: data.destinationAreaId ?? existing.destinationAreaId,
+    });
+
     let wagonUpdateData = {};
 
     if (data.wagonCounts) {
@@ -430,6 +449,21 @@ router.post(
         "At least one wagon is required before confirming VP Schedule",
       );
     }
+
+    await db.$transaction(async (tx) => {
+      await assertVPScheduleBranchAreaAlignment(tx, {
+        fromBranchId: existing.fromBranchId,
+        toBranchId: existing.toBranchId,
+        sourceAreaId: existing.sourceAreaId,
+        destinationAreaId: existing.destinationAreaId,
+      });
+
+      await assertVPScheduleFreightMatrices(tx, {
+        sourceAreaId: existing.sourceAreaId,
+        destinationAreaId: existing.destinationAreaId,
+        wagonCounts: existing.wagonCounts,
+      });
+    });
 
     const parsed = confirmVPScheduleSchema.safeParse(req.body);
 

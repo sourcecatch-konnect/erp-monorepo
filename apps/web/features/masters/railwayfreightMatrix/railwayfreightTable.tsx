@@ -21,7 +21,7 @@ const formatNumber = (value?: number | null, suffix = "") => {
 export const railwayFreightColumns:
 ColumnDef<RailwayFreightMatrixWithRelations>[] = [
   {
-    accessorKey: "wagonType",
+    accessorKey: "wagon",
     header: "Wagon Type",
     enableHiding: false,
     cell: ({ row }) => (
@@ -31,7 +31,9 @@ ColumnDef<RailwayFreightMatrixWithRelations>[] = [
         </span>
 
         <div className="flex flex-col">
-          <span className="font-medium">{row.original.wagonType}</span>
+          <span className="font-medium">
+            {row.original.wagon?.name ?? "-"}
+          </span>
           <span className="text-xs text-muted-foreground">
             Railway Freight
           </span>

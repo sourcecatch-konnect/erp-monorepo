@@ -16,6 +16,7 @@ export type RailwayFreightMatrixWithRelations =
     sourceCity?: z.infer<typeof citySchema>;
     destinationCity?: z.infer<typeof citySchema>;
     wagon?: {
+      id: string;
       name: string;
     };
   };

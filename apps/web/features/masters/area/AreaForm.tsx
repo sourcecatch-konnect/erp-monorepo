@@ -165,7 +165,7 @@ const handleCityChange = React.useCallback(
        {
   fields: ["place_id", "name", "formatted_address", "geometry"],
   componentRestrictions: { country: "in" },
-  strictBounds: true,
+  strictBounds: false,
 },
       );
 
@@ -174,34 +174,44 @@ const handleCityChange = React.useCallback(
       });
 
       autocompleteRef.current.addListener("place_changed", () => {
-        const place = autocompleteRef.current.getPlace();
-        const selectedAddress = place.formatted_address ?? place.name ?? "";
-        const areaName = getAreaNameFromAddress(
-          selectedAddress,
-          selectedCity?.name,
-        );
+  const place = autocompleteRef.current?.getPlace?.();
 
-        form.setValue("name", areaName, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
+  if (!place) {
+    return;
+  }
 
-        form.setValue("googlePlaceId", place.place_id ?? null, {
-          shouldDirty: true,
-        });
+  const selectedAddress = place.formatted_address ?? place.name ?? "";
 
-        form.setValue("formattedAddress", selectedAddress || null, {
-          shouldDirty: true,
-        });
+  if (!selectedAddress) {
+    return;
+  }
 
-        form.setValue("latitude", place.geometry?.location?.lat() ?? null, {
-          shouldDirty: true,
-        });
+  const areaName = getAreaNameFromAddress(
+    selectedAddress,
+    selectedCity?.name,
+  );
 
-        form.setValue("longitude", place.geometry?.location?.lng() ?? null, {
-          shouldDirty: true,
-        });
-      });
+  form.setValue("name", areaName, {
+    shouldDirty: true,
+    shouldValidate: true,
+  });
+
+  form.setValue("googlePlaceId", place.place_id ?? null, {
+    shouldDirty: true,
+  });
+
+  form.setValue("formattedAddress", selectedAddress || null, {
+    shouldDirty: true,
+  });
+
+  form.setValue("latitude", place.geometry?.location?.lat?.() ?? null, {
+    shouldDirty: true,
+  });
+
+  form.setValue("longitude", place.geometry?.location?.lng?.() ?? null, {
+    shouldDirty: true,
+  });
+});
     };
 
     if (window.google?.maps?.places) {
@@ -248,7 +258,7 @@ const handleCityChange = React.useCallback(
 
         autocompleteRef.current.setBounds(results[0].geometry.viewport);
 autocompleteRef.current.setOptions({
-  strictBounds: true,
+  strictBounds: false,
 });
       },
     );
