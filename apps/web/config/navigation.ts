@@ -10,6 +10,7 @@ import {
   IconTruckDelivery,
   IconUser,
   IconWallet,
+  IconCashBanknote,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -247,6 +248,16 @@ export const NAV_SECTIONS: NavSection[] = [
             href: "/masters/rate-matrix",
             permission: PERMS.MASTERS.RATE_MATRIX.VIEW,
           },
+          {
+            title: "Creditors",
+            href: "/masters/creditor",
+            permission: PERMS.MASTERS.CREDITOR.VIEW,
+          },
+          {
+            title: "Cash Accounts",
+            href: "/masters/cash-account",
+            permission: PERMS.MASTERS.CASH_ACCOUNT.VIEW,
+          },
         ],
       },
     ],
@@ -254,6 +265,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Finance",
     items: [
+      {
+        title: "Cash Planning",
+        href: "/cash-planning",
+        icon: IconCashBanknote,
+        permission: PERMS.CASH_PLANNING.VIEW,
+      },
       {
         title: "Accounts",
         href: "/accounts",

@@ -59,6 +59,8 @@ const ALL_CARDS: MasterCard[] = [
     { title: "Rate Matrix", description: "Route-wise freight rate entries", href: "/masters/rate-matrix", icon: IconReceipt, group: "Rates & Finance", permission: PERMS.MASTERS.RATE_MATRIX.VIEW },
     { title: "Wagons", description: "Railway wagon types & dimensions", href: "/masters/wagons", icon: IconTrain, group: "Rates & Finance", permission: PERMS.MASTERS.WAGON.VIEW },
     { title: "Railway Freight", description: "Rail freight matrix by route", href: "/masters/railway-freight", icon: IconTrain, group: "Rates & Finance", permission: PERMS.MASTERS.RAILWAY_FREIGHT.VIEW },
+    { title: "Creditors", description: "Payees grouped by category", href: "/masters/creditor", icon: IconReceipt, group: "Rates & Finance", permission: PERMS.MASTERS.CREDITOR.VIEW },
+    { title: "Cash Accounts", description: "Bank accounts & cash-in-hand", href: "/masters/cash-account", icon: IconReceipt, group: "Rates & Finance", permission: PERMS.MASTERS.CASH_ACCOUNT.VIEW },
 
     // Organisation
     { title: "Branches", description: "Branch offices, GST & settings", href: "/masters/branch", icon: IconBuildingWarehouse, group: "Organisation", permission: PERMS.MASTERS.BRANCH.VIEW },

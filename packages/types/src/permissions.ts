@@ -37,6 +37,8 @@ const MASTER_SLUGS = [
   "agreement",
   "rate-matrix",
   "vehicle-type",
+  "creditor",
+  "cash-account",
 ] as const;
 
 export type MasterSlug = (typeof MASTER_SLUGS)[number];
@@ -75,6 +77,12 @@ type EwaybillPermissionKey =
 
 type TrackingPermissionKey = "tracking.view";
 
+type CashPlanningPermissionKey =
+  | "cashplanning.view"
+  | "cashplanning.enter"
+  | "cashplanning.approve"
+  | "cashplanning.close";
+
 type AdminPermissionKey =
   | "admin.rbac.manage"
   | "admin.audit_log.view";
@@ -99,6 +107,7 @@ export type PermissionKey =
   | EwaybillPermissionKey
   | TrackingPermissionKey
   | VPSchedulePermissionKey
+  | CashPlanningPermissionKey
   | AdminPermissionKey
   | NotificationPermissionKey
   | AttachmentPermissionKey;
@@ -145,6 +154,8 @@ export const PERMS = {
     AGREEMENT: masterPerms("agreement"),
     RATE_MATRIX: masterPerms("rate-matrix"),
     VEHICLE_TYPE: masterPerms("vehicle-type"),
+    CREDITOR: masterPerms("creditor"),
+    CASH_ACCOUNT: masterPerms("cash-account"),
   },
   LORRY_RECEIPT: {
     VIEW: "lorry_receipt.view",
@@ -190,6 +201,12 @@ export const PERMS = {
   },
   TRACKING: {
     VIEW: "tracking.view",
+  },
+  CASH_PLANNING: {
+    VIEW: "cashplanning.view",
+    ENTER: "cashplanning.enter",
+    APPROVE: "cashplanning.approve",
+    CLOSE: "cashplanning.close",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",

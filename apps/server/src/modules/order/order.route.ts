@@ -175,6 +175,7 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
     if (!fromBranch) throw new BadRequestError("From branch not found");
 
     const fyCode = fyCodeFor(new Date());
+
     const seq = await nextSequence(tx, fromBranch.branchCode, fyCode, "ORDER");
 
     const orderNumber = formatDocNumber(
