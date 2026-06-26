@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { IconReceipt } from "@tabler/icons-react";
+import { IconReceipt, IconCoins } from "@tabler/icons-react";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
@@ -13,10 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from "@skerp/ui/components/table";
-import { formatPaise } from "@/lib/money";
+import { TooltipProvider } from "@skerp/ui/components/tooltip";
 
 import { cashPlanningApi } from "./cash-planning.service";
 import { cashPlanningKeys } from "./cash-planning.keys";
+import { CompactMoney } from "./CompactMoney";
 
 const labelOf = (v: string) =>
   v.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -28,7 +29,16 @@ export default function CreditorLedgerView() {
   });
 
   if (ledger.isLoading) {
-    return <Skeleton className="h-80 w-full rounded-md" />;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-[68px] w-full rounded-md" />
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-48 w-full rounded-md" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const data = ledger.data;
@@ -45,11 +55,22 @@ export default function CreditorLedgerView() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-3">
-        <div>
-          <p className="text-xs text-muted-foreground">Total Outstanding</p>
-          <p className="text-lg font-semibold">{formatPaise(data.grandTotal)}</p>
+    <TooltipProvider>
+      <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-card p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <IconCoins size={18} />
+          </span>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">
+              Total Outstanding
+            </p>
+            <CompactMoney
+              className="block text-xl font-semibold"
+              value={data.grandTotal}
+            />
+          </div>
         </div>
         <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
           {data.groups.length} categor{data.groups.length === 1 ? "y" : "ies"} · auto-totalled
@@ -62,19 +83,27 @@ export default function CreditorLedgerView() {
             key={group.category}
             className="overflow-hidden rounded-md border border-border bg-card"
           >
-            <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
-              <span className="text-sm font-semibold">
-                {labelOf(group.category)}
-              </span>
-              <span className="text-sm font-semibold">
-                {formatPaise(group.subtotal)}
-              </span>
+            <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">
+                  {labelOf(group.category)}
+                </span>
+                <span className="rounded-full bg-background px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {group.creditors.length}
+                </span>
+              </div>
+              <CompactMoney
+                className="text-sm font-semibold"
+                value={group.subtotal}
+              />
             </div>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="h-8">Creditor</TableHead>
-                  <TableHead className="h-8 text-right">Outstanding</TableHead>
+                  <TableHead className="h-8 text-xs">Creditor</TableHead>
+                  <TableHead className="h-8 text-right text-xs">
+                    Outstanding
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -82,7 +111,7 @@ export default function CreditorLedgerView() {
                   <TableRow key={c.id}>
                     <TableCell className="py-1.5 text-sm">{c.name}</TableCell>
                     <TableCell className="py-1.5 text-right text-sm">
-                      {formatPaise(c.outstandingBalance)}
+                      <CompactMoney value={c.outstandingBalance} />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -91,6 +120,7 @@ export default function CreditorLedgerView() {
           </div>
         ))}
       </div>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

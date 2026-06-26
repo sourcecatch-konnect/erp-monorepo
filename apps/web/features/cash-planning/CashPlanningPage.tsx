@@ -3,13 +3,14 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconLock, IconPlus } from "@tabler/icons-react";
+import { IconLock, IconPlus, IconFileText } from "@tabler/icons-react";
 
 import type { CashPlanDayView } from "@skerp/types";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import { TooltipProvider } from "@skerp/ui/components/tooltip";
 import {
   Tabs,
   TabsContent,
@@ -17,10 +18,11 @@ import {
   TabsTrigger,
 } from "@skerp/ui/components/tabs";
 import { useCan } from "@/features/auth";
-import { formatPaise } from "@/lib/money";
 
 import { cashPlanningApi } from "./cash-planning.service";
 import { cashPlanningKeys } from "./cash-planning.keys";
+import { CompactMoney } from "./CompactMoney";
+import { DayCloseReportDialog } from "./DayCloseReportDialog";
 import CashPositionPanel from "./CashPositionPanel";
 import PaymentQueue from "./PaymentQueue";
 import CreditorLedgerView from "./CreditorLedgerView";
@@ -41,7 +43,8 @@ function HeaderStat({
   tone,
 }: {
   label: string;
-  value: string;
+  /** amount in paise */
+  value: number;
   tone?: "ok" | "bad";
 }) {
   return (
@@ -49,7 +52,8 @@ function HeaderStat({
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <p
+      <CompactMoney
+        value={value}
         className={`text-sm font-semibold ${
           tone === "bad"
             ? "text-destructive"
@@ -57,9 +61,7 @@ function HeaderStat({
               ? "text-emerald-600"
               : ""
         }`}
-      >
-        {value}
-      </p>
+      />
     </div>
   );
 }
@@ -71,6 +73,7 @@ export default function CashPlanningPage() {
   const canClose = useCan(PERMS.CASH_PLANNING.CLOSE);
 
   const [date, setDate] = React.useState(todayIso());
+  const [showReport, setShowReport] = React.useState(false);
 
   const dayQuery = useQuery({
     queryKey: cashPlanningKeys.day(date),
@@ -116,7 +119,8 @@ export default function CashPlanningPage() {
   const day: CashPlanDayView | null | undefined = dayQuery.data;
 
   return (
-    <div className="space-y-5">
+    <TooltipProvider>
+      <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-0.5">
           <h1 className="text-xl font-semibold tracking-tight">Cash Planning</h1>
@@ -128,11 +132,15 @@ export default function CashPlanningPage() {
         <div className="flex items-end gap-3">
           {day ? (
             <div className="flex gap-2">
-              <HeaderStat label="Available" value={formatPaise(day.availableCash)} tone={day.availableCash < 0 ? "bad" : "ok"} />
-              <HeaderStat label="Pending" value={formatPaise(day.pendingTotal)} />
+              <HeaderStat
+                label="Available"
+                value={day.availableCash}
+                tone={day.availableCash < 0 ? "bad" : "ok"}
+              />
+              <HeaderStat label="Pending" value={day.pendingTotal} />
               <HeaderStat
                 label="Projected"
-                value={formatPaise(day.availableCash + expectedByDay)}
+                value={day.availableCash + expectedByDay}
               />
             </div>
           ) : null}
@@ -145,6 +153,12 @@ export default function CashPlanningPage() {
             />
           </div>
 
+          {day ? (
+            <Button variant="outline" onClick={() => setShowReport(true)}>
+              <IconFileText size={15} className="mr-1" />
+              Day report
+            </Button>
+          ) : null}
           {day && day.status === "OPEN" && canClose ? (
             <Button
               variant="outline"
@@ -207,6 +221,15 @@ export default function CashPlanningPage() {
           </TabsContent>
         </Tabs>
       )}
-    </div>
+      </div>
+
+      {day ? (
+        <DayCloseReportDialog
+          day={day}
+          open={showReport}
+          onOpenChange={setShowReport}
+        />
+      ) : null}
+    </TooltipProvider>
   );
 }

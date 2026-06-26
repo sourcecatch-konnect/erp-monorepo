@@ -20,6 +20,7 @@ import { formatPaise } from "@/lib/money";
 
 import { cashPlanningApi } from "./cash-planning.service";
 import { cashPlanningKeys } from "./cash-planning.keys";
+import { CompactMoney } from "./CompactMoney";
 
 type Props = {
   day: CashPlanDayView;
@@ -59,9 +60,14 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
   });
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <h2 className="text-sm font-semibold">Cash Position</h2>
+    <div className="overflow-hidden rounded-md border border-border bg-card">
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+        <div className="space-y-0.5">
+          <h2 className="text-sm font-semibold">Cash Position</h2>
+          <p className="text-xs text-muted-foreground">
+            Opening across accounts · closing = opening − approved
+          </p>
+        </div>
         {editable ? (
           <Button
             size="sm"
@@ -78,9 +84,9 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Account</TableHead>
-            <TableHead className="text-right">Opening</TableHead>
-            <TableHead className="text-right">Closing</TableHead>
+            <TableHead className="text-xs">Account</TableHead>
+            <TableHead className="text-right text-xs">Opening</TableHead>
+            <TableHead className="text-right text-xs">Closing</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -101,18 +107,18 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
                 <TableRow key={b.accountId}>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary">
                         {b.account.type === "BANK" ? (
-                          <IconBuildingBank size={12} />
+                          <IconBuildingBank size={14} />
                         ) : (
-                          <IconCash size={12} />
+                          <IconCash size={14} />
                         )}
                       </span>
                       <span className="text-sm font-medium">{b.account.name}</span>
                       {carriedMismatch ? (
                         <span
                           title={`Carried forward: ${formatPaise(b.carriedOpening ?? 0)}`}
-                          className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                          className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700"
                         >
                           edited
                         </span>
@@ -124,18 +130,18 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
                       <Input
                         type="number"
                         step="0.01"
-                        className="h-8 w-32 text-right"
+                        className="h-9 w-32 text-right"
                         value={draft[b.accountId] ?? ""}
                         onChange={(e) =>
                           setDraft((d) => ({ ...d, [b.accountId]: e.target.value }))
                         }
                       />
                     ) : (
-                      formatPaise(b.openingBalance)
+                      <CompactMoney value={b.openingBalance} />
                     )}
                   </TableCell>
                   <TableCell className="text-right text-sm">
-                    {formatPaise(b.closingBalance)}
+                    <CompactMoney value={b.closingBalance} />
                   </TableCell>
                 </TableRow>
               );
@@ -147,25 +153,25 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
       <div className="grid grid-cols-3 gap-px border-t bg-border text-sm">
         <div className="bg-card px-4 py-3">
           <p className="text-xs text-muted-foreground">Total Opening</p>
-          <p className="font-semibold">{formatPaise(day.totalOpening)}</p>
+          <CompactMoney className="text-base font-semibold" value={day.totalOpening} />
         </div>
         <div className="bg-card px-4 py-3">
           <p className="text-xs text-muted-foreground">Approved</p>
-          <p className="font-semibold text-destructive">
-            {formatPaise(day.approvedTotal)}
-          </p>
+          <CompactMoney
+            className="text-base font-semibold text-destructive"
+            value={day.approvedTotal}
+          />
         </div>
         <div className="bg-card px-4 py-3">
           <p className="text-xs text-muted-foreground">Available Cash</p>
-          <p
+          <CompactMoney
             className={
               day.availableCash < 0
-                ? "font-semibold text-destructive"
-                : "font-semibold text-emerald-600"
+                ? "text-base font-semibold text-destructive"
+                : "text-base font-semibold text-emerald-600"
             }
-          >
-            {formatPaise(day.availableCash)}
-          </p>
+            value={day.availableCash}
+          />
         </div>
       </div>
     </div>

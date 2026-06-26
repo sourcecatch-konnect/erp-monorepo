@@ -656,7 +656,7 @@ model Transport {
 model RailwayFreightMatrix {
   id                String   @id @default(cuid())
 
-  wagonType         String
+  wagonId           String
 
   sourceCityId      String
   destinationCityId String
@@ -675,9 +675,9 @@ model RailwayFreightMatrix {
   sourceArea        Area?    @relation("RailwayFreightSourceArea", fields: [sourceAreaId], references: [id])
   destinationArea   Area?    @relation("RailwayFreightDestinationArea", fields: [destinationAreaId], references: [id])
 
-  wagon             Wagon    @relation(fields: [wagonType], references: [name])
+  wagon             Wagon    @relation(fields: [wagonId], references: [id])
 
-  @@index([wagonType])
+  @@index([wagonId])
   @@index([sourceCityId])
   @@index([destinationCityId])
   @@index([sourceAreaId])

@@ -12,6 +12,7 @@ import {
   IconSparkles,
   IconGripVertical,
   IconBolt,
+  IconInbox,
 } from "@tabler/icons-react";
 
 import type {
@@ -31,10 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
-import { formatPaise } from "@/lib/money";
+import { formatPaise, formatPaiseCompact } from "@/lib/money";
 
 import { cashPlanningApi } from "./cash-planning.service";
 import { cashPlanningKeys } from "./cash-planning.keys";
+import { CompactMoney } from "./CompactMoney";
 import { creditorApi } from "../masters/creditor/creditor.service";
 import { creditorKeys } from "../masters/creditor/creditor.keys";
 
@@ -65,6 +67,8 @@ const segmentBadge: Record<CashSegment, string> = {
   RAIL: "bg-indigo-100 text-indigo-700",
   FCI: "bg-teal-100 text-teal-700",
 };
+
+const fieldLabel = "text-xs font-medium text-muted-foreground";
 
 export default function PaymentQueue({ day, date, canEnter, canApprove }: Props) {
   const queryClient = useQueryClient();
@@ -221,11 +225,11 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
       {editable ? (
         <div className="flex flex-wrap items-end gap-2 border-b bg-muted/30 px-4 py-3">
           <div className="grid gap-1">
-            <label className="text-[11px] text-muted-foreground">Payee</label>
+            <label className={fieldLabel}>Payee</label>
             <Input
               ref={payeeRef}
               list="creditor-suggestions"
-              className="h-8 w-44"
+              className="h-9 w-48"
               placeholder="Type payee…"
               value={payeeName}
               onChange={(e) => {
@@ -243,7 +247,7 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
               {creditors.map((c) => (
                 <option key={c.id} value={c.name}>
                   {c.outstandingBalance > 0
-                    ? `outstanding ${formatPaise(c.outstandingBalance)}`
+                    ? `outstanding ${formatPaiseCompact(c.outstandingBalance)}`
                     : ""}
                 </option>
               ))}
@@ -251,11 +255,11 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
           </div>
 
           <div className="grid gap-1">
-            <label className="text-[11px] text-muted-foreground">Amount (₹)</label>
+            <label className={fieldLabel}>Amount (₹)</label>
             <Input
               type="number"
               step="0.01"
-              className="h-8 w-28 text-right"
+              className="h-9 w-28 text-right"
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -266,7 +270,7 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
           </div>
 
           <div className="grid gap-1">
-            <label className="text-[11px] text-muted-foreground">Category</label>
+            <label className={fieldLabel}>Category</label>
             <Select
               value={category}
               onValueChange={(v) => setCategory(v as typeof category)}
@@ -285,7 +289,7 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
           </div>
 
           <div className="grid gap-1">
-            <label className="text-[11px] text-muted-foreground">Mode</label>
+            <label className={fieldLabel}>Mode</label>
             <Select value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
               <SelectTrigger className="h-9 w-28">
                 <SelectValue />
@@ -301,7 +305,7 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
           </div>
 
           <div className="grid gap-1">
-            <label className="text-[11px] text-muted-foreground">Segment</label>
+            <label className={fieldLabel}>Segment</label>
             <Select
               value={segment === "" ? NO_SEGMENT : segment}
               onValueChange={(v) =>
@@ -322,9 +326,9 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
             </Select>
           </div>
 
-          <Button size="sm" onClick={() => add.mutate()} disabled={!canSubmit}>
+          <Button onClick={() => add.mutate()} disabled={!canSubmit}>
             <IconPlus size={15} className="mr-1" />
-            Add
+            Add payment
           </Button>
         </div>
       ) : null}
@@ -332,14 +336,15 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
       {/* rows */}
       <div className="divide-y">
         {day.payments.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            No payments queued yet.
+          <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-sm text-muted-foreground">
+            <IconInbox size={26} className="text-muted-foreground/70" />
+            No payments queued yet.{editable ? " Add one above to begin." : ""}
           </div>
         ) : (
           computed.map(({ p, remainingAfter, fits }, index) => (
             <React.Fragment key={p.id}>
               {index === waterlineIndex ? (
-                <div className="flex items-center gap-2 bg-red-50 px-4 py-1.5 text-[11px] font-medium text-red-600">
+                <div className="flex items-center gap-2 bg-red-50 px-4 py-1.5 text-xs font-medium text-red-600">
                   <span className="h-px flex-1 bg-red-300" />
                   cash runs out here — below this exceeds available cash
                   <span className="h-px flex-1 bg-red-300" />
@@ -361,41 +366,49 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
                     className="shrink-0 cursor-grab text-muted-foreground/50"
                   />
                 ) : null}
-                <span className="w-5 shrink-0 text-xs text-muted-foreground">
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-muted-foreground">
                   {index + 1}
+                </span>
+
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                  {p.payeeName.charAt(0).toUpperCase()}
                 </span>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">{p.payeeName}</span>
                     {p.isLate ? (
-                      <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
-                        <IconSparkles size={10} /> new
+                      <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-700">
+                        <IconSparkles size={11} /> new
                       </span>
                     ) : null}
                     {p.segment ? (
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${segmentBadge[p.segment]}`}
+                        className={`rounded px-1.5 py-0.5 text-xs font-medium ${segmentBadge[p.segment]}`}
                       >
                         {p.segment}
                       </span>
                     ) : null}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     {labelOf(p.category)} · {labelOf(p.mode)}
                   </div>
                 </div>
 
                 <div className="shrink-0 text-right">
-                  <div className="text-sm font-semibold">{formatPaise(p.amount)}</div>
+                  <CompactMoney
+                    className="text-sm font-semibold"
+                    value={p.amount}
+                  />
                   <div
-                    className={`text-[10px] ${
+                    className={`text-[11px] ${
                       remainingAfter < 0 ? "text-red-600" : "text-muted-foreground"
                     }`}
+                    title={formatPaise(Math.abs(remainingAfter))}
                   >
                     {remainingAfter < 0
-                      ? `over by ${formatPaise(-remainingAfter)}`
-                      : `${formatPaise(remainingAfter)} left`}
+                      ? `over by ${formatPaiseCompact(-remainingAfter)}`
+                      : `${formatPaiseCompact(remainingAfter)} left`}
                   </div>
                 </div>
 

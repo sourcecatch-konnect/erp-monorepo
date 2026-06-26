@@ -135,27 +135,52 @@ const PAYMENTS: { payee: string; amount: number; category: Cat; segment?: "ROAD"
   { payee: "Telephone", amount: 12000, category: "EXPENSE" },
 ];
 
-// ── img 2: receivables (values in lakhs -> rupees) ──
+// ── img: "Payment Receivable" (values in lakhs). `total` = full receivable
+// (right column), `expected` = the acknowledged/guaranteed slice (left column;
+// 0 = nothing confirmed yet), `date` = expected-by date where the sheet gives
+// one. Zero-total rows from the sheet are omitted. Grand total = 277.44 L.
 const L = (lakhs: number) => Math.round(lakhs * 100000);
-const RECEIVABLES: { party: string; amount: number; expected?: string }[] = [
-  { party: "Geep Industries", amount: L(11.52) },
-  { party: "Prasad & Co", amount: L(1.48) },
-  { party: "Badri Ray & Co", amount: L(1.49) },
-  { party: "Videocon Industries", amount: L(9.17) },
-  { party: "Sai Baba Logistics", amount: L(2.14) },
-  { party: "Prince Corporation", amount: L(5.34) },
-  { party: "VIP Industries", amount: L(5.0) },
-  { party: "Maa Sarda", amount: L(11.52) },
-  { party: "Astha Roadlines", amount: L(6.16) },
-  { party: "DMO", amount: L(11.23) },
-  { party: "Samsonite South Asia", amount: L(11.38), expected: "2026-06-22" },
-  { party: "Nilon's Enterprises", amount: L(16.47), expected: "2026-06-25" },
-  { party: "Whirlpool of India", amount: L(85.58) },
-  { party: "Britania Industries", amount: L(1.88), expected: "2026-06-17" },
-  { party: "Supreme Industries", amount: L(0.49), expected: "2026-06-26" },
-  { party: "Raptakos Brett Ltd", amount: L(1.29), expected: "2026-06-26" },
-  { party: "DM MP Civil Supply Corp", amount: L(8.39) },
-  { party: "Food Corpration Chandra", amount: L(74.21) },
+const RECEIVABLES: {
+  party: string;
+  total: number;
+  expected: number;
+  date?: string;
+}[] = [
+  { party: "Rail Road", total: 0.27, expected: 0 },
+  { party: "Geep Industries", total: 11.52, expected: 0 },
+  { party: "Prasad & Co", total: 1.48, expected: 0 },
+  { party: "Badri Ray & Co", total: 1.49, expected: 0 },
+  { party: "Videocon Industries", total: 9.17, expected: 0 },
+  { party: "Sai Baba Logistics", total: 2.14, expected: 0 },
+  { party: "Handicraft Stores", total: 0.44, expected: 0 },
+  { party: "Prince Corporation", total: 5.34, expected: 0 },
+  { party: "VIP Industries", total: 5.0, expected: 0 },
+  { party: "Marrico Ltd", total: 0.71, expected: 0 },
+  { party: "Anima Sanitory", total: 0.63, expected: 0 },
+  { party: "Maa Sarda", total: 11.52, expected: 0 },
+  { party: "Sowallow Enterprses", total: 2.37, expected: 0 },
+  { party: "Astha Roadlines", total: 6.16, expected: 0 },
+  { party: "Biswas Dairy", total: 0.62, expected: 0.35 },
+  { party: "DMO", total: 11.23, expected: 0 },
+  { party: "New BP International", total: 0.73, expected: 0.5 },
+  { party: "Samsonite South Asia", total: 11.38, expected: 3.88, date: "2026-06-22" },
+  { party: "Jain Irregation", total: 0.31, expected: 0 },
+  { party: "Nilon's Enterprises", total: 16.47, expected: 2.0, date: "2026-06-25" },
+  { party: "Rahul Enterprises", total: 0.54, expected: 0 },
+  { party: "Whirlpool of India", total: 85.58, expected: 10.8 },
+  { party: "Phantom Express", total: 0.65, expected: 0 },
+  { party: "Britania Industries", total: 1.88, expected: 1.6, date: "2026-06-17" },
+  { party: "Gopal Umberlla", total: 0.61, expected: 0.61, date: "2026-06-17" },
+  { party: "Modern Tailor", total: 0.26, expected: 0.26 },
+  { party: "Liebherr Appliance", total: 1.36, expected: 0 },
+  { party: "Goodyear India Ltd", total: 1.52, expected: 0 },
+  { party: "Supreme Industries", total: 0.49, expected: 0.49, date: "2026-06-26" },
+  { party: "Pioneer Syndicate", total: 0.36, expected: 0 },
+  { party: "Raptakos Brett Ltd", total: 1.29, expected: 1.25, date: "2026-06-26" },
+  { party: "MTR Construct & Inputs", total: 0.41, expected: 0 },
+  { party: "Maharahstra Transport", total: 0.91, expected: 0 },
+  { party: "DM MP Civil Supply Corp", total: 8.39, expected: 0 },
+  { party: "Food Corpration Chandra", total: 74.21, expected: 0 },
 ];
 
 // Seed the real sheet date plus "today" so the default page view is populated.
@@ -197,11 +222,9 @@ async function main() {
     await db.cashReceivable.createMany({
       data: RECEIVABLES.map((r) => ({
         partyName: r.party,
-        totalAmount: P(r.amount), // r.amount already in rupees
-        expectedAmount: r.expected ? P(r.amount) : 0n,
-        expectedDate: r.expected
-          ? new Date(`${r.expected}T00:00:00.000Z`)
-          : null,
+        totalAmount: P(L(r.total)),
+        expectedAmount: P(L(r.expected)),
+        expectedDate: r.date ? new Date(`${r.date}T00:00:00.000Z`) : null,
       })),
     });
     console.log(`Seeded ${RECEIVABLES.length} receivables.`);
