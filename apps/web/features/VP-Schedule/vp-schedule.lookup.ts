@@ -2,6 +2,9 @@
 import { branchApi } from "../masters/branch/branch.service";
 import { areaApi } from "../masters/area/area.service";
 import { wagonApi } from "../masters/wagon/wagon.service";
+import { api } from "@/lib/api";
+import type { ApiResponse } from "@skerp/types";
+import { unwrapApiResponse } from "../masters/_shared/master-api";
 
 export type VPScheduleOption = {
   value: string;
@@ -43,6 +46,32 @@ export const vpScheduleLookups = {
     const result = await wagonApi.list(LOOKUP_QUERY);
 
     return result.data.map((wagon) => ({
+      value: wagon.id,
+      label: wagon.name,
+      totalCft: wagon.totalCft,
+      capacityMt: wagon.capacityMt,
+    }));
+  },
+
+  availableWagons: async (
+    sourceAreaId: string,
+    destinationAreaId: string,
+  ): Promise<VPScheduleWagonOption[]> => {
+    const res = await api.get<
+      ApiResponse<
+        Array<{
+          id: string;
+          name: string;
+          totalCft?: number | null;
+          capacityMt?: number | null;
+          isActive?: boolean | null;
+        }>
+      >
+    >("/railway-freight/available-wagons", {
+      params: { sourceAreaId, destinationAreaId },
+    });
+
+    return unwrapApiResponse(res).map((wagon) => ({
       value: wagon.id,
       label: wagon.name,
       totalCft: wagon.totalCft,

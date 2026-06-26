@@ -5,11 +5,16 @@ import {
   createRailwayFreightMatrixSchema,
   updateRailwayFreightMatrixSchema,
 } from "@skerp/validators";
+import { PERMS } from "@skerp/types";
 
 import { db } from "../../../prisma/prisma.js";
 
 import { createCrudRouter } from "../_shared/crud.factory.js";
 import { convertRupeeFieldsToPaise } from "../../lib/money.js";
+import { authMiddleware } from "../../middlewares/auth.middlware.js";
+import { can } from "../../auth/can.middleware.js";
+import { BadRequestError } from "../../lib/error.js";
+import { sendOk } from "../_shared/response.js";
 
 const moneyFields = ["freightAmount"];
 
@@ -55,7 +60,7 @@ const validateAreaCity = async ({
   }
 };
 
-const router: Router =
+const railwayFreightCrudRouter: Router =
   createCrudRouter({
     model: db.railwayFreightMatrix,
 
@@ -192,5 +197,107 @@ const router: Router =
       blockDeleteIfExists: [],
     },
   });
+
+const router: Router = Router();
+
+router.use(authMiddleware);
+
+router.get(
+  "/available-wagons",
+  can(PERMS.MASTERS.RAILWAY_FREIGHT.VIEW),
+  async (req, res) => {
+    const sourceAreaId =
+      typeof req.query.sourceAreaId === "string"
+        ? req.query.sourceAreaId.trim()
+        : "";
+    const destinationAreaId =
+      typeof req.query.destinationAreaId === "string"
+        ? req.query.destinationAreaId.trim()
+        : "";
+
+    if (!sourceAreaId || !destinationAreaId) {
+      throw new BadRequestError("Source area and destination area are required");
+    }
+
+    const [sourceArea, destinationArea] = await Promise.all([
+      db.area.findUnique({
+        where: { id: sourceAreaId },
+        select: { id: true, cityId: true },
+      }),
+      db.area.findUnique({
+        where: { id: destinationAreaId },
+        select: { id: true, cityId: true },
+      }),
+    ]);
+
+    if (!sourceArea?.cityId) {
+      throw new BadRequestError("Source area not found");
+    }
+
+    if (!destinationArea?.cityId) {
+      throw new BadRequestError("Destination area not found");
+    }
+
+    const rows = await db.railwayFreightMatrix.findMany({
+      where: {
+        sourceCityId: sourceArea.cityId,
+        destinationCityId: destinationArea.cityId,
+        OR: [
+          {
+            sourceAreaId: sourceArea.id,
+            destinationAreaId: destinationArea.id,
+          },
+          {
+            sourceAreaId: sourceArea.id,
+            destinationAreaId: null,
+          },
+          {
+            sourceAreaId: null,
+            destinationAreaId: destinationArea.id,
+          },
+          {
+            sourceAreaId: null,
+            destinationAreaId: null,
+          },
+        ],
+      },
+      select: {
+        wagonId: true,
+        wagon: {
+          select: {
+            id: true,
+            name: true,
+            totalCft: true,
+            capacityMt: true,
+            isActive: true,
+          },
+        },
+      },
+      orderBy: {
+        wagon: {
+          name: "asc",
+        },
+      },
+    });
+
+    const unique = new Map<string, {
+      id: string;
+      name: string;
+      totalCft: number | null;
+      capacityMt: number | null;
+      isActive: boolean;
+    }>();
+
+    for (const row of rows) {
+      if (row.wagon && !unique.has(row.wagonId)) {
+        unique.set(row.wagonId, row.wagon);
+      }
+    }
+
+    return sendOk(res, Array.from(unique.values()));
+  },
+);
+
+router.use("/", railwayFreightCrudRouter);
 
 export default router;

@@ -16,4 +16,11 @@ export const vpScheduleLookupKeys = {
   branches: ["vp-schedule-lookups", "branches"] as const,
   areas: ["vp-schedule-lookups", "areas"] as const,
   wagons: ["vp-schedule-lookups", "wagons"] as const,
+  availableWagons: (sourceAreaId: string, destinationAreaId: string) =>
+    [
+      "vp-schedule-lookups",
+      "available-wagons",
+      sourceAreaId,
+      destinationAreaId,
+    ] as const,
 };

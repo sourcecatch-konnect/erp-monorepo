@@ -53,10 +53,7 @@ import {
   useVPScheduleDetail,
 } from "./hook/useVPSchedule";
 import { vpScheduleLookupKeys } from "./vp-schedule.key";
-import {
-  vpScheduleLookups,
-  type VPScheduleWagonOption,
-} from "./vp-schedule.lookup";
+import { vpScheduleLookups } from "./vp-schedule.lookup";
 import { areaApi } from "../masters/area/area.service";
 
 type Props = {
@@ -141,10 +138,6 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
     queryFn: vpScheduleLookups.branches,
   });
 
-  const wagons = useQuery({
-    queryKey: vpScheduleLookupKeys.wagons,
-    queryFn: vpScheduleLookups.wagons,
-  });
 const isResettingEditFormRef = React.useRef(false);
 const previousFromBranchIdRef = React.useRef("");
 const previousToBranchIdRef = React.useRef("");
@@ -252,6 +245,22 @@ const destinationAreaOptions =
     label: area.name,
     value: area.id,
   })) ?? [];
+
+const availableWagons = useQuery({
+  queryKey:
+    watchedSourceAreaId && watchedDestinationAreaId
+      ? vpScheduleLookupKeys.availableWagons(
+          watchedSourceAreaId,
+          watchedDestinationAreaId,
+        )
+      : ["vp-schedule-lookups", "available-wagons-empty"],
+  queryFn: () =>
+    vpScheduleLookups.availableWagons(
+      watchedSourceAreaId,
+      watchedDestinationAreaId,
+    ),
+  enabled: Boolean(watchedSourceAreaId && watchedDestinationAreaId),
+});
   
 
 
@@ -361,11 +370,42 @@ React.useEffect(() => {
   watchedDestinationAreaId,
 ]);
   const watchedWagons = form.watch("wagonCounts") ?? [];
-  const wagonOptions = wagons.data ?? [];
+  const wagonOptions = availableWagons.data ?? [];
   const wagonMap = React.useMemo(
     () => new Map(wagonOptions.map((wagon) => [wagon.value, wagon])),
     [wagonOptions],
   );
+
+React.useEffect(() => {
+  if (
+    !watchedSourceAreaId ||
+    !watchedDestinationAreaId ||
+    availableWagons.isLoading
+  ) {
+    return;
+  }
+
+  const availableIds = new Set(
+    (availableWagons.data ?? []).map((wagon) => wagon.value),
+  );
+  const rows = form.getValues("wagonCounts") ?? [];
+  const hasUnavailable = rows.some(
+    (row) => row.wagonId && !availableIds.has(row.wagonId),
+  );
+
+  if (hasUnavailable) {
+    form.setValue("wagonCounts", [emptyWagonRow], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+}, [
+  availableWagons.data,
+  availableWagons.isLoading,
+  form,
+  watchedSourceAreaId,
+  watchedDestinationAreaId,
+]);
 
   const totalWagons = watchedWagons.reduce(
     (sum, row) => sum + (Number(row?.count) || 0),
@@ -557,9 +597,22 @@ const onSubmit = async (values: CreateVPScheduleBody) => {
                                 options={wagonOptions}
                                 value={field.value}
                                 onChange={field.onChange}
-                                placeholder="Select wagon"
+                                placeholder={
+                                  watchedSourceAreaId && watchedDestinationAreaId
+                                    ? "Select wagon"
+                                    : "Select route areas first"
+                                }
                                 searchPlaceholder="Search wagon..."
-                                emptyText="No wagons found"
+                                emptyText={
+                                  watchedSourceAreaId && watchedDestinationAreaId
+                                    ? "No railway freight wagons found for this route"
+                                    : "Select source and destination area first"
+                                }
+                                disabled={
+                                  !watchedSourceAreaId ||
+                                  !watchedDestinationAreaId ||
+                                  availableWagons.isLoading
+                                }
                                 invalid={Boolean(wagonError)}
                               />
                             )}
