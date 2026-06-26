@@ -37,6 +37,7 @@ router.use(authMiddleware);
 
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
+const readClient = db as unknown as Prisma.TransactionClient;
 
 const getVPScheduleIdentifier = (req: { params: { id?: string } }) => {
   const identifier = decodeURIComponent(req.params.id ?? "").trim();
@@ -252,21 +253,20 @@ router.post("/", can(PERMS.VP_SCHEDULE.CREATE), async (req, res) => {
   assertBranchAccess(req, data.fromBranchId);
 
   const me = actorId(req);
+  await assertVPScheduleReferences(readClient, data);
+  await assertVPScheduleBranchAreaAlignment(readClient, data);
+  await assertVPScheduleFreightMatrices(readClient, data);
+
+  const totals = await calculateVPScheduleTotals(readClient, data.wagonCounts);
+  const wagonRows = await buildWagonCountRows(readClient, data.wagonCounts);
 
   const schedule = await db.$transaction(async (tx) => {
-    await assertVPScheduleReferences(tx, data);
-    await assertVPScheduleBranchAreaAlignment(tx, data);
-
     const { scheduleNumber } = await generateVPScheduleNumber(
       tx,
       data.fromBranchId,
     );
 
-    const totals = await calculateVPScheduleTotals(tx, data.wagonCounts);
-
-    const wagonRows = await buildWagonCountRows(tx, data.wagonCounts);
-
-    const created = await tx.vPSchedule.create({
+    const createdBase = await tx.vPSchedule.create({
       data: {
         scheduleNumber,
         scheduleDate: data.scheduleDate,
@@ -287,13 +287,25 @@ router.post("/", can(PERMS.VP_SCHEDULE.CREATE), async (req, res) => {
         remarks: data.remarks ?? null,
 
         createdById: me,
-
-        wagonCounts: {
-          create: wagonRows,
-        },
       },
+      select: { id: true },
+    });
+
+    await tx.vPScheduleWagonCount.createMany({
+      data: wagonRows.map((row) => ({
+        ...row,
+        vpScheduleId: createdBase.id,
+      })),
+    });
+
+    const created = await tx.vPSchedule.findUnique({
+      where: { id: createdBase.id },
       include: vpScheduleInclude,
     });
+
+    if (!created) {
+      throw new BadRequestError("VP Schedule could not be created");
+    }
 
     return created;
   });
@@ -352,21 +364,33 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
     assertBranchAccess(req, data.fromBranchId);
   }
 
-  const updated = await db.$transaction(async (tx) => {
-    await assertVPScheduleReferences(tx, data);
-    await assertVPScheduleBranchAreaAlignment(tx, {
-      fromBranchId: data.fromBranchId ?? existing.fromBranchId,
-      toBranchId: data.toBranchId ?? existing.toBranchId,
-      sourceAreaId: data.sourceAreaId ?? existing.sourceAreaId,
-      destinationAreaId: data.destinationAreaId ?? existing.destinationAreaId,
-    });
+  const effectiveRoute = {
+    fromBranchId: data.fromBranchId ?? existing.fromBranchId,
+    toBranchId: data.toBranchId ?? existing.toBranchId,
+    sourceAreaId: data.sourceAreaId ?? existing.sourceAreaId,
+    destinationAreaId: data.destinationAreaId ?? existing.destinationAreaId,
+  };
 
+  await assertVPScheduleReferences(readClient, data);
+  await assertVPScheduleBranchAreaAlignment(readClient, effectiveRoute);
+  await assertVPScheduleFreightMatrices(readClient, {
+    sourceAreaId: effectiveRoute.sourceAreaId,
+    destinationAreaId: effectiveRoute.destinationAreaId,
+    wagonCounts: data.wagonCounts ?? existing.wagonCounts,
+  });
+
+  const wagonUpdate =
+    data.wagonCounts
+      ? {
+          totals: await calculateVPScheduleTotals(readClient, data.wagonCounts),
+          rows: await buildWagonCountRows(readClient, data.wagonCounts),
+        }
+      : null;
+
+  const updated = await db.$transaction(async (tx) => {
     let wagonUpdateData = {};
 
-    if (data.wagonCounts) {
-      const totals = await calculateVPScheduleTotals(tx, data.wagonCounts);
-      const wagonRows = await buildWagonCountRows(tx, data.wagonCounts);
-
+    if (wagonUpdate) {
       await tx.vPScheduleWagonCount.deleteMany({
         where: {
           vpScheduleId: existing.id,
@@ -374,16 +398,13 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
       });
 
       wagonUpdateData = {
-        totalWagonCount: totals.totalWagonCount,
-        totalCapacityCft: totals.totalCapacityCft,
-        totalCapacityMt: totals.totalCapacityMt,
-        wagonCounts: {
-          create: wagonRows,
-        },
+        totalWagonCount: wagonUpdate.totals.totalWagonCount,
+        totalCapacityCft: wagonUpdate.totals.totalCapacityCft,
+        totalCapacityMt: wagonUpdate.totals.totalCapacityMt,
       };
     }
 
-    const row = await tx.vPSchedule.update({
+    await tx.vPSchedule.update({
       where: {
         id: existing.id,
       },
@@ -408,8 +429,25 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
           increment: 1,
         },
       },
+    });
+
+    if (wagonUpdate) {
+      await tx.vPScheduleWagonCount.createMany({
+        data: wagonUpdate.rows.map((row) => ({
+          ...row,
+          vpScheduleId: existing.id,
+        })),
+      });
+    }
+
+    const row = await tx.vPSchedule.findUnique({
+      where: { id: existing.id },
       include: vpScheduleInclude,
     });
+
+    if (!row) {
+      throw new BadRequestError("VP Schedule could not be updated");
+    }
 
     return row;
   });
@@ -450,19 +488,17 @@ router.post(
       );
     }
 
-    await db.$transaction(async (tx) => {
-      await assertVPScheduleBranchAreaAlignment(tx, {
-        fromBranchId: existing.fromBranchId,
-        toBranchId: existing.toBranchId,
-        sourceAreaId: existing.sourceAreaId,
-        destinationAreaId: existing.destinationAreaId,
-      });
+    await assertVPScheduleBranchAreaAlignment(readClient, {
+      fromBranchId: existing.fromBranchId,
+      toBranchId: existing.toBranchId,
+      sourceAreaId: existing.sourceAreaId,
+      destinationAreaId: existing.destinationAreaId,
+    });
 
-      await assertVPScheduleFreightMatrices(tx, {
-        sourceAreaId: existing.sourceAreaId,
-        destinationAreaId: existing.destinationAreaId,
-        wagonCounts: existing.wagonCounts,
-      });
+    await assertVPScheduleFreightMatrices(readClient, {
+      sourceAreaId: existing.sourceAreaId,
+      destinationAreaId: existing.destinationAreaId,
+      wagonCounts: existing.wagonCounts,
     });
 
     const parsed = confirmVPScheduleSchema.safeParse(req.body);

@@ -221,47 +221,45 @@ export const assertVPScheduleFreightMatrices = async (
   tx: Tx,
   data: VPScheduleFreightMatrixInput,
 ) => {
-  const [sourceArea, destinationArea, wagons] = await Promise.all([
-    tx.area.findUnique({
-      where: { id: data.sourceAreaId },
-      select: {
-        id: true,
-        name: true,
-        cityId: true,
-        city: {
-          select: {
-            name: true,
-          },
+  const sourceArea = await tx.area.findUnique({
+    where: { id: data.sourceAreaId },
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      city: {
+        select: {
+          name: true,
         },
       },
-    }),
+    },
+  });
 
-    tx.area.findUnique({
-      where: { id: data.destinationAreaId },
-      select: {
-        id: true,
-        name: true,
-        cityId: true,
-        city: {
-          select: {
-            name: true,
-          },
+  const destinationArea = await tx.area.findUnique({
+    where: { id: data.destinationAreaId },
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      city: {
+        select: {
+          name: true,
         },
       },
-    }),
+    },
+  });
 
-    tx.wagon.findMany({
-      where: {
-        id: {
-          in: data.wagonCounts.map((item) => item.wagonId),
-        },
+  const wagons = await tx.wagon.findMany({
+    where: {
+      id: {
+        in: data.wagonCounts.map((item) => item.wagonId),
       },
-      select: {
-        id: true,
-        name: true,
-      },
-    }),
-  ]);
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 
   if (!sourceArea) {
     throw new BadRequestError("Source area not found");
@@ -342,52 +340,44 @@ export const assertVPScheduleReferences = async (
     wagonCounts?: VPScheduleWagonInput[];
   },
 ) => {
-  const [
-    fromBranch,
-    toBranch,
-    sourceArea,
-    destinationArea,
-    wagons,
-  ] = await Promise.all([
-    data.fromBranchId
-      ? tx.branch.findUnique({
-          where: { id: data.fromBranchId },
-          select: { id: true },
-        })
-      : null,
+  const fromBranch = data.fromBranchId
+    ? await tx.branch.findUnique({
+        where: { id: data.fromBranchId },
+        select: { id: true },
+      })
+    : null;
 
-    data.toBranchId
-      ? tx.branch.findUnique({
-          where: { id: data.toBranchId },
-          select: { id: true },
-        })
-      : null,
+  const toBranch = data.toBranchId
+    ? await tx.branch.findUnique({
+        where: { id: data.toBranchId },
+        select: { id: true },
+      })
+    : null;
 
-    data.sourceAreaId
-      ? tx.area.findUnique({
-          where: { id: data.sourceAreaId },
-          select: { id: true },
-        })
-      : null,
+  const sourceArea = data.sourceAreaId
+    ? await tx.area.findUnique({
+        where: { id: data.sourceAreaId },
+        select: { id: true },
+      })
+    : null;
 
-    data.destinationAreaId
-      ? tx.area.findUnique({
-          where: { id: data.destinationAreaId },
-          select: { id: true },
-        })
-      : null,
+  const destinationArea = data.destinationAreaId
+    ? await tx.area.findUnique({
+        where: { id: data.destinationAreaId },
+        select: { id: true },
+      })
+    : null;
 
-    data.wagonCounts?.length
-      ? tx.wagon.findMany({
-          where: {
-            id: {
-              in: data.wagonCounts.map((item) => item.wagonId),
-            },
+  const wagons = data.wagonCounts?.length
+    ? await tx.wagon.findMany({
+        where: {
+          id: {
+            in: data.wagonCounts.map((item) => item.wagonId),
           },
-          select: { id: true },
-        })
-      : [],
-  ]);
+        },
+        select: { id: true },
+      })
+    : [];
 
   if (data.fromBranchId && !fromBranch) {
     throw new BadRequestError("From branch not found");
@@ -427,25 +417,25 @@ export const assertVPScheduleBranchAreaAlignment = async (
     destinationAreaId: string;
   },
 ) => {
-  const [fromBranch, toBranch, sourceArea, destinationArea] =
-    await Promise.all([
-      tx.branch.findUnique({
-        where: { id: data.fromBranchId },
-        select: { cityId: true },
-      }),
-      tx.branch.findUnique({
-        where: { id: data.toBranchId },
-        select: { cityId: true },
-      }),
-      tx.area.findUnique({
-        where: { id: data.sourceAreaId },
-        select: { cityId: true },
-      }),
-      tx.area.findUnique({
-        where: { id: data.destinationAreaId },
-        select: { cityId: true },
-      }),
-    ]);
+  const fromBranch = await tx.branch.findUnique({
+    where: { id: data.fromBranchId },
+    select: { cityId: true },
+  });
+
+  const toBranch = await tx.branch.findUnique({
+    where: { id: data.toBranchId },
+    select: { cityId: true },
+  });
+
+  const sourceArea = await tx.area.findUnique({
+    where: { id: data.sourceAreaId },
+    select: { cityId: true },
+  });
+
+  const destinationArea = await tx.area.findUnique({
+    where: { id: data.destinationAreaId },
+    select: { cityId: true },
+  });
 
   if (!fromBranch?.cityId) {
     throw new BadRequestError("From branch city not found");
