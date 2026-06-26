@@ -33,7 +33,8 @@ import {
   IconEdit,
   IconEye,
 } from "@tabler/icons-react";
-import { formatVPScheduleDate, VPScheduleStatusBadge } from "./vp-schedule-ui";
+import { formatVPScheduleDate, TruncatedTooltipText, VPScheduleStatusBadge } from "./vp-schedule-ui";
+import { TooltipProvider } from "@skerp/ui/components/tooltip";
 
 type VPScheduleRow = {
   id: string;
@@ -138,17 +139,14 @@ export default function VPScheduleTable({
     {
       id: "scheduleNumber",
       header: "Schedule No",
+      size: 180,
       cell: ({ row }) => (
-
-      
-  <Link
-  href={`/operations/vp-schedule/${encodeURIComponent(
-    String(row.original.scheduleNumber || row.original.id)
-  )}`}
-  className="font-medium text-primary hover:underline"
->
-
-        
+        <Link
+          href={`/operations/vp-schedule/${encodeURIComponent(
+            String(row.original.scheduleNumber || row.original.id),
+          )}`}
+          className="font-medium text-primary hover:underline"
+        >
           {row.original.scheduleNumber ?? "—"}
         </Link>
       ),
@@ -156,36 +154,51 @@ export default function VPScheduleTable({
     {
       id: "scheduleName",
       header: "Schedule Name",
-      cell: ({ row }) => row.original.scheduleName ?? "—",
+      size: 220,
+      cell: ({ row }) => (
+        <TruncatedTooltipText value={row.original.scheduleName ?? "—"} />
+      ),
     },
     {
       id: "scheduleDate",
       header: "Date",
+      size: 100,
       cell: ({ row }) => formatVPScheduleDate(row.original.scheduleDate),
     },
     {
       id: "route",
       header: "Route",
-      cell: ({ row }) => routeLabel(row.original),
+      size: 340,
+      cell: ({ row }) => (
+        <TruncatedTooltipText value={routeLabel(row.original)} />
+      ),
     },
     {
       id: "branch",
       header: "Branch",
-      cell: ({ row }) => branchLabel(row.original),
+      size: 180,
+      cell: ({ row }) => (
+        <TruncatedTooltipText value={branchLabel(row.original)} />
+      ),
     },
     {
       id: "totalWagonCount",
       header: "Wagons",
+      size: 90,
       cell: ({ row }) => row.original.totalWagonCount ?? 0,
     },
     {
       id: "capacity",
       header: "Capacity",
-      cell: ({ row }) => capacityLabel(row.original),
+      size: 150,
+      cell: ({ row }) => (
+        <TruncatedTooltipText value={capacityLabel(row.original)} />
+      ),
     },
     {
       id: "status",
       header: "Status",
+      size: 140,
       cell: ({ row }) => (
         <VPScheduleStatusBadge status={row.original.status} />
       ),
@@ -193,7 +206,10 @@ export default function VPScheduleTable({
     {
       id: "createdBy",
       header: "Created By",
-      cell: ({ row }) => createdByLabel(row.original),
+      size: 100,
+      cell: ({ row }) => (
+        <TruncatedTooltipText value={createdByLabel(row.original)} />
+      ),
     },
   ],
   [],
@@ -206,21 +222,24 @@ export default function VPScheduleTable({
   });
 
   return (
+     <TooltipProvider>
     <div className="w-full overflow-x-auto rounded-lg bg-card">
-      <Table className="w-full">
+      <Table className="w-full table-fixed">
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id} className="bg-muted/40">
               {headerGroup.headers.map((header) => (
                 <TableHead
-                  key={header.id}
-                  className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
-                >
-                  {flexRender(
-                    header.column.columnDef.header,
-                    header.getContext(),
-                  )}
-                </TableHead>
+  key={header.id}
+  className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
+  style={{
+    width: header.getSize(),
+    minWidth: header.getSize(),
+    maxWidth: header.getSize(),
+  }}
+>
+  {flexRender(header.column.columnDef.header, header.getContext())}
+</TableHead>
               ))}
 
               <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
@@ -268,12 +287,17 @@ export default function VPScheduleTable({
               return (
                 <TableRow key={row.id} className="hover:bg-muted/30">
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="h-12 text-sm">
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </TableCell>
+                    <TableCell
+  key={cell.id}
+  className="h-12 overflow-hidden text-sm"
+  style={{
+    width: cell.column.getSize(),
+    minWidth: cell.column.getSize(),
+    maxWidth: cell.column.getSize(),
+  }}
+>
+  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+</TableCell>
                   ))}
 
                   <TableCell className="w-16 text-right">
@@ -323,5 +347,6 @@ export default function VPScheduleTable({
         </TableBody>
       </Table>
     </div>
+    </TooltipProvider>
   );
 }

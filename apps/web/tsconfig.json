@@ -18,6 +18,6 @@
     "next-env.d.ts",
     "next.config.js",
     ".next/types/**/*.ts"
-, "app/(dashboard)/operations/vp-schedule"  ],
+  ],
   "exclude": ["node_modules"]
 }

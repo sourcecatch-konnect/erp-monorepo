@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { VPSchedule } from "@skerp/types";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@skerp/ui/components/tooltip";
 
 export type VPScheduleStatus = VPSchedule["status"];
 
@@ -87,3 +88,31 @@ export const formatVPScheduleDateTime = (date?: string | Date | null) => {
     minute: "2-digit",
   });
 };
+export function TruncatedTooltipText({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) {
+  if (!value || value === "—") {
+    return <span>—</span>;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={`block max-w-full truncate ${className ?? ""}`}
+          title={value}
+        >
+          {value}
+        </span>
+      </TooltipTrigger>
+
+      <TooltipContent side="top" className="max-w-sm whitespace-normal">
+        {value}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
