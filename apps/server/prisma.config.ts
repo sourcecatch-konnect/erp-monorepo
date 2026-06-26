@@ -10,6 +10,6 @@ export default defineConfig({
   datasource: {
     url: env("DIRECT_URL"),
     // Empty Neon DB Prisma replays migrations into to diff/generate them (Supabase can't auto-create a shadow).
-    shadowDatabaseUrl: env("SHADOW_DATABASE_URL"),
+    // shadowDatabaseUrl: env("SHADOW_DATABASE_URL"),
   },
 });

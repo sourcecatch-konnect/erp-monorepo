@@ -1,5 +1,5 @@
 import { ComponentType } from "react";
-import { IconBox, IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch,IconGasStation ,IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld, IconTrain } from "@tabler/icons-react";
+import { IconBox, IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch,IconGasStation ,IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld, IconTrain, IconBuildingBank, IconCash } from "@tabler/icons-react";
 
 export type MasterCategory = "Location";
 
@@ -30,7 +30,9 @@ permissionKey:
   | "masters.goods"
   | "masters.warehouse"
   | "masters.pump"
-  | "masters.vehicle-type";
+  | "masters.vehicle-type"
+  | "masters.creditor"
+  | "masters.cash-account";
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -202,6 +204,22 @@ export const masterRegistry = [
   category: "Location",
   permissionKey: "masters.rate-matrix", // or better: "masters.rate-matrix"
   page: () => import("./rateMatrix/page"),
+},
+{
+  slug: "creditor",
+  label: "Creditor",
+  icon: IconBuildingBank,
+  category: "Location",
+  permissionKey: "masters.creditor",
+  page: () => import("./creditor/page"),
+},
+{
+  slug: "cash-account",
+  label: "Cash Account",
+  icon: IconCash,
+  category: "Location",
+  permissionKey: "masters.cash-account",
+  page: () => import("./cash-account/page"),
 },
 ] satisfies MasterEntry[];
 

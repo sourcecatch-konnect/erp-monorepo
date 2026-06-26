@@ -40,6 +40,9 @@ import adminRoute from "./modules/admin/admin.route.js";
 import notificationRoute from "./modules/notifications/notification.route.js";
 import attachmentRoute from "./modules/attachments/attachment.route.js";
 import trackingRoute from "./modules/tracking/tracking.route.js";
+import creditorRoute from "./modules/creditor/creditor.route.js";
+import cashAccountRoute from "./modules/cash-account/cash-account.route.js";
+import cashPlanningRoute from "./modules/cash-planning/cash-planning.route.js";
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
@@ -97,6 +100,9 @@ app.use("/goods", goodsRoute)
 app.use("/wagons", wagonRoute)
 app.use("/agreements", agreementRoute)
 app.use("/pumps", pumpRoute)
+app.use("/creditors", creditorRoute)
+app.use("/cash-accounts", cashAccountRoute)
+app.use("/cash-planning", cashPlanningRoute)
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);

@@ -66,11 +66,11 @@ export default function ConsignmentLinesEditor({
   truckCount: number;
 }) {
   const {
-  control,
-  trigger,
-  getValues,
-  formState: { isSubmitted },
-} = useFormContext<FormValues>();
+    control,
+    trigger,
+    getValues,
+    formState: { isSubmitted },
+  } = useFormContext<FormValues>();
 
   const { fields, append, remove } = useFieldArray<FormValues, "consignments">({
     control,
@@ -99,24 +99,24 @@ export default function ConsignmentLinesEditor({
   );
 
   React.useEffect(() => {
-  const current = getValues("consignments") ?? [];
+    const current = getValues("consignments") ?? [];
 
-  if (current.length === 0) {
-    append({
-      truckIndex: 1,
-      loadingLocationId: undefined,
-      unloadingLocationId: undefined,
-      goods: [emptyGoods()],
-    });
-  }
-}, [append, getValues]);
-React.useEffect(() => {
-  const current = getValues("consignments") ?? [];
+    if (current.length === 0) {
+      append({
+        truckIndex: 1,
+        loadingLocationId: undefined,
+        unloadingLocationId: undefined,
+        goods: [emptyGoods()],
+      });
+    }
+  }, [append, getValues]);
+  React.useEffect(() => {
+    const current = getValues("consignments") ?? [];
 
-  if (truckCount === 1 && current.length > 1) {
-    remove(1);
-  }
-}, [truckCount, getValues, remove]);
+    if (truckCount === 1 && current.length > 1) {
+      remove(1);
+    }
+  }, [truckCount, getValues, remove]);
   return (
     <div className="space-y-3">
       <AnimatePresence initial={false}>
