@@ -15,9 +15,6 @@ export const dayInclude = {
     },
     orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
   },
-  receivables: {
-    orderBy: [{ expectedDate: "asc" }, { createdAt: "asc" }],
-  },
 } satisfies Prisma.CashPlanDayInclude;
 
 type DayWithRelations = Prisma.CashPlanDayGetPayload<{ include: typeof dayInclude }>;
@@ -58,29 +55,38 @@ export function buildDayView(day: DayWithRelations) {
     .filter((p) => p.status === "PENDING")
     .reduce((s, p) => s + Number(p.amount), 0);
 
-  const receivables = day.receivables.map((r) => ({
-    ...r,
-    amount: Number(r.amount),
-    receivedAmount: r.receivedAmount === null ? null : Number(r.receivedAmount),
-  }));
-  // Expected = receivables not yet acknowledged as received.
-  const expectedReceivables = receivables
-    .filter((r) => !r.ackReceived)
-    .reduce((s, r) => s + r.amount, 0);
-
-  const availableCash = totalOpening - approvedTotal;
-
   return {
     ...day,
     balances,
     payments: day.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
-    receivables,
     totalOpening,
     approvedTotal,
     pendingTotal,
-    availableCash,
-    expectedReceivables,
-    projectedCash: availableCash + expectedReceivables,
+    availableCash: totalOpening - approvedTotal,
+  };
+}
+
+/**
+ * Build the global receivables ledger: every receivable ordered by expected
+ * date, plus pending/expected subtotals (unreceived only). All money is paise.
+ */
+export async function buildReceivablesView() {
+  const rows = await db.cashReceivable.findMany({
+    orderBy: [{ expectedDate: "asc" }, { createdAt: "asc" }],
+  });
+
+  const receivables = rows.map((r) => ({
+    ...r,
+    totalAmount: Number(r.totalAmount),
+    expectedAmount: Number(r.expectedAmount),
+    receivedAmount: r.receivedAmount === null ? null : Number(r.receivedAmount),
+  }));
+
+  const open = receivables.filter((r) => !r.ackReceived);
+  return {
+    receivables,
+    totalPending: open.reduce((s, r) => s + r.totalAmount, 0),
+    totalExpected: open.reduce((s, r) => s + r.expectedAmount, 0),
   };
 }
 

@@ -15,6 +15,7 @@ import {
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
+import { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
@@ -28,6 +29,7 @@ import {
 import {
   buildDayView,
   buildLedgerView,
+  buildReceivablesView,
   dayInclude,
   findDay,
   poolTotals,
@@ -393,62 +395,58 @@ router.put(
       throw new BadRequestError("orderedIds contains unknown payments");
     }
 
-    await db.$transaction(
-      parsed.data.orderedIds.map((pid, index) =>
-        db.cashPayment.update({
-          where: { id: pid },
-          data: { priority: index + 1 },
-        }),
-      ),
+    // One UPDATE … CASE so reordering is a single round-trip. The previous
+    // per-row update loop opened an interactive transaction and blew the 5s
+    // budget on larger queues (Transaction API error: expired transaction).
+    const cases = parsed.data.orderedIds.map(
+      (pid, index) => Prisma.sql`WHEN ${pid} THEN ${index + 1}`,
     );
+    await db.$executeRaw`
+      UPDATE "CashPayment"
+      SET "priority" = CASE "id" ${Prisma.join(cases, " ")} END,
+          "updatedAt" = NOW()
+      WHERE "id" IN (${Prisma.join(parsed.data.orderedIds)})
+    `;
 
     const fresh = await findDay(id);
     return sendOk(res, buildDayView(fresh!));
   },
 );
 
-/* ───────────────────────── Receivables ───────────────────────── */
+/* ──────────────────── Receivables (global) ──────────────────── */
 
-router.post(
-  "/days/:id/receivables",
-  can(PERMS.CASH_PLANNING.ENTER),
-  async (req, res) => {
-    const id = getParamId(req);
-    const day = await loadDayOr404(id);
-    assertOpen(day.status);
+// List all receivables with pending / expected subtotals.
+router.get("/receivables", can(PERMS.CASH_PLANNING.VIEW), async (_req, res) => {
+  return sendOk(res, await buildReceivablesView());
+});
 
-    const parsed = createCashReceivableSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
-    const b = parsed.data;
+router.post("/receivables", can(PERMS.CASH_PLANNING.ENTER), async (req, res) => {
+  const parsed = createCashReceivableSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+  const b = parsed.data;
 
-    await db.cashReceivable.create({
-      data: {
-        dayId: id,
-        partyName: b.partyName,
-        amount: BigInt(b.amount),
-        expectedDate: parseReceivableDate(b.expectedDate),
-        note: b.note ?? null,
-      },
-    });
+  await db.cashReceivable.create({
+    data: {
+      partyName: b.partyName,
+      totalAmount: BigInt(b.totalAmount),
+      expectedAmount: BigInt(b.expectedAmount),
+      expectedDate: parseReceivableDate(b.expectedDate),
+      note: b.note ?? null,
+    },
+  });
 
-    const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!), undefined, 201);
-  },
-);
+  return sendOk(res, await buildReceivablesView(), undefined, 201);
+});
 
 router.patch(
   "/receivables/:id",
   can(PERMS.CASH_PLANNING.ENTER),
   async (req, res) => {
     const id = getParamId(req);
-    const existing = await db.cashReceivable.findUnique({
-      where: { id },
-      include: { day: { select: { status: true } } },
-    });
+    const existing = await db.cashReceivable.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Receivable not found");
-    assertOpen(existing.day.status);
 
     const parsed = updateCashReceivableSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -460,7 +458,12 @@ router.patch(
       where: { id },
       data: {
         ...(b.partyName !== undefined ? { partyName: b.partyName } : {}),
-        ...(b.amount !== undefined ? { amount: BigInt(b.amount) } : {}),
+        ...(b.totalAmount !== undefined
+          ? { totalAmount: BigInt(b.totalAmount) }
+          : {}),
+        ...(b.expectedAmount !== undefined
+          ? { expectedAmount: BigInt(b.expectedAmount) }
+          : {}),
         ...(b.expectedDate !== undefined
           ? { expectedDate: parseReceivableDate(b.expectedDate) }
           : {}),
@@ -468,8 +471,7 @@ router.patch(
       },
     });
 
-    const fresh = await findDay(existing.dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, await buildReceivablesView());
   },
 );
 
@@ -478,12 +480,8 @@ router.post(
   can(PERMS.CASH_PLANNING.ENTER),
   async (req, res) => {
     const id = getParamId(req);
-    const existing = await db.cashReceivable.findUnique({
-      where: { id },
-      include: { day: { select: { status: true } } },
-    });
+    const existing = await db.cashReceivable.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Receivable not found");
-    assertOpen(existing.day.status);
 
     const parsed = markReceivableReceivedSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -498,8 +496,7 @@ router.post(
       },
     });
 
-    const fresh = await findDay(existing.dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, await buildReceivablesView());
   },
 );
 
@@ -508,17 +505,12 @@ router.delete(
   can(PERMS.CASH_PLANNING.ENTER),
   async (req, res) => {
     const id = getParamId(req);
-    const existing = await db.cashReceivable.findUnique({
-      where: { id },
-      include: { day: { select: { status: true } } },
-    });
+    const existing = await db.cashReceivable.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Receivable not found");
-    assertOpen(existing.day.status);
 
     await db.cashReceivable.delete({ where: { id } });
 
-    const fresh = await findDay(existing.dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, await buildReceivablesView());
   },
 );
 

@@ -3,4 +3,5 @@ export const cashPlanningKeys = {
   day: (date: string) => [...cashPlanningKeys.all, "day", date] as const,
   days: () => [...cashPlanningKeys.all, "days"] as const,
   ledger: () => [...cashPlanningKeys.all, "ledger"] as const,
+  receivables: () => [...cashPlanningKeys.all, "receivables"] as const,
 };

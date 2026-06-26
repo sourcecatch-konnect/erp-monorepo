@@ -8,6 +8,7 @@ import type {
   UpsertCashBalancesBody,
   PaymentStatus,
   CreditorLedgerView,
+  ReceivablesView,
   CreateCashReceivableBody,
   UpdateCashReceivableBody,
 } from "@skerp/types";
@@ -114,13 +115,19 @@ export const cashPlanningApi = {
     return unwrapApiResponse(res);
   },
 
-  // ── receivables ──
+  // ── receivables (global) ──
+  listReceivables: async (): Promise<ReceivablesView> => {
+    const res = await api.get<ApiResponse<ReceivablesView>>(
+      "/cash-planning/receivables",
+    );
+    return unwrapApiResponse(res);
+  },
+
   addReceivable: async (
-    dayId: string,
     body: CreateCashReceivableBody,
-  ): Promise<CashPlanDayView> => {
-    const res = await api.post<ApiResponse<CashPlanDayView>>(
-      `/cash-planning/days/${dayId}/receivables`,
+  ): Promise<ReceivablesView> => {
+    const res = await api.post<ApiResponse<ReceivablesView>>(
+      "/cash-planning/receivables",
       body,
     );
     return unwrapApiResponse(res);
@@ -129,8 +136,8 @@ export const cashPlanningApi = {
   updateReceivable: async (
     id: string,
     body: UpdateCashReceivableBody,
-  ): Promise<CashPlanDayView> => {
-    const res = await api.patch<ApiResponse<CashPlanDayView>>(
+  ): Promise<ReceivablesView> => {
+    const res = await api.patch<ApiResponse<ReceivablesView>>(
       `/cash-planning/receivables/${id}`,
       body,
     );
@@ -140,16 +147,16 @@ export const cashPlanningApi = {
   markReceived: async (
     id: string,
     receivedAmount: number,
-  ): Promise<CashPlanDayView> => {
-    const res = await api.post<ApiResponse<CashPlanDayView>>(
+  ): Promise<ReceivablesView> => {
+    const res = await api.post<ApiResponse<ReceivablesView>>(
       `/cash-planning/receivables/${id}/received`,
       { receivedAmount, ackReceived: true },
     );
     return unwrapApiResponse(res);
   },
 
-  deleteReceivable: async (id: string): Promise<CashPlanDayView> => {
-    const res = await api.delete<ApiResponse<CashPlanDayView>>(
+  deleteReceivable: async (id: string): Promise<ReceivablesView> => {
+    const res = await api.delete<ApiResponse<ReceivablesView>>(
       `/cash-planning/receivables/${id}`,
     );
     return unwrapApiResponse(res);

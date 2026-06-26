@@ -24,6 +24,13 @@ import type {
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
 import { formatPaise } from "@/lib/money";
 
 import { cashPlanningApi } from "./cash-planning.service";
@@ -40,7 +47,8 @@ type Props = {
 
 const CATEGORIES = ["DIESEL", "RENT", "FREIGHT", "EXPENSE", "REPAIR", "OTHER"] as const;
 const MODES = ["CASH", "BANK", "UPI", "CHEQUE"] as const;
-const SEGMENTS: (CashSegment | "")[] = ["", "ROAD", "RAIL", "FCI"];
+const SEGMENTS: CashSegment[] = ["ROAD", "RAIL", "FCI"];
+const NO_SEGMENT = "NONE";
 
 const labelOf = (v: string) =>
   v.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -259,47 +267,59 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
 
           <div className="grid gap-1">
             <label className="text-[11px] text-muted-foreground">Category</label>
-            <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            <Select
               value={category}
-              onChange={(e) => setCategory(e.target.value as typeof category)}
+              onValueChange={(v) => setCategory(v as typeof category)}
             >
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {labelOf(c)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-9 w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {labelOf(c)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid gap-1">
             <label className="text-[11px] text-muted-foreground">Mode</label>
-            <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as typeof mode)}
-            >
-              {MODES.map((m) => (
-                <option key={m} value={m}>
-                  {labelOf(m)}
-                </option>
-              ))}
-            </select>
+            <Select value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
+              <SelectTrigger className="h-9 w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODES.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {labelOf(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid gap-1">
             <label className="text-[11px] text-muted-foreground">Segment</label>
-            <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-              value={segment}
-              onChange={(e) => setSegment(e.target.value as CashSegment | "")}
+            <Select
+              value={segment === "" ? NO_SEGMENT : segment}
+              onValueChange={(v) =>
+                setSegment(v === NO_SEGMENT ? "" : (v as CashSegment))
+              }
             >
-              {SEGMENTS.map((s) => (
-                <option key={s || "none"} value={s}>
-                  {s ? labelOf(s) : "—"}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-9 w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_SEGMENT}>—</SelectItem>
+                {SEGMENTS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {labelOf(s)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Button size="sm" onClick={() => add.mutate()} disabled={!canSubmit}>

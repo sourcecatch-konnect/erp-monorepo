@@ -1239,9 +1239,8 @@ model CashPlanDay {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  balances    CashAccountBalance[]
-  payments    CashPayment[]
-  receivables CashReceivable[]
+  balances CashAccountBalance[]
+  payments CashPayment[]
 }
 
 model CashAccountBalance {
@@ -1288,21 +1287,20 @@ model CashPayment {
   @@index([status])
 }
 
+// Global (not day-scoped). One row per party/invoice still owed to us. Carries
+// the full outstanding (totalAmount) plus the slice expected by expectedDate
+// (expectedAmount) — the day forecast sums the expected slices due by the day.
 model CashReceivable {
   id             String    @id @default(cuid())
-  dayId          String
   partyName      String
-  amount         BigInt // expected amount (paise)
+  totalAmount    BigInt // total still to be received from this party (paise)
+  expectedAmount BigInt    @default(0) // slice expected by expectedDate (paise)
   expectedDate   DateTime? @db.Date
   receivedAmount BigInt? // actual received (paise), null until received
   ackReceived    Boolean   @default(false)
   note           String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
-
-  day CashPlanDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
-
-  @@index([dayId])
 }
 
 enum CreditorCategory {

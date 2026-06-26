@@ -99,7 +99,6 @@ export type CashPlanDayView = CashPlanDay & {
   balances: CashAccountBalanceWithAccount[];
   /** ordered by priority asc (top = pay first) */
   payments: CashPaymentWithCreditor[];
-  receivables: CashReceivable[];
   /** Σ opening balances (paise) */
   totalOpening: number;
   /** Σ approved payments (paise) */
@@ -108,10 +107,18 @@ export type CashPlanDayView = CashPlanDay & {
   pendingTotal: number;
   /** totalOpening − approvedTotal (paise) */
   availableCash: number;
-  /** Σ expected receivables not yet received (paise) */
-  expectedReceivables: number;
-  /** availableCash + expectedReceivables (paise) — short forecast */
-  projectedCash: number;
+};
+
+/**
+ * Global receivables ledger. Receivables are no longer tied to a day; the
+ * day forecast combines `availableCash` with the expected slices due by it.
+ */
+export type ReceivablesView = {
+  receivables: CashReceivable[];
+  /** Σ totalAmount of receivables not yet acknowledged received (paise) */
+  totalPending: number;
+  /** Σ expectedAmount of receivables not yet acknowledged received (paise) */
+  totalExpected: number;
 };
 
 /** A category group in the creditor ledger view. */

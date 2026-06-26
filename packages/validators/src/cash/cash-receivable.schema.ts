@@ -16,12 +16,13 @@ const amountPaise = z
 
 /* -----------------------------
    RECEIVABLE ENTITY (DB / API)
+   Global — not tied to a cash-plan day.
 ------------------------------ */
 export const cashReceivableSchema = z.object({
   id: z.string(),
-  dayId: z.string(),
   partyName: z.string(),
-  amount: z.number(), // paise
+  totalAmount: z.number(), // total still to receive (paise)
+  expectedAmount: z.number(), // slice expected by expectedDate (paise)
   expectedDate: z.date().nullable().optional(),
   receivedAmount: z.number().nullable().optional(),
   ackReceived: z.boolean(),
@@ -32,16 +33,17 @@ export const cashReceivableSchema = z.object({
 
 /* -----------------------------
    CREATE / UPDATE
-   (dayId comes from the route param)
 ------------------------------ */
-export const createCashReceivableSchema = z.object({
+const cashReceivableFields = z.object({
   partyName: z
     .string()
     .trim()
     .min(1, "Party is required")
     .max(120, "Party name cannot exceed 120 characters"),
 
-  amount: amountPaise,
+  totalAmount: amountPaise,
+
+  expectedAmount: amountPaise.optional().default(0),
 
   expectedDate: z
     .string()
@@ -51,7 +53,28 @@ export const createCashReceivableSchema = z.object({
   note: optionalString,
 });
 
-export const updateCashReceivableSchema = createCashReceivableSchema.partial();
+/** expected slice must never exceed the total still owed. */
+const expectedWithinTotal = (v: {
+  totalAmount?: number;
+  expectedAmount?: number;
+}) =>
+  v.totalAmount === undefined ||
+  v.expectedAmount === undefined ||
+  v.expectedAmount <= v.totalAmount;
+
+const expectedWithinTotalError = {
+  message: "Expected amount cannot exceed the total amount",
+  path: ["expectedAmount"],
+};
+
+export const createCashReceivableSchema = cashReceivableFields.refine(
+  expectedWithinTotal,
+  expectedWithinTotalError,
+);
+
+export const updateCashReceivableSchema = cashReceivableFields
+  .partial()
+  .refine(expectedWithinTotal, expectedWithinTotalError);
 
 /* -----------------------------
    MARK RECEIVED

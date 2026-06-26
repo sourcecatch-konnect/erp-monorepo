@@ -3,11 +3,12 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconCalendar, IconLock, IconPlus } from "@tabler/icons-react";
+import { IconLock, IconPlus } from "@tabler/icons-react";
 
 import type { CashPlanDayView } from "@skerp/types";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
+import { DatePicker } from "@skerp/ui/components/datepicker";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   Tabs,
@@ -26,6 +27,13 @@ import CreditorLedgerView from "./CreditorLedgerView";
 import ReceivablesPanel from "./ReceivablesPanel";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** Local-date YYYY-MM-DD (avoids the UTC shift from toISOString). */
+const toIsoDate = (d: Date): string => {
+  const m = `${d.getMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getDate()}`.padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 
 function HeaderStat({
   label,
@@ -69,6 +77,24 @@ export default function CashPlanningPage() {
     queryFn: () => cashPlanningApi.getDay(date),
   });
 
+  // Global receivables — used here only to project cash for the selected day.
+  const receivablesQuery = useQuery({
+    queryKey: cashPlanningKeys.receivables(),
+    queryFn: () => cashPlanningApi.listReceivables(),
+  });
+
+  const expectedByDay = React.useMemo(() => {
+    const rows = receivablesQuery.data?.receivables ?? [];
+    return rows
+      .filter(
+        (r) =>
+          !r.ackReceived &&
+          r.expectedDate != null &&
+          toIsoDate(new Date(r.expectedDate)) <= date,
+      )
+      .reduce((s, r) => s + r.expectedAmount, 0);
+  }, [receivablesQuery.data, date]);
+
   const openDay = useMutation({
     mutationFn: () => cashPlanningApi.openDay(date),
     onSuccess: (view) => {
@@ -104,20 +130,18 @@ export default function CashPlanningPage() {
             <div className="flex gap-2">
               <HeaderStat label="Available" value={formatPaise(day.availableCash)} tone={day.availableCash < 0 ? "bad" : "ok"} />
               <HeaderStat label="Pending" value={formatPaise(day.pendingTotal)} />
-              <HeaderStat label="Projected" value={formatPaise(day.projectedCash)} />
+              <HeaderStat
+                label="Projected"
+                value={formatPaise(day.availableCash + expectedByDay)}
+              />
             </div>
           ) : null}
 
-          <div className="relative">
-            <IconCalendar
-              size={15}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="h-9 rounded-md border border-input bg-card pl-8 pr-3 text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+          <div className="w-44">
+            <DatePicker
+              selected={new Date(`${date}T00:00:00`)}
+              onSelect={(d) => d && setDate(toIsoDate(d))}
+              clearable={false}
             />
           </div>
 
