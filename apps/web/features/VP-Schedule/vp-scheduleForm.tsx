@@ -246,20 +246,9 @@ const destinationAreaOptions =
     value: area.id,
   })) ?? [];
 
-const availableWagons = useQuery({
-  queryKey:
-    watchedSourceAreaId && watchedDestinationAreaId
-      ? vpScheduleLookupKeys.availableWagons(
-          watchedSourceAreaId,
-          watchedDestinationAreaId,
-        )
-      : ["vp-schedule-lookups", "available-wagons-empty"],
-  queryFn: () =>
-    vpScheduleLookups.availableWagons(
-      watchedSourceAreaId,
-      watchedDestinationAreaId,
-    ),
-  enabled: Boolean(watchedSourceAreaId && watchedDestinationAreaId),
+const wagons = useQuery({
+  queryKey: vpScheduleLookupKeys.wagons,
+  queryFn: vpScheduleLookups.wagons,
 });
   
 
@@ -370,42 +359,12 @@ React.useEffect(() => {
   watchedDestinationAreaId,
 ]);
   const watchedWagons = form.watch("wagonCounts") ?? [];
-  const wagonOptions = availableWagons.data ?? [];
+  const wagonOptions = wagons.data ?? [];
   const wagonMap = React.useMemo(
     () => new Map(wagonOptions.map((wagon) => [wagon.value, wagon])),
     [wagonOptions],
   );
 
-React.useEffect(() => {
-  if (
-    !watchedSourceAreaId ||
-    !watchedDestinationAreaId ||
-    availableWagons.isLoading
-  ) {
-    return;
-  }
-
-  const availableIds = new Set(
-    (availableWagons.data ?? []).map((wagon) => wagon.value),
-  );
-  const rows = form.getValues("wagonCounts") ?? [];
-  const hasUnavailable = rows.some(
-    (row) => row.wagonId && !availableIds.has(row.wagonId),
-  );
-
-  if (hasUnavailable) {
-    form.setValue("wagonCounts", [emptyWagonRow], {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  }
-}, [
-  availableWagons.data,
-  availableWagons.isLoading,
-  form,
-  watchedSourceAreaId,
-  watchedDestinationAreaId,
-]);
 
   const totalWagons = watchedWagons.reduce(
     (sum, row) => sum + (Number(row?.count) || 0),
@@ -511,12 +470,13 @@ const onSubmit = async (values: CreateVPScheduleBody) => {
               )}
             />
 
-            <TextField<CreateVPScheduleFormInput>
-              name="scheduleName"
-              label="Schedule name"
-              placeholder="Auto-generated from route and schedule date"
-              required
-            />
+<TextField<CreateVPScheduleFormInput>
+  name="scheduleName"
+  label="Schedule name"
+  placeholder="Auto-generated from route and schedule date"
+  required
+  disabled
+/>
           </FormSection>
 
           <FormSection
@@ -597,22 +557,9 @@ const onSubmit = async (values: CreateVPScheduleBody) => {
                                 options={wagonOptions}
                                 value={field.value}
                                 onChange={field.onChange}
-                                placeholder={
-                                  watchedSourceAreaId && watchedDestinationAreaId
-                                    ? "Select wagon"
-                                    : "Select route areas first"
-                                }
-                                searchPlaceholder="Search wagon..."
-                                emptyText={
-                                  watchedSourceAreaId && watchedDestinationAreaId
-                                    ? "No railway freight wagons found for this route"
-                                    : "Select source and destination area first"
-                                }
-                                disabled={
-                                  !watchedSourceAreaId ||
-                                  !watchedDestinationAreaId ||
-                                  availableWagons.isLoading
-                                }
+                                placeholder="Select wagon"
+                                emptyText="No wagons found"
+                                disabled={wagons.isLoading}
                                 invalid={Boolean(wagonError)}
                               />
                             )}

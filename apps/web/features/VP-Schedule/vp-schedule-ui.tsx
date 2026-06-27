@@ -90,12 +90,17 @@ export const formatVPScheduleDateTime = (date?: string | Date | null) => {
 };
 export function TruncatedTooltipText({
   value,
+  tooltipValue,
   className,
 }: {
   value: string;
+  tooltipValue?: string;
   className?: string;
 }) {
-  if (!value || value === "—") {
+  const displayValue = value || "—";
+  const tooltipText = tooltipValue || displayValue;
+
+  if (!displayValue || displayValue === "—") {
     return <span>—</span>;
   }
 
@@ -104,15 +109,15 @@ export function TruncatedTooltipText({
       <TooltipTrigger asChild>
         <span
           className={`block max-w-full truncate ${className ?? ""}`}
-          title={value}
+          title={tooltipText}
         >
-          {value}
+          {displayValue}
         </span>
       </TooltipTrigger>
 
-      <TooltipContent side="top" className="max-w-sm whitespace-normal">
-        {value}
-      </TooltipContent>
+      <TooltipContent side="top" className="max-w-sm whitespace-pre-line break-words">
+  {tooltipText}
+</TooltipContent>
     </Tooltip>
   );
 }

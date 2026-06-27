@@ -56,12 +56,40 @@ const vpScheduleWhereByIdentifier = (identifier: string) => ({
 
 const buildWagonCountRows = async (
   tx: Prisma.TransactionClient,
-  wagonCounts: {
-    wagonId: string;
-    count: number;
-  }[],
+  data: {
+    sourceAreaId: string;
+    destinationAreaId: string;
+    wagonCounts: {
+      wagonId: string;
+      count: number;
+    }[];
+  },
 ) => {
-  const wagonIds = wagonCounts.map((item) => item.wagonId);
+  const sourceArea = await tx.area.findUnique({
+    where: { id: data.sourceAreaId },
+    select: {
+      id: true,
+      cityId: true,
+    },
+  });
+
+  const destinationArea = await tx.area.findUnique({
+    where: { id: data.destinationAreaId },
+    select: {
+      id: true,
+      cityId: true,
+    },
+  });
+
+  if (!sourceArea) {
+    throw new BadRequestError("Source area not found");
+  }
+
+  if (!destinationArea) {
+    throw new BadRequestError("Destination area not found");
+  }
+
+  const wagonIds = data.wagonCounts.map((item) => item.wagonId);
 
   const wagons = await tx.wagon.findMany({
     where: {
@@ -76,13 +104,83 @@ const buildWagonCountRows = async (
     },
   });
 
+  const freightMatrices = await tx.railwayFreightMatrix.findMany({
+    where: {
+      wagonId: {
+        in: wagonIds,
+      },
+      sourceCityId: sourceArea.cityId,
+      destinationCityId: destinationArea.cityId,
+      OR: [
+        {
+          sourceAreaId: sourceArea.id,
+          destinationAreaId: destinationArea.id,
+        },
+        {
+          sourceAreaId: sourceArea.id,
+          destinationAreaId: null,
+        },
+        {
+          sourceAreaId: null,
+          destinationAreaId: destinationArea.id,
+        },
+        {
+          sourceAreaId: null,
+          destinationAreaId: null,
+        },
+      ],
+    },
+    select: {
+      id: true,
+      wagonId: true,
+      sourceAreaId: true,
+      destinationAreaId: true,
+      freightAmount: true,
+    },
+  });
+
   const wagonMap = new Map(wagons.map((wagon) => [wagon.id, wagon]));
 
-  return wagonCounts.map((item) => {
+  const findBestFreightMatrix = (wagonId: string) => {
+    const matches = freightMatrices.filter(
+      (matrix) => matrix.wagonId === wagonId,
+    );
+
+    return (
+      matches.find(
+        (matrix) =>
+          matrix.sourceAreaId === sourceArea.id &&
+          matrix.destinationAreaId === destinationArea.id,
+      ) ??
+      matches.find(
+        (matrix) =>
+          matrix.sourceAreaId === sourceArea.id &&
+          matrix.destinationAreaId === null,
+      ) ??
+      matches.find(
+        (matrix) =>
+          matrix.sourceAreaId === null &&
+          matrix.destinationAreaId === destinationArea.id,
+      ) ??
+      matches.find(
+        (matrix) =>
+          matrix.sourceAreaId === null && matrix.destinationAreaId === null,
+      ) ??
+      null
+    );
+  };
+
+  return data.wagonCounts.map((item) => {
     const wagon = wagonMap.get(item.wagonId);
 
     if (!wagon) {
       throw new BadRequestError("Selected wagon not found");
+    }
+
+    const freightMatrix = findBestFreightMatrix(item.wagonId);
+
+    if (!freightMatrix) {
+      throw new BadRequestError("Railway freight not found for selected wagon");
     }
 
     const capacityCft = Number(wagon.totalCft ?? 0);
@@ -91,14 +189,18 @@ const buildWagonCountRows = async (
     return {
       wagonId: item.wagonId,
       count: item.count,
+
       capacityCft,
       capacityMt,
       totalCft: capacityCft * item.count,
       totalMt: capacityMt * item.count,
+
+      freightMatrixId: freightMatrix.id,
+      freightAmount: freightMatrix.freightAmount,
+      totalFreight: freightMatrix.freightAmount * BigInt(item.count),
     };
   });
 };
-
 /* ------------------------------------------------------------------ */
 /* List                                                               */
 /* ------------------------------------------------------------------ */
@@ -258,7 +360,11 @@ router.post("/", can(PERMS.VP_SCHEDULE.CREATE), async (req, res) => {
   await assertVPScheduleFreightMatrices(readClient, data);
 
   const totals = await calculateVPScheduleTotals(readClient, data.wagonCounts);
-  const wagonRows = await buildWagonCountRows(readClient, data.wagonCounts);
+  const wagonRows = await buildWagonCountRows(readClient, {
+  sourceAreaId: data.sourceAreaId,
+  destinationAreaId: data.destinationAreaId,
+  wagonCounts: data.wagonCounts,
+});
 
   const schedule = await db.$transaction(async (tx) => {
     const { scheduleNumber } = await generateVPScheduleNumber(
@@ -383,7 +489,11 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
     data.wagonCounts
       ? {
           totals: await calculateVPScheduleTotals(readClient, data.wagonCounts),
-          rows: await buildWagonCountRows(readClient, data.wagonCounts),
+          rows: await buildWagonCountRows(readClient, {
+  sourceAreaId: effectiveRoute.sourceAreaId,
+  destinationAreaId: effectiveRoute.destinationAreaId,
+  wagonCounts: data.wagonCounts,
+}),
         }
       : null;
 

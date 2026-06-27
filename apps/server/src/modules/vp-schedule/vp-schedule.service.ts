@@ -23,36 +23,21 @@ type VPScheduleFreightMatrixInput = {
 export const vpScheduleListSelect = {
   id: true,
   scheduleNumber: true,
-  scheduleDate: true,
   scheduleName: true,
+  scheduleDate: true,
   status: true,
-  totalWagonCount: true,
-  totalCapacityCft: true,
-  totalCapacityMt: true,
   remarks: true,
-  createdAt: true,
-  updatedAt: true,
-
-  fromBranch: {
-    select: {
-      id: true,
-      branchCode: true,
-      name: true,
-    },
-  },
-
-  toBranch: {
-    select: {
-      id: true,
-      branchCode: true,
-      name: true,
-    },
-  },
 
   sourceArea: {
     select: {
       id: true,
       name: true,
+      city: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   },
 
@@ -60,12 +45,37 @@ export const vpScheduleListSelect = {
     select: {
       id: true,
       name: true,
+      city: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   },
 
-  createdBy: {
+  fromBranch: {
     select: {
       id: true,
+      name: true,
+      branchCode: true,
+    },
+  },
+
+  toBranch: {
+    select: {
+      id: true,
+      name: true,
+      branchCode: true,
+    },
+  },
+
+  totalWagonCount: true,
+  totalCapacityMt: true,
+  totalCapacityCft: true,
+
+  createdBy: {
+    select: {
       firstName: true,
       lastName: true,
     },

@@ -610,20 +610,20 @@ model City {
 }
 
 model Area {
-  id                       String             @id @default(cuid())
-  name                     String
-  cityId                   String
-  formattedAddress         String?
-  googlePlaceId            String?            @unique
-  isRailHead               Boolean            @default(false)
-  latitude                 Float?
-  longitude                Float?
+  id               String  @id @default(cuid())
+  name             String
+  cityId           String
+  formattedAddress String?
+  googlePlaceId    String? @unique
+  isRailHead       Boolean @default(false)
+  latitude         Float?
+  longitude        Float?
 
-  customerLocations        CustomerLocation[]
-  city                     City               @relation(fields: [cityId], references: [id])
+  customerLocations CustomerLocation[]
+  city              City               @relation(fields: [cityId], references: [id])
 
-  vpSchedulesAsSource      VPSchedule[]       @relation("VPScheduleSourceArea")
-  vpSchedulesAsDestination VPSchedule[]       @relation("VPScheduleDestinationArea")
+  vpSchedulesAsSource      VPSchedule[] @relation("VPScheduleSourceArea")
+  vpSchedulesAsDestination VPSchedule[] @relation("VPScheduleDestinationArea")
 
   railwayFreightAsSource      RailwayFreightMatrix[] @relation("RailwayFreightSourceArea")
   railwayFreightAsDestination RailwayFreightMatrix[] @relation("RailwayFreightDestinationArea")
@@ -631,6 +631,7 @@ model Area {
   @@unique([cityId, name])
   @@index([isRailHead])
 }
+
 model State {
   id         String      @id @default(cuid())
   name       String      @unique
@@ -654,9 +655,9 @@ model Transport {
 }
 
 model RailwayFreightMatrix {
-  id                String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  wagonId           String
+  wagonId String
 
   sourceCityId      String
   destinationCityId String
@@ -664,18 +665,19 @@ model RailwayFreightMatrix {
   sourceAreaId      String?
   destinationAreaId String?
 
-  freightAmount     BigInt
+  freightAmount BigInt
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  sourceCity        City     @relation("SourceCity", fields: [sourceCityId], references: [id])
-  destinationCity   City     @relation("DestinationCity", fields: [destinationCityId], references: [id])
+  sourceCity      City @relation("SourceCity", fields: [sourceCityId], references: [id])
+  destinationCity City @relation("DestinationCity", fields: [destinationCityId], references: [id])
 
-  sourceArea        Area?    @relation("RailwayFreightSourceArea", fields: [sourceAreaId], references: [id])
-  destinationArea   Area?    @relation("RailwayFreightDestinationArea", fields: [destinationAreaId], references: [id])
+  sourceArea      Area? @relation("RailwayFreightSourceArea", fields: [sourceAreaId], references: [id])
+  destinationArea Area? @relation("RailwayFreightDestinationArea", fields: [destinationAreaId], references: [id])
 
-  wagon             Wagon    @relation(fields: [wagonId], references: [id])
+  wagon            Wagon                  @relation(fields: [wagonId], references: [id])
+  vpScheduleCounts VPScheduleWagonCount[]
 
   @@index([wagonId])
   @@index([sourceCityId])
@@ -1171,25 +1173,30 @@ model VPSchedule {
 model VPScheduleWagonCount {
   id String @id @default(cuid())
 
-  vpScheduleId String
-  wagonId      String
+  vpScheduleId    String
+  wagonId         String
+  freightMatrixId String?
 
   count Int @default(0)
 
-  capacityCft Float?
-  capacityMt  Float?
-  totalCft    Float?
-  totalMt     Float?
+  capacityCft   Float?
+  capacityMt    Float?
+  totalCft      Float?
+  totalMt       Float?
+  freightAmount BigInt?
+  totalFreight  BigInt?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  vpSchedule VPSchedule @relation(fields: [vpScheduleId], references: [id], onDelete: Cascade)
-  wagon      Wagon      @relation(fields: [wagonId], references: [id])
+  vpSchedule    VPSchedule            @relation(fields: [vpScheduleId], references: [id], onDelete: Cascade)
+  wagon         Wagon                 @relation(fields: [wagonId], references: [id])
+  freightMatrix RailwayFreightMatrix? @relation(fields: [freightMatrixId], references: [id])
 
   @@unique([vpScheduleId, wagonId])
   @@index([vpScheduleId])
   @@index([wagonId])
+  @@index([freightMatrixId])
 }
 
 // ── Cash Planning ─────────────────────────────────────────────────────────

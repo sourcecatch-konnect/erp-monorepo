@@ -44,15 +44,23 @@ type VPScheduleRow = {
   status?: string | null;
   remarks?: string | null;
 
-  sourceArea?: {
+ sourceArea?: {
+  id: string;
+  name: string;
+  city?: {
     id: string;
     name: string;
   } | null;
+} | null;
 
-  destinationArea?: {
+destinationArea?: {
+  id: string;
+  name: string;
+  city?: {
     id: string;
     name: string;
   } | null;
+} | null;
 
 fromBranch?: {
   id: string;
@@ -81,27 +89,29 @@ type VPScheduleTableProps = {
   isLoading: boolean;
 };
 
-const formatDate = (date?: string | Date | null) => {
-  if (!date) return "—";
-
-  return new Date(date).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
 
 const routeLabel = (schedule: VPScheduleRow) => {
-  const source = schedule.sourceArea?.name;
-  const destination = schedule.destinationArea?.name;
+  const sourceCity = schedule.sourceArea?.city?.name;
+  const destinationCity = schedule.destinationArea?.city?.name;
 
-  if (source || destination) {
-    return `${source ?? "?"} → ${destination ?? "?"}`;
+  if (sourceCity || destinationCity) {
+    return `${sourceCity ?? "?"} → ${destinationCity ?? "?"}`;
   }
 
   return "—";
 };
+const routeTooltipLabel = (schedule: VPScheduleRow) => {
+  const sourceArea = schedule.sourceArea?.name;
+  const destinationArea = schedule.destinationArea?.name;
 
+  if (sourceArea || destinationArea) {
+    return `Source Area: ${sourceArea ?? "?"}\nDestination Area: ${
+      destinationArea ?? "?"
+    }`;
+  }
+
+  return "—";
+};
 const branchLabel = (schedule: VPScheduleRow) => {
   const from =
     schedule.fromBranch?.name || schedule.fromBranch?.branchCode || null;
@@ -166,17 +176,20 @@ export default function VPScheduleTable({
       cell: ({ row }) => formatVPScheduleDate(row.original.scheduleDate),
     },
     {
-      id: "route",
-      header: "Route",
-      size: 340,
-      cell: ({ row }) => (
-        <TruncatedTooltipText value={routeLabel(row.original)} />
-      ),
-    },
+  id: "route",
+  header: "Route",
+  size: 180,
+  cell: ({ row }) => (
+    <TruncatedTooltipText
+      value={routeLabel(row.original)}
+      tooltipValue={routeTooltipLabel(row.original)}
+    />
+  ),
+},
     {
       id: "branch",
       header: "Branch",
-      size: 180,
+      size: 200,
       cell: ({ row }) => (
         <TruncatedTooltipText value={branchLabel(row.original)} />
       ),
@@ -206,7 +219,7 @@ export default function VPScheduleTable({
     {
       id: "createdBy",
       header: "Created By",
-      size: 100,
+      size: 120,
       cell: ({ row }) => (
         <TruncatedTooltipText value={createdByLabel(row.original)} />
       ),

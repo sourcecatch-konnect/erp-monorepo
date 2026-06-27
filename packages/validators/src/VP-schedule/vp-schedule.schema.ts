@@ -84,18 +84,32 @@ export const vpScheduleSchema = z.object({
     .optional(),
 
   sourceArea: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-    })
-    .optional(),
+  .object({
+    id: z.string(),
+    name: z.string(),
+    city: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .optional(),
 
-  destinationArea: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-    })
-    .optional(),
+destinationArea: z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    city: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .optional(),
 
   wagonCounts: z
     .array(
@@ -103,12 +117,23 @@ export const vpScheduleSchema = z.object({
         id: z.string(),
         wagonId: z.string(),
         count: z.number(),
+        freightMatrixId: z.string().nullable().optional(),
+        freightAmount: z.union([z.number(), z.string()]).nullable().optional(),
+        totalFreight: z.union([z.number(), z.string()]).nullable().optional(),
+        capacityCft: z.number().nullable().optional(),
+        capacityMt: z.number().nullable().optional(),
+        totalCft: z.number().nullable().optional(),
+        totalMt: z.number().nullable().optional(),
         wagon: z
           .object({
             id: z.string(),
             name: z.string(),
+            height: z.number().nullable().optional(),
+            width: z.number().nullable().optional(),
+            weight: z.number().nullable().optional(),
             totalCft: z.number().nullable().optional(),
             capacityMt: z.number().nullable().optional(),
+            isActive: z.boolean().optional(),
           })
           .optional(),
       }),

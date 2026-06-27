@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   IconArrowLeft,
+  IconArrowRight,
   IconBan,
   IconCalendar,
   IconCircleCheck,
@@ -19,19 +20,12 @@ import {
 
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@skerp/ui/components/table";
 
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { useCancelVPSchedule, useConfirmVPSchedule, useVPScheduleDetail } from "./hook/useVPSchedule";
 import { formatVPScheduleDate, formatVPScheduleDateTime, VPScheduleStatusBadge } from "./vp-schedule-ui";
+import { formatPaise } from "@/lib/money";
 
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -95,6 +89,16 @@ function StatCard({
   );
 }
 
+const formatFreight = (value: string | number | null | undefined) => {
+  if (value === null || value === undefined || value === "") return "â€”";
+
+  const amount = Number(value);
+
+  if (Number.isNaN(amount)) return "â€”";
+
+  return formatPaise(amount);
+};
+
 
 export default function VPScheduleDetail({
   scheduleId,
@@ -144,8 +148,11 @@ export default function VPScheduleDetail({
     );
   }
 
-  const sourceArea = schedule.sourceArea?.name ?? "—";
-  const destinationArea = schedule.destinationArea?.name ?? "—";
+const sourceArea = schedule.sourceArea?.name ?? "—";
+const destinationArea = schedule.destinationArea?.name ?? "—";
+
+const sourceCity = schedule.sourceArea?.city?.name ?? "—";
+const destinationCity = schedule.destinationArea?.city?.name ?? "—";
 
   const fromBranch =
     schedule.fromBranch?.name || schedule.fromBranch?.branchCode || "—";
@@ -167,7 +174,9 @@ export default function VPScheduleDetail({
   const canCancel = isDraft || isPlanned;
 
 const wagonCounts = schedule.wagonCounts ?? [];
-
+const totalFreight = wagonCounts.reduce((sum: number, wagon: any) => {
+  return sum + Number(wagon.totalFreight ?? 0);
+}, 0);
   const handleConfirm = () => {
     confirm.mutate(
       {
@@ -296,87 +305,116 @@ const wagonCounts = schedule.wagonCounts ?? [];
             </dl>
           </CardSection>
 
-          <CardSection title="Route Details" icon={<IconMapPin size={14} />}>
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field label="Source area" value={sourceArea} />
-              <Field label="Destination area" value={destinationArea} />
-              <Field
-                label="Route"
-                value={
-                  <span className="font-medium">
-                    {sourceArea} → {destinationArea}
-                  </span>
-                }
-              />
-            </dl>
-          </CardSection>
+        <CardSection title="Route Details" icon={<IconMapPin size={14} />}>
+  <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+    <Field label="Source area" value={sourceArea} />
+    <Field label="Destination area" value={destinationArea} />
+
+    <Field
+      label="Route"
+      value={
+        <span className="inline-flex items-center gap-1.5 font-medium">
+          <span>{sourceCity}</span>
+          <IconArrowRight size={14} className="text-muted-foreground" />
+          <span>{destinationCity}</span>
+        </span>
+      }
+    />
+  </dl>
+</CardSection>
 <CardSection
   title="Wagon Details"
   icon={<IconPackage size={14} />}
   action={
-<div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
-  <span className="text-xs font-medium text-muted-foreground">
-    Total Wagons
-  </span>
-  <span className="text-sm font-semibold text-foreground">
-    {schedule.totalWagonCount ?? 0}
-  </span>
-</div>
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
+        <span className="text-xs font-medium text-muted-foreground">
+          Total Wagons
+        </span>
+        <span className="text-sm font-semibold text-foreground">
+          {schedule.totalWagonCount ?? 0}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
+        <span className="text-xs font-medium text-muted-foreground">
+          Total Freight
+        </span>
+        <span className="text-sm font-semibold text-foreground">
+          {formatFreight(totalFreight)}
+        </span>
+      </div>
+    </div>
   }
 >
   {wagonCounts.length ? (
-    <div className="overflow-hidden rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead className="text-xs uppercase">Wagon</TableHead>
-            <TableHead className="text-xs uppercase">Count</TableHead>
-            <TableHead className="text-xs uppercase">Height</TableHead>
-            <TableHead className="text-xs uppercase">Width</TableHead>
-            <TableHead className="text-xs uppercase">Weight</TableHead>
-            <TableHead className="text-xs uppercase">Capacity MT</TableHead>
-            <TableHead className="text-xs uppercase">Capacity CFT</TableHead>
-            <TableHead className="text-xs uppercase">Total MT</TableHead>
-            <TableHead className="text-xs uppercase">Total CFT</TableHead>
-          </TableRow>
-        </TableHeader>
+    <div className="grid gap-3">
+      {wagonCounts.map((wagon: any) => (
+        <div
+          key={wagon.id}
+          className="rounded-xl border bg-background p-4 shadow-sm"
+        >
+        <div className="flex items-center justify-between gap-3 border-b pb-3">
+  <p className="text-sm font-semibold text-foreground">
+    {wagon.wagon?.name ?? wagon.wagonName ?? "—"}
+  </p>
 
-        <TableBody>
-          {wagonCounts.map((wagon: any) => (
-            <TableRow key={wagon.id}>
-              <TableCell className="font-medium">
-                {wagon.wagon?.name ?? wagon.wagonName ?? "—"}
-              </TableCell>
+  <p className="text-xs text-muted-foreground">
+    Wagon Count:{" "}
+    <span className="font-medium text-foreground">
+      {wagon.count ?? wagon.quantity ?? "—"}
+    </span>
+  </p>
+</div>
 
-              <TableCell>{wagon.count ?? wagon.quantity ?? "—"}</TableCell>
-
-              <TableCell>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-7">
+            <div>
+              <p className="text-xs text-muted-foreground">Height</p>
+              <p className="font-medium">
                 {wagon.wagon?.height != null ? wagon.wagon.height : "—"}
-              </TableCell>
+              </p>
+            </div>
 
-              <TableCell>
+            <div>
+              <p className="text-xs text-muted-foreground">Width</p>
+              <p className="font-medium">
                 {wagon.wagon?.width != null ? wagon.wagon.width : "—"}
-              </TableCell>
+              </p>
+            </div>
 
-              <TableCell>
+            <div>
+              <p className="text-xs text-muted-foreground">Weight</p>
+              <p className="font-medium">
                 {wagon.wagon?.weight != null ? wagon.wagon.weight : "—"}
-              </TableCell>
+              </p>
+            </div>
 
-              <TableCell>
+            <div>
+              <p className="text-xs text-muted-foreground">Capacity MT</p>
+              <p className="font-medium">
                 {wagon.capacityMt ?? wagon.wagon?.capacityMt ?? "—"}
-              </TableCell>
+              </p>
+            </div>
 
-              <TableCell>
+            <div>
+              <p className="text-xs text-muted-foreground">Capacity CFT</p>
+              <p className="font-medium">
                 {wagon.capacityCft ?? wagon.wagon?.totalCft ?? "—"}
-              </TableCell>
+              </p>
+            </div>
 
-              <TableCell>{wagon.totalMt ?? "—"}</TableCell>
+            <div>
+              <p className="text-xs text-muted-foreground">Total MT</p>
+              <p className="font-medium">{wagon.totalMt ?? "—"}</p>
+            </div>
 
-              <TableCell>{wagon.totalCft ?? "—"}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+            <div>
+              <p className="text-xs text-muted-foreground">Total CFT</p>
+              <p className="font-medium">{wagon.totalCft ?? "—"}</p>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   ) : (
     <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
