@@ -46,11 +46,11 @@ import {
 } from "@skerp/ui/components/table";
 import { formatPaiseCompact } from "@/lib/money";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
-import { applyReceiptOptimistic } from "./cash-planning.compute";
-import { CompactMoney } from "./CompactMoney";
-import { StatCard } from "./StatCard";
+import { cashPlanningApi } from "../api/cash-planning.service";
+import { cashPlanningKeys } from "../api/cash-planning.keys";
+import { applyReceiptOptimistic } from "../lib/cash-planning.compute";
+import { CompactMoney } from "../components/CompactMoney";
+import { StatCard } from "../components/StatCard";
 import { EditReceivableDialog } from "./EditReceivableDialog";
 import { ReceiptTimeline } from "./ReceiptTimeline";
 

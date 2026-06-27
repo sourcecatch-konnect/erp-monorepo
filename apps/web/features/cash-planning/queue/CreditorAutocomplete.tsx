@@ -8,9 +8,9 @@ import { Input } from "@skerp/ui/components/input";
 import { cn } from "@skerp/ui/lib/util";
 import { formatPaiseCompact } from "@/lib/money";
 
-import { creditorApi } from "../masters/creditor/creditor.service";
-import { creditorKeys } from "../masters/creditor/creditor.keys";
-import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
+import { creditorApi } from "../../masters/creditor/creditor.service";
+import { creditorKeys } from "../../masters/creditor/creditor.keys";
+import { useDebouncedValue } from "../../masters/_shared/hooks/useDebouncedValue";
 
 const PAGE_SIZE = 20;
 

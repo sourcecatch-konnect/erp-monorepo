@@ -28,16 +28,16 @@ import {
 } from "@skerp/ui/components/tabs";
 import { useCan } from "@/features/auth";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
-import CashPositionPanel from "./CashPositionPanel";
-import PaymentQueue from "./PaymentQueue";
-import CreditorLedgerView from "./CreditorLedgerView";
-import ReceivablesPanel from "./ReceivablesPanel";
+import { cashPlanningApi } from "./api/cash-planning.service";
+import { cashPlanningKeys } from "./api/cash-planning.keys";
+import CashPositionPanel from "./queue/CashPositionPanel";
+import PaymentQueue from "./queue/PaymentQueue";
+import CreditorLedgerView from "./ledger/CreditorLedgerView";
+import ReceivablesPanel from "./receivables/ReceivablesPanel";
 import {
   CashPositionSkeleton,
   PaymentQueueSkeleton,
-} from "./CashPlanningSkeletons";
+} from "./components/CashPlanningSkeletons";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 

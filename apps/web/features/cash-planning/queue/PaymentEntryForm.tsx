@@ -22,9 +22,9 @@ import {
   SelectValue,
 } from "@skerp/ui/components/select";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
-import { recomputeDayView } from "./cash-planning.compute";
+import { cashPlanningApi } from "../api/cash-planning.service";
+import { cashPlanningKeys } from "../api/cash-planning.keys";
+import { recomputeDayView } from "../lib/cash-planning.compute";
 import CreditorAutocomplete from "./CreditorAutocomplete";
 
 const CATEGORIES = ["DIESEL", "RENT", "FREIGHT", "EXPENSE", "REPAIR", "OTHER"] as const;

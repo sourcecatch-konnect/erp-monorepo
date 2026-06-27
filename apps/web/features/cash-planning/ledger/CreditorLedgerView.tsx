@@ -21,10 +21,10 @@ import {
 } from "@skerp/ui/components/accordion";
 import { TooltipProvider } from "@skerp/ui/components/tooltip";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
-import { CompactMoney } from "./CompactMoney";
-import { StatCard } from "./StatCard";
+import { cashPlanningApi } from "../api/cash-planning.service";
+import { cashPlanningKeys } from "../api/cash-planning.keys";
+import { CompactMoney } from "../components/CompactMoney";
+import { StatCard } from "../components/StatCard";
 
 const labelOf = (v: string) =>
   v.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());

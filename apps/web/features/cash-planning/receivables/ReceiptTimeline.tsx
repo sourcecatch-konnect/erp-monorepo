@@ -10,7 +10,7 @@ import {
   PopoverContent,
 } from "@skerp/ui/components/popver";
 
-import { CompactMoney } from "./CompactMoney";
+import { CompactMoney } from "../components/CompactMoney";
 
 /** A vertical timeline of every receipt recorded against a receivable. */
 export function ReceiptTimeline({ receipts }: { receipts: CashReceipt[] }) {

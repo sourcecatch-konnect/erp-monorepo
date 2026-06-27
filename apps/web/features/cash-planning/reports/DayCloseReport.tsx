@@ -19,14 +19,23 @@ const money = (paise: number): string =>
 const printCss = `
 @media print {
   @page { size: A5 portrait; margin: 12mm; }
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
   body * { visibility: hidden !important; }
   #day-close-report, #day-close-report * { visibility: visible !important; }
   #day-close-report {
-    position: absolute !important;
-    left: 0; top: 0;
+    position: static !important;
     width: 100% !important;
+    max-width: none !important;
     margin: 0 !important;
+    overflow: visible !important;
     box-shadow: none !important;
+  }
+  #day-close-report .day-close-row {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 `;
@@ -41,7 +50,7 @@ function Row({
   amount: number;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 py-1 text-sm">
+    <div className="day-close-row flex items-center justify-between gap-2 py-1 text-sm">
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{label}</span>
         {segment ? (

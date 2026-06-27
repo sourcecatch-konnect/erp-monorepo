@@ -41,10 +41,10 @@ import type {
 import { Button } from "@skerp/ui/components/button";
 import { formatPaise, formatPaiseCompact } from "@/lib/money";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
-import { recomputeDayView } from "./cash-planning.compute";
-import { CompactMoney } from "./CompactMoney";
+import { cashPlanningApi } from "../api/cash-planning.service";
+import { cashPlanningKeys } from "../api/cash-planning.keys";
+import { recomputeDayView } from "../lib/cash-planning.compute";
+import { CompactMoney } from "../components/CompactMoney";
 import PaymentEntryForm from "./PaymentEntryForm";
 
 type Props = {
@@ -69,8 +69,6 @@ const segmentBadge: Record<CashSegment, string> = {
   RAIL: "bg-indigo-100 text-indigo-700",
   FCI: "bg-teal-100 text-teal-700",
 };
-
-const fieldLabel = "text-xs font-medium text-muted-foreground";
 
 /** One row of the queue — a dnd-kit sortable item. Memoised so unaffected rows
  *  don't re-render on every drag move / optimistic patch. */

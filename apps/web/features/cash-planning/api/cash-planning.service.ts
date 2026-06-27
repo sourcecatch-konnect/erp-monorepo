@@ -12,7 +12,7 @@ import type {
   CreateCashReceivableBody,
   UpdateCashReceivableBody,
 } from "@skerp/types";
-import { unwrapApiResponse } from "../masters/_shared/master-api";
+import { unwrapApiResponse } from "../../masters/_shared/master-api";
 
 export type CashDaySummary = {
   id: string;
