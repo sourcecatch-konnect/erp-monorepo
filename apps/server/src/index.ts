@@ -49,6 +49,7 @@ import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
 import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
+import MRRRRoute from "./modules/mrrr/mrrr.route.js"
 import { authMiddleware } from "./middlewares/auth.middlware.js";
 import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
 import { ensurePermissionCatalog } from "./auth/permission-catalog.js";
@@ -109,6 +110,7 @@ app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);
 app.use("/attachments", attachmentRoute);
 app.use("/vp-schedules", vpScheduleRoute);
+app.use("/mrrr",MRRRRoute)
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use(errorMiddleware);

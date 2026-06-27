@@ -69,7 +69,7 @@ export const NAV_SECTIONS: NavSection[] = [
         disabled: false,
       },
       {
-  title: "Operations",
+  title: "VP management",
   icon: IconActivity,
   items: [
     {
@@ -84,15 +84,10 @@ export const NAV_SECTIONS: NavSection[] = [
       disabled: true,
     },
     {
-      title: "MR",
-      href: "/operations/mr",
-      disabled: true,
-    },
-    {
-      title: "RR",
-      href: "/operations/rr",
-      disabled: true,
-    },
+      title: "MR / RR",
+      href: "/operations/MRRR",
+      permission: PERMS.MRRR.VIEW,
+    }
   ],
 },
       {

@@ -64,6 +64,11 @@ type VPSchedulePermissionKey =
   | "vp_schedule.confirm"
   | "vp_schedule.cancel";
 
+type MRRRPermissionKey =
+  | `mrrr.${CrudAction}`
+  | "mrrr.submit"
+  | "mrrr.cancel";
+
 type OrderPermissionKey =
   | `order.${CrudAction}`
   | "order.approve"
@@ -109,6 +114,7 @@ export type PermissionKey =
   | VPSchedulePermissionKey
   | CashPlanningPermissionKey
   | AdminPermissionKey
+  | MRRRPermissionKey
   | NotificationPermissionKey
   | AttachmentPermissionKey;
 
@@ -181,6 +187,14 @@ export const PERMS = {
   DELETE: "vp_schedule.delete",
   CONFIRM: "vp_schedule.confirm",
   CANCEL: "vp_schedule.cancel",
+},
+MRRR: {
+  VIEW: "mrrr.view",
+  CREATE: "mrrr.create",
+  UPDATE: "mrrr.update",
+  DELETE: "mrrr.delete",
+  SUBMIT: "mrrr.submit",
+  CANCEL: "mrrr.cancel",
 },
   ORDER: {
     VIEW: "order.view",
