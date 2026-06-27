@@ -15,6 +15,7 @@ import {
   IconWallet,
   IconChartBar,
   IconCalendarEvent,
+  IconArrowsSort,
 } from "@tabler/icons-react";
 
 import type {
@@ -28,6 +29,13 @@ import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { TooltipProvider } from "@skerp/ui/components/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
 import {
   Table,
   TableBody,
@@ -63,6 +71,44 @@ const toIsoDate = (d: Date): string => {
 
 const fieldLabel = "text-xs font-medium text-muted-foreground";
 
+type ReceivableRow = ReceivablesView["receivables"][number];
+type ReceivableSort =
+  | "smart"
+  | "expectedDate"
+  | "expectedAmount"
+  | "pendingAmount"
+  | "receivedAmount"
+  | "status"
+  | "party";
+
+const RECEIVABLE_SORTS: { value: ReceivableSort; label: string }[] = [
+  { value: "smart", label: "Smart: due first" },
+  { value: "expectedDate", label: "Expected date" },
+  { value: "expectedAmount", label: "Expected amount" },
+  { value: "pendingAmount", label: "Pending amount" },
+  { value: "receivedAmount", label: "Received amount" },
+  { value: "status", label: "Status" },
+  { value: "party", label: "Party A-Z" },
+];
+
+const byParty = (a: ReceivableRow, b: ReceivableRow) =>
+  a.partyName.localeCompare(b.partyName, "en-IN", { sensitivity: "base" });
+
+const expectedTime = (r: ReceivableRow) =>
+  r.expectedDate ? new Date(r.expectedDate).getTime() : Number.POSITIVE_INFINITY;
+
+const latestReceiptTime = (r: ReceivableRow) => {
+  const receivedAt = r.receipts[0]?.receivedAt;
+  return receivedAt ? new Date(receivedAt).getTime() : 0;
+};
+
+const statusRank = (r: ReceivableRow) => {
+  if (r.ackReceived) return 3;
+  if (r.expectedAmount > 0) return 0;
+  if ((r.receivedAmount ?? 0) > 0) return 1;
+  return 2;
+};
+
 export default function ReceivablesPanel({ day, date, canEnter }: Props) {
   const queryClient = useQueryClient();
   const editable = canEnter;
@@ -80,6 +126,7 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
   const [expectedAmt, setExpectedAmt] = React.useState("");
   const [expectedDate, setExpectedDate] = React.useState<Date | undefined>();
   const [editing, setEditing] = React.useState<CashReceivable | null>(null);
+  const [sortBy, setSortBy] = React.useState<ReceivableSort>("smart");
 
   const resetForm = () => {
     setParty("");
@@ -146,6 +193,68 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
       .reduce((s, r) => s + r.expectedAmount, 0);
   }, [view, isDueByDay]);
 
+  const sortedReceivables = React.useMemo(() => {
+    if (!view) return [];
+
+    return view.receivables
+      .map((receivable, index) => ({ receivable, index }))
+      .sort((left, right) => {
+        const a = left.receivable;
+        const b = right.receivable;
+        let result = 0;
+
+        switch (sortBy) {
+          case "smart": {
+            const rank = (r: ReceivableRow) =>
+              r.ackReceived
+                ? 3
+                : isDueByDay(r)
+                  ? 0
+                  : r.expectedAmount > 0
+                    ? 1
+                    : 2;
+            result =
+              rank(a) - rank(b) ||
+              expectedTime(a) - expectedTime(b) ||
+              b.expectedAmount - a.expectedAmount ||
+              b.totalAmount - a.totalAmount ||
+              byParty(a, b);
+            break;
+          }
+          case "expectedDate":
+            result = expectedTime(a) - expectedTime(b) || byParty(a, b);
+            break;
+          case "expectedAmount":
+            result =
+              b.expectedAmount - a.expectedAmount ||
+              expectedTime(a) - expectedTime(b) ||
+              byParty(a, b);
+            break;
+          case "pendingAmount":
+            result = b.totalAmount - a.totalAmount || byParty(a, b);
+            break;
+          case "receivedAmount":
+            result =
+              (b.receivedAmount ?? 0) - (a.receivedAmount ?? 0) ||
+              latestReceiptTime(b) - latestReceiptTime(a) ||
+              byParty(a, b);
+            break;
+          case "status":
+            result =
+              statusRank(a) - statusRank(b) ||
+              b.totalAmount - a.totalAmount ||
+              byParty(a, b);
+            break;
+          case "party":
+            result = byParty(a, b);
+            break;
+        }
+
+        return result || left.index - right.index;
+      })
+      .map(({ receivable }) => receivable);
+  }, [view, sortBy, isDueByDay]);
+
   const projectedCash = day.availableCash + expectedByDay;
   const openCount = view
     ? view.receivables.filter((r) => !r.ackReceived).length
@@ -195,16 +304,36 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
 
         {/* receivables list */}
         <div className="overflow-hidden rounded-md border border-border bg-card">
-          <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
             <div className="space-y-0.5">
               <h2 className="text-sm font-semibold">Receivables</h2>
               <p className="text-xs text-muted-foreground">
                 Money owed to you — slices due by {date} are highlighted
               </p>
             </div>
-            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-              {openCount} open
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <IconArrowsSort size={14} className="text-muted-foreground" />
+                <Select
+                  value={sortBy}
+                  onValueChange={(value) => setSortBy(value as ReceivableSort)}
+                >
+                  <SelectTrigger className="h-8 w-44 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RECEIVABLE_SORTS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                {openCount} open
+              </span>
+            </div>
           </div>
 
           {/* quick add */}
@@ -295,7 +424,7 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  view.receivables.map((r) => {
+                  sortedReceivables.map((r) => {
                     const due = isDueByDay(r);
                     return (
                       <TableRow

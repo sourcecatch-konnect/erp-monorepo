@@ -145,6 +145,10 @@ const RECEIVABLES: {
   total: number;
   expected: number;
   date?: string;
+  /** Demo receipt history (lakhs) — past slices already received against this
+   *  receivable, to populate the timeline + partial-receipt UI. `total` is the
+   *  ORIGINAL amount; outstanding is derived by subtracting these. */
+  received?: { amount: number; date: string }[];
 }[] = [
   { party: "Rail Road", total: 0.27, expected: 0 },
   { party: "Geep Industries", total: 11.52, expected: 0 },
@@ -157,7 +161,17 @@ const RECEIVABLES: {
   { party: "VIP Industries", total: 5.0, expected: 0 },
   { party: "Marrico Ltd", total: 0.71, expected: 0 },
   { party: "Anima Sanitory", total: 0.63, expected: 0 },
-  { party: "Maa Sarda", total: 11.52, expected: 0 },
+  {
+    party: "Maa Sarda",
+    total: 11.52,
+    expected: 3.0,
+    date: "2026-06-28",
+    // mirrors the "11L total → 5L then 2L received" case → 4.52L still open
+    received: [
+      { amount: 5.0, date: "2026-06-12" },
+      { amount: 2.0, date: "2026-06-20" },
+    ],
+  },
   { party: "Sowallow Enterprses", total: 2.37, expected: 0 },
   { party: "Astha Roadlines", total: 6.16, expected: 0 },
   { party: "Biswas Dairy", total: 0.62, expected: 0.35 },
@@ -167,9 +181,26 @@ const RECEIVABLES: {
   { party: "Jain Irregation", total: 0.31, expected: 0 },
   { party: "Nilon's Enterprises", total: 16.47, expected: 2.0, date: "2026-06-25" },
   { party: "Rahul Enterprises", total: 0.54, expected: 0 },
-  { party: "Whirlpool of India", total: 85.58, expected: 10.8 },
+  {
+    party: "Whirlpool of India",
+    total: 85.58,
+    expected: 10.8,
+    received: [
+      { amount: 20.0, date: "2026-06-10" },
+      { amount: 15.0, date: "2026-06-18" },
+    ],
+  },
   { party: "Phantom Express", total: 0.65, expected: 0 },
-  { party: "Britania Industries", total: 1.88, expected: 1.6, date: "2026-06-17" },
+  {
+    party: "Britania Industries",
+    total: 1.88,
+    expected: 0,
+    // fully settled across two slices → shows the "Settled" state + timeline
+    received: [
+      { amount: 1.6, date: "2026-06-17" },
+      { amount: 0.28, date: "2026-06-20" },
+    ],
+  },
   { party: "Gopal Umberlla", total: 0.61, expected: 0.61, date: "2026-06-17" },
   { party: "Modern Tailor", total: 0.26, expected: 0.26 },
   { party: "Liebherr Appliance", total: 1.36, expected: 0 },
