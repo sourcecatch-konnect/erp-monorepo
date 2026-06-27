@@ -8,6 +8,7 @@ import {
   updateCashPaymentSchema,
   cashPaymentStatusUpdateSchema,
   reorderCashPaymentsSchema,
+  bulkApproveCashPaymentsSchema,
   closeCashDaySchema,
   createCashReceivableSchema,
   updateCashReceivableSchema,
@@ -193,8 +194,6 @@ router.post(
   can(PERMS.CASH_PLANNING.ENTER),
   async (req, res) => {
     const id = getParamId(req);
-    const day = await loadDayOr404(id);
-    assertOpen(day.status);
 
     const parsed = createCashPaymentSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -202,13 +201,22 @@ router.post(
     }
     const body = parsed.data;
 
-    // "New" flag: payment raised after review has begun (≥1 approved already).
-    const hasApproved = day.payments.some((p) => p.status === "APPROVED");
-    // Append to the bottom of the priority queue.
-    const maxPriority = day.payments.reduce(
-      (m, p) => Math.max(m, p.priority),
-      0,
-    );
+    // Read only the scalars we need instead of loading the whole day graph:
+    // the day's status, the current max priority, and whether any payment is
+    // already approved ("New" flag = raised after review began).
+    const [dayRow, priorityAgg, approved] = await Promise.all([
+      db.cashPlanDay.findUnique({ where: { id }, select: { status: true } }),
+      db.cashPayment.aggregate({ where: { dayId: id }, _max: { priority: true } }),
+      db.cashPayment.findFirst({
+        where: { dayId: id, status: "APPROVED" },
+        select: { id: true },
+      }),
+    ]);
+    if (!dayRow) throw new NotFoundError("Cash plan day not found");
+    assertOpen(dayRow.status);
+
+    const hasApproved = !!approved;
+    const maxPriority = priorityAgg._max.priority ?? 0;
 
     const payment = await db.cashPayment.create({
       data: {
@@ -376,6 +384,62 @@ router.post(
   },
 );
 
+// Bulk approve — approve the given pending payments in one transaction, applying
+// the cash guard cumulatively. Replaces the old client-side N round-trip loop.
+// Payments are approved in the order given; once the next one would exceed
+// available cash, the rest are left untouched (no error — partial approve).
+router.post(
+  "/days/:id/payments/approve-bulk",
+  can(PERMS.CASH_PLANNING.APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const day = await loadDayOr404(id);
+    assertOpen(day.status);
+
+    const parsed = bulkApproveCashPaymentsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+
+    // Resolve the requested ids against this day's pending payments, preserving
+    // request order. Unknown / non-pending ids are silently skipped.
+    const byId = new Map(day.payments.map((p) => [p.id, p]));
+    const toApprove = parsed.data.ids
+      .map((pid) => byId.get(pid))
+      .filter((p): p is NonNullable<typeof p> => !!p && p.status === "PENDING");
+
+    if (toApprove.length > 0) {
+      await db.$transaction(async (tx) => {
+        const { totalOpening, approvedTotal } = await poolTotals(tx, id);
+        let running = approvedTotal;
+        const approvedAt = new Date();
+        const approvedById = actorId(req);
+
+        for (const p of toApprove) {
+          const amount = Number(p.amount);
+          // Cumulative guard: stop once the next payment no longer fits.
+          if (running + amount > totalOpening) break;
+          running += amount;
+
+          if (p.creditorId) {
+            await tx.creditor.update({
+              where: { id: p.creditorId },
+              data: { outstandingBalance: { decrement: p.amount } },
+            });
+          }
+          await tx.cashPayment.update({
+            where: { id: p.id },
+            data: { status: "APPROVED", approvedById, approvedAt },
+          });
+        }
+      });
+    }
+
+    const fresh = await findDay(id);
+    return sendOk(res, buildDayView(fresh!));
+  },
+);
+
 // Reorder the priority queue (top = pay first)
 router.put(
   "/days/:id/payments/reorder",
@@ -398,8 +462,11 @@ router.put(
     // One UPDATE … CASE so reordering is a single round-trip. The previous
     // per-row update loop opened an interactive transaction and blew the 5s
     // budget on larger queues (Transaction API error: expired transaction).
+    // Cast each THEN to int: an untyped bind parameter inside CASE is parsed as
+    // text, which makes the whole CASE text and fails to assign to the integer
+    // "priority" column (Postgres 42804). The ::int pins the type at parse time.
     const cases = parsed.data.orderedIds.map(
-      (pid, index) => Prisma.sql`WHEN ${pid} THEN ${index + 1}`,
+      (pid, index) => Prisma.sql`WHEN ${pid} THEN ${index + 1}::int`,
     );
     await db.$executeRaw`
       UPDATE "CashPayment"
@@ -488,12 +555,33 @@ router.post(
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
 
-    await db.cashReceivable.update({
-      where: { id },
-      data: {
-        receivedAmount: BigInt(parsed.data.receivedAmount),
-        ackReceived: parsed.data.ackReceived,
-      },
+    // Partial receipt: deduct from the outstanding total, accumulate into the
+    // received running total, and consume the expected slice. The receivable
+    // closes (ackReceived) only once the outstanding hits zero. Receiving more
+    // than what's left is clamped to the outstanding.
+    const outstanding = Number(existing.totalAmount);
+    const receivedNow = Math.min(parsed.data.receivedAmount, outstanding);
+    const newOutstanding = outstanding - receivedNow;
+    const newReceived = Number(existing.receivedAmount ?? 0n) + receivedNow;
+
+    // Record the slice in the receipt timeline and roll up the parent totals
+    // atomically.
+    await db.$transaction(async (tx) => {
+      if (receivedNow > 0) {
+        await tx.cashReceivableReceipt.create({
+          data: { receivableId: id, amount: BigInt(receivedNow) },
+        });
+      }
+      await tx.cashReceivable.update({
+        where: { id },
+        data: {
+          totalAmount: BigInt(newOutstanding),
+          receivedAmount: BigInt(newReceived),
+          expectedAmount: 0n,
+          expectedDate: null,
+          ackReceived: newOutstanding === 0,
+        },
+      });
     });
 
     return sendOk(res, await buildReceivablesView());

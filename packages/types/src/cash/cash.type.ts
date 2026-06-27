@@ -11,12 +11,14 @@ import {
   updateCashPaymentSchema,
   cashPaymentStatusUpdateSchema,
   reorderCashPaymentsSchema,
+  bulkApproveCashPaymentsSchema,
   cashPlanDaySchema,
   cashAccountBalanceSchema,
   openCashDaySchema,
   upsertCashBalancesSchema,
   closeCashDaySchema,
   cashReceivableSchema,
+  cashReceiptSchema,
   createCashReceivableSchema,
   updateCashReceivableSchema,
   markReceivableReceivedSchema,
@@ -61,9 +63,13 @@ export type CashPaymentStatusUpdateBody = z.output<
 export type ReorderCashPaymentsBody = z.output<
   typeof reorderCashPaymentsSchema
 >;
+export type BulkApproveCashPaymentsBody = z.output<
+  typeof bulkApproveCashPaymentsSchema
+>;
 
 /* ---- Receivable ---- */
 export type CashReceivable = z.infer<typeof cashReceivableSchema>;
+export type CashReceipt = z.infer<typeof cashReceiptSchema>;
 export type CreateCashReceivableBody = z.output<
   typeof createCashReceivableSchema
 >;
@@ -113,11 +119,16 @@ export type CashPlanDayView = CashPlanDay & {
  * Global receivables ledger. Receivables are no longer tied to a day; the
  * day forecast combines `availableCash` with the expected slices due by it.
  */
+/** A receivable plus its receipt timeline (newest first). */
+export type CashReceivableWithReceipts = CashReceivable & {
+  receipts: CashReceipt[];
+};
+
 export type ReceivablesView = {
-  receivables: CashReceivable[];
-  /** Σ totalAmount of receivables not yet acknowledged received (paise) */
+  receivables: CashReceivableWithReceipts[];
+  /** Σ outstanding of receivables not yet fully settled (paise) */
   totalPending: number;
-  /** Σ expectedAmount of receivables not yet acknowledged received (paise) */
+  /** Σ next-expected slice of receivables not yet fully settled (paise) */
   totalExpected: number;
 };
 

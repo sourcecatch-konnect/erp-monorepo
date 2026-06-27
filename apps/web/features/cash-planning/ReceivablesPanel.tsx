@@ -40,6 +40,7 @@ import { formatPaiseCompact } from "@/lib/money";
 import { cashPlanningApi } from "./cash-planning.service";
 import { cashPlanningKeys } from "./cash-planning.keys";
 import { CompactMoney } from "./CompactMoney";
+import { StatCard } from "./StatCard";
 import { EditReceivableDialog } from "./EditReceivableDialog";
 
 type Props = {
@@ -56,42 +57,6 @@ const toIsoDate = (d: Date): string => {
   const day = `${d.getDate()}`.padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
 };
-
-const toneText = {
-  sky: "text-sky-600",
-  emerald: "text-emerald-600",
-  destructive: "text-destructive",
-} as const;
-
-function StatCard({
-  icon,
-  label,
-  value,
-  tone,
-  sub,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  tone?: keyof typeof toneText;
-  sub?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-md border border-border bg-card p-4 transition-colors hover:border-primary/30">
-      <div className="flex items-center gap-2">
-        <span className="flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          {icon}
-        </span>
-        <span className="text-sm font-medium text-muted-foreground">{label}</span>
-      </div>
-      <CompactMoney
-        className={`mt-2.5 block text-xl font-semibold ${tone ? toneText[tone] : ""}`}
-        value={value}
-      />
-      {sub ? <p className="mt-1 text-xs text-muted-foreground">{sub}</p> : null}
-    </div>
-  );
-}
 
 const fieldLabel = "text-xs font-medium text-muted-foreground";
 
@@ -141,8 +106,18 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
   const received = useMutation({
     mutationFn: ({ id, amt }: { id: string; amt: number }) =>
       cashPlanningApi.markReceived(id, amt),
+    onMutate: ({ id, amt }) => {
+      const prev = queryClient.getQueryData<ReceivablesView>(
+        cashPlanningKeys.receivables(),
+      );
+      if (prev) setView(applyReceiptOptimistic(prev, id, amt));
+      return { prev };
+    },
+    onError: (e, _vars, ctx) => {
+      if (ctx?.prev) setView(ctx.prev);
+      toast.error(e instanceof Error ? e.message : "Failed");
+    },
     onSuccess: (next) => setView(next),
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
   const remove = useMutation({

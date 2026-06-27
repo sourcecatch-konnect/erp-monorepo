@@ -1,15 +1,24 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconLock, IconPlus, IconFileText } from "@tabler/icons-react";
+import {
+  IconLock,
+  IconPlus,
+  IconFileText,
+  IconWallet,
+  IconCalendarPlus,
+  IconListCheck,
+  IconReceipt2,
+  IconCoins,
+} from "@tabler/icons-react";
 
 import type { CashPlanDayView } from "@skerp/types";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { DatePicker } from "@skerp/ui/components/datepicker";
-import { Skeleton } from "@skerp/ui/components/skeleton";
 import { TooltipProvider } from "@skerp/ui/components/tooltip";
 import {
   Tabs,
@@ -21,12 +30,14 @@ import { useCan } from "@/features/auth";
 
 import { cashPlanningApi } from "./cash-planning.service";
 import { cashPlanningKeys } from "./cash-planning.keys";
-import { CompactMoney } from "./CompactMoney";
-import { DayCloseReportDialog } from "./DayCloseReportDialog";
 import CashPositionPanel from "./CashPositionPanel";
 import PaymentQueue from "./PaymentQueue";
 import CreditorLedgerView from "./CreditorLedgerView";
 import ReceivablesPanel from "./ReceivablesPanel";
+import {
+  CashPositionSkeleton,
+  PaymentQueueSkeleton,
+} from "./CashPlanningSkeletons";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -37,32 +48,11 @@ const toIsoDate = (d: Date): string => {
   return `${d.getFullYear()}-${m}-${day}`;
 };
 
-function HeaderStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  /** amount in paise */
-  value: number;
-  tone?: "ok" | "bad";
-}) {
+function TabCount({ n }: { n: number }) {
   return (
-    <div className="rounded-md border border-border bg-card px-3 py-1.5">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <CompactMoney
-        value={value}
-        className={`text-sm font-semibold ${
-          tone === "bad"
-            ? "text-destructive"
-            : tone === "ok"
-              ? "text-emerald-600"
-              : ""
-        }`}
-      />
-    </div>
+    <span className="ml-0.5 rounded-full bg-foreground/10 px-1.5 text-[11px] font-medium text-foreground/70">
+      {n}
+    </span>
   );
 }
 
@@ -72,31 +62,19 @@ export default function CashPlanningPage() {
   const canApprove = useCan(PERMS.CASH_PLANNING.APPROVE);
   const canClose = useCan(PERMS.CASH_PLANNING.CLOSE);
 
+  const router = useRouter();
   const [date, setDate] = React.useState(todayIso());
-  const [showReport, setShowReport] = React.useState(false);
 
   const dayQuery = useQuery({
     queryKey: cashPlanningKeys.day(date),
     queryFn: () => cashPlanningApi.getDay(date),
   });
 
-  // Global receivables — used here only to project cash for the selected day.
+  // Global receivables — used here for the Receivables tab count badge.
   const receivablesQuery = useQuery({
     queryKey: cashPlanningKeys.receivables(),
     queryFn: () => cashPlanningApi.listReceivables(),
   });
-
-  const expectedByDay = React.useMemo(() => {
-    const rows = receivablesQuery.data?.receivables ?? [];
-    return rows
-      .filter(
-        (r) =>
-          !r.ackReceived &&
-          r.expectedDate != null &&
-          toIsoDate(new Date(r.expectedDate)) <= date,
-      )
-      .reduce((s, r) => s + r.expectedAmount, 0);
-  }, [receivablesQuery.data, date]);
 
   const openDay = useMutation({
     mutationFn: () => cashPlanningApi.openDay(date),
@@ -117,34 +95,29 @@ export default function CashPlanningPage() {
   });
 
   const day: CashPlanDayView | null | undefined = dayQuery.data;
+  const openReceivables =
+    receivablesQuery.data?.receivables.filter((r) => !r.ackReceived).length ?? 0;
 
   return (
     <TooltipProvider>
       <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-0.5">
-          <h1 className="text-xl font-semibold tracking-tight">Cash Planning</h1>
-          <p className="text-sm text-muted-foreground">
-            Daily cash position, priority payment queue and stakeholder approvals
-          </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <IconWallet size={20} />
+          </span>
+          <div className="space-y-0.5">
+            <h1 className="text-xl font-semibold tracking-tight">
+              Cash Planning
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Daily cash position, priority payment queue and stakeholder
+              approvals
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-end gap-3">
-          {day ? (
-            <div className="flex gap-2">
-              <HeaderStat
-                label="Available"
-                value={day.availableCash}
-                tone={day.availableCash < 0 ? "bad" : "ok"}
-              />
-              <HeaderStat label="Pending" value={day.pendingTotal} />
-              <HeaderStat
-                label="Projected"
-                value={day.availableCash + expectedByDay}
-              />
-            </div>
-          ) : null}
-
+        <div className="flex flex-wrap items-center gap-2">
           <div className="w-44">
             <DatePicker
               selected={new Date(`${date}T00:00:00`)}
@@ -154,7 +127,27 @@ export default function CashPlanningPage() {
           </div>
 
           {day ? (
-            <Button variant="outline" onClick={() => setShowReport(true)}>
+            <span
+              className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium ${
+                day.status === "CLOSED"
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-emerald-100 text-emerald-700"
+              }`}
+            >
+              <span
+                className={`size-1.5 rounded-full ${
+                  day.status === "CLOSED" ? "bg-muted-foreground" : "bg-emerald-500"
+                }`}
+              />
+              {day.status === "CLOSED" ? "Closed" : "Open"}
+            </span>
+          ) : null}
+
+          {day ? (
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/cash-planning/report/${date}`)}
+            >
               <IconFileText size={15} className="mr-1" />
               Day report
             </Button>
@@ -169,35 +162,53 @@ export default function CashPlanningPage() {
               {closeDay.isPending ? "Closing…" : "Close day"}
             </Button>
           ) : null}
-          {day && day.status === "CLOSED" ? (
-            <span className="inline-flex h-9 items-center rounded-md bg-muted px-3 text-xs font-medium text-muted-foreground">
-              Closed
-            </span>
-          ) : null}
         </div>
       </div>
 
       {dayQuery.isLoading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-40 w-full rounded-md" />
-          <Skeleton className="h-64 w-full rounded-md" />
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
+          <CashPositionSkeleton />
+          <PaymentQueueSkeleton />
         </div>
       ) : !day ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed py-16 text-center">
-          <p className="text-sm text-muted-foreground">No cash plan for {date}.</p>
+          <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <IconCalendarPlus size={24} />
+          </span>
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">No cash plan for this day</p>
+            <p className="text-xs text-muted-foreground">
+              Open the day to carry forward balances and start the queue.
+            </p>
+          </div>
           {canEnter ? (
             <Button onClick={() => openDay.mutate()} disabled={openDay.isPending}>
               <IconPlus size={15} className="mr-1" />
               {openDay.isPending ? "Opening…" : "Open this day"}
             </Button>
-          ) : null}
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              You don&apos;t have permission to open a day.
+            </p>
+          )}
         </div>
       ) : (
         <Tabs defaultValue="queue" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="queue">Payment Queue</TabsTrigger>
-            <TabsTrigger value="ledger">Creditor Ledger</TabsTrigger>
-            <TabsTrigger value="receivables">Receivables</TabsTrigger>
+            <TabsTrigger value="queue" className="gap-1.5">
+              <IconListCheck size={15} />
+              Payment Queue
+              <TabCount n={day.payments.length} />
+            </TabsTrigger>
+            <TabsTrigger value="ledger" className="gap-1.5">
+              <IconReceipt2 size={15} />
+              Creditor Ledger
+            </TabsTrigger>
+            <TabsTrigger value="receivables" className="gap-1.5">
+              <IconCoins size={15} />
+              Receivables
+              <TabCount n={openReceivables} />
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="queue">
@@ -222,14 +233,6 @@ export default function CashPlanningPage() {
         </Tabs>
       )}
       </div>
-
-      {day ? (
-        <DayCloseReportDialog
-          day={day}
-          open={showReport}
-          onOpenChange={setShowReport}
-        />
-      ) : null}
     </TooltipProvider>
   );
 }

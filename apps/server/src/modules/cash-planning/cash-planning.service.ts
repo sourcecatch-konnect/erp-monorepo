@@ -73,6 +73,7 @@ export function buildDayView(day: DayWithRelations) {
 export async function buildReceivablesView() {
   const rows = await db.cashReceivable.findMany({
     orderBy: [{ expectedDate: "asc" }, { createdAt: "asc" }],
+    include: { receipts: { orderBy: { receivedAt: "desc" } } },
   });
 
   const receivables = rows.map((r) => ({
@@ -80,6 +81,7 @@ export async function buildReceivablesView() {
     totalAmount: Number(r.totalAmount),
     expectedAmount: Number(r.expectedAmount),
     receivedAmount: r.receivedAmount === null ? null : Number(r.receivedAmount),
+    receipts: r.receipts.map((rc) => ({ ...rc, amount: Number(rc.amount) })),
   }));
 
   const open = receivables.filter((r) => !r.ackReceived);
