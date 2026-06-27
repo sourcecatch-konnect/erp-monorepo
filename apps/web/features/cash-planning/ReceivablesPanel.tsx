@@ -7,6 +7,7 @@ import {
   IconPlus,
   IconTrash,
   IconCheck,
+  IconChecks,
   IconReceipt,
   IconPencil,
   IconCoins,
@@ -39,9 +40,11 @@ import { formatPaiseCompact } from "@/lib/money";
 
 import { cashPlanningApi } from "./cash-planning.service";
 import { cashPlanningKeys } from "./cash-planning.keys";
+import { applyReceiptOptimistic } from "./cash-planning.compute";
 import { CompactMoney } from "./CompactMoney";
 import { StatCard } from "./StatCard";
 import { EditReceivableDialog } from "./EditReceivableDialog";
+import { ReceiptTimeline } from "./ReceiptTimeline";
 
 type Props = {
   day: CashPlanDayView;
@@ -346,11 +349,29 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                         <TableCell className="text-right">
                           {r.ackReceived ? (
                             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                              <IconCheck size={12} />
-                              <CompactMoney
-                                value={r.receivedAmount ?? r.totalAmount}
-                              />
+                              <IconChecks size={12} />
+                              Settled
                             </span>
+                          ) : (r.receivedAmount ?? 0) > 0 ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                                <CompactMoney value={r.receivedAmount ?? 0} />{" "}
+                                received
+                              </span>
+                              <div className="h-1 w-20 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="h-full bg-emerald-500"
+                                  style={{
+                                    width: `${Math.round(
+                                      ((r.receivedAmount ?? 0) /
+                                        ((r.receivedAmount ?? 0) + r.totalAmount ||
+                                          1)) *
+                                        100,
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">
                               pending
@@ -359,6 +380,47 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
+                            {r.receipts.length > 0 ? (
+                              <ReceiptTimeline receipts={r.receipts} />
+                            ) : null}
+                            {editable &&
+                            !r.ackReceived &&
+                            r.expectedAmount > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                title={`Receive the expected ${formatPaiseCompact(
+                                  r.expectedAmount,
+                                )}`}
+                                className="h-8 gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                disabled={received.isPending}
+                                onClick={() =>
+                                  received.mutate({
+                                    id: r.id,
+                                    amt: r.expectedAmount,
+                                  })
+                                }
+                              >
+                                <IconCheck size={14} />
+                                {formatPaiseCompact(r.expectedAmount)}
+                              </Button>
+                            ) : null}
+                            {editable && !r.ackReceived ? (
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                title={`Settle full remaining (${formatPaiseCompact(
+                                  r.totalAmount,
+                                )})`}
+                                className="text-emerald-600 hover:bg-emerald-50"
+                                disabled={received.isPending}
+                                onClick={() =>
+                                  received.mutate({ id: r.id, amt: r.totalAmount })
+                                }
+                              >
+                                <IconChecks size={15} />
+                              </Button>
+                            ) : null}
                             {editable && !r.ackReceived ? (
                               <Button
                                 size="icon-sm"
@@ -368,20 +430,6 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                                 onClick={() => setEditing(r)}
                               >
                                 <IconPencil size={15} />
-                              </Button>
-                            ) : null}
-                            {editable && !r.ackReceived ? (
-                              <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                title="Mark received (full)"
-                                className="text-emerald-600 hover:bg-emerald-50"
-                                disabled={received.isPending}
-                                onClick={() =>
-                                  received.mutate({ id: r.id, amt: r.totalAmount })
-                                }
-                              >
-                                <IconCheck size={15} />
                               </Button>
                             ) : null}
                             {editable ? (

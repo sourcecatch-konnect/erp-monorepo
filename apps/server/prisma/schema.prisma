@@ -76,6 +76,8 @@ model User {
   updatedTrips                VehicleTrip[]                  @relation("UpdatedTrips")
   createdVPSchedules          VPSchedule[]                   @relation("CreatedVPSchedules")
   updatedVPSchedules          VPSchedule[]                   @relation("UpdatedVPSchedules")
+  createdMRRRs                MRRR[]                         @relation("CreatedMRRR")
+  updatedMRRRs                MRRR[]                         @relation("UpdatedMRRR")
 }
 
 model Company {
@@ -610,20 +612,20 @@ model City {
 }
 
 model Area {
-  id                       String             @id @default(cuid())
-  name                     String
-  cityId                   String
-  formattedAddress         String?
-  googlePlaceId            String?            @unique
-  isRailHead               Boolean            @default(false)
-  latitude                 Float?
-  longitude                Float?
+  id               String  @id @default(cuid())
+  name             String
+  cityId           String
+  formattedAddress String?
+  googlePlaceId    String? @unique
+  isRailHead       Boolean @default(false)
+  latitude         Float?
+  longitude        Float?
 
-  customerLocations        CustomerLocation[]
-  city                     City               @relation(fields: [cityId], references: [id])
+  customerLocations CustomerLocation[]
+  city              City               @relation(fields: [cityId], references: [id])
 
-  vpSchedulesAsSource      VPSchedule[]       @relation("VPScheduleSourceArea")
-  vpSchedulesAsDestination VPSchedule[]       @relation("VPScheduleDestinationArea")
+  vpSchedulesAsSource      VPSchedule[] @relation("VPScheduleSourceArea")
+  vpSchedulesAsDestination VPSchedule[] @relation("VPScheduleDestinationArea")
 
   railwayFreightAsSource      RailwayFreightMatrix[] @relation("RailwayFreightSourceArea")
   railwayFreightAsDestination RailwayFreightMatrix[] @relation("RailwayFreightDestinationArea")
@@ -631,6 +633,7 @@ model Area {
   @@unique([cityId, name])
   @@index([isRailHead])
 }
+
 model State {
   id         String      @id @default(cuid())
   name       String      @unique
@@ -654,9 +657,9 @@ model Transport {
 }
 
 model RailwayFreightMatrix {
-  id                String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  wagonId           String
+  wagonId String
 
   sourceCityId      String
   destinationCityId String
@@ -664,18 +667,19 @@ model RailwayFreightMatrix {
   sourceAreaId      String?
   destinationAreaId String?
 
-  freightAmount     BigInt
+  freightAmount BigInt
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  sourceCity        City     @relation("SourceCity", fields: [sourceCityId], references: [id])
-  destinationCity   City     @relation("DestinationCity", fields: [destinationCityId], references: [id])
+  sourceCity      City @relation("SourceCity", fields: [sourceCityId], references: [id])
+  destinationCity City @relation("DestinationCity", fields: [destinationCityId], references: [id])
 
-  sourceArea        Area?    @relation("RailwayFreightSourceArea", fields: [sourceAreaId], references: [id])
-  destinationArea   Area?    @relation("RailwayFreightDestinationArea", fields: [destinationAreaId], references: [id])
+  sourceArea      Area? @relation("RailwayFreightSourceArea", fields: [sourceAreaId], references: [id])
+  destinationArea Area? @relation("RailwayFreightDestinationArea", fields: [destinationAreaId], references: [id])
 
-  wagon             Wagon    @relation(fields: [wagonId], references: [id])
+  wagon            Wagon                  @relation(fields: [wagonId], references: [id])
+  vpScheduleCounts VPScheduleWagonCount[]
 
   @@index([wagonId])
   @@index([sourceCityId])
@@ -692,10 +696,10 @@ model Wagon {
   width  Float
   weight Float
 
-  totalCft   Float?
-  capacityMt Float?
-  isActive   Boolean @default(true)
-
+  totalCft             Float?
+  capacityMt           Float?
+  isActive             Boolean                @default(true)
+  mrRrRows             MRRRRow[]
   RailwayFreightMatrix RailwayFreightMatrix[]
   vpScheduleCounts     VPScheduleWagonCount[]
 }
@@ -1143,13 +1147,13 @@ model VPSchedule {
   createdById String
   updatedById String?
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-  version   Int       @default(1)
-
-  fromBranch Branch @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
-  toBranch   Branch @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  version    Int       @default(1)
+  mrRr       MRRR?
+  fromBranch Branch    @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
+  toBranch   Branch    @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
 
   sourceArea      Area @relation("VPScheduleSourceArea", fields: [sourceAreaId], references: [id])
   destinationArea Area @relation("VPScheduleDestinationArea", fields: [destinationAreaId], references: [id])
@@ -1171,25 +1175,30 @@ model VPSchedule {
 model VPScheduleWagonCount {
   id String @id @default(cuid())
 
-  vpScheduleId String
-  wagonId      String
+  vpScheduleId    String
+  wagonId         String
+  freightMatrixId String?
 
   count Int @default(0)
 
-  capacityCft Float?
-  capacityMt  Float?
-  totalCft    Float?
-  totalMt     Float?
+  capacityCft   Float?
+  capacityMt    Float?
+  totalCft      Float?
+  totalMt       Float?
+  freightAmount BigInt?
+  totalFreight  BigInt?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  vpSchedule VPSchedule @relation(fields: [vpScheduleId], references: [id], onDelete: Cascade)
-  wagon      Wagon      @relation(fields: [wagonId], references: [id])
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  mrRrRows      MRRRRow[]
+  vpSchedule    VPSchedule            @relation(fields: [vpScheduleId], references: [id], onDelete: Cascade)
+  wagon         Wagon                 @relation(fields: [wagonId], references: [id])
+  freightMatrix RailwayFreightMatrix? @relation(fields: [freightMatrixId], references: [id])
 
   @@unique([vpScheduleId, wagonId])
   @@index([vpScheduleId])
   @@index([wagonId])
+  @@index([freightMatrixId])
 }
 
 // ── Cash Planning ─────────────────────────────────────────────────────────
@@ -1291,18 +1300,17 @@ model CashPayment {
 // the full outstanding (totalAmount) plus the slice expected by expectedDate
 // (expectedAmount) — the day forecast sums the expected slices due by the day.
 model CashReceivable {
-  id             String    @id @default(cuid())
+  id             String                  @id @default(cuid())
   partyName      String
   totalAmount    BigInt // outstanding still to be received from this party (paise)
-  expectedAmount BigInt    @default(0) // next slice expected by expectedDate (paise)
-  expectedDate   DateTime? @db.Date
+  expectedAmount BigInt                  @default(0) // next slice expected by expectedDate (paise)
+  expectedDate   DateTime?               @db.Date
   receivedAmount BigInt? // cumulative received (paise), null until first receipt
-  ackReceived    Boolean   @default(false) // true once fully settled (outstanding = 0)
+  ackReceived    Boolean                 @default(false) // true once fully settled (outstanding = 0)
   note           String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  receipts CashReceivableReceipt[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  receipts       CashReceivableReceipt[]
 }
 
 // One recorded receipt against a receivable — the slice history / audit trail
@@ -1317,6 +1325,82 @@ model CashReceivableReceipt {
   createdAt    DateTime       @default(now())
 
   @@index([receivableId])
+}
+
+model MRRR {
+  id String @id @default(cuid())
+
+  mrRrNumber String? @unique
+
+  vpScheduleId String     @unique
+  vpSchedule   VPSchedule @relation(fields: [vpScheduleId], references: [id])
+
+  rakeType RakeType?
+  status   MRRRStatus @default(DRAFT)
+
+  remarks String?
+
+  createdById String
+  updatedById String?
+
+  createdBy User  @relation("CreatedMRRR", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedMRRR", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  rows MRRRRow[]
+
+  @@index([vpScheduleId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([createdById])
+}
+
+model MRRRRow {
+  id String @id @default(cuid())
+
+  mrRrId String
+  mrRr   MRRR   @relation(fields: [mrRrId], references: [id], onDelete: Cascade)
+
+  vpScheduleWagonCountId String
+  vpScheduleWagonCount   VPScheduleWagonCount @relation(fields: [vpScheduleWagonCountId], references: [id])
+
+  wagonId String
+  wagon   Wagon  @relation(fields: [wagonId], references: [id])
+
+  wagonTypeLabel String
+  rowNumber      Int
+  rowLabel       String
+
+  sequenceNo String?
+  vpNo       String?
+  mrRrNo     String?
+  sealNo     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([mrRrId, rowNumber])
+  @@index([mrRrId])
+  @@index([wagonId])
+  @@index([vpScheduleWagonCountId])
+  @@index([mrRrNo])
+  @@index([vpNo])
+  @@index([sealNo])
+}
+
+enum MRRRStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+}
+
+enum RakeType {
+  INDENT
+  LEASE
 }
 
 enum CreditorCategory {
