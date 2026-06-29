@@ -22,8 +22,8 @@ import {
 } from "@skerp/ui/components/dialog";
 import { formatPaise } from "@/lib/money";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
+import { cashPlanningApi } from "../api/cash-planning.service";
+import { cashPlanningKeys } from "../api/cash-planning.keys";
 
 const toPaise = (rupees: string): number => Math.round(Number(rupees) * 100);
 const toRupeeInput = (paise: number): string => (paise / 100).toFixed(2);

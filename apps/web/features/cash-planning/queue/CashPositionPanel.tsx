@@ -18,9 +18,9 @@ import {
 } from "@skerp/ui/components/table";
 import { formatPaise } from "@/lib/money";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
-import { CompactMoney } from "./CompactMoney";
+import { cashPlanningApi } from "../api/cash-planning.service";
+import { cashPlanningKeys } from "../api/cash-planning.keys";
+import { CompactMoney } from "../components/CompactMoney";
 
 type Props = {
   day: CashPlanDayView;

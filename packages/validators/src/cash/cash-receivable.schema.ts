@@ -32,6 +32,18 @@ export const cashReceivableSchema = z.object({
 });
 
 /* -----------------------------
+   RECEIPT (one slice in the timeline / audit trail)
+------------------------------ */
+export const cashReceiptSchema = z.object({
+  id: z.string(),
+  receivableId: z.string(),
+  amount: z.number(), // paise received this slice
+  receivedAt: z.date(),
+  note: z.string().nullable().optional(),
+  createdAt: z.date(),
+});
+
+/* -----------------------------
    CREATE / UPDATE
 ------------------------------ */
 const cashReceivableFields = z.object({
@@ -77,9 +89,17 @@ export const updateCashReceivableSchema = cashReceivableFields
   .refine(expectedWithinTotal, expectedWithinTotalError);
 
 /* -----------------------------
-   MARK RECEIVED
+   RECEIVE (record a receipt against the outstanding total)
+   The amount is deducted from the outstanding total; the receivable closes
+   automatically once nothing is left. ackReceived is computed server-side.
 ------------------------------ */
+const receivedAmountPaise = z
+  .union([z.string(), z.number()])
+  .transform((v) => Number(v))
+  .refine((v) => Number.isInteger(v) && v > 0, {
+    message: "Received amount must be a positive whole number of paise",
+  });
+
 export const markReceivableReceivedSchema = z.object({
-  receivedAmount: amountPaise,
-  ackReceived: z.boolean().optional().default(true),
+  receivedAmount: receivedAmountPaise,
 });

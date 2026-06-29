@@ -7,6 +7,7 @@ import {
   IconPlus,
   IconTrash,
   IconCheck,
+  IconChecks,
   IconReceipt,
   IconPencil,
   IconCoins,
@@ -14,6 +15,7 @@ import {
   IconWallet,
   IconChartBar,
   IconCalendarEvent,
+  IconArrowsSort,
 } from "@tabler/icons-react";
 
 import type {
@@ -28,6 +30,13 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { TooltipProvider } from "@skerp/ui/components/tooltip";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,10 +46,13 @@ import {
 } from "@skerp/ui/components/table";
 import { formatPaiseCompact } from "@/lib/money";
 
-import { cashPlanningApi } from "./cash-planning.service";
-import { cashPlanningKeys } from "./cash-planning.keys";
-import { CompactMoney } from "./CompactMoney";
+import { cashPlanningApi } from "../api/cash-planning.service";
+import { cashPlanningKeys } from "../api/cash-planning.keys";
+import { applyReceiptOptimistic } from "../lib/cash-planning.compute";
+import { CompactMoney } from "../components/CompactMoney";
+import { StatCard } from "../components/StatCard";
 import { EditReceivableDialog } from "./EditReceivableDialog";
+import { ReceiptTimeline } from "./ReceiptTimeline";
 
 type Props = {
   day: CashPlanDayView;
@@ -57,43 +69,45 @@ const toIsoDate = (d: Date): string => {
   return `${d.getFullYear()}-${m}-${day}`;
 };
 
-const toneText = {
-  sky: "text-sky-600",
-  emerald: "text-emerald-600",
-  destructive: "text-destructive",
-} as const;
-
-function StatCard({
-  icon,
-  label,
-  value,
-  tone,
-  sub,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  tone?: keyof typeof toneText;
-  sub?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-md border border-border bg-card p-4 transition-colors hover:border-primary/30">
-      <div className="flex items-center gap-2">
-        <span className="flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          {icon}
-        </span>
-        <span className="text-sm font-medium text-muted-foreground">{label}</span>
-      </div>
-      <CompactMoney
-        className={`mt-2.5 block text-xl font-semibold ${tone ? toneText[tone] : ""}`}
-        value={value}
-      />
-      {sub ? <p className="mt-1 text-xs text-muted-foreground">{sub}</p> : null}
-    </div>
-  );
-}
-
 const fieldLabel = "text-xs font-medium text-muted-foreground";
+
+type ReceivableRow = ReceivablesView["receivables"][number];
+type ReceivableSort =
+  | "smart"
+  | "expectedDate"
+  | "expectedAmount"
+  | "pendingAmount"
+  | "receivedAmount"
+  | "status"
+  | "party";
+
+const RECEIVABLE_SORTS: { value: ReceivableSort; label: string }[] = [
+  { value: "smart", label: "Smart: due first" },
+  { value: "expectedDate", label: "Expected date" },
+  { value: "expectedAmount", label: "Expected amount" },
+  { value: "pendingAmount", label: "Pending amount" },
+  { value: "receivedAmount", label: "Received amount" },
+  { value: "status", label: "Status" },
+  { value: "party", label: "Party A-Z" },
+];
+
+const byParty = (a: ReceivableRow, b: ReceivableRow) =>
+  a.partyName.localeCompare(b.partyName, "en-IN", { sensitivity: "base" });
+
+const expectedTime = (r: ReceivableRow) =>
+  r.expectedDate ? new Date(r.expectedDate).getTime() : Number.POSITIVE_INFINITY;
+
+const latestReceiptTime = (r: ReceivableRow) => {
+  const receivedAt = r.receipts[0]?.receivedAt;
+  return receivedAt ? new Date(receivedAt).getTime() : 0;
+};
+
+const statusRank = (r: ReceivableRow) => {
+  if (r.ackReceived) return 3;
+  if (r.expectedAmount > 0) return 0;
+  if ((r.receivedAmount ?? 0) > 0) return 1;
+  return 2;
+};
 
 export default function ReceivablesPanel({ day, date, canEnter }: Props) {
   const queryClient = useQueryClient();
@@ -112,6 +126,7 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
   const [expectedAmt, setExpectedAmt] = React.useState("");
   const [expectedDate, setExpectedDate] = React.useState<Date | undefined>();
   const [editing, setEditing] = React.useState<CashReceivable | null>(null);
+  const [sortBy, setSortBy] = React.useState<ReceivableSort>("smart");
 
   const resetForm = () => {
     setParty("");
@@ -141,8 +156,18 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
   const received = useMutation({
     mutationFn: ({ id, amt }: { id: string; amt: number }) =>
       cashPlanningApi.markReceived(id, amt),
+    onMutate: ({ id, amt }) => {
+      const prev = queryClient.getQueryData<ReceivablesView>(
+        cashPlanningKeys.receivables(),
+      );
+      if (prev) setView(applyReceiptOptimistic(prev, id, amt));
+      return { prev };
+    },
+    onError: (e, _vars, ctx) => {
+      if (ctx?.prev) setView(ctx.prev);
+      toast.error(e instanceof Error ? e.message : "Failed");
+    },
     onSuccess: (next) => setView(next),
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
   const remove = useMutation({
@@ -167,6 +192,68 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
       .filter(isDueByDay)
       .reduce((s, r) => s + r.expectedAmount, 0);
   }, [view, isDueByDay]);
+
+  const sortedReceivables = React.useMemo(() => {
+    if (!view) return [];
+
+    return view.receivables
+      .map((receivable, index) => ({ receivable, index }))
+      .sort((left, right) => {
+        const a = left.receivable;
+        const b = right.receivable;
+        let result = 0;
+
+        switch (sortBy) {
+          case "smart": {
+            const rank = (r: ReceivableRow) =>
+              r.ackReceived
+                ? 3
+                : isDueByDay(r)
+                  ? 0
+                  : r.expectedAmount > 0
+                    ? 1
+                    : 2;
+            result =
+              rank(a) - rank(b) ||
+              expectedTime(a) - expectedTime(b) ||
+              b.expectedAmount - a.expectedAmount ||
+              b.totalAmount - a.totalAmount ||
+              byParty(a, b);
+            break;
+          }
+          case "expectedDate":
+            result = expectedTime(a) - expectedTime(b) || byParty(a, b);
+            break;
+          case "expectedAmount":
+            result =
+              b.expectedAmount - a.expectedAmount ||
+              expectedTime(a) - expectedTime(b) ||
+              byParty(a, b);
+            break;
+          case "pendingAmount":
+            result = b.totalAmount - a.totalAmount || byParty(a, b);
+            break;
+          case "receivedAmount":
+            result =
+              (b.receivedAmount ?? 0) - (a.receivedAmount ?? 0) ||
+              latestReceiptTime(b) - latestReceiptTime(a) ||
+              byParty(a, b);
+            break;
+          case "status":
+            result =
+              statusRank(a) - statusRank(b) ||
+              b.totalAmount - a.totalAmount ||
+              byParty(a, b);
+            break;
+          case "party":
+            result = byParty(a, b);
+            break;
+        }
+
+        return result || left.index - right.index;
+      })
+      .map(({ receivable }) => receivable);
+  }, [view, sortBy, isDueByDay]);
 
   const projectedCash = day.availableCash + expectedByDay;
   const openCount = view
@@ -217,16 +304,36 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
 
         {/* receivables list */}
         <div className="overflow-hidden rounded-md border border-border bg-card">
-          <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
             <div className="space-y-0.5">
               <h2 className="text-sm font-semibold">Receivables</h2>
               <p className="text-xs text-muted-foreground">
                 Money owed to you — slices due by {date} are highlighted
               </p>
             </div>
-            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-              {openCount} open
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <IconArrowsSort size={14} className="text-muted-foreground" />
+                <Select
+                  value={sortBy}
+                  onValueChange={(value) => setSortBy(value as ReceivableSort)}
+                >
+                  <SelectTrigger className="h-8 w-44 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RECEIVABLE_SORTS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                {openCount} open
+              </span>
+            </div>
           </div>
 
           {/* quick add */}
@@ -317,7 +424,7 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  view.receivables.map((r) => {
+                  sortedReceivables.map((r) => {
                     const due = isDueByDay(r);
                     return (
                       <TableRow
@@ -371,11 +478,29 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                         <TableCell className="text-right">
                           {r.ackReceived ? (
                             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                              <IconCheck size={12} />
-                              <CompactMoney
-                                value={r.receivedAmount ?? r.totalAmount}
-                              />
+                              <IconChecks size={12} />
+                              Settled
                             </span>
+                          ) : (r.receivedAmount ?? 0) > 0 ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                                <CompactMoney value={r.receivedAmount ?? 0} />{" "}
+                                received
+                              </span>
+                              <div className="h-1 w-20 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="h-full bg-emerald-500"
+                                  style={{
+                                    width: `${Math.round(
+                                      ((r.receivedAmount ?? 0) /
+                                        ((r.receivedAmount ?? 0) + r.totalAmount ||
+                                          1)) *
+                                        100,
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">
                               pending
@@ -384,6 +509,47 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
+                            {r.receipts.length > 0 ? (
+                              <ReceiptTimeline receipts={r.receipts} />
+                            ) : null}
+                            {editable &&
+                            !r.ackReceived &&
+                            r.expectedAmount > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                title={`Receive the expected ${formatPaiseCompact(
+                                  r.expectedAmount,
+                                )}`}
+                                className="h-8 gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                disabled={received.isPending}
+                                onClick={() =>
+                                  received.mutate({
+                                    id: r.id,
+                                    amt: r.expectedAmount,
+                                  })
+                                }
+                              >
+                                <IconCheck size={14} />
+                                {formatPaiseCompact(r.expectedAmount)}
+                              </Button>
+                            ) : null}
+                            {editable && !r.ackReceived ? (
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                title={`Settle full remaining (${formatPaiseCompact(
+                                  r.totalAmount,
+                                )})`}
+                                className="text-emerald-600 hover:bg-emerald-50"
+                                disabled={received.isPending}
+                                onClick={() =>
+                                  received.mutate({ id: r.id, amt: r.totalAmount })
+                                }
+                              >
+                                <IconChecks size={15} />
+                              </Button>
+                            ) : null}
                             {editable && !r.ackReceived ? (
                               <Button
                                 size="icon-sm"
@@ -393,20 +559,6 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                                 onClick={() => setEditing(r)}
                               >
                                 <IconPencil size={15} />
-                              </Button>
-                            ) : null}
-                            {editable && !r.ackReceived ? (
-                              <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                title="Mark received (full)"
-                                className="text-emerald-600 hover:bg-emerald-50"
-                                disabled={received.isPending}
-                                onClick={() =>
-                                  received.mutate({ id: r.id, amt: r.totalAmount })
-                                }
-                              >
-                                <IconCheck size={15} />
                               </Button>
                             ) : null}
                             {editable ? (

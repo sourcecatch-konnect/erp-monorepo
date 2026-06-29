@@ -12,7 +12,7 @@ import type {
   CreateCashReceivableBody,
   UpdateCashReceivableBody,
 } from "@skerp/types";
-import { unwrapApiResponse } from "../masters/_shared/master-api";
+import { unwrapApiResponse } from "../../masters/_shared/master-api";
 
 export type CashDaySummary = {
   id: string;
@@ -107,6 +107,18 @@ export const cashPlanningApi = {
     return unwrapApiResponse(res);
   },
 
+  /** Approve many pending payments in a single server round-trip. */
+  approveBulk: async (
+    dayId: string,
+    ids: string[],
+  ): Promise<CashPlanDayView> => {
+    const res = await api.post<ApiResponse<CashPlanDayView>>(
+      `/cash-planning/days/${dayId}/payments/approve-bulk`,
+      { ids },
+    );
+    return unwrapApiResponse(res);
+  },
+
   closeDay: async (dayId: string): Promise<CashPlanDayView> => {
     const res = await api.post<ApiResponse<CashPlanDayView>>(
       `/cash-planning/days/${dayId}/close`,
@@ -144,13 +156,14 @@ export const cashPlanningApi = {
     return unwrapApiResponse(res);
   },
 
+  /** Record a receipt against a receivable's outstanding total (partial OK). */
   markReceived: async (
     id: string,
     receivedAmount: number,
   ): Promise<ReceivablesView> => {
     const res = await api.post<ApiResponse<ReceivablesView>>(
       `/cash-planning/receivables/${id}/received`,
-      { receivedAmount, ackReceived: true },
+      { receivedAmount },
     );
     return unwrapApiResponse(res);
   },
