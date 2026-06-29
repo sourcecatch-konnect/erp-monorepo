@@ -36,6 +36,7 @@
     "ioredis": "^5.11.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
+    "prisma": "^7.8.0",
     "puppeteer": "^25.1.0",
     "socket.io": "^4.8.3",
     "ws": "^8.21.0",
@@ -52,7 +53,6 @@
     "@types/node": "^22.15.3",
     "@types/ws": "^8.18.1",
     "eslint": "^9.39.1",
-    "prisma": "^7.8.0",
     "tsx": "^4.20.6",
     "typescript": "5.9.2"
   }
