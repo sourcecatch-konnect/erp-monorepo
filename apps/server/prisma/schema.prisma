@@ -1398,81 +1398,8 @@ enum MRRRStatus {
   CANCELLED
 }
 
-enum RakeType {
-  INDENT
-  LEASE
-}
 
-model MRRR {
-  id String @id @default(cuid())
 
-  mrRrNumber String? @unique
-
-  vpScheduleId String     @unique
-  vpSchedule   VPSchedule @relation(fields: [vpScheduleId], references: [id])
-
-  rakeType RakeType?
-  status   MRRRStatus @default(DRAFT)
-
-  remarks String?
-
-  createdById String
-  updatedById String?
-
-  createdBy User  @relation("CreatedMRRR", fields: [createdById], references: [id])
-  updatedBy User? @relation("UpdatedMRRR", fields: [updatedById], references: [id])
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-  version   Int       @default(1)
-
-  rows MRRRRow[]
-
-  @@index([vpScheduleId])
-  @@index([status])
-  @@index([deletedAt])
-  @@index([createdById])
-}
-
-model MRRRRow {
-  id String @id @default(cuid())
-
-  mrRrId String
-  mrRr   MRRR   @relation(fields: [mrRrId], references: [id], onDelete: Cascade)
-
-  vpScheduleWagonCountId String
-  vpScheduleWagonCount   VPScheduleWagonCount @relation(fields: [vpScheduleWagonCountId], references: [id])
-
-  wagonId String
-  wagon   Wagon  @relation(fields: [wagonId], references: [id])
-
-  wagonTypeLabel String
-  rowNumber      Int
-  rowLabel       String
-
-  sequenceNo String?
-  vpNo       String?
-  mrRrNo     String?
-  sealNo     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([mrRrId, rowNumber])
-  @@index([mrRrId])
-  @@index([wagonId])
-  @@index([vpScheduleWagonCountId])
-  @@index([mrRrNo])
-  @@index([vpNo])
-  @@index([sealNo])
-}
-
-enum MRRRStatus {
-  DRAFT
-  SUBMITTED
-  CANCELLED
-}
 
 enum RakeType {
   INDENT
