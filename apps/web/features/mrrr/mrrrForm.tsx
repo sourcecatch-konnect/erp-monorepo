@@ -306,7 +306,7 @@ const previewTotalFreight = previewWagonCounts.reduce(
         }
 
         toast.success("MR/RR updated");
-        router.push(`/operations/MRRR/${encodeURIComponent(mrrrId)}`);
+        router.push(`/operations/mrrr/${encodeURIComponent(mrrrId)}`);
         return;
       }
 
@@ -326,14 +326,14 @@ const previewTotalFreight = previewWagonCounts.reduce(
       const created = await createMutation.mutateAsync(body);
 
       toast.success("MR/RR created");
-      router.push(`/operations/MRRR/${encodeURIComponent(created.id)}`);
+      router.push(`/operations/mrrr/${encodeURIComponent(created.id)}`);
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
   };
 
   const handleCancel = () => {
-    router.push("/operations/MRRR");
+    router.push("/operations/mrrr");
   };
 
   if (isEdit && detailQuery.isLoading) {

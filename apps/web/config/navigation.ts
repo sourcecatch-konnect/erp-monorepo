@@ -85,7 +85,7 @@ export const NAV_SECTIONS: NavSection[] = [
     },
     {
       title: "MR / RR",
-      href: "/operations/MRRR",
+      href: "/operations/mrrr",
       permission: PERMS.MRRR.VIEW,
     }
   ],

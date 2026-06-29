@@ -258,7 +258,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
         variant="ghost"
         size="sm"
         className="text-muted-foreground"
-        onClick={() => router.push("/operations/MRRR")}
+        onClick={() => router.push("/operations/mrrr")}
       >
         <IconArrowLeft size={16} className="mr-1" />
         Back to MR/RR
@@ -290,7 +290,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push(`/operations/MRRR/${mrrr.id}/edit`)}
+              onClick={() => router.push(`/operations/mrrr/${mrrr.id}/edit`)}
             >
               <IconEdit size={14} className="mr-1.5" />
               Edit

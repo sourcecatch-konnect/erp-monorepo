@@ -80,7 +80,7 @@ export function MRRRListPage() {
           </p>
         </div>
 
-        <Button onClick={() => router.push("/operations/MRRR/new")}>
+        <Button onClick={() => router.push("/operations/mrrr/new")}>
           <IconPlus size={16} className="mr-1" />
           Add MR/RR
         </Button>

@@ -76,10 +76,15 @@ export const mrrrApi = {
   if (query?.size !== undefined) params.size = query.size;
   if (query?.search) params.search = query.search;
 
+
   const res = await api.get<ApiResponse<MRRRVPScheduleOption[]>>(
     "/mrrr/vp-schedules",
     { params },
   );
+
+  if (!res.data.ok) {
+    throw new Error(res.data.error.message);
+  }
 
   return {
     data: res.data.data,

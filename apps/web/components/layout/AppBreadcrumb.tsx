@@ -47,7 +47,7 @@ export function AppBreadcrumb() {
 
 const isMRRRDetailSegment =
   segments[index - 2] === "operations" &&
-  segments[index - 1] === "MRRR";
+  segments[index - 1] === "mrrr";
 
 const content =
   label ??

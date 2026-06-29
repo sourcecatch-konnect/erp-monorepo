@@ -198,7 +198,7 @@ const [cancelRow, setCancelRow] = React.useState<MRRRRow | null>(null);
       {
         id: "createdBy",
         header: "Created By",
-        size: 80,
+        size: 100,
         cell: ({ row }) => (
           <TruncatedTooltipText value={createdByLabel(row.original)} />
         ),
@@ -347,7 +347,7 @@ const handleCancel = (reason: string) => {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem asChild>
                               <Link
-                                href={`/operations/MRRR/${encodeURIComponent(
+                                href={`/operations/mrrr/${encodeURIComponent(
                                   String(identifier),
                                 )}`}
                               >
@@ -360,7 +360,7 @@ const handleCancel = (reason: string) => {
                               <>
                                 <DropdownMenuItem asChild>
                                   <Link
-                                    href={`/operations/MRRR/${encodeURIComponent(
+                                    href={`/operations/mrrr/${encodeURIComponent(
                                       String(identifier),
                                     )}/edit`}
                                   >
