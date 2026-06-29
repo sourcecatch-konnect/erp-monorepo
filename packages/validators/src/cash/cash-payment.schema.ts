@@ -105,3 +105,10 @@ export const cashPaymentStatusUpdateSchema = z.object({
 export const reorderCashPaymentsSchema = z.object({
   orderedIds: z.array(z.string().min(1)).min(1, "orderedIds is required"),
 });
+
+/* -----------------------------
+   BULK APPROVE (approve all that fit, one round-trip)
+------------------------------ */
+export const bulkApproveCashPaymentsSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, "ids is required"),
+});

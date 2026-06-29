@@ -1300,16 +1300,31 @@ model CashPayment {
 // the full outstanding (totalAmount) plus the slice expected by expectedDate
 // (expectedAmount) — the day forecast sums the expected slices due by the day.
 model CashReceivable {
-  id             String    @id @default(cuid())
+  id             String                  @id @default(cuid())
   partyName      String
-  totalAmount    BigInt // total still to be received from this party (paise)
-  expectedAmount BigInt    @default(0) // slice expected by expectedDate (paise)
-  expectedDate   DateTime? @db.Date
-  receivedAmount BigInt? // actual received (paise), null until received
-  ackReceived    Boolean   @default(false)
+  totalAmount    BigInt // outstanding still to be received from this party (paise)
+  expectedAmount BigInt                  @default(0) // next slice expected by expectedDate (paise)
+  expectedDate   DateTime?               @db.Date
+  receivedAmount BigInt? // cumulative received (paise), null until first receipt
+  ackReceived    Boolean                 @default(false) // true once fully settled (outstanding = 0)
   note           String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  receipts       CashReceivableReceipt[]
+}
+
+// One recorded receipt against a receivable — the slice history / audit trail
+// that powers the receivable's timeline view.
+model CashReceivableReceipt {
+  id           String         @id @default(cuid())
+  receivableId String
+  receivable   CashReceivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  amount       BigInt // received this slice (paise)
+  receivedAt   DateTime       @default(now())
+  note         String?
+  createdAt    DateTime       @default(now())
+
+  @@index([receivableId])
 }
 
 model MRRR {

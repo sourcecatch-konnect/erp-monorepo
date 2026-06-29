@@ -11,8 +11,34 @@ import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter }
 from "../_shared/crud.factory.js";
 import { convertRupeeFieldsToPaise } from "../../lib/money.js";
+import { BadRequestError } from "../../lib/error.js";
 
 const moneyFields = ["freightAmount"];
+
+const getSearch = (value: unknown) =>
+  typeof value === "string" && value.trim() ? value.trim() : undefined;
+
+const toRailwayFreightData = async (data: any) => {
+  const { wagonType, ...payload } = data;
+  const wagonRef = payload.wagonId ?? wagonType;
+
+  if (wagonRef) {
+    const wagon = await db.wagon.findFirst({
+      where: {
+        OR: [{ id: wagonRef }, { name: wagonRef }],
+      },
+      select: { id: true },
+    });
+
+    if (!wagon) {
+      throw new BadRequestError("Selected wagon does not exist.");
+    }
+
+    payload.wagonId = wagon.id;
+  }
+
+  return convertRupeeFieldsToPaise(payload, moneyFields);
+};
 
 const router: Router =
   createCrudRouter({
@@ -29,11 +55,12 @@ const router: Router =
 
     hooks: {
   beforeCreate: async (data: any) => {
+    const payload = await toRailwayFreightData(data);
     const exists = await db.railwayFreightMatrix.findFirst({
       where: {
-        wagonType: data.wagonType,
-        sourceCityId: data.sourceCityId,
-        destinationCityId: data.destinationCityId,
+        wagonId: payload.wagonId,
+        sourceCityId: payload.sourceCityId,
+        destinationCityId: payload.destinationCityId,
       },
       select: { id: true },
     });
@@ -44,17 +71,28 @@ const router: Router =
       );
     }
 
-    return convertRupeeFieldsToPaise(data, moneyFields);
+    return payload;
   },
 
   beforeUpdate: async (data: any) =>
-    convertRupeeFieldsToPaise(data, moneyFields),
+    toRailwayFreightData(data),
 },
 
     listOptions: {
-      searchableFields: [
-        "wagonType",
-      ],
+      extraWhere: (req) => {
+        const search = getSearch(req.query.search) ?? getSearch(req.query.q);
+
+        return search
+          ? {
+              wagon: {
+                name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            }
+          : {};
+      },
 
       defaultInclude: {
         sourceCity: {
