@@ -52,7 +52,7 @@ const printCss = `
 .cash-report-receivable-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.375rem 0.5rem;
+  gap: 0.25rem 0.4rem;
 }
 .cash-report-checkbox {
   display: inline-block;
@@ -113,7 +113,7 @@ const printCss = `
   }
   #cash-planning-a4-report .cash-report-receivable-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2mm 3mm;
+    gap: 1.5mm 2.5mm;
   }
   #cash-planning-a4-report .cash-report-queue-row {
     break-inside: avoid;
@@ -408,14 +408,15 @@ function CreditorGroupTable({ group }: { group: CreditorLedgerGroup }) {
 function ReceivableTable({ rows }: { rows: ReceivableRow[] }) {
   return (
     <div className="cash-report-table-frame overflow-hidden rounded border border-foreground/10">
-      <table className="w-full border-collapse text-[10px]">
+      <table className="w-full table-fixed border-collapse text-[9px]">
         <thead>
-          <tr className="border-b border-foreground/10 bg-muted/50 text-left text-[9px] uppercase tracking-wide text-muted-foreground">
-            <th className="px-1.5 py-1 font-semibold">Party</th>
-            <th className="px-1.5 py-1 text-right font-semibold">Pend.</th>
-            <th className="px-1.5 py-1 text-right font-semibold">Exp.</th>
-            <th className="px-1.5 py-1 text-right font-semibold">Recv.</th>
-            <th className="px-1.5 py-1 font-semibold">Date</th>
+          <tr className="border-b border-foreground/10 bg-muted/50 text-left text-[8px] uppercase tracking-wide text-muted-foreground">
+            <th className="w-[42%] px-1 py-0.5 font-semibold">Party</th>
+            <th className="w-[18%] px-1 py-0.5 text-right font-semibold">Pend</th>
+            <th className="w-[24%] px-1 py-0.5 text-right font-semibold">
+              Exp/Dt
+            </th>
+            <th className="w-[16%] px-1 py-0.5 text-right font-semibold">Recv</th>
           </tr>
         </thead>
         <tbody>
@@ -424,22 +425,20 @@ function ReceivableTable({ rows }: { rows: ReceivableRow[] }) {
               key={row.id}
               className="border-b border-foreground/5 last:border-0"
             >
-              <td className="max-w-[34mm] truncate px-1.5 py-1 font-medium">
+              <td className="truncate px-1 py-0.5 font-medium">
                 {row.partyName}
               </td>
-              <td className="px-1.5 py-1 text-right tabular-nums">
+              <td className="px-1 py-0.5 text-right tabular-nums">
                 {money(row.totalAmount)}
               </td>
-              <td className="px-1.5 py-1 text-right tabular-nums">
+              <td className="whitespace-nowrap px-1 py-0.5 text-right tabular-nums">
                 {row.expectedAmount > 0 ? money(row.expectedAmount) : "-"}
+                {row.expectedDate ? `/${dateLabel(row.expectedDate)}` : ""}
               </td>
-              <td className="px-1.5 py-1 text-right tabular-nums">
+              <td className="px-1 py-0.5 text-right tabular-nums">
                 {(row.receivedAmount ?? 0) > 0
                   ? money(row.receivedAmount ?? 0)
                   : "-"}
-              </td>
-              <td className="whitespace-nowrap px-1.5 py-1 tabular-nums">
-                {dateLabel(row.expectedDate)}
               </td>
             </tr>
           ))}
@@ -467,8 +466,6 @@ export function CashPlanningA4Report({
   const openReceivables = receivables.receivables.filter(
     (row) => !row.ackReceived,
   );
-  const settledReceivables =
-    receivables.receivables.length - openReceivables.length;
   const receivedTotal = receivables.receivables.reduce(
     (sum, row) => sum + (row.receivedAmount ?? 0),
     0,
@@ -569,7 +566,6 @@ export function CashPlanningA4Report({
 
         <Section
           title="Receivables"
-          aside={`${openReceivables.length} open, ${settledReceivables} settled`}
           className="cash-report-page-start"
         >
           <div className="mt-3 grid grid-cols-4 gap-2">
@@ -590,7 +586,7 @@ export function CashPlanningA4Report({
               No receivables recorded.
             </p>
           ) : (
-            <div className="cash-report-receivable-grid mt-3">
+            <div className="cash-report-receivable-grid mt-2">
               {receivableColumns.map((rows, index) => (
                 <ReceivableTable key={index} rows={rows} />
               ))}

@@ -1,0 +1,62 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    image: skerp-server:production
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${DATABASE_URL:-}
+      DIRECT_URL: ${DIRECT_URL:-}
+      ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:-}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      WEB_URL: ${WEB_URL:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_S3_REGION: ${AWS_S3_REGION:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      NOTIFICATION_QUEUE_PREFIX: ${NOTIFICATION_QUEUE_PREFIX:-}
+      ATTACHMENT_MAX_SIZE_BYTES: ${ATTACHMENT_MAX_SIZE_BYTES:-}
+      ATTACHMENT_ALLOWED_MIME: ${ATTACHMENT_ALLOWED_MIME:-}
+      ONELAP_BASE_URL: ${ONELAP_BASE_URL:-}
+      ONELAP_USERNAME: ${ONELAP_USERNAME:-}
+      ONELAP_PASSWORD: ${ONELAP_PASSWORD:-}
+    ports:
+      - "${SERVER_PORT:-5000}:5000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:
+
