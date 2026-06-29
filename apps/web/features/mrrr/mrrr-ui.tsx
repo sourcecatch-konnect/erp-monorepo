@@ -2,6 +2,7 @@
 
 import type { MRRR } from "@skerp/types";
 import { cn } from "@/lib/utils";
+import { formatPaise } from "@/lib/money";
 
 export type MRRRStatus = MRRR["status"];
 
@@ -87,4 +88,13 @@ export const formatMRRRDateTime = (date?: string | Date | null) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+export const formatFreight = (value: string | number | bigint | null | undefined) => {
+  if (value === null || value === undefined || value === "") return "—";
+
+  const amount = Number(value);
+
+  if (Number.isNaN(amount)) return "—";
+
+  return formatPaise(amount);
 };

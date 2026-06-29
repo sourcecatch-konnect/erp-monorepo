@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
+  Controller,
   FormProvider,
   useFieldArray,
   useForm,
@@ -53,6 +54,9 @@ import {
   useUpdateMRRR,
   useUpdateMRRRRows,
 } from "./hook/useMrrr";
+import { formatMoney } from "@/lib/format";
+import { formatFreight } from "./mrrr-ui";
+import { DatePicker } from "@skerp/ui/components/datepicker";
 
 type Props = {
   mode: "create" | "edit";
@@ -74,6 +78,7 @@ type MRRRFormRow = {
 
 type MRRRFormInput = MRRRFormValues & {
   mrRrNumber?: string | null;
+  scheduleDate?: string;
   rows: MRRRFormRow[];
 };
 
@@ -149,7 +154,15 @@ const collectErrors = (node: unknown, path: string[] = []): FlatError[] => {
 
   return issues;
 };
+const selectedDate = (value?: string | null) => {
+  if (!value) return undefined;
 
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return undefined;
+
+  return date;
+};
 export function MRRRForm({ mode, mrrrId }: Props) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -164,6 +177,7 @@ export function MRRRForm({ mode, mrrrId }: Props) {
     resolver: zodResolver(isEdit ? updateMRRRSchema : createMRRRSchema) as any,
     mode: "onTouched",
     defaultValues: {
+      scheduleDate: "",
       vpScheduleId: "",
       rakeType: undefined,
       mrRrNumber: "",
@@ -180,13 +194,18 @@ export function MRRRForm({ mode, mrrrId }: Props) {
   const watchedVPScheduleId = form.watch("vpScheduleId");
   const watchedRows = form.watch("rows") ?? [];
   const watchedMrRrNumber = form.watch("mrRrNumber");
+  const watchedScheduleDate = form.watch("scheduleDate");
+const [selectedScheduleDate, setSelectedScheduleDate] = React.useState("");
+const vpSchedules = useMRRRVPSchedules({
+  page: 0,
+  size: 20,
+  scheduleDate: watchedScheduleDate || undefined,
+} as any);
 
-  const vpSchedules = useMRRRVPSchedules({
-    page: 0,
-    size: 1000,
-  });
-
-  const previewQuery = useMRRRPreview(watchedVPScheduleId);
+const previewQuery = useMRRRPreview(
+  watchedVPScheduleId,
+  !isEdit && Boolean(watchedVPScheduleId),
+);
 
   React.useEffect(() => {
     const mrrr = detailQuery.data as MRRRWithRelations | undefined;
@@ -237,6 +256,14 @@ export function MRRRForm({ mode, mrrrId }: Props) {
   }, [isEdit, previewQuery.data, replace, watchedVPScheduleId]);
 
   const totalRows = watchedRows.length;
+  const preview = previewQuery.data;
+const previewSchedule = preview?.vpSchedule;
+const previewWagonCounts = previewSchedule?.wagonCounts ?? [];
+
+const previewTotalFreight = previewWagonCounts.reduce(
+  (sum: number, wagon: any) => sum + Number(wagon.totalFreight ?? 0),
+  0,
+);
   const { errors, submitCount } = form.formState;
   const validationIssues = React.useMemo(() => collectErrors(errors), [errors]);
   const showValidationSummary = submitCount > 0 && validationIssues.length > 0;
@@ -279,7 +306,7 @@ export function MRRRForm({ mode, mrrrId }: Props) {
         }
 
         toast.success("MR/RR updated");
-        router.push(`/operations/mrrr/${encodeURIComponent(mrrrId)}`);
+        router.push(`/operations/MRRR/${encodeURIComponent(mrrrId)}`);
         return;
       }
 
@@ -287,33 +314,26 @@ export function MRRRForm({ mode, mrrrId }: Props) {
         vpScheduleId: values.vpScheduleId,
         rakeType: values.rakeType,
         remarks: values.remarks,
+        rows: values.rows.map((row, index) => ({
+          rowNumber: row.rowNumber ?? index + 1,
+          sequenceNo: row.sequenceNo,
+          vpNo: row.vpNo,
+          mrRrNo: row.mrRrNo,
+          sealNo: row.sealNo,
+        })),
       };
 
       const created = await createMutation.mutateAsync(body);
-      const createdRowsByNumber = new Map(
-        (created.rows ?? []).map((row) => [row.rowNumber, row]),
-      );
-      const rowsWithIds = values.rows.map((row) => ({
-        ...row,
-        id: row.id ?? createdRowsByNumber.get(row.rowNumber ?? 0)?.id,
-      }));
-
-      if (rowsWithIds.some((row) => row.id)) {
-        await updateRowsMutation.mutateAsync({
-          id: created.id,
-          body: buildRowsBody(rowsWithIds),
-        });
-      }
 
       toast.success("MR/RR created");
-      router.push(`/operations/mrrr/${encodeURIComponent(created.id)}`);
+      router.push(`/operations/MRRR/${encodeURIComponent(created.id)}`);
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
   };
 
   const handleCancel = () => {
-    router.push("/operations/mrrr");
+    router.push("/operations/MRRR");
   };
 
   if (isEdit && detailQuery.isLoading) {
@@ -348,6 +368,37 @@ export function MRRRForm({ mode, mrrrId }: Props) {
             title="MR/RR Details"
             columns={2}
           >
+      <Controller
+  control={form.control}
+  name="scheduleDate"
+  render={({ field, fieldState }) => (
+    <div className="grid gap-1.5">
+      <label className="text-xs font-medium text-muted-foreground">
+        Schedule date <span className="text-red-600">*</span>
+      </label>
+
+      <DatePicker
+        selected={selectedDate(field.value)}
+        onSelect={(date) => {
+          const value = date ? date.toISOString() : "";
+
+          field.onChange(value);
+
+          form.setValue("vpScheduleId", "");
+          replace([]);
+        }}
+        placeholder="Select schedule date"
+        disabled={isEdit}
+      />
+
+      {fieldState.error?.message ? (
+        <p className="text-xs text-red-600">
+          {fieldState.error.message}
+        </p>
+      ) : null}
+    </div>
+  )}
+/>
             <ComboboxField<MRRRFormInput>
               name="vpScheduleId"
               label="VP Schedule"
@@ -374,47 +425,182 @@ export function MRRRForm({ mode, mrrrId }: Props) {
             ) : null}
           </FormSection>
 
-          <FormSection
-            icon={<IconTrain size={16} />}
-            title="VP Schedule Preview"
-            columns={1}
+<FormSection
+  icon={<IconTrain size={16} />}
+  title="VP Schedule Preview"
+  columns={1}
+>
+  {!watchedVPScheduleId ? (
+    <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+      Select VP Schedule to load MR/RR preview rows.
+    </div>
+  ) : previewQuery.isLoading ? (
+    <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+      Loading VP Schedule preview...
+    </div>
+  ) : previewSchedule ? (
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-muted/20 p-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Schedule No</p>
+            <p className="text-sm font-medium">
+              {previewSchedule.scheduleNumber ?? "—"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">Schedule Date</p>
+            <p className="text-sm font-medium">
+              {previewSchedule.scheduleDate
+                ? new Date(previewSchedule.scheduleDate).toLocaleDateString(
+                    "en-IN",
+                    {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    },
+                  )
+                : "—"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">From Branch</p>
+            <p className="text-sm font-medium">
+              {previewSchedule.fromBranch?.name ??
+                previewSchedule.fromBranch?.branchCode ??
+                "—"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">To Branch</p>
+            <p className="text-sm font-medium">
+              {previewSchedule.toBranch?.name ??
+                previewSchedule.toBranch?.branchCode ??
+                "—"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">Total Wagons</p>
+            <p className="text-sm font-medium">
+              {previewSchedule.totalWagonCount ??
+                previewQuery.data?.rows?.length ??
+                0}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">Total MT</p>
+            <p className="text-sm font-medium">
+              {previewSchedule.totalCapacityMt ?? "—"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">Total CFT</p>
+            <p className="text-sm font-medium">
+              {previewSchedule.totalCapacityCft != null
+                ? Number(previewSchedule.totalCapacityCft).toLocaleString(
+                    "en-IN",
+                  )
+                : "—"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground">Total Freight</p>
+            <p className="text-sm font-medium">
+              {formatFreight(previewTotalFreight)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border bg-background p-3">
+          <p className="text-xs text-muted-foreground">Route</p>
+          <p className="text-sm font-medium">
+            {previewSchedule.sourceArea?.name ?? "—"} →{" "}
+            {previewSchedule.destinationArea?.name ?? "—"}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3">
+        {previewWagonCounts.map((wagon: any) => (
+          <div
+            key={wagon.id}
+            className="rounded-xl border bg-background p-4 shadow-sm"
           >
-            {!watchedVPScheduleId ? (
-              <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-                Select VP Schedule to load MR/RR preview rows.
-              </div>
-            ) : previewQuery.isLoading ? (
-              <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-                Loading VP Schedule preview...
-              </div>
-            ) : previewQuery.data ? (
-              <div className="grid gap-3 rounded-md border bg-muted/20 p-4 sm:grid-cols-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Preview rows</p>
-                  <p className="text-sm font-medium">
-                    {previewQuery.data.rows?.length ?? 0}
-                  </p>
-                </div>
+            <div className="flex items-center justify-between gap-3 border-b pb-3">
+              <p className="text-sm font-semibold text-foreground">
+                {wagon.wagon?.name ?? "—"}
+              </p>
 
-                <div>
-                  <p className="text-xs text-muted-foreground">Total wagons</p>
-                  <p className="text-sm font-medium">
-                    {previewQuery.data.rows?.length ?? 0}
-                  </p>
-                </div>
+              <p className="text-xs text-muted-foreground">
+                Wagon Count:{" "}
+                <span className="font-medium text-foreground">
+                  {wagon.count ?? "—"}
+                </span>
+              </p>
+            </div>
 
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <p className="text-sm font-medium">Ready for MR/RR</p>
-                </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-6">
+              <div>
+                <p className="text-xs text-muted-foreground">Capacity MT</p>
+                <p className="font-medium">
+                  {wagon.capacityMt ?? "—"}
+                </p>
               </div>
-            ) : (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-                Preview not available for selected VP Schedule.
-              </div>
-            )}
-          </FormSection>
 
+              <div>
+                <p className="text-xs text-muted-foreground">Capacity CFT</p>
+                <p className="font-medium">
+                  {wagon.capacityCft ?? "—"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">Total MT</p>
+                <p className="font-medium">
+                  {wagon.totalMt ?? "—"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">Total CFT</p>
+                <p className="font-medium">
+                  {wagon.totalCft != null
+                    ? Number(wagon.totalCft).toLocaleString("en-IN")
+                    : "—"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">Freight / Wagon</p>
+                <p className="font-medium">
+                  {formatMoney(wagon.freightAmount)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">Total Freight</p>
+                <p className="font-medium">
+                  {formatMoney(wagon.totalFreight)}
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+      Preview not available for selected VP Schedule.
+    </div>
+  )}
+</FormSection>
           <FormSection
             icon={<IconClipboardList size={16} />}
             title="MR/RR Rows"
@@ -443,9 +629,7 @@ export function MRRRForm({ mode, mrrrId }: Props) {
                                 watchedRows[index]?.wagonTypeLabel ||
                                 "-"}
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {watchedRows[index]?.wagonId || "-"}
-                            </div>
+                   
                           </TableCell>
 
                           <TableCell className="align-top">

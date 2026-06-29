@@ -23,8 +23,9 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { formatPaise } from "@/lib/money";
+import { formatFreight, MRRRStatusBadge } from "./mrrr-ui";
 
-import {
+import { 
   useCancelMRRR,
   useMRRRDetail,
   useSubmitMRRR,
@@ -74,56 +75,9 @@ function CardSection({
   );
 }
 
-function StatCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-}) {
-  return (
-    <div className="rounded-lg bg-muted/40 px-4 py-3">
-      <p className="text-xs uppercase text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-medium leading-none">
-        {value}
-        {sub ? (
-          <span className="ml-1 text-xs font-normal text-muted-foreground">
-            {sub}
-          </span>
-        ) : null}
-      </p>
-    </div>
-  );
-}
 
-function MRRRStatusBadge({ status }: { status?: string | null }) {
-  const value = status ?? "DRAFT";
 
-  const labelMap: Record<string, string> = {
-    DRAFT: "Draft",
-    SUBMITTED: "Submitted",
-    CANCELLED: "Cancelled",
-  };
 
-  const classMap: Record<string, string> = {
-    DRAFT: "bg-slate-500/10 text-slate-600 border-slate-500/20",
-    SUBMITTED: "bg-green-500/10 text-green-700 border-green-500/20",
-    CANCELLED: "bg-red-500/10 text-red-700 border-red-500/20",
-  };
-
-  return (
-    <span
-      className={[
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        classMap[value] ?? classMap.DRAFT,
-      ].join(" ")}
-    >
-      {labelMap[value] ?? value}
-    </span>
-  );
-}
 
 const formatDate = (value?: string | Date | null) => {
   if (!value) return "—";
@@ -155,15 +109,6 @@ const formatDateTime = (value?: string | Date | null) => {
   }).format(date);
 };
 
-const formatMoney = (value: string | number | bigint | null | undefined) => {
-  if (value === null || value === undefined || value === "") return "—";
-
-  const amount = Number(value);
-
-  if (Number.isNaN(amount)) return "—";
-
-  return formatPaise(amount);
-};
 
 export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
   const router = useRouter();
@@ -261,13 +206,16 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
 
   const totalRows = rows.length;
 
-  const totalWagons = rows.reduce((sum: number, row: any) => {
-    return sum + Number(row.count ?? row.wagonCount ?? row.quantity ?? 0);
-  }, 0);
 
-  const totalFreight = rows.reduce((sum: number, row: any) => {
-    return sum + Number(row.totalFreight ?? row.freightAmount ?? 0);
-  }, 0);
+
+ const totalFreight = rows.reduce((sum: number, row: any) => {
+  const freight =
+    row.vpScheduleWagonCount?.freightAmount ??
+    row.freightAmount ??
+    0;
+
+  return sum + Number(freight);
+}, 0);
 
   const handleSubmit = () => {
     submit.mutate(
@@ -310,7 +258,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
         variant="ghost"
         size="sm"
         className="text-muted-foreground"
-        onClick={() => router.push("/operations/mrrr")}
+        onClick={() => router.push("/operations/MRRR")}
       >
         <IconArrowLeft size={16} className="mr-1" />
         Back to MR/RR
@@ -342,7 +290,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push(`/operations/mrrr/${mrrr.id}/edit`)}
+              onClick={() => router.push(`/operations/MRRR/${mrrr.id}/edit`)}
             >
               <IconEdit size={14} className="mr-1.5" />
               Edit
@@ -388,32 +336,41 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         <div className="space-y-4">
           <CardSection
-            title="MR/RR Overview"
-            icon={<IconFileDescription size={14} />}
-          >
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Field
-                label="MR/RR no"
-                value={
-                  mrrr.mrrrNumber ??
-                  mrrr.mrRrNumber ??
-                  mrrr.documentNumber ??
-                  "—"
-                }
-              />
+  title="MR/RR Overview"
+  icon={<IconFileDescription size={14} />}
+>
+  <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+    <Field
+      label="MR/RR no"
+      value={
+        mrrr.mrRrNumber ??
+        mrrr.mrrrNumber ??
+        mrrr.documentNumber ??
+        "Not generated yet"
+      }
+    />
 
-              <Field label="MR/RR date" value={formatDate(mrrr.mrrrDate)} />
+    <Field
+      label="MR/RR date"
+      value={formatDate(mrrr.mrRrDate ?? mrrr.mrrrDate ?? mrrr.createdAt)}
+    />
 
-              <Field
-                label="Status"
-                value={<MRRRStatusBadge status={status} />}
-              />
+    <Field
+      label="Rake type"
+      value={mrrr.rakeType ?? "—"}
+    />
 
-              <Field label="From branch" value={fromBranch} />
-              <Field label="To branch" value={toBranch} />
-              <Field label="Created by" value={createdBy} />
-            </dl>
-          </CardSection>
+    <Field
+      label="Status"
+      value={<MRRRStatusBadge status={status} />}
+    />
+
+    <Field label="From branch" value={fromBranch} />
+    <Field label="To branch" value={toBranch} />
+    <Field label="Created by" value={createdBy} />
+    <Field label="Last updated" value={formatDateTime(mrrr.updatedAt)} />
+  </dl>
+</CardSection>
 
           <CardSection title="VP Schedule" icon={<IconTrain size={14} />}>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -490,7 +447,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                     Total Freight
                   </span>
                   <span className="text-sm font-semibold text-foreground">
-                    {formatMoney(totalFreight)}
+                    {formatFreight(totalFreight)}
                   </span>
                 </div>
               </div>
@@ -509,14 +466,15 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                           Wagon
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
+                          MR/RR NO
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
                           Sequence No
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
                           VP No
                         </th>
-                        <th className="px-3 py-2 text-right text-xs font-medium uppercase text-muted-foreground">
-                          Count
-                        </th>
+                
                         <th className="px-3 py-2 text-right text-xs font-medium uppercase text-muted-foreground">
                           Freight
                         </th>
@@ -543,7 +501,9 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                             <td className="px-3 py-2 font-medium">
                               {wagonName}
                             </td>
-
+                            <td className="px-3 py-2">
+                              {row.mrRrNo || "—"}
+                            </td>
                             <td className="px-3 py-2">
                               {row.sequenceNo || "—"}
                             </td>
@@ -552,15 +512,14 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                               {row.vpNo || "—"}
                             </td>
 
-                            <td className="px-3 py-2 text-right">
-                              {row.count ?? row.wagonCount ?? row.quantity ?? "—"}
-                            </td>
+           
 
-                            <td className="px-3 py-2 text-right font-medium">
-                              {formatMoney(
-                                row.totalFreight ?? row.freightAmount,
-                              )}
-                            </td>
+<td className="px-3 py-2 text-right font-medium">
+  {formatFreight(
+    row.vpScheduleWagonCount?.freightAmount ??
+      row.freightAmount
+  )}
+</td>
                           </tr>
                         );
                       })}
@@ -589,14 +548,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
         </div>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <StatCard label="Rows" value={totalRows} />
-            <StatCard label="Wagons" value={totalWagons} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-2">
-            <StatCard label="Total Freight" value={formatMoney(totalFreight)} />
-          </div>
+       
 
           <CardSection title="Timeline" icon={<IconCalendar size={14} />}>
             <div className="space-y-3 text-sm">

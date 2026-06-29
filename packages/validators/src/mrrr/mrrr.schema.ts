@@ -117,6 +117,19 @@ export const createMRRRSchema = z.object({
     250,
     "Remarks cannot exceed 250 characters",
   ),
+
+  rows: z
+    .array(
+      z.object({
+        rowNumber: z.coerce.number().int().min(1),
+
+        sequenceNo: optionalString,
+        vpNo: optionalString,
+        mrRrNo: optionalString,
+        sealNo: optionalString,
+      }),
+    )
+    .optional(),
 });
 
 export const updateMRRRSchema = z.object({

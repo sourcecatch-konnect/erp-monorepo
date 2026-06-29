@@ -27,6 +27,7 @@ import {
   mrrrInclude,
   mrrrListSelect,
 } from "./mrrr.service.js";
+import { getDateRange } from "../vp-schedule/vp-schedule.route.js";
 
 const router: Router = Router();
 
@@ -58,7 +59,15 @@ const getIdParam = (
 };
 const mrrrIdentifierWhere = (identifier: string): Prisma.MRRRWhereInput => ({
   deletedAt: null,
-  OR: [{ id: identifier }, { mrRrNumber: identifier }],
+  OR: [
+    { id: identifier },
+    { mrRrNumber: identifier },
+    {
+      vpSchedule: {
+        scheduleNumber: identifier,
+      },
+    },
+  ],
 });
 
 /**
@@ -68,15 +77,28 @@ const mrrrIdentifierWhere = (identifier: string): Prisma.MRRRWhereInput => ({
  */
 router.get(
   "/vp-schedules",
-  can(PERMS.MRRR.VIEW),
+  can(PERMS.MRRR.CREATE),
   async (req, res) => {
     const query = parseListQuery(req);
+    const scheduleDate =
+  typeof req.query.scheduleDate === "string"
+    ? req.query.scheduleDate
+    : undefined;
 
+const dateRange = scheduleDate ? getDateRange(scheduleDate) : null;
     const where: Prisma.VPScheduleWhereInput = {
       deletedAt: null,
       status: "PLANNED",
       mrRr: null,
       ...branchFilter(req, "fromBranchId"),
+      ...(dateRange
+    ? {
+        scheduleDate: {
+          gte: dateRange.start,
+          lt: dateRange.end,
+        },
+      }
+    : {}),
       ...(query.search
         ? {
             OR: [
@@ -150,7 +172,7 @@ router.get(
       res,
       data.map((item) => ({
         ...item,
-        label: `${item.scheduleNumber} | ${item.scheduleName} | ${item.totalWagonCount} Wagons`,
+        label: item.scheduleNumber,
         value: item.id,
       })),
       {
@@ -166,6 +188,7 @@ router.get(
  * GET /mrrr/vp-schedules/:vpScheduleId/preview
  * Preview MR/RR rows before creating MR/RR.
  */
+
 router.get(
   "/vp-schedules/:vpScheduleId/preview",
   can(PERMS.MRRR.VIEW),
@@ -220,7 +243,9 @@ router.get(
         mrRr: {
           select: {
             id: true,
+            mrRrNumber: true,
             status: true,
+            deletedAt: true,
           },
         },
       },
@@ -237,7 +262,14 @@ router.get(
     }
 
     if (schedule.mrRr) {
-      throw new ConflictError("MR/RR already exists for this VP Schedule");
+      throw new ConflictError(
+        "MR/RR already exists for this VP Schedule",
+        "CONFLICT",
+        {
+          vpScheduleId: schedule.id,
+          existingMRRR: schedule.mrRr,
+        },
+      );
     }
 
     if (!schedule.wagonCounts.length) {
@@ -257,6 +289,7 @@ router.get(
  * POST /mrrr
  * Create MR/RR and auto-generate rows from VP Schedule wagonCounts.
  */
+
 router.post(
   "/",
   can(PERMS.MRRR.CREATE),
@@ -293,6 +326,9 @@ router.post(
           mrRr: {
             select: {
               id: true,
+              mrRrNumber: true,
+              status: true,
+              deletedAt: true,
             },
           },
         },
@@ -309,7 +345,14 @@ router.post(
       }
 
       if (schedule.mrRr) {
-        throw new ConflictError("MR/RR already exists for this VP Schedule");
+        throw new ConflictError(
+          "MR/RR already exists for this VP Schedule",
+          "CONFLICT",
+          {
+            vpScheduleId: schedule.id,
+            existingMRRR: schedule.mrRr,
+          },
+        );
       }
 
       if (!schedule.wagonCounts.length) {
@@ -317,6 +360,9 @@ router.post(
       }
 
       const generatedRows = buildMRRRPreviewRows(schedule.wagonCounts);
+      const inputRowsByNumber = new Map(
+        (data.rows ?? []).map((row) => [row.rowNumber, row]),
+      );
 
       const mrrr = await tx.mRRR.create({
         data: {
@@ -332,14 +378,22 @@ router.post(
       });
 
       await tx.mRRRRow.createMany({
-        data: generatedRows.map((row) => ({
-          mrRrId: mrrr.id,
-          vpScheduleWagonCountId: row.vpScheduleWagonCountId,
-          wagonId: row.wagonId,
-          wagonTypeLabel: row.wagonTypeLabel,
-          rowNumber: row.rowNumber,
-          rowLabel: row.rowLabel,
-        })),
+        data: generatedRows.map((row) => {
+          const inputRow = inputRowsByNumber.get(row.rowNumber);
+
+          return {
+            mrRrId: mrrr.id,
+            vpScheduleWagonCountId: row.vpScheduleWagonCountId,
+            wagonId: row.wagonId,
+            wagonTypeLabel: row.wagonTypeLabel,
+            rowNumber: row.rowNumber,
+            rowLabel: row.rowLabel,
+            sequenceNo: inputRow?.sequenceNo ?? null,
+            vpNo: inputRow?.vpNo ?? null,
+            mrRrNo: inputRow?.mrRrNo ?? null,
+            sealNo: inputRow?.sealNo ?? null,
+          };
+        }),
       });
 
       const result = await tx.mRRR.findUnique({

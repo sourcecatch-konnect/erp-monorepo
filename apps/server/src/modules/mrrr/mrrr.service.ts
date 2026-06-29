@@ -22,6 +22,31 @@ export const mrrrListSelect = {
       totalWagonCount: true,
       fromBranchId: true,
       toBranchId: true,
+      sourceArea: {
+  select: {
+    id: true,
+    name: true,
+    city: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  },
+},
+
+destinationArea: {
+  select: {
+    id: true,
+    name: true,
+    city: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  },
+},
       fromBranch: {
         select: {
           id: true,

@@ -37,11 +37,15 @@ export const useMRRRVPSchedules = (query?: ListQuery) => {
   });
 };
 
-export const useMRRRPreview = (vpScheduleId: string) => {
+export const useMRRRPreview = (
+  vpScheduleId?: string,
+  enabled = true,
+) => {
   return useQuery({
-    queryKey: mrrrLookupKeys.preview(vpScheduleId),
-    queryFn: () => mrrrApi.preview(vpScheduleId),
-    enabled: Boolean(vpScheduleId),
+    queryKey: mrrrLookupKeys.preview(vpScheduleId ?? ""),
+    queryFn: () => mrrrApi.preview(vpScheduleId!),
+    enabled: enabled && Boolean(vpScheduleId),
+    retry: false,
   });
 };
 

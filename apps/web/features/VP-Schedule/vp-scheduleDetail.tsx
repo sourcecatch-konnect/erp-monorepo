@@ -94,7 +94,7 @@ const formatFreight = (value: string | number | null | undefined) => {
 
   const amount = Number(value);
 
-  if (Number.isNaN(amount)) return "â€”";
+  if (Number.isNaN(amount)) return "-";
 
   return formatPaise(amount);
 };
@@ -335,7 +335,7 @@ const totalFreight = wagonCounts.reduce((sum: number, wagon: any) => {
           {schedule.totalWagonCount ?? 0}
         </span>
       </div>
-
+      
       <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
         <span className="text-xs font-medium text-muted-foreground">
           Total Freight
@@ -354,20 +354,20 @@ const totalFreight = wagonCounts.reduce((sum: number, wagon: any) => {
           key={wagon.id}
           className="rounded-xl border bg-background p-4 shadow-sm"
         >
-        <div className="flex items-center justify-between gap-3 border-b pb-3">
-  <p className="text-sm font-semibold text-foreground">
-    {wagon.wagon?.name ?? wagon.wagonName ?? "—"}
-  </p>
+          <div className="flex items-center justify-between gap-3 border-b pb-3">
+            <p className="text-sm font-semibold text-foreground">
+              {wagon.wagon?.name ?? wagon.wagonName ?? "—"}
+            </p>
 
-  <p className="text-xs text-muted-foreground">
-    Wagon Count:{" "}
-    <span className="font-medium text-foreground">
-      {wagon.count ?? wagon.quantity ?? "—"}
-    </span>
-  </p>
-</div>
+            <p className="text-xs text-muted-foreground">
+              Wagon Count:{" "}
+              <span className="font-medium text-foreground">
+                {wagon.count ?? wagon.quantity ?? "—"}
+              </span>
+            </p>
+          </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-7">
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-8">
             <div>
               <p className="text-xs text-muted-foreground">Height</p>
               <p className="font-medium">
@@ -410,8 +410,19 @@ const totalFreight = wagonCounts.reduce((sum: number, wagon: any) => {
 
             <div>
               <p className="text-xs text-muted-foreground">Total CFT</p>
-              <p className="font-medium">{wagon.totalCft ?? "—"}</p>
+              <p className="font-medium">
+                {wagon.totalCft != null
+                  ? Number(wagon.totalCft).toLocaleString("en-IN")
+                  : "—"}
+              </p>
             </div>
+            <div>
+  <p className="text-xs text-muted-foreground">Freight Amount</p>
+  <p className="font-medium">
+    {formatFreight(wagon.freightAmount)}
+  </p>
+</div>
+            
           </div>
         </div>
       ))}

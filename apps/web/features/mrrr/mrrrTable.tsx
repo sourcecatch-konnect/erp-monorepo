@@ -4,6 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   ColumnDef,
   flexRender,
@@ -11,11 +12,14 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import {
+  IconBan,
   IconDatabaseOff,
   IconDotsVertical,
   IconEdit,
   IconEye,
+  IconTrash,
 } from "@tabler/icons-react";
+import { PERMS } from "@skerp/types";
 
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -31,11 +35,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@skerp/ui/components/dropdown";
 import { TooltipProvider } from "@skerp/ui/components/tooltip";
+import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import { useCan } from "@/features/auth";
+import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { TruncatedTooltipText } from "../VP-Schedule/vp-schedule-ui";
 import { formatMRRRDate, MRRRStatusBadge } from "./mrrr-ui";
+import { useCancelMRRR, useDeleteMRRR } from "./hook/useMrrr";
+import ReasonDialog from "@/components/feedback/ReasonDialog";
 
 
 type MRRRRow = {
@@ -51,7 +61,23 @@ type MRRRRow = {
     scheduleNumber?: string | null;
     scheduleName?: string | null;
     scheduleDate?: string | Date | null;
+    sourceArea?: {
+  id: string;
+  name?: string | null;
+  city?: {
+    id: string;
+    name?: string | null;
+  } | null;
+} | null;
 
+destinationArea?: {
+  id: string;
+  name?: string | null;
+  city?: {
+    id: string;
+    name?: string | null;
+  } | null;
+} | null;
     fromBranch?: {
       id: string;
       name?: string | null;
@@ -77,38 +103,34 @@ type MRRRTableProps = {
 };
 
 const identifierLabel = (row: MRRRRow) => {
-  return row.mrRrNumber || row.id;
+  return row.mrRrNumber || row.vpSchedule?.scheduleNumber || row.id;
 };
 
-const vpScheduleLabel = (row: MRRRRow) => {
-  const number = row.vpSchedule?.scheduleNumber;
-  const name = row.vpSchedule?.scheduleName;
 
-  if (number && name) return `${number} | ${name}`;
-  if (number) return number;
-  if (name) return name;
 
-  return "—";
-};
+const routeLabel = (row: MRRRRow) => {
+  const sourceCity = row.vpSchedule?.sourceArea?.city?.name;
+  const destinationCity = row.vpSchedule?.destinationArea?.city?.name;
 
-const branchLabel = (row: MRRRRow) => {
-  const from =
-    row.vpSchedule?.fromBranch?.name ||
-    row.vpSchedule?.fromBranch?.branchCode ||
-    null;
-
-  const to =
-    row.vpSchedule?.toBranch?.name ||
-    row.vpSchedule?.toBranch?.branchCode ||
-    null;
-
-  if (from || to) {
-    return `${from ?? "?"} → ${to ?? "?"}`;
+  if (sourceCity || destinationCity) {
+    return `${sourceCity ?? "?"} → ${destinationCity ?? "?"}`;
   }
 
   return "—";
 };
 
+const routeTooltipLabel = (row: MRRRRow) => {
+  const sourceArea = row.vpSchedule?.sourceArea?.name;
+  const destinationArea = row.vpSchedule?.destinationArea?.name;
+
+  if (sourceArea || destinationArea) {
+    return `Source Area: ${sourceArea ?? "?"}\nDestination Area: ${
+      destinationArea ?? "?"
+    }`;
+  }
+
+  return "—";
+};
 const createdByLabel = (row: MRRRRow) => {
   if (!row.createdBy) return "—";
 
@@ -118,56 +140,57 @@ const createdByLabel = (row: MRRRRow) => {
 };
 
 export default function MRRRTable({ data, isLoading }: MRRRTableProps) {
+const canDelete = useCan(PERMS.MRRR.DELETE);
+const canCancel = useCan(PERMS.MRRR.CANCEL);
+
+const deleteMutation = useDeleteMRRR();
+const cancelMutation = useCancelMRRR();
+
+const [deleteRow, setDeleteRow] = React.useState<MRRRRow | null>(null);
+const [cancelRow, setCancelRow] = React.useState<MRRRRow | null>(null);
+
   const columns = React.useMemo<ColumnDef<MRRRRow>[]>(
     () => [
+
       {
-        id: "mrRrNumber",
-        header: "MR/RR No",
-        size: 180,
-        cell: ({ row }) => (
-          <Link
-            href={`/operations/mrrr/${encodeURIComponent(
-              String(identifierLabel(row.original)),
-            )}`}
-            className="font-medium text-primary hover:underline"
-          >
-            {row.original.mrRrNumber ?? "—"}
-          </Link>
-        ),
-      },
-      {
-        id: "vpSchedule",
-        header: "VP Schedule",
-        size: 240,
-        cell: ({ row }) => (
-          <TruncatedTooltipText value={vpScheduleLabel(row.original)} />
-        ),
-      },
+  id: "vpSchedule",
+  header: "VP Schedule",
+  size: 130,
+  cell: ({ row }) => (
+    <TruncatedTooltipText
+      value={row.original.vpSchedule?.scheduleNumber ?? "—"}
+    />
+  ),
+}
+,
       {
         id: "scheduleDate",
         header: "Schedule Date",
-        size: 130,
+        size: 120,
         cell: ({ row }) =>
           formatMRRRDate(row.original.vpSchedule?.scheduleDate),
       },
       {
-        id: "branch",
-        header: "Branch",
-        size: 200,
-        cell: ({ row }) => (
-          <TruncatedTooltipText value={branchLabel(row.original)} />
-        ),
-      },
+  id: "route",
+  header: "Route",
+  size: 160,
+  cell: ({ row }) => (
+    <TruncatedTooltipText
+      value={routeLabel(row.original)}
+      tooltipValue={routeTooltipLabel(row.original)}
+    />
+  ),
+},
       {
         id: "rakeType",
         header: "Rake Type",
-        size: 120,
+        size: 80,
         cell: ({ row }) => row.original.rakeType ?? "—",
       },
       {
         id: "status",
         header: "Status",
-        size: 130,
+        size: 100,
         cell: ({ row }) => (
           <MRRRStatusBadge status={row.original.status} />
         ),
@@ -175,7 +198,7 @@ export default function MRRRTable({ data, isLoading }: MRRRTableProps) {
       {
         id: "createdBy",
         header: "Created By",
-        size: 140,
+        size: 80,
         cell: ({ row }) => (
           <TruncatedTooltipText value={createdByLabel(row.original)} />
         ),
@@ -190,6 +213,38 @@ export default function MRRRTable({ data, isLoading }: MRRRTableProps) {
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const handleDelete = () => {
+    if (!deleteRow) return;
+
+    deleteMutation.mutate(deleteRow.id, {
+      onSuccess: () => {
+        toast.success("MR/RR deleted");
+        setDeleteRow(null);
+      },
+      onError: (error) => {
+        toast.error(getErrorMessage(error));
+      },
+    });
+  };
+const handleCancel = (reason: string) => {
+  if (!cancelRow) return;
+
+  cancelMutation.mutate(
+    {
+      id: cancelRow.id,
+      body: { reason },
+    },
+    {
+      onSuccess: () => {
+        toast.success("MR/RR cancelled");
+        setCancelRow(null);
+      },
+      onError: (error) => {
+        toast.error(getErrorMessage(error));
+      },
+    },
+  );
+};
   return (
     <TooltipProvider>
       <div className="w-full overflow-x-auto rounded-lg bg-card">
@@ -302,16 +357,44 @@ export default function MRRRTable({ data, isLoading }: MRRRTableProps) {
                             </DropdownMenuItem>
 
                             {mrrr.status === "DRAFT" ? (
-                              <DropdownMenuItem asChild>
-                                <Link
-                                  href={`/operations/MRRR/${encodeURIComponent(
-                                    String(identifier),
-                                  )}/edit`}
-                                >
-                                  <IconEdit size={16} className="mr-2" />
-                                  Edit
-                                </Link>
-                              </DropdownMenuItem>
+                              <>
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/operations/MRRR/${encodeURIComponent(
+                                      String(identifier),
+                                    )}/edit`}
+                                  >
+                                    <IconEdit size={16} className="mr-2" />
+                                    Edit
+                                  </Link>
+                                </DropdownMenuItem>
+                                {canCancel && ["DRAFT", "SUBMITTED"].includes(mrrr.status ?? "") ? (
+  <>
+    <DropdownMenuSeparator />
+    <DropdownMenuItem
+      className="text-red-600 focus:text-red-700"
+      disabled={cancelMutation.isPending}
+      onClick={() => setCancelRow(mrrr)}
+    >
+      <IconBan size={16} className="mr-2" />
+      Cancel
+    </DropdownMenuItem>
+  </>
+) : null}
+                                {canDelete ? (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      disabled={deleteMutation.isPending}
+                                      onClick={() => setDeleteRow(mrrr)}
+                                    >
+                                      <IconTrash size={16} className="mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : null}
+                              </>
                             ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -324,6 +407,36 @@ export default function MRRRTable({ data, isLoading }: MRRRTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(deleteRow)}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setDeleteRow(null);
+          }
+        }}
+        title={`Delete MR/RR ${deleteRow ? identifierLabel(deleteRow) : ""}`}
+        description="This will hide the draft MR/RR from the normal list. Submitted MR/RR documents cannot be deleted."
+        confirmLabel="Delete MR/RR"
+        pendingLabel="Deleting..."
+        destructive
+        isPending={deleteMutation.isPending}
+        onConfirm={handleDelete}
+      />
+      <ReasonDialog
+  open={Boolean(cancelRow)}
+  onOpenChange={(open) => {
+    if (!open && !cancelMutation.isPending) {
+      setCancelRow(null);
+    }
+  }}
+  title={`Cancel MR/RR ${cancelRow ? identifierLabel(cancelRow) : ""}`}
+  description="This will cancel the MR/RR and it cannot continue in the railway process."
+  confirmLabel="Cancel MR/RR"
+  destructive
+  isPending={cancelMutation.isPending}
+  onConfirm={handleCancel}
+/>
     </TooltipProvider>
   );
 }

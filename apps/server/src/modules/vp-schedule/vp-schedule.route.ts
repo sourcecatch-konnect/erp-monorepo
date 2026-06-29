@@ -34,7 +34,15 @@ const router: Router = Router();
 
 router.use(authMiddleware);
 
+export const getDateRange = (value: string | Date) => {
+  const start = new Date(value);
+  start.setHours(0, 0, 0, 0);
 
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return { start, end };
+};
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 const readClient = db as unknown as Prisma.TransactionClient;
@@ -350,22 +358,53 @@ router.post("/", can(PERMS.VP_SCHEDULE.CREATE), async (req, res) => {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
 
-  const data = parsed.data;
+const data = parsed.data;
 
-  assertBranchAccess(req, data.fromBranchId);
+assertBranchAccess(req, data.fromBranchId);
 
-  const me = actorId(req);
-  await assertVPScheduleReferences(readClient, data);
-  await assertVPScheduleBranchAreaAlignment(readClient, data);
-  await assertVPScheduleFreightMatrices(readClient, data);
+const me = actorId(req);
 
-  const totals = await calculateVPScheduleTotals(readClient, data.wagonCounts);
-  const wagonRows = await buildWagonCountRows(readClient, {
+await assertVPScheduleReferences(readClient, data);
+await assertVPScheduleBranchAreaAlignment(readClient, data);
+
+const { start, end } = getDateRange(data.scheduleDate);
+
+const duplicate = await db.vPSchedule.findFirst({
+  where: {
+    deletedAt: null,
+
+    scheduleDate: {
+      gte: start,
+      lt: end,
+    },
+
+    fromBranchId: data.fromBranchId,
+    toBranchId: data.toBranchId,
+
+    sourceAreaId: data.sourceAreaId,
+    destinationAreaId: data.destinationAreaId,
+  },
+  select: {
+    id: true,
+    scheduleNumber: true,
+  },
+});
+
+if (duplicate) {
+  throw new ConflictError(
+    `VP Schedule already exists for this date, branch route and area route: ${duplicate.scheduleNumber}`,
+  );
+}
+
+await assertVPScheduleFreightMatrices(readClient, data);
+
+const totals = await calculateVPScheduleTotals(readClient, data.wagonCounts);
+
+const wagonRows = await buildWagonCountRows(readClient, {
   sourceAreaId: data.sourceAreaId,
   destinationAreaId: data.destinationAreaId,
   wagonCounts: data.wagonCounts,
 });
-
   const schedule = await db.$transaction(async (tx) => {
     const { scheduleNumber } = await generateVPScheduleNumber(
       tx,

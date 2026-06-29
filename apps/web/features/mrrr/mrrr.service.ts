@@ -68,22 +68,24 @@ const encodeMRRRIdentifier = (identifier: string) =>
 
 export const mrrrApi = {
   vpSchedules: async (
-    query?: ListQuery,
-  ): Promise<ListResult<MRRRVPScheduleOption>> => {
-    const params: Record<string, string | number> = {};
+  query?: ListQuery,
+): Promise<ListResult<MRRRVPScheduleOption>> => {
+  const params: Record<string, string | number> = {};
 
-    if (query?.page !== undefined) params.page = query.page;
-    if (query?.size !== undefined) params.size = query.size;
-    if (query?.search) params.search = query.search;
-    if (query?.sort) params.sort = query.sort;
+  if (query?.page !== undefined) params.page = query.page;
+  if (query?.size !== undefined) params.size = query.size;
+  if (query?.search) params.search = query.search;
 
-    const res = await api.get<ApiResponse<MRRRVPScheduleOption[]>>(
-      "/mrrr/vp-schedules",
-      { params },
-    );
+  const res = await api.get<ApiResponse<MRRRVPScheduleOption[]>>(
+    "/mrrr/vp-schedules",
+    { params },
+  );
 
-    return unwrapListResponse(res);
-  },
+  return {
+    data: res.data.data,
+    meta: res.data.meta,
+  };
+},
 
   preview: async (vpScheduleId: string): Promise<MRRRPreviewResponse> => {
     const res = await api.get<ApiResponse<MRRRPreviewResponse>>(
