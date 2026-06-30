@@ -73,36 +73,53 @@ const isLoading = wagonDetail.isLoading;
             {/* Wagon Information */}
 
             <div className="px-5 py-5">
-              <SectionLabel>Wagon Information</SectionLabel>
+  <SectionLabel>Wagon Information</SectionLabel>
 
-              <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                <Field
-                  label="Wagon Name"
-                  value={data?.name}
-                  icon={<IconTrain size={12} />}
-                />
+  <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+    <Field
+      label="Wagon Name"
+      value={data?.name}
+      icon={<IconTrain size={12} />}
+    />
 
-                <Field
-                  label="Height"
-                  value={data?.height != null ? `${data.height} ft` : "-"}
-                  icon={<IconRulerMeasure size={12} />}
-                />
+    <Field
+      label="Status"
+      value={data?.isActive ? "Active" : "Inactive"}
+      icon={<IconCircleCheckFilled size={12} />}
+    />
 
-                <Field
-                  label="Width"
-                  value={data?.width != null ? `${data.width} ft` : "-"}
-                  icon={<IconRulerMeasure size={12} />}
-                />
+    <Field
+      label="Height"
+      value={data?.height != null ? `${data.height} ft` : "-"}
+      icon={<IconRulerMeasure size={12} />}
+    />
 
-                <Field
-                  label="Weight"
-                  value={data?.weight != null ? `${data.weight} kg` : "-"}
-                  icon={<IconScale size={12} />}
-                />
-              </div>
-            </div>
+    <Field
+      label="Width"
+      value={data?.width != null ? `${data.width} ft` : "-"}
+      icon={<IconRulerMeasure size={12} />}
+    />
 
-            <div className="mx-5 border-t" />
+    <Field
+      label="Tare Weight"
+      value={data?.weight != null ? `${data.weight} kg` : "-"}
+      icon={<IconScale size={12} />}
+    />
+
+    <Field
+      label="Total CFT"
+      value={data?.totalCft != null ? `${data.totalCft} CFT` : "-"}
+      icon={<IconRulerMeasure size={12} />}
+    />
+
+    <Field
+      label="Capacity MT"
+      value={data?.capacityMt != null ? `${data.capacityMt} MT` : "-"}
+      icon={<IconScale size={12} />}
+    />
+  </div>
+</div>
+
 
             {/* System Information */}
           </div>

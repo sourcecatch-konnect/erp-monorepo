@@ -32,6 +32,7 @@ import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { railwayFreightApi } from "./railwayfreight.service";
 import { railwayFreightKeys } from "./railwayfreight.key";
 import CitySelectField from "../_shared/fields/CitySelectField";
+import { areaApi } from "../area/area.service";
 
 type Props = {
   open: boolean;
@@ -40,12 +41,13 @@ type Props = {
 };
 
 const defaultValues: CreateRailwayFreightMatrixFormInput = {
-  wagonType: "",
+  wagonId: "",
   sourceCityId: "",
+  sourceAreaId: "",
   destinationCityId: "",
+  destinationAreaId: "",
   freightAmount: "",
 };
-
 export default function RailwayFreightForm({
   open,
   onOpenChange,
@@ -88,19 +90,66 @@ const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
-    form.reset({
-      wagonType: row?.wagonType ?? "",
-      sourceCityId: row?.sourceCityId ?? "",
-      destinationCityId: row?.destinationCityId ?? "",
-      freightAmount:
-        row?.freightAmount != null ? String(paiseToRupees(row.freightAmount)) : "",
-    });
+   form.reset({
+  wagonId: row?.wagonId ?? "",
+  sourceCityId: row?.sourceCityId ?? "",
+  sourceAreaId: row?.sourceAreaId ?? "",
+  destinationCityId: row?.destinationCityId ?? "",
+  destinationAreaId: row?.destinationAreaId ?? "",
+  freightAmount:
+    row?.freightAmount != null
+      ? String(paiseToRupees(row.freightAmount))
+      : "",
+});
   }, [open, row, form]);
 
+const sourceCityId = form.watch("sourceCityId");
+const destinationCityId = form.watch("destinationCityId");
+
+const sourceAreas = useQuery({
+  queryKey: ["railway-freight-source-areas", sourceCityId],
+  queryFn: () =>
+    areaApi.list({
+      page: 0,
+      size: 1000,
+      cityId: sourceCityId,
+    } as any),
+  enabled: open && Boolean(sourceCityId),
+});
+
+const destinationAreas = useQuery({
+  queryKey: ["railway-freight-destination-areas", destinationCityId],
+  queryFn: () =>
+    areaApi.list({
+      page: 0,
+      size: 1000,
+      cityId: destinationCityId,
+    } as any),
+  enabled: open && Boolean(destinationCityId),
+});
+const sourceAreaOptions =
+  sourceAreas.data?.data.map((area) => ({
+    label: area.name,
+    value: area.id,
+  })) ?? [];
+
+const destinationAreaOptions =
+  destinationAreas.data?.data.map((area) => ({
+    label: area.name,
+    value: area.id,
+  })) ?? [];
+
+React.useEffect(() => {
+  form.setValue("sourceAreaId", "");
+}, [sourceCityId, form]);
+
+React.useEffect(() => {
+  form.setValue("destinationAreaId", "");
+}, [destinationCityId, form]);
 
 const wagonOptions = (wagons.data?.data ?? []).map((w) => ({
   label: w.name,
-  value: w.name,
+  value: w.id,
 }));
 
   return (
@@ -123,7 +172,7 @@ const wagonOptions = (wagons.data?.data ?? []).map((w) => ({
         description="Select wagon and define route"
       >
         <SelectField<CreateRailwayFreightMatrixFormInput>
-          name="wagonType"
+          name="wagonId"
           label="Wagon Type"
           options={wagonOptions}
           required
@@ -173,6 +222,19 @@ const wagonOptions = (wagons.data?.data ?? []).map((w) => ({
         }
       : null
   }
+/>
+<SelectField<CreateRailwayFreightMatrixFormInput>
+  name="sourceAreaId"
+  label="Source Area"
+  options={sourceAreaOptions}
+  disabled={!sourceCityId}
+/>
+
+<SelectField<CreateRailwayFreightMatrixFormInput>
+  name="destinationAreaId"
+  label="Destination Area"
+  options={destinationAreaOptions}
+  disabled={!destinationCityId}
 />
       </FormSection>
     </MasterFormDialog>

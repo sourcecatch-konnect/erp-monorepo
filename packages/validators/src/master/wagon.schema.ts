@@ -7,6 +7,17 @@ const requiredNumber = (field: string) =>
     .transform((v) => (v === "" ? NaN : Number(v)))
     .refine((v) => !Number.isNaN(v), `${field} must be a number`);
 
+const optionalNumber = (field: string) =>
+  z
+    .union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((v) => {
+      if (v === "" || v === null || v === undefined) return null;
+      return Number(v);
+    })
+    .refine(
+      (v) => v === null || !Number.isNaN(v),
+      `${field} must be a number`,
+    );
 
 export const wagonSchema = z.object({
   id: z.string(),
@@ -16,6 +27,11 @@ export const wagonSchema = z.object({
   height: z.number(),
   width: z.number(),
   weight: z.number(),
+
+  totalCft: z.number().nullable().optional(),
+  capacityMt: z.number().nullable().optional(),
+
+  isActive: z.boolean().optional(),
 });
 
 export const createWagonSchema = z.object({
@@ -23,26 +39,34 @@ export const createWagonSchema = z.object({
     .string()
     .trim()
     .min(1, "Wagon name is required")
-    .max(
-      100,
-      "Name cannot exceed 100 characters"
-    ),
+    .max(100, "Name cannot exceed 100 characters"),
 
   height: requiredNumber("Height").refine(
     (v: number) => v > 0,
-    "Height must be greater than 0"
+    "Height must be greater than 0",
   ),
 
   width: requiredNumber("Width").refine(
     (v: number) => v > 0,
-    "Width must be greater than 0"
+    "Width must be greater than 0",
   ),
 
   weight: requiredNumber("Weight").refine(
     (v: number) => v > 0,
-    "Weight must be greater than 0"
+    "Weight must be greater than 0",
   ),
+
+  totalCft: optionalNumber("Total CFT").refine(
+    (v) => v === null || v > 0,
+    "Total CFT must be greater than 0",
+  ),
+
+  capacityMt: optionalNumber("Capacity MT").refine(
+    (v) => v === null || v > 0,
+    "Capacity MT must be greater than 0",
+  ),
+
+  isActive: z.boolean().optional(),
 });
 
-export const updateWagonSchema =
-  createWagonSchema.partial();
+export const updateWagonSchema = createWagonSchema.partial();

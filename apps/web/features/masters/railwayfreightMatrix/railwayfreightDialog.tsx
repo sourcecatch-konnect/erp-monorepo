@@ -112,7 +112,7 @@ const isLoading = freightDetail.isLoading;
               <DetailItem
                 icon={<IconTrain size={15} />}
                 label="Wagon Type"
-                value={data?.wagonType}
+                value={data?.wagon?.name ?? "-"}
               />
 
               <DetailItem
@@ -136,7 +136,7 @@ const isLoading = freightDetail.isLoading;
               <DetailItem
                 icon={<IconId size={15} />}
                 label="Wagon Reference"
-                value={data?.wagon?.name ?? data?.wagonType ?? "-"}
+                value={data?.wagonId ?? "-"}
               />
 
               <DetailItem

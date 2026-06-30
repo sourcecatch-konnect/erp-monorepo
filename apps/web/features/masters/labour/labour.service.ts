@@ -5,6 +5,7 @@ import type {
   Labour,
   CreateLabourBody,
   UpdateLabourBody,
+  LabourWithRelations,
 } from "@skerp/types";
 
 import {
@@ -37,24 +38,17 @@ export const labourApi = {
     }
   },
 
-  detail: async (
-    id: string
-  ): Promise<Labour> => {
-    try {
-      const res = await api.get<
-        ApiResponse<Labour>
-      >(`/labours/${id}`);
+  detail: async (id: string): Promise<LabourWithRelations> => {
+  const res = await api.get<ApiResponse<LabourWithRelations>>(
+    `/labour/${id}`,
+  );
 
-      return unwrapApiResponse(res);
-    } catch (error) {
-      console.error(
-        `Failed to fetch labour ${id}:`,
-        error
-      );
+  if (!res.data.ok) {
+    throw new Error(res.data.error.message);
+  }
 
-      throw error;
-    }
-  },
+  return res.data.data;
+},
 
   create: async (
     body: CreateLabourBody

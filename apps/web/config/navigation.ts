@@ -69,11 +69,27 @@ export const NAV_SECTIONS: NavSection[] = [
         disabled: false,
       },
       {
-        title: "Operations",
-        href: "/operations",
-        icon: IconActivity,
-        disabled: true,
-      },
+  title: "VP Management",
+  icon: IconTrain,
+  items: [
+    {
+      title: "VP Schedule",
+      href: "/vp-management/vp-schedule",
+      permission: PERMS.VP_SCHEDULE.VIEW,
+    },
+    {
+      title: "VP Loading",
+      href: "/vp-management/vp-loading",
+      permission: PERMS.VP_SCHEDULE.VIEW,
+      disabled: true,
+    },
+    {
+      title: "MR / RR",
+      href: "/vp-management/mrrr",
+      permission: PERMS.MRRR.VIEW,
+    }
+  ],
+},
       {
         title: "E-Way Bills",
         icon: IconFileBarcode,

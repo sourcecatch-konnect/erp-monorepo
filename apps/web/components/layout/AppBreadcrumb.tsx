@@ -43,13 +43,21 @@ export function AppBreadcrumb() {
             isRoleDetailSegment ||
             (segments[index - 1] === "trips" && !label);
 
-          const content =
-            label ??
-            (isDynamicSegment ? (
-              <Skeleton className="h-4 w-36 rounded-sm" />
-            ) : (
-              titleize(decodeURIComponent(segment))
-            ));
+        const decodedSegment = decodeURIComponent(segment);
+
+const isMRRRDetailSegment =
+  segments[index - 2] === "operations" &&
+  segments[index - 1] === "mrrr";
+
+const content =
+  label ??
+  (isMRRRDetailSegment ? (
+    `MR/RR - ${decodedSegment}`
+  ) : isDynamicSegment ? (
+    <Skeleton className="h-4 w-36 rounded-sm" />
+  ) : (
+    titleize(decodedSegment)
+  ));
 
           return (
             <Fragment key={href}>
