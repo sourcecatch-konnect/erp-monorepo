@@ -78,6 +78,10 @@ model User {
   updatedVPSchedules          VPSchedule[]                   @relation("UpdatedVPSchedules")
   createdMRRRs                MRRR[]                         @relation("CreatedMRRR")
   updatedMRRRs                MRRR[]                         @relation("UpdatedMRRR")
+  createdGRNs                 GRN[]                          @relation("CreatedGRN")
+  updatedGRNs                 GRN[]                          @relation("UpdatedGRN")
+  createdVPLoadings           VPLoading[]                    @relation("CreatedVPLoading")
+  updatedVPLoadings           VPLoading[]                    @relation("UpdatedVPLoading")
 }
 
 model Company {
@@ -563,26 +567,30 @@ model Goods {
 }
 
 model Labour {
-  id           String     @id @default(cuid())
-  name         String
-  photoPath    String?
-  address      String?
-  contactName  String?
-  contactPhone String?
-  mobileNo     String?
-  referredBy   String?
-  refContactNo String?
-  startDate    DateTime?
-  pan          String?
-  tdsAmount    BigInt?
-  tdsRate      BigInt?
-  type         WorkerType
-  branchId     String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  cityId       String
-  branch       Branch     @relation("WorkerBranch", fields: [branchId], references: [id])
-  city         City       @relation(fields: [cityId], references: [id])
+  id                      String      @id @default(cuid())
+  name                    String
+  photoPath               String?
+  address                 String?
+  contactName             String?
+  contactPhone            String?
+  mobileNo                String?
+  referredBy              String?
+  refContactNo            String?
+  startDate               DateTime?
+  pan                     String?
+  tdsAmount               BigInt?
+  tdsRate                 BigInt?
+  type                    WorkerType
+  branchId                String
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  cityId                  String
+  branch                  Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                    City        @relation(fields: [cityId], references: [id])
+  grnLabours              GRN[]       @relation("GRNLabour")
+  grnUnloadingSupervisors GRN[]       @relation("GRNUnloadingSupervisor")
+  vpLoadingLabours        VPLoading[] @relation("VPLoadingLabour")
+  vpLoadingSupervisors    VPLoading[] @relation("VPLoadingSupervisor")
 }
 
 model City {
@@ -1012,6 +1020,8 @@ model LorryReceipt {
   unloadingLocationId String?
   ewayBill            EwayBill?
   goods               LRGoods[]
+  grn                 GRN?
+  vpLoadings          VPLoading[]
   createdBy           User              @relation("CreatedLR", fields: [createdById], references: [id])
   group               LRGroup           @relation(fields: [groupId], references: [id])
   loadingLocation     CustomerLocation? @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
@@ -1034,6 +1044,7 @@ model LRGoods {
   length         Float?
   width          Float?
   height         Float?
+  grnGoods       GRNGoods[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
@@ -1147,13 +1158,15 @@ model VPSchedule {
   createdById String
   updatedById String?
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
   deletedAt  DateTime?
-  version    Int       @default(1)
+  version    Int         @default(1)
   mrRr       MRRR?
-  fromBranch Branch    @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
-  toBranch   Branch    @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
+  grns       GRN[]
+  vpLoadings VPLoading[]
+  fromBranch Branch      @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
+  toBranch   Branch      @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
 
   sourceArea      Area @relation("VPScheduleSourceArea", fields: [sourceAreaId], references: [id])
   destinationArea Area @relation("VPScheduleDestinationArea", fields: [destinationAreaId], references: [id])
@@ -1343,13 +1356,13 @@ model MRRR {
   createdById String
   updatedById String?
 
-  createdBy User  @relation("CreatedMRRR", fields: [createdById], references: [id])
-  updatedBy User? @relation("UpdatedMRRR", fields: [updatedById], references: [id])
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-  version   Int       @default(1)
+  createdBy  User        @relation("CreatedMRRR", fields: [createdById], references: [id])
+  updatedBy  User?       @relation("UpdatedMRRR", fields: [updatedById], references: [id])
+  vpLoadings VPLoading[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  deletedAt  DateTime?
+  version    Int         @default(1)
 
   rows MRRRRow[]
 
@@ -1368,9 +1381,9 @@ model MRRRRow {
   vpScheduleWagonCountId String
   vpScheduleWagonCount   VPScheduleWagonCount @relation(fields: [vpScheduleWagonCountId], references: [id])
 
-  wagonId String
-  wagon   Wagon  @relation(fields: [wagonId], references: [id])
-
+  wagonId        String
+  wagon          Wagon       @relation(fields: [wagonId], references: [id])
+  vpLoadings     VPLoading[]
   wagonTypeLabel String
   rowNumber      Int
   rowLabel       String
@@ -1392,14 +1405,213 @@ model MRRRRow {
   @@index([sealNo])
 }
 
-enum MRRRStatus {
+model GRN {
+  id String @id @default(cuid())
+
+  grnNumber String @unique
+
+  lorryReceiptId String       @unique
+  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+
+  vpScheduleId String
+  vpSchedule   VPSchedule @relation(fields: [vpScheduleId], references: [id])
+
+  status GRNStatus @default(DRAFT)
+
+  gateNo String?
+
+  inDateTime       DateTime?
+  outDateTime      DateTime?
+  unloadingMinutes Int?
+
+  totalQty    Int @default(0)
+  receivedQty Int @default(0)
+  damageQty   Int @default(0)
+  shortageQty Int @default(0)
+
+  totalWeightMt Decimal?
+
+  totalFreight   BigInt?
+  balanceFreight BigInt?
+  freightPerMt   BigInt?
+
+  detentionDays   Int     @default(0)
+  detentionRate   BigInt?
+  detentionAmount BigInt  @default(0)
+
+  grossTotal BigInt @default(0)
+
+  advanceAmount            BigInt @default(0)
+  damageAmount             BigInt @default(0)
+  tdsAmount                BigInt @default(0)
+  hamaliAmount             BigInt @default(0)
+  printingStationaryAmount BigInt @default(0)
+
+  netAmount BigInt @default(0)
+
+  labourId String?
+  labour   Labour? @relation("GRNLabour", fields: [labourId], references: [id])
+
+  labourCharge BigInt?
+
+  unloadingSupervisorId String?
+  unloadingSupervisor   Labour? @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+
+  damagesBy GRNDamagesBy?
+
+  lrCopyChecked      Boolean @default(false)
+  invoiceChecked     Boolean @default(false)
+  kataReceiptChecked Boolean @default(false)
+  wayBillChecked     Boolean @default(false)
+  sealNoChecked      Boolean @default(false)
+
+  lrCopyRemark      String?
+  invoiceRemark     String?
+  kataReceiptRemark String?
+  wayBillRemark     String?
+  sealNoRemark      String?
+
+  remarks      String?
+  cancelReason String?
+
+  createdById String
+  updatedById String?
+
+  createdBy User  @relation("CreatedGRN", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedGRN", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  goods      GRNGoods[]
+  vpLoadings VPLoading[]
+
+  @@index([vpScheduleId])
+  @@index([status])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+model GRNGoods {
+  id String @id @default(cuid())
+
+  grnId String
+  grn   GRN    @relation(fields: [grnId], references: [id], onDelete: Cascade)
+
+  lrGoodsId String?
+  lrGoods   LRGoods? @relation(fields: [lrGoodsId], references: [id])
+
+  goodsName   String
+  description String?
+
+  totalQty    Int @default(0)
+  receivedQty Int @default(0)
+  damageQty   Int @default(0)
+  shortageQty Int @default(0)
+
+  unit   String?
+  weight Decimal?
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([grnId])
+  @@index([lrGoodsId])
+}
+
+model VPLoading {
+  id String @id @default(cuid())
+
+  loadingNumber String @unique
+
+  vpScheduleId String
+  vpSchedule   VPSchedule @relation(fields: [vpScheduleId], references: [id])
+
+  mrRrId String
+  mrRr   MRRR   @relation(fields: [mrRrId], references: [id])
+
+  mrRrRowId String
+  mrRrRow   MRRRRow @relation(fields: [mrRrRowId], references: [id])
+
+  lorryReceiptId String
+  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+
+  grnId String
+  grn   GRN    @relation(fields: [grnId], references: [id])
+
+  status VPLoadingStatus @default(DRAFT)
+
+  gateNo String?
+
+  loadedQty      Int      @default(0)
+  loadedCft      Float?
+  loadedWeightMt Decimal?
+
+  labourId String?
+  labour   Labour? @relation("VPLoadingLabour", fields: [labourId], references: [id])
+
+  labourCharge BigInt?
+
+  loadingSupervisorId String?
+  loadingSupervisor   Labour? @relation("VPLoadingSupervisor", fields: [loadingSupervisorId], references: [id])
+
+  loadingStartedAt   DateTime?
+  loadingCompletedAt DateTime?
+
+  remarks      String?
+  cancelReason String?
+
+  createdById String
+  updatedById String?
+
+  createdBy User  @relation("CreatedVPLoading", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedVPLoading", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  @@unique([mrRrRowId, lorryReceiptId])
+  @@index([vpScheduleId])
+  @@index([mrRrId])
+  @@index([mrRrRowId])
+  @@index([lorryReceiptId])
+  @@index([grnId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+enum GRNStatus {
   DRAFT
   SUBMITTED
   CANCELLED
 }
 
+enum GRNDamagesBy {
+  NONE
+  TRANSPORTER
+  LABOUR
+  RAILWAY
+  CUSTOMER
+  UNKNOWN
+}
 
+enum VPLoadingStatus {
+  DRAFT
+  LOADED
+  CANCELLED
+}
 
+enum MRRRStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+}
 
 enum RakeType {
   INDENT
@@ -1413,6 +1625,13 @@ enum CreditorCategory {
   EXPENSE
   REPAIR
   OTHER
+}
+
+enum VPScheduleStatus {
+  DRAFT
+  PLANNED
+  MRRR_CREATED
+  CANCELLED
 }
 
 enum CashAccountType {
@@ -1619,10 +1838,4 @@ enum TripStatus {
 enum TripType {
   lr
   dc
-}
-
-enum VPScheduleStatus {
-  DRAFT
-  PLANNED
-  CANCELLED
 }
