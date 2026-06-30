@@ -23,8 +23,16 @@ export const mrrrStatusSchema = z.enum([
   "CANCELLED",
 ]);
 
-export const rakeTypeSchema = z.enum(["INDENT", "LEASE"]);
+export const rakeTypeSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.enum(["INDENT", "LEASE"]).optional(),
+);
+export const rakeTypeEnumSchema = z.enum(["INDENT", "LEASE"]);
 
+export const rakeTypeFormSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  rakeTypeEnumSchema.optional(),
+);
 export const mrrrRowSchema = z.object({
   id: z.string(),
 
@@ -65,7 +73,7 @@ export const mrrrSchema = z.object({
   mrRrNumber: z.string().nullable().optional(),
 
   vpScheduleId: z.string(),
-  rakeType: rakeTypeSchema.nullable().optional(),
+  rakeType: rakeTypeEnumSchema.nullable().optional(),
   status: mrrrStatusSchema,
 
   remarks: z.string().nullable().optional(),
@@ -111,7 +119,7 @@ export const mrrrSchema = z.object({
 export const createMRRRSchema = z.object({
   vpScheduleId: idString("VP Schedule"),
 
-  rakeType: rakeTypeSchema.optional(),
+  rakeType: rakeTypeFormSchema,
 
   remarks: optionalLimitedString(
     250,
@@ -133,7 +141,7 @@ export const createMRRRSchema = z.object({
 });
 
 export const updateMRRRSchema = z.object({
-  rakeType: rakeTypeSchema.optional(),
+  rakeType: rakeTypeFormSchema,
 
   remarks: optionalLimitedString(
     250,

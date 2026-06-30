@@ -747,11 +747,6 @@ router.delete("/:id", can(PERMS.VP_SCHEDULE.DELETE), async (req, res) => {
 
   assertBranchAccess(req, existing.fromBranchId);
 
-  if (existing.status !== "DRAFT") {
-    throw new BadRequestError(
-      "Only a DRAFT VP Schedule can be deleted. Please cancel it instead.",
-    );
-  }
 
   const me = actorId(req);
 

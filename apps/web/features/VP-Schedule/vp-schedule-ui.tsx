@@ -108,16 +108,18 @@ export function TruncatedTooltipText({
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className={`block max-w-full truncate ${className ?? ""}`}
-          title={tooltipText}
+          className={`block max-w-full truncate cursor-help ${className ?? ""}`}
         >
           {displayValue}
         </span>
       </TooltipTrigger>
 
-      <TooltipContent side="top" className="max-w-sm whitespace-pre-line break-words">
-  {tooltipText}
-</TooltipContent>
+      <TooltipContent
+        side="top"
+        className="z-50 max-w-sm whitespace-pre-line break-words"
+      >
+        {tooltipText}
+      </TooltipContent>
     </Tooltip>
   );
 }

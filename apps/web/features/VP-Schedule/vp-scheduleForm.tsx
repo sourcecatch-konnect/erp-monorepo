@@ -309,41 +309,55 @@ const formatScheduleDate = (value?: string) => {
   });
 };
 
+const formatAreaName = (area?: string) => {
+  const areaName = area?.split(",")[0] ?? "";
 
-const createCityCode = (city?: string) => {
-  if (!city) return "";
-
-  const normalizedCity = city
+  return areaName
     .replace(/[^a-zA-Z\s]/g, " ")
     .replace(/\s+/g, " ")
-    .trim();
-
-  return normalizedCity.slice(0, 3).toUpperCase();
+    .trim()
+    .toUpperCase();
 };
+const selectedSourceAreaLabel = React.useMemo(() => {
+  return (
+    sourceAreaOptions.find((area) => area.value === watchedSourceAreaId)
+      ?.label ?? ""
+  );
+}, [sourceAreaOptions, watchedSourceAreaId]);
 
+const selectedDestinationAreaLabel = React.useMemo(() => {
+  return (
+    destinationAreaOptions.find(
+      (area) => area.value === watchedDestinationAreaId,
+    )?.label ?? ""
+  );
+}, [destinationAreaOptions, watchedDestinationAreaId]);
 React.useEffect(() => {
   if (isEdit) return;
 
   const formattedDate = formatScheduleDate(watchedScheduleDate);
 
   if (
-    !selectedFromBranch ||
-    !selectedToBranch ||
     !watchedSourceAreaId ||
     !watchedDestinationAreaId ||
+    !selectedSourceAreaLabel ||
+    !selectedDestinationAreaLabel ||
     !formattedDate
   ) {
     return;
   }
-
-  const sourceCode = createCityCode(selectedFromBranch.label);
-  const destinationCode = createCityCode(selectedToBranch.label);
+const sourceCode = formatAreaName(selectedSourceAreaLabel);
+const destinationCode = formatAreaName(selectedDestinationAreaLabel);
 
   if (!sourceCode || !destinationCode) {
     return;
   }
 
-  const scheduleName = `VP Schedule / ${sourceCode}-${destinationCode} / ${formattedDate}`;
+  const scheduleName = `${sourceCode}-${destinationCode} / ${formattedDate}`;
+
+  if (form.getValues("scheduleName") === scheduleName) {
+    return;
+  }
 
   form.setValue("scheduleName", scheduleName, {
     shouldValidate: true,
@@ -352,13 +366,12 @@ React.useEffect(() => {
 }, [
   isEdit,
   form,
-  selectedFromBranch,
-  selectedToBranch,
   watchedScheduleDate,
   watchedSourceAreaId,
   watchedDestinationAreaId,
-]);
-  const watchedWagons = form.watch("wagonCounts") ?? [];
+  selectedSourceAreaLabel,
+  selectedDestinationAreaLabel,
+]);  const watchedWagons = form.watch("wagonCounts") ?? [];
   const wagonOptions = wagons.data ?? [];
   const wagonMap = React.useMemo(
     () => new Map(wagonOptions.map((wagon) => [wagon.value, wagon])),
@@ -388,7 +401,7 @@ const onSubmit = async (values: CreateVPScheduleBody) => {
       toast.success("VP schedule updated");
 
       router.push(
-        `/operations/vp-schedule/${encodeURIComponent(
+        `/vp-management/vp-schedule/${encodeURIComponent(
           detailQuery.data?.scheduleNumber ?? scheduleId
         )}`
       );
@@ -401,7 +414,7 @@ const onSubmit = async (values: CreateVPScheduleBody) => {
     toast.success("VP schedule created");
 
     router.push(
-      `/operations/vp-schedule/${encodeURIComponent(created.scheduleNumber)}`
+      `/vp-management/vp-schedule/${encodeURIComponent(created.scheduleNumber)}`
     );
   } catch (error) {
     toast.error(getErrorMessage(error));
@@ -409,7 +422,7 @@ const onSubmit = async (values: CreateVPScheduleBody) => {
 };
 
   const handleCancel = () => {
-    router.push("/operations/vp-schedule");
+    router.push("/vp-management/vp-schedule");
   };
 
   if (isEdit && detailQuery.isLoading) {

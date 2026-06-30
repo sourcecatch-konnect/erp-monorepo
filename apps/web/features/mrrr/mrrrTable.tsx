@@ -38,7 +38,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@skerp/ui/components/dropdown";
-import { TooltipProvider } from "@skerp/ui/components/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@skerp/ui/components/tooltip";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import { useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -152,17 +152,30 @@ const [cancelRow, setCancelRow] = React.useState<MRRRRow | null>(null);
   const columns = React.useMemo<ColumnDef<MRRRRow>[]>(
     () => [
 
-      {
+ {
   id: "vpSchedule",
-  header: "VP Schedule",
-  size: 130,
-  cell: ({ row }) => (
-    <TruncatedTooltipText
-      value={row.original.vpSchedule?.scheduleNumber ?? "—"}
-    />
-  ),
-}
-,
+  header: "VP Schedule Name",
+  size: 220,
+  cell: ({ row }) => {
+    const mrrr = row.original;
+    const vpSchedule = mrrr.vpSchedule;
+
+    const label =
+      vpSchedule?.scheduleName ??
+      vpSchedule?.scheduleNumber ??
+      "View MR/RR";
+
+    return (
+      <Link
+        href={`/vp-management/mrrr/${encodeURIComponent(String(mrrr.id))}`}
+        className="block cursor-pointer truncate font-medium text-primary underline-offset-4 hover:underline"
+        title={label}
+      >
+        {label}
+      </Link>
+    );
+  },
+},
       {
         id: "scheduleDate",
         header: "Schedule Date",
@@ -170,18 +183,39 @@ const [cancelRow, setCancelRow] = React.useState<MRRRRow | null>(null);
         cell: ({ row }) =>
           formatMRRRDate(row.original.vpSchedule?.scheduleDate),
       },
-      {
+{
   id: "route",
   header: "Route",
   size: 160,
-  cell: ({ row }) => (
-    <TruncatedTooltipText
-      value={routeLabel(row.original)}
-      tooltipValue={routeTooltipLabel(row.original)}
-    />
-  ),
-},
-      {
+  cell: ({ row }) => {
+    const mrrr = row.original;
+    const schedule = mrrr.vpSchedule;
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="block cursor-help truncate">
+            {routeLabel(mrrr)}
+          </span>
+        </TooltipTrigger>
+
+        <TooltipContent side="top" className="z-50 max-w-sm">
+          <div className="grid gap-1 text-xs">
+            <p>
+              <span className="font-medium">Source Area:</span>{" "}
+              {schedule?.sourceArea?.name ?? "?"}
+            </p>
+
+            <p>
+              <span className="font-medium">Destination Area:</span>{" "}
+              {schedule?.destinationArea?.name ?? "?"}
+            </p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    );
+  },
+},      {
         id: "rakeType",
         header: "Rake Type",
         size: 80,
@@ -347,7 +381,7 @@ const handleCancel = (reason: string) => {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem asChild>
                               <Link
-                                href={`/operations/mrrr/${encodeURIComponent(
+                                href={`/vp-management/mrrr/${encodeURIComponent(
                                   String(identifier),
                                 )}`}
                               >
@@ -360,7 +394,7 @@ const handleCancel = (reason: string) => {
                               <>
                                 <DropdownMenuItem asChild>
                                   <Link
-                                    href={`/operations/mrrr/${encodeURIComponent(
+                                    href={`/vp-management/mrrr/${encodeURIComponent(
                                       String(identifier),
                                     )}/edit`}
                                   >

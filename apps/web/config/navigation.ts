@@ -69,23 +69,23 @@ export const NAV_SECTIONS: NavSection[] = [
         disabled: false,
       },
       {
-  title: "VP management",
-  icon: IconActivity,
+  title: "VP Management",
+  icon: IconTrain,
   items: [
     {
       title: "VP Schedule",
-      href: "/operations/vp-schedule",
+      href: "/vp-management/vp-schedule",
       permission: PERMS.VP_SCHEDULE.VIEW,
     },
     {
       title: "VP Loading",
-      href: "/operations/vp-loading",
+      href: "/vp-management/vp-loading",
       permission: PERMS.VP_SCHEDULE.VIEW,
       disabled: true,
     },
     {
       title: "MR / RR",
-      href: "/operations/mrrr",
+      href: "/vp-management/mrrr",
       permission: PERMS.MRRR.VIEW,
     }
   ],

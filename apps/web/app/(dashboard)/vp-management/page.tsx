@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { IconTrain } from "@tabler/icons-react";
 
-export default function OperationsPage() {
+export default function VpManagementPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">Operations</h1>
+        <h1 className="text-xl font-semibold tracking-tight">VP Management</h1>
         <p className="text-sm text-muted-foreground">
           Railway and transport operation workflows
         </p>
@@ -13,7 +13,7 @@ export default function OperationsPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <Link
-          href="/operations/vp-schedule"
+          href="/vp-management/vp-schedule"
           className="group flex items-start gap-3 rounded-md border border-border bg-white p-3.5 transition-all duration-150 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-sm"
         >
           <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors duration-150 group-hover:bg-primary/10 group-hover:text-primary">

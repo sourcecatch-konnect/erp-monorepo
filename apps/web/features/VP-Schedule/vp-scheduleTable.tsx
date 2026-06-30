@@ -32,9 +32,12 @@ import {
   IconDotsVertical,
   IconEdit,
   IconEye,
+  IconTrash,
 } from "@tabler/icons-react";
 import { formatVPScheduleDate, TruncatedTooltipText, VPScheduleStatusBadge } from "./vp-schedule-ui";
-import { TooltipProvider } from "@skerp/ui/components/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@skerp/ui/components/tooltip";
+import { useDeleteVPSchedule } from "./hook/useVPSchedule";
+import { toast } from "sonner";
 
 type VPScheduleRow = {
   id: string;
@@ -100,37 +103,8 @@ const routeLabel = (schedule: VPScheduleRow) => {
 
   return "—";
 };
-const routeTooltipLabel = (schedule: VPScheduleRow) => {
-  const sourceArea = schedule.sourceArea?.name;
-  const destinationArea = schedule.destinationArea?.name;
 
-  if (sourceArea || destinationArea) {
-    return `Source Area: ${sourceArea ?? "?"}\nDestination Area: ${
-      destinationArea ?? "?"
-    }`;
-  }
 
-  return "—";
-};
-const branchLabel = (schedule: VPScheduleRow) => {
-  const from =
-    schedule.fromBranch?.name || schedule.fromBranch?.branchCode || null;
-
-  const to = schedule.toBranch?.name || schedule.toBranch?.branchCode || null;
-
-  if (from || to) {
-    return `${from ?? "?"} → ${to ?? "?"}`;
-  }
-
-  return "—";
-};
-
-const capacityLabel = (schedule: VPScheduleRow) => {
-  const mt = schedule.totalCapacityMt ?? 0;
-  const cft = schedule.totalCapacityCft ?? 0;
-
-  return `${mt} MT / ${cft} CFT`;
-};
 
 const createdByLabel = (schedule: VPScheduleRow) => {
   if (!schedule.createdBy) return "—";
@@ -144,82 +118,101 @@ export default function VPScheduleTable({
   data,
   isLoading,
 }: VPScheduleTableProps) {
+  const deleteMutation = useDeleteVPSchedule();
+
+  const handleDelete = async (schedule: VPScheduleRow) => {
+    const label = schedule.scheduleName || schedule.scheduleNumber || "this VP schedule";
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${label}?`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteMutation.mutateAsync(schedule.id);
+      toast.success("VP schedule deleted");
+    } catch (error) {
+      toast.error("Failed to delete VP schedule");
+    }
+  };
   const columns = React.useMemo<ColumnDef<VPScheduleRow>[]>(
   () => [
-    {
-      id: "scheduleNumber",
-      header: "Schedule No",
-      size: 180,
-      cell: ({ row }) => (
-        <Link
-          href={`/operations/vp-schedule/${encodeURIComponent(
-            String(row.original.scheduleNumber || row.original.id),
-          )}`}
-          className="font-medium text-primary hover:underline"
-        >
-          {row.original.scheduleNumber ?? "—"}
-        </Link>
-      ),
-    },
-    {
-      id: "scheduleName",
-      header: "Schedule Name",
-      size: 220,
-      cell: ({ row }) => (
-        <TruncatedTooltipText value={row.original.scheduleName ?? "—"} />
-      ),
-    },
-    {
-      id: "scheduleDate",
-      header: "Date",
-      size: 100,
-      cell: ({ row }) => formatVPScheduleDate(row.original.scheduleDate),
-    },
-    {
-  id: "route",
-  header: "Route",
-  size: 180,
-  cell: ({ row }) => (
-    <TruncatedTooltipText
-      value={routeLabel(row.original)}
-      tooltipValue={routeTooltipLabel(row.original)}
-    />
-  ),
+{
+  id: "scheduleName",
+  header: "Schedule Name",
+  size: 260,
+  cell: ({ row }) => {
+    const schedule = row.original;
+
+    return (
+      <Link
+        href={`/vp-management/vp-schedule/${encodeURIComponent(
+          String(schedule.scheduleNumber || schedule.id),
+        )}`}
+        className="block min-w-0 cursor-pointer font-medium text-primary hover:underline"
+      >
+        <TruncatedTooltipText
+          value={schedule.scheduleName ?? "—"}
+          className="cursor-pointer"
+        />
+      </Link>
+    );
+  },
 },
     {
-      id: "branch",
-      header: "Branch",
-      size: 200,
-      cell: ({ row }) => (
-        <TruncatedTooltipText value={branchLabel(row.original)} />
-      ),
+      id: "route",
+      header: "Route",
+      size: 160,
+      cell: ({ row }) => {
+        const schedule = row.original;
+
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="block truncate cursor-help">
+                {routeLabel(schedule)}
+              </span>
+            </TooltipTrigger>
+
+            <TooltipContent side="top" className="z-50 max-w-sm">
+              <div className="grid gap-1 text-xs">
+                <p>
+                  <span className="font-medium">Source Area:</span>{" "}
+                  {schedule.sourceArea?.name ?? "?"}
+                </p>
+
+                <p>
+                  <span className="font-medium">Destination Area:</span>{" "}
+                  {schedule.destinationArea?.name ?? "?"}
+                </p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        );
+      },
     },
+
     {
       id: "totalWagonCount",
       header: "Wagons",
       size: 90,
       cell: ({ row }) => row.original.totalWagonCount ?? 0,
     },
-    {
-      id: "capacity",
-      header: "Capacity",
-      size: 150,
-      cell: ({ row }) => (
-        <TruncatedTooltipText value={capacityLabel(row.original)} />
-      ),
-    },
+
     {
       id: "status",
       header: "Status",
-      size: 140,
+      size: 120,
       cell: ({ row }) => (
         <VPScheduleStatusBadge status={row.original.status} />
       ),
     },
+
     {
       id: "createdBy",
       header: "Created By",
-      size: 120,
+      size: 100,
       cell: ({ row }) => (
         <TruncatedTooltipText value={createdByLabel(row.original)} />
       ),
@@ -255,9 +248,9 @@ export default function VPScheduleTable({
 </TableHead>
               ))}
 
-              <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
-                Actions
-              </TableHead>
+            <TableHead className="sticky right-0 z-20 h-10 w-16 bg-muted text-right text-xs font-semibold uppercase text-muted-foreground ">
+  Actions
+</TableHead> 
             </TableRow>
           ))}
         </TableHeader>
@@ -298,7 +291,7 @@ export default function VPScheduleTable({
               const schedule = row.original;
 
               return (
-                <TableRow key={row.id} className="hover:bg-muted/30">
+                <TableRow key={row.id} className="group hover:bg-muted/30">
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
   key={cell.id}
@@ -313,44 +306,52 @@ export default function VPScheduleTable({
 </TableCell>
                   ))}
 
-                  <TableCell className="w-16 text-right">
+                 <TableCell className="sticky right-0 z-10 w-16 bg-card text-right  group-hover:bg-muted/30">
                     <div className="flex justify-end gap-1">
-                
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label="VP schedule actions"
-                          >
-                            <IconDotsVertical size={16} />
-                          </Button>
-                        </DropdownMenuTrigger>
+                <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="ghost"
+      aria-label="VP schedule actions"
+    >
+      <IconDotsVertical size={16} />
+    </Button>
+  </DropdownMenuTrigger>
 
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                         <Link
-  href={`/operations/vp-schedule/${encodeURIComponent(
-    String(schedule.scheduleNumber || schedule.id)
-  )}`}
-  className="font-medium text-primary hover:underline"
->
-                               
-                              <IconEye size={16} className="mr-2" />
-                              View details
-                            </Link>
-                          </DropdownMenuItem>
+  <DropdownMenuContent align="end">
+    <DropdownMenuItem asChild>
+      <Link
+        href={`/vp-management/vp-schedule/${encodeURIComponent(
+          String(schedule.scheduleNumber || schedule.id),
+        )}`}
+      >
+        <IconEye size={16} className="mr-2" />
+        View details
+      </Link>
+    </DropdownMenuItem>
 
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={`/operations/vp-schedule/${schedule.id}/edit`}
-                            >
-                              <IconEdit size={16} className="mr-2" />
-                              Edit
-                            </Link>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+    <DropdownMenuItem asChild>
+      <Link href={`/vp-management/vp-schedule/${schedule.id}/edit`}>
+        <IconEdit size={16} className="mr-2" />
+        Edit
+      </Link>
+    </DropdownMenuItem>
+
+    <DropdownMenuItem
+      disabled={deleteMutation.isPending}
+      className="text-destructive focus:text-destructive"
+      onSelect={(event) => {
+        event.preventDefault();
+        handleDelete(schedule);
+      }}
+    >
+      <IconTrash size={16} className="mr-2" />
+      Delete
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>

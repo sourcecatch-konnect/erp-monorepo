@@ -213,8 +213,14 @@ const previewQuery = useMRRRPreview(
     if (!isEdit || !mrrr) return;
 
     form.reset({
+      scheduleDate: mrrr.vpSchedule?.scheduleDate
+    ? new Date(mrrr.vpSchedule.scheduleDate).toISOString()
+    : "",
       vpScheduleId: mrrr.vpScheduleId ?? "",
-      rakeType: mrrr.rakeType ?? undefined,
+      rakeType:
+  mrrr.rakeType === "INDENT" || mrrr.rakeType === "LEASE"
+    ? mrrr.rakeType
+    : undefined,
       mrRrNumber: mrrr.mrRrNumber ?? "",
       remarks: mrrr.remarks ?? "",
       rows:
@@ -231,6 +237,15 @@ const previewQuery = useMRRRPreview(
           sealNo: row.sealNo ?? "",
         })) ?? [],
     });
+    if (mrrr.rakeType === "INDENT" || mrrr.rakeType === "LEASE") {
+  form.setValue("rakeType", mrrr.rakeType, {
+    shouldValidate: false,
+    shouldDirty: false,
+    shouldTouch: false,
+  });
+}
+
+form.clearErrors("rakeType");
   }, [detailQuery.data, form, isEdit]);
 
   React.useEffect(() => {
@@ -255,11 +270,16 @@ const previewQuery = useMRRRPreview(
     );
   }, [isEdit, previewQuery.data, replace, watchedVPScheduleId]);
 
-  const totalRows = watchedRows.length;
-  const preview = previewQuery.data;
-const previewSchedule = preview?.vpSchedule;
-const previewWagonCounts = previewSchedule?.wagonCounts ?? [];
+const totalRows = watchedRows.length;
 
+const mrrrDetail = detailQuery.data as MRRRWithRelations | undefined;
+const preview = previewQuery.data;
+
+const previewSchedule = isEdit
+  ? (mrrrDetail?.vpSchedule as any)
+  : preview?.vpSchedule;
+
+const previewWagonCounts = previewSchedule?.wagonCounts ?? [];
 const previewTotalFreight = previewWagonCounts.reduce(
   (sum: number, wagon: any) => sum + Number(wagon.totalFreight ?? 0),
   0,
@@ -271,7 +291,14 @@ const previewTotalFreight = previewWagonCounts.reduce(
     createMutation.isPending ||
     updateMutation.isPending ||
     updateRowsMutation.isPending;
-  const vpScheduleOptions = vpSchedules.data?.data ?? [];
+ const vpScheduleOptions =
+  vpSchedules.data?.data?.map((schedule: any) => ({
+    label:
+      schedule.scheduleName ??
+      schedule.scheduleNumber ??
+      schedule.id,
+    value: schedule.id,
+  })) ?? [];
 
   const buildRowsBody = (rows: MRRRFormRow[]): UpdateMRRRRowsBody => ({
     rows: rows
@@ -289,9 +316,12 @@ const previewTotalFreight = previewWagonCounts.reduce(
     try {
       if (isEdit && mrrrId) {
         const body: UpdateMRRRBody = {
-          rakeType: values.rakeType,
-          remarks: values.remarks,
-        };
+  rakeType:
+    values.rakeType === "INDENT" || values.rakeType === "LEASE"
+      ? values.rakeType
+      : undefined,
+  remarks: values.remarks,
+};
 
         await updateMutation.mutateAsync({
           id: mrrrId,
@@ -306,13 +336,16 @@ const previewTotalFreight = previewWagonCounts.reduce(
         }
 
         toast.success("MR/RR updated");
-        router.push(`/operations/mrrr/${encodeURIComponent(mrrrId)}`);
+        router.push(`/vp-management/mrrr/${encodeURIComponent(mrrrId)}`);
         return;
       }
 
       const body: CreateMRRRBody = {
         vpScheduleId: values.vpScheduleId,
-        rakeType: values.rakeType,
+        rakeType:
+  values.rakeType === "INDENT" || values.rakeType === "LEASE"
+    ? values.rakeType
+    : undefined,
         remarks: values.remarks,
         rows: values.rows.map((row, index) => ({
           rowNumber: row.rowNumber ?? index + 1,
@@ -326,14 +359,14 @@ const previewTotalFreight = previewWagonCounts.reduce(
       const created = await createMutation.mutateAsync(body);
 
       toast.success("MR/RR created");
-      router.push(`/operations/mrrr/${encodeURIComponent(created.id)}`);
+      router.push(`/vp-management/mrrr/${encodeURIComponent(created.id)}`);
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
   };
 
   const handleCancel = () => {
-    router.push("/operations/mrrr");
+    router.push("/vp-management/mrrr");
   };
 
   if (isEdit && detailQuery.isLoading) {
@@ -580,14 +613,14 @@ const previewTotalFreight = previewWagonCounts.reduce(
               <div>
                 <p className="text-xs text-muted-foreground">Freight / Wagon</p>
                 <p className="font-medium">
-                  {formatMoney(wagon.freightAmount)}
+                  {formatFreight(wagon.freightAmount)}
                 </p>
               </div>
 
               <div>
                 <p className="text-xs text-muted-foreground">Total Freight</p>
                 <p className="font-medium">
-                  {formatMoney(wagon.totalFreight)}
+                  {formatFreight(wagon.totalFreight)}
                 </p>
               </div>
             </div>

@@ -218,7 +218,7 @@ const totalFreight = wagonCounts.reduce((sum: number, wagon: any) => {
         variant="ghost"
         size="sm"
         className="text-muted-foreground"
-        onClick={() => router.push("/operations/vp-schedule")}
+        onClick={() => router.push("/vp-management/vp-schedule")}
       >
         <IconArrowLeft size={16} className="mr-1" />
         Back to VP schedules
@@ -249,7 +249,7 @@ const totalFreight = wagonCounts.reduce((sum: number, wagon: any) => {
               variant="outline"
               size="sm"
               onClick={() =>
-                router.push(`/operations/vp-schedule/${schedule.id}/edit`)
+                router.push(`/vp-management/vp-schedule/${schedule.id}/edit`)
               }
             >
               <IconEdit size={14} className="mr-1.5" />

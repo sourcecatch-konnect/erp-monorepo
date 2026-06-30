@@ -66,24 +66,23 @@ export function VPScheduleListPage() {
           </p>
         </div>
 
-        <Button onClick={() => router.push("/operations/vp-schedule/new")}>
+        <Button onClick={() => router.push("/vp-management/vp-schedule/new")}>
           <IconPlus size={16} className="mr-1" />
           Add Schedule
         </Button>
       </div>
-
-      <div className="rounded-md border bg-white p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+         
+      <div className="relative w-full sm:max-w-sm">
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search by schedule name, source, destination or rake no..."
             className="sm:max-w-sm"
           />
-
+        
     
         </div>
-      </div>
+      
 
       <VPScheduleTable data={data} isLoading={schedules.isLoading} />
 
