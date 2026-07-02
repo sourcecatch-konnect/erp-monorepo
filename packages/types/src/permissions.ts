@@ -59,6 +59,33 @@ type TripPermissionKey =
   | "trip.close"
   | "trip.cancel";
 
+type VehicleJourneyPermissionKey =
+  | "vehicle_journey.view"
+  | "vehicle_journey.create"
+  | "vehicle_journey.update"
+  | "vehicle_journey.close"
+  | "vehicle_journey.cancel"
+  | "vehicle_journey.override_chain";
+
+type TripExpensePermissionKey =
+  | "trip_expense.view"
+  | "trip_expense.create"
+  | "trip_expense.update"
+  | "trip_expense.approve"
+  | "trip_expense.reverse";
+
+type TripAdvancePermissionKey =
+  | "trip_advance.view"
+  | "trip_advance.create"
+  | "trip_advance.reverse";
+
+type LogSlipPermissionKey =
+  | "logslip.view"
+  | "logslip.generate"
+  | "logslip.post_accounts"
+  | "logslip.reopen"
+  | "logslip.print";
+
 type VPSchedulePermissionKey =
   | `vp_schedule.${CrudAction}`
   | "vp_schedule.confirm"
@@ -108,6 +135,10 @@ export type PermissionKey =
   | MasterPermissionKey
   | LorryReceiptPermissionKey
   | TripPermissionKey
+  | VehicleJourneyPermissionKey
+  | TripExpensePermissionKey
+  | TripAdvancePermissionKey
+  | LogSlipPermissionKey
   | OrderPermissionKey
   | EwaybillPermissionKey
   | TrackingPermissionKey
@@ -179,6 +210,33 @@ export const PERMS = {
     DELETE: "trip.delete",
     CLOSE: "trip.close",
     CANCEL: "trip.cancel",
+  },
+  VEHICLE_JOURNEY: {
+    VIEW: "vehicle_journey.view",
+    CREATE: "vehicle_journey.create",
+    UPDATE: "vehicle_journey.update",
+    CLOSE: "vehicle_journey.close",
+    CANCEL: "vehicle_journey.cancel",
+    OVERRIDE_CHAIN: "vehicle_journey.override_chain",
+  },
+  TRIP_EXPENSE: {
+    VIEW: "trip_expense.view",
+    CREATE: "trip_expense.create",
+    UPDATE: "trip_expense.update",
+    APPROVE: "trip_expense.approve",
+    REVERSE: "trip_expense.reverse",
+  },
+  TRIP_ADVANCE: {
+    VIEW: "trip_advance.view",
+    CREATE: "trip_advance.create",
+    REVERSE: "trip_advance.reverse",
+  },
+  LOGSLIP: {
+    VIEW: "logslip.view",
+    GENERATE: "logslip.generate",
+    POST_ACCOUNTS: "logslip.post_accounts",
+    REOPEN: "logslip.reopen",
+    PRINT: "logslip.print",
   },
   VP_SCHEDULE: {
   VIEW: "vp_schedule.view",

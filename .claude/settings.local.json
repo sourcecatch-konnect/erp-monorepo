@@ -13,7 +13,8 @@
       "Bash(gh pr *)",
       "Bash(pnpm --filter @skerp/types check-types)",
       "Bash(pnpm --filter @skerp/server check-types)",
-      "Bash(pnpm --filter @skerp/notifications-web check-types)"
+      "Bash(pnpm --filter @skerp/notifications-web check-types)",
+      "Bash(pnpm --filter @skerp/validators build)"
     ]
   }
 }

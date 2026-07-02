@@ -82,6 +82,11 @@ model User {
   updatedGRNs                 GRN[]                          @relation("UpdatedGRN")
   createdVPLoadings           VPLoading[]                    @relation("CreatedVPLoading")
   updatedVPLoadings           VPLoading[]                    @relation("UpdatedVPLoading")
+  createdJourneys             VehicleJourney[]               @relation("CreatedJourneys")
+  updatedJourneys             VehicleJourney[]               @relation("UpdatedJourneys")
+  createdTripExpenses         TripExpense[]                  @relation("CreatedTripExpenses")
+  createdDriverAdvances       DriverAdvance[]                @relation("CreatedDriverAdvances")
+  generatedLogSlips           LogSlip[]                      @relation("GeneratedLogSlips")
 }
 
 model Company {
@@ -132,6 +137,7 @@ model Branch {
   warehouses Warehouse[] @relation("BranchWarehouses")
   agreements Agreement[] @relation("BranchAgreement")
   workers    Labour[]    @relation("WorkerBranch")
+  homeJourneys VehicleJourney[] @relation("JourneyHomeBranch")
 
   users             User[]
   userBranches      UserBranch[]
@@ -398,8 +404,11 @@ model Vehicle {
   openingKM          Int
   status             VehicleStatus @default(AVAILABLE)
   vehicleTypeId      String
-  vehicleTypeRef     VehicleType   @relation(fields: [vehicleTypeId], references: [id])
+  vehicleTypeRef     VehicleType     @relation(fields: [vehicleTypeId], references: [id])
   VehicleTrip        VehicleTrip[]
+  journeys           VehicleJourney[]
+  driverAdvances     DriverAdvance[]
+  logSlips           LogSlip[]
 }
 
 model Customer {
@@ -546,6 +555,9 @@ model Driver {
   updatedAt              DateTime      @updatedAt
   status                 DriverStatus  @default(AVAILABLE)
   VehicleTrip            VehicleTrip[]
+  journeys               VehicleJourney[]
+  advances               DriverAdvance[]
+  logSlips               LogSlip[]
 }
 
 model Goods {
@@ -617,6 +629,12 @@ model City {
   transports          Transport[]
   tripUnloadingPoints TripUnloadingPoint[]
   warehouses          Warehouse[]
+  journeyStarts       VehicleJourney[]       @relation("JourneyStartCity")
+  journeyReturns      VehicleJourney[]       @relation("JourneyReturnCity")
+  journeyCurrent      VehicleJourney[]       @relation("JourneyCurrentCity")
+  tripsFrom           VehicleTrip[]          @relation("TripFromCity")
+  tripsTo             VehicleTrip[]          @relation("TripToCity")
+  tripExpenses        TripExpense[]          @relation("TripExpenseCity")
 }
 
 model Area {
@@ -734,6 +752,7 @@ model Pump {
   stateId           String
   city              City      @relation("PumpCity", fields: [cityId], references: [id])
   state             State     @relation(fields: [stateId], references: [id])
+  tripExpenses      TripExpense[]
 }
 
 model SpareCategory {
@@ -1093,6 +1112,24 @@ model VehicleTrip {
   version            Int                  @default(1)
   consignorId        String?
   tripName           String
+  // --- Journey leg fields (null for standalone trips created before journeys) ---
+  journeyId            String?
+  sequenceNo           Int?
+  legType              TripLegType?
+  fromCityId           String?
+  toCityId             String?
+  isReturnLeg          Boolean   @default(false)
+  arrivalDateTime      DateTime?
+  unloadingCompletedAt DateTime?
+  closedById           String?
+  closeReason          String?
+  // Reason recorded when the operator breaks city/KM/time continuity.
+  chainExceptionReason String?
+  journey              VehicleJourney? @relation(fields: [journeyId], references: [id])
+  fromCity             City?           @relation("TripFromCity", fields: [fromCityId], references: [id])
+  toCity               City?           @relation("TripToCity", fields: [toCityId], references: [id])
+  expenses             TripExpense[]
+  advances             DriverAdvance[]
   primaryGroups      LRGroup[]            @relation("GroupPrimaryTrip")
   secondaryGroups    LRGroup[]            @relation("GroupSecondaryTrip")
   TripStatusHistory  TripStatusHistory[]
@@ -1105,7 +1142,9 @@ model VehicleTrip {
   updatedBy          User?                @relation("UpdatedTrips", fields: [updatedById], references: [id])
   vehicle            Vehicle              @relation(fields: [vehicleId], references: [id])
 
+  @@unique([journeyId, sequenceNo])
   @@index([status])
+  @@index([journeyId])
 }
 
 model TripUnloadingPoint {
@@ -1116,6 +1155,13 @@ model TripUnloadingPoint {
   cityId        String
   locationId    String?
   plannedDate   DateTime?
+  actualArrivalAt   DateTime?
+  actualUnloadingAt DateTime?
+  actualDepartureAt DateTime?
+  receivedQty       Int?
+  damageQty         Int?
+  shortageQty       Int?
+  remarks           String?
   city          City              @relation(fields: [cityId], references: [id])
   location      CustomerLocation? @relation(fields: [locationId], references: [id])
   trip          VehicleTrip       @relation(fields: [vehicleTripId], references: [id], onDelete: Cascade)
@@ -1248,8 +1294,9 @@ model CashAccount {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  balances CashAccountBalance[]
-  payments CashPayment[]
+  balances       CashAccountBalance[]
+  payments       CashPayment[]
+  driverAdvances DriverAdvance[]
 }
 
 model CashPlanDay {
@@ -1838,4 +1885,301 @@ enum TripStatus {
 enum TripType {
   lr
   dc
+}
+
+/* ------------------------------------------------------------------ */
+/* Vehicle journey / log slip (docs/TRIP_JOURNEY_LOGSLIP_PLAN.md)      */
+/* ------------------------------------------------------------------ */
+
+/// Full own-vehicle truck cycle: sequential trip legs starting from a base
+/// city and normally closing when the vehicle returns to `returnCityId`.
+/// Settled by exactly one LogSlip. Return base is configured per journey —
+/// never hardcoded.
+model VehicleJourney {
+  id               String                  @id @default(cuid())
+  journeyNumber    String                  @unique
+  fyCode           String
+  vehicleId        String
+  driverId         String
+  homeBranchId     String
+  startCityId      String
+  returnCityId     String
+  currentCityId    String
+  openingKm        Int
+  closingKm        Int?
+  startedAt        DateTime
+  closedAt         DateTime?
+  status           VehicleJourneyStatus    @default(ACTIVE)
+  settlementStatus JourneySettlementStatus @default(NOT_READY)
+  // Reason recorded when the journey is closed away from the return city.
+  closeReason      String?
+  cancelReason     String?
+  remarks          String?
+  createdById      String
+  updatedById      String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  deletedAt        DateTime?
+  version          Int                     @default(1)
+
+  vehicle     Vehicle @relation(fields: [vehicleId], references: [id])
+  driver      Driver  @relation(fields: [driverId], references: [id])
+  homeBranch  Branch  @relation("JourneyHomeBranch", fields: [homeBranchId], references: [id])
+  startCity   City    @relation("JourneyStartCity", fields: [startCityId], references: [id])
+  returnCity  City    @relation("JourneyReturnCity", fields: [returnCityId], references: [id])
+  currentCity City    @relation("JourneyCurrentCity", fields: [currentCityId], references: [id])
+  createdBy   User    @relation("CreatedJourneys", fields: [createdById], references: [id])
+  updatedBy   User?   @relation("UpdatedJourneys", fields: [updatedById], references: [id])
+
+  trips    VehicleTrip[]
+  expenses TripExpense[]
+  advances DriverAdvance[]
+  logSlip  LogSlip?
+
+  @@index([vehicleId, status])
+  @@index([driverId, status])
+  @@index([fyCode])
+  @@index([homeBranchId])
+  @@index([settlementStatus])
+  @@index([status])
+}
+
+/// A journey/trip expense. Money events — never just a number on the trip.
+/// Cash expenses paid from the driver advance settle at log slip time;
+/// credit/card expenses are payables to the pump/vendor ledger.
+model TripExpense {
+  id              String            @id @default(cuid())
+  journeyId       String
+  tripId          String?
+  expenseType     TripExpenseType
+  amountPaise     BigInt
+  paymentMode     TripPaymentMode
+  cityId          String?
+  pumpId          String?
+  dieselQty       Float?
+  dieselRatePaise BigInt?
+  expenseDate     DateTime
+  receiptNo       String?
+  // Paid out of the driver's cash advance (settles at log slip).
+  paidByDriver    Boolean           @default(true)
+  remarks         String?
+  status          TripExpenseStatus @default(DRAFT)
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectReason    String?
+  reversedById    String?
+  reversedAt      DateTime?
+  reverseReason   String?
+  // Set by the accounts posting service (Phase 6) — null until posted.
+  journalEntryId  String?
+  createdById     String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  journey   VehicleJourney @relation(fields: [journeyId], references: [id])
+  trip      VehicleTrip?   @relation(fields: [tripId], references: [id])
+  city      City?          @relation("TripExpenseCity", fields: [cityId], references: [id])
+  pump      Pump?          @relation(fields: [pumpId], references: [id])
+  createdBy User           @relation("CreatedTripExpenses", fields: [createdById], references: [id])
+
+  @@index([journeyId])
+  @@index([tripId])
+  @@index([status])
+}
+
+/// Cash/bank/card advance handed to the driver for a journey. Settled against
+/// the driver's cash expenses when the log slip is generated.
+model DriverAdvance {
+  id             String              @id @default(cuid())
+  journeyId      String
+  tripId         String?
+  driverId       String
+  vehicleId      String
+  amountPaise    BigInt
+  paymentMode    TripPaymentMode
+  cashAccountId  String?
+  paidAt         DateTime
+  narration      String?
+  status         DriverAdvanceStatus @default(POSTED)
+  reversedById   String?
+  reversedAt     DateTime?
+  reverseReason  String?
+  // Set by the accounts posting service (Phase 6) — null until posted.
+  journalEntryId String?
+  createdById    String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  journey     VehicleJourney @relation(fields: [journeyId], references: [id])
+  trip        VehicleTrip?   @relation(fields: [tripId], references: [id])
+  driver      Driver         @relation(fields: [driverId], references: [id])
+  vehicle     Vehicle        @relation(fields: [vehicleId], references: [id])
+  cashAccount CashAccount?   @relation(fields: [cashAccountId], references: [id])
+  createdBy   User           @relation("CreatedDriverAdvances", fields: [createdById], references: [id])
+
+  @@index([journeyId])
+  @@index([driverId])
+  @@index([status])
+}
+
+/// Final settlement document for a VehicleJourney. Totals are frozen at
+/// generation time (snapshot lines in LogSlipLine) so the print stays
+/// historically stable even if trip/expense rows change later.
+model LogSlip {
+  id                      String        @id @default(cuid())
+  journeyId               String        @unique
+  logSlipNumber           String?       @unique
+  fyCode                  String
+  logSlipDate             DateTime
+  status                  LogSlipStatus @default(DRAFT)
+  vehicleId               String
+  driverId                String
+  openingKm               Int
+  closingKm               Int
+  totalKm                 Int
+  totalDays               Int
+  totalFreightPaise       BigInt        @default(0)
+  totalAdvancePaise       BigInt        @default(0)
+  totalDieselQty          Float         @default(0)
+  totalDieselAmountPaise  BigInt        @default(0)
+  totalCashExpensePaise   BigInt        @default(0)
+  totalCreditExpensePaise BigInt        @default(0)
+  totalExpensePaise       BigInt        @default(0)
+  netVehicleResultPaise   BigInt        @default(0)
+  driverCashExpensePaise  BigInt        @default(0)
+  driverReceivablePaise   BigInt        @default(0)
+  driverPayablePaise      BigInt        @default(0)
+  // Diesel accounting: fuel left in tank from the previous journey plus this
+  // journey's fills, compared against expected consumption at the standard
+  // average, yields the short/excess diesel figure.
+  previousDieselQty       Float         @default(0)
+  dieselRatePaise         BigInt?
+  standardAverage         Float?
+  actualAverage           Float?
+  expectedDieselQty       Float?
+  shortDieselQty          Float?
+  remarks                 String?
+  generatedById           String?
+  generatedAt             DateTime?
+  postedJournalEntryId    String?
+  postedById              String?
+  postedAt                DateTime?
+  reopenedById            String?
+  reopenedAt              DateTime?
+  reopenReason            String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  version                 Int           @default(1)
+
+  journey     VehicleJourney @relation(fields: [journeyId], references: [id])
+  vehicle     Vehicle        @relation(fields: [vehicleId], references: [id])
+  driver      Driver         @relation(fields: [driverId], references: [id])
+  generatedBy User?          @relation("GeneratedLogSlips", fields: [generatedById], references: [id])
+  lines       LogSlipLine[]
+
+  @@index([status])
+  @@index([fyCode])
+}
+
+/// Snapshot line frozen at log slip generation. `sourceType`/`sourceId` point
+/// back at the origin row (VehicleTrip / DriverAdvance / TripExpense) so
+/// accounts can audit, and reopen can diff old vs new.
+model LogSlipLine {
+  id          String          @id @default(cuid())
+  logSlipId   String
+  lineType    LogSlipLineType
+  sourceType  String?
+  sourceId    String?
+  description String
+  quantity    Float?
+  ratePaise   BigInt?
+  amountPaise BigInt
+  sortOrder   Int             @default(0)
+  metadata    Json?
+
+  logSlip LogSlip @relation(fields: [logSlipId], references: [id], onDelete: Cascade)
+
+  @@index([logSlipId])
+}
+
+enum VehicleJourneyStatus {
+  DRAFT
+  ACTIVE
+  RETURNED
+  READY_FOR_LOGSLIP
+  SETTLED
+  REOPENED
+  CANCELLED
+}
+
+enum JourneySettlementStatus {
+  NOT_READY
+  PENDING_REVIEW
+  READY
+  GENERATED
+  POSTED
+  TALLY_SYNCED
+}
+
+enum TripLegType {
+  LR
+  DC
+  EMPTY
+  LOCAL
+  RETURN
+  WORKSHOP
+  OTHER
+}
+
+enum TripPaymentMode {
+  CASH
+  BANK
+  CARD
+  UPI
+  CREDIT
+}
+
+enum TripExpenseType {
+  DIESEL
+  TOLL
+  PARKING
+  FOOD
+  REPAIR
+  FINE
+  LOADING
+  UNLOADING
+  MISC
+}
+
+enum TripExpenseStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+  POSTED
+  REVERSED
+}
+
+enum DriverAdvanceStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+enum LogSlipStatus {
+  DRAFT
+  GENERATED
+  POSTED_TO_ACCOUNTS
+  TALLY_SYNCED
+  REOPENED
+  CANCELLED
+}
+
+enum LogSlipLineType {
+  TRIP_FREIGHT
+  ADVANCE
+  DIESEL
+  EXPENSE
+  DRIVER_SETTLEMENT
+  ADJUSTMENT
 }
