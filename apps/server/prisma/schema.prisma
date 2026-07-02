@@ -1163,7 +1163,6 @@ model VPSchedule {
   deletedAt  DateTime?
   version    Int         @default(1)
   mrRr       MRRR?
-  grns       GRN[]
   vpLoadings VPLoading[]
   fromBranch Branch      @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
   toBranch   Branch      @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
@@ -1413,8 +1412,6 @@ model GRN {
   lorryReceiptId String       @unique
   lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
 
-  vpScheduleId String
-  vpSchedule   VPSchedule @relation(fields: [vpScheduleId], references: [id])
 
   status GRNStatus @default(DRAFT)
 
@@ -1488,7 +1485,6 @@ model GRN {
   goods      GRNGoods[]
   vpLoadings VPLoading[]
 
-  @@index([vpScheduleId])
   @@index([status])
   @@index([createdById])
   @@index([deletedAt])

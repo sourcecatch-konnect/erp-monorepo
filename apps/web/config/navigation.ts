@@ -87,6 +87,11 @@ export const NAV_SECTIONS: NavSection[] = [
       title: "MR / RR",
       href: "/vp-management/mrrr",
       permission: PERMS.MRRR.VIEW,
+    },
+    {
+      title: "GRN At Rail Head",
+      href: "/vp-management/grn",
+      permission: PERMS.GRN.VIEW,
     }
   ],
 },

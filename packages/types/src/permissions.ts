@@ -68,6 +68,16 @@ type MRRRPermissionKey =
   | `mrrr.${CrudAction}`
   | "mrrr.submit"
   | "mrrr.cancel";
+  
+type GRNPermissionKey =
+  | `grn.${CrudAction}`
+  | "grn.submit"
+  | "grn.cancel";
+
+type VPLoadingPermissionKey =
+  | `vp_loading.${CrudAction}`
+  | "vp_loading.mark_loaded"
+  | "vp_loading.cancel";
 
 type OrderPermissionKey =
   | `order.${CrudAction}`
@@ -111,8 +121,10 @@ export type PermissionKey =
   | OrderPermissionKey
   | EwaybillPermissionKey
   | TrackingPermissionKey
+  | VPLoadingPermissionKey
   | VPSchedulePermissionKey
   | CashPlanningPermissionKey
+  | GRNPermissionKey
   | AdminPermissionKey
   | MRRRPermissionKey
   | NotificationPermissionKey
@@ -172,6 +184,14 @@ export const PERMS = {
     CANCEL: "lorry_receipt.cancel",
     GENERATE_INVOICE: "lorry_receipt.generate_invoice",
   },
+  VP_LOADING: {
+  VIEW: "vp_loading.view",
+  CREATE: "vp_loading.create",
+  UPDATE: "vp_loading.update",
+  DELETE: "vp_loading.delete",
+  MARK_LOADED: "vp_loading.mark_loaded",
+  CANCEL: "vp_loading.cancel",
+},
   TRIP: {
     VIEW: "trip.view",
     CREATE: "trip.create",
@@ -195,6 +215,14 @@ MRRR: {
   DELETE: "mrrr.delete",
   SUBMIT: "mrrr.submit",
   CANCEL: "mrrr.cancel",
+},
+GRN: {
+  VIEW: "grn.view",
+  CREATE: "grn.create",
+  UPDATE: "grn.update",
+  DELETE: "grn.delete",
+  SUBMIT: "grn.submit",
+  CANCEL: "grn.cancel",
 },
   ORDER: {
     VIEW: "order.view",
