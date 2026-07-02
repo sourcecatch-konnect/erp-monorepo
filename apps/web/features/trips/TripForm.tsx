@@ -27,6 +27,7 @@ import IconTextField from "../masters/_shared/fields/IconTextField";
 import CheckboxField from "../masters/_shared/fields/CheckBoxField";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
+import { paiseToRupees } from "@/lib/money";
 import { tripApi, tripLookups, tripLookupKeys } from "./trip.service";
 
 type Props = {
@@ -69,8 +70,9 @@ export default function TripForm({ mode, trip }: Props) {
           routeId: trip.routeId,
           tripType: trip.tripType,
           consignorId: trip.consignorId ?? undefined,
+          // Stored as paise; the form edits rupees.
           onwardFreight: trip.onwardFreight
-            ? Number(trip.onwardFreight)
+            ? paiseToRupees(Number(trip.onwardFreight))
             : undefined,
           openingKm: trip.openingKm,
           isTripEmpty: trip.isTripEmpty,

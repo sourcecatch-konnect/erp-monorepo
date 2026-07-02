@@ -38,14 +38,8 @@ import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
 import { lrGroupApi } from "@/features/lorry-receipts/lr-group.service";
 import { lrGroupKeys } from "@/features/lorry-receipts/lr-group.keys";
-import {
-  StatusBadge,
-  formatDate,
-  formatMoney,
-  formatMoneyFromPaise,
-  formatDateTime,
-} from "./order-ui";
-import { paiseToRupees } from "@/lib/money";
+import { StatusBadge, formatDate, formatDateTime } from "./order-ui";
+import { formatRupees, formatPaise, paiseToRupees } from "@/lib/money";
 import OrderTimeline from "./OrderTimeline";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
@@ -252,9 +246,9 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
   const hasApprovedFreight = approvedFreight != null;
   const displayedFreight =
     hasApprovedFreight && order.bookingFreightAmount != null
-      ? formatMoneyFromPaise(order.bookingFreightAmount)
+      ? formatPaise(order.bookingFreightAmount)
       : autoFreight != null
-        ? formatMoney(autoFreight)
+        ? formatRupees(autoFreight)
         : "-";
 
   const freightWasEdited =
@@ -468,7 +462,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                   <p className="mt-1 text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
                     {order.status === "PendingApproval"
                       ? `Order not confirmed yet`
-                      : ` ${formatMoneyFromPaise(order.bookingFreightAmount)} `}
+                      : ` ${formatPaise(order.bookingFreightAmount)} `}
                   </p>
                 </div>
 
@@ -498,13 +492,13 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div>
                       <p className="text-orange-700/70">Auto freight</p>
-                      <p className="font-medium">{formatMoney(autoFreight)}</p>
+                      <p className="font-medium">{formatRupees(autoFreight)}</p>
                     </div>
 
                     <div>
                       <p className="text-orange-700/70">Approved freight</p>
                       <p className="font-medium">
-                        {formatMoney(approvedFreight)}
+                        {formatRupees(approvedFreight)}
                       </p>
                     </div>
 
@@ -512,7 +506,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                       <p className="text-orange-700/70">Difference</p>
                       <p className="font-semibold">
                         {freightDifference > 0 ? "+" : ""}
-                        {formatMoney(freightDifference)}
+                        {formatRupees(freightDifference)}
                       </p>
                     </div>
                   </div>
