@@ -47,7 +47,7 @@ import {
   IconDownload,
 } from "@tabler/icons-react";
 
-import { formatMoney } from "@/lib/format";
+import { formatPaise } from "@/lib/money";
 import {
   TripStatusBadge,
   TRIP_STATUS_ORDER,
@@ -170,7 +170,7 @@ export default function TripTable(props: Props) {
       },
       {
         header: "Freight",
-        cell: ({ row }) => formatMoney(row.original.onwardFreight),
+        cell: ({ row }) => formatPaise(row.original.onwardFreight),
       },
       {
         header: "Status",

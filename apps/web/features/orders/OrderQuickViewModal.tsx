@@ -18,7 +18,8 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
-import { StatusBadge, formatDate, formatMoneyFromPaise } from "./order-ui";
+import { StatusBadge, formatDate } from "./order-ui";
+import { formatPaise } from "@/lib/money";
 import { IconArrowRight, IconBuildingWarehouse, IconFileText } from "@tabler/icons-react";
 
 function DetailLine({
@@ -121,7 +122,7 @@ const { data: order, isLoading } = useQuery({
 
   <DetailLine
     label="Freight"
-    value={formatMoneyFromPaise(order.bookingFreightAmount)}
+    value={formatPaise(order.bookingFreightAmount)}
   />
 
   <DetailLine

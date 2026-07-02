@@ -42,7 +42,8 @@ import {
   IconChevronRight,
 } from "@tabler/icons-react";
 
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { formatPaise } from "@/lib/money";
 import { LRStatusBadge, SOURCE_LABELS, LR_STATUS_ORDER } from "../lorry-receipt-ui";
 
 type Props = {
@@ -127,7 +128,7 @@ export default function LRTable(props: Props) {
         header: "Freight",
         cell: ({ row }) =>
           row.original.baseFreightAmount != null
-            ? formatMoney(row.original.baseFreightAmount)
+            ? formatPaise(row.original.baseFreightAmount)
             : "—",
       },
       { header: "Source", cell: ({ row }) => SOURCE_LABELS[row.original.source] },
@@ -298,7 +299,7 @@ export default function LRTable(props: Props) {
                                             <p>{lr.invoiceNumber}</p>
                                             {lr.invoiceAmount != null ? (
                                               <p className="text-xs text-muted-foreground">
-                                                {formatMoney(lr.invoiceAmount)}
+                                                {formatPaise(lr.invoiceAmount)}
                                               </p>
                                             ) : null}
                                           </div>

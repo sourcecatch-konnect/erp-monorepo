@@ -20,8 +20,7 @@ import {
 
 import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
-import { formatMoney } from "@/lib/format";
-import { paiseToRupees } from "@/lib/money";
+import { formatPaise, paiseToRupees } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { lrGroupApi } from "./lr-group.service";
@@ -278,7 +277,7 @@ export default function LRDetail({ id }: { id: string }) {
               label="Base freight"
               value={
                 g.baseFreightAmount != null
-                  ? formatMoney(g.baseFreightAmount)
+                  ? formatPaise(g.baseFreightAmount)
                   : "—"
               }
             />
@@ -312,7 +311,7 @@ export default function LRDetail({ id }: { id: string }) {
                 <div className="text-right text-xs text-muted-foreground">
                   {lr.invoiceNumber ? <p>Invoice {lr.invoiceNumber}</p> : null}
                   {lr.invoiceAmount != null ? (
-                    <p>{formatMoney(lr.invoiceAmount)}</p>
+                    <p>{formatPaise(lr.invoiceAmount)}</p>
                   ) : null}
                 </div>
                 {g.status === "DRAFT" && canUpdate && (
