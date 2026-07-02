@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import type {
   ApiResponse,
   Company,
+  CompanyWithRelations,
   CreateCompanyBody,
   UpdateCompanyBody,
 } from "@skerp/types";
@@ -22,11 +23,17 @@ export const companyApi = {
     return unwrapListResponse(res);
   },
 
-  detail: async (id: string): Promise<Company> => {
-    const res = await api.get<ApiResponse<Company>>(`/companies/${id}`);
+ detail: async (id: string): Promise<CompanyWithRelations> => {
+  const res = await api.get<ApiResponse<CompanyWithRelations>>(
+    `/companies/${id}`,
+  );
 
-    return unwrapApiResponse(res);
-  },
+  if (!res.data.ok) {
+    throw new Error(res.data.error.message);
+  }
+
+  return res.data.data;
+},
 
   create: async (body: CreateCompanyBody): Promise<Company> => {
     const res = await api.post<ApiResponse<Company>>("/companies", body);
