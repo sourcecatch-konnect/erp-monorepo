@@ -5,6 +5,7 @@ import {
   IconFileBarcode,
   IconLayoutDashboard,
   IconReceipt2,
+  IconRoute,
   IconSettings,
   IconTrain,
   IconTruckDelivery,
@@ -121,6 +122,12 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/trips",
         icon: IconTruckDelivery,
         permission: PERMS.TRIP.VIEW,
+      },
+      {
+        title: "Vehicle Journeys",
+        href: "/vehicle-journeys",
+        icon: IconRoute,
+        permission: PERMS.VEHICLE_JOURNEY.VIEW,
       },
       {
         title: "Wagon Tracking",
