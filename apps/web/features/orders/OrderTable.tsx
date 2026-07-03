@@ -48,7 +48,8 @@ import {
   IconListDetails,
 } from "@tabler/icons-react";
 
-import { StatusBadge, formatDate, formatMoneyFromPaise, STATUS_ORDER } from "./order-ui";
+import { StatusBadge, formatDate, STATUS_ORDER } from "./order-ui";
+import { formatPaise } from "@/lib/money";
 
 export type OrderRowActions = {
   onQuickView: (order: Order) => void;
@@ -155,7 +156,7 @@ console.log(data, "order List")
       },
       {
         header: "Freight",
-        cell: ({ row }) => formatMoneyFromPaise(row.original.bookingFreightAmount),
+        cell: ({ row }) => formatPaise(row.original.bookingFreightAmount),
       },
       {
         header: "Status",

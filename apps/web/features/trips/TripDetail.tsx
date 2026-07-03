@@ -19,7 +19,8 @@ import {
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
-import { formatMoney, formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
+import { formatPaise } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { tripApi } from "./trip.service";
@@ -190,7 +191,7 @@ export default function TripDetail({ id }: { id: string }) {
           {t.tripType === "lr" ? (
             <Field label="Client" value={t.consignor?.name ?? "—"} />
           ) : null}
-          <Field label="Onward freight" value={formatMoney(t.onwardFreight)} />
+          <Field label="Onward freight" value={formatPaise(t.onwardFreight)} />
           <Field label="Empty trip" value={t.isTripEmpty ? "Yes" : "No"} />
           {t.tripType === "dc" ? (
             <Field label="Rake date" value={formatDate(t.rakeDate)} />

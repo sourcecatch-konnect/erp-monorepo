@@ -1,12 +1,11 @@
 import * as React from "react";
 import type { OrderStatus } from "@skerp/types";
 import { cn } from "@/lib/utils";
-import { formatPaise } from "@/lib/money";
 
-// Shared formatters — re-exported so existing order imports keep working.
-export { formatMoney, formatDate, formatDateTime } from "@/lib/format";
+// Date formatters — re-exported so existing order imports keep working.
+// Money lives in `@/lib/money` (`formatRupees` / `formatPaise`).
+export { formatDate, formatDateTime } from "@/lib/format";
 
-// Shared formatters — re-exported so existing order imports keep working.
 const STATUS_LABELS: Record<OrderStatus, string> = {
   PendingApproval: "Pending Approval",
   Confirmed: "Confirmed",
@@ -39,15 +38,6 @@ export function StatusBadge({ status }: { status: OrderStatus }) {
     </span>
   );
 }
-export const formatMoneyFromPaise = (
-  value: string | number | null | undefined
-) => {
-  if (value === null || value === undefined || value === "") return "-";
-  const num = typeof value === "string" ? Number(value) : value;
-  if (Number.isNaN(num)) return "-";
-
-  return formatPaise(num);
-};
 export const STATUS_ORDER: { key: string; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "PendingApproval", label: "Pending Approval" },

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalRupeesToPaise } from "../_shared/money.js";
 
 const optionalString = z
   .string()
@@ -13,22 +14,6 @@ const positiveInt = (label: string) =>
     .refine(
       (value) => Number.isInteger(value) && value > 0,
       `${label} must be a positive whole number`,
-    );
-
-// Money entered in rupees on the UI/wire, stored as paise.
-const optionalRupeesToPaise = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform((value) => {
-      if (value === "" || value === undefined || value === null) {
-        return undefined;
-      }
-      return Math.round(Number(value) * 100);
-    })
-    .refine(
-      (value) => value === undefined || (Number.isInteger(value) && value > 0),
-      `${label} must be a positive amount`,
     );
 
 const requiredDate = z

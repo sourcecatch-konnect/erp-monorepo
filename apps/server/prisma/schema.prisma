@@ -965,6 +965,11 @@ model LRGroup {
   secondaryTripId     String?
   marketVehicleNumber String?
   marketDriverName    String?
+  marketFreightAmount    BigInt?
+  marketAdvanceAmount    BigInt?
+  marketCommissionAmount BigInt?
+  marketHamaliAmount     BigInt?
+  marketTdsAmount        BigInt?
   tripLegType         LRTripLegType   @default(DIRECT)
   hubId               String?
   railheadBranchId    String?

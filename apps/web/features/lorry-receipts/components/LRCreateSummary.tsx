@@ -15,6 +15,7 @@ import {
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
 
+import { formatPaise } from "@/lib/money";
 import type { LROrderContext } from "../lorry-receipt.service";
 
 type Option = { value: string; label: string; hint?: string };
@@ -31,15 +32,6 @@ type Props = {
 
 const labelOf = (opts: Option[], value?: string | null) =>
   value ? (opts.find((o) => o.value === value)?.label ?? null) : null;
-
-const formatRupees = (amount: number | null | undefined) =>
-  amount == null
-    ? null
-    : new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency: "INR",
-        maximumFractionDigits: 0,
-      }).format(amount);
 
 const DASH = <span className="text-muted-foreground/60">—</span>;
 
@@ -339,7 +331,9 @@ export default function LRCreateSummary({
             <Section icon={<IconReceipt2 size={14} />} title="Freight & priority">
               {source === "FROM_ORDER" && (
                 <Row label="Booking freight">
-                  {formatRupees(order?.bookingFreightAmount) ?? DASH}
+                  {order?.bookingFreightAmount != null
+                    ? formatPaise(order.bookingFreightAmount)
+                    : DASH}
                 </Row>
               )}
               <Row label="Priority">{priority || "Normal"}</Row>

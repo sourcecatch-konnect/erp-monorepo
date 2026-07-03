@@ -6,6 +6,7 @@ import {
   lrGoodsLineSchema,
   ewayBillSchema,
 } from "../lorry-receipt/lorry-receipt.schema.js";
+import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -25,29 +26,7 @@ const optionalId = z
   .optional()
   .transform((v) => v || undefined);
 
-// Money fields are entered in rupees on the wire/UI and stored as paise. These
-// transform rupees -> paise so the input is honest (₹) and the output is paise.
-const rupeesToPaise = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .transform((v) => Math.round(Number(v) * 100))
-    .refine(
-      (v) => Number.isInteger(v) && v > 0,
-      `${label} must be a positive amount`,
-    );
-
-const optionalRupeesToPaise = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform((v) => {
-      if (v === "" || v === undefined || v === null) return undefined;
-      return Math.round(Number(v) * 100);
-    })
-    .refine(
-      (v) => v === undefined || (Number.isInteger(v) && v > 0),
-      `${label} must be a positive amount`,
-    );
+// Money fields (rupees → paise) come from the shared `_shared/money` boundary.
 
 const truckIndexField = z
   .union([z.string(), z.number()])
