@@ -64,15 +64,19 @@ export default function LRDetail({ id }: { id: string }) {
     queryKey: lrGroupKeys.detail(id),
     queryFn: () => lrGroupApi.detail(id),
   });
+  const actionGroupId = group.data?.id ?? id;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(id) });
+    if (actionGroupId !== id) {
+      queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(actionGroupId) });
+    }
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
   };
 
   const finalise = useMutation({
     mutationFn: (body: Parameters<typeof lrGroupApi.finalise>[1]) =>
-      lrGroupApi.finalise(id, body),
+      lrGroupApi.finalise(actionGroupId, body),
     onSuccess: () => {
       toast.success("Group finalised");
       setFinaliseOpen(false);
@@ -83,7 +87,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const split = useMutation({
     mutationFn: (secondaryTripId: string) =>
-      lrGroupApi.splitAtHub(id, { secondaryTripId }),
+      lrGroupApi.splitAtHub(actionGroupId, { secondaryTripId }),
     onSuccess: () => {
       toast.success("Leg 2 trip attached");
       setSplitOpen(false);
@@ -94,7 +98,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const cancel = useMutation({
     mutationFn: (reason: string) =>
-      lrGroupApi.cancel(id, { cancelReason: reason }),
+      lrGroupApi.cancel(actionGroupId, { cancelReason: reason }),
     onSuccess: () => {
       toast.success("Group cancelled");
       setCancelOpen(false);
@@ -105,7 +109,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const updateGroup = useMutation({
     mutationFn: (body: Parameters<typeof lrGroupApi.update>[1]) =>
-      lrGroupApi.update(id, body),
+      lrGroupApi.update(actionGroupId, body),
     onSuccess: () => {
       toast.success("Group updated");
       setEditGroupOpen(false);
@@ -116,7 +120,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const addLine = useMutation({
     mutationFn: (payload: LinePayload) =>
-      lrGroupApi.addLorryReceipt(id, {
+      lrGroupApi.addLorryReceipt(actionGroupId, {
         loadingLocationId: payload.loadingLocationId,
         unloadingLocationId: payload.unloadingLocationId,
         goods: payload.goods,
@@ -293,7 +297,7 @@ export default function LRDetail({ id }: { id: string }) {
           <p className="text-sm font-semibold">Lorry receipts</p>
           {g.status === "DRAFT" && canUpdate && (
             <Button size="sm" variant="outline" onClick={() => setAddLineOpen(true)}>
-              <IconPlus size={14} className="mr-1" /> Add LR
+              <IconPlus size={14} className="mr-1" /> Add consignment LR
             </Button>
           )}
         </div>
@@ -433,9 +437,12 @@ export default function LRDetail({ id }: { id: string }) {
             ? {
                 loadingLocationId: editLine.loadingLocationId ?? undefined,
                 unloadingLocationId: editLine.unloadingLocationId ?? undefined,
-                goodsName: editLine.goods[0]?.name ?? "",
-                quantity: editLine.goods[0]?.quantity != null ? String(editLine.goods[0].quantity) : "",
-                unit: editLine.goods[0]?.unit ?? "",
+                goods: editLine.goods.map((goods) => ({
+                  name: goods.name,
+                  quantity:
+                    goods.quantity != null ? String(goods.quantity) : "",
+                  unit: goods.unit,
+                })),
                 invoiceNumber: editLine.invoiceNumber ?? "",
                 invoiceAmount:
                   editLine.invoiceAmount != null

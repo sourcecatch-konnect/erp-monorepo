@@ -86,7 +86,7 @@ export function MRRRListPage() {
         </Button>
       </div>
 
-      <div className="rounded-md border bg-white p-4">
+      <div className="rounded-md">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Input
             value={search}

@@ -85,7 +85,7 @@ export default function FinaliseDialog({
   onConfirm,
 }: Props) {
   const form = useForm<FinaliseGroupFormInput, unknown, FinaliseGroupBody>({
-    resolver: zodResolver(finaliseGroupSchema),
+    resolver: zodResolver(finaliseGroupSchema, undefined, { raw: true }),
     defaultValues: {
       baseFreightAmount: (defaultFreight ?? "") as unknown as number,
       sealNumber: "",

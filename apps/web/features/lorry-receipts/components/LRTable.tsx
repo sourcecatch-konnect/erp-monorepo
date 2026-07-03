@@ -101,7 +101,10 @@ export default function LRTable(props: Props) {
       {
         header: "Group #",
         cell: ({ row }) => (
-          <Link href={`/lorry-receipts/${row.original.id}`} className="block">
+         <Link
+  href={`/lorry-receipts/${encodeURIComponent(row.original.groupNumber)}`}
+  className="block"
+>
             <span className="font-medium text-primary hover:underline">
               {row.original.groupNumber}
             </span>
@@ -244,11 +247,11 @@ export default function LRTable(props: Props) {
                       ))}
                       <TableCell className="w-16 text-right">
                         <div className="flex justify-end gap-1">
-                          <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
-                            <Link href={`/lorry-receipts/${g.id}`}>
-                              <IconEye size={16} />
-                            </Link>
-                          </Button>
+                        <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
+  <Link href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}>
+    <IconEye size={16} />
+  </Link>
+</Button>
                           {canCancel && cancellable ? (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -285,7 +288,7 @@ export default function LRTable(props: Props) {
                                   {childRows.map((lr) => (
                                     <tr key={lr.id} className="border-t">
                                       <td className="px-3 py-2 font-medium text-primary">
-                                        <Link href={`/lorry-receipts/${g.id}`} className="hover:underline">
+                                        <Link href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`} className="hover:underline">
                                           {lr.lrNumber}
                                         </Link>
                                       </td>

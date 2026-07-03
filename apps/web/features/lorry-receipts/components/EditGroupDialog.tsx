@@ -60,7 +60,7 @@ export default function EditGroupDialog({ open, onOpenChange, group, isPending, 
   });
 
   const form = useForm<UpdateLRGroupBody>({
-    resolver: zodResolver(updateLRGroupSchema),
+    resolver: zodResolver(updateLRGroupSchema, undefined, { raw: true }),
     defaultValues: {
       consigneeId: group.consigneeId,
       transportType: group.transportType,

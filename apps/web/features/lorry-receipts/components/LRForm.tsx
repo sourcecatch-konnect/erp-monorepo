@@ -140,6 +140,14 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryKey: lrLookupKeys.attachableTrips,
     queryFn: lrLookups.attachableTrips,
   });
+  const marketVehicles = useQuery({
+    queryKey: lrLookupKeys.marketVehicles,
+    queryFn: lrLookups.marketVehicles,
+  });
+  const drivers = useQuery({
+    queryKey: lrLookupKeys.drivers,
+    queryFn: lrLookups.drivers,
+  });
   const goodsMaster = useQuery({
     queryKey: lrLookupKeys.goods,
     queryFn: lrLookups.goods,
@@ -161,7 +169,7 @@ export default function LRForm({ orderId, tripId }: Props) {
   });
 
   const form = useForm<CreateLRGroupFormInput, unknown, CreateLRGroupBody>({
-    resolver: zodResolver(createLRGroupSchema),
+    resolver: zodResolver(createLRGroupSchema, undefined, { raw: true }),
     defaultValues:
       source === "FROM_ORDER"
         ? {
@@ -225,6 +233,14 @@ export default function LRForm({ orderId, tripId }: Props) {
   const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
     value: g.name,
     hint: g.description ?? undefined,
+  }));
+  const marketVehicleSuggestions = (marketVehicles.data ?? []).map((v) => ({
+    value: v.vehicleNumber,
+    hint: "Market vehicle",
+  }));
+  const driverSuggestions = (drivers.data ?? []).map((d) => ({
+    value: d.name,
+    hint: d.mobile ?? undefined,
   }));
   const loadingOptions = (consignorLocations.data ?? []).map((l) => ({
     value: l.value,
@@ -483,13 +499,29 @@ export default function LRForm({ orderId, tripId }: Props) {
               <div>
                 <FieldLabel>Transport by</FieldLabel>
                 <Segmented
-                  value={(field.value as boolean) ?? false}
-                  onChange={field.onChange as (v: boolean) => void}
-                  options={[
-                    { value: false, label: "Own Vehicle" },
-                    { value: true, label: "Market Vehicle" },
-                  ]}
-                />
+  value={(field.value as boolean) ?? false}
+  onChange={(v) => {
+    field.onChange(v);
+
+    if (v) {
+      // Market vehicle selected, own trip not required
+      form.setValue("primaryTripId" as never, undefined as never);
+    } else {
+      // Own vehicle selected, clear market vehicle data
+      form.setValue("marketVehicleNumber" as never, undefined as never);
+      form.setValue("marketDriverName" as never, undefined as never);
+      form.setValue("marketFreightAmount" as never, undefined as never);
+      form.setValue("marketAdvanceAmount" as never, undefined as never);
+      form.setValue("marketCommissionAmount" as never, undefined as never);
+      form.setValue("marketHamaliAmount" as never, undefined as never);
+      form.setValue("marketTdsAmount" as never, undefined as never);
+    }
+  }}
+  options={[
+    { value: false, label: "Own Vehicle" },
+    { value: true, label: "Market Vehicle" },
+  ]}
+/>
               </div>
             )}
           />
@@ -507,37 +539,114 @@ export default function LRForm({ orderId, tripId }: Props) {
           )}
 
           {watchIsMarket && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Controller
                 name="marketVehicleNumber"
                 control={form.control}
                 render={({ field }) => (
                   <div>
                     <FieldLabel required>Vehicle number</FieldLabel>
-                    <Input
+                    <SuggestInput
                       value={(field.value as string) ?? ""}
-                      onChange={field.onChange}
-                      placeholder="e.g. MH12AB1234"
-                      className="h-9"
+                      onChange={(value) =>
+                        field.onChange(value.toUpperCase().replace(/\s+/g, ""))
+                      }
+                      onBlur={field.onBlur}
+                      suggestions={marketVehicleSuggestions}
+                      placeholder={
+                        marketVehicles.isLoading
+                          ? "Loading market vehicles..."
+                          : "Select or type vehicle"
+                      }
+                      invalid={Boolean(errors.marketVehicleNumber?.message)}
+                      className="[&_input]:h-9 [&_input]:uppercase"
                     />
                   </div>
                 )}
               />
+
               <Controller
                 name="marketDriverName"
                 control={form.control}
                 render={({ field }) => (
                   <div>
                     <FieldLabel>Driver</FieldLabel>
-                    <Input
+                    <SuggestInput
                       value={(field.value as string) ?? ""}
                       onChange={field.onChange}
-                      placeholder="Driver name"
-                      className="h-9"
+                      onBlur={field.onBlur}
+                      suggestions={driverSuggestions}
+                      placeholder={
+                        drivers.isLoading
+                          ? "Loading drivers..."
+                          : "Select or type driver"
+                      }
+                      invalid={Boolean(errors.marketDriverName?.message)}
+                      className="[&_input]:h-9"
                     />
                   </div>
                 )}
               />
+
+              <div>
+                <FieldLabel>Freight amount</FieldLabel>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  className="h-9"
+                  {...form.register("marketFreightAmount")}
+                />
+              </div>
+
+              <div>
+                <FieldLabel>Advance amount</FieldLabel>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  className="h-9"
+                  {...form.register("marketAdvanceAmount")}
+                />
+              </div>
+
+              <div>
+                <FieldLabel>Commission</FieldLabel>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  className="h-9"
+                  {...form.register("marketCommissionAmount")}
+                />
+              </div>
+
+              <div>
+                <FieldLabel>Hamali</FieldLabel>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  className="h-9"
+                  {...form.register("marketHamaliAmount")}
+                />
+              </div>
+
+              <div>
+                <FieldLabel>TDS</FieldLabel>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  className="h-9"
+                  {...form.register("marketTdsAmount")}
+                />
+              </div>
             </div>
           )}
         </FormSection>

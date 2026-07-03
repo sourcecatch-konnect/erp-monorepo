@@ -59,11 +59,20 @@ export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
 
 const vehicleShape = {
   isMarketVehicle: z.boolean().default(false),
-  // The leg-1 trip the whole group rides. Leg 2 is attached later by the
-  // group "split at hub" action, never at creation.
+
+  // Own vehicle
   primaryTripId: optionalId,
+
+  // Market vehicle
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
+
+  // Entered in rupees, stored as paise
+  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
+  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
+  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
+  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
+  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
 };
 
 export const createGroupFromOrderSchema = z.object({
@@ -148,12 +157,19 @@ export const updateLRGroupSchema = z.object({
   transportType: lrTransportTypeSchema.optional(),
   railheadBranchId: optionalId,
   priority: lrPrioritySchema.optional(),
+
   isMarketVehicle: z.boolean().optional(),
-  // Only the leg-1 trip is editable here. Leg 2 / hub / tripLegType are owned
-  // by the "split at hub" action, never the edit form.
   primaryTripId: optionalId,
+
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
+
+  // Entered in rupees, stored as paise
+  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
+  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
+  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
+  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
+  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
 });
 
 export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
