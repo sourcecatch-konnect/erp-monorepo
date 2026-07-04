@@ -34,7 +34,32 @@ const labelOf = (opts: Option[], value?: string | null) =>
   value ? (opts.find((o) => o.value === value)?.label ?? null) : null;
 
 const DASH = <span className="text-muted-foreground/60">—</span>;
+const goodsLabel = (
+  goods?: {
+    name?: string | null;
+    quantity?: string | number | null;
+    unit?: string | null;
+  }[],
+) => {
+  if (!goods?.length) return ["No goods added"];
 
+  return goods
+    .map((g) => {
+      const name = g.name?.trim();
+
+      const qtyUnit =
+        g.quantity && g.unit
+          ? `${g.quantity} ${g.unit}`
+          : g.quantity
+            ? String(g.quantity)
+            : g.unit
+              ? g.unit
+              : null;
+
+      return [name, qtyUnit].filter(Boolean).join(" · ");
+    })
+    .filter(Boolean);
+};
 function Section({
   icon,
   title,
@@ -63,9 +88,12 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 text-sm">
-      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-right font-medium">{children}</span>
+    <div className="grid gap-1 text-sm">
+      <span className="text-xs text-muted-foreground">{label}</span>
+
+      <div className="min-w-0 font-medium text-foreground">
+        {children}
+      </div>
     </div>
   );
 }
@@ -78,10 +106,15 @@ function Pair({
   to: React.ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="truncate">{from ?? DASH}</span>
-      <IconArrowRight size={13} className="shrink-0 text-muted-foreground" />
-      <span className="truncate">{to ?? DASH}</span>
+    <span className="inline-flex max-w-full items-center gap-1.5">
+      <span className="min-w-0 truncate">{from ?? DASH}</span>
+
+      <IconArrowRight
+        size={13}
+        className="shrink-0 text-muted-foreground"
+      />
+
+      <span className="min-w-0 truncate">{to ?? DASH}</span>
     </span>
   );
 }
@@ -197,10 +230,10 @@ export default function LRCreateSummary({
 
                 <Section icon={<IconRoute size={14} />} title="Route">
                   <Row label="Branches">
-                    <Pair
-                      from={order.fromBranch?.shortCode}
-                      to={order.toBranch?.shortCode}
-                    />
+                   <Pair
+  from={order.fromBranch?.name ?? order.fromBranch?.branchCode ?? "—"}
+  to={order.toBranch?.name ?? order.toBranch?.branchCode ?? "—"}
+/>
                   </Row>
                   {order.route &&
                     (order.route.source || order.route.destination) && (
@@ -214,17 +247,32 @@ export default function LRCreateSummary({
                   <Row label="Mode">{transportLabel}</Row>
                 </Section>
 
-                <Section icon={<IconUsers size={14} />} title="Parties">
-                  <Row label="Consignor → Consignee">
-                    <Pair from={order.consignor} to={order.consignee} />
-                  </Row>
-                  {!order.consignee && (
-                    <p className="flex items-center gap-1 text-xs text-amber-600">
-                      <IconAlertTriangle size={13} />
-                      Set the order's consignee before creating the group.
-                    </p>
-                  )}
-                </Section>
+          <Section icon={<IconUsers size={14} />} title="Parties">
+  <div className="space-y-2">
+    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
+      <span className="text-muted-foreground">Consignor</span>
+      <span className="line-clamp-2 break-words font-medium text-foreground">
+        {order.consignor || "—"}
+      </span>
+    </div>
+
+
+
+    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
+      <span className="text-muted-foreground">Consignee</span>
+      <span className="line-clamp-2 break-words font-medium text-foreground">
+        {order.consignee || "Consignee not selected"}
+      </span>
+    </div>
+
+    {!order.consignee && (
+      <p className="flex items-start gap-1.5 pt-1 text-xs leading-snug text-amber-600">
+        <IconAlertTriangle size={13} className="mt-0.5 shrink-0" />
+        <span>Set the order&apos;s consignee before creating the group.</span>
+      </p>
+    )}
+  </div>
+</Section>
 
                 <Section icon={<IconTruck size={14} />} title="This truck">
                   <Row label="Truck">
@@ -276,53 +324,81 @@ export default function LRCreateSummary({
             )}
 
             {/* Consignment lines — the core "what will be created" detail. */}
-            <Section
-              icon={<IconPackage size={14} />}
-              title={`Consignments (${lrCount} LR${lrCount === 1 ? "" : "s"})`}
-            >
-              {lrCount === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No consignment lines yet.
-                </p>
-              ) : (
-                <ol className="space-y-2">
-                  {source === "FROM_ORDER"
-                    ? truckLines.map((l, i) => (
-                        <SummaryLine
-                          key={i}
-                          index={i}
-                          loading={l.loadingLocation}
-                          unloading={l.unloadingLocation}
-                          goods={l.goods
-                            .map((g) =>
-                              [g.name, g.quantity && g.unit ? `${g.quantity} ${g.unit}` : null]
-                                .filter(Boolean)
-                                .join(" · "),
-                            )
-                            .filter(Boolean)}
-                        />
-                      ))
-                    : instantLines.map((l, i) => (
-                        <SummaryLine
-                          key={i}
-                          index={i}
-                          loading={labelOf(locationOptions, l.loadingLocationId)}
-                          unloading={labelOf(
-                            locationOptions,
-                            l.unloadingLocationId,
-                          )}
-                          goods={(l.goods ?? [])
-                            .map((g) =>
-                              [g.name, g.quantity && g.unit ? `${g.quantity} ${g.unit}` : null]
-                                .filter(Boolean)
-                                .join(" · "),
-                            )
-                            .filter(Boolean)}
-                        />
-                      ))}
-                </ol>
-              )}
-            </Section>
+          <Section
+  icon={<IconPackage size={14} />}
+  title={`Consignments (${lrCount} LR${lrCount === 1 ? "" : "s"})`}
+>
+  {lrCount === 0 ? (
+    <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center">
+      <IconPackage className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+      <p className="text-xs font-medium text-muted-foreground">
+        No consignment lines yet.
+      </p>
+    </div>
+  ) : (
+    <div className="space-y-2">
+      {source === "FROM_ORDER"
+  ? truckLines.map((line, i) => {
+      const loading = line.loadingLocation;
+      const unloading = line.unloadingLocation;
+
+      const goods = (line.goods ?? [])
+        .map((g) =>
+          [
+            g.name,
+            g.quantity && g.unit
+              ? `${g.quantity} ${g.unit}`
+              : g.quantity
+                ? String(g.quantity)
+                : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        )
+        .filter(Boolean);
+
+      return (
+        <ConsignmentCard
+          key={i}
+          index={i}
+          loading={loading}
+          unloading={unloading}
+          goods={goods}
+        />
+      );
+    })
+  : instantLines.map((line, i) => {
+      const loading = labelOf(locationOptions, line.loadingLocationId);
+      const unloading = labelOf(locationOptions, line.unloadingLocationId);
+
+      const goods = (line.goods ?? [])
+        .map((g) =>
+          [
+            g.name,
+            g.quantity && g.unit
+              ? `${g.quantity} ${g.unit}`
+              : g.quantity
+                ? String(g.quantity)
+                : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        )
+        .filter(Boolean);
+
+      return (
+        <ConsignmentCard
+          key={i}
+          index={i}
+          loading={loading}
+          unloading={unloading}
+          goods={goods}
+        />
+      );
+    })}
+    </div>
+  )}
+</Section>
 
             <Section icon={<IconTruck size={14} />} title="Vehicle">
               {VehicleRows}
@@ -379,5 +455,72 @@ function SummaryLine({
         </p>
       )}
     </li>
+  );
+}
+function ConsignmentCard({
+  index,
+  loading,
+  unloading,
+  goods,
+}: {
+  index: number;
+  loading?: string | null;
+  unloading?: string | null;
+  goods: string[];
+}) {
+  return (
+    <div className="max-w-full rounded-lg border bg-background p-3 shadow-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground">
+          Consignment Line {index + 1}
+        </p>
+
+        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+          LR {index + 1}
+        </span>
+      </div>
+
+      <div className="space-y-2 text-xs">
+        <div className="rounded-md bg-muted/30 p-2">
+          <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
+            Route
+          </p>
+
+          <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2">
+            <span className="min-w-0 break-words line-clamp-2 font-medium">
+              {loading || "Loading not selected"}
+            </span>
+
+            <span className="shrink-0 text-muted-foreground">→</span>
+
+            <span className="min-w-0 break-words line-clamp-2 font-medium">
+              {unloading || "Unloading not selected"}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-md border p-2">
+          <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
+            Goods
+          </p>
+
+          {goods.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {goods.map((item, idx) => (
+                <span
+                  key={idx}
+                  className="max-w-[220px] rounded-md bg-muted px-2 py-1 text-[11px] font-medium leading-snug break-words line-clamp-2"
+                  title={item}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No goods added</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

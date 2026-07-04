@@ -134,15 +134,31 @@ router.get("/status-counts", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => 
 /* Detail                                                              */
 /* ------------------------------------------------------------------ */
 router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
-  const id = getParamId(req);
+  const rawIdentifier = getParamId(req);
+  const identifier = decodeURIComponent(rawIdentifier).trim();
+
+  const branchFilter = groupBranchFilter(req);
+
   const group = await db.lRGroup.findFirst({
-    where: { id, deletedAt: null, ...groupBranchFilter(req) },
+    where: {
+      AND: [
+        { deletedAt: null },
+        branchFilter,
+        {
+          OR: [
+            { id: identifier },
+            { groupNumber: identifier },
+          ],
+        },
+      ],
+    },
     include: groupDetailInclude,
   });
+
   if (!group) throw new NotFoundError("Lorry receipt group not found");
+
   return sendOk(res, group);
 });
-
 /* ------------------------------------------------------------------ */
 /* Create                                                              */
 /* ------------------------------------------------------------------ */
@@ -236,20 +252,20 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
     destinationBranchId = input.destinationBranchId;
     consignorId = input.consignorId;
     consigneeId = input.consigneeId;
-    lines = input.lrs.map((l) => ({
-      loadingLocationId: l.loadingLocationId ?? null,
-      unloadingLocationId: l.unloadingLocationId ?? null,
-      goods: l.goods.map((g) => ({
-        name: g.name,
-        description: g.description ?? null,
-        quantity: g.quantity,
-        unit: g.unit,
-        weight: g.weight ?? null,
-        length: g.length ?? null,
-        width: g.width ?? null,
-        height: g.height ?? null,
-      })),
-    }));
+    lines = (input.lrs ?? []).map((l) => ({
+  loadingLocationId: l.loadingLocationId ?? null,
+  unloadingLocationId: l.unloadingLocationId ?? null,
+  goods: l.goods.map((g) => ({
+    name: g.name,
+    description: g.description ?? null,
+    quantity: g.quantity,
+    unit: g.unit,
+    weight: g.weight ?? null,
+    length: g.length ?? null,
+    width: g.width ?? null,
+    height: g.height ?? null,
+  })),
+}));
   }
 
   // Origin-branch access check.
@@ -265,14 +281,71 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   const fyCode = fyCodeFor(now);
   const groupNumber = await generateGroupNumber(db, originBranch.branchCode, fyCode);
   // One upsert reserves a contiguous block of LR numbers (no per-line round-trip).
-  const lrNumbers = await generateLRNumbers(
-    db,
-    originBranch.branchCode,
-    fyCode,
-    lines.length,
-  );
-
+  const lrNumbers = lines.length
+  ? await generateLRNumbers(
+      db,
+      originBranch.branchCode,
+      fyCode,
+      lines.length,
+    )
+  : [];
   const isMarketVehicle = input.isMarketVehicle ?? false;
+  const activeStatuses: LRGroupStatus[] = ["DRAFT", "FINALISED"];
+  const marketVehicleNumber =
+    isMarketVehicle && input.marketVehicleNumber
+      ? input.marketVehicleNumber.toUpperCase().replace(/\s+/g, "")
+      : null;
+  const marketDriverName =
+    isMarketVehicle && input.marketDriverName
+      ? input.marketDriverName.trim()
+      : null;
+
+if (marketVehicleNumber) {
+  const busyVehicle = await db.lRGroup.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: activeStatuses },
+      isMarketVehicle: true,
+      marketVehicleNumber,
+    },
+    select: {
+      id: true,
+      groupNumber: true,
+      status: true,
+    },
+  });
+
+  if (busyVehicle) {
+    throw new BadRequestError(
+      `Vehicle ${marketVehicleNumber} is already assigned to LR group ${busyVehicle.groupNumber}`,
+    );
+  }
+}
+
+if (marketDriverName) {
+  const busyDriver = await db.lRGroup.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: activeStatuses },
+      isMarketVehicle: true,
+      marketDriverName: {
+        equals: marketDriverName,
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+      groupNumber: true,
+      status: true,
+    },
+  });
+
+  if (busyDriver) {
+    throw new BadRequestError(
+      `Driver ${marketDriverName} is already assigned to LR group ${busyDriver.groupNumber}`,
+    );
+  }
+}
   const transportType =
     input.source === "INSTANT" ? "Road" : (input.transportType ?? "Road");
   const tripLegType =
@@ -281,7 +354,48 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   const railheadBranchId =
     input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null;
   const primaryTripId = !isMarketVehicle ? (input.primaryTripId ?? null) : null;
+if (!isMarketVehicle && primaryTripId) {
+  const trip = await db.vehicleTrip.findUnique({
+    where: { id: primaryTripId },
+    select: {
+      id: true,
+      status: true,
+      tripName: true,
+      vehicle: { select: { vehicleNumber: true } },
+      driver: { select: { name: true } },
+    },
+  });
 
+  if (!trip) {
+    throw new BadRequestError("Trip not found");
+  }
+
+  if (trip.status !== "Planned") {
+    throw new BadRequestError(
+      `Trip ${trip.tripName} is not available. Current status is ${trip.status}`,
+    );
+  }
+
+  const busyGroup = await db.lRGroup.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: activeStatuses },
+      OR: [
+        { primaryTripId },
+        { secondaryTripId: primaryTripId },
+      ],
+    },
+    select: {
+      groupNumber: true,
+    },
+  });
+
+  if (busyGroup) {
+    throw new BadRequestError(
+      `Trip ${trip.tripName} is already assigned to LR group ${busyGroup.groupNumber}`,
+    );
+  }
+}
   // ---- Writes only: create the group + its LRs and dispatch the trip. The
   // heavy detail include is fetched AFTER commit, not inside the transaction. ----
   const created = await db.$transaction(
@@ -304,21 +418,31 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
           railheadBranchId,
           isMarketVehicle,
           primaryTripId,
-          marketVehicleNumber: isMarketVehicle ? (input.marketVehicleNumber ?? null) : null,
-          marketDriverName: isMarketVehicle ? (input.marketDriverName ?? null) : null,
+          marketVehicleNumber,
+          marketDriverName,
+
+          marketFreightAmount: isMarketVehicle ? (input.marketFreightAmount ?? null) : null,
+          marketAdvanceAmount: isMarketVehicle ? (input.marketAdvanceAmount ?? null) : null,
+          marketCommissionAmount: isMarketVehicle
+            ? (input.marketCommissionAmount ?? null)
+            : null,
+          marketHamaliAmount: isMarketVehicle ? (input.marketHamaliAmount ?? null) : null,
+          marketTdsAmount: isMarketVehicle ? (input.marketTdsAmount ?? null) : null,
           status: "DRAFT",
           createdById: me,
-          lorryReceipts: {
-            create: lines.map((line, i) => ({
-              lrNumber: lrNumbers[i]!,
-              fyCode,
-              loadingLocationId: line.loadingLocationId,
-              unloadingLocationId: line.unloadingLocationId,
-              status: "DRAFT",
-              createdById: me,
-              goods: { create: line.goods },
-            })),
-          },
+          lorryReceipts: lines.length
+  ? {
+      create: lines.map((line, i) => ({
+        lrNumber: lrNumbers[i]!,
+        fyCode,
+        loadingLocationId: line.loadingLocationId,
+        unloadingLocationId: line.unloadingLocationId,
+        status: "DRAFT",
+        createdById: me,
+        goods: line.goods.length ? { create: line.goods } : undefined,
+      })),
+    }
+  : undefined,
         },
         select: { id: true, groupNumber: true },
       });
@@ -346,11 +470,16 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
 /* ------------------------------------------------------------------ */
 router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
   const id = getParamId(req);
-  const existing = await db.lRGroup.findFirst({ where: { id, deletedAt: null } });
+  const existing = await db.lRGroup.findFirst({
+  where: { id, deletedAt: null },
+  include: {
+    lorryReceipts: true,
+  },
+});
   if (!existing) throw new NotFoundError("Lorry receipt group not found");
-  if (existing.status !== "DRAFT") {
-    throw new BadRequestError("Only a DRAFT group can be edited");
-  }
+ if (existing.lorryReceipts.length === 0) {
+  throw new BadRequestError("Add at least one LR before finalising the group");
+}
   assertBranchAccess(req, existing.originBranchId);
 
   const parsed = updateLRGroupSchema.safeParse(req.body);
@@ -360,32 +489,78 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
   const input = parsed.data;
   const me = actorId(req);
 
-  const updated = await db.lRGroup.update({
-    where: { id },
-    data: {
-      ...(input.consigneeId !== undefined ? { consigneeId: input.consigneeId } : {}),
-      ...(input.transportType ? { transportType: input.transportType } : {}),
-      ...(input.railheadBranchId !== undefined
-        ? { railheadBranchId: input.railheadBranchId ?? null }
-        : {}),
-      ...(input.priority ? { priority: input.priority } : {}),
-      ...(input.isMarketVehicle !== undefined
-        ? { isMarketVehicle: input.isMarketVehicle }
-        : {}),
-      ...(input.primaryTripId !== undefined
-        ? { primaryTripId: input.primaryTripId ?? null }
-        : {}),
-      ...(input.marketVehicleNumber !== undefined
-        ? { marketVehicleNumber: input.marketVehicleNumber ?? null }
-        : {}),
-      ...(input.marketDriverName !== undefined
-        ? { marketDriverName: input.marketDriverName ?? null }
-        : {}),
-      updatedById: me,
-      version: { increment: 1 },
-    },
-    include: groupDetailInclude,
-  });
+  const nextIsMarketVehicle =
+  input.isMarketVehicle !== undefined
+    ? input.isMarketVehicle
+    : existing.isMarketVehicle;
+
+const updated = await db.lRGroup.update({
+  where: { id },
+  data: {
+    ...(input.consigneeId !== undefined ? { consigneeId: input.consigneeId } : {}),
+    ...(input.transportType ? { transportType: input.transportType } : {}),
+    ...(input.railheadBranchId !== undefined
+      ? { railheadBranchId: input.railheadBranchId ?? null }
+      : {}),
+    ...(input.priority ? { priority: input.priority } : {}),
+
+    isMarketVehicle: nextIsMarketVehicle,
+
+    // If market vehicle, clear own trip.
+    // If own vehicle, allow trip and clear market vehicle values.
+    primaryTripId: nextIsMarketVehicle
+      ? null
+      : input.primaryTripId !== undefined
+        ? input.primaryTripId ?? null
+        : existing.primaryTripId,
+
+    marketVehicleNumber: nextIsMarketVehicle
+      ? input.marketVehicleNumber !== undefined
+        ? input.marketVehicleNumber ?? null
+        : existing.marketVehicleNumber
+      : null,
+
+    marketDriverName: nextIsMarketVehicle
+      ? input.marketDriverName !== undefined
+        ? input.marketDriverName ?? null
+        : existing.marketDriverName
+      : null,
+
+    marketFreightAmount: nextIsMarketVehicle
+      ? input.marketFreightAmount !== undefined
+        ? input.marketFreightAmount ?? null
+        : existing.marketFreightAmount
+      : null,
+
+    marketAdvanceAmount: nextIsMarketVehicle
+      ? input.marketAdvanceAmount !== undefined
+        ? input.marketAdvanceAmount ?? null
+        : existing.marketAdvanceAmount
+      : null,
+
+    marketCommissionAmount: nextIsMarketVehicle
+      ? input.marketCommissionAmount !== undefined
+        ? input.marketCommissionAmount ?? null
+        : existing.marketCommissionAmount
+      : null,
+
+    marketHamaliAmount: nextIsMarketVehicle
+      ? input.marketHamaliAmount !== undefined
+        ? input.marketHamaliAmount ?? null
+        : existing.marketHamaliAmount
+      : null,
+
+    marketTdsAmount: nextIsMarketVehicle
+      ? input.marketTdsAmount !== undefined
+        ? input.marketTdsAmount ?? null
+        : existing.marketTdsAmount
+      : null,
+
+    updatedById: me,
+    version: { increment: 1 },
+  },
+  include: groupDetailInclude,
+});
 
   return sendOk(res, updated);
 });
@@ -395,31 +570,44 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
 /* ------------------------------------------------------------------ */
 router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) => {
   const id = getParamId(req);
+
   const existing = await db.lRGroup.findFirst({
     where: { id, deletedAt: null },
     include: {
       lorryReceipts: {
         where: { deletedAt: null },
-        select: { id: true, status: true, ewayBill: { select: { id: true } } },
+        select: {
+          id: true,
+          status: true,
+          loadingLocationId: true,
+          unloadingLocationId: true,
+          ewayBill: { select: { id: true } },
+          goods: { select: { id: true } },
+        },
       },
     },
   });
+
   if (!existing) throw new NotFoundError("Lorry receipt group not found");
+
   if (existing.status !== "DRAFT") {
     throw new BadRequestError("Only a DRAFT group can be finalised");
   }
+
   assertBranchAccess(req, existing.originBranchId);
 
   const parsed = finaliseGroupSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
+
   const { baseFreightAmount, sealNumber, lrs } = parsed.data;
   const me = actorId(req);
 
   // All-or-nothing: the payload must cover exactly the group's LRs.
   const groupLrIds = new Set(existing.lorryReceipts.map((l) => l.id));
   const payloadLrIds = new Set(lrs.map((l) => l.lrId));
+
   if (
     groupLrIds.size !== payloadLrIds.size ||
     [...groupLrIds].some((lid) => !payloadLrIds.has(lid))
@@ -429,20 +617,33 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
     );
   }
 
-  const updated = await db.$transaction(async (tx) => {
-    const existingLrsById = new Map(existing.lorryReceipts.map((lr) => [lr.id, lr]));
+  const existingLrsById = new Map(
+    existing.lorryReceipts.map((lr) => [lr.id, lr]),
+  );
 
+  // Do all validation BEFORE transaction.
+  for (const line of lrs) {
+    const lr = existingLrsById.get(line.lrId);
+    if (!lr || !lr.loadingLocationId || !lr.unloadingLocationId || lr.goods.length === 0) {
+      throw new BadRequestError(
+        "Add loading point, unloading point, and goods to every LR before finalising the group",
+      );
+    }
+
+    if (line.existingEwayBillId) {
+      if (lr?.ewayBill?.id !== line.existingEwayBillId) {
+        throw new BadRequestError("Existing e-way bill does not belong to this LR");
+      }
+    } else if (line.ewayBill) {
+      if (lr?.ewayBill) {
+        throw new BadRequestError("This LR already has an e-way bill");
+      }
+    }
+  }
+
+  await db.$transaction(async (tx) => {
     for (const line of lrs) {
-      const lr = existingLrsById.get(line.lrId);
-
-      if (line.existingEwayBillId) {
-        if (lr?.ewayBill?.id !== line.existingEwayBillId) {
-          throw new BadRequestError("Existing e-way bill does not belong to this LR");
-        }
-      } else if (line.ewayBill) {
-        if (lr?.ewayBill) {
-          throw new BadRequestError("This LR already has an e-way bill");
-        }
+      if (line.ewayBill && !line.existingEwayBillId) {
         await tx.ewayBill.create({
           data: {
             lorryReceiptId: line.lrId,
@@ -467,7 +668,7 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
       });
     }
 
-    return tx.lRGroup.update({
+    await tx.lRGroup.update({
       where: { id },
       data: {
         status: "FINALISED",
@@ -478,13 +679,18 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
         updatedById: me,
         version: { increment: 1 },
       },
-      include: groupDetailInclude,
+      select: { id: true },
     });
+  });
+
+  // Fetch heavy detail AFTER transaction commit.
+  const updated = await db.lRGroup.findUniqueOrThrow({
+    where: { id },
+    include: groupDetailInclude,
   });
 
   return sendOk(res, updated);
 });
-
 /* ------------------------------------------------------------------ */
 /* Split at hub (HO action) — attach leg-2 trip to a FINALISED group    */
 /* ------------------------------------------------------------------ */
@@ -550,12 +756,12 @@ router.post("/:id/split-at-hub", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, r
 
   return sendOk(res, updated);
 });
-
 /* ------------------------------------------------------------------ */
 /* Add an LR (consignment line) to a DRAFT group                        */
 /* ------------------------------------------------------------------ */
 router.post("/:id/lorry-receipts", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
   const id = getParamId(req);
+
   const group = await db.lRGroup.findFirst({
     where: { id, deletedAt: null },
     select: {
@@ -566,21 +772,30 @@ router.post("/:id/lorry-receipts", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, 
       originBranch: { select: { branchCode: true } },
     },
   });
+
   if (!group) throw new NotFoundError("Lorry receipt group not found");
+
   if (group.status !== "DRAFT") {
     throw new BadRequestError("LRs can only be added to a DRAFT group");
   }
+
   assertBranchAccess(req, group.originBranchId);
 
   const parsed = lrGroupLineSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
+
   const line = parsed.data;
   const me = actorId(req);
 
-  const updated = await db.$transaction(async (tx) => {
-    const lrNumber = await generateLRNumber(tx, group.originBranch.branchCode, group.fyCode);
+  await db.$transaction(async (tx) => {
+    const lrNumber = await generateLRNumber(
+      tx,
+      group.originBranch.branchCode,
+      group.fyCode,
+    );
+
     await tx.lorryReceipt.create({
       data: {
         lrNumber,
@@ -590,26 +805,31 @@ router.post("/:id/lorry-receipts", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, 
         unloadingLocationId: line.unloadingLocationId ?? null,
         status: "DRAFT",
         createdById: me,
-        goods: {
-          create: line.goods.map((g) => ({
-            name: g.name,
-            description: g.description ?? null,
-            quantity: g.quantity,
-            unit: g.unit,
-            weight: g.weight ?? null,
-            length: g.length ?? null,
-            width: g.width ?? null,
-            height: g.height ?? null,
-          })),
-        },
+        goods: (line.goods ?? []).length
+          ? {
+              create: (line.goods ?? []).map((g) => ({
+                name: g.name,
+                description: g.description ?? null,
+                quantity: g.quantity,
+                unit: g.unit,
+                weight: g.weight ?? null,
+                length: g.length ?? null,
+                width: g.width ?? null,
+                height: g.height ?? null,
+              })),
+            }
+          : undefined,
       },
     });
-    return tx.lRGroup.findUniqueOrThrow({ where: { id }, include: groupDetailInclude });
+  });
+
+  const updated = await db.lRGroup.findUniqueOrThrow({
+    where: { id },
+    include: groupDetailInclude,
   });
 
   return sendOk(res, updated, undefined, 201);
 });
-
 /* ------------------------------------------------------------------ */
 /* Cancel — cancels the group and all its LRs                          */
 /* ------------------------------------------------------------------ */

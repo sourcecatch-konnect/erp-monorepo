@@ -40,6 +40,7 @@ import {
   IconDatabaseOff,
   IconChevronDown,
   IconChevronRight,
+  IconAlertTriangle,
 } from "@tabler/icons-react";
 
 import { formatDate } from "@/lib/format";
@@ -101,7 +102,10 @@ export default function LRTable(props: Props) {
       {
         header: "Group #",
         cell: ({ row }) => (
-          <Link href={`/lorry-receipts/${row.original.id}`} className="block">
+         <Link
+  href={`/lorry-receipts/${encodeURIComponent(row.original.groupNumber)}`}
+  className="block"
+>
             <span className="font-medium text-primary hover:underline">
               {row.original.groupNumber}
             </span>
@@ -122,7 +126,25 @@ export default function LRTable(props: Props) {
       },
       {
         header: "LRs",
-        cell: ({ row }) => row.original.lrCount ?? "—",
+        cell: ({ row }) => {
+          const hasIncompleteLr = (row.original.lorryReceipts ?? []).some(
+            (lr) =>
+              !lr.loadingLocation ||
+              !lr.unloadingLocation ||
+              (lr.goods?.length ?? 0) === 0,
+          );
+              {hasIncompleteLr ? (
+                <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                  <IconAlertTriangle size={12} /> Details pending
+                </span>
+              ) : null}
+          return (
+            <div className="flex flex-col gap-1">
+              <span>{row.original.lrCount ?? "—"}</span>
+        
+            </div>
+          );
+        },
       },
       {
         header: "Freight",
@@ -244,11 +266,11 @@ export default function LRTable(props: Props) {
                       ))}
                       <TableCell className="w-16 text-right">
                         <div className="flex justify-end gap-1">
-                          <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
-                            <Link href={`/lorry-receipts/${g.id}`}>
-                              <IconEye size={16} />
-                            </Link>
-                          </Button>
+                        <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
+  <Link href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}>
+    <IconEye size={16} />
+  </Link>
+</Button>
                           {canCancel && cancellable ? (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -276,6 +298,7 @@ export default function LRTable(props: Props) {
                                   <tr>
                                     <th className="px-3 py-2 font-semibold">LR #</th>
                                     <th className="px-3 py-2 font-semibold">Route</th>
+                                    <th className="px-3 py-2 font-semibold">Goods</th>
                                     <th className="px-3 py-2 font-semibold">Invoice</th>
                                     <th className="px-3 py-2 font-semibold">E-way bill</th>
                                     <th className="px-3 py-2 font-semibold">Status</th>
@@ -285,13 +308,37 @@ export default function LRTable(props: Props) {
                                   {childRows.map((lr) => (
                                     <tr key={lr.id} className="border-t">
                                       <td className="px-3 py-2 font-medium text-primary">
-                                        <Link href={`/lorry-receipts/${g.id}`} className="hover:underline">
+                                        <Link href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`} className="hover:underline">
                                           {lr.lrNumber}
                                         </Link>
                                       </td>
                                       <td className="px-3 py-2 text-muted-foreground">
-                                        {lr.loadingLocation?.name ?? "-"} -&gt;{" "}
-                                        {lr.unloadingLocation?.name ?? "-"}
+                                        <div className="flex flex-col gap-1">
+                                          <span>
+                                            {lr.loadingLocation?.name ?? "-"} -&gt;{" "}
+                                            {lr.unloadingLocation?.name ?? "-"}
+                                          </span>
+                                          {(!lr.loadingLocation ||
+                                            !lr.unloadingLocation) && (
+                                            <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                              <IconAlertTriangle size={13} />
+                                              Location pending
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {(lr.goods?.length ?? 0) > 0 ? (
+                                          <span className="text-muted-foreground">
+                                            {lr.goods?.length} row
+                                            {lr.goods?.length === 1 ? "" : "s"}
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                            <IconAlertTriangle size={13} />
+                                            Goods not added
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="px-3 py-2">
                                         {lr.invoiceNumber ? (

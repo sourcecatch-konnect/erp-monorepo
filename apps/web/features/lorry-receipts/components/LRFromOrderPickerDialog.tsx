@@ -112,12 +112,13 @@ export default function LRFromOrderPickerDialog({ open, onOpenChange }: Props) {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {order.customer?.name ?? "—"}
-                    {order.fromBranch && order.toBranch
-                      ? ` · ${order.fromBranch.shortCode} → ${order.toBranch.shortCode}`
-                      : ""}
-                  </p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+  {order.customer?.name ?? "—"}
+  {" · "}
+  {order.route?.sourceCity?.name ?? "—"} → {order.route?.destinationCity?.name ?? "—"}
+  {" · "}
+  {order.fromBranch?.branchCode ?? "—"} → {order.toBranch?.branchCode ?? "—"}
+</p>
                 </div>
                 <IconArrowRight
                   size={15}

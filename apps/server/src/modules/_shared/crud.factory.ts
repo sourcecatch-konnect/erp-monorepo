@@ -71,6 +71,7 @@ type CrudOptions<Create, Update> = {
     softDelete?: boolean;
     defaultSelect?: Record<string, unknown>;
     extraWhere?: (req: Request) => Record<string, unknown>;
+    mapRows?: (rows: unknown[], req: Request) => Promise<unknown[]> | unknown[];
     blockDeleteIfExists?: {
       model: any;
       label: string;
@@ -203,7 +204,7 @@ const where = {
   ...extraWhere,
 };
 
-      const [data, total] = await Promise.all([
+      const [rawData, total] = await Promise.all([
         model.findMany({
           where,
           skip: query.page * query.size,
@@ -215,6 +216,9 @@ const where = {
         }),
         model.count({ where }),
       ]);
+      const data = listOptions?.mapRows
+        ? await listOptions.mapRows(rawData, req)
+        : rawData;
 
       return sendOk(res, data, {
         page: query.page,
@@ -243,12 +247,15 @@ const where = {
   ...extraWhere,
 };
 
-      const data = await model.findMany({
+      const rawData = await model.findMany({
         where,
         take: 20,
         ...defaultQueryArgs,
         orderBy: listOptions?.defaultOrderBy,
       });
+      const data = listOptions?.mapRows
+        ? await listOptions.mapRows(rawData, req)
+        : rawData;
 
       return sendOk(res, data);
     },
@@ -272,13 +279,16 @@ const where = {
   ...baseWhere,
   ...extraWhere,
 };
-      const data = await model.findMany({
+      const rawData = await model.findMany({
         where,
         ...defaultQueryArgs,
         orderBy: query.sort
           ? { [query.sort.field]: query.sort.direction }
           : listOptions?.defaultOrderBy,
       });
+      const data = listOptions?.mapRows
+        ? await listOptions.mapRows(rawData, req)
+        : rawData;
 
       res.header("Content-Type", "text/csv");
       res.attachment("export.csv");

@@ -223,14 +223,16 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
                   truckIndex: c.truckIndex,
                   loadingLocationId: c.loadingLocationId ?? null,
                   unloadingLocationId: c.unloadingLocationId ?? null,
-                  goods: {
-                    create: c.goods.map((g) => ({
-                      goodsId: g.goodsId,
-                      quantity: g.quantity,
-                      unit: g.unit,
-                      weight: g.weight,
-                    })),
-                  },
+                  goods: (c.goods ?? []).length
+                    ? {
+                        create: (c.goods ?? []).map((g) => ({
+                          goodsId: g.goodsId,
+                          quantity: g.quantity,
+                          unit: g.unit,
+                          weight: g.weight,
+                        })),
+                      }
+                    : undefined,
                 })),
               }
             : undefined,
@@ -376,14 +378,16 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
                   truckIndex: c.truckIndex,
                   loadingLocationId: c.loadingLocationId ?? null,
                   unloadingLocationId: c.unloadingLocationId ?? null,
-                  goods: {
-                    create: c.goods.map((g) => ({
-                      goodsId: g.goodsId,
-                      quantity: g.quantity,
-                      unit: g.unit,
-                      weight: g.weight,
-                    })),
-                  },
+                  goods: (c.goods ?? []).length
+                    ? {
+                        create: (c.goods ?? []).map((g) => ({
+                          goodsId: g.goodsId,
+                          quantity: g.quantity,
+                          unit: g.unit,
+                          weight: g.weight,
+                        })),
+                      }
+                    : undefined,
                 })),
               }
             : undefined,

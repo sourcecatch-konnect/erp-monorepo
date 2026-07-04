@@ -44,6 +44,16 @@ router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
+/** Journey legs are lifecycle-managed by their journey, not the trips module. */
+const assertNotJourneyLeg = (trip: { journeyId: string | null }) => {
+  if (trip.journeyId) {
+    throw new BadRequestError(
+      "This trip is a journey leg — manage it from its vehicle journey",
+      "TRIP_IS_JOURNEY_LEG",
+    );
+  }
+};
+
 /* Trips are not branch-scoped — a single global per-FY counter. */
 const TRIP_SEQ_KEY = "TRIP";
 
@@ -309,6 +319,8 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
     );
   }
 
+  assertNotJourneyLeg(existing);
+
   if (existing.status !== "Planned") {
     throw new BadRequestError("Only a Planned trip can be edited");
   }
@@ -357,6 +369,8 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
     where: { id, deletedAt: null },
   });
   if (!existing) throw new NotFoundError("Trip not found");
+
+  assertNotJourneyLeg(existing);
 
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
@@ -409,6 +423,8 @@ router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
+  assertNotJourneyLeg(existing);
+
   if (!["Planned", "Cancelled"].includes(existing.status)) {
     throw new BadRequestError(
       `A ${existing.status} trip cannot be deleted. Please cancel the trip instead.`,
@@ -449,6 +465,8 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
     where: { id, deletedAt: null },
   });
   if (!existing) throw new NotFoundError("Trip not found");
+
+  assertNotJourneyLeg(existing);
 
   if (!["Planned", "InTransit"].includes(existing.status)) {
     throw new BadRequestError(
