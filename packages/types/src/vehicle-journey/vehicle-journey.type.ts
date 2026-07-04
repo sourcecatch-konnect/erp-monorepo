@@ -3,8 +3,6 @@ import {
   vehicleJourneyStatusSchema,
   journeySettlementStatusSchema,
   tripLegTypeSchema,
-  startJourneySchema,
-  addJourneyLegSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
   cancelJourneySchema,
@@ -40,10 +38,6 @@ export type DriverAdvanceStatus = z.infer<typeof driverAdvanceStatusSchema>;
 /* Request bodies (inferred from validators)                          */
 /* ------------------------------------------------------------------ */
 
-export type StartJourneyBody = z.output<typeof startJourneySchema>;
-export type StartJourneyFormInput = z.input<typeof startJourneySchema>;
-export type AddJourneyLegBody = z.output<typeof addJourneyLegSchema>;
-export type AddJourneyLegFormInput = z.input<typeof addJourneyLegSchema>;
 export type CloseJourneyLegBody = z.output<typeof closeJourneyLegSchema>;
 export type DispatchJourneyLegBody = z.output<typeof dispatchJourneyLegSchema>;
 export type CancelJourneyBody = z.output<typeof cancelJourneySchema>;
@@ -209,4 +203,29 @@ export type VehicleJourney = {
   advances?: DriverAdvance[];
   totals?: JourneyTotals;
   logSlip?: { id: string; logSlipNumber: string | null; status: string } | null;
+};
+
+/**
+ * Journey context for the trip form: the vehicle's active journey (if any)
+ * with its chain tip, plus the head-office base every journey returns to.
+ */
+export type ActiveJourneyInfo = {
+  headOffice: { branchId: string; cityId: string; cityName: string };
+  journey: {
+    id: string;
+    journeyNumber: string;
+    driverId: string;
+    driverName: string | null;
+    returnCityId: string;
+    returnCityName: string | null;
+    lastLeg: {
+      id: string;
+      sequenceNo: number | null;
+      status: TripStatus;
+      toCityId: string | null;
+      toCityName: string | null;
+      closingKm: number | null;
+      endDateTime: string | null;
+    } | null;
+  } | null;
 };

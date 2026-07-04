@@ -17,6 +17,11 @@ type Props<TFormValues extends FieldValues> = {
   emptyText?: string;
   required?: boolean;
   disabled?: boolean;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  onScrollEnd?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
 };
 
 /**
@@ -32,6 +37,11 @@ export default function ComboboxField<TFormValues extends FieldValues>({
   emptyText,
   required,
   disabled,
+  searchValue,
+  onSearchChange,
+  onScrollEnd,
+  hasMore,
+  isLoadingMore,
 }: Props<TFormValues>) {
   const {
     watch,
@@ -62,6 +72,11 @@ export default function ComboboxField<TFormValues extends FieldValues>({
         emptyText={emptyText}
         disabled={disabled}
         invalid={Boolean(error)}
+        searchValue={searchValue}
+        onSearchChange={onSearchChange}
+        onScrollEnd={onScrollEnd}
+        hasMore={hasMore}
+        isLoadingMore={isLoadingMore}
       />
       {typeof error === "string" ? (
         <p className="text-xs text-red-600">{error}</p>

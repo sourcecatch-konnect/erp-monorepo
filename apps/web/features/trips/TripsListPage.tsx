@@ -34,6 +34,7 @@ export default function TripsListPage() {
   const [closeTrip, setCloseTrip] = React.useState<Trip | null>(null);
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
   const [deleteTrip, setDeleteTrip] = React.useState<Trip | null>(null);
+  const [dispatchTrip, setDispatchTrip] = React.useState<Trip | null>(null);
 
   const canCreate = useCan(PERMS.TRIP.CREATE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
@@ -78,6 +79,16 @@ export default function TripsListPage() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: tripKeys.all });
   };
+
+  const dispatch = useMutation({
+    mutationFn: (id: string) => tripApi.dispatch(id),
+    onSuccess: () => {
+      toast.success("Trip dispatched");
+      setDispatchTrip(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
 
   const close = useMutation({
     mutationFn: (vars: { id: string; closingKm: number }) =>
@@ -161,11 +172,13 @@ export default function TripsListPage() {
         counts={counts.data ?? {}}
         isLoading={trips.isLoading}
         canStart={canCreateLR}
+        canDispatch={canUpdate}
         canClose={canClose}
         canUpdate={canUpdate}
         canCancel={canCancel}
         canDelete={canDelete}
         onStart={(t) => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
+        onDispatch={(t) => setDispatchTrip(t)}
         onClose={(t) => setCloseTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
         onDelete={(t) => setDeleteTrip(t)}
@@ -178,9 +191,23 @@ export default function TripsListPage() {
         onOpenChange={(open) => !open && setCloseTrip(null)}
         tripNumber={closeTrip?.tripNumber}
         openingKm={closeTrip?.openingKm}
+        isReturnLeg={closeTrip?.isReturnLeg}
         isPending={close.isPending}
         onConfirm={(closingKm) => {
           if (closeTrip) close.mutate({ id: closeTrip.id, closingKm });
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(dispatchTrip)}
+        onOpenChange={(open) => !open && setDispatchTrip(null)}
+        title={`Dispatch trip ${dispatchTrip?.tripNumber ?? ""}`}
+        description="The trip moves to In Transit without an LR — use this for empty or rake (DC) legs. LR trips are dispatched by attaching an LR."
+        confirmLabel="Dispatch"
+        pendingLabel="Dispatching..."
+        isPending={dispatch.isPending}
+        onConfirm={() => {
+          if (dispatchTrip) dispatch.mutate(dispatchTrip.id);
         }}
       />
 

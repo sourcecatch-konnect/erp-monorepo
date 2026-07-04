@@ -60,10 +60,18 @@ export type Trip = {
   updatedAt: string;
   deletedAt: string | null;
 
+  // Journey leg fields — every trip belongs to a vehicle journey (rows from
+  // before the journey module carry null).
+  journeyId: string | null;
+  sequenceNo: number | null;
+  isReturnLeg: boolean;
+  chainExceptionReason: string | null;
+
   vehicle?: { id: string; vehicleNumber: string; ownershipType: string };
   driver?: { id: string; name: string };
   route?: RouteRef;
   consignor?: { id: string; name: string; shortName: string | null } | null;
   createdBy?: { id: string; firstName: string; lastName: string };
+  journey?: { id: string; journeyNumber: string; status: string } | null;
   TripStatusHistory?: TripStatusHistoryRow[];
 };

@@ -1,6 +1,36 @@
 import { Prisma } from "../../../generated/prisma/index.js";
+import { db } from "../../../prisma/prisma.js";
+import { BadRequestError } from "../../lib/error.js";
+import { writeTripStatus } from "../trip/trip.service.js";
 
 type Tx = Prisma.TransactionClient;
+
+export const TX_BUDGET = { timeout: 15000, maxWait: 10000 } as const;
+
+/**
+ * The universal journey base: every journey returns to the head-office city
+ * (`Branch.isHeadOffice` — exactly one branch carries the flag). Configured
+ * data, never a hardcoded city id.
+ */
+export const getHeadOffice = async (): Promise<{
+  branchId: string;
+  cityId: string;
+  cityName: string;
+}> => {
+  const ho = await db.branch.findFirst({
+    where: { isHeadOffice: true },
+    select: { id: true, cityId: true, city: { select: { name: true } } },
+  });
+  if (!ho) {
+    throw new BadRequestError(
+      "No head-office branch is configured — set isHeadOffice on the base branch",
+    );
+  }
+  if (!ho.cityId || !ho.city) {
+    throw new BadRequestError("The head-office branch has no city configured");
+  }
+  return { branchId: ho.id, cityId: ho.cityId, cityName: ho.city.name };
+};
 
 /* ------------------------------------------------------------------ */
 /* Selects / includes                                                 */
@@ -76,6 +106,7 @@ export const journeyListSelect = {
       status: true,
       legType: true,
       closingKm: true,
+      endDateTime: true,
       fromCity: cityRef,
       toCity: cityRef,
     },
@@ -281,11 +312,98 @@ export const chainViolations = (
   return violations;
 };
 
-/** Journey statuses that block starting another journey for the same vehicle/driver. */
-export const OPEN_JOURNEY_STATUSES = [
-  "DRAFT",
-  "ACTIVE",
-  "RETURNED",
-  "READY_FOR_LOGSLIP",
-  "REOPENED",
-] as const;
+/* ------------------------------------------------------------------ */
+/* Close leg                                                          */
+/* ------------------------------------------------------------------ */
+
+type CloseLegArgs = {
+  journey: {
+    id: string;
+    returnCityId: string;
+    vehicleId: string;
+    driverId: string;
+  };
+  trip: { id: string; toCityId: string | null };
+  closingKm: number;
+  endDateTime: Date;
+  arrivalDateTime?: Date;
+  unloadingCompletedAt?: Date;
+  closeReason?: string;
+  actorId: string;
+};
+
+/**
+ * Close a journey leg and roll the journey forward. Closing at the journey's
+ * return city (head office) returns the whole journey: vehicle and driver are
+ * released immediately, settlement stays pending (plan §5.5/§5.8 policy).
+ * Shared by the trips route and the journey route so there is exactly one
+ * close path.
+ */
+export const closeLegAndUpdateJourney = async (
+  args: CloseLegArgs,
+): Promise<{ isReturnToBase: boolean }> => {
+  const { journey, trip, actorId } = args;
+  const isReturnToBase =
+    trip.toCityId !== null && trip.toCityId === journey.returnCityId;
+
+  await db.$transaction(async (tx) => {
+    await tx.vehicleTrip.update({
+      where: { id: trip.id },
+      data: {
+        status: "Closed",
+        closingKm: args.closingKm,
+        endDateTime: args.endDateTime,
+        arrivalDateTime: args.arrivalDateTime ?? args.endDateTime,
+        unloadingCompletedAt: args.unloadingCompletedAt ?? null,
+        closedById: actorId,
+        closeReason: args.closeReason ?? null,
+        updatedById: actorId,
+        version: { increment: 1 },
+      },
+      select: { id: true },
+    });
+
+    await tx.vehicle.update({
+      where: { id: journey.vehicleId },
+      data: {
+        currentKM: args.closingKm,
+        // Physical return releases the vehicle; settlement stays pending.
+        ...(isReturnToBase ? { status: "AVAILABLE" as const } : {}),
+      },
+    });
+
+    if (isReturnToBase) {
+      await tx.driver.update({
+        where: { id: journey.driverId },
+        data: { status: "AVAILABLE" },
+      });
+    }
+
+    await tx.vehicleJourney.update({
+      where: { id: journey.id },
+      data: {
+        ...(trip.toCityId ? { currentCityId: trip.toCityId } : {}),
+        updatedById: actorId,
+        version: { increment: 1 },
+        ...(isReturnToBase
+          ? {
+              status: "RETURNED" as const,
+              settlementStatus: "PENDING_REVIEW" as const,
+              closingKm: args.closingKm,
+              closedAt: args.endDateTime,
+            }
+          : {}),
+      },
+    });
+
+    await writeTripStatus(
+      tx,
+      trip.id,
+      actorId,
+      "Closed",
+      isReturnToBase ? "Leg closed — vehicle returned to base" : "Leg closed",
+    );
+  }, TX_BUDGET);
+
+  return { isReturnToBase };
+};

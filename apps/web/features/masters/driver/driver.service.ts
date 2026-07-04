@@ -85,28 +85,47 @@ export const driverApi = {
 
     return unwrapApiResponse(res);
   },
-getPhotoUploadUrl: async (body: {
-  fileName: string;
-  contentType: string;
-  fileSize: number;
-}): Promise<{ key: string; uploadUrl: string }> => {
-  const res = await api.post<ApiResponse<{ key: string; uploadUrl: string }>>(
-    "/drivers/_photo/upload-url",
-    body
-  );
 
-  return unwrapApiResponse(res);
-},
+  lookup: async (query?: {
+    search?: string;
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<Driver>> => {
+    const params: Record<string, string | number> = {
+      page: query?.page ?? 0,
+      size: query?.size ?? 20,
+    };
 
-getPhotoViewUrl: async (key: string): Promise<{ viewUrl: string }> => {
-  const res = await api.get<ApiResponse<{ viewUrl: string }>>(
-    "/drivers/_photo/view-url",
-    {
-      params: { key },
-    }
-  );
+    if (query?.search) params.search = query.search;
 
-  return unwrapApiResponse(res);
-},
+    const res = await api.get<ApiResponse<Driver[]>>("/drivers/lookup", {
+      params,
+    });
+
+    return unwrapListResponse(res);
+  },
+  getPhotoUploadUrl: async (body: {
+    fileName: string;
+    contentType: string;
+    fileSize: number;
+  }): Promise<{ key: string; uploadUrl: string }> => {
+    const res = await api.post<ApiResponse<{ key: string; uploadUrl: string }>>(
+      "/drivers/_photo/upload-url",
+      body,
+    );
+
+    return unwrapApiResponse(res);
+  },
+
+  getPhotoViewUrl: async (key: string): Promise<{ viewUrl: string }> => {
+    const res = await api.get<ApiResponse<{ viewUrl: string }>>(
+      "/drivers/_photo/view-url",
+      {
+        params: { key },
+      },
+    );
+
+    return unwrapApiResponse(res);
+  },
 
 };

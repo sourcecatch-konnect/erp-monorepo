@@ -9,8 +9,6 @@ import type {
   LogSlipPreview,
   VehicleJourneyStatus,
   JourneySettlementStatus,
-  StartJourneyBody,
-  AddJourneyLegBody,
   CloseJourneyLegBody,
   DispatchJourneyLegBody,
   CancelJourneyBody,
@@ -64,22 +62,6 @@ export const journeyApi = {
   detail: async (id: string): Promise<VehicleJourney> => {
     const res = await api.get<ApiResponse<VehicleJourney>>(
       `/vehicle-journeys/${id}`,
-    );
-    return unwrapApiResponse(res);
-  },
-
-  start: async (body: StartJourneyBody): Promise<VehicleJourney> => {
-    const res = await api.post<ApiResponse<VehicleJourney>>(
-      "/vehicle-journeys",
-      body,
-    );
-    return unwrapApiResponse(res);
-  },
-
-  addLeg: async (id: string, body: AddJourneyLegBody): Promise<JourneyLeg> => {
-    const res = await api.post<ApiResponse<JourneyLeg>>(
-      `/vehicle-journeys/${id}/add-leg`,
-      body,
     );
     return unwrapApiResponse(res);
   },
@@ -248,64 +230,14 @@ export const logSlipApi = {
 /* Lookups (reuse master list endpoints)                              */
 /* ------------------------------------------------------------------ */
 
-type VehicleRow = { id: string; vehicleNumber: string; ownershipType: string };
 type NamedRow = { id: string; name: string };
-type BranchRow = { id: string; name: string; branchCode: string };
-type RouteRow = {
-  id: string;
-  sourceCity?: { id: string; name: string } | null;
-  destinationCity?: { id: string; name: string } | null;
-};
 type CashAccountRow = { id: string; name: string; isActive?: boolean };
 
 const LOOKUP_QUERY = { size: 1000 } as const;
 
 export type JourneyOption = { value: string; label: string };
-export type JourneyRouteOption = JourneyOption & {
-  sourceCityId: string | null;
-  destinationCityId: string | null;
-};
 
 export const journeyLookups = {
-  // Journeys run on our own vehicles only.
-  ownVehicles: async (): Promise<JourneyOption[]> => {
-    const res = await api.get<ApiResponse<VehicleRow[]>>("/vehicles", {
-      params: LOOKUP_QUERY,
-    });
-    return unwrapListResponse(res)
-      .data.filter((v) => v.ownershipType === "Own_Vehicle")
-      .map((v) => ({ value: v.id, label: v.vehicleNumber }));
-  },
-  drivers: async (): Promise<JourneyOption[]> => {
-    const res = await api.get<ApiResponse<NamedRow[]>>("/drivers", {
-      params: { ...LOOKUP_QUERY, sort: "name:asc" },
-    });
-    return unwrapListResponse(res).data.map((d) => ({
-      value: d.id,
-      label: d.name,
-    }));
-  },
-  // Routes carry their city ids so dialogs can pre-check chain continuity.
-  routes: async (): Promise<JourneyRouteOption[]> => {
-    const res = await api.get<ApiResponse<RouteRow[]>>("/routes", {
-      params: LOOKUP_QUERY,
-    });
-    return unwrapListResponse(res).data.map((r) => ({
-      value: r.id,
-      label: `${r.sourceCity?.name ?? "?"} → ${r.destinationCity?.name ?? "?"}`,
-      sourceCityId: r.sourceCity?.id ?? null,
-      destinationCityId: r.destinationCity?.id ?? null,
-    }));
-  },
-  customers: async (): Promise<JourneyOption[]> => {
-    const res = await api.get<ApiResponse<NamedRow[]>>("/customers", {
-      params: { ...LOOKUP_QUERY, sort: "name:asc" },
-    });
-    return unwrapListResponse(res).data.map((c) => ({
-      value: c.id,
-      label: c.name,
-    }));
-  },
   cities: async (): Promise<JourneyOption[]> => {
     const res = await api.get<ApiResponse<NamedRow[]>>("/cities", {
       params: { ...LOOKUP_QUERY, sort: "name:asc" },
@@ -313,16 +245,6 @@ export const journeyLookups = {
     return unwrapListResponse(res).data.map((c) => ({
       value: c.id,
       label: c.name,
-    }));
-  },
-  branches: async (): Promise<(JourneyOption & { branchCode: string })[]> => {
-    const res = await api.get<ApiResponse<BranchRow[]>>("/branches", {
-      params: LOOKUP_QUERY,
-    });
-    return unwrapListResponse(res).data.map((b) => ({
-      value: b.id,
-      label: b.name,
-      branchCode: b.branchCode,
     }));
   },
   pumps: async (): Promise<JourneyOption[]> => {

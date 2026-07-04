@@ -26,6 +26,14 @@ const router: Router = createCrudRouter({
       "insuranceNumber",
       "insuranceCompany",
     ],
+    lookupSelect: {
+      id: true,
+      vehicleNumber: true,
+      status: true,
+    },
+    lookupOrderBy: {
+      vehicleNumber: "asc",
+    },
     defaultInclude: {
       vehicleTypeRef: {
         select: {

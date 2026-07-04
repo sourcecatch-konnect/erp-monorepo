@@ -59,7 +59,6 @@ import {
   formatDateTime,
 } from "./journey-ui";
 import JourneyTimeline from "./JourneyTimeline";
-import AddLegDialog from "./AddLegDialog";
 import CloseLegDialog from "./CloseLegDialog";
 import TripExpenseDrawer from "./TripExpenseDrawer";
 import AdvanceDialog from "./AdvanceDialog";
@@ -67,7 +66,6 @@ import AdvanceDialog from "./AdvanceDialog";
 export default function VehicleJourneyDetail({ id }: { id: string }) {
   const queryClient = useQueryClient();
 
-  const [addLegOpen, setAddLegOpen] = React.useState(false);
   const [closeLeg, setCloseLeg] = React.useState<JourneyLeg | null>(null);
   const [dispatchLeg, setDispatchLeg] = React.useState<JourneyLeg | null>(null);
   const [expenseOpen, setExpenseOpen] = React.useState(false);
@@ -197,8 +195,10 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
   const lastLeg = activeLegs[activeLegs.length - 1] ?? null;
   const totals = journey.totals;
 
-  const canAddLeg =
-    canUpdate && journey.status === "ACTIVE" && lastLeg?.status === "Closed";
+  // The next leg is created from the Trips page ("New Trip" auto-attaches
+  // to this journey) — the journey page only visualises and settles.
+  const nextLegReady =
+    journey.status === "ACTIVE" && lastLeg?.status === "Closed";
   const canMarkReady = canUpdate && journey.status === "RETURNED";
   const moneyEntryAllowed = ["ACTIVE", "RETURNED"].includes(journey.status);
   const showLogSlipLink =
@@ -235,9 +235,11 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {canAddLeg ? (
-              <Button onClick={() => setAddLegOpen(true)}>
-                <IconPlus size={16} className="mr-1" /> Add Leg
+            {nextLegReady ? (
+              <Button asChild>
+                <Link href="/trips/new">
+                  <IconPlus size={16} className="mr-1" /> New Trip (next leg)
+                </Link>
               </Button>
             ) : null}
             {canMarkReady ? (
@@ -634,11 +636,6 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
       </Tabs>
 
       {/* Dialogs */}
-      <AddLegDialog
-        open={addLegOpen}
-        onOpenChange={setAddLegOpen}
-        journey={journey}
-      />
       <CloseLegDialog
         open={Boolean(closeLeg)}
         onOpenChange={(open) => !open && setCloseLeg(null)}

@@ -54,6 +54,13 @@ export const tripListSelect = {
   rakeDate: true,
   startDateTime: true,
   createdAt: true,
+  journeyId: true,
+  sequenceNo: true,
+  legType: true,
+  isReturnLeg: true,
+  journey: {
+    select: { id: true, journeyNumber: true, status: true },
+  },
 
   vehicle: {
     select: { id: true, vehicleNumber: true, ownershipType: true },
@@ -78,6 +85,7 @@ export const tripListSelect = {
 
 /** Fully-hydrated trip for the detail page. */
 export const tripInclude = {
+  journey: { select: { id: true, journeyNumber: true, status: true } },
   vehicle: { select: { id: true, vehicleNumber: true, ownershipType: true } },
   driver: { select: { id: true, name: true } },
   route: {

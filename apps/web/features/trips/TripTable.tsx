@@ -45,6 +45,7 @@ import {
   IconTrash,
   IconPlus,
   IconDownload,
+  IconPlayerPlay,
 } from "@tabler/icons-react";
 
 import { formatPaise } from "@/lib/money";
@@ -57,11 +58,14 @@ import {
 export type TripRowActions = {
   /** Planned trip — routes to the Instant LR form to start (attach) the trip. */
   onStart: (trip: Trip) => void;
+  /** Planned empty/DC leg — dispatches without an LR. */
+  onDispatch: (trip: Trip) => void;
   /** InTransit trip — opens the closing-KM dialog. */
   onClose: (trip: Trip) => void;
   onCancel: (trip: Trip) => void;
   onDelete: (trip: Trip) => void;
   canStart: boolean;
+  canDispatch: boolean;
   canClose: boolean;
   canUpdate: boolean;
   canCancel: boolean;
@@ -105,10 +109,12 @@ export default function TripTable(props: Props) {
     counts,
     isLoading,
     onStart,
+    onDispatch,
     onClose,
     onCancel,
     onDelete,
     canStart,
+    canDispatch,
     canClose,
     canUpdate,
     canCancel,
@@ -153,6 +159,28 @@ export default function TripTable(props: Props) {
             </span>
           </Link>
         ),
+      },
+      {
+        header: "Journey",
+        cell: ({ row }) => {
+          const j = row.original.journey;
+          if (!j) return <span className="text-muted-foreground">—</span>;
+          return (
+            <Link
+              href={`/vehicle-journeys/${j.id}`}
+              className="block"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="block text-primary hover:underline">
+                {j.journeyNumber}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Leg {row.original.sequenceNo ?? "?"}
+                {row.original.isReturnLeg ? " · return" : ""}
+              </span>
+            </Link>
+          );
+        },
       },
       {
         header: "Vehicle",
@@ -292,13 +320,17 @@ export default function TripTable(props: Props) {
                 const startable = t.status === "Planned";
                 const closeable = t.status === "InTransit";
                 const editable = t.status === "Planned";
-                const deletable = DELETE_ALLOWED_STATUSES.includes(
-                  t.status as (typeof DELETE_ALLOWED_STATUSES)[number],
-                );
+                // Journey legs keep their chain slot — cancel, never delete.
+                const deletable =
+                  !t.journeyId &&
+                  DELETE_ALLOWED_STATUSES.includes(
+                    t.status as (typeof DELETE_ALLOWED_STATUSES)[number],
+                  );
                 const cancellable =
                   t.status === "Planned" || t.status === "InTransit";
                 const hasRowAction =
                   (canStart && startable) ||
+                  (canDispatch && startable) ||
                   (canClose && closeable) ||
                   (canUpdate && editable) ||
                   canDownloadPdf ||
@@ -341,7 +373,13 @@ export default function TripTable(props: Props) {
                             {canStart && startable ? (
                               <DropdownMenuItem onClick={() => onStart(t)}>
                                 <IconTruckDelivery size={16} className="mr-2" />{" "}
-                                Start trip
+                                Start trip (attach LR)
+                              </DropdownMenuItem>
+                            ) : null}
+                            {canDispatch && startable ? (
+                              <DropdownMenuItem onClick={() => onDispatch(t)}>
+                                <IconPlayerPlay size={16} className="mr-2" />{" "}
+                                Dispatch (no LR)
                               </DropdownMenuItem>
                             ) : null}
                             {canClose && closeable ? (
