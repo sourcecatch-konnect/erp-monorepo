@@ -99,10 +99,7 @@ const customerLocationInclude = {
 // List a customer's saved pickup locations (used by the Order form dropdown).
 router.get("/:id/locations", can("masters.customer.view"), async (req, res) => {
   const customerId = getParamId(req);
-  console.log("CUSTOMER LOCATION FILTER:", {
-    customerId,
-    query: req.query,
-  });
+
 
   const cityId =
     typeof req.query.cityId === "string" && req.query.cityId.trim()

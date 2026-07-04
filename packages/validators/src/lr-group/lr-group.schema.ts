@@ -48,7 +48,7 @@ const truckIndexField = z
 export const lrGroupLineSchema = z.object({
   loadingLocationId: optionalId,
   unloadingLocationId: optionalId,
-  goods: z.array(lrGoodsLineSchema).min(1, "Add at least one goods line"),
+  goods: z.array(lrGoodsLineSchema).optional().default([]),
 });
 
 export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
@@ -59,11 +59,20 @@ export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
 
 const vehicleShape = {
   isMarketVehicle: z.boolean().default(false),
-  // The leg-1 trip the whole group rides. Leg 2 is attached later by the
-  // group "split at hub" action, never at creation.
+
+  // Own vehicle
   primaryTripId: optionalId,
+
+  // Market vehicle
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
+
+  // Entered in rupees, stored as paise
+  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
+  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
+  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
+  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
+  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
 };
 
 export const createGroupFromOrderSchema = z.object({
@@ -97,7 +106,7 @@ export const createInstantGroupSchema = z.object({
   priority: lrPrioritySchema.default("Normal"),
   ...vehicleShape,
   // Instant groups declare their consignments inline (no order to read from).
-  lrs: z.array(lrGroupLineSchema).min(1, "Add at least one consignment"),
+  lrs: z.array(lrGroupLineSchema).optional().default([]),
 });
 
 export type CreateInstantGroupInput = z.infer<typeof createInstantGroupSchema>;
@@ -135,6 +144,31 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["primaryTripId"],
     });
   }
+  if (d.source === "INSTANT") {
+    if (!d.lrs || d.lrs.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add at least one consignment line",
+        path: ["lrs"],
+      });
+    }
+    (d.lrs ?? []).forEach((line, index) => {
+      if (!line.loadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Loading point is required",
+          path: ["lrs", index, "loadingLocationId"],
+        });
+      }
+      if (!line.unloadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unloading point is required",
+          path: ["lrs", index, "unloadingLocationId"],
+        });
+      }
+    });
+  }
 });
 
 export type CreateLRGroupInput = z.infer<typeof createLRGroupSchema>;
@@ -148,12 +182,19 @@ export const updateLRGroupSchema = z.object({
   transportType: lrTransportTypeSchema.optional(),
   railheadBranchId: optionalId,
   priority: lrPrioritySchema.optional(),
+
   isMarketVehicle: z.boolean().optional(),
-  // Only the leg-1 trip is editable here. Leg 2 / hub / tripLegType are owned
-  // by the "split at hub" action, never the edit form.
   primaryTripId: optionalId,
+
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
+
+  // Entered in rupees, stored as paise
+  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
+  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
+  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
+  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
+  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
 });
 
 export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
@@ -189,12 +230,9 @@ export const finaliseGroupLineSchema = z
   });
 
 export const finaliseGroupSchema = z.object({
-  // Entered in rupees, stored as paise.
   baseFreightAmount: rupeesToPaise("Base freight amount"),
   sealNumber: optionalString,
-  lrs: z
-    .array(finaliseGroupLineSchema)
-    .min(1, "At least one lorry receipt is required"),
+  lrs: z.array(finaliseGroupLineSchema).min(1, "At least one LR is required"),
 });
 
 export type FinaliseGroupInput = z.infer<typeof finaliseGroupSchema>;

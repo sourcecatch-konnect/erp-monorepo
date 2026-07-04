@@ -72,8 +72,21 @@ export const lorryReceiptApi = {
 /* Lookup helpers (reused across LR form)                             */
 /* ------------------------------------------------------------------ */
 
-type VehicleRow = { id: string; vehicleNumber: string; ownershipType?: string };
-type DriverRow = { id: string; name: string; mobile?: string | null };
+type VehicleRow = {
+  id: string;
+  vehicleNumber: string;
+  ownershipType?: string;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
+
+type DriverRow = {
+  id: string;
+  name: string;
+  mobile?: string | null;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
 type CustomerRow = { id: string; name: string; shortName: string | null };
 type GoodsRow = {
   id: string;
@@ -113,9 +126,14 @@ type OrderRow = {
   fromBranchId?: string;
   toBranchId?: string;
   customerId?: string;
+  route?: {
+  id: string;
+  sourceCity?: { id: string; name: string } | null;
+  destinationCity?: { id: string; name: string } | null;
+} | null;
   customer?: { id: string; name: string } | null;
-  fromBranch?: { id: string; name?: string; shortCode: string } | null;
-  toBranch?: { id: string; name?: string; shortCode: string } | null;
+fromBranch?: { id: string; name?: string; branchCode: string } | null;
+toBranch?: { id: string; name?: string; branchCode: string } | null;
 };
 
 /** Slim shape of GET /orders/:id we read for FROM_ORDER LR context. */
@@ -126,8 +144,8 @@ type OrderContextRow = {
   bookingFreightAmount?: string | number | null;
   customer?: { id: string; name: string } | null;
   consignee?: { id: string; name: string } | null;
-  fromBranch?: { id: string; name: string; shortCode: string } | null;
-  toBranch?: { id: string; name: string; shortCode: string } | null;
+fromBranch?: { id: string; name: string; branchCode: string } | null;
+toBranch?: { id: string; name: string; branchCode: string } | null;
   route?: {
     sourceCity?: { id: string; name: string } | null;
     destinationCity?: { id: string; name: string } | null;
@@ -160,8 +178,8 @@ export type LROrderContext = {
   bookingFreightAmount: number | null;
   consignor: string | null;
   consignee: string | null;
-  fromBranch: { name: string; shortCode: string } | null;
-  toBranch: { name: string; shortCode: string } | null;
+  fromBranch: { name: string; branchCode: string } | null;
+toBranch: { name: string; branchCode: string } | null;
   route: { source: string | null; destination: string | null } | null;
   trucks: { truckIndex: number; lineCount: number }[];
   lines: LROrderContextLine[];
@@ -345,11 +363,11 @@ export const lrLookups = {
       consignor: order.customer?.name ?? null,
       consignee: order.consignee?.name ?? null,
       fromBranch: order.fromBranch
-        ? { name: order.fromBranch.name, shortCode: order.fromBranch.shortCode }
-        : null,
-      toBranch: order.toBranch
-        ? { name: order.toBranch.name, shortCode: order.toBranch.shortCode }
-        : null,
+  ? { name: order.fromBranch.name, branchCode: order.fromBranch.branchCode }
+  : null,
+toBranch: order.toBranch
+  ? { name: order.toBranch.name, branchCode: order.toBranch.branchCode }
+  : null,
       route: order.route
         ? {
             source: order.route.sourceCity?.name ?? null,

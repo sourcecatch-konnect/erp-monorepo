@@ -16,6 +16,7 @@ import {
   IconPlus,
   IconPencil,
   IconTrash,
+  IconAlertTriangle,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
@@ -64,15 +65,19 @@ export default function LRDetail({ id }: { id: string }) {
     queryKey: lrGroupKeys.detail(id),
     queryFn: () => lrGroupApi.detail(id),
   });
+  const actionGroupId = group.data?.id ?? id;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(id) });
+    if (actionGroupId !== id) {
+      queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(actionGroupId) });
+    }
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
   };
 
   const finalise = useMutation({
     mutationFn: (body: Parameters<typeof lrGroupApi.finalise>[1]) =>
-      lrGroupApi.finalise(id, body),
+      lrGroupApi.finalise(actionGroupId, body),
     onSuccess: () => {
       toast.success("Group finalised");
       setFinaliseOpen(false);
@@ -83,7 +88,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const split = useMutation({
     mutationFn: (secondaryTripId: string) =>
-      lrGroupApi.splitAtHub(id, { secondaryTripId }),
+      lrGroupApi.splitAtHub(actionGroupId, { secondaryTripId }),
     onSuccess: () => {
       toast.success("Leg 2 trip attached");
       setSplitOpen(false);
@@ -94,7 +99,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const cancel = useMutation({
     mutationFn: (reason: string) =>
-      lrGroupApi.cancel(id, { cancelReason: reason }),
+      lrGroupApi.cancel(actionGroupId, { cancelReason: reason }),
     onSuccess: () => {
       toast.success("Group cancelled");
       setCancelOpen(false);
@@ -105,7 +110,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const updateGroup = useMutation({
     mutationFn: (body: Parameters<typeof lrGroupApi.update>[1]) =>
-      lrGroupApi.update(id, body),
+      lrGroupApi.update(actionGroupId, body),
     onSuccess: () => {
       toast.success("Group updated");
       setEditGroupOpen(false);
@@ -116,7 +121,7 @@ export default function LRDetail({ id }: { id: string }) {
 
   const addLine = useMutation({
     mutationFn: (payload: LinePayload) =>
-      lrGroupApi.addLorryReceipt(id, {
+      lrGroupApi.addLorryReceipt(actionGroupId, {
         loadingLocationId: payload.loadingLocationId,
         unloadingLocationId: payload.unloadingLocationId,
         goods: payload.goods,
@@ -181,6 +186,24 @@ export default function LRDetail({ id }: { id: string }) {
   }
 
   const g = group.data;
+const hasNoLrs = g.lorryReceipts.length === 0;
+
+const hasIncompleteLr = g.lorryReceipts.some(
+  (lr) =>
+    !lr.loadingLocationId || !lr.unloadingLocationId || lr.goods.length === 0,
+);
+
+const cannotFinalise = hasNoLrs || hasIncompleteLr;
+
+const finaliseBlockMessage = hasNoLrs
+  ? "Add at least one consignment LR before finalising this group."
+  : "One or more LRs are incomplete. Keep the group in draft, edit those LRs, and add loading point, unloading point, and goods before finalising.";
+
+const finaliseTitle = hasNoLrs
+  ? "Add at least one consignment LR before finalising"
+  : hasIncompleteLr
+    ? "Add loading point, unloading point, and goods to every LR before finalising"
+    : undefined;
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
@@ -217,9 +240,13 @@ export default function LRDetail({ id }: { id: string }) {
             </Button>
           )}
           {g.status === "DRAFT" && canApprove && (
-            <Button onClick={() => setFinaliseOpen(true)}>
-              Finalise group
-            </Button>
+           <Button
+  onClick={() => setFinaliseOpen(true)}
+  disabled={cannotFinalise}
+  title={finaliseTitle}
+>
+  Finalise group
+</Button>
           )}
           {g.status === "FINALISED" && canApprove && (
             <Button variant="outline" onClick={() => setSplitOpen(true)}>
@@ -237,6 +264,13 @@ export default function LRDetail({ id }: { id: string }) {
           )}
         </div>
       </div>
+
+      {cannotFinalise && (
+  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
+    <p>{finaliseBlockMessage}</p>
+  </div>
+)}
 
       {/* Summary */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -293,7 +327,7 @@ export default function LRDetail({ id }: { id: string }) {
           <p className="text-sm font-semibold">Lorry receipts</p>
           {g.status === "DRAFT" && canUpdate && (
             <Button size="sm" variant="outline" onClick={() => setAddLineOpen(true)}>
-              <IconPlus size={14} className="mr-1" /> Add LR
+              <IconPlus size={14} className="mr-1" /> Add consignment LR
             </Button>
           )}
         </div>
@@ -349,6 +383,17 @@ export default function LRDetail({ id }: { id: string }) {
                     {gd.name} · {gd.quantity} {gd.unit}
                   </span>
                 ))}
+              </div>
+            )}
+            {(!lr.loadingLocationId ||
+              !lr.unloadingLocationId ||
+              lr.goods.length === 0) && (
+              <div className="mb-3 flex w-fit flex-wrap items-center gap-1 rounded-sm bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                <IconAlertTriangle size={13} />
+                Complete before finalise:
+                {!lr.loadingLocationId ? " loading point" : ""}
+                {!lr.unloadingLocationId ? " unloading point" : ""}
+                {lr.goods.length === 0 ? " goods" : ""}
               </div>
             )}
 
@@ -433,9 +478,12 @@ export default function LRDetail({ id }: { id: string }) {
             ? {
                 loadingLocationId: editLine.loadingLocationId ?? undefined,
                 unloadingLocationId: editLine.unloadingLocationId ?? undefined,
-                goodsName: editLine.goods[0]?.name ?? "",
-                quantity: editLine.goods[0]?.quantity != null ? String(editLine.goods[0].quantity) : "",
-                unit: editLine.goods[0]?.unit ?? "",
+                goods: editLine.goods.map((goods) => ({
+                  name: goods.name,
+                  quantity:
+                    goods.quantity != null ? String(goods.quantity) : "",
+                  unit: goods.unit,
+                })),
                 invoiceNumber: editLine.invoiceNumber ?? "",
                 invoiceAmount:
                   editLine.invoiceAmount != null

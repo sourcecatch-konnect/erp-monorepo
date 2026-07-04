@@ -38,11 +38,15 @@ export const lrGroupApi = {
     return unwrapApiResponse(res);
   },
 
-  detail: async (id: string): Promise<LRGroup> => {
-    const res = await api.get<ApiResponse<LRGroup>>(`/lr-groups/${id}`);
-    return unwrapApiResponse(res);
-  },
+detail: async (identifier: string): Promise<LRGroup> => {
+  const cleanIdentifier = decodeURIComponent(identifier);
 
+  const res = await api.get<ApiResponse<LRGroup>>(
+    `/lr-groups/${encodeURIComponent(cleanIdentifier)}`
+  );
+
+  return unwrapApiResponse(res);
+},
   create: async (body: CreateLRGroupBody): Promise<LRGroup> => {
     const res = await api.post<ApiResponse<LRGroup>>("/lr-groups", body);
     return unwrapApiResponse(res);
