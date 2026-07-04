@@ -291,16 +291,22 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   : [];
   const isMarketVehicle = input.isMarketVehicle ?? false;
   const activeStatuses: LRGroupStatus[] = ["DRAFT", "FINALISED"];
+  const marketVehicleNumber =
+    isMarketVehicle && input.marketVehicleNumber
+      ? input.marketVehicleNumber.toUpperCase().replace(/\s+/g, "")
+      : null;
+  const marketDriverName =
+    isMarketVehicle && input.marketDriverName
+      ? input.marketDriverName.trim()
+      : null;
 
-if (isMarketVehicle && input.marketVehicleNumber) {
-  const vehicleNo = input.marketVehicleNumber.toUpperCase().replace(/\s+/g, "");
-
+if (marketVehicleNumber) {
   const busyVehicle = await db.lRGroup.findFirst({
     where: {
       deletedAt: null,
       status: { in: activeStatuses },
       isMarketVehicle: true,
-      marketVehicleNumber: vehicleNo,
+      marketVehicleNumber,
     },
     select: {
       id: true,
@@ -311,21 +317,19 @@ if (isMarketVehicle && input.marketVehicleNumber) {
 
   if (busyVehicle) {
     throw new BadRequestError(
-      `Vehicle ${vehicleNo} is already assigned to LR group ${busyVehicle.groupNumber}`,
+      `Vehicle ${marketVehicleNumber} is already assigned to LR group ${busyVehicle.groupNumber}`,
     );
   }
 }
 
-if (isMarketVehicle && input.marketDriverName) {
-  const driverName = input.marketDriverName.trim();
-
+if (marketDriverName) {
   const busyDriver = await db.lRGroup.findFirst({
     where: {
       deletedAt: null,
       status: { in: activeStatuses },
       isMarketVehicle: true,
       marketDriverName: {
-        equals: driverName,
+        equals: marketDriverName,
         mode: "insensitive",
       },
     },
@@ -338,7 +342,7 @@ if (isMarketVehicle && input.marketDriverName) {
 
   if (busyDriver) {
     throw new BadRequestError(
-      `Driver ${driverName} is already assigned to LR group ${busyDriver.groupNumber}`,
+      `Driver ${marketDriverName} is already assigned to LR group ${busyDriver.groupNumber}`,
     );
   }
 }
@@ -414,8 +418,8 @@ if (!isMarketVehicle && primaryTripId) {
           railheadBranchId,
           isMarketVehicle,
           primaryTripId,
-          marketVehicleNumber: isMarketVehicle ? (input.marketVehicleNumber ?? null) : null,
-          marketDriverName: isMarketVehicle ? (input.marketDriverName ?? null) : null,
+          marketVehicleNumber,
+          marketDriverName,
 
           marketFreightAmount: isMarketVehicle ? (input.marketFreightAmount ?? null) : null,
           marketAdvanceAmount: isMarketVehicle ? (input.marketAdvanceAmount ?? null) : null,

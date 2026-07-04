@@ -144,6 +144,31 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["primaryTripId"],
     });
   }
+  if (d.source === "INSTANT") {
+    if (!d.lrs || d.lrs.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add at least one consignment line",
+        path: ["lrs"],
+      });
+    }
+    (d.lrs ?? []).forEach((line, index) => {
+      if (!line.loadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Loading point is required",
+          path: ["lrs", index, "loadingLocationId"],
+        });
+      }
+      if (!line.unloadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unloading point is required",
+          path: ["lrs", index, "unloadingLocationId"],
+        });
+      }
+    });
+  }
 });
 
 export type CreateLRGroupInput = z.infer<typeof createLRGroupSchema>;
