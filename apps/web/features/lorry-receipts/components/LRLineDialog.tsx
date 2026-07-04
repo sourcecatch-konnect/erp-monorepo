@@ -76,7 +76,7 @@ export default function LRLineDialog({
     defaultValues: {
       loadingLocationId: undefined,
       unloadingLocationId: undefined,
-      goods: [{ name: "", quantity: "", unit: "" }],
+      goods: [],
       invoiceNumber: "",
       invoiceAmount: "",
     },
@@ -97,7 +97,7 @@ export default function LRLineDialog({
               quantity: g.quantity ?? "",
               unit: g.unit ?? "",
             }))
-          : [{ name: "", quantity: "", unit: "" }],
+          : [],
         invoiceNumber: initial?.invoiceNumber ?? "",
         invoiceAmount: initial?.invoiceAmount ?? "",
       });
@@ -125,7 +125,7 @@ export default function LRLineDialog({
     onSubmit({
       loadingLocationId: v.loadingLocationId || undefined,
       unloadingLocationId: v.unloadingLocationId || undefined,
-      goods,
+      goods: goods.length ? goods : [],
       invoiceNumber: mode === "edit" ? v.invoiceNumber.trim() || undefined : undefined,
       invoiceAmount:
         mode === "edit" && v.invoiceAmount ? Number(v.invoiceAmount) : undefined,
@@ -184,7 +184,7 @@ export default function LRLineDialog({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-muted-foreground">
-                Goods for this LR <span className="text-red-600">*</span>
+                Goods for this LR
               </p>
               <Button
                 type="button"
@@ -195,6 +195,12 @@ export default function LRLineDialog({
                 <IconPlus size={14} className="mr-1" /> Add goods row
               </Button>
             </div>
+            {fields.length === 0 ? (
+              <div className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+                No goods added yet. This LR can stay draft, but the group cannot
+                be finalised until every LR has goods.
+              </div>
+            ) : null}
 
   {fields.map((field, index) => (
   <div key={field.id} className="rounded-md border bg-muted/20 p-3">
@@ -235,7 +241,6 @@ export default function LRLineDialog({
           size="icon-sm"
           variant="ghost"
           aria-label="Remove goods"
-          disabled={fields.length <= 1}
           onClick={() => remove(index)}
         >
           <IconTrash size={15} />

@@ -199,6 +199,7 @@ export const groupListSelect = {
       invoiceAmount: true,
       loadingLocation: { select: locationSelect },
       unloadingLocation: { select: locationSelect },
+      goods: { select: { id: true } },
       ewayBill: true,
     },
   },

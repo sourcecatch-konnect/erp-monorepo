@@ -16,6 +16,7 @@ import {
   IconPlus,
   IconPencil,
   IconTrash,
+  IconAlertTriangle,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
@@ -185,6 +186,24 @@ export default function LRDetail({ id }: { id: string }) {
   }
 
   const g = group.data;
+const hasNoLrs = g.lorryReceipts.length === 0;
+
+const hasIncompleteLr = g.lorryReceipts.some(
+  (lr) =>
+    !lr.loadingLocationId || !lr.unloadingLocationId || lr.goods.length === 0,
+);
+
+const cannotFinalise = hasNoLrs || hasIncompleteLr;
+
+const finaliseBlockMessage = hasNoLrs
+  ? "Add at least one consignment LR before finalising this group."
+  : "One or more LRs are incomplete. Keep the group in draft, edit those LRs, and add loading point, unloading point, and goods before finalising.";
+
+const finaliseTitle = hasNoLrs
+  ? "Add at least one consignment LR before finalising"
+  : hasIncompleteLr
+    ? "Add loading point, unloading point, and goods to every LR before finalising"
+    : undefined;
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
@@ -221,9 +240,13 @@ export default function LRDetail({ id }: { id: string }) {
             </Button>
           )}
           {g.status === "DRAFT" && canApprove && (
-            <Button onClick={() => setFinaliseOpen(true)}>
-              Finalise group
-            </Button>
+           <Button
+  onClick={() => setFinaliseOpen(true)}
+  disabled={cannotFinalise}
+  title={finaliseTitle}
+>
+  Finalise group
+</Button>
           )}
           {g.status === "FINALISED" && canApprove && (
             <Button variant="outline" onClick={() => setSplitOpen(true)}>
@@ -241,6 +264,13 @@ export default function LRDetail({ id }: { id: string }) {
           )}
         </div>
       </div>
+
+      {cannotFinalise && (
+  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
+    <p>{finaliseBlockMessage}</p>
+  </div>
+)}
 
       {/* Summary */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -353,6 +383,17 @@ export default function LRDetail({ id }: { id: string }) {
                     {gd.name} · {gd.quantity} {gd.unit}
                   </span>
                 ))}
+              </div>
+            )}
+            {(!lr.loadingLocationId ||
+              !lr.unloadingLocationId ||
+              lr.goods.length === 0) && (
+              <div className="mb-3 flex w-fit flex-wrap items-center gap-1 rounded-sm bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                <IconAlertTriangle size={13} />
+                Complete before finalise:
+                {!lr.loadingLocationId ? " loading point" : ""}
+                {!lr.unloadingLocationId ? " unloading point" : ""}
+                {lr.goods.length === 0 ? " goods" : ""}
               </div>
             )}
 

@@ -51,6 +51,7 @@ export type LRGroupListReceipt = {
   unloadingLocation: LocationRef | null;
   invoiceNumber: string | null;
   invoiceAmount: number | null;
+  goods?: { id: string }[];
   ewayBill: EwayBill | null;
 };
 

@@ -88,9 +88,12 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 text-sm">
-      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-right font-medium">{children}</span>
+    <div className="grid gap-1 text-sm">
+      <span className="text-xs text-muted-foreground">{label}</span>
+
+      <div className="min-w-0 font-medium text-foreground">
+        {children}
+      </div>
     </div>
   );
 }
@@ -103,10 +106,15 @@ function Pair({
   to: React.ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="truncate">{from ?? DASH}</span>
-      <IconArrowRight size={13} className="shrink-0 text-muted-foreground" />
-      <span className="truncate">{to ?? DASH}</span>
+    <span className="inline-flex max-w-full items-center gap-1.5">
+      <span className="min-w-0 truncate">{from ?? DASH}</span>
+
+      <IconArrowRight
+        size={13}
+        className="shrink-0 text-muted-foreground"
+      />
+
+      <span className="min-w-0 truncate">{to ?? DASH}</span>
     </span>
   );
 }

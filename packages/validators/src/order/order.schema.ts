@@ -83,7 +83,7 @@ export const orderConsignmentSchema = z.object({
     .refine((v) => Number.isInteger(v) && v > 0, "Truck index must be a positive whole number"),
   loadingLocationId: optionalString,
   unloadingLocationId: optionalString,
-  goods: z.array(orderItemSchema).min(1, "Add at least one goods line"),
+  goods: z.array(orderItemSchema).optional().default([]),
 });
 
 export type OrderConsignmentInput = z.infer<typeof orderConsignmentSchema>;

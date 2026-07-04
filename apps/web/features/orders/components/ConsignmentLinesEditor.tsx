@@ -93,7 +93,7 @@ export default function ConsignmentLinesEditor({
         truckIndex: 1,
         loadingLocationId: undefined,
         unloadingLocationId: undefined,
-        goods: [emptyGoods()],
+        goods: [],
       }),
     [append],
   );
@@ -106,7 +106,7 @@ export default function ConsignmentLinesEditor({
         truckIndex: 1,
         loadingLocationId: undefined,
         unloadingLocationId: undefined,
-        goods: [emptyGoods()],
+        goods: [],
       });
     }
   }, [append, getValues]);
@@ -188,7 +188,6 @@ function ConsignmentLineCard({
   });
 
   const removeGoods = (gIndex: number) => {
-    if (fields.length <= 1) return;
     remove(gIndex);
     if (isSubmitted) void trigger(`consignments.${index}.goods`);
   };
@@ -316,6 +315,11 @@ function ConsignmentLineCard({
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Goods
           </p>
+          {fields.length === 0 ? (
+            <span className="rounded-sm bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              Can be added before LR finalise
+            </span>
+          ) : null}
         </div>
 
         {/* Column header (desktop) */}
@@ -328,8 +332,14 @@ function ConsignmentLineCard({
         </div>
 
         <div className="space-y-2 sm:space-y-1">
-          <AnimatePresence initial={false}>
-            {fields.map((goodsField, gIndex) => {
+          {fields.length === 0 ? (
+            <div className="rounded-md border border-dashed bg-background px-3 py-4 text-center text-xs text-muted-foreground">
+              No goods added yet. You can create the order now and add goods on
+              the draft LR before finalising.
+            </div>
+          ) : (
+            <AnimatePresence initial={false}>
+              {fields.map((goodsField, gIndex) => {
               const goodsErr = lineErr?.goods?.[gIndex];
               const isLast = gIndex === fields.length - 1;
               return (
@@ -420,15 +430,15 @@ function ConsignmentLineCard({
                     variant="ghost"
                     className="justify-self-end text-muted-foreground hover:bg-red-50 hover:text-red-600"
                     onClick={() => removeGoods(gIndex)}
-                    disabled={fields.length === 1}
                     aria-label="Remove goods row"
                   >
                     <IconTrash size={16} />
                   </Button>
                 </motion.div>
               );
-            })}
-          </AnimatePresence>
+              })}
+            </AnimatePresence>
+          )}
         </div>
 
         <button

@@ -256,6 +256,8 @@ export default function FinaliseDialog({
                                 selected={toDate(field.value)}
                                 onSelect={field.onChange}
                                 clearable={false}
+                                toYear={new Date().getFullYear()}
+                                disabled={{ after: new Date() }}
                               />
                               {lrErr?.ewayBill?.generatedAt?.message ? (
                                 <p className="mt-1 text-xs text-red-600">

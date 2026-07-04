@@ -87,7 +87,31 @@ function FieldLabel({
     </label>
   );
 }
+function ReadOnlyAmount({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <FieldLabel>{label}</FieldLabel>
 
+      <div className="  px-3 py-2">
+        <div
+          className={`text-sm ${
+            strong ? "font-semibold text-foreground" : "font-medium text-foreground"
+          }`}
+        >
+          ₹ {value.toFixed(2)}
+        </div>
+      </div>
+    </div>
+  );
+}
 function Segmented<T extends string | boolean>({
   value,
   onChange,
@@ -186,7 +210,7 @@ export default function LRForm({ orderId, tripId }: Props) {
             priority: "Normal",
             isMarketVehicle: false,
             primaryTripId: tripId,
-            lrs: [EMPTY_LINE],
+            lrs: [],
           },
   });
 
@@ -312,7 +336,29 @@ export default function LRForm({ orderId, tripId }: Props) {
       setSubmitting(false);
     }
   };
+const moneyNumber = (value: unknown) => {
+  const n =
+    typeof value === "number"
+      ? value
+      : Number(String(value ?? "").trim() || 0);
 
+  return Number.isFinite(n) ? n : 0;
+};
+
+const marketFreightAmount = form.watch("marketFreightAmount" as never);
+const marketAdvanceAmount = form.watch("marketAdvanceAmount" as never);
+const marketCommissionAmount = form.watch("marketCommissionAmount" as never);
+const marketHamaliAmount = form.watch("marketHamaliAmount" as never);
+const marketTdsAmount = form.watch("marketTdsAmount" as never);
+
+const totalFreightAdvance =
+  moneyNumber(marketAdvanceAmount) +
+  moneyNumber(marketCommissionAmount) +
+  moneyNumber(marketHamaliAmount) +
+  moneyNumber(marketTdsAmount);
+
+const netBalanceFreight =
+  moneyNumber(marketFreightAmount) - totalFreightAdvance;
   return (
     <FormProvider {...form}>
       <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
@@ -330,7 +376,7 @@ export default function LRForm({ orderId, tripId }: Props) {
             <p className="mt-0.5 text-xs text-muted-foreground">
               {source === "FROM_ORDER"
                 ? "LRs are generated from the order's consignment lines for the chosen truck."
-                : "Standalone Road group — declare each consignment line below."}
+                : "Standalone Road group — you can add consignment lines now or later."}
             </p>
           </div>
           <div className="flex items-end gap-2">
@@ -647,6 +693,16 @@ export default function LRForm({ orderId, tripId }: Props) {
                   {...form.register("marketTdsAmount")}
                 />
               </div>
+  <ReadOnlyAmount
+  label="Total Freight Advance"
+  value={totalFreightAdvance}
+/>
+
+<ReadOnlyAmount
+  label="Net Balance Freight"
+  value={netBalanceFreight}
+  strong
+/>
             </div>
           )}
         </FormSection>
@@ -655,10 +711,18 @@ export default function LRForm({ orderId, tripId }: Props) {
         {source === "INSTANT" && (
           <FormSection
             icon={<IconPackage size={16} />}
-            title="Consignments (one LR each)"
+            title="Consignments / LR Lines"
             columns={1}
           >
             <div className="space-y-3">
+              {fields.length === 0 && (
+  <div className="rounded-lg border border-dashed bg-muted/20 p-4">
+    <p className="text-sm font-medium">No consignment line added</p>
+    <p className="mt-1 text-xs text-muted-foreground">
+      You can create the LR group now and add LR lines later.
+    </p>
+  </div>
+)}
               {fields.map((field, idx) => {
                 const base = `lrs.${idx}` as const;
                 // `lrs` only exists on the INSTANT branch of the union; narrow it.
@@ -673,7 +737,7 @@ export default function LRForm({ orderId, tripId }: Props) {
                     key={field.id}
                     className="relative rounded-lg border bg-muted/20 p-3"
                   >
-                    {fields.length > 1 && (
+                    {fields.length > 0 && (
                       <button
                         type="button"
                         onClick={() => remove(idx)}

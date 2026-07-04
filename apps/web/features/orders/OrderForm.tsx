@@ -203,14 +203,7 @@ export default function OrderForm({ mode, order }: Props) {
                       unit: g.unit,
                       weight: g.weight ? Number(g.weight) : undefined,
                     }))
-                  : [
-                      {
-                        goodsId: "",
-                        quantity: 1,
-                        unit: "MT",
-                        weight: undefined,
-                      },
-                    ],
+                  : [],
             })) ?? [],
         }
       : {
