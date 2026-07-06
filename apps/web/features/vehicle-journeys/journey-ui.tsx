@@ -4,6 +4,7 @@ import type {
   JourneySettlementStatus,
   TripLegType,
   TripStatus,
+  TripType,
   TripExpenseStatus,
   TripExpenseType,
 } from "@skerp/types";
@@ -114,6 +115,30 @@ export const LEG_TYPE_LABELS: Record<TripLegType, string> = {
   WORKSHOP: "Workshop",
   OTHER: "Other",
 };
+
+type LegDispatchGateInput = {
+  status: TripStatus;
+  tripType: TripType;
+  isTripEmpty: boolean;
+};
+
+/**
+ * LR legs carrying goods dispatch by attaching an LR (server flips them to
+ * InTransit on attach) — DC/empty legs have no LR to attach, so they use the
+ * direct dispatch action instead. See `legDispatchesDirect`. Mirrors
+ * `tripAttachesLR` / `tripDispatchesDirect` in features/trips/trip-ui.tsx.
+ */
+export function legAttachesLR(leg: LegDispatchGateInput): boolean {
+  return (
+    leg.status === "Planned" && leg.tripType === "lr" && !leg.isTripEmpty
+  );
+}
+
+export function legDispatchesDirect(leg: LegDispatchGateInput): boolean {
+  return (
+    leg.status === "Planned" && (leg.tripType === "dc" || leg.isTripEmpty)
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Expense                                                            */

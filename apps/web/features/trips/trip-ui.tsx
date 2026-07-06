@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { TripStatus, TripType } from "@skerp/types";
+import type { Trip, TripStatus, TripType } from "@skerp/types";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<TripStatus, string> = {
@@ -43,3 +43,22 @@ export const TRIP_STATUS_ORDER: { key: string; label: string }[] = [
   { key: "Closed", label: "Closed" },
   { key: "Cancelled", label: "Cancelled" },
 ];
+
+type DispatchGateInput = Pick<Trip, "status" | "tripType" | "isTripEmpty">;
+
+/**
+ * LR trips carrying goods dispatch by attaching an LR (server flips them to
+ * InTransit on attach) — DC/empty legs have no LR to attach, so they use the
+ * direct dispatch action instead. See `tripDispatchesDirect`.
+ */
+export function tripAttachesLR(trip: DispatchGateInput): boolean {
+  return (
+    trip.status === "Planned" && trip.tripType === "lr" && !trip.isTripEmpty
+  );
+}
+
+export function tripDispatchesDirect(trip: DispatchGateInput): boolean {
+  return (
+    trip.status === "Planned" && (trip.tripType === "dc" || trip.isTripEmpty)
+  );
+}

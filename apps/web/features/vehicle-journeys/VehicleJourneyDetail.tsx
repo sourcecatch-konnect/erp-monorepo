@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { JourneyLeg, TripExpense, DriverAdvance } from "@skerp/types";
@@ -45,6 +46,7 @@ import {
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { formatPaise } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
@@ -57,6 +59,8 @@ import {
   SETTLEMENT_LABELS,
   LEG_TYPE_LABELS,
   formatDateTime,
+  legAttachesLR,
+  legDispatchesDirect,
 } from "./journey-ui";
 import JourneyTimeline from "./JourneyTimeline";
 import CloseLegDialog from "./CloseLegDialog";
@@ -64,7 +68,9 @@ import TripExpenseDrawer from "./TripExpenseDrawer";
 import AdvanceDialog from "./AdvanceDialog";
 
 export default function VehicleJourneyDetail({ id }: { id: string }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const { setLabel } = useBreadcrumbLabels();
 
   const [closeLeg, setCloseLeg] = React.useState<JourneyLeg | null>(null);
   const [dispatchLeg, setDispatchLeg] = React.useState<JourneyLeg | null>(null);
@@ -88,12 +94,19 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
   const canAdvance = useCan(PERMS.TRIP_ADVANCE.CREATE);
   const canReverseAdvance = useCan(PERMS.TRIP_ADVANCE.REVERSE);
   const canViewLogSlip = useCan(PERMS.LOGSLIP.VIEW);
+  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 
   const query = useQuery({
     queryKey: journeyKeys.detail(id),
     queryFn: () => journeyApi.detail(id),
   });
   const journey = query.data;
+
+  React.useEffect(() => {
+    const href = `/vehicle-journeys/${encodeURIComponent(id)}`;
+    setLabel(href, journey?.journeyNumber ?? null);
+    return () => setLabel(href, null);
+  }, [id, setLabel, journey?.journeyNumber]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: journeyKeys.all });
@@ -401,22 +414,38 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                         <LegStatusBadge status={leg.status} />
                       </TableCell>
                       <TableCell className="text-right">
-                        {canUpdate && journey.status === "ACTIVE" ? (
-                          leg.status === "Planned" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setDispatchLeg(leg)}
-                            >
-                              <IconTruckDelivery size={14} className="mr-1" />
-                              Dispatch
-                            </Button>
-                          ) : leg.status === "InTransit" ? (
-                            <Button size="sm" onClick={() => setCloseLeg(leg)}>
-                              <IconCircleCheck size={14} className="mr-1" />
-                              Close
-                            </Button>
-                          ) : null
+                        {journey.status === "ACTIVE" &&
+                        canCreateLR &&
+                        legAttachesLR(leg) ? (
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              router.push(
+                                `/lorry-receipts/new?tripId=${leg.id}`,
+                              )
+                            }
+                          >
+                            <IconTruckDelivery size={14} className="mr-1" />
+                            Start trip
+                          </Button>
+                        ) : journey.status === "ACTIVE" &&
+                          canUpdate &&
+                          legDispatchesDirect(leg) ? (
+                          <Button
+                            size="sm"
+                            className="bg-green-600 text-white hover:bg-green-700"
+                            onClick={() => setDispatchLeg(leg)}
+                          >
+                            <IconTruckDelivery size={14} className="mr-1" />
+                            Dispatch
+                          </Button>
+                        ) : journey.status === "ACTIVE" &&
+                          canUpdate &&
+                          leg.status === "InTransit" ? (
+                          <Button size="sm" onClick={() => setCloseLeg(leg)}>
+                            <IconCircleCheck size={14} className="mr-1" />
+                            Close
+                          </Button>
                         ) : null}
                       </TableCell>
                     </TableRow>

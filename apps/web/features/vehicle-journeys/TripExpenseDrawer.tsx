@@ -116,7 +116,7 @@ export default function TripExpenseDrawer({
   );
 
   const form = useForm<TripExpenseFormInput, unknown, CreateTripExpenseBody>({
-    resolver: zodResolver(createTripExpenseSchema),
+    resolver: zodResolver(createTripExpenseSchema, undefined, { raw: true }),
     defaultValues: defaults(),
   });
 

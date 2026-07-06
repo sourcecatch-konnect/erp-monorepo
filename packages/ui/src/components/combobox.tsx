@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsUpDownIcon, CheckIcon } from "lucide-react";
-
+import { ChevronsUpDownIcon } from "lucide-react";
+import { IconCircleCheckFilled } from "@tabler/icons-react";
 import { cn } from "../lib/util";
 import { Button } from "./button";
 import { Popover, PopoverContent, PopoverTrigger } from "./popver";
@@ -92,7 +92,7 @@ export function Combobox({
           <span className="whitespace-normal break-words text-left">
             {selected ? selected.label : placeholder}
           </span>
-          <ChevronsUpDownIcon className="ml-2 size-4 shrink-0 opacity-50" />
+          <ChevronsUpDownIcon className="ml-2 size-4 shrink-0 opacity-50 text-blue-500" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -132,6 +132,10 @@ export function Combobox({
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
+                  className={cn(
+                    option.value === value &&
+                      "bg-blue-50 border-blue-400 border rounded-md shadow-xs",
+                  )}
                   key={option.value}
                   value={option.label}
                   onSelect={() => {
@@ -140,7 +144,7 @@ export function Combobox({
                   }}
                   data-checked={option.value === value}
                 >
-                  <CheckIcon
+                  <IconCircleCheckFilled
                     className={cn(
                       "mr-2 size-4",
                       option.value === value ? "opacity-100" : "opacity-0",

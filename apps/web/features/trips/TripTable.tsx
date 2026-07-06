@@ -53,6 +53,8 @@ import {
   TripStatusBadge,
   TRIP_STATUS_ORDER,
   TRIP_TYPE_LABELS,
+  tripAttachesLR,
+  tripDispatchesDirect,
 } from "./trip-ui";
 
 export type TripRowActions = {
@@ -280,7 +282,7 @@ export default function TripTable(props: Props) {
                     {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
                 ))}
-                <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
+                <TableHead className="h-10 w-24 text-right text-xs font-semibold uppercase text-muted-foreground">
                   Actions
                 </TableHead>
               </TableRow>
@@ -295,7 +297,7 @@ export default function TripTable(props: Props) {
                       <Skeleton className="h-4 w-24" />
                     </TableCell>
                   ))}
-                  <TableCell className="w-16">
+                  <TableCell className="w-24">
                     <Skeleton className="ml-auto size-7 rounded-md" />
                   </TableCell>
                 </TableRow>
@@ -317,7 +319,10 @@ export default function TripTable(props: Props) {
             ) : (
               table.getRowModel().rows.map((row) => {
                 const t = row.original;
-                const startable = t.status === "Planned";
+                // LR trips carrying goods dispatch by attaching an LR; DC and
+                // empty legs have no LR to attach and dispatch directly.
+                const attachableLR = tripAttachesLR(t);
+                const dispatchableDirect = tripDispatchesDirect(t);
                 const closeable = t.status === "InTransit";
                 const editable = t.status === "Planned";
                 // Journey legs keep their chain slot — cancel, never delete.
@@ -329,8 +334,8 @@ export default function TripTable(props: Props) {
                 const cancellable =
                   t.status === "Planned" || t.status === "InTransit";
                 const hasRowAction =
-                  (canStart && startable) ||
-                  (canDispatch && startable) ||
+                  (canStart && attachableLR) ||
+                  (canDispatch && dispatchableDirect) ||
                   (canClose && closeable) ||
                   (canUpdate && editable) ||
                   canDownloadPdf ||
@@ -369,15 +374,21 @@ export default function TripTable(props: Props) {
                               <IconDotsVertical size={16} />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canStart && startable ? (
-                              <DropdownMenuItem onClick={() => onStart(t)}>
+                          <DropdownMenuContent align="end" className="w-56">
+                            {canStart && attachableLR ? (
+                              <DropdownMenuItem
+                                onClick={() => onStart(t)}
+                                className="text-primary focus:text-primary [&_svg]:text-primary"
+                              >
                                 <IconTruckDelivery size={16} className="mr-2" />{" "}
                                 Start trip (attach LR)
                               </DropdownMenuItem>
                             ) : null}
-                            {canDispatch && startable ? (
-                              <DropdownMenuItem onClick={() => onDispatch(t)}>
+                            {canDispatch && dispatchableDirect ? (
+                              <DropdownMenuItem
+                                onClick={() => onDispatch(t)}
+                                className="text-green-600 focus:text-green-700 [&_svg]:text-green-600"
+                              >
                                 <IconPlayerPlay size={16} className="mr-2" />{" "}
                                 Dispatch (no LR)
                               </DropdownMenuItem>

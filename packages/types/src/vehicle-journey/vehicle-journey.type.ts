@@ -43,12 +43,14 @@ export type DispatchJourneyLegBody = z.output<typeof dispatchJourneyLegSchema>;
 export type CancelJourneyBody = z.output<typeof cancelJourneySchema>;
 export type CloseJourneyBody = z.output<typeof closeJourneySchema>;
 
-export type CreateTripExpenseBody = z.output<typeof createTripExpenseSchema>;
+// Form/API request bodies stay as z.input when the web form uses
+// zodResolver(..., { raw: true }); the server owns rupees -> paise conversion.
+export type CreateTripExpenseBody = z.input<typeof createTripExpenseSchema>;
 export type TripExpenseFormInput = z.input<typeof createTripExpenseSchema>;
-export type UpdateTripExpenseBody = z.output<typeof updateTripExpenseSchema>;
+export type UpdateTripExpenseBody = z.input<typeof updateTripExpenseSchema>;
 export type RejectTripExpenseBody = z.output<typeof rejectTripExpenseSchema>;
 export type ReverseTripExpenseBody = z.output<typeof reverseTripExpenseSchema>;
-export type CreateDriverAdvanceBody = z.output<
+export type CreateDriverAdvanceBody = z.input<
   typeof createDriverAdvanceSchema
 >;
 export type DriverAdvanceFormInput = z.input<typeof createDriverAdvanceSchema>;

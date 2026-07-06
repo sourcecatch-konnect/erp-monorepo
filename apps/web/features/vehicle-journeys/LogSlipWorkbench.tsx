@@ -159,7 +159,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
     unknown,
     GenerateLogSlipBody
   >({
-    resolver: zodResolver(generateLogSlipSchema),
+    resolver: zodResolver(generateLogSlipSchema, undefined, { raw: true }),
     defaultValues: { previousDieselQty: 0 },
   });
 

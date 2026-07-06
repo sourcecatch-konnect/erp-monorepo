@@ -1,12 +1,12 @@
 "use client";
 
-import * as React from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, FormProvider, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-
+import { motion, AnimatePresence, useInView } from "motion/react";
 import { createTripSchema } from "@skerp/validators";
 import type { CreateTripFormInput, CreateTripBody, Trip } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -43,6 +43,8 @@ import {
 } from "@/components/lookups";
 import { paiseToRupees } from "@/lib/money";
 import { tripApi, tripLookups, tripLookupKeys } from "./trip.service";
+import { tripKeys } from "./trip.keys";
+import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 
 type Props = {
   mode: "create" | "edit";
@@ -51,8 +53,18 @@ type Props = {
 
 export default function TripForm({ mode, trip }: Props) {
   const router = useRouter();
-  const [discardOpen, setDiscardOpen] = React.useState(false);
-  const [submitting, setSubmitting] = React.useState(false);
+  const queryClient = useQueryClient();
+  const { setLabel } = useBreadcrumbLabels();
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const actionButtonsRef = useRef<HTMLDivElement>(null);
+  const [actionButtonsHaveBeenSeen, setActionButtonsHaveBeenSeen] =
+    useState(false);
+
+  const actionButtonsVisible = useInView(actionButtonsRef, {
+    margin: "0px",
+  });
 
   const isJourneyLegEdit = mode === "edit" && Boolean(trip?.journeyId);
 
@@ -66,7 +78,7 @@ export default function TripForm({ mode, trip }: Props) {
   });
 
   const form = useForm<CreateTripFormInput, unknown, CreateTripBody>({
-    resolver: zodResolver(createTripSchema),
+    resolver: zodResolver(createTripSchema, undefined, { raw: true }),
     defaultValues: trip
       ? {
           vehicleId: trip.vehicleId,
@@ -74,7 +86,7 @@ export default function TripForm({ mode, trip }: Props) {
           routeId: trip.routeId,
           tripType: trip.tripType,
           consignorId: trip.consignorId ?? undefined,
-          // Stored as paise; the form edits rupees.
+
           onwardFreight: trip.onwardFreight
             ? paiseToRupees(Number(trip.onwardFreight))
             : undefined,
@@ -98,26 +110,39 @@ export default function TripForm({ mode, trip }: Props) {
   /* Journey context — every trip attaches to its vehicle's journey */
   /* -------------------------------------------------------------- */
 
-  // Only the create flow previews the attach; editing a leg keeps its slot.
   const journeyInfo = useQuery({
     queryKey: tripLookupKeys.activeJourney(vehicleId ?? ""),
     queryFn: () => tripApi.activeJourney(vehicleId!),
     enabled: mode === "create" && Boolean(vehicleId),
     staleTime: 15_000,
   });
+
   const info = mode === "create" ? journeyInfo.data : undefined;
   const journey = info?.journey ?? null;
   const lastLeg = journey?.lastLeg ?? null;
 
+  useEffect(() => {
+    if (mode === "create") {
+      setLabel("/trips/new", "New Trip");
+      return () => setLabel("/trips/new", null);
+    }
+
+    if (trip?.id) {
+      const href = `/trips/${encodeURIComponent(trip.id)}/edit`;
+      setLabel(href, "edit");
+      return () => setLabel(href, null);
+    }
+  }, [mode, setLabel, trip?.id]);
+
   // The journey's driver stays for the whole cycle — lock the field.
-  React.useEffect(() => {
+  useEffect(() => {
     if (journey?.driverId) {
       form.setValue("driverId", journey.driverId, { shouldValidate: true });
     }
   }, [journey?.driverId, form]);
 
   // Suggest the continuous opening KM (previous closing + 1) when empty.
-  React.useEffect(() => {
+  useEffect(() => {
     if (
       journey &&
       lastLeg?.closingKm != null &&
@@ -128,7 +153,7 @@ export default function TripForm({ mode, trip }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journey?.id, lastLeg?.closingKm]);
 
-  const selectedRoute = React.useMemo(
+  const selectedRoute = useMemo(
     () => (routes.data ?? []).find((r) => r.value === routeId) ?? null,
     [routes.data, routeId],
   );
@@ -136,7 +161,7 @@ export default function TripForm({ mode, trip }: Props) {
   const openingKm = Number(openingKmRaw);
 
   // Mirror the server's chain rules so breaks surface before submit.
-  const chainWarnings = React.useMemo(() => {
+  const chainWarnings = useMemo(() => {
     if (mode !== "create" || !info) return [];
     const warnings: string[] = [];
     if (journey) {
@@ -156,7 +181,7 @@ export default function TripForm({ mode, trip }: Props) {
         openingKm !== lastLeg.closingKm + 1
       ) {
         warnings.push(
-          `Opening KM breaks continuity — expected ${lastLeg.closingKm + 1} (previous closing KM + 1).`,
+          `Opening KM breaks continuity : expected ${lastLeg.closingKm + 1} (previous closing KM + 1).`,
         );
       }
     } else if (
@@ -176,8 +201,8 @@ export default function TripForm({ mode, trip }: Props) {
 
   const isReturnLeg = Boolean(
     journey &&
-      selectedRoute?.destinationCityId &&
-      selectedRoute.destinationCityId === journey.returnCityId,
+    selectedRoute?.destinationCityId &&
+    selectedRoute.destinationCityId === journey.returnCityId,
   );
 
   const onSubmit = async (values: CreateTripBody) => {
@@ -185,6 +210,7 @@ export default function TripForm({ mode, trip }: Props) {
     try {
       if (mode === "edit" && trip) {
         await tripApi.update(trip.id, { ...values, version: trip.version });
+        await queryClient.invalidateQueries({ queryKey: tripKeys.all });
         toast.success("Trip updated");
         router.push(`/trips/${trip.id}`);
       } else {
@@ -204,33 +230,118 @@ export default function TripForm({ mode, trip }: Props) {
     else router.push("/trips");
   };
 
+  useEffect(() => {
+    if (actionButtonsVisible) {
+      setActionButtonsHaveBeenSeen(true);
+    }
+  }, [actionButtonsVisible]);
+
+  const showStickyActions = actionButtonsHaveBeenSeen && !actionButtonsVisible;
+
+  const renderActionButtons = () => (
+    <>
+      <Button type="button" variant="outline" onClick={handleCancel}>
+        Cancel
+      </Button>
+      <Button type="submit" disabled={submitting || prevLegOpen}>
+        {submitting ? "Saving..." : "Save Trip"}
+      </Button>
+    </>
+  );
+
   return (
     <FormProvider {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="mx-auto max-w-4xl space-y-5 p-4 md:p-6"
+        className="mx-auto  max-w-4xl space-y-5 p-4 pb-8 md:p-6 md:pb-10"
       >
         <div className="rounded-lg border bg-background p-4 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
+          <div>
+            <div className="flex  items-center justify-between">
               <h1 className="text-lg font-semibold tracking-tight">
                 {mode === "edit"
                   ? `Edit Trip ${trip?.tripNumber}`
                   : "Create New Trip"}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
-                {mode === "edit"
-                  ? "Update trip details and save changes."
-                  : "Every trip joins its vehicle's journey — as the next leg, or by opening a new journey from head office."}
+                {mode === "edit" && "Update trip details and save changes."}
               </p>
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting || prevLegOpen}>
-                {submitting ? "Saving…" : "Save Trip"}
-              </Button>
+              {mode === "create" && vehicleId ? (
+                <div className="col-span-full">
+                  {journeyInfo.isLoading ? (
+                    <div className="rounded-md border p-3">
+                      <Skeleton className="h-4 w-64" />
+                      <Skeleton className="mt-2 h-3 w-40" />
+                    </div>
+                  ) : journey ? (
+                    <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <IconRoute size={15} className="text-primary" />
+                        <span className="text-sm font-medium">
+                          Journey {journey.journeyNumber}
+                        </span>
+                        <IconArrowRight
+                          size={13}
+                          className="text-muted-foreground"
+                        />
+                        <span className="text-sm">
+                          this trip becomes{" "}
+                          <span className="font-semibold">
+                            leg {(lastLeg?.sequenceNo ?? 0) + 1}
+                          </span>
+                          {isReturnLeg ? " — the return to base" : ""}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        {lastLeg ? (
+                          <span className="inline-flex items-center gap-1">
+                            <IconMapPin size={12} />
+                            Truck at {lastLeg.toCityName ?? "?"}
+                            {lastLeg.closingKm != null
+                              ? ` · closing KM ${lastLeg.closingKm.toLocaleString("en-IN")}`
+                              : ""}
+                          </span>
+                        ) : null}
+                        <span className="inline-flex items-center gap-1">
+                          <IconHome size={12} />
+                          Returns at {journey.returnCityName ?? "?"}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <IconLock size={12} />
+                          Driver locked to{" "}
+                          {journey.driverName ?? "journey driver"}
+                        </span>
+                      </div>
+                      {prevLegOpen ? (
+                        <p className="mt-2 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1.5 text-xs font-medium text-destructive">
+                          <IconAlertTriangle
+                            size={14}
+                            className="mt-0.5 shrink-0"
+                          />
+                          Leg {lastLeg?.sequenceNo} is still{" "}
+                          {lastLeg?.status === "InTransit"
+                            ? "in transit"
+                            : "planned"}{" "}
+                          — close it before adding the next leg.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : info ? (
+                    <div className=" ">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <IconHome size={18} className="text-primary" />
+                        <span className="text-base font-medium">
+                          New Journey
+                        </span>
+                        {/* <span className="text-sm text-muted-foreground">
+                          — opens automatically with this trip as leg 1, based
+                          at {info.headOffice.cityName} (head office)
+                        </span> */}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -257,83 +368,14 @@ export default function TripForm({ mode, trip }: Props) {
             />
 
             {/* Journey context — appears once a vehicle is picked */}
-            {mode === "create" && vehicleId ? (
-              <div className="col-span-full">
-                {journeyInfo.isLoading ? (
-                  <div className="rounded-md border p-3">
-                    <Skeleton className="h-4 w-64" />
-                    <Skeleton className="mt-2 h-3 w-40" />
-                  </div>
-                ) : journey ? (
-                  <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <IconRoute size={15} className="text-primary" />
-                      <span className="text-sm font-medium">
-                        Journey {journey.journeyNumber}
-                      </span>
-                      <IconArrowRight
-                        size={13}
-                        className="text-muted-foreground"
-                      />
-                      <span className="text-sm">
-                        this trip becomes{" "}
-                        <span className="font-semibold">
-                          leg {(lastLeg?.sequenceNo ?? 0) + 1}
-                        </span>
-                        {isReturnLeg ? " — the return to base" : ""}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      {lastLeg ? (
-                        <span className="inline-flex items-center gap-1">
-                          <IconMapPin size={12} />
-                          Truck at {lastLeg.toCityName ?? "?"}
-                          {lastLeg.closingKm != null
-                            ? ` · closing KM ${lastLeg.closingKm.toLocaleString("en-IN")}`
-                            : ""}
-                        </span>
-                      ) : null}
-                      <span className="inline-flex items-center gap-1">
-                        <IconHome size={12} />
-                        Returns at {journey.returnCityName ?? "?"}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <IconLock size={12} />
-                        Driver locked to {journey.driverName ?? "journey driver"}
-                      </span>
-                    </div>
-                    {prevLegOpen ? (
-                      <p className="mt-2 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1.5 text-xs font-medium text-destructive">
-                        <IconAlertTriangle size={14} className="mt-0.5 shrink-0" />
-                        Leg {lastLeg?.sequenceNo} is still{" "}
-                        {lastLeg?.status === "InTransit"
-                          ? "in transit"
-                          : "planned"}{" "}
-                        — close it before adding the next leg.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : info ? (
-                  <div className="rounded-md border p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <IconHome size={15} className="text-primary" />
-                      <span className="text-sm font-medium">New journey</span>
-                      <span className="text-sm text-muted-foreground">
-                        — opens automatically with this trip as leg 1, based at{" "}
-                        {info.headOffice.cityName} (head office)
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
 
             {isJourneyLegEdit && trip?.journey ? (
               <div className="col-span-full rounded-md border border-primary/30 bg-primary/5 p-3">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <IconRoute size={15} className="text-primary" />
                   <span className="font-medium">
-                    Leg {trip.sequenceNo} of journey {trip.journey.journeyNumber}
+                    Leg {trip.sequenceNo} of journey{" "}
+                    {trip.journey.journeyNumber}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     Vehicle and driver stay with the journey — cancel the trip
@@ -493,6 +535,29 @@ export default function TripForm({ mode, trip }: Props) {
             ) : null}
           </FormSection>
         </div>
+
+        <div
+          ref={actionButtonsRef}
+          className="flex justify-end gap-2 rounded-lg border bg-background p-4 shadow-sm"
+        >
+          {renderActionButtons()}
+        </div>
+
+        <AnimatePresence>
+          {showStickyActions ? (
+            <motion.div
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="fixed inset-x-0 bottom-0 z-1 border-t bg-background/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            >
+              <div className="mx-auto flex max-w-4xl justify-end gap-2">
+                {renderActionButtons()}
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </form>
 
       <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>

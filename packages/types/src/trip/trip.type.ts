@@ -11,9 +11,12 @@ import {
 export type TripType = z.infer<typeof tripTypeSchema>;
 export type TripStatus = z.infer<typeof tripStatusSchema>;
 
-export type CreateTripBody = z.output<typeof createTripSchema>;
+// Both typed as z.input: with the form's `raw: true` resolver, the values
+// reaching onSubmit are the untransformed (rupees) shape, not paise — the
+// server is the sole rupees -> paise boundary. See TripForm.tsx.
+export type CreateTripBody = z.input<typeof createTripSchema>;
 export type CreateTripFormInput = z.input<typeof createTripSchema>;
-export type UpdateTripBody = z.output<typeof updateTripSchema>;
+export type UpdateTripBody = z.input<typeof updateTripSchema>;
 export type CloseTripBody = z.output<typeof closeTripSchema>;
 export type CancelTripBody = z.output<typeof cancelTripSchema>;
 
