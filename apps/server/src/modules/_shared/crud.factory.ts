@@ -1,4 +1,4 @@
-import { Router , type Request } from "express";
+import { Router, type Request } from "express";
 import { ZodType, ZodTypeDef } from "zod";
 import { PermissionAction } from "@skerp/types";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
@@ -70,6 +70,8 @@ type CrudOptions<Create, Update> = {
     defaultOrderBy?: object;
     softDelete?: boolean;
     defaultSelect?: Record<string, unknown>;
+    lookupSelect?: Record<string, unknown>;
+    lookupOrderBy?: object;
     extraWhere?: (req: Request) => Record<string, unknown>;
     mapRows?: (rows: unknown[], req: Request) => Promise<unknown[]> | unknown[];
     blockDeleteIfExists?: {
@@ -178,11 +180,17 @@ export function createCrudRouter<Create, Update>({
   hooks,
 }: CrudOptions<Create, Update>) {
   const router = Router();
+
   const defaultQueryArgs = listOptions?.defaultSelect
-  ? { select: listOptions.defaultSelect }
-  : listOptions?.defaultInclude
-    ? { include: listOptions.defaultInclude }
-    : {};
+    ? { select: listOptions.defaultSelect }
+    : listOptions?.defaultInclude
+      ? { include: listOptions.defaultInclude }
+      : {};
+
+  const lookupQueryArgs = listOptions?.lookupSelect
+    ? { select: listOptions.lookupSelect }
+    : defaultQueryArgs;
+
   router.use(authMiddleware);
 
   router.get(
@@ -191,18 +199,18 @@ export function createCrudRouter<Create, Update>({
     async (req, res) => {
       const query = parseListQuery(req);
       const baseWhere = buildWhere(
-  query.search,
-  listOptions?.searchableFields,
-  query.filter,
-  listOptions?.softDelete,
-);
+        query.search,
+        listOptions?.searchableFields,
+        query.filter,
+        listOptions?.softDelete,
+      );
 
-const extraWhere = listOptions?.extraWhere?.(req) ?? {};
+      const extraWhere = listOptions?.extraWhere?.(req) ?? {};
 
-const where = {
-  ...baseWhere,
-  ...extraWhere,
-};
+      const where = {
+        ...baseWhere,
+        ...extraWhere,
+      };
 
       const [rawData, total] = await Promise.all([
         model.findMany({
@@ -233,19 +241,19 @@ const where = {
     requirePermission(permissionKey, actionPermission("view")),
     async (req, res) => {
       const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-     const baseWhere = buildWhere(
-  q,
-  listOptions?.searchableFields,
-  {},
-  listOptions?.softDelete,
-);
+      const baseWhere = buildWhere(
+        q,
+        listOptions?.searchableFields,
+        {},
+        listOptions?.softDelete,
+      );
 
-const extraWhere = listOptions?.extraWhere?.(req) ?? {};
+      const extraWhere = listOptions?.extraWhere?.(req) ?? {};
 
-const where = {
-  ...baseWhere,
-  ...extraWhere,
-};
+      const where = {
+        ...baseWhere,
+        ...extraWhere,
+      };
 
       const rawData = await model.findMany({
         where,
@@ -262,23 +270,55 @@ const where = {
   );
 
   router.get(
+    "/lookup",
+    requirePermission(permissionKey, actionPermission("view")),
+    async (req, res) => {
+      const query = parseListQuery(req);
+      const q = query.search;
+      const baseWhere = buildWhere(
+        q,
+        listOptions?.searchableFields,
+        query.filter,
+        listOptions?.softDelete,
+      );
+
+      const extraWhere = listOptions?.extraWhere?.(req) ?? {};
+      const where = {
+        ...baseWhere,
+        ...extraWhere,
+      };
+
+      const take = typeof req.query.size === "undefined" ? 20 : query.size;
+
+      const data = await model.findMany({
+        where,
+        take,
+        ...lookupQueryArgs,
+        orderBy: listOptions?.lookupOrderBy ?? listOptions?.defaultOrderBy,
+      });
+
+      return sendOk(res, data);
+    },
+  );
+
+  router.get(
     "/export",
     requirePermission(permissionKey, actionPermission("view")),
     async (req, res) => {
       const query = parseListQuery(req);
       const baseWhere = buildWhere(
-  query.search,
-  listOptions?.searchableFields,
-  query.filter,
-  listOptions?.softDelete,
-);
+        query.search,
+        listOptions?.searchableFields,
+        query.filter,
+        listOptions?.softDelete,
+      );
 
-const extraWhere = listOptions?.extraWhere?.(req) ?? {};
+      const extraWhere = listOptions?.extraWhere?.(req) ?? {};
 
-const where = {
-  ...baseWhere,
-  ...extraWhere,
-};
+      const where = {
+        ...baseWhere,
+        ...extraWhere,
+      };
       const rawData = await model.findMany({
         where,
         ...defaultQueryArgs,
@@ -326,61 +366,61 @@ const where = {
         ? await hooks.beforeCreate(parsed.data)
         : parsed.data;
 
- try {
-  const row = await model.create({ data });
+      try {
+        const row = await model.create({ data });
 
-  return sendOk(res, row, undefined, 201);
-} catch (error) {
-  const message = getUniqueConstraintMessage(error, uniqueErrorMessages);
+        return sendOk(res, row, undefined, 201);
+      } catch (error) {
+        const message = getUniqueConstraintMessage(error, uniqueErrorMessages);
 
-  if (message) {
-    throw new BadRequestError(message);
-  }
+        if (message) {
+          throw new BadRequestError(message);
+        }
 
-  throw error;
-}
+        throw error;
+      }
     },
   );
 
- router.patch(
-  "/:id",
-  requirePermission(permissionKey, actionPermission("update")),
-  async (req, res) => {
-    const id = getParamId(req);
-    const existing = await model.findUnique({ where: { id } });
+  router.patch(
+    "/:id",
+    requirePermission(permissionKey, actionPermission("update")),
+    async (req, res) => {
+      const id = getParamId(req);
+      const existing = await model.findUnique({ where: { id } });
 
-    if (!existing) {
-      throw new NotFoundError("Resource not found");
-    }
-
-    const parsed = updateSchema.safeParse(req.body);
-
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
-
-    const data = hooks?.beforeUpdate
-      ? await hooks.beforeUpdate(parsed.data, existing)
-      : parsed.data;
-
-    try {
-      const row = await model.update({
-        where: { id },
-        data,
-      });
-
-      return sendOk(res, row);
-    } catch (error) {
-      const message = getUniqueConstraintMessage(error, uniqueErrorMessages);
-
-      if (message) {
-        throw new BadRequestError(message);
+      if (!existing) {
+        throw new NotFoundError("Resource not found");
       }
 
-      throw error;
-    }
-  },
-);
+      const parsed = updateSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.flatten().fieldErrors);
+      }
+
+      const data = hooks?.beforeUpdate
+        ? await hooks.beforeUpdate(parsed.data, existing)
+        : parsed.data;
+
+      try {
+        const row = await model.update({
+          where: { id },
+          data,
+        });
+
+        return sendOk(res, row);
+      } catch (error) {
+        const message = getUniqueConstraintMessage(error, uniqueErrorMessages);
+
+        if (message) {
+          throw new BadRequestError(message);
+        }
+
+        throw error;
+      }
+    },
+  );
   router.delete(
     "/:id",
     requirePermission(permissionKey, actionPermission("delete")),

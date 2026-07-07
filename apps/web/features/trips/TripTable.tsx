@@ -45,6 +45,7 @@ import {
   IconTrash,
   IconPlus,
   IconDownload,
+  IconPlayerPlay,
 } from "@tabler/icons-react";
 
 import { formatPaise } from "@/lib/money";
@@ -52,16 +53,21 @@ import {
   TripStatusBadge,
   TRIP_STATUS_ORDER,
   TRIP_TYPE_LABELS,
+  tripAttachesLR,
+  tripDispatchesDirect,
 } from "./trip-ui";
 
 export type TripRowActions = {
   /** Planned trip — routes to the Instant LR form to start (attach) the trip. */
   onStart: (trip: Trip) => void;
+  /** Planned empty/DC leg — dispatches without an LR. */
+  onDispatch: (trip: Trip) => void;
   /** InTransit trip — opens the closing-KM dialog. */
   onClose: (trip: Trip) => void;
   onCancel: (trip: Trip) => void;
   onDelete: (trip: Trip) => void;
   canStart: boolean;
+  canDispatch: boolean;
   canClose: boolean;
   canUpdate: boolean;
   canCancel: boolean;
@@ -105,10 +111,12 @@ export default function TripTable(props: Props) {
     counts,
     isLoading,
     onStart,
+    onDispatch,
     onClose,
     onCancel,
     onDelete,
     canStart,
+    canDispatch,
     canClose,
     canUpdate,
     canCancel,
@@ -153,6 +161,28 @@ export default function TripTable(props: Props) {
             </span>
           </Link>
         ),
+      },
+      {
+        header: "Journey",
+        cell: ({ row }) => {
+          const j = row.original.journey;
+          if (!j) return <span className="text-muted-foreground">—</span>;
+          return (
+            <Link
+              href={`/vehicle-journeys/${j.id}`}
+              className="block"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="block text-primary hover:underline">
+                {j.journeyNumber}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Leg {row.original.sequenceNo ?? "?"}
+                {row.original.isReturnLeg ? " · return" : ""}
+              </span>
+            </Link>
+          );
+        },
       },
       {
         header: "Vehicle",
@@ -252,7 +282,7 @@ export default function TripTable(props: Props) {
                     {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
                 ))}
-                <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
+                <TableHead className="h-10 w-24 text-right text-xs font-semibold uppercase text-muted-foreground">
                   Actions
                 </TableHead>
               </TableRow>
@@ -267,7 +297,7 @@ export default function TripTable(props: Props) {
                       <Skeleton className="h-4 w-24" />
                     </TableCell>
                   ))}
-                  <TableCell className="w-16">
+                  <TableCell className="w-24">
                     <Skeleton className="ml-auto size-7 rounded-md" />
                   </TableCell>
                 </TableRow>
@@ -289,16 +319,23 @@ export default function TripTable(props: Props) {
             ) : (
               table.getRowModel().rows.map((row) => {
                 const t = row.original;
-                const startable = t.status === "Planned";
+                // LR trips carrying goods dispatch by attaching an LR; DC and
+                // empty legs have no LR to attach and dispatch directly.
+                const attachableLR = tripAttachesLR(t);
+                const dispatchableDirect = tripDispatchesDirect(t);
                 const closeable = t.status === "InTransit";
                 const editable = t.status === "Planned";
-                const deletable = DELETE_ALLOWED_STATUSES.includes(
-                  t.status as (typeof DELETE_ALLOWED_STATUSES)[number],
-                );
+                // Journey legs keep their chain slot — cancel, never delete.
+                const deletable =
+                  !t.journeyId &&
+                  DELETE_ALLOWED_STATUSES.includes(
+                    t.status as (typeof DELETE_ALLOWED_STATUSES)[number],
+                  );
                 const cancellable =
                   t.status === "Planned" || t.status === "InTransit";
                 const hasRowAction =
-                  (canStart && startable) ||
+                  (canStart && attachableLR) ||
+                  (canDispatch && dispatchableDirect) ||
                   (canClose && closeable) ||
                   (canUpdate && editable) ||
                   canDownloadPdf ||
@@ -337,11 +374,23 @@ export default function TripTable(props: Props) {
                               <IconDotsVertical size={16} />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canStart && startable ? (
-                              <DropdownMenuItem onClick={() => onStart(t)}>
+                          <DropdownMenuContent align="end" className="w-56">
+                            {canStart && attachableLR ? (
+                              <DropdownMenuItem
+                                onClick={() => onStart(t)}
+                                className="text-primary focus:text-primary [&_svg]:text-primary"
+                              >
                                 <IconTruckDelivery size={16} className="mr-2" />{" "}
-                                Start trip
+                                Start trip (attach LR)
+                              </DropdownMenuItem>
+                            ) : null}
+                            {canDispatch && dispatchableDirect ? (
+                              <DropdownMenuItem
+                                onClick={() => onDispatch(t)}
+                                className="text-green-600 focus:text-green-700 [&_svg]:text-green-600"
+                              >
+                                <IconPlayerPlay size={16} className="mr-2" />{" "}
+                                Dispatch (no LR)
                               </DropdownMenuItem>
                             ) : null}
                             {canClose && closeable ? (

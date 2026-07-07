@@ -87,7 +87,8 @@ model User {
   createdTripExpenses         TripExpense[]                  @relation("CreatedTripExpenses")
   createdDriverAdvances       DriverAdvance[]                @relation("CreatedDriverAdvances")
   generatedLogSlips           LogSlip[]                      @relation("GeneratedLogSlips")
-  supervisedGRNs              GRN[]                          @relation("GRNUnloadingSupervisor")
+
+  supervisedGRNs GRN[] @relation("GRNUnloadingSupervisor")
 }
 
 model Company {
@@ -138,6 +139,7 @@ model Branch {
   warehouses Warehouse[] @relation("BranchWarehouses")
   agreements Agreement[] @relation("BranchAgreement")
   workers    Labour[]    @relation("WorkerBranch")
+
   homeJourneys VehicleJourney[] @relation("JourneyHomeBranch")
 
   users             User[]
@@ -405,11 +407,13 @@ model Vehicle {
   openingKM          Int
   status             VehicleStatus @default(AVAILABLE)
   vehicleTypeId      String
-  vehicleTypeRef     VehicleType     @relation(fields: [vehicleTypeId], references: [id])
-  VehicleTrip        VehicleTrip[]
-  journeys           VehicleJourney[]
-  driverAdvances     DriverAdvance[]
-  logSlips           LogSlip[]
+
+  vehicleTypeRef VehicleType @relation(fields: [vehicleTypeId], references: [id])
+
+  VehicleTrip    VehicleTrip[]
+  journeys       VehicleJourney[]
+  driverAdvances DriverAdvance[]
+  logSlips       LogSlip[]
 }
 
 model Customer {
@@ -520,7 +524,7 @@ model RateMatrix {
 }
 
 model Driver {
-  id                     String        @id @default(cuid())
+  id                     String           @id @default(cuid())
   name                   String
   photoPath              String?
   type                   String
@@ -550,11 +554,11 @@ model Driver {
   aadharCardNo           String?
   noTDSApplyAmount       Int?
   tdsRate                Int?
-  onLeave                Boolean       @default(false)
-  blackListed            Boolean       @default(false)
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
-  status                 DriverStatus  @default(AVAILABLE)
+  onLeave                Boolean          @default(false)
+  blackListed            Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  status                 DriverStatus     @default(AVAILABLE)
   VehicleTrip            VehicleTrip[]
   journeys               VehicleJourney[]
   advances               DriverAdvance[]
@@ -580,29 +584,29 @@ model Goods {
 }
 
 model Labour {
-  id                      String      @id @default(cuid())
-  name                    String
-  photoPath               String?
-  address                 String?
-  contactName             String?
-  contactPhone            String?
-  mobileNo                String?
-  referredBy              String?
-  refContactNo            String?
-  startDate               DateTime?
-  pan                     String?
-  tdsAmount               BigInt?
-  tdsRate                 BigInt?
-  type                    WorkerType
-  branchId                String
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
-  cityId                  String
-  branch                  Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
-  city                    City        @relation(fields: [cityId], references: [id])
-  grnLabours              GRN[]       @relation("GRNLabour")
-  vpLoadingLabours        VPLoading[] @relation("VPLoadingLabour")
-  vpLoadingSupervisors    VPLoading[] @relation("VPLoadingSupervisor")
+  id                   String      @id @default(cuid())
+  name                 String
+  photoPath            String?
+  address              String?
+  contactName          String?
+  contactPhone         String?
+  mobileNo             String?
+  referredBy           String?
+  refContactNo         String?
+  startDate            DateTime?
+  pan                  String?
+  tdsAmount            BigInt?
+  tdsRate              BigInt?
+  type                 WorkerType
+  branchId             String
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  cityId               String
+  branch               Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                 City        @relation(fields: [cityId], references: [id])
+  grnLabours           GRN[]       @relation("GRNLabour")
+  vpLoadingLabours     VPLoading[] @relation("VPLoadingLabour")
+  vpLoadingSupervisors VPLoading[] @relation("VPLoadingSupervisor")
 }
 
 model City {
@@ -750,9 +754,11 @@ model Pump {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   stateId           String
-  city              City      @relation("PumpCity", fields: [cityId], references: [id])
-  state             State     @relation(fields: [stateId], references: [id])
-  tripExpenses      TripExpense[]
+
+  city  City  @relation("PumpCity", fields: [cityId], references: [id])
+  state State @relation(fields: [stateId], references: [id])
+
+  tripExpenses TripExpense[]
 }
 
 model SpareCategory {
@@ -967,56 +973,56 @@ model DocumentSequence {
 }
 
 model LRGroup {
-  id                  String          @id @default(cuid())
-  groupNumber         String          @unique
-  fyCode              String
-  source              LRSource
-  orderId             String?
-  truckIndex          Int             @default(1)
-  originBranchId      String
-  destinationBranchId String
-  consignorId         String
-  consigneeId         String
-  transportType       LRTransportType @default(Road)
-  priority            LRPriority      @default(Normal)
-  isMarketVehicle     Boolean         @default(false)
-  primaryTripId       String?
-  secondaryTripId     String?
-  marketVehicleNumber String?
-  marketDriverName    String?
+  id                     String          @id @default(cuid())
+  groupNumber            String          @unique
+  fyCode                 String
+  source                 LRSource
+  orderId                String?
+  truckIndex             Int             @default(1)
+  originBranchId         String
+  destinationBranchId    String
+  consignorId            String
+  consigneeId            String
+  transportType          LRTransportType @default(Road)
+  priority               LRPriority      @default(Normal)
+  isMarketVehicle        Boolean         @default(false)
+  primaryTripId          String?
+  secondaryTripId        String?
+  marketVehicleNumber    String?
+  marketDriverName       String?
   marketFreightAmount    BigInt?
   marketAdvanceAmount    BigInt?
   marketCommissionAmount BigInt?
   marketHamaliAmount     BigInt?
   marketTdsAmount        BigInt?
-  tripLegType         LRTripLegType   @default(DIRECT)
-  hubId               String?
-  railheadBranchId    String?
-  baseFreightAmount   BigInt?
-  sealNumber          String?
-  status              LRGroupStatus   @default(DRAFT)
-  cancelReason        String?
-  finalisedAt         DateTime?
-  finalisedById       String?
-  createdById         String
-  updatedById         String?
-  version             Int             @default(1)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  deletedAt           DateTime?
-  consignee           Customer        @relation("GroupConsignee", fields: [consigneeId], references: [id])
-  consignor           Customer        @relation("GroupConsignor", fields: [consignorId], references: [id])
-  createdBy           User            @relation("CreatedLRGroup", fields: [createdById], references: [id])
-  destinationBranch   Branch          @relation("GroupDestination", fields: [destinationBranchId], references: [id])
-  finalisedBy         User?           @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
-  hub                 Branch?         @relation("GroupHub", fields: [hubId], references: [id])
-  order               Order?          @relation(fields: [orderId], references: [id])
-  originBranch        Branch          @relation("GroupOrigin", fields: [originBranchId], references: [id])
-  primaryTrip         VehicleTrip?    @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
-  railheadBranch      Branch?         @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
-  secondaryTrip       VehicleTrip?    @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
-  updatedBy           User?           @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
-  lorryReceipts       LorryReceipt[]
+  tripLegType            LRTripLegType   @default(DIRECT)
+  hubId                  String?
+  railheadBranchId       String?
+  baseFreightAmount      BigInt?
+  sealNumber             String?
+  status                 LRGroupStatus   @default(DRAFT)
+  cancelReason           String?
+  finalisedAt            DateTime?
+  finalisedById          String?
+  createdById            String
+  updatedById            String?
+  version                Int             @default(1)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  deletedAt              DateTime?
+  consignee              Customer        @relation("GroupConsignee", fields: [consigneeId], references: [id])
+  consignor              Customer        @relation("GroupConsignor", fields: [consignorId], references: [id])
+  createdBy              User            @relation("CreatedLRGroup", fields: [createdById], references: [id])
+  destinationBranch      Branch          @relation("GroupDestination", fields: [destinationBranchId], references: [id])
+  finalisedBy            User?           @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
+  hub                    Branch?         @relation("GroupHub", fields: [hubId], references: [id])
+  order                  Order?          @relation(fields: [orderId], references: [id])
+  originBranch           Branch          @relation("GroupOrigin", fields: [originBranchId], references: [id])
+  primaryTrip            VehicleTrip?    @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
+  railheadBranch         Branch?         @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
+  secondaryTrip          VehicleTrip?    @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
+  updatedBy              User?           @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
+  lorryReceipts          LorryReceipt[]
 
   @@index([status])
   @@index([orderId])
@@ -1092,60 +1098,60 @@ model EwayBill {
 }
 
 model VehicleTrip {
-  vehicleId          String
-  isTripEmpty        Boolean              @default(false)
-  driverId           String
-  rateMatrixId       String?
-  routeId            String
-  status             TripStatus           @default(Planned)
-  cancelReason       String?
-  onwardFreight      BigInt
-  tripType           TripType
-  closingKm          Int?
-  createdAt          DateTime             @default(now())
-  createdById        String
-  deletedAt          DateTime?
-  endDateTime        DateTime?
-  fyCode             String
-  id                 String               @id @default(cuid())
-  openingKm          Int
-  rakeDate           DateTime?
-  startDateTime      DateTime?
-  tripNumber         String               @unique
-  updatedAt          DateTime             @updatedAt
-  updatedById        String?
-  version            Int                  @default(1)
-  consignorId        String?
-  tripName           String
+  vehicleId            String
+  isTripEmpty          Boolean              @default(false)
+  driverId             String
+  rateMatrixId         String?
+  routeId              String
+  status               TripStatus           @default(Planned)
+  cancelReason         String?
+  onwardFreight        BigInt
+  tripType             TripType
+  closingKm            Int?
+  createdAt            DateTime             @default(now())
+  createdById          String
+  deletedAt            DateTime?
+  endDateTime          DateTime?
+  fyCode               String
+  id                   String               @id @default(cuid())
+  openingKm            Int
+  rakeDate             DateTime?
+  startDateTime        DateTime?
+  tripNumber           String               @unique
+  updatedAt            DateTime             @updatedAt
+  updatedById          String?
+  version              Int                  @default(1)
+  consignorId          String?
+  tripName             String
   // --- Journey leg fields (null for standalone trips created before journeys) ---
   journeyId            String?
   sequenceNo           Int?
   legType              TripLegType?
   fromCityId           String?
   toCityId             String?
-  isReturnLeg          Boolean   @default(false)
+  isReturnLeg          Boolean              @default(false)
   arrivalDateTime      DateTime?
   unloadingCompletedAt DateTime?
   closedById           String?
   closeReason          String?
   // Reason recorded when the operator breaks city/KM/time continuity.
   chainExceptionReason String?
-  journey              VehicleJourney? @relation(fields: [journeyId], references: [id])
-  fromCity             City?           @relation("TripFromCity", fields: [fromCityId], references: [id])
-  toCity               City?           @relation("TripToCity", fields: [toCityId], references: [id])
+  journey              VehicleJourney?      @relation(fields: [journeyId], references: [id])
+  fromCity             City?                @relation("TripFromCity", fields: [fromCityId], references: [id])
+  toCity               City?                @relation("TripToCity", fields: [toCityId], references: [id])
   expenses             TripExpense[]
   advances             DriverAdvance[]
-  primaryGroups      LRGroup[]            @relation("GroupPrimaryTrip")
-  secondaryGroups    LRGroup[]            @relation("GroupSecondaryTrip")
-  TripStatusHistory  TripStatusHistory[]
-  TripUnloadingPoint TripUnloadingPoint[]
-  consignor          Customer?            @relation(fields: [consignorId], references: [id])
-  createdBy          User                 @relation("CreatedTrips", fields: [createdById], references: [id])
-  driver             Driver               @relation(fields: [driverId], references: [id])
-  rateMatrix         RateMatrix?          @relation(fields: [rateMatrixId], references: [id])
-  route              Route                @relation(fields: [routeId], references: [id])
-  updatedBy          User?                @relation("UpdatedTrips", fields: [updatedById], references: [id])
-  vehicle            Vehicle              @relation(fields: [vehicleId], references: [id])
+  primaryGroups        LRGroup[]            @relation("GroupPrimaryTrip")
+  secondaryGroups      LRGroup[]            @relation("GroupSecondaryTrip")
+  TripStatusHistory    TripStatusHistory[]
+  TripUnloadingPoint   TripUnloadingPoint[]
+  consignor            Customer?            @relation(fields: [consignorId], references: [id])
+  createdBy            User                 @relation("CreatedTrips", fields: [createdById], references: [id])
+  driver               Driver               @relation(fields: [driverId], references: [id])
+  rateMatrix           RateMatrix?          @relation(fields: [rateMatrixId], references: [id])
+  route                Route                @relation(fields: [routeId], references: [id])
+  updatedBy            User?                @relation("UpdatedTrips", fields: [updatedById], references: [id])
+  vehicle              Vehicle              @relation(fields: [vehicleId], references: [id])
 
   @@unique([journeyId, sequenceNo])
   @@index([status])
@@ -1153,13 +1159,13 @@ model VehicleTrip {
 }
 
 model TripUnloadingPoint {
-  id            String            @id @default(cuid())
-  sequence      Int
-  vehicleTripId String
-  actualDate    DateTime?
-  cityId        String
-  locationId    String?
-  plannedDate   DateTime?
+  id                String            @id @default(cuid())
+  sequence          Int
+  vehicleTripId     String
+  actualDate        DateTime?
+  cityId            String
+  locationId        String?
+  plannedDate       DateTime?
   actualArrivalAt   DateTime?
   actualUnloadingAt DateTime?
   actualDepartureAt DateTime?
@@ -1167,9 +1173,9 @@ model TripUnloadingPoint {
   damageQty         Int?
   shortageQty       Int?
   remarks           String?
-  city          City              @relation(fields: [cityId], references: [id])
-  location      CustomerLocation? @relation(fields: [locationId], references: [id])
-  trip          VehicleTrip       @relation(fields: [vehicleTripId], references: [id], onDelete: Cascade)
+  city              City              @relation(fields: [cityId], references: [id])
+  location          CustomerLocation? @relation(fields: [locationId], references: [id])
+  trip              VehicleTrip       @relation(fields: [vehicleTripId], references: [id], onDelete: Cascade)
 
   @@index([vehicleTripId])
 }
@@ -1464,7 +1470,6 @@ model GRN {
   lorryReceiptId String       @unique
   lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
 
-
   status GRNStatus @default(DRAFT)
 
   gateNo String?
@@ -1498,14 +1503,14 @@ model GRN {
 
   netAmount BigInt @default(0)
 
-  labourId String?
-  labour   Labour? @relation("GRNLabour", fields: [labourId], references: [id])
-  labourName String?
+  labourId     String?
+  labour       Labour? @relation("GRNLabour", fields: [labourId], references: [id])
+  labourName   String?
   labourCharge BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   User? @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
-  damagesBy GRNDamagesBy?
+  unloadingSupervisor   User?         @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+  damagesBy             GRNDamagesBy?
 
   lrCopyChecked      Boolean @default(false)
   invoiceChecked     Boolean @default(false)
@@ -1887,13 +1892,19 @@ enum TripType {
   dc
 }
 
-/* ------------------------------------------------------------------ */
-/* Vehicle journey / log slip (docs/TRIP_JOURNEY_LOGSLIP_PLAN.md)      */
-/* ------------------------------------------------------------------ */
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Vehicle journey / log slip (docs/TRIP_JOURNEY_LOGSLIP_PLAN.md)
+ */
+/**
+ * ------------------------------------------------------------------
+ */
 
 /// Full own-vehicle truck cycle: sequential trip legs starting from a base
 /// city and normally closing when the vehicle returns to `returnCityId`.
-/// Settled by exactly one LogSlip. Return base is configured per journey —
+/// Settled by exactly one LogSlip. Return base is configured per journey -
 /// never hardcoded.
 model VehicleJourney {
   id               String                  @id @default(cuid())
@@ -1944,7 +1955,7 @@ model VehicleJourney {
   @@index([status])
 }
 
-/// A journey/trip expense. Money events — never just a number on the trip.
+/// A journey/trip expense. Money events - never just a number on the trip.
 /// Cash expenses paid from the driver advance settle at log slip time;
 /// credit/card expenses are payables to the pump/vendor ledger.
 model TripExpense {

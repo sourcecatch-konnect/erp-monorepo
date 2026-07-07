@@ -163,7 +163,11 @@ export default function AdvanceDialog({ open, onOpenChange, journey }: Props) {
           >
             Cancel
           </Button>
-          <Button type="submit" form="driver-advance-form" disabled={submitting}>
+          <Button
+            type="submit"
+            form="driver-advance-form"
+            disabled={submitting}
+          >
             {submitting ? "Saving…" : "Record Advance"}
           </Button>
         </DialogFooter>

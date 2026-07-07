@@ -14,18 +14,25 @@ import {
   IconTrash,
   IconCircleCheck,
   IconTruckDelivery,
+  IconPlayerPlay,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
-import { TripStatusBadge, TRIP_TYPE_LABELS } from "./trip-ui";
+import {
+  TripStatusBadge,
+  TRIP_TYPE_LABELS,
+  tripAttachesLR,
+  tripDispatchesDirect,
+} from "./trip-ui";
 import CloseTripDialog from "./CloseTripDialog";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -42,25 +49,44 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 export default function TripDetail({ id }: { id: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { setLabel } = useBreadcrumbLabels();
   const [closeOpen, setCloseOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [dispatchOpen, setDispatchOpen] = React.useState(false);
 
   const canClose = useCan(PERMS.TRIP.CLOSE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
+  const canDispatch = canUpdate;
 
   const trip = useQuery({
     queryKey: tripKeys.detail(id),
     queryFn: () => tripApi.detail(id),
   });
 
+  React.useEffect(() => {
+    const href = `/trips/${encodeURIComponent(id)}`;
+    setLabel(href, trip.data?.tripNumber ?? null);
+    return () => setLabel(href, null);
+  }, [id, setLabel, trip.data?.tripNumber]);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: tripKeys.all });
     queryClient.invalidateQueries({ queryKey: tripKeys.detail(id) });
   };
+
+  const dispatch = useMutation({
+    mutationFn: () => tripApi.dispatch(id),
+    onSuccess: () => {
+      toast.success("Trip dispatched");
+      setDispatchOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
 
   const close = useMutation({
     mutationFn: (closingKm: number) => tripApi.close(id, { closingKm }),
@@ -111,9 +137,12 @@ export default function TripDetail({ id }: { id: string }) {
   }
 
   const t = trip.data;
-  // A Planned trip is "started" by creating its LR — the LR attach flips it to
-  // InTransit on the server. The button just routes to the Instant LR form.
-  const startable = t.status === "Planned";
+  // A Planned LR trip carrying goods is "started" by creating its LR — the LR
+  // attach flips it to InTransit on the server. The button just routes to the
+  // Instant LR form. DC/empty legs have no LR to attach, so they dispatch
+  // directly instead — see tripAttachesLR / tripDispatchesDirect.
+  const attachableLR = tripAttachesLR(t);
+  const dispatchableDirect = tripDispatchesDirect(t);
   const closeable = t.status === "InTransit";
   const editable = t.status === "Planned";
   const deletable = t.status === "Planned" || t.status === "Cancelled";
@@ -153,11 +182,19 @@ export default function TripDetail({ id }: { id: string }) {
               <IconEdit size={16} className="mr-1" /> Edit
             </Button>
           ) : null}
-          {canCreateLR && startable ? (
+          {canCreateLR && attachableLR ? (
             <Button
               onClick={() => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
             >
               <IconTruckDelivery size={16} className="mr-1" /> Start trip
+            </Button>
+          ) : null}
+          {canDispatch && dispatchableDirect ? (
+            <Button
+              className="bg-green-600 text-white hover:bg-green-700"
+              onClick={() => setDispatchOpen(true)}
+            >
+              <IconPlayerPlay size={16} className="mr-1" /> Dispatch
             </Button>
           ) : null}
           {canClose && closeable ? (
@@ -245,6 +282,17 @@ export default function TripDetail({ id }: { id: string }) {
           <p className="text-sm text-muted-foreground">No history yet.</p>
         )}
       </section>
+
+      <ConfirmDialog
+        open={dispatchOpen}
+        onOpenChange={setDispatchOpen}
+        title={`Dispatch trip ${t.tripNumber}`}
+        description="The trip moves to In Transit without an LR — use this for empty or rake (DC) legs. LR trips are dispatched by attaching an LR."
+        confirmLabel="Dispatch"
+        pendingLabel="Dispatching..."
+        isPending={dispatch.isPending}
+        onConfirm={() => dispatch.mutate()}
+      />
 
       <CloseTripDialog
         open={closeOpen}
