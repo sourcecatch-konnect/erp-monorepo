@@ -235,7 +235,6 @@ export default function LRForm({ orderId, tripId }: Props) {
         source === "INSTANT" ? "consigneeId" : "orderId",
       ],
     });
-
   const activeConsignorId =
     source === "INSTANT"
       ? ((watchConsignor as string | undefined) ?? undefined)
