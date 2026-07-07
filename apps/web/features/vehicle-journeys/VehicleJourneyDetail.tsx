@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { JourneyLeg, TripExpense, DriverAdvance } from "@skerp/types";
@@ -46,7 +45,6 @@ import {
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
-import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { formatPaise } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
@@ -59,31 +57,37 @@ import {
   SETTLEMENT_LABELS,
   LEG_TYPE_LABELS,
   formatDateTime,
-  legAttachesLR,
-  legDispatchesDirect,
 } from "./journey-ui";
 import JourneyTimeline from "./JourneyTimeline";
+import AddLegDialog from "./AddLegDialog";
 import CloseLegDialog from "./CloseLegDialog";
 import TripExpenseDrawer from "./TripExpenseDrawer";
 import AdvanceDialog from "./AdvanceDialog";
 
 export default function VehicleJourneyDetail({ id }: { id: string }) {
-  const router = useRouter();
   const queryClient = useQueryClient();
-  const { setLabel } = useBreadcrumbLabels();
 
+  const [addLegOpen, setAddLegOpen] = React.useState(false);
   const [closeLeg, setCloseLeg] = React.useState<JourneyLeg | null>(null);
   const [dispatchLeg, setDispatchLeg] = React.useState<JourneyLeg | null>(null);
   const [expenseOpen, setExpenseOpen] = React.useState(false);
-  const [editExpense, setEditExpense] = React.useState<TripExpense | null>(null);
+  const [editExpense, setEditExpense] = React.useState<TripExpense | null>(
+    null,
+  );
   const [advanceOpen, setAdvanceOpen] = React.useState(false);
   const [markReadyOpen, setMarkReadyOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [forceCloseOpen, setForceCloseOpen] = React.useState(false);
-  const [rejectExpense, setRejectExpense] = React.useState<TripExpense | null>(null);
-  const [reverseExpense, setReverseExpense] = React.useState<TripExpense | null>(null);
-  const [deleteExpense, setDeleteExpense] = React.useState<TripExpense | null>(null);
-  const [reverseAdvance, setReverseAdvance] = React.useState<DriverAdvance | null>(null);
+  const [rejectExpense, setRejectExpense] = React.useState<TripExpense | null>(
+    null,
+  );
+  const [reverseExpense, setReverseExpense] =
+    React.useState<TripExpense | null>(null);
+  const [deleteExpense, setDeleteExpense] = React.useState<TripExpense | null>(
+    null,
+  );
+  const [reverseAdvance, setReverseAdvance] =
+    React.useState<DriverAdvance | null>(null);
 
   const canUpdate = useCan(PERMS.VEHICLE_JOURNEY.UPDATE);
   const canClose = useCan(PERMS.VEHICLE_JOURNEY.CLOSE);
@@ -94,19 +98,12 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
   const canAdvance = useCan(PERMS.TRIP_ADVANCE.CREATE);
   const canReverseAdvance = useCan(PERMS.TRIP_ADVANCE.REVERSE);
   const canViewLogSlip = useCan(PERMS.LOGSLIP.VIEW);
-  const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
 
   const query = useQuery({
     queryKey: journeyKeys.detail(id),
     queryFn: () => journeyApi.detail(id),
   });
   const journey = query.data;
-
-  React.useEffect(() => {
-    const href = `/vehicle-journeys/${encodeURIComponent(id)}`;
-    setLabel(href, journey?.journeyNumber ?? null);
-    return () => setLabel(href, null);
-  }, [id, setLabel, journey?.journeyNumber]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: journeyKeys.all });
@@ -208,10 +205,8 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
   const lastLeg = activeLegs[activeLegs.length - 1] ?? null;
   const totals = journey.totals;
 
-  // The next leg is created from the Trips page ("New Trip" auto-attaches
-  // to this journey) — the journey page only visualises and settles.
-  const nextLegReady =
-    journey.status === "ACTIVE" && lastLeg?.status === "Closed";
+  const canAddLeg =
+    canUpdate && journey.status === "ACTIVE" && lastLeg?.status === "Closed";
   const canMarkReady = canUpdate && journey.status === "RETURNED";
   const moneyEntryAllowed = ["ACTIVE", "RETURNED"].includes(journey.status);
   const showLogSlipLink =
@@ -225,9 +220,7 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-semibold">
-                {journey.journeyNumber}
-              </h1>
+              <h1 className="text-lg font-semibold">{journey.journeyNumber}</h1>
               <JourneyStatusBadge status={journey.status} />
               <span className="text-xs text-muted-foreground">
                 {SETTLEMENT_LABELS[journey.settlementStatus]}
@@ -248,11 +241,9 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {nextLegReady ? (
-              <Button asChild>
-                <Link href="/trips/new">
-                  <IconPlus size={16} className="mr-1" /> New Trip (next leg)
-                </Link>
+            {canAddLeg ? (
+              <Button onClick={() => setAddLegOpen(true)}>
+                <IconPlus size={16} className="mr-1" /> Add Leg
               </Button>
             ) : null}
             {canMarkReady ? (
@@ -262,10 +253,7 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
               </Button>
             ) : null}
             {showLogSlipLink ? (
-              <Button
-                variant={canMarkReady ? "outline" : "default"}
-                asChild
-              >
+              <Button variant={canMarkReady ? "outline" : "default"} asChild>
                 <Link href={`/vehicle-journeys/${journey.id}/log-slip`}>
                   <IconFileInvoice size={16} className="mr-1" /> Log Slip
                 </Link>
@@ -357,39 +345,55 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
-                  {["#", "Route", "Type", "Freight", "KM", "Start", "End", "Status", ""].map(
-                    (h) => (
-                      <TableHead
-                        key={h}
-                        className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
-                      >
-                        {h}
-                      </TableHead>
-                    ),
-                  )}
+                  {[
+                    "#",
+                    "Route",
+                    "Type",
+                    "Freight",
+                    "KM",
+                    "Start",
+                    "End",
+                    "Status",
+                    "",
+                  ].map((h) => (
+                    <TableHead
+                      key={h}
+                      className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
+                    >
+                      {h}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {legs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={9}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
                       No legs yet
                     </TableCell>
                   </TableRow>
                 ) : (
                   legs.map((leg) => (
                     <TableRow key={leg.id} className="hover:bg-muted/30">
-                      <TableCell className="text-sm">{leg.sequenceNo}</TableCell>
+                      <TableCell className="text-sm">
+                        {leg.sequenceNo}
+                      </TableCell>
                       <TableCell className="text-sm">
                         <Link
                           href={`/trips/${leg.id}`}
                           className="font-medium text-primary hover:underline"
                         >
-                          {leg.fromCity?.name ?? "?"} → {leg.toCity?.name ?? "?"}
+                          {leg.fromCity?.name ?? "?"} →{" "}
+                          {leg.toCity?.name ?? "?"}
                         </Link>
                         <span className="block text-xs text-muted-foreground">
                           {leg.tripNumber}
-                          {leg.consignor?.name ? ` · ${leg.consignor.name}` : ""}
+                          {leg.consignor?.name
+                            ? ` · ${leg.consignor.name}`
+                            : ""}
                           {leg.chainExceptionReason ? " · chain exception" : ""}
                         </span>
                       </TableCell>
@@ -414,38 +418,22 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                         <LegStatusBadge status={leg.status} />
                       </TableCell>
                       <TableCell className="text-right">
-                        {journey.status === "ACTIVE" &&
-                        canCreateLR &&
-                        legAttachesLR(leg) ? (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              router.push(
-                                `/lorry-receipts/new?tripId=${leg.id}`,
-                              )
-                            }
-                          >
-                            <IconTruckDelivery size={14} className="mr-1" />
-                            Start trip
-                          </Button>
-                        ) : journey.status === "ACTIVE" &&
-                          canUpdate &&
-                          legDispatchesDirect(leg) ? (
-                          <Button
-                            size="sm"
-                            className="bg-green-600 text-white hover:bg-green-700"
-                            onClick={() => setDispatchLeg(leg)}
-                          >
-                            <IconTruckDelivery size={14} className="mr-1" />
-                            Dispatch
-                          </Button>
-                        ) : journey.status === "ACTIVE" &&
-                          canUpdate &&
-                          leg.status === "InTransit" ? (
-                          <Button size="sm" onClick={() => setCloseLeg(leg)}>
-                            <IconCircleCheck size={14} className="mr-1" />
-                            Close
-                          </Button>
+                        {canUpdate && journey.status === "ACTIVE" ? (
+                          leg.status === "Planned" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setDispatchLeg(leg)}
+                            >
+                              <IconTruckDelivery size={14} className="mr-1" />
+                              Dispatch
+                            </Button>
+                          ) : leg.status === "InTransit" ? (
+                            <Button size="sm" onClick={() => setCloseLeg(leg)}>
+                              <IconCircleCheck size={14} className="mr-1" />
+                              Close
+                            </Button>
+                          ) : null
                         ) : null}
                       </TableCell>
                     </TableRow>
@@ -467,7 +455,16 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
-                  {["Date", "Type", "Leg", "Mode", "Qty", "Amount", "Status", ""].map((h) => (
+                  {[
+                    "Date",
+                    "Type",
+                    "Leg",
+                    "Mode",
+                    "Qty",
+                    "Amount",
+                    "Status",
+                    "",
+                  ].map((h) => (
                     <TableHead
                       key={h}
                       className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
@@ -480,7 +477,10 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
               <TableBody>
                 {(journey.expenses ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={8}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
                       No expenses recorded
                     </TableCell>
                   </TableRow>
@@ -598,22 +598,31 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
-                  {["Paid at", "Mode", "Account", "Narration", "Amount", "Status", ""].map(
-                    (h) => (
-                      <TableHead
-                        key={h}
-                        className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
-                      >
-                        {h}
-                      </TableHead>
-                    ),
-                  )}
+                  {[
+                    "Paid at",
+                    "Mode",
+                    "Account",
+                    "Narration",
+                    "Amount",
+                    "Status",
+                    "",
+                  ].map((h) => (
+                    <TableHead
+                      key={h}
+                      className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
+                    >
+                      {h}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(journey.advances ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={7}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
                       No advances recorded
                     </TableCell>
                   </TableRow>
@@ -665,6 +674,11 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
       </Tabs>
 
       {/* Dialogs */}
+      <AddLegDialog
+        open={addLegOpen}
+        onOpenChange={setAddLegOpen}
+        journey={journey}
+      />
       <CloseLegDialog
         open={Boolean(closeLeg)}
         onOpenChange={(open) => !open && setCloseLeg(null)}
@@ -741,7 +755,11 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
         isPending={expenseAction.isPending}
         onConfirm={(reason) => {
           if (rejectExpense)
-            expenseAction.mutate({ action: "reject", expense: rejectExpense, reason });
+            expenseAction.mutate({
+              action: "reject",
+              expense: rejectExpense,
+              reason,
+            });
         }}
       />
 
@@ -755,7 +773,11 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
         isPending={expenseAction.isPending}
         onConfirm={(reason) => {
           if (reverseExpense)
-            expenseAction.mutate({ action: "reverse", expense: reverseExpense, reason });
+            expenseAction.mutate({
+              action: "reverse",
+              expense: reverseExpense,
+              reason,
+            });
         }}
       />
 

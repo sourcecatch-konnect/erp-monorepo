@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { IconPlus } from "@tabler/icons-react";
-import Link from "next/link";
 
 import { useCan } from "@/features/auth";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
@@ -13,16 +12,18 @@ import type { ListQuery } from "../masters/_shared/master-api";
 
 import { journeyApi } from "./journey.service";
 import { journeyKeys } from "./journey.keys";
-import JourneyCardList from "./JourneyCardList";
+import JourneyTable from "./JourneyTable";
+import StartJourneyDialog from "./StartJourneyDialog";
 
 export default function VehicleJourneyListPage() {
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [startOpen, setStartOpen] = React.useState(false);
   const debouncedSearch = useDebouncedValue(search);
 
-  const canCreateTrip = useCan(PERMS.TRIP.CREATE);
+  const canCreate = useCan(PERMS.VEHICLE_JOURNEY.CREATE);
 
   React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
 
@@ -54,20 +55,17 @@ export default function VehicleJourneyListPage() {
         <div>
           <h1 className="text-lg font-semibold">Vehicle Journeys</h1>
           <p className="text-xs text-muted-foreground">
-            Full truck cycles — every trip attaches to its vehicle&apos;s
-            journey automatically. Create trips from the Trips page.
+            Full truck cycles — legs, expenses and log slip settlement.
           </p>
         </div>
-        {canCreateTrip ? (
-          <Button asChild>
-            <Link href="/trips/new">
-              <IconPlus size={16} className="mr-1" /> New Trip
-            </Link>
+        {canCreate ? (
+          <Button onClick={() => setStartOpen(true)}>
+            <IconPlus size={16} className="mr-1" /> Start Journey
           </Button>
         ) : null}
       </div>
 
-      <JourneyCardList
+      <JourneyTable
         data={journeys.data?.data ?? []}
         total={journeys.data?.meta?.total ?? 0}
         page={page}
@@ -84,6 +82,8 @@ export default function VehicleJourneyListPage() {
         counts={counts.data ?? {}}
         isLoading={journeys.isLoading}
       />
+
+      <StartJourneyDialog open={startOpen} onOpenChange={setStartOpen} />
     </div>
   );
 }

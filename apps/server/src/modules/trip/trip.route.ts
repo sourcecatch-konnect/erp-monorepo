@@ -54,6 +54,16 @@ router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
+/** Journey legs are lifecycle-managed by their journey, not the trips module. */
+const assertNotJourneyLeg = (trip: { journeyId: string | null }) => {
+  if (trip.journeyId) {
+    throw new BadRequestError(
+      "This trip is a journey leg — manage it from its vehicle journey",
+      "TRIP_IS_JOURNEY_LEG",
+    );
+  }
+};
+
 /* Trips are not branch-scoped — a single global per-FY counter. */
 const TRIP_SEQ_KEY = "TRIP";
 /* Journeys share the same global-per-FY numbering style. */
@@ -521,7 +531,12 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
 
     /* ---- number reservation (gap-tolerant, outside the transaction) ---- */
     const fyCode = fyCodeFor(now);
-    const journeySeq = await nextSequence(db, JOURNEY_SEQ_KEY, fyCode, "JOURNEY");
+    const journeySeq = await nextSequence(
+      db,
+      JOURNEY_SEQ_KEY,
+      fyCode,
+      "JOURNEY",
+    );
     const tripSeq = await nextSequence(db, TRIP_SEQ_KEY, fyCode, "TRIP");
     const journeyNumber = formatDocNumber(
       JOURNEY_SEQ_KEY,
@@ -626,6 +641,8 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
       "This trip changed in another tab — reload and retry",
     );
   }
+
+  assertNotJourneyLeg(existing);
 
   if (existing.status !== "Planned") {
     throw new BadRequestError("Only a Planned trip can be edited");
@@ -829,6 +846,8 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
+  assertNotJourneyLeg(existing);
+
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
   }
@@ -929,13 +948,7 @@ router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
-  // Journey legs keep their sequence slot in the chain — cancel, never delete.
-  if (existing.journeyId) {
-    throw new BadRequestError(
-      "A journey leg cannot be deleted — cancel it instead",
-      "TRIP_IS_JOURNEY_LEG",
-    );
-  }
+  assertNotJourneyLeg(existing);
 
   if (!["Planned", "Cancelled"].includes(existing.status)) {
     throw new BadRequestError(
@@ -977,6 +990,8 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
     where: { id, deletedAt: null },
   });
   if (!existing) throw new NotFoundError("Trip not found");
+
+  assertNotJourneyLeg(existing);
 
   if (!["Planned", "InTransit"].includes(existing.status)) {
     throw new BadRequestError(

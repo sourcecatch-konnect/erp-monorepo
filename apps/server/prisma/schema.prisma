@@ -87,6 +87,8 @@ model User {
   createdTripExpenses         TripExpense[]                  @relation("CreatedTripExpenses")
   createdDriverAdvances       DriverAdvance[]                @relation("CreatedDriverAdvances")
   generatedLogSlips           LogSlip[]                      @relation("GeneratedLogSlips")
+
+  supervisedGRNs GRN[] @relation("GRNUnloadingSupervisor")
 }
 
 model Company {
@@ -133,10 +135,11 @@ model Branch {
   companyId   String
   warehouseId String?
 
-  company      Company          @relation(fields: [companyId], references: [id])
-  warehouses   Warehouse[]      @relation("BranchWarehouses")
-  agreements   Agreement[]      @relation("BranchAgreement")
-  workers      Labour[]         @relation("WorkerBranch")
+  company    Company     @relation(fields: [companyId], references: [id])
+  warehouses Warehouse[] @relation("BranchWarehouses")
+  agreements Agreement[] @relation("BranchAgreement")
+  workers    Labour[]    @relation("WorkerBranch")
+
   homeJourneys VehicleJourney[] @relation("JourneyHomeBranch")
 
   users             User[]
@@ -384,14 +387,14 @@ model UserNotificationSubscription {
 }
 
 model Vehicle {
-  id                 String           @id @default(cuid())
-  vehicleNumber      String           @unique
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  id                 String        @id @default(cuid())
+  vehicleNumber      String        @unique
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   bodyType           String?
   capacityMT         Float
-  chasisNumber       String           @unique
-  engineNumber       String           @unique
+  chasisNumber       String        @unique
+  engineNumber       String        @unique
   insuranceCompany   String?
   insuranceDueDate   DateTime?
   insuranceIssueDate DateTime?
@@ -402,13 +405,15 @@ model Vehicle {
   wheels             String?
   currentKM          Int
   openingKM          Int
-  status             VehicleStatus    @default(AVAILABLE)
+  status             VehicleStatus @default(AVAILABLE)
   vehicleTypeId      String
-  vehicleTypeRef     VehicleType      @relation(fields: [vehicleTypeId], references: [id])
-  VehicleTrip        VehicleTrip[]
-  journeys           VehicleJourney[]
-  driverAdvances     DriverAdvance[]
-  logSlips           LogSlip[]
+
+  vehicleTypeRef VehicleType @relation(fields: [vehicleTypeId], references: [id])
+
+  VehicleTrip    VehicleTrip[]
+  journeys       VehicleJourney[]
+  driverAdvances DriverAdvance[]
+  logSlips       LogSlip[]
 }
 
 model Customer {
@@ -579,30 +584,29 @@ model Goods {
 }
 
 model Labour {
-  id                      String      @id @default(cuid())
-  name                    String
-  photoPath               String?
-  address                 String?
-  contactName             String?
-  contactPhone            String?
-  mobileNo                String?
-  referredBy              String?
-  refContactNo            String?
-  startDate               DateTime?
-  pan                     String?
-  tdsAmount               BigInt?
-  tdsRate                 BigInt?
-  type                    WorkerType
-  branchId                String
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
-  cityId                  String
-  branch                  Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
-  city                    City        @relation(fields: [cityId], references: [id])
-  grnLabours              GRN[]       @relation("GRNLabour")
-  grnUnloadingSupervisors GRN[]       @relation("GRNUnloadingSupervisor")
-  vpLoadingLabours        VPLoading[] @relation("VPLoadingLabour")
-  vpLoadingSupervisors    VPLoading[] @relation("VPLoadingSupervisor")
+  id                   String      @id @default(cuid())
+  name                 String
+  photoPath            String?
+  address              String?
+  contactName          String?
+  contactPhone         String?
+  mobileNo             String?
+  referredBy           String?
+  refContactNo         String?
+  startDate            DateTime?
+  pan                  String?
+  tdsAmount            BigInt?
+  tdsRate              BigInt?
+  type                 WorkerType
+  branchId             String
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  cityId               String
+  branch               Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                 City        @relation(fields: [cityId], references: [id])
+  grnLabours           GRN[]       @relation("GRNLabour")
+  vpLoadingLabours     VPLoading[] @relation("VPLoadingLabour")
+  vpLoadingSupervisors VPLoading[] @relation("VPLoadingSupervisor")
 }
 
 model City {
@@ -731,7 +735,7 @@ model Wagon {
 }
 
 model Pump {
-  id                String        @id @default(cuid())
+  id                String    @id @default(cuid())
   name              String
   address           String?
   cityId            String
@@ -746,13 +750,15 @@ model Pump {
   accountName       String?
   bankName          String?
   branchIfscCode    String?
-  isBlackListed     Boolean       @default(false)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  isBlackListed     Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   stateId           String
-  city              City          @relation("PumpCity", fields: [cityId], references: [id])
-  state             State         @relation(fields: [stateId], references: [id])
-  tripExpenses      TripExpense[]
+
+  city  City  @relation("PumpCity", fields: [cityId], references: [id])
+  state State @relation(fields: [stateId], references: [id])
+
+  tripExpenses TripExpense[]
 }
 
 model SpareCategory {
@@ -1497,15 +1503,14 @@ model GRN {
 
   netAmount BigInt @default(0)
 
-  labourId String?
-  labour   Labour? @relation("GRNLabour", fields: [labourId], references: [id])
-
+  labourId     String?
+  labour       Labour? @relation("GRNLabour", fields: [labourId], references: [id])
+  labourName   String?
   labourCharge BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   Labour? @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
-
-  damagesBy GRNDamagesBy?
+  unloadingSupervisor   User?         @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+  damagesBy             GRNDamagesBy?
 
   lrCopyChecked      Boolean @default(false)
   invoiceChecked     Boolean @default(false)
@@ -1887,6 +1892,20 @@ enum TripType {
   dc
 }
 
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Vehicle journey / log slip (docs/TRIP_JOURNEY_LOGSLIP_PLAN.md)
+ */
+/**
+ * ------------------------------------------------------------------
+ */
+
+/// Full own-vehicle truck cycle: sequential trip legs starting from a base
+/// city and normally closing when the vehicle returns to `returnCityId`.
+/// Settled by exactly one LogSlip. Return base is configured per journey -
+/// never hardcoded.
 model VehicleJourney {
   id               String                  @id @default(cuid())
   journeyNumber    String                  @unique
@@ -1936,6 +1955,9 @@ model VehicleJourney {
   @@index([status])
 }
 
+/// A journey/trip expense. Money events - never just a number on the trip.
+/// Cash expenses paid from the driver advance settle at log slip time;
+/// credit/card expenses are payables to the pump/vendor ledger.
 model TripExpense {
   id              String            @id @default(cuid())
   journeyId       String

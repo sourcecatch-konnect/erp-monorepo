@@ -116,7 +116,7 @@ export default function TripExpenseDrawer({
   );
 
   const form = useForm<TripExpenseFormInput, unknown, CreateTripExpenseBody>({
-    resolver: zodResolver(createTripExpenseSchema, undefined, { raw: true }),
+    resolver: zodResolver(createTripExpenseSchema),
     defaultValues: defaults(),
   });
 
@@ -282,11 +282,7 @@ export default function TripExpenseDrawer({
             Cancel
           </Button>
           <Button type="submit" form="trip-expense-form" disabled={submitting}>
-            {submitting
-              ? "Saving…"
-              : expense
-                ? "Save Expense"
-                : "Add Expense"}
+            {submitting ? "Saving…" : expense ? "Save Expense" : "Add Expense"}
           </Button>
         </SheetFooter>
       </SheetContent>

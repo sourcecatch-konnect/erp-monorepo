@@ -73,7 +73,7 @@ export default function AdvanceDialog({ open, onOpenChange, journey }: Props) {
     unknown,
     CreateDriverAdvanceBody
   >({
-    resolver: zodResolver(createDriverAdvanceSchema, undefined, { raw: true }),
+    resolver: zodResolver(createDriverAdvanceSchema),
     defaultValues: { journeyId: journey.id, paymentMode: "CASH" },
   });
 
@@ -163,7 +163,11 @@ export default function AdvanceDialog({ open, onOpenChange, journey }: Props) {
           >
             Cancel
           </Button>
-          <Button type="submit" form="driver-advance-form" disabled={submitting}>
+          <Button
+            type="submit"
+            form="driver-advance-form"
+            disabled={submitting}
+          >
             {submitting ? "Saving…" : "Record Advance"}
           </Button>
         </DialogFooter>

@@ -36,7 +36,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
-import { SuggestInput } from "@skerp/ui/components/suggest-input";
+import {
+  SuggestInput,
+  type SuggestOption,
+} from "@skerp/ui/components/suggest-input";
 
 import FormSection from "@/features/masters/_shared/fields/FormSection";
 import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
@@ -45,6 +48,7 @@ import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation"
 import { lrGroupApi } from "../lr-group.service";
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
 import LRCreateSummary from "./LRCreateSummary";
+import { FieldLabel, MoneyField } from "./moneyField";
 import CreateTripDialog from "@/features/trips/CreateTripDialog";
 
 type Props = {
@@ -56,15 +60,26 @@ type Props = {
 const EMPTY_LINE = {
   loadingLocationId: undefined as string | undefined,
   unloadingLocationId: undefined as string | undefined,
-  goods: [
-    {
-      name: "",
-      description: "",
-      quantity: "" as unknown as number,
-      unit: "",
-      weight: "" as unknown as number,
-    },
-  ],
+  goods: [],
+};
+type MarketVehicleLookup = {
+  vehicleNumber: string;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
+
+type DriverLookup = {
+  name: string;
+  mobile?: string | null;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
+const EMPTY_GOODS = {
+  name: "",
+  description: "",
+  quantity: "" as unknown as number,
+  unit: "",
+  weight: "" as unknown as number,
 };
 
 const TRANSPORT_OPTIONS = [
@@ -78,20 +93,6 @@ const PRIORITY_OPTIONS = [
   { value: "Critical", label: "Critical" },
 ] as const;
 
-function FieldLabel({
-  children,
-  required,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
-  return (
-    <label className="mb-1 block text-xs font-medium text-muted-foreground">
-      {children}
-      {required && <span className="ml-0.5 text-red-600">*</span>}
-    </label>
-  );
-}
 function ReadOnlyAmount({
   label,
   value,
@@ -144,6 +145,177 @@ function Segmented<T extends string | boolean>({
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+type LRFormApi = ReturnType<
+  typeof useForm<CreateLRGroupFormInput, unknown, CreateLRGroupBody>
+>;
+
+function InstantLRLineCard({
+  form,
+  idx,
+  totalLines,
+  loadingOptions,
+  unloadingOptions,
+  goodsSuggestions,
+  watchConsignor,
+  watchConsignee,
+  onRemove,
+}: {
+  form: LRFormApi;
+  idx: number;
+  totalLines: number;
+  loadingOptions: { value: string; label: string }[];
+  unloadingOptions: { value: string; label: string }[];
+  goodsSuggestions: { value: string; hint?: string }[];
+  watchConsignor: unknown;
+  watchConsignee: unknown;
+  onRemove: () => void;
+}) {
+  const base = `lrs.${idx}` as const;
+  const {
+    fields: goodsFields,
+    append: appendGoods,
+    remove: removeGoods,
+  } = useFieldArray({
+    control: form.control,
+    name: `${base}.goods`,
+  });
+  const lineErr = (
+    form.formState.errors as {
+      lrs?: {
+        loadingLocationId?: { message?: string };
+        unloadingLocationId?: { message?: string };
+        goods?: { name?: { message?: string } }[];
+      }[];
+    }
+  ).lrs?.[idx];
+
+  return (
+    <div className="relative rounded-lg border bg-muted/20 p-3">
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={totalLines <= 1}
+        className="absolute right-2 top-2 rounded-sm p-1 text-muted-foreground hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Remove consignment line"
+      >
+        <IconTrash size={14} />
+      </button>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ComboboxField
+          name={`${base}.loadingLocationId`}
+          label="Loading point"
+          required
+          options={loadingOptions}
+          emptyText={
+            watchConsignor ? "No saved locations" : "Pick a consignor first"
+          }
+        />
+        <ComboboxField
+          name={`${base}.unloadingLocationId`}
+          label="Unloading point"
+          required
+          options={unloadingOptions}
+          emptyText={
+            watchConsignee ? "No saved locations" : "Pick a consignee first"
+          }
+        />
+      </div>
+      {lineErr?.loadingLocationId?.message ? (
+        <p className="mt-1 text-xs text-red-600">
+          {lineErr.loadingLocationId.message}
+        </p>
+      ) : null}
+      {lineErr?.unloadingLocationId?.message ? (
+        <p className="mt-1 text-xs text-red-600">
+          {lineErr.unloadingLocationId.message}
+        </p>
+      ) : null}
+
+      <div className="mt-3 rounded-md bg-background/70 p-3">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">
+            Goods
+          </p>
+        </div>
+
+        {goodsFields.length === 0 ? (
+          <div className="rounded-md border border-dashed bg-muted/20 px-3 py-3 text-center text-xs text-muted-foreground">
+            No goods added yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {goodsFields.map((goodsField, goodsIdx) => {
+              const goodsBase = `${base}.goods.${goodsIdx}` as const;
+              const goodsErr = lineErr?.goods?.[goodsIdx];
+              return (
+                <div
+                  key={goodsField.id}
+                  className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_auto]"
+                >
+                  <div>
+                    <FieldLabel required>Goods name</FieldLabel>
+                    <Controller
+                      name={`${goodsBase}.name`}
+                      control={form.control}
+                      render={({ field }) => (
+                        <SuggestInput
+                          value={(field.value as string) ?? ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          suggestions={goodsSuggestions}
+                          placeholder="Select or type goods"
+                          invalid={Boolean(goodsErr?.name?.message)}
+                        />
+                      )}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel required>Qty</FieldLabel>
+                    <Input
+                      {...form.register(`${goodsBase}.quantity`)}
+                      type="number"
+                      min={1}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel required>Unit</FieldLabel>
+                    <Input
+                      {...form.register(`${goodsBase}.unit`)}
+                      placeholder="MT / PCS"
+                      className="h-9"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="self-end justify-self-end text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                    onClick={() => removeGoods(goodsIdx)}
+                    aria-label="Remove goods"
+                  >
+                    <IconTrash size={14} />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={() => appendGoods(EMPTY_GOODS)}
+        >
+          <IconPlus size={14} className="mr-1" /> Add goods
+        </Button>
+      </div>
     </div>
   );
 }
@@ -215,7 +387,7 @@ export default function LRForm({ orderId, tripId }: Props) {
             priority: "Normal",
             isMarketVehicle: false,
             primaryTripId: tripId,
-            lrs: [],
+            lrs: [EMPTY_LINE],
           },
   });
 
@@ -244,13 +416,9 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryKey: lrLookupKeys.attachableTrips(activeConsignorId),
     queryFn: () => lrLookups.attachableTrips(activeConsignorId),
   });
-
   const watchPrimaryTripId = form.watch("primaryTripId" as never) as unknown as
     | string
     | undefined;
-
-  // Resolved independently of the consignor filter above, so the selected
-  // trip's own client stays known even while the filtered list is refetching.
   const allTrips = useQuery({
     queryKey: lrLookupKeys.attachableTrips(undefined),
     queryFn: () => lrLookups.attachableTrips(undefined),
@@ -261,9 +429,6 @@ export default function LRForm({ orderId, tripId }: Props) {
     [allTrips.data, watchPrimaryTripId],
   );
 
-  // Picking a trip fixes the consignor to that trip's client (a trip carries
-  // one client) — fills it in when it's empty or mismatched, e.g. arriving
-  // from the trip's "Start trip" action with only a trip preset.
   React.useEffect(() => {
     if (source !== "INSTANT") return;
     const tripConsignorId = selectedTrip?.consignor?.id;
@@ -275,8 +440,6 @@ export default function LRForm({ orderId, tripId }: Props) {
     }
   }, [source, selectedTrip, watchConsignor, form]);
 
-  // Clear a previously-picked trip if the consignor changes away from it —
-  // but not when the auto-fill above is what changed the consignor.
   const prevConsignorRef = React.useRef(activeConsignorId);
   React.useEffect(() => {
     if (prevConsignorRef.current !== activeConsignorId) {
@@ -312,27 +475,36 @@ export default function LRForm({ orderId, tripId }: Props) {
     hint: t.hint,
     badge: t.badge,
   }));
-
-  const handleTripCreated = async (created: Trip) => {
-    await queryClient.invalidateQueries({
-      queryKey: ["lookup", "attachable-trips"],
-    });
-    form.setValue("primaryTripId" as never, created.id as never, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  };
   const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
     value: g.name,
     hint: g.description ?? undefined,
   }));
-  const marketVehicleSuggestions = (marketVehicles.data ?? []).map((v) => ({
-    value: v.vehicleNumber,
-    hint: "Market vehicle",
-  }));
-  const driverSuggestions = (drivers.data ?? []).map((d) => ({
+  const marketVehicleRows = (marketVehicles.data ??
+    []) as MarketVehicleLookup[];
+  const driverRows = (drivers.data ?? []) as DriverLookup[];
+
+  const marketVehicleSuggestions: SuggestOption[] = marketVehicleRows.map(
+    (v) => ({
+      value: v.vehicleNumber,
+      hint: v.isAssigned
+        ? v.activeGroupNumber
+          ? `Assigned in ${v.activeGroupNumber}`
+          : "Assigned in active LR group"
+        : "Market vehicle",
+      badge: v.isAssigned ? "Assigned" : "Available",
+      badgeTone: v.isAssigned ? "warning" : "success",
+    }),
+  );
+
+  const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
     value: d.name,
-    hint: d.mobile ?? undefined,
+    hint: d.isAssigned
+      ? d.activeGroupNumber
+        ? `${d.mobile ?? "No mobile"}`
+        : `${d.mobile ?? "No mobile"}`
+      : (d.mobile ?? undefined),
+    badge: d.isAssigned ? "Assigned" : "Available",
+    badgeTone: d.isAssigned ? "warning" : "success",
   }));
   const loadingOptions = (consignorLocations.data ?? []).map((l) => ({
     value: l.value,
@@ -404,6 +576,18 @@ export default function LRForm({ orderId, tripId }: Props) {
       setSubmitting(false);
     }
   };
+  const handleTripCreated = async (created: Trip) => {
+    await queryClient.invalidateQueries({
+      queryKey: lrLookupKeys.attachableTrips(activeConsignorId),
+    });
+    await queryClient.invalidateQueries({
+      queryKey: lrLookupKeys.attachableTrips(undefined),
+    });
+    form.setValue("primaryTripId" as never, created.id as never, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
   const moneyNumber = (value: unknown) => {
     const n =
       typeof value === "number"
@@ -441,11 +625,11 @@ export default function LRForm({ orderId, tripId }: Props) {
                   ? "Create LR Group from Order"
                   : "Create Instant LR Group"}
               </h1>
-              {/* <p className="mt-0.5 text-xs text-muted-foreground">
-              {source === "FROM_ORDER"
-                ? "LRs are generated from the order's consignment lines for the chosen truck."
-                : "Standalone Road group — you can add consignment lines now or later."}
-            </p> */}
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {source === "FROM_ORDER"
+                  ? "LRs are generated from the order's consignment lines for the chosen truck."
+                  : "Standalone Road group — add at least one loading and unloading point to create the group."}
+              </p>
             </div>
             <div className="flex items-end gap-2">
               <Controller
@@ -737,65 +921,30 @@ export default function LRForm({ orderId, tripId }: Props) {
                   )}
                 />
 
-                <div>
-                  <FieldLabel>Freight amount</FieldLabel>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    className="h-9"
-                    {...form.register("marketFreightAmount")}
-                  />
-                </div>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketFreightAmount"
+                  label="Freight amount"
+                />
 
-                <div>
-                  <FieldLabel>Advance amount</FieldLabel>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    className="h-9"
-                    {...form.register("marketAdvanceAmount")}
-                  />
-                </div>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketAdvanceAmount"
+                  label="Advance amount"
+                />
 
-                <div>
-                  <FieldLabel>Commission</FieldLabel>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    className="h-9"
-                    {...form.register("marketCommissionAmount")}
-                  />
-                </div>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketCommissionAmount"
+                  label="Commission"
+                />
 
-                <div>
-                  <FieldLabel>Hamali</FieldLabel>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    className="h-9"
-                    {...form.register("marketHamaliAmount")}
-                  />
-                </div>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketHamaliAmount"
+                  label="Hamali"
+                />
 
-                <div>
-                  <FieldLabel>TDS</FieldLabel>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    className="h-9"
-                    {...form.register("marketTdsAmount")}
-                  />
-                </div>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketTdsAmount"
+                  label="TDS"
+                />
                 <ReadOnlyAmount
                   label="Total Freight Advance"
                   value={totalFreightAdvance}
@@ -824,95 +973,25 @@ export default function LRForm({ orderId, tripId }: Props) {
                       No consignment line added
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      You can create the LR group now and add LR lines later.
+                      Add at least one consignment line with loading and
+                      unloading points.
                     </p>
                   </div>
                 )}
                 {fields.map((field, idx) => {
-                  const base = `lrs.${idx}` as const;
-                  // `lrs` only exists on the INSTANT branch of the union; narrow it.
-                  const lrsErrors = (
-                    errors as {
-                      lrs?: { goods?: { name?: { message?: string } }[] }[];
-                    }
-                  ).lrs;
-                  const lineErr = lrsErrors?.[idx];
                   return (
-                    <div
+                    <InstantLRLineCard
                       key={field.id}
-                      className="relative rounded-lg border bg-muted/20 p-3"
-                    >
-                      {fields.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => remove(idx)}
-                          className="absolute right-2 top-2 rounded-sm p-1 text-muted-foreground hover:text-red-600"
-                          aria-label="Remove consignment line"
-                        >
-                          <IconTrash size={14} />
-                        </button>
-                      )}
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <ComboboxField
-                          name={`${base}.loadingLocationId`}
-                          label="Loading point"
-                          options={loadingOptions}
-                          emptyText={
-                            watchConsignor
-                              ? "No saved locations"
-                              : "Pick a consignor first"
-                          }
-                        />
-                        <ComboboxField
-                          name={`${base}.unloadingLocationId`}
-                          label="Unloading point"
-                          options={unloadingOptions}
-                          emptyText={
-                            watchConsignee
-                              ? "No saved locations"
-                              : "Pick a consignee first"
-                          }
-                        />
-                      </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-4">
-                        <div className="sm:col-span-2">
-                          <FieldLabel required>Goods name</FieldLabel>
-                          <Controller
-                            name={`${base}.goods.0.name`}
-                            control={form.control}
-                            render={({ field }) => (
-                              <SuggestInput
-                                value={(field.value as string) ?? ""}
-                                onChange={field.onChange}
-                                onBlur={field.onBlur}
-                                suggestions={goodsSuggestions}
-                                placeholder="Select or type goods"
-                                invalid={Boolean(
-                                  lineErr?.goods?.[0]?.name?.message,
-                                )}
-                              />
-                            )}
-                          />
-                        </div>
-                        <div>
-                          <FieldLabel required>Qty</FieldLabel>
-                          <Input
-                            {...form.register(`${base}.goods.0.quantity`)}
-                            type="number"
-                            min={1}
-                            className="h-9"
-                          />
-                        </div>
-                        <div>
-                          <FieldLabel required>Unit</FieldLabel>
-                          <Input
-                            {...form.register(`${base}.goods.0.unit`)}
-                            placeholder="MT / PCS"
-                            className="h-9"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                      form={form}
+                      idx={idx}
+                      totalLines={fields.length}
+                      loadingOptions={loadingOptions}
+                      unloadingOptions={unloadingOptions}
+                      goodsSuggestions={goodsSuggestions}
+                      watchConsignor={watchConsignor}
+                      watchConsignee={watchConsignee}
+                      onRemove={() => remove(idx)}
+                    />
                   );
                 })}
                 <Button

@@ -73,6 +73,7 @@ type CrudOptions<Create, Update> = {
     lookupSelect?: Record<string, unknown>;
     lookupOrderBy?: object;
     extraWhere?: (req: Request) => Record<string, unknown>;
+    mapRows?: (rows: unknown[], req: Request) => Promise<unknown[]> | unknown[];
     blockDeleteIfExists?: {
       model: any;
       label: string;
@@ -211,7 +212,7 @@ export function createCrudRouter<Create, Update>({
         ...extraWhere,
       };
 
-      const [data, total] = await Promise.all([
+      const [rawData, total] = await Promise.all([
         model.findMany({
           where,
           skip: query.page * query.size,
@@ -223,6 +224,9 @@ export function createCrudRouter<Create, Update>({
         }),
         model.count({ where }),
       ]);
+      const data = listOptions?.mapRows
+        ? await listOptions.mapRows(rawData, req)
+        : rawData;
 
       return sendOk(res, data, {
         page: query.page,
@@ -251,12 +255,15 @@ export function createCrudRouter<Create, Update>({
         ...extraWhere,
       };
 
-      const data = await model.findMany({
+      const rawData = await model.findMany({
         where,
         take: 20,
         ...defaultQueryArgs,
         orderBy: listOptions?.defaultOrderBy,
       });
+      const data = listOptions?.mapRows
+        ? await listOptions.mapRows(rawData, req)
+        : rawData;
 
       return sendOk(res, data);
     },
@@ -312,13 +319,16 @@ export function createCrudRouter<Create, Update>({
         ...baseWhere,
         ...extraWhere,
       };
-      const data = await model.findMany({
+      const rawData = await model.findMany({
         where,
         ...defaultQueryArgs,
         orderBy: query.sort
           ? { [query.sort.field]: query.sort.direction }
           : listOptions?.defaultOrderBy,
       });
+      const data = listOptions?.mapRows
+        ? await listOptions.mapRows(rawData, req)
+        : rawData;
 
       res.header("Content-Type", "text/csv");
       res.attachment("export.csv");

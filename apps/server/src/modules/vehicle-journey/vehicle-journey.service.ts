@@ -8,9 +8,8 @@ type Tx = Prisma.TransactionClient;
 export const TX_BUDGET = { timeout: 15000, maxWait: 10000 } as const;
 
 /**
- * The universal journey base: every journey returns to the head-office city
- * (`Branch.isHeadOffice` — exactly one branch carries the flag). Configured
- * data, never a hardcoded city id.
+ * The configured journey base. The base city comes from the head-office
+ * branch flag, not a hardcoded city id.
  */
 export const getHeadOffice = async (): Promise<{
   branchId: string;
@@ -23,7 +22,7 @@ export const getHeadOffice = async (): Promise<{
   });
   if (!ho) {
     throw new BadRequestError(
-      "No head-office branch is configured — set isHeadOffice on the base branch",
+      "No head-office branch is configured - set isHeadOffice on the base branch",
     );
   }
   if (!ho.cityId || !ho.city) {
@@ -106,7 +105,6 @@ export const journeyListSelect = {
       status: true,
       legType: true,
       closingKm: true,
-      endDateTime: true,
       fromCity: cityRef,
       toCity: cityRef,
     },
@@ -304,13 +302,20 @@ export const chainViolations = (
     next.startDateTime &&
     next.startDateTime <= prev.endDateTime
   ) {
-    violations.push(
-      "Start time must be after the previous leg's close time",
-    );
+    violations.push("Start time must be after the previous leg's close time");
   }
 
   return violations;
 };
+
+/** Journey statuses that block starting another journey for the same vehicle/driver. */
+export const OPEN_JOURNEY_STATUSES = [
+  "DRAFT",
+  "ACTIVE",
+  "RETURNED",
+  "READY_FOR_LOGSLIP",
+  "REOPENED",
+] as const;
 
 /* ------------------------------------------------------------------ */
 /* Close leg                                                          */
@@ -333,11 +338,8 @@ type CloseLegArgs = {
 };
 
 /**
- * Close a journey leg and roll the journey forward. Closing at the journey's
- * return city (head office) returns the whole journey: vehicle and driver are
- * released immediately, settlement stays pending (plan §5.5/§5.8 policy).
- * Shared by the trips route and the journey route so there is exactly one
- * close path.
+ * Close a journey leg and roll the journey forward. Closing at the configured
+ * return city returns the journey and releases the vehicle/driver.
  */
 export const closeLegAndUpdateJourney = async (
   args: CloseLegArgs,
@@ -367,7 +369,6 @@ export const closeLegAndUpdateJourney = async (
       where: { id: journey.vehicleId },
       data: {
         currentKM: args.closingKm,
-        // Physical return releases the vehicle; settlement stays pending.
         ...(isReturnToBase ? { status: "AVAILABLE" as const } : {}),
       },
     });
@@ -401,7 +402,7 @@ export const closeLegAndUpdateJourney = async (
       trip.id,
       actorId,
       "Closed",
-      isReturnToBase ? "Leg closed — vehicle returned to base" : "Leg closed",
+      isReturnToBase ? "Leg closed - vehicle returned to base" : "Leg closed",
     );
   }, TX_BUDGET);
 

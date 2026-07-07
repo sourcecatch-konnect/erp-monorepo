@@ -3,6 +3,8 @@ import {
   vehicleJourneyStatusSchema,
   journeySettlementStatusSchema,
   tripLegTypeSchema,
+  startJourneySchema,
+  addJourneyLegSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
   cancelJourneySchema,
@@ -38,19 +40,21 @@ export type DriverAdvanceStatus = z.infer<typeof driverAdvanceStatusSchema>;
 /* Request bodies (inferred from validators)                          */
 /* ------------------------------------------------------------------ */
 
+export type StartJourneyBody = z.output<typeof startJourneySchema>;
+export type StartJourneyFormInput = z.input<typeof startJourneySchema>;
+export type AddJourneyLegBody = z.output<typeof addJourneyLegSchema>;
+export type AddJourneyLegFormInput = z.input<typeof addJourneyLegSchema>;
 export type CloseJourneyLegBody = z.output<typeof closeJourneyLegSchema>;
 export type DispatchJourneyLegBody = z.output<typeof dispatchJourneyLegSchema>;
 export type CancelJourneyBody = z.output<typeof cancelJourneySchema>;
 export type CloseJourneyBody = z.output<typeof closeJourneySchema>;
 
-// Form/API request bodies stay as z.input when the web form uses
-// zodResolver(..., { raw: true }); the server owns rupees -> paise conversion.
-export type CreateTripExpenseBody = z.input<typeof createTripExpenseSchema>;
+export type CreateTripExpenseBody = z.output<typeof createTripExpenseSchema>;
 export type TripExpenseFormInput = z.input<typeof createTripExpenseSchema>;
-export type UpdateTripExpenseBody = z.input<typeof updateTripExpenseSchema>;
+export type UpdateTripExpenseBody = z.output<typeof updateTripExpenseSchema>;
 export type RejectTripExpenseBody = z.output<typeof rejectTripExpenseSchema>;
 export type ReverseTripExpenseBody = z.output<typeof reverseTripExpenseSchema>;
-export type CreateDriverAdvanceBody = z.input<
+export type CreateDriverAdvanceBody = z.output<
   typeof createDriverAdvanceSchema
 >;
 export type DriverAdvanceFormInput = z.input<typeof createDriverAdvanceSchema>;
@@ -208,8 +212,8 @@ export type VehicleJourney = {
 };
 
 /**
- * Journey context for the trip form: the vehicle's active journey (if any)
- * with its chain tip, plus the head-office base every journey returns to.
+ * Journey context for the trip form: the vehicle's active journey, if any,
+ * with its chain tip, plus the configured head-office base.
  */
 export type ActiveJourneyInfo = {
   headOffice: { branchId: string; cityId: string; cityName: string };

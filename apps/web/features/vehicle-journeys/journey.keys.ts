@@ -11,7 +11,12 @@ export const journeyKeys = {
 };
 
 export const journeyLookupKeys = {
+  ownVehicles: ["lookup", "own-vehicles"] as const,
+  drivers: ["lookup", "drivers"] as const,
+  routes: ["lookup", "journey-routes"] as const,
+  customers: ["lookup", "customers"] as const,
   cities: ["lookup", "cities"] as const,
+  branches: ["lookup", "branches"] as const,
   pumps: ["lookup", "pumps"] as const,
   cashAccounts: ["lookup", "cash-accounts"] as const,
 };

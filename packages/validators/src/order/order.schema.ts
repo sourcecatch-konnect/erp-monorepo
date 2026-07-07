@@ -3,7 +3,31 @@ import { z } from "zod";
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
+export const goodsUnitValues = [
+  "MT",
+  "KG",
+  "QUINTAL",
+  "BAGS",
+  "BOXES",
+  "CARTONS",
+  "BUNDLES",
+  "PIECES",
+  "DRUMS",
+  "PALLETS",
+  "ROLLS",
+  "COILS",
+] as const;
 
+export const goodsUnitSchema = z
+  .string()
+  .trim()
+  .min(1, "Unit is required")
+  .transform((value) => value.toUpperCase())
+  .pipe(
+    z.enum(goodsUnitValues, {
+      errorMap: () => ({ message: "Select a valid unit" }),
+    }),
+  );
 const optionalString = z
   .string()
   .trim()
@@ -20,17 +44,24 @@ const positiveIntField = (label: string) =>
   z
     .union([z.string(), z.number()])
     .transform((value) => Number(value))
-    .refine((value) => Number.isInteger(value) && value > 0, `${label} must be a positive whole number`);
+    .refine(
+      (value) => Number.isInteger(value) && value > 0,
+      `${label} must be a positive whole number`,
+    );
 
 const optionalNumberField = (label: string) =>
   z
     .union([z.string(), z.number()])
     .optional()
     .transform((value) => {
-      if (value === "" || value === undefined || value === null) return undefined;
+      if (value === "" || value === undefined || value === null)
+        return undefined;
       return Number(value);
     })
-    .refine((value) => value === undefined || !Number.isNaN(value), `${label} must be valid`);
+    .refine(
+      (value) => value === undefined || !Number.isNaN(value),
+      `${label} must be valid`,
+    );
 
 const optionalEmail = z
   .string()
@@ -56,10 +87,10 @@ export const orderStatusSchema = z.enum([
 export const orderItemSchema = z.object({
   goodsId: z.string().min(1, "Select goods"),
   quantity: positiveIntField("Quantity"),
-  unit: z.string().trim().min(1, "Unit is required").max(20, "Unit too long"),
+  unit: goodsUnitSchema,
   weight: optionalNumberField("Weight").refine(
     (value) => value === undefined || value >= 0,
-    "Weight cannot be negative"
+    "Weight cannot be negative",
   ),
 });
 
@@ -80,7 +111,10 @@ export const orderConsignmentSchema = z.object({
       if (v === "" || v === undefined || v === null) return 1;
       return Number(v);
     })
-    .refine((v) => Number.isInteger(v) && v > 0, "Truck index must be a positive whole number"),
+    .refine(
+      (v) => Number.isInteger(v) && v > 0,
+      "Truck index must be a positive whole number",
+    ),
   loadingLocationId: optionalString,
   unloadingLocationId: optionalString,
   goods: z.array(orderItemSchema).optional().default([]),
@@ -115,7 +149,7 @@ const orderBaseShape = {
     .or(z.literal(""))
     .refine(
       (value) => !value || /^(\+91)?[6-9]\d{9}$/.test(value),
-      "Enter a valid Indian mobile number"
+      "Enter a valid Indian mobile number",
     )
     .transform((value) => (value ? value : undefined)),
   contactEmail: optionalEmail,
@@ -132,7 +166,7 @@ const typeRefinement = (
     items?: unknown[];
     consignments?: OrderConsignmentInput[];
   },
-  ctx: z.RefinementCtx
+  ctx: z.RefinementCtx,
 ) => {
   if (data.orderType === "Truck") {
     if (!data.truckQuantity || data.truckQuantity < 1) {
@@ -147,6 +181,13 @@ const typeRefinement = (
         code: z.ZodIssueCode.custom,
         message: "Vehicle type is required for a truck order",
         path: ["vehicleTypeId"],
+      });
+    }
+    if (!data.consignments || data.consignments.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add at least one consignment line",
+        path: ["consignments"],
       });
     }
     // A loading -> unloading pair must not repeat within the same truck: put
@@ -164,6 +205,20 @@ const typeRefinement = (
           code: z.ZodIssueCode.custom,
           message: `Truck #${c.truckIndex} exceeds the booked truck quantity (${data.truckQuantity})`,
           path: ["consignments", index, "truckIndex"],
+        });
+      }
+      if (!c.loadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Loading point is required",
+          path: ["consignments", index, "loadingLocationId"],
+        });
+      }
+      if (!c.unloadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unloading point is required",
+          path: ["consignments", index, "unloadingLocationId"],
         });
       }
       if (!c.loadingLocationId || !c.unloadingLocationId) return;
@@ -190,9 +245,13 @@ const typeRefinement = (
   }
 };
 
-export const createOrderSchema = z.object(orderBaseShape).superRefine(typeRefinement);
+export const createOrderSchema = z
+  .object(orderBaseShape)
+  .superRefine(typeRefinement);
 
-export const updateOrderSchema = z.object(orderBaseShape).superRefine(typeRefinement);
+export const updateOrderSchema = z
+  .object(orderBaseShape)
+  .superRefine(typeRefinement);
 
 /* ------------------------------------------------------------------ */
 /* Transitions                                                        */
@@ -201,7 +260,7 @@ export const updateOrderSchema = z.object(orderBaseShape).superRefine(typeRefine
 export const approveOrderSchema = z.object({
   bookingFreightAmount: optionalNumberField("Freight amount").refine(
     (value) => value === undefined || value >= 0,
-    "Freight cannot be negative"
+    "Freight cannot be negative",
   ),
   freightOverrideReason: optionalString,
   // Set true by the UI to confirm proceeding despite a disallow-new-booking flag.

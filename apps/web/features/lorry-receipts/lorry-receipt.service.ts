@@ -72,8 +72,21 @@ export const lorryReceiptApi = {
 /* Lookup helpers (reused across LR form)                             */
 /* ------------------------------------------------------------------ */
 
-type VehicleRow = { id: string; vehicleNumber: string; ownershipType?: string };
-type DriverRow = { id: string; name: string; mobile?: string | null };
+type VehicleRow = {
+  id: string;
+  vehicleNumber: string;
+  ownershipType?: string;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
+
+type DriverRow = {
+  id: string;
+  name: string;
+  mobile?: string | null;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
 type CustomerRow = { id: string; name: string; shortName: string | null };
 type GoodsRow = {
   id: string;

@@ -11,6 +11,56 @@ import { presignDownload, presignUpload } from "../../lib/s3.js";
 
 const moneyFields = ["salary", "noTDSApplyAmount"];
 
+const normalizeDriverName = (value: string) => value.trim().toLowerCase();
+
+const withActiveLRGroupAssignment = async (rows: unknown[]) => {
+  const drivers = rows as Record<string, unknown>[];
+  const driverNames = drivers
+    .map((d) =>
+      typeof d.name === "string" ? normalizeDriverName(d.name) : null,
+    )
+    .filter((d): d is string => Boolean(d));
+
+  if (driverNames.length === 0) return rows;
+
+  const groups = await db.lRGroup.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["DRAFT", "FINALISED"] },
+      isMarketVehicle: true,
+      marketDriverName: { not: null },
+    },
+    select: {
+      groupNumber: true,
+      marketDriverName: true,
+    },
+  });
+
+  const requested = new Set(driverNames);
+  const groupByDriver = new Map(
+    groups
+      .filter(
+        (g) =>
+          g.marketDriverName &&
+          requested.has(normalizeDriverName(g.marketDriverName)),
+      )
+      .map((g) => [
+        normalizeDriverName(g.marketDriverName!),
+        g.groupNumber,
+      ]),
+  );
+
+  return drivers.map((driver) => {
+    const key =
+      typeof driver.name === "string" ? normalizeDriverName(driver.name) : "";
+    const activeGroupNumber = groupByDriver.get(key) ?? null;
+    return {
+      ...driver,
+      isAssigned: Boolean(activeGroupNumber),
+      activeGroupNumber,
+    };
+  });
+};
 
 const router = Router();
 router.post("/_photo/upload-url", async (req, res, next) => {
@@ -128,6 +178,7 @@ const crudRouter: Router = createCrudRouter({
     },
     lookupOrderBy: { name: "asc" },
     defaultOrderBy: { name: "asc" },
+    mapRows: withActiveLRGroupAssignment,
   },
 });
 

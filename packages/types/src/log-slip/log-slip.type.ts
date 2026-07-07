@@ -9,8 +9,7 @@ import {
 export type LogSlipStatus = z.infer<typeof logSlipStatusSchema>;
 export type LogSlipLineType = z.infer<typeof logSlipLineTypeSchema>;
 
-// Raw resolver output is posted to the API; the server validator converts money.
-export type GenerateLogSlipBody = z.input<typeof generateLogSlipSchema>;
+export type GenerateLogSlipBody = z.output<typeof generateLogSlipSchema>;
 export type GenerateLogSlipFormInput = z.input<typeof generateLogSlipSchema>;
 export type ReopenLogSlipBody = z.output<typeof reopenLogSlipSchema>;
 
