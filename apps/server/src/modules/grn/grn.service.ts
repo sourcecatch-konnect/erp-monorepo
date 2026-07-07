@@ -1,6 +1,8 @@
+// apps/server/src/modules/grn/grn.service.ts
+
 import { Prisma } from "../../../generated/prisma/index.js";
 import { rupeesToPaise } from "../../lib/money.js";
-import type { CreateGRNBody, UpdateGRNBody } from "@skerp/types";
+import type { CreateGRNInput, UpdateGRNInput } from "@skerp/validators";
 
 export {
   fyCodeFor,
@@ -8,191 +10,154 @@ export {
   formatDocNumber,
 } from "../_shared/doc-number.js";
 
-type GRNGoodsInput = CreateGRNBody["goods"][number];
+type BranchScopedReq = {
+  ctx?: {
+    branchScope: "ALL" | "ASSIGNED";
+    branchIds: string[];
+  };
+};
 
-/* ------------------------------------------------------------------ */
-/* Selects / Includes                                                 */
-/* ------------------------------------------------------------------ */
+/**
+ * GRN is created at receiving / destination branch.
+ */
+export const grnDestinationBranchFilter = (req: BranchScopedReq) => {
+  if (!req.ctx) return {};
+  if (req.ctx.branchScope === "ALL") return {};
 
-export const grnListSelect = {
-  id: true,
-  grnNumber: true,
-  lorryReceiptId: true,
- 
-  status: true,
-  gateNo: true,
+  if (req.ctx.branchIds.length === 0) {
+    return { id: { in: [] as string[] } };
+  }
 
-  inDateTime: true,
-  outDateTime: true,
-  unloadingMinutes: true,
-
-  totalQty: true,
-  receivedQty: true,
-  damageQty: true,
-  shortageQty: true,
-  totalWeightMt: true,
-
-  grossTotal: true,
-  netAmount: true,
-
-  createdAt: true,
-  updatedAt: true,
-  version: true,
-
-  lorryReceipt: {
-    select: {
-      id: true,
-      lrNumber: true,
-      status: true,
-      invoiceNumber: true,
-      invoiceAmount: true,
-    },
-  },
-
-
-  createdBy: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-    },
-  },
-} satisfies Prisma.GRNSelect;
-
-export const grnDetailInclude = {
-  lorryReceipt: {
-    select: {
-      id: true,
-      lrNumber: true,
-      status: true,
-      invoiceNumber: true,
-      invoiceAmount: true,
-
-      group: {
-        select: {
-          id: true,
-          groupNumber: true,
-          transportType: true,
-
-          originBranch: {
-            select: {
-              id: true,
-              name: true,
-              branchCode: true,
-            },
-          },
-
-          destinationBranch: {
-            select: {
-              id: true,
-              name: true,
-              branchCode: true,
-            },
-          },
-
-          consignor: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-
-          consignee: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
+  return {
+    group: {
+      destinationBranchId: {
+        in: req.ctx.branchIds,
       },
     },
-  },
+  };
+};
 
- 
-  goods: {
-    orderBy: {
-      createdAt: "asc" as const,
-    },
-  },
+const branchSelect = {
+  id: true,
+  name: true,
+  branchCode: true,
+} satisfies Prisma.BranchSelect;
 
-  labour: {
+const customerSelect = {
+  id: true,
+  name: true,
+} satisfies Prisma.CustomerSelect;
+
+const locationSelect = {
+  id: true,
+  name: true,
+  address: true,
+  city: {
     select: {
       id: true,
       name: true,
-      type: true,
-      mobileNo: true,
     },
   },
+} satisfies Prisma.CustomerLocationSelect;
 
-  unloadingSupervisor: {
+const tripPreviewSelect = {
+  id: true,
+  tripNumber: true,
+  tripName: true,
+  onwardFreight: true,
+  vehicle: {
+    select: {
+      id: true,
+      vehicleNumber: true,
+    },
+  },
+  driver: {
     select: {
       id: true,
       name: true,
-      type: true,
-      mobileNo: true,
+      mobile: true,
     },
   },
+} satisfies Prisma.VehicleTripSelect;
 
-  createdBy: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-    },
-  },
+const userSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+} satisfies Prisma.UserSelect;
 
-  updatedBy: {
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-    },
-  },
-} satisfies Prisma.GRNInclude;
+const labourSelect = {
+  id: true,
+  name: true,
+  type: true,
+  mobileNo: true,
+} satisfies Prisma.LabourSelect;
 
-export const grnPreviewLRInclude = {
+const lrLiteSelect = {
+  id: true,
+  lrNumber: true,
+  status: true,
+  invoiceNumber: true,
+  invoiceAmount: true,
   group: {
     select: {
       id: true,
       groupNumber: true,
-      transportType: true,
+      originBranchId: true,
+      destinationBranchId: true,
+      consignor: { select: customerSelect },
+      consignee: { select: customerSelect },
+      originBranch: { select: branchSelect },
+      destinationBranch: { select: branchSelect },
+    },
+  },
+} satisfies Prisma.LorryReceiptSelect;
 
-      originBranch: {
-        select: {
-          id: true,
-          name: true,
-          branchCode: true,
-        },
-      },
+/* ------------------------------------------------------------------ */
+/* Eligible LR dropdown select                                         */
+/* ------------------------------------------------------------------ */
 
-      destinationBranch: {
-        select: {
-          id: true,
-          name: true,
-          branchCode: true,
-        },
-      },
+export const eligibleLRSelect = {
+  id: true,
+  lrNumber: true,
+  status: true,
+  createdAt: true,
+  invoiceNumber: true,
+  invoiceAmount: true,
+  groupId: true,
+  group: {
+    select: {
+      id: true,
+      groupNumber: true,
+      destinationBranchId: true,
+      consignor: { select: customerSelect },
+      consignee: { select: customerSelect },
+      originBranch: { select: branchSelect },
+      destinationBranch: { select: branchSelect },
+    },
+  },
+} satisfies Prisma.LorryReceiptSelect;
 
-      consignor: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
+/* ------------------------------------------------------------------ */
+/* GRN preview include                                                 */
+/* ------------------------------------------------------------------ */
 
-      consignee: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
+export const grnPreviewInclude = {
+  loadingLocation: { select: locationSelect },
+  unloadingLocation: { select: locationSelect },
+  ewayBill: true,
+
+  // Used only to block duplicate GRN.
+  grn: {
+    select: {
+      id: true,
+      grnNumber: true,
+      status: true,
     },
   },
 
   goods: {
-    orderBy: {
-      createdAt: "asc" as const,
-    },
+    orderBy: { createdAt: "asc" },
     select: {
       id: true,
       name: true,
@@ -200,147 +165,158 @@ export const grnPreviewLRInclude = {
       quantity: true,
       unit: true,
       weight: true,
+      length: true,
+      width: true,
+      height: true,
     },
   },
 
-  ewayBill: {
+  group: {
     select: {
       id: true,
-      ewayBillNo: true,
-      expiresAt: true,
-      generatedAt: true,
+      groupNumber: true,
+      fyCode: true,
+      source: true,
+      transportType: true,
+      tripLegType: true,
+      priority: true,
+
+      originBranchId: true,
+      destinationBranchId: true,
+
+      // Own / market vehicle logic
+      isMarketVehicle: true,
+
+      // Market vehicle fields
+      marketVehicleNumber: true,
+      marketDriverName: true,
+      marketFreightAmount: true,
+      marketAdvanceAmount: true,
+      marketCommissionAmount: true,
+      marketHamaliAmount: true,
+      marketTdsAmount: true,
+
+      // Own vehicle / common freight
+      baseFreightAmount: true,
+      sealNumber: true,
+      finalisedAt: true,
+
+      consignor: { select: customerSelect },
+      consignee: { select: customerSelect },
+
+      originBranch: { select: branchSelect },
+      destinationBranch: { select: branchSelect },
+      hub: { select: branchSelect },
+      railheadBranch: { select: branchSelect },
+
+      primaryTrip: { select: tripPreviewSelect },
+      secondaryTrip: { select: tripPreviewSelect },
     },
   },
 } satisfies Prisma.LorryReceiptInclude;
 
-/* ------------------------------------------------------------------ */
-/* Calculation helpers                                                */
-/* ------------------------------------------------------------------ */
-const toMoney = (value: number | undefined): number | undefined => {
-  return value === undefined ? undefined : rupeesToPaise(value);
-};
+export const grnListSelect = {
+  id: true,
+  grnNumber: true,
+  status: true,
+  gateNo: true,
+  inDateTime: true,
+  outDateTime: true,
+  totalQty: true,
+  receivedQty: true,
+  damageQty: true,
+  shortageQty: true,
+  netAmount: true,
+  createdAt: true,
+  updatedAt: true,
+  version: true,
+  lorryReceipt: { select: lrLiteSelect },
+} satisfies Prisma.GRNSelect;
 
-const toMoneyOrZero = (value: number | undefined): number => {
-  return value === undefined ? 0 : rupeesToPaise(value);
-};
-export const calculateUnloadingMinutes = (
-  inDateTime?: Date,
-  outDateTime?: Date,
+export const grnDetailInclude = {
+  lorryReceipt: { select: lrLiteSelect },
+  goods: {
+    orderBy: { createdAt: "asc" },
+  },
+  labour: { select: labourSelect },
+  unloadingSupervisor: { select: userSelect },
+  createdBy: { select: userSelect },
+  updatedBy: { select: userSelect },
+} satisfies Prisma.GRNInclude;
+
+type GRNMoneyInput = Pick<
+  CreateGRNInput | UpdateGRNInput,
+  | "totalFreight"
+  | "balanceFreight"
+  | "freightPerMt"
+  | "detentionRate"
+  | "advanceAmount"
+  | "damageAmount"
+  | "tdsAmount"
+  | "hamaliAmount"
+  | "printingStationaryAmount"
+  | "labourCharge"
+>;
+
+const toMoney = (value: number | undefined) =>
+  value === undefined ? undefined : BigInt(rupeesToPaise(value));
+
+export const toDecimalOrNull = (value: number | undefined) =>
+  value === undefined ? null : new Prisma.Decimal(value);
+
+export const buildGRNMoneyData = (data: GRNMoneyInput) => ({
+  totalFreight: toMoney(data.totalFreight),
+  balanceFreight: toMoney(data.balanceFreight),
+  freightPerMt: toMoney(data.freightPerMt),
+  detentionRate: toMoney(data.detentionRate),
+  advanceAmount: toMoney(data.advanceAmount),
+  damageAmount: toMoney(data.damageAmount),
+  tdsAmount: toMoney(data.tdsAmount),
+  hamaliAmount: toMoney(data.hamaliAmount),
+  printingStationaryAmount: toMoney(data.printingStationaryAmount),
+  labourCharge: toMoney(data.labourCharge),
+});
+
+export const calculateGRNTotals = (
+  goods: Array<{
+    totalQty: number;
+    receivedQty: number;
+    damageQty: number;
+    shortageQty: number;
+  }>,
+  money: {
+    totalFreight?: bigint;
+    detentionRate?: bigint;
+    advanceAmount?: bigint;
+    damageAmount?: bigint;
+    tdsAmount?: bigint;
+    hamaliAmount?: bigint;
+    printingStationaryAmount?: bigint;
+  },
+  detentionDays: number,
 ) => {
-  if (!inDateTime || !outDateTime) return null;
+  const totalQty = goods.reduce((sum, row) => sum + row.totalQty, 0);
+  const receivedQty = goods.reduce((sum, row) => sum + row.receivedQty, 0);
+  const damageQty = goods.reduce((sum, row) => sum + row.damageQty, 0);
+  const shortageQty = goods.reduce((sum, row) => sum + row.shortageQty, 0);
 
-  const diff = outDateTime.getTime() - inDateTime.getTime();
-
-  if (diff < 0) return null;
-
-  return Math.floor(diff / 60000);
-};
-
-export const calculateGRNGoodsTotals = (goods: GRNGoodsInput[]) => {
-  return goods.reduce(
-    (acc, item) => {
-      acc.totalQty += item.totalQty;
-      acc.receivedQty += item.receivedQty;
-      acc.damageQty += item.damageQty;
-      acc.shortageQty += item.shortageQty;
-
-      if (item.weight !== undefined) {
-        acc.totalWeightMt += item.weight;
-      }
-
-      return acc;
-    },
-    {
-      totalQty: 0,
-      receivedQty: 0,
-      damageQty: 0,
-      shortageQty: 0,
-      totalWeightMt: 0,
-    },
-  );
-};
-
-export const calculateGRNAmounts = (
-  data: Pick<
-    CreateGRNBody | UpdateGRNBody,
-    | "balanceFreight"
-    | "detentionDays"
-    | "detentionRate"
-    | "advanceAmount"
-    | "damageAmount"
-    | "tdsAmount"
-    | "hamaliAmount"
-    | "printingStationaryAmount"
-  >,
-) => {
-  const balanceFreight = toMoneyOrZero(data.balanceFreight);
-  const detentionRate = toMoneyOrZero(data.detentionRate);
-
-  const advanceAmount = toMoneyOrZero(data.advanceAmount);
-  const damageAmount = toMoneyOrZero(data.damageAmount);
-  const tdsAmount = toMoneyOrZero(data.tdsAmount);
-  const hamaliAmount = toMoneyOrZero(data.hamaliAmount);
-  const printingStationaryAmount = toMoneyOrZero(
-    data.printingStationaryAmount,
-  );
-
-  const detentionAmount = (data.detentionDays ?? 0) * detentionRate;
-
-  const grossTotal = balanceFreight + detentionAmount;
-
-  const netAmount =
-    grossTotal -
-    advanceAmount -
-    damageAmount -
-    tdsAmount +
-    hamaliAmount +
-    printingStationaryAmount;
+  const detentionAmount =
+    BigInt(detentionDays) * (money.detentionRate ?? BigInt(0));
+  const grossTotal = (money.totalFreight ?? BigInt(0)) + detentionAmount;
+  const deductions =
+    (money.advanceAmount ?? BigInt(0)) +
+    (money.damageAmount ?? BigInt(0)) +
+    (money.tdsAmount ?? BigInt(0)) +
+    (money.hamaliAmount ?? BigInt(0)) +
+    (money.printingStationaryAmount ?? BigInt(0));
 
   return {
+    totalQty,
+    receivedQty,
+    damageQty,
+    shortageQty,
     detentionAmount,
     grossTotal,
-    netAmount,
+    netAmount: grossTotal - deductions,
   };
-};
-export const buildGRNMoneyData = (data: CreateGRNBody | UpdateGRNBody) => {
-  const amounts = calculateGRNAmounts(data);
-
-  return {
-    totalFreight: toMoney(data.totalFreight),
-    balanceFreight: toMoney(data.balanceFreight),
-    freightPerMt: toMoney(data.freightPerMt),
-
-    detentionRate: toMoney(data.detentionRate),
-    detentionAmount: amounts.detentionAmount,
-
-    grossTotal: amounts.grossTotal,
-
-    advanceAmount: toMoneyOrZero(data.advanceAmount),
-    damageAmount: toMoneyOrZero(data.damageAmount),
-    tdsAmount: toMoneyOrZero(data.tdsAmount),
-    hamaliAmount: toMoneyOrZero(data.hamaliAmount),
-    printingStationaryAmount: toMoneyOrZero(
-      data.printingStationaryAmount,
-    ),
-
-    netAmount: amounts.netAmount,
-  };
-};
-
-export const buildGRNGoodsCreateData = (goods: GRNGoodsInput[]) => {
-  return goods.map((item) => ({
-    lrGoodsId: item.lrGoodsId ?? null,
-    goodsName: item.goodsName,
-    description: item.description ?? null,
-    totalQty: item.totalQty,
-    receivedQty: item.receivedQty,
-    damageQty: item.damageQty,
-    shortageQty: item.shortageQty,
-    unit: item.unit ?? null,
-    weight:
-      item.weight === undefined
-        ? undefined
-        : new Prisma.Decimal(item.weight),
-    remarks: item.remarks ?? null,
-  }));
 };

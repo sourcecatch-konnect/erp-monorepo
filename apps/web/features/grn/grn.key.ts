@@ -1,3 +1,5 @@
+// apps/web/src/features/grn/grn.key.ts
+
 import type { ListQuery } from "../masters/_shared/master-api";
 
 export const grnKeys = {
@@ -11,6 +13,11 @@ export const grnKeys = {
   detail: (id: string) =>
     ["grn", "detail", id] as const,
 
-  lrPreview: (lorryReceiptId: string) =>
-    ["grn", "preview", "lr", lorryReceiptId] as const,
+  preview: (lrId: string) =>
+    ["grn", "preview", lrId] as const,
+};
+
+export const grnLookupKeys = {
+  eligibleLRs: (query: ListQuery) =>
+    ["grn-lookups", "eligible-lrs", query] as const,
 };

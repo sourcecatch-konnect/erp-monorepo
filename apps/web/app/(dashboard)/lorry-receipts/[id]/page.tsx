@@ -1,3 +1,4 @@
+"use client";
 import { ProtectedRoute } from "@/features/auth";
 import { LRDetail } from "@/features/lorry-receipts";
 import { PERMS } from "@skerp/types";

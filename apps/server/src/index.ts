@@ -48,7 +48,6 @@ import vpScheduleRoute from "./modules/vp-schedule/vp-schedule.route.js"
 import creditorRoute from "./modules/creditor/creditor.route.js";
 import cashAccountRoute from "./modules/cash-account/cash-account.route.js";
 import cashPlanningRoute from "./modules/cash-planning/cash-planning.route.js";
-import grnRoute from "./modules/grn/grn.router.js"
 import vpLoadingRoute from "./modules/vp-loading/vp-loading.route.js"
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
@@ -59,6 +58,7 @@ import MRRRRoute from "./modules/mrrr/mrrr.route.js"
 import { authMiddleware } from "./middlewares/auth.middlware.js";
 import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
 import { ensurePermissionCatalog } from "./auth/permission-catalog.js";
+import grnRoute from "./modules/grn/grn.route.js"
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with

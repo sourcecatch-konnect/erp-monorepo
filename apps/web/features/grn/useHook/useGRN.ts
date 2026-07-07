@@ -1,16 +1,25 @@
+// apps/web/src/features/grn/hooks/use-grn.ts
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type {
-  CreateGRNBody,
-  UpdateGRNBody,
-  SubmitGRNBody,
-  CancelGRNBody,
-} from "@skerp/types";
-
 import type { ListQuery } from "@/features/masters/_shared/master-api";
-
-import { grnKeys } from "../grn.key";
-import { grnApi } from "../grn.service";
+import {
+  grnApi,
+  type CancelGRNBody,
+  type CreateGRNBody,
+  type SubmitGRNBody,
+  type UpdateGRNBody,
+} from "../grn.service";
+import { grnKeys, grnLookupKeys } from "../grn.key";
+import { api } from "@/lib/api";
+export type SupervisorOption = {
+  id: string;
+  name: string;
+  email: string;
+};
+/* ------------------------------------------------------------------ */
+/* Queries                                                            */
+/* ------------------------------------------------------------------ */
 
 export const useGRNs = (query: ListQuery) => {
   return useQuery({
@@ -34,23 +43,36 @@ export const useGRNDetail = (id: string) => {
   });
 };
 
-export const useGRNLRPreview = (lorryReceiptId: string) => {
+export const useEligibleGRNLrs = (query: ListQuery) => {
   return useQuery({
-    queryKey: grnKeys.lrPreview(lorryReceiptId),
-    queryFn: () => grnApi.previewLR(lorryReceiptId),
-    enabled: Boolean(lorryReceiptId),
+    queryKey: grnLookupKeys.eligibleLRs(query),
+    queryFn: () => grnApi.eligibleLRs(query),
   });
 };
+
+export const useGRNPreview = (lrId: string) => {
+  return useQuery({
+    queryKey: grnKeys.preview(lrId),
+    queryFn: () => grnApi.preview(lrId),
+    enabled: Boolean(lrId),
+  });
+};
+
+/* ------------------------------------------------------------------ */
+/* Mutations                                                          */
+/* ------------------------------------------------------------------ */
 
 export const useCreateGRN = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: CreateGRNBody) =>
-      grnApi.create(body),
+    mutationFn: (body: CreateGRNBody) => grnApi.create(body),
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: grnKeys.all });
+
+      // After GRN create, selected LR should disappear from eligible LR list.
+      queryClient.invalidateQueries({ queryKey: ["grn-lookups"] });
     },
   });
 };
@@ -64,7 +86,7 @@ export const useUpdateGRN = () => {
       body,
     }: {
       id: string;
-      body: UpdateGRNBody & { version?: number };
+      body: UpdateGRNBody;
     }) => grnApi.update(id, body),
 
     onSuccess: (_data, variables) => {
@@ -118,15 +140,15 @@ export const useCancelGRN = () => {
   });
 };
 
-export const useDeleteGRN = () => {
-  const queryClient = useQueryClient();
+export function useGrnSupervisors() {
+  return useQuery({
+    queryKey: ["grn-supervisors"],
+    queryFn: async () => {
+      const res = await api.get<{ data: SupervisorOption[] }>(
+        "/grn/supervisors",
+      );
 
-  return useMutation({
-    mutationFn: (id: string) =>
-      grnApi.delete(id),
-
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: grnKeys.all });
+      return res.data.data;
     },
   });
-};
+}

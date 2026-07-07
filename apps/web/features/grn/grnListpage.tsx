@@ -1,197 +1,141 @@
+// apps/web/app/(dashboard)/vp-management/grn/page.tsx
+
 "use client";
 
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import type { GRN } from "@skerp/types";
-import { PERMS } from "@skerp/types";
+import Link from "next/link";
+import { IconEye, IconPlus } from "@tabler/icons-react";
+
 import { Button } from "@skerp/ui/components/button";
-import { IconPlus } from "@tabler/icons-react";
-
-import ConfirmDialog from "@/components/feedback/ConfirmDialog";
-import ReasonDialog from "@/components/feedback/ReasonDialog";
-import { useCan } from "@/features/auth";
-import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
-import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
-import type { ListQuery } from "@/features/masters/_shared/master-api";
-
-import GRNTable from "./GRNTable";
 import {
-  useCancelGRN,
-  useDeleteGRN,
-  useGRNs,
-  useGRNStatusCounts,
-  useSubmitGRN,
-} from "./hook/useGrn";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@skerp/ui/components/table";
 
-export function GRNListPage() {
-  const router = useRouter();
-  const [page, setPage] = React.useState(0);
-  const [size, setSize] = React.useState(10);
-  const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("ALL");
-  const [submitGRN, setSubmitGRN] = React.useState<GRN | null>(null);
-  const [cancelGRN, setCancelGRN] = React.useState<GRN | null>(null);
-  const [deleteGRN, setDeleteGRN] = React.useState<GRN | null>(null);
+import { useGRNs } from "./useHook/useGRN";
+import { formatPaise } from "@/lib/money";
 
-  const canCreate = useCan(PERMS.GRN.CREATE);
-  const canSubmit = useCan(PERMS.GRN.SUBMIT);
-  const canCancel = useCan(PERMS.GRN.CANCEL);
-  const canDelete = useCan(PERMS.GRN.DELETE);
-  const canCreateVPLoading = useCan(PERMS.VP_LOADING.CREATE);
+const DASH = "—";
 
-  const debouncedSearch = useDebouncedValue(search);
+const formatDate = (value: unknown) => {
+  if (!value) return DASH;
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, statusFilter]);
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return DASH;
 
-  const listQuery = React.useMemo<ListQuery>(
-    () => ({
-      page,
-      size,
-      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
-      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
-    }),
-    [page, size, debouncedSearch, statusFilter],
-  );
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
 
-  const grns = useGRNs(listQuery);
-  const counts = useGRNStatusCounts();
-  const submitMutation = useSubmitGRN();
-  const cancelMutation = useCancelGRN();
-  const deleteMutation = useDeleteGRN();
+export default function GrnListPage() {
+  const grns = useGRNs({
+    page: 0,
+    size: 25,
+    search: "",
+  });
 
-  const handleSizeChange = (nextSize: number) => {
-    setSize(nextSize);
-    setPage(0);
-  };
-
-  const handleView = (grn: GRN) => {
-    toast.info(`${grn.grnNumber} detail screen is coming next`);
-  };
-
-  const handleCreateVPLoading = (grn: GRN) => {
-    toast.info(`${grn.grnNumber} is ready for VP Loading`);
-  };
+  const rows = grns.data?.data ?? [];
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">GRN</h1>
+    <div className="space-y-6 p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">GRN</h1>
           <p className="text-sm text-muted-foreground">
-            Create and manage goods received notes for rail-head unloading.
+            Goods Receipt Note list
           </p>
         </div>
 
-        {canCreate ? (
-          <Button onClick={() => router.push("/vp-management/grn/new")}>
-            <IconPlus size={16} className="mr-1" />
-            Add GRN
-          </Button>
-        ) : null}
+        <Button asChild>
+          <Link href="/vp-management/grn/new">
+            <IconPlus size={16} className="mr-2" />
+            Create GRN
+          </Link>
+        </Button>
       </div>
 
-      <GRNTable
-        data={grns.data?.data ?? []}
-        total={grns.data?.meta?.total ?? 0}
-        page={page}
-        size={size}
-        search={search}
-        statusFilter={statusFilter}
-        counts={counts.data ?? {}}
-        isLoading={grns.isLoading}
-        canSubmit={canSubmit}
-        canCancel={canCancel}
-        canDelete={canDelete}
-        canCreateVPLoading={canCreateVPLoading}
-        onPageChange={setPage}
-        onSizeChange={handleSizeChange}
-        onSearchChange={setSearch}
-        onStatusFilterChange={setStatusFilter}
-        onView={handleView}
-        onSubmit={setSubmitGRN}
-        onCancel={setCancelGRN}
-        onDelete={setDeleteGRN}
-        onCreateVPLoading={handleCreateVPLoading}
-      />
+      <div className="rounded-lg border bg-card">
+        {grns.isLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">
+            Loading GRN list...
+          </div>
+        ) : grns.isError ? (
+          <div className="p-6 text-sm text-red-600">
+            Failed to load GRN list.
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">
+            No GRN found.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead>GRN No</TableHead>
+                  <TableHead>LR No</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Gate No</TableHead>
+                  <TableHead>Received</TableHead>
+                  <TableHead>Damage</TableHead>
+                  <TableHead>Shortage</TableHead>
+                  <TableHead>Net Amount</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
 
-      <ConfirmDialog
-        open={Boolean(submitGRN)}
-        onOpenChange={(open) => !open && setSubmitGRN(null)}
-        title={`Submit GRN ${submitGRN?.grnNumber ?? ""}`}
-        description="Submitted GRNs are ready for VP Loading and cannot be edited as drafts."
-        confirmLabel="Submit GRN"
-        pendingLabel="Submitting..."
-        isPending={submitMutation.isPending}
-        onConfirm={() => {
-          if (!submitGRN) return;
+              <TableBody>
+                {rows.map((grn: any) => (
+                  <TableRow key={grn.id}>
+                    <TableCell className="font-medium">
+                      {grn.grnNumber || DASH}
+                    </TableCell>
 
-          submitMutation.mutate(
-            {
-              id: submitGRN.id,
-              body: { version: submitGRN.version },
-            },
-            {
-              onSuccess: () => {
-                toast.success("GRN submitted");
-                setSubmitGRN(null);
-              },
-              onError: (error) => toast.error(getErrorMessage(error)),
-            },
-          );
-        }}
-      />
+                    <TableCell>
+                      {grn.lorryReceipt?.lrNumber || DASH}
+                    </TableCell>
 
-      <ReasonDialog
-        open={Boolean(cancelGRN)}
-        onOpenChange={(open) => !open && setCancelGRN(null)}
-        title={`Cancel GRN ${cancelGRN?.grnNumber ?? ""}`}
-        description="This keeps the GRN record but stops it from being used for new VP Loading."
-        confirmLabel="Cancel GRN"
-        destructive
-        isPending={cancelMutation.isPending}
-        onConfirm={(reason) => {
-          if (!cancelGRN) return;
+                    <TableCell>
+                      <span className="inline-flex rounded-full border bg-muted px-2 py-0.5 text-xs font-medium">
+                        {grn.status || DASH}
+                      </span>
+                    </TableCell>
 
-          cancelMutation.mutate(
-            {
-              id: cancelGRN.id,
-              body: { reason, version: cancelGRN.version },
-            },
-            {
-              onSuccess: () => {
-                toast.success("GRN cancelled");
-                setCancelGRN(null);
-              },
-              onError: (error) => toast.error(getErrorMessage(error)),
-            },
-          );
-        }}
-      />
+                    <TableCell>{grn.gateNo || DASH}</TableCell>
 
-      <ConfirmDialog
-        open={Boolean(deleteGRN)}
-        onOpenChange={(open) => !open && setDeleteGRN(null)}
-        title={`Delete GRN ${deleteGRN?.grnNumber ?? ""}`}
-        description="Use this only for wrong or duplicate draft/cancelled GRNs."
-        confirmLabel="Delete GRN"
-        pendingLabel="Deleting..."
-        destructive
-        isPending={deleteMutation.isPending}
-        onConfirm={() => {
-          if (!deleteGRN) return;
+                    <TableCell>{grn.receivedQty ?? DASH}</TableCell>
 
-          deleteMutation.mutate(deleteGRN.id, {
-            onSuccess: () => {
-              toast.success("GRN deleted");
-              setDeleteGRN(null);
-            },
-            onError: (error) => toast.error(getErrorMessage(error)),
-          });
-        }}
-      />
+                    <TableCell>{grn.damageQty ?? DASH}</TableCell>
+
+                    <TableCell>{grn.shortageQty ?? DASH}</TableCell>
+
+                    <TableCell>{formatPaise(grn.netAmount)}</TableCell>
+
+                    <TableCell>{formatDate(grn.createdAt)}</TableCell>
+
+                    <TableCell className="text-right">
+                      <Button asChild size="sm" variant="outline">
+                   
+                        <Link href={`/vp-management/grn/${grn.id}`}>
+                          <IconEye size={14} className="mr-1" />
+                          View
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

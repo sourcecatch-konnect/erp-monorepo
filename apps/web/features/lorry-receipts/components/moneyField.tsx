@@ -47,11 +47,13 @@ export function MoneyField<TFormValues extends FieldValues>({
   label,
   required,
   placeholder = "0.00",
+  readOnly = false,
 }: {
   name: Path<TFormValues>;
   label: string;
   required?: boolean;
   placeholder?: string;
+  readOnly?: boolean;
 }) {
   const {
     control,
@@ -67,7 +69,7 @@ export function MoneyField<TFormValues extends FieldValues>({
 
   return (
     <div>
-      <FieldLabel >{label}</FieldLabel>
+      <FieldLabel required={required}>{label}</FieldLabel>
 
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
@@ -80,10 +82,16 @@ export function MoneyField<TFormValues extends FieldValues>({
           placeholder={placeholder}
           value={formatAmountInput(field.value)}
           onChange={(event) => {
+            if (readOnly) return;
             field.onChange(cleanAmountInput(event.target.value));
           }}
           onBlur={field.onBlur}
-          className="h-9 pl-7 text-right tabular-nums"
+          readOnly={readOnly}
+          className={
+            readOnly
+              ? "h-9 bg-muted/40 pl-7 text-right tabular-nums"
+              : "h-9 pl-7 text-right tabular-nums"
+          }
           aria-invalid={Boolean(error)}
         />
       </div>

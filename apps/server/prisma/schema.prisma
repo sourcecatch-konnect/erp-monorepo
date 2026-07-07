@@ -87,6 +87,7 @@ model User {
   createdTripExpenses         TripExpense[]                  @relation("CreatedTripExpenses")
   createdDriverAdvances       DriverAdvance[]                @relation("CreatedDriverAdvances")
   generatedLogSlips           LogSlip[]                      @relation("GeneratedLogSlips")
+  supervisedGRNs              GRN[]                          @relation("GRNUnloadingSupervisor")
 }
 
 model Company {
@@ -600,7 +601,6 @@ model Labour {
   branch                  Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
   city                    City        @relation(fields: [cityId], references: [id])
   grnLabours              GRN[]       @relation("GRNLabour")
-  grnUnloadingSupervisors GRN[]       @relation("GRNUnloadingSupervisor")
   vpLoadingLabours        VPLoading[] @relation("VPLoadingLabour")
   vpLoadingSupervisors    VPLoading[] @relation("VPLoadingSupervisor")
 }
@@ -1500,12 +1500,11 @@ model GRN {
 
   labourId String?
   labour   Labour? @relation("GRNLabour", fields: [labourId], references: [id])
-
+  labourName String?
   labourCharge BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   Labour? @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
-
+  unloadingSupervisor   User? @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
   damagesBy GRNDamagesBy?
 
   lrCopyChecked      Boolean @default(false)

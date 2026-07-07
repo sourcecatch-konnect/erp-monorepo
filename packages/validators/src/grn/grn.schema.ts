@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
 const optionalString = z
   .string()
   .trim()
@@ -60,10 +56,6 @@ const nonNegativeIntField = (label: string) =>
       `${label} must be a non-negative whole number`,
     );
 
-/* ------------------------------------------------------------------ */
-/* Enums                                                              */
-/* ------------------------------------------------------------------ */
-
 export const grnStatusSchema = z.enum(["DRAFT", "SUBMITTED", "CANCELLED"]);
 
 export const grnDamagesBySchema = z.enum([
@@ -75,76 +67,46 @@ export const grnDamagesBySchema = z.enum([
   "UNKNOWN",
 ]);
 
-/* ------------------------------------------------------------------ */
-/* GRN Goods                                                          */
-/* ------------------------------------------------------------------ */
-
 export const grnGoodsSchema = z
   .object({
     lrGoodsId: optionalString,
-
-    goodsName: z
-      .string()
-      .trim()
-      .min(1, "Goods name is required")
-      .max(150, "Goods name is too long"),
-
+    goodsName: z.string().trim().min(1, "Goods name is required"),
     description: optionalString,
-
     totalQty: nonNegativeIntField("Total quantity"),
     receivedQty: nonNegativeIntField("Received quantity"),
     damageQty: nonNegativeIntField("Damage quantity"),
     shortageQty: nonNegativeIntField("Shortage quantity"),
-
     unit: optionalString,
-
     weight: optionalNonNegativeNumberField("Weight"),
-
     remarks: optionalString,
   })
   .superRefine((data, ctx) => {
-    const actualQty = data.receivedQty + data.damageQty + data.shortageQty;
-
-    if (actualQty > data.totalQty) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Received + damage + shortage quantity cannot be greater than total quantity",
-        path: ["receivedQty"],
-      });
-    }
+    if (data.receivedQty + data.shortageQty > data.totalQty) {
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: "Received and shortage quantity cannot exceed total quantity",
+    path: ["receivedQty"],
   });
+}
 
-/* ------------------------------------------------------------------ */
-/* Create / Update                                                    */
-/* ------------------------------------------------------------------ */
+if (data.damageQty > data.receivedQty) {
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: "Damage quantity cannot be greater than received quantity",
+    path: ["damageQty"],
+  });
+}
+  });
 
 const grnBaseShape = {
   lorryReceiptId: z.string().trim().min(1, "LR is required"),
-
   gateNo: optionalString,
 
   inDateTime: optionalDate,
   outDateTime: optionalDate,
+  unloadingMinutes: optionalNumberField("Unloading minutes"),
 
-  labourId: optionalString,
-  labourCharge: optionalNonNegativeNumberField("Labour charge"),
-
-  unloadingSupervisorId: optionalString,
-
-  damagesBy: grnDamagesBySchema.optional().default("NONE"),
-
-  lrCopyChecked: z.boolean().optional().default(false),
-  invoiceChecked: z.boolean().optional().default(false),
-  kataReceiptChecked: z.boolean().optional().default(false),
-  wayBillChecked: z.boolean().optional().default(false),
-  sealNoChecked: z.boolean().optional().default(false),
-
-  lrCopyRemark: optionalString,
-  invoiceRemark: optionalString,
-  kataReceiptRemark: optionalString,
-  wayBillRemark: optionalString,
-  sealNoRemark: optionalString,
+  totalWeightMt: optionalNonNegativeNumberField("Total weight"),
 
   totalFreight: optionalNonNegativeNumberField("Total freight"),
   balanceFreight: optionalNonNegativeNumberField("Balance freight"),
@@ -153,17 +115,35 @@ const grnBaseShape = {
   detentionDays: nonNegativeIntField("Detention days"),
   detentionRate: optionalNonNegativeNumberField("Detention rate"),
 
-  advanceAmount: optionalNonNegativeNumberField("Advance amount"),
+  advanceAmount: optionalNonNegativeNumberField("Advance"),
   damageAmount: optionalNonNegativeNumberField("Damage amount"),
-  tdsAmount: optionalNonNegativeNumberField("TDS amount"),
-  hamaliAmount: optionalNonNegativeNumberField("Hamali amount"),
+  tdsAmount: optionalNonNegativeNumberField("TDS"),
+  hamaliAmount: optionalNonNegativeNumberField("Hamali"),
   printingStationaryAmount: optionalNonNegativeNumberField(
-    "Printing stationary amount",
+    "Printing and stationery",
   ),
+  labourName: optionalString,
+  labourId: optionalString,
+  labourCharge: optionalNonNegativeNumberField("Labour charge"),
+  unloadingSupervisorId: optionalString,
+  damagesBy: grnDamagesBySchema.optional(),
+
+  lrCopyChecked: z.coerce.boolean().optional().default(false),
+  invoiceChecked: z.coerce.boolean().optional().default(false),
+  kataReceiptChecked: z.coerce.boolean().optional().default(false),
+  wayBillChecked: z.coerce.boolean().optional().default(false),
+  sealNoChecked: z.coerce.boolean().optional().default(false),
+
+  lrCopyRemark: optionalString,
+  invoiceRemark: optionalString,
+  kataReceiptRemark: optionalString,
+  wayBillRemark: optionalString,
+  sealNoRemark: optionalString,
 
   remarks: optionalString,
 
-  goods: z.array(grnGoodsSchema).min(1, "Add at least one goods line"),
+  goods: z.array(grnGoodsSchema).min(1, "At least one goods line is required"),
+  damagePhotoAttachmentIds: z.array(z.string().trim().min(1)).optional().default([]),
 
   version: z.number().optional(),
 };
@@ -172,27 +152,43 @@ const grnDateRefinement = (
   data: {
     inDateTime?: Date;
     outDateTime?: Date;
+    goods?: Array<{ damageQty: number }>;
+    damagesBy?: z.infer<typeof grnDamagesBySchema>;
   },
   ctx: z.RefinementCtx,
 ) => {
   if (data.inDateTime && data.outDateTime && data.outDateTime < data.inDateTime) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Out date/time cannot be before in date/time",
+      message: "Out time cannot be before in time",
       path: ["outDateTime"],
+    });
+  }
+
+  const damageQty = (data.goods ?? []).reduce(
+    (sum, row) => sum + row.damageQty,
+    0,
+  );
+
+  if (damageQty > 0 && !data.damagesBy) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Damages by is required when damage quantity is entered",
+      path: ["damagesBy"],
     });
   }
 };
 
-export const createGRNSchema = z.object(grnBaseShape).superRefine(grnDateRefinement);
+export const createGRNSchema = z
+  .object(grnBaseShape)
+  .superRefine(grnDateRefinement);
 
-export const updateGRNSchema = z.object(grnBaseShape).superRefine(grnDateRefinement);
-
-/* ------------------------------------------------------------------ */
-/* Transitions                                                        */
-/* ------------------------------------------------------------------ */
+export const updateGRNSchema = z
+  .object(grnBaseShape)
+  .superRefine(grnDateRefinement);
 
 export const submitGRNSchema = z.object({
+  damagePhotoAttachmentIds: z.array(z.string().trim().min(1)).optional().default([]),
   version: z.number().optional(),
 });
 
@@ -202,6 +198,11 @@ export const cancelGRNSchema = z.object({
     .trim()
     .min(3, "Please give a reason (min 3 characters)")
     .max(500, "Reason is too long"),
-
   version: z.number().optional(),
 });
+
+export type GRNGoodsInput = z.infer<typeof grnGoodsSchema>;
+export type CreateGRNInput = z.infer<typeof createGRNSchema>;
+export type UpdateGRNInput = z.infer<typeof updateGRNSchema>;
+export type SubmitGRNInput = z.infer<typeof submitGRNSchema>;
+export type CancelGRNInput = z.infer<typeof cancelGRNSchema>;

@@ -1,752 +1,1002 @@
+// apps/web/src/features/grn/components/GRNForm.tsx
+
 "use client";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Controller, FormProvider, useFieldArray, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import {
+  Controller,
+  FormProvider,
+  useFieldArray,
+  useForm,
+  useWatch,
+} from "react-hook-form";
+import type { SubmitHandler } from "react-hook-form";
 import { toast } from "sonner";
 import {
   IconAlertTriangle,
-  IconClipboardCheck,
-  IconCurrencyRupee,
-  IconNotes,
+  IconFileText,
   IconPackage,
-  IconReceipt,
-  IconTrain,
+  IconX,
 } from "@tabler/icons-react";
 
-import type { CreateGRNBody, CreateGRNFormInput, GRNDamagesBy } from "@skerp/types";
-import { createGRNSchema } from "@skerp/validators";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
-import { Checkbox } from "@skerp/ui/components/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@skerp/ui/components/table";
+import { Textarea } from "@skerp/ui/components/textarea";
 
 import FormSection from "@/features/masters/_shared/fields/FormSection";
 import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
-import SelectField from "@/features/masters/_shared/fields/SelectField";
-import TextAreaField from "@/features/masters/_shared/fields/TextAreaField";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
-import type { ListQuery } from "@/features/masters/_shared/master-api";
-import { lorryReceiptApi } from "@/features/lorry-receipts/lorry-receipt.service";
+import { attachmentApi } from "@/features/attachments/attachment.client";
 
-import { formatMoney } from "@/lib/format";
-
-import { useCreateGRN, useGRNLRPreview } from "./hook/useGrn";
-import { formatDate, formatGRNMoney } from "./grn-ui";
+import {
+  useCreateGRN,
+  useEligibleGRNLrs,
+  useGRNPreview,
+  useGrnSupervisors,
+  useSubmitGRN,
+} from "./useHook/useGRN";
+import type { CreateGRNBody, GRN } from "./grn.service";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@skerp/ui/components/table";
+import LRPreviewPanel from "./components/grnPreview";
+import { FieldLabel, MoneyField } from "../lorry-receipts/components/moneyField";
 import { DatePicker } from "@skerp/ui/components/datepicker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@skerp/ui/components/select";
 
-type Props = {
-  mode: "create";
+type GRNFormValues = CreateGRNBody & {
+  balanceFreight?: number | string;
+  freightPerMT?: number | string;
+  detentionDays?: number;
+  detentionAmount?: number | string;
+  grossTotal?: number | string;
+  labourName?: string;
 };
 
-type GRNFormValues = CreateGRNFormInput;
+const numberValue = (value: unknown) => {
+  const n =
+    typeof value === "number"
+      ? value
+      : Number(String(value ?? "").trim() || 0);
 
-type FlatError = {
-  label: string;
-  message: string;
+  return Number.isFinite(n) ? n : 0;
 };
 
-const FIELD_LABELS: Record<string, string> = {
-
-  lorryReceiptId: "LR",
-  gateNo: "Gate No",
-  inDateTime: "In date/time",
-  outDateTime: "Out date/time",
-  goods: "Goods",
-  receivedQty: "Received quantity",
-  damageQty: "Damage quantity",
-  shortageQty: "Shortage quantity",
+const toNumberOrUndefined = (value: unknown) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  return numberValue(value);
 };
 
-const DAMAGE_OPTIONS: { label: string; value: GRNDamagesBy }[] = [
-  { label: "None", value: "NONE" },
-  { label: "Transporter", value: "TRANSPORTER" },
-  { label: "Labour", value: "LABOUR" },
-  { label: "Railway", value: "RAILWAY" },
-  { label: "Customer", value: "CUSTOMER" },
-  { label: "Unknown", value: "UNKNOWN" },
-];
+const DAMAGE_PHOTO_ENTITY = "GRN_DAMAGE";
+const MAX_DAMAGE_PHOTO_BYTES = 2 * 1024 * 1024;
 
-const CHECK_FIELDS = [
-  { name: "lrCopyChecked", label: "LR Copy", remark: "lrCopyRemark" },
-  { name: "invoiceChecked", label: "Invoice", remark: "invoiceRemark" },
-  { name: "kataReceiptChecked", label: "Kata Receipt", remark: "kataReceiptRemark" },
-  { name: "wayBillChecked", label: "Way Bill", remark: "wayBillRemark" },
-  { name: "sealNoChecked", label: "Seal No", remark: "sealNoRemark" },
-] as const;
+const getDamagePhotoKey = (file: File) =>
+  `${file.name}-${file.size}-${file.lastModified}`;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const toDate = (value: unknown) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 
-const humanLabel = (path: string[]) => {
-  const parts: string[] = [];
+const calculateUnloadingMinutes = (
+  inDateTime: unknown,
+  outDateTime: unknown,
+) => {
+  const inDate = toDate(inDateTime);
+  const outDate = toDate(outDateTime);
 
-  for (let index = 0; index < path.length; index += 1) {
-    const segment = path[index];
+  if (!inDate || !outDate) return undefined;
 
-    if (!segment || /^\d+$/.test(segment)) continue;
+  const diffMs = outDate.getTime() - inDate.getTime();
 
-    const next = path[index + 1];
+  if (diffMs <= 0) return undefined;
 
-    if (next && /^\d+$/.test(next)) {
-      parts.push(`Goods row ${Number(next) + 1}`);
-      continue;
-    }
+  return Math.round(diffMs / 60000);
+};
 
-    parts.push(FIELD_LABELS[segment] ?? segment);
+const formatMinutesToHours = (minutes?: number) => {
+  if (!minutes) return "—";
+
+  const hours = minutes / 60;
+
+  return `${hours.toFixed(2)} hr`;
+};
+const toDateValue = (value: unknown): Date | undefined => {
+  if (!value) return undefined;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
   }
 
-  return parts.join(" - ");
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 };
 
-const collectErrors = (node: unknown, path: string[] = []): FlatError[] => {
-  if (!isRecord(node)) return [];
-
-  const message = node.message;
-
-  if (typeof message === "string" && message.length > 0) {
-    return [{ label: humanLabel(path), message }];
-  }
-
-  const issues: FlatError[] = [];
-
-  for (const key of Object.keys(node)) {
-    if (key === "ref" || key === "type" || key === "message") continue;
-    issues.push(...collectErrors(node[key], [...path, key]));
-  }
-
-  return issues;
+const paiseToRupeeInput = (value: unknown) => {
+  const num = toNumberOrUndefined(value);
+  return num === undefined ? undefined : num / 100;
 };
-
-
-const watchedMoney = (value: unknown): number => {
-  const amount = value === "" || value === undefined ? undefined : Number(value);
-
-  return amount !== undefined && Number.isFinite(amount) ? amount : 0;
-};
-
-export function GRNForm({ mode }: Props) {
+export default function GRNForm() {
   const router = useRouter();
-  const createMutation = useCreateGRN();
 
-  const form = useForm<GRNFormValues>({
-    resolver: zodResolver(createGRNSchema) as any,
-    mode: "onTouched",
-    defaultValues: {
-      lorryReceiptId: "",
+  const createGRN = useCreateGRN();
+  const submitGRN = useSubmitGRN();
+  const damagePhotoInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [damagePhotoFiles, setDamagePhotoFiles] = React.useState<File[]>([]);
+  const [createdDraft, setCreatedDraft] = React.useState<GRN | null>(null);
+  const [isUploadingDamagePhotos, setIsUploadingDamagePhotos] =
+    React.useState(false);
 
-      gateNo: "",
-       inDateTime: new Date().toISOString().slice(0, 10),
-      outDateTime: "",
-      labourId: "",
-      labourCharge: "",
-      unloadingSupervisorId: "",
-      damagesBy: "NONE",
-      lrCopyChecked: false,
-      invoiceChecked: false,
-      kataReceiptChecked: false,
-      wayBillChecked: false,
-      sealNoChecked: false,
-      lrCopyRemark: "",
-      invoiceRemark: "",
-      kataReceiptRemark: "",
-      wayBillRemark: "",
-      sealNoRemark: "",
-      totalFreight: "",
-      balanceFreight: "",
-      freightPerMt: "",
-      detentionDays: 0,
-      detentionRate: "",
-      advanceAmount: "",
-      damageAmount: "",
-      tdsAmount: "",
-      hamaliAmount: "",
-      printingStationaryAmount: "",
-      remarks: "",
-      goods: [],
-    },
+const form = useForm<GRNFormValues>({
+  defaultValues: {
+    lorryReceiptId: "",
+    goods: [],
+    damagePhotoAttachmentIds: [],
+    detentionDays: 0,
+    damagesBy: "NONE",
+    detentionAmount: "0",
+    balanceFreight: 0,
+    freightPerMT: "0",
+    grossTotal: "0",
+  },
+});
+  const eligibleLRs = useEligibleGRNLrs({
+    page: 0,
+    size: 50,
+    search: "",
   });
 
+  const selectedLRId = useWatch({
+    control: form.control,
+    name: "lorryReceiptId",
+  });
+const totalFreightValue = useWatch({
+  control: form.control,
+  name: "totalFreight",
+});
+
+const advanceAmountValue = useWatch({
+  control: form.control,
+  name: "advanceAmount",
+});
+
+const detentionAmountValue = useWatch({
+  control: form.control,
+  name: "detentionAmount",
+});
+  const preview = useGRNPreview(selectedLRId);
+const isMarketVehicle = preview.data?.vehicleInfo.type === "MARKET";
   const { fields, replace } = useFieldArray({
     control: form.control,
     name: "goods",
   });
 
-  const watchedLorryReceiptId = form.watch("lorryReceiptId");
-  const watchedGoods = form.watch("goods") ?? [];
-  const watchedValues = form.watch();
-
- const lrQuery = useQuery({
-  queryKey: ["grn-lookups", "finalised-lrs"],
-  queryFn: () =>
-    lorryReceiptApi.list({
-      page: 0,
-      size: 100,
-      filter: { status: "FINALISED" },
-    } satisfies ListQuery),
-});
-console.log(lrQuery.data?.data,"LRs at GRN")
-const lrOptions =
-  lrQuery.data?.data.map((lr) => ({
-    value: lr.id,
-    label: lr.lrNumber ?? "",
-  })) ?? [];
-  const previewQuery = useGRNLRPreview(watchedLorryReceiptId || "");
+  const watchedGoods = useWatch({
+    control: form.control,
+    name: "goods",
+  });
 
   React.useEffect(() => {
-    const preview = previewQuery.data;
+    setCreatedDraft(null);
+    setDamagePhotoFiles([]);
 
-    if (!preview || !watchedLorryReceiptId) return;
+    if (!selectedLRId) {
+      replace([]);
+      return;
+    }
+
+    if (!preview.data) return;
 
     replace(
-      preview.goods.map((item) => ({
-        lrGoodsId: item.lrGoodsId,
-        goodsName: item.goodsName,
-        description: item.description ?? "",
-        totalQty: item.totalQty,
-        receivedQty: item.totalQty,
-        damageQty: 0,
-        shortageQty: 0,
-        unit: item.unit ?? "",
-        weight: item.weight == null ? "" : String(item.weight),
-        remarks: "",
-      })),
+      preview.data.goods.map((item) => {
+        const totalQty = numberValue(item.totalQty);
+        const receivedQty = numberValue(item.receivedQty);
+
+        return {
+          lrGoodsId: item.lrGoodsId,
+          goodsName: item.goodsName,
+          description: item.description ?? undefined,
+          totalQty,
+          receivedQty,
+          damageQty: numberValue(item.damageQty),
+          shortageQty: Math.max(totalQty - receivedQty, 0),
+          unit: item.unit ?? undefined,
+          weight: toNumberOrUndefined(item.weight),
+          remarks: "",
+        };
+      }),
     );
 
-    form.setValue(
-      "totalFreight",
-      preview.lorryReceipt.invoiceAmount == null
-        ? ""
-        : String(preview.lorryReceipt.invoiceAmount),
-      { shouldDirty: false, shouldValidate: false },
-    );
-    form.setValue(
-      "balanceFreight",
-      preview.lorryReceipt.invoiceAmount == null
-        ? ""
-        : String(preview.lorryReceipt.invoiceAmount),
-      { shouldDirty: false, shouldValidate: false },
-    );
-  }, [form, previewQuery.data, replace, watchedLorryReceiptId]);
+form.setValue(
+  "totalFreight",
+  paiseToRupeeInput(preview.data.chargeDefaults.totalFreight),
+);
 
- 
+form.setValue(
+  "advanceAmount",
+  paiseToRupeeInput(preview.data.chargeDefaults.advanceAmount),
+);
 
+form.setValue(
+  "hamaliAmount",
+  paiseToRupeeInput(preview.data.chargeDefaults.hamaliAmount),
+);
 
+form.setValue(
+  "tdsAmount",
+  paiseToRupeeInput(preview.data.chargeDefaults.tdsAmount),
+);
+  }, [selectedLRId, preview.data, replace, form]);
+  
+const freightSummary = React.useMemo(() => {
+  const totalFreight = numberValue(totalFreightValue);
+  const advanceAmount = numberValue(advanceAmountValue);
+  const detentionAmount = numberValue(detentionAmountValue);
 
-  const totals = React.useMemo(() => {
-    return watchedGoods.reduce(
-      (acc, row) => {
-        acc.totalQty += Number(row.totalQty || 0);
-        acc.receivedQty += Number(row.receivedQty || 0);
-        acc.damageQty += Number(row.damageQty || 0);
-        acc.shortageQty += Number(row.shortageQty || 0);
-        acc.weight += Number(row.weight || 0);
+  // Old ERP style: balance is same as total freight
+  const balanceFreight = totalFreight;
 
-        return acc;
-      },
-      {
-        totalQty: 0,
-        receivedQty: 0,
-        damageQty: 0,
-        shortageQty: 0,
-        weight: 0,
-      },
-    );
-  }, [watchedGoods]);
+  // If you want balance after advance, use this instead:
+  // const balanceFreight = Math.max(totalFreight - advanceAmount, 0);
+
+  const totalMt = (watchedGoods ?? []).reduce((sum, row) => {
+    const unit = String(row?.unit ?? "").toUpperCase();
+
+    if (unit === "MT") {
+      return sum + numberValue(row?.receivedQty || row?.totalQty);
+    }
+
+    return sum;
+  }, 0);
+
+  const freightPerMT = totalMt > 0 ? totalFreight / totalMt : 0;
+
+  const grossTotal = totalFreight + detentionAmount;
+
+  return {
+    totalFreight,
+    balanceFreight,
+    freightPerMT,
+    detentionAmount,
+    grossTotal,
+  };
+}, [totalFreightValue, advanceAmountValue, detentionAmountValue, watchedGoods]);
 React.useEffect(() => {
-  const totalFreight = watchedMoney(watchedValues.totalFreight);
-  const advanceAmount = watchedMoney(watchedValues.advanceAmount);
+  const totalFreight = numberValue(totalFreightValue);
+  const detentionAmount = numberValue(detentionAmountValue);
 
-  const balanceFreight = Math.max(totalFreight - advanceAmount, 0);
+  const grossTotal = totalFreight + detentionAmount;
 
-  form.setValue("balanceFreight", String(balanceFreight), {
+  form.setValue("grossTotal", grossTotal.toFixed(2), {
     shouldDirty: true,
     shouldValidate: true,
   });
-}, [form, watchedValues.totalFreight, watchedValues.advanceAmount]);
-const moneyPreview = React.useMemo(() => {
-  const balanceFreight = watchedMoney(watchedValues.balanceFreight);
-  const detentionDays = Number(watchedValues.detentionDays || 0);
-  const detentionRate = watchedMoney(watchedValues.detentionRate);
+}, [form, totalFreightValue, detentionAmountValue]);
+const labourValue = useWatch({
+  control: form.control,
+  name: "labourName",
+});
+const grossTotalValue = useWatch({
+  control: form.control,
+  name: "grossTotal",
+});
 
-  const detentionAmount = detentionRate;
-  const gross = balanceFreight + detentionAmount;
+const detentionDaysValue = useWatch({
+  control: form.control,
+  name: "detentionDays",
+});
 
-  const net =
-    gross -
-    watchedMoney(watchedValues.damageAmount) -
-    watchedMoney(watchedValues.tdsAmount) +
-    watchedMoney(watchedValues.hamaliAmount) +
-    watchedMoney(watchedValues.printingStationaryAmount);
+const grossTotalPaise = Math.round(numberValue(grossTotalValue) * 100);
+const detentionAmountPaise = Math.round(numberValue(detentionAmountValue) * 100);
+const labourOptions = [
+  {
+    value: "OTHER_LABOUR",
+    label: "Other Labour",
+  },
+  {
+    value: "PARAS_ROADLINES",
+    label: "Paras RoadLines",
+  },
+];
+  const lrOptions =
+    eligibleLRs.data?.data?.map((lr) => ({
+      value: lr.id,
+      label: String(lr.lrNumber ?? lr.id),
+    })) ?? [];
 
-  return { detentionAmount, gross, net };
-}, [watchedValues]);
+  const validateGoods = (goods: GRNFormValues["goods"]) => {
+    for (const [index, row] of goods.entries()) {
+      const totalQty = numberValue(row.totalQty);
+      const receivedQty = numberValue(row.receivedQty);
+      const damageQty = numberValue(row.damageQty);
 
-  const validationIssues = React.useMemo(
-    () => collectErrors(form.formState.errors),
-    [form.formState.errors],
-  );
-  const showValidationSummary =
-    form.formState.submitCount > 0 && validationIssues.length > 0;
+      if (receivedQty > totalQty) {
+        toast.error(
+          `Row ${index + 1}: Received qty cannot be greater than total qty.`,
+        );
+        return false;
+      }
 
-  const onSubmit = async (values: GRNFormValues) => {
-    try {
-      const parsed = createGRNSchema.parse(values) as CreateGRNBody;
-      const created = await createMutation.mutateAsync(parsed);
+      if (damageQty > receivedQty) {
+        toast.error(
+          `Row ${index + 1}: Damage qty cannot be greater than received qty.`,
+        );
+        return false;
+      }
+    }
 
-      toast.success("GRN created");
-      router.push(`/vp-management/grn?created=${encodeURIComponent(created.id)}`);
-    } catch (error) {
-      toast.error(getErrorMessage(error));
+    return true;
+  };
+  const handleDamagePhotosChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = Array.from(event.target.files ?? []);
+
+    const validFiles: File[] = [];
+    for (const file of files) {
+      if (!file.type.toLowerCase().startsWith("image/")) {
+        toast.error(`${file.name} is not an image file`);
+        continue;
+      }
+
+      if (file.size > MAX_DAMAGE_PHOTO_BYTES) {
+        toast.error(`${file.name} must be less than 2 MB`);
+        continue;
+      }
+
+      validFiles.push(file);
+    }
+
+    setDamagePhotoFiles((currentFiles) => {
+      const selectedKeys = new Set(currentFiles.map(getDamagePhotoKey));
+      const newFiles = validFiles.filter((file) => {
+        const key = getDamagePhotoKey(file);
+
+        if (selectedKeys.has(key)) {
+          toast.error(`${file.name} is already selected`);
+          return false;
+        }
+
+        selectedKeys.add(key);
+        return true;
+      });
+
+      return [...currentFiles, ...newFiles];
+    });
+
+    event.target.value = "";
+  };
+
+  const removeDamagePhoto = (fileToRemove: File) => {
+    const keyToRemove = getDamagePhotoKey(fileToRemove);
+
+    setDamagePhotoFiles((currentFiles) =>
+      currentFiles.filter((file) => getDamagePhotoKey(file) !== keyToRemove),
+    );
+
+    if (damagePhotoInputRef.current) {
+      damagePhotoInputRef.current.value = "";
     }
   };
-const toSafeNumber = (value: unknown) => {
-  const number = Number(value || 0);
-  return Number.isFinite(number) ? number : 0;
-};
+const inDateTime = useWatch({
+  control: form.control,
+  name: "inDateTime",
+});
 
-const recalculateShortage = (
-  index: number,
-  nextValues?: {
-    totalQty?: unknown;
-    receivedQty?: unknown;
-    damageQty?: unknown;
-  },
-) => {
-  const row = form.getValues(`goods.${index}`);
+const outDateTime = useWatch({
+  control: form.control,
+  name: "outDateTime",
+});
 
-  const totalQty = toSafeNumber(nextValues?.totalQty ?? row.totalQty);
-  const receivedQty = toSafeNumber(nextValues?.receivedQty ?? row.receivedQty);
-  const damageQty = toSafeNumber(nextValues?.damageQty ?? row.damageQty);
-
-  const shortageQty = Math.max(totalQty - receivedQty, 0);
-
-  form.setValue(`goods.${index}.shortageQty`, shortageQty, {
+const unloadingMinutes = React.useMemo(
+  () => calculateUnloadingMinutes(inDateTime, outDateTime),
+  [inDateTime, outDateTime],
+);
+React.useEffect(() => {
+  form.setValue("unloadingMinutes", unloadingMinutes, {
     shouldDirty: true,
     shouldValidate: true,
   });
-};
-  return (
-    <FormProvider {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="mx-auto w-full max-w-6xl space-y-5 p-4 pb-20"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight">
-              {mode === "create" ? "Create GRN" : "GRN"}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Receive rail-head goods against a finalised LR.
-            </p>
-          </div>
+}, [form, unloadingMinutes]);
+  const onSubmit: SubmitHandler<GRNFormValues> = async (values) => {
+    if (!values.lorryReceiptId) {
+      toast.error("Please select LR first");
+      return;
+    }
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push("/vp-management/grn")}
-          >
-            Back
-          </Button>
-        </div>
+    if (!values.goods.length) {
+      toast.error("No goods found for selected LR");
+      return;
+    }
 
-        <FormSection icon={<IconTrain size={16} />} title="LR Detail" columns={3}>
-   
+    if (!validateGoods(values.goods)) return;
 
-          <ComboboxField<GRNFormValues>
-            name="lorryReceiptId"
-            label="LR Number"
-            options={lrOptions}
-            emptyText="No finalised LRs found"
-            required
-          />
+    const goods = values.goods.map((row) => {
+      const totalQty = numberValue(row.totalQty);
+      const receivedQty = numberValue(row.receivedQty);
+      const damageQty = numberValue(row.damageQty);
+      const shortageQty = Math.max(totalQty - receivedQty, 0);
 
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Gate No</label>
-            <Input placeholder="Gate number" {...form.register("gateNo")} />
-          </div>
+      return {
+        ...row,
+        totalQty,
+        receivedQty,
+        damageQty,
+        shortageQty,
+        remarks:
+          damageQty > 0 || shortageQty > 0
+            ? row.remarks?.trim() || undefined
+            : undefined,
+      };
+    });
+    const hasDamage = goods.some((row) => numberValue(row.damageQty) > 0);
 
-          <div className="grid gap-1.5">
-           
-            <Controller
-  control={form.control}
-  name="inDateTime"
-  render={({ field }) => (
-    <DatePicker
-      label="In Date"
-      selected={field.value ? new Date(field.value) : undefined}
-      onSelect={(d) =>
-        field.onChange(d ? d.toISOString().slice(0, 10) : "")
-      }
-    />
-  )}
-/>
-          </div>
+    if (hasDamage && (!values.damagesBy || values.damagesBy === "NONE")) {
+  toast.error("Please select who caused the damage");
+  return;
+}
 
-          <div className="grid gap-1.5">
-           
-           <Controller
-  control={form.control}
-  name="outDateTime"
-  render={({ field }) => (
-    <DatePicker
-      label="Out Date"
-      selected={field.value ? new Date(field.value) : undefined}
-      onSelect={(d) =>
-        field.onChange(d ? d.toISOString().slice(0, 10) : "")
-      }
-    />
-  )}
-/>
-          </div>
+    try {
+const { labourName, detentionAmount, grossTotal, freightPerMT, ...apiValues } =
+  values;
 
-          <SelectField<GRNFormValues>
-            name="damagesBy"
-            label="Damages By"
-            options={DAMAGE_OPTIONS}
-          />
-        </FormSection>
-
-        <FormSection icon={<IconReceipt size={16} />} title="LR Preview" columns={1}>
-          {!watchedLorryReceiptId ? (
-            <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-              Select a finalised LR to load consignor, consignee, e-way bill, and goods lines.
-            </div>
-          ) : previewQuery.isLoading ? (
-            <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-              Loading LR preview...
-            </div>
-          ) : previewQuery.data ? (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <p className="text-xs text-muted-foreground">LR Number</p>
-                <p className="text-sm font-medium">
-                  {previewQuery.data.lorryReceipt.lrNumber}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Group</p>
-                <p className="text-sm font-medium">
-                  {previewQuery.data.group?.groupNumber ?? "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Consignor</p>
-                <p className="text-sm font-medium">
-                  {(previewQuery.data.group?.consignor as any)?.name ?? "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Consignee</p>
-                <p className="text-sm font-medium">
-                  {(previewQuery.data.group?.consignee as any)?.name ?? "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Origin</p>
-                <p className="text-sm font-medium">
-                  {(previewQuery.data.group?.originBranch as any)?.name ?? "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Destination</p>
-                <p className="text-sm font-medium">
-                  {(previewQuery.data.group?.destinationBranch as any)?.name ?? "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Invoice</p>
-                <p className="text-sm font-medium">
-                  {previewQuery.data.lorryReceipt.invoiceNumber ?? "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Invoice Amount</p>
-                <p className="text-sm font-medium">
-                  {formatMoney(previewQuery.data.lorryReceipt.invoiceAmount)}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              LR preview is not available for this selection.
-            </div>
-          )}
-        </FormSection>
-
-        <FormSection icon={<IconPackage size={16} />} title="Goods Receiving" columns={1}>
-          <div className="overflow-x-auto rounded-md border bg-background">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Goods</TableHead>
-                  <TableHead className="w-28">Total</TableHead>
-                  <TableHead className="w-28">Received</TableHead>
-                  <TableHead className="w-28">Damage</TableHead>
-                  <TableHead className="w-28">Shortage</TableHead>
-                  <TableHead className="w-28">Weight</TableHead>
-                  <TableHead>Remarks</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {fields.length ? (
-                  fields.map((field, index) => (
-                    <TableRow key={field.id}>
-                      <TableCell className="min-w-56 align-top">
-                        <Input
-                          placeholder="Goods name"
-                          {...form.register(`goods.${index}.goodsName`)}
-                        />
-                        <input type="hidden" {...form.register(`goods.${index}.lrGoodsId`)} />
-                        <input type="hidden" {...form.register(`goods.${index}.unit`)} />
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Input
-  type="number"
-  min={0}
-  {...form.register(`goods.${index}.totalQty`, {
-    onChange: (event) => {
-      recalculateShortage(index, {
-        totalQty: event.target.value,
+const created =
+  createdDraft?.lorryReceiptId === values.lorryReceiptId
+    ? createdDraft
+    : await createGRN.mutateAsync({
+        ...apiValues,
+        labourId: undefined,
+        unloadingSupervisorId: values.unloadingSupervisorId,
+        goods,
+        damagePhotoAttachmentIds: [],
       });
-    },
-  })}
-/>
-                      </TableCell>
-                      <TableCell className="align-top">
-                       <Input
-  type="number"
-  min={0}
-  {...form.register(`goods.${index}.receivedQty`, {
-    onChange: (event) => {
-      recalculateShortage(index, {
-        receivedQty: event.target.value,
+      setCreatedDraft(created);
+
+      setIsUploadingDamagePhotos(true);
+      const uploadedPhotos = await Promise.all(
+        damagePhotoFiles.map((file) =>
+          attachmentApi.upload(
+            {
+              entityType: DAMAGE_PHOTO_ENTITY,
+              entityId: created.id,
+              originalName: file.name,
+              mime: file.type,
+              sizeBytes: file.size,
+            },
+            file,
+          ),
+        ),
+      );
+      setIsUploadingDamagePhotos(false);
+
+      const submitted = await submitGRN.mutateAsync({
+        id: created.id,
+        body: {
+          version: created.version,
+          damagePhotoAttachmentIds: uploadedPhotos.map((photo) => photo.id),
+        },
       });
-    },
-  })}
-/>
+
+      toast.success(`GRN ${submitted.grnNumber} created`);
+      setCreatedDraft(null);
+    router.push(`/vp-management/grn/${submitted.id}`);
+    } catch (err) {
+      setIsUploadingDamagePhotos(false);
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const isCreating =
+    createGRN.isPending || submitGRN.isPending || isUploadingDamagePhotos;
+const hasDamageOrShortage = React.useMemo(() => {
+  return watchedGoods?.some((row) => {
+    const damageQty = numberValue(row?.damageQty);
+    const totalQty = numberValue(row?.totalQty);
+    const receivedQty = numberValue(row?.receivedQty);
+    const shortageQty = Math.max(totalQty - receivedQty, 0);
+
+    return damageQty > 0 || shortageQty > 0;
+  });
+}, [watchedGoods]);
+const damageByValue = useWatch({
+  control: form.control,
+  name: "damagesBy",
+});
+const { data: supervisors = [], isLoading: supervisorsLoading } =
+  useGrnSupervisors();
+React.useEffect(() => {
+  if (!hasDamageOrShortage) {
+    setDamagePhotoFiles([]);
+    form.setValue("damagesBy", "NONE" as GRNFormValues["damagesBy"], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+}, [form, hasDamageOrShortage]);
+   return (
+<FormProvider {...form}>
+  <form onSubmit={form.handleSubmit(onSubmit)}>
+    <div className="flex w-full items-start gap-5 overflow-hidden">
+  {/* LEFT SIDE FORM */}
+  <div className="min-w-0 flex-1 space-y-5">
+    <FormSection
+      icon={<IconFileText size={16} />}
+      title="Select LR"
+      columns={1}
+    >
+      <ComboboxField
+        name="lorryReceiptId"
+        label="LR Number"
+        required
+        options={lrOptions}
+        emptyText={
+          eligibleLRs.isLoading
+            ? "Loading LRs..."
+            : "No eligible LR found"
+        }
+      />
+    </FormSection>
+
+{preview.data ? (
+  <FormSection
+    icon={<IconPackage size={16} />}
+    title="Goods Receive"
+    columns={1}
+  >
+    <div className="space-y-3">
+      <div className="overflow-x-auto rounded-lg border">
+        <div className="min-w-[500px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="w-12">SN</TableHead>
+                <TableHead className="w-24">Goods Name</TableHead>
+                <TableHead className="w-20">Unit</TableHead>
+                <TableHead className="w-32">Total</TableHead>
+                <TableHead className="w-32">Received</TableHead>
+                <TableHead className="w-32">Damage</TableHead>
+                <TableHead className="w-28">Shortage</TableHead>
+              </TableRow>
+            </TableHeader>
+
+            <TableBody>
+              {fields.map((field, index) => {
+                const row = watchedGoods?.[index];
+
+                const totalQty = numberValue(row?.totalQty);
+                const receivedQty = numberValue(row?.receivedQty);
+                const damageQty = numberValue(row?.damageQty);
+                const shortageQty = Math.max(totalQty - receivedQty, 0);
+                const showReason = damageQty > 0 || shortageQty > 0;
+
+                return (
+                  <React.Fragment key={field.id}>
+                    <TableRow>
+                      <TableCell className="text-muted-foreground">
+                        {index + 1}
                       </TableCell>
-                      <TableCell className="align-top">
-                       <Input
-  type="number"
-  min={0}
-  {...form.register(`goods.${index}.damageQty`, {
-    onChange: (event) => {
-      recalculateShortage(index, {
-        damageQty: event.target.value,
-      });
-    },
-  })}
-/>
+
+                      <TableCell>
+                        <p className="font-medium">
+                          {row?.goodsName || "Goods"}
+                        </p>
+
+                        {row?.description ? (
+                          <p className="text-xs text-muted-foreground">
+                            {row.description}
+                          </p>
+                        ) : null}
                       </TableCell>
-                      <TableCell className="align-top">
-                       <Input
-  type="number"
-  min={0}
-  readOnly
-  className="bg-muted/50"
-  {...form.register(`goods.${index}.shortageQty`)}
-/>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.001"
-                          {...form.register(`goods.${index}.weight`)}
+
+                      <TableCell>{row?.unit || "—"}</TableCell>
+
+                      {/* Total is now manually editable */}
+                      <TableCell>
+                        <Controller
+                          name={`goods.${index}.totalQty` as const}
+                          control={form.control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              min={0}
+                              className="h-9"
+                              value={field.value ?? ""}
+                              onChange={(event) => {
+                                const value = numberValue(event.target.value);
+
+                                field.onChange(value);
+
+                                form.setValue(
+                                  `goods.${index}.shortageQty` as const,
+                                  Math.max(value - receivedQty, 0),
+                                  { shouldDirty: true },
+                                );
+                              }}
+                            />
+                          )}
                         />
                       </TableCell>
-                      <TableCell className="min-w-52 align-top">
-                        <Input
-                          placeholder="Row remarks"
-                          {...form.register(`goods.${index}.remarks`)}
+
+                      <TableCell>
+                        <Controller
+                          name={`goods.${index}.receivedQty` as const}
+                          control={form.control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              min={0}
+                              max={totalQty}
+                              className="h-9"
+                              value={field.value ?? ""}
+                              onChange={(event) => {
+                                const value = numberValue(event.target.value);
+
+                                field.onChange(value);
+
+                                form.setValue(
+                                  `goods.${index}.shortageQty` as const,
+                                  Math.max(totalQty - value, 0),
+                                  { shouldDirty: true },
+                                );
+                              }}
+                            />
+                          )}
                         />
+                      </TableCell>
+
+                      <TableCell>
+                        <Controller
+                          name={`goods.${index}.damageQty` as const}
+                          control={form.control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              min={0}
+                              max={receivedQty}
+                              className="h-9"
+                              value={field.value ?? ""}
+                              onChange={(event) =>
+                                field.onChange(numberValue(event.target.value))
+                              }
+                            />
+                          )}
+                        />
+                      </TableCell>
+
+                      <TableCell>
+                        <span className="inline-flex min-w-12 rounded-md bg-muted px-3 py-2 font-medium">
+                          {shortageQty}
+                        </span>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="h-24 text-center text-sm text-muted-foreground"
-                    >
-                      Select LR to prepare goods receiving rows.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
 
-         
-        </FormSection>
-
-        <FormSection icon={<IconCurrencyRupee size={16} />} title="Freight & Charges" columns={3}>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Total Freight</label>
-            <Input type="number" min={0} step="0.01" {...form.register("totalFreight")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Balance Freight</label>
-           <Input
-  type="number"
-  min={0}
-  step="0.01"
-  readOnly
-  className="bg-muted/50"
-  {...form.register("balanceFreight")}
-/>
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Freight / MT</label>
-            <Input type="number" min={0} step="0.01" {...form.register("freightPerMt")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Detention Days</label>
-            <Input type="number" min={0} {...form.register("detentionDays")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Detention Rate</label>
-            <Input type="number" min={0} step="0.01" {...form.register("detentionRate")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Advance</label>
-            <Input type="number" min={0} step="0.01" {...form.register("advanceAmount")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Damages</label>
-            <Input type="number" min={0} step="0.01" {...form.register("damageAmount")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">TDS</label>
-            <Input type="number" min={0} step="0.01" {...form.register("tdsAmount")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Hamali</label>
-            <Input type="number" min={0} step="0.01" {...form.register("hamaliAmount")} />
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Printing & Stationary</label>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              {...form.register("printingStationaryAmount")}
-            />
-          </div>
-          <div className="rounded-md border bg-background p-3 md:col-span-2">
-            <div className="grid gap-2 text-sm sm:grid-cols-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Detention</p>
-                <p className="font-medium">{formatGRNMoney(moneyPreview.detentionAmount * 100)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Gross</p>
-                <p className="font-medium">{formatGRNMoney(moneyPreview.gross * 100)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net</p>
-                <p className="font-medium">{formatGRNMoney(moneyPreview.net * 100)}</p>
-              </div>
-            </div>
-          </div>
-        </FormSection>
-
-        <FormSection icon={<IconClipboardCheck size={16} />} title="Document Checks" columns={1}>
-          <div className="grid gap-3 md:grid-cols-2">
-            {CHECK_FIELDS.map((item) => (
-              <div key={item.name} className="rounded-md border bg-background p-3">
-                <Controller
-                  control={form.control}
-                  name={item.name}
-                  render={({ field }) => (
-                    <label className="flex items-center gap-2 text-sm font-medium">
-                      <Checkbox
-                        checked={Boolean(field.value)}
-                        onCheckedChange={(checked) => field.onChange(Boolean(checked))}
-                      />
-                      {item.label}
-                    </label>
-                  )}
-                />
-                <Input
-                  className="mt-2"
-                  placeholder={`${item.label} remark`}
-                  {...form.register(item.remark)}
-                />
-              </div>
-            ))}
-          </div>
-        </FormSection>
-
-        <FormSection icon={<IconNotes size={16} />} title="Remarks" columns={1}>
-          <TextAreaField<GRNFormValues>
-            name="remarks"
-            label="Remarks"
-            placeholder="Any unloading notes"
-            rows={4}
-            maxLength={500}
-          />
-        </FormSection>
-
-        <div className="sticky bottom-0 z-20 border-t border-border/70 bg-background/85 py-3 backdrop-blur-md">
-          {showValidationSummary ? (
-            <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <div className="flex items-start gap-2">
-                <IconAlertTriangle
-                  size={16}
-                  className="mt-0.5 shrink-0 text-destructive"
-                />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-destructive">
-                    Please fix {validationIssues.length} issue
-                    {validationIssues.length === 1 ? "" : "s"} before saving
-                  </p>
-                  {validationIssues.map((issue, index) => (
-                    <p
-                      key={`${issue.label}-${index}`}
-                      className="text-xs text-destructive/90"
-                    >
-                      <span className="font-medium">{issue.label}:</span>{" "}
-                      {issue.message}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              {fields.length
-                ? `${fields.length} goods row${fields.length === 1 ? "" : "s"} ready`
-                : "Select LR to prepare GRN"}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => router.push("/vp-management/grn")}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create GRN"}
-              </Button>
-            </div>
-          </div>
+                   {showReason ? (
+  <TableRow className="hover:bg-transparent">
+    <TableCell colSpan={7} className="px-3 pb-4 pt-0">
+      <div className="ml-[48px] rounded-md border border-amber-200 bg-amber-50/50 p-3">
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-amber-800">
+          <IconAlertTriangle size={13} />
+          Reason for damage / shortage
         </div>
-      </form>
-    </FormProvider>
-  );
+
+        <Textarea
+          {...form.register(`goods.${index}.remarks` as const)}
+          rows={2}
+          placeholder="Write reason here..."
+          className="bg-background"
+        />
+      </div>
+    </TableCell>
+  </TableRow>
+) : null}
+
+                  </React.Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+    </div>
+  </FormSection>
+) : null}
+
+{preview.data ? (
+  <FormSection
+    icon={<IconFileText size={16} />}
+    title="Receiving Details"
+    columns={3}
+  >
+    <Controller
+      name="gateNo"
+      control={form.control}
+      render={({ field }) => (
+        <div>
+          <FieldLabel>Gate No</FieldLabel>
+          <Input
+            className="h-9"
+            placeholder="Enter gate no"
+            value={field.value ?? ""}
+            onChange={field.onChange}
+            onBlur={field.onBlur}
+          />
+        </div>
+      )}
+    />
+<Controller
+  name="inDateTime"
+  control={form.control}
+  render={({ field }) => (
+    <div className="w-full md:col-span-2">
+      <FieldLabel>In Date </FieldLabel>
+      <DatePicker
+  
+        placeholder="Select in date"
+        selected={toDateValue(field.value)}
+        onSelect={(date) => field.onChange(date)}
+        withTime
+      />
+    </div>
+  )}
+/>
+<div>
+      <FieldLabel>Unloading Time (Hr)</FieldLabel>
+      <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
+        {formatMinutesToHours(unloadingMinutes)}
+      </div>
+    </div>
+<Controller
+  name="outDateTime"
+  control={form.control}
+  render={({ field }) => (
+     <div className="w-full md:col-span-2">
+      <FieldLabel>Out Date </FieldLabel>
+    <DatePicker
+
+      placeholder="Select out date"
+      selected={toDateValue(field.value)}
+      onSelect={(date) => field.onChange(date)}
+      withTime
+    />
+    </div>
+  )}
+/>
+    
+  </FormSection>
+) : null}
+{preview.data ? (
+  <FormSection
+    icon={<IconFileText size={16} />}
+    title="Labour & Damage Details"
+    columns={3}
+  >
+  
+<div>
+  <FieldLabel>Damage By</FieldLabel>
+
+  <Select
+    value={String(damageByValue ?? "NONE")}
+    disabled={!hasDamageOrShortage}
+    onValueChange={(value) => {
+      form.setValue("damagesBy", value as GRNFormValues["damagesBy"], {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select damage by" />
+    </SelectTrigger>
+
+    <SelectContent>
+<SelectItem value="NONE">No Damage</SelectItem>
+<SelectItem value="TRANSPORTER">Transporter</SelectItem>
+<SelectItem value="LABOUR">Labour</SelectItem>
+<SelectItem value="RAILWAY">Railway</SelectItem>
+<SelectItem value="CUSTOMER">Customer</SelectItem>
+<SelectItem value="UNKNOWN">Unknown</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+
+<div className="md:col-span-2">
+  <FieldLabel>Damage Photos</FieldLabel>
+  <Input
+    ref={damagePhotoInputRef}
+    type="file"
+    accept="image/*"
+    multiple
+    disabled={!hasDamageOrShortage || isCreating}
+    onChange={handleDamagePhotosChange}
+    className="h-9"
+  />
+  {damagePhotoFiles.length > 0 ? (
+    <div className="mt-2 space-y-2">
+      <div className="text-xs text-muted-foreground">
+        {damagePhotoFiles.length} photo
+        {damagePhotoFiles.length === 1 ? "" : "s"} selected
+      </div>
+
+      <div className="grid max-h-32 gap-1.5 overflow-y-auto rounded-md border bg-muted/20 p-2">
+        {damagePhotoFiles.map((file) => (
+          <div
+            key={getDamagePhotoKey(file)}
+            className="flex min-w-0 items-center gap-2 rounded-sm bg-background px-2 py-1.5 text-xs"
+          >
+            <span className="min-w-0 flex-1 truncate" title={file.name}>
+              {file.name}
+            </span>
+            <span className="shrink-0 text-muted-foreground">
+              {(file.size / 1024 / 1024).toFixed(1)} MB
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              disabled={isCreating}
+              onClick={() => removeDamagePhoto(file)}
+              aria-label={`Remove ${file.name}`}
+            >
+              <IconX size={14} />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null}
+</div>
+
+    <div>
+  <FieldLabel>Labour Name</FieldLabel>
+
+  <Select
+    value={String(labourValue ?? "")}
+    onValueChange={(value) => {
+      form.setValue("labourName", value, {
+  shouldDirty: true,
+  shouldValidate: true,
+});
+    }}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select labour" />
+    </SelectTrigger>
+
+    <SelectContent>
+      {labourOptions.map((item) => (
+        <SelectItem key={item.value} value={item.value}>
+          {item.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
+
+    <Controller
+      name="labourCharge"
+      control={form.control}
+      render={({ field }) => (
+        <div>
+          <FieldLabel>Labour Charge</FieldLabel>
+          <Input
+            type="number"
+            min={0}
+            className="h-9"
+            placeholder="0"
+            value={field.value ?? ""}
+            onChange={(event) =>
+              field.onChange(toNumberOrUndefined(event.target.value))
+            }
+            onBlur={field.onBlur}
+          />
+        </div>
+      )}
+    />
+
+<Controller
+  name="unloadingSupervisorId"
+  control={form.control}
+  render={({ field }) => (
+    <div>
+      <FieldLabel>Unloading Supervisor</FieldLabel>
+
+      <Select
+        value={field.value ?? ""}
+        onValueChange={(value) => field.onChange(value)}
+        disabled={supervisorsLoading}
+      >
+        <SelectTrigger className="h-9">
+          <SelectValue
+            placeholder={
+              supervisorsLoading ? "Loading supervisors..." : "Select supervisor"
+            }
+          />
+        </SelectTrigger>
+
+        <SelectContent>
+          {supervisors.map((supervisor) => (
+            <SelectItem key={supervisor.id} value={supervisor.id}>
+              {supervisor.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )}
+/>
+
+  </FormSection>
+) : null}
+{preview.data ? (
+  <FormSection
+    icon={<IconFileText size={16} />}
+    title="Detention Summary"
+    columns={3}
+  >
+    <Controller
+      name="detentionDays"
+      control={form.control}
+      render={({ field }) => (
+        <div>
+          <FieldLabel>Detention Days</FieldLabel>
+          <Input
+            type="number"
+            min={0}
+            className="h-9"
+            placeholder="0"
+            value={field.value ?? ""}
+            onChange={(event) =>
+              field.onChange(toNumberOrUndefined(event.target.value))
+            }
+            onBlur={field.onBlur}
+          />
+        </div>
+      )}
+    />
+
+    <MoneyField<GRNFormValues>
+      name="detentionAmount"
+      label="Detention Amount"
+    />
+  </FormSection>
+) : null}
+    {/* BUTTONS MUST STAY INSIDE LEFT COLUMN */}
+    <div className="flex items-center justify-end gap-2 rounded-lg border bg-background p-4">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => router.push("/grn")}
+      >
+        Cancel
+      </Button>
+
+      <Button
+        type="submit"
+        disabled={
+          isCreating ||
+          !selectedLRId ||
+          preview.isLoading ||
+          fields.length === 0
+        }
+      >
+        {isCreating ? "Creating..." : "Create GRN"}
+      </Button>
+    </div>
+  </div>
+
+<div className="sticky top-6 h-[calc(100vh-3rem)] w-[360px] min-w-[360px] max-w-[360px] basis-[360px] flex-none overflow-hidden">
+  <LRPreviewPanel
+    preview={preview.data}
+    loading={preview.isLoading}
+    detentionAmountPaise={detentionAmountPaise}
+    grossTotalPaise={grossTotalPaise}
+  />
+</div>
+</div>
+</form>
+  </FormProvider>
+);
+ 
 }
