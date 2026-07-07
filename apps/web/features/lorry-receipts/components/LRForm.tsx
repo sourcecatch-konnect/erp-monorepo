@@ -248,16 +248,49 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryFn: () => lrLookups.attachableTrips(activeConsignorId),
   });
 
-  // Clear a previously-picked trip if it no longer matches the consignor.
+  const watchPrimaryTripId = form.watch("primaryTripId" as never) as unknown as
+    | string
+    | undefined;
+
+  // Resolved independently of the consignor filter above, so the selected
+  // trip's own client stays known even while the filtered list is refetching.
+  const allTrips = useQuery({
+    queryKey: lrLookupKeys.attachableTrips(undefined),
+    queryFn: () => lrLookups.attachableTrips(undefined),
+    enabled: source === "INSTANT",
+  });
+  const selectedTrip = React.useMemo(
+    () => (allTrips.data ?? []).find((t) => t.id === watchPrimaryTripId),
+    [allTrips.data, watchPrimaryTripId],
+  );
+
+  // Picking a trip fixes the consignor to that trip's client (a trip carries
+  // one client) — fills it in when it's empty or mismatched, e.g. arriving
+  // from the trip's "Start trip" action with only a trip preset.
+  React.useEffect(() => {
+    if (source !== "INSTANT") return;
+    const tripConsignorId = selectedTrip?.consignor?.id;
+    if (tripConsignorId && tripConsignorId !== watchConsignor) {
+      form.setValue("consignorId" as never, tripConsignorId as never, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [source, selectedTrip, watchConsignor, form]);
+
+  // Clear a previously-picked trip if the consignor changes away from it —
+  // but not when the auto-fill above is what changed the consignor.
   const prevConsignorRef = React.useRef(activeConsignorId);
   React.useEffect(() => {
     if (prevConsignorRef.current !== activeConsignorId) {
       prevConsignorRef.current = activeConsignorId;
-      form.setValue("primaryTripId" as never, undefined as never, {
-        shouldValidate: true,
-      });
+      if (selectedTrip && selectedTrip.consignor?.id !== activeConsignorId) {
+        form.setValue("primaryTripId" as never, undefined as never, {
+          shouldValidate: true,
+        });
+      }
     }
-  }, [activeConsignorId, form]);
+  }, [activeConsignorId, form, selectedTrip]);
 
   // Instant lines pick loading/unloading from the parties' saved locations.
   const consignorLocations = useQuery({
