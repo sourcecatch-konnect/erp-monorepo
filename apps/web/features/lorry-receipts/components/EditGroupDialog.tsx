@@ -54,8 +54,8 @@ export default function EditGroupDialog({ open, onOpenChange, group, isPending, 
     enabled: open,
   });
   const trips = useQuery({
-    queryKey: lrLookupKeys.attachableTrips,
-    queryFn: lrLookups.attachableTrips,
+    queryKey: lrLookupKeys.attachableTrips(group.consignorId),
+    queryFn: () => lrLookups.attachableTrips(group.consignorId),
     enabled: open,
   });
 

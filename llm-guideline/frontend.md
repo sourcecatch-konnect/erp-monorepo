@@ -122,6 +122,38 @@ apps/web/
 - Validate with the shared Zod schema from `@skerp/validators` via `zodResolver`.
 - Field errors render per [design.md §8](./design.md).
 
+### Money fields: never convert twice
+
+Money is stored and returned by the API as **paise**. Operators enter money in
+**rupees**. Before changing any money field, identify exactly which boundary is
+responsible for the rupees -> paise conversion:
+
+- If a shared validator uses `rupeesToPaise(...)` or
+  `optionalRupeesToPaise(...)`, the server parse is the conversion boundary.
+  The web form must use `zodResolver(schema, undefined, { raw: true })` so it
+  validates but still submits the raw rupee input to the API.
+- The request body type for those raw-resolver forms should be `z.input<typeof
+  schema>`, not `z.output<typeof schema>`. `z.output` is already paise and will
+  be converted again by the server.
+- If a schema expects paise directly, for example cash planning, the form may
+  manually convert rupees to paise once before calling the API. Do not also use
+  a rupees-to-paise validator for that payload.
+- Master CRUD money fields that rely on server `convertRupeeFieldsToPaise(...)`
+  should submit rupee numbers and let the route hook convert once.
+- When editing existing rows, convert API paise back to rupees for defaults with
+  `paiseToRupees(...)`; do not send that display value through another
+  client-side paise conversion.
+
+Checklist for upgrades:
+
+- Search for `rupeesToPaise`, `optionalRupeesToPaise`,
+  `convertRupeeFieldsToPaise`, `paiseToRupees`, and manual `* 100`.
+- For every money form, confirm there is exactly one conversion before the DB:
+  either web manual conversion, server route hook conversion, or server Zod
+  transform.
+- If both the web form and the server route parse the same transform schema,
+  the form must use `raw: true`.
+
 ---
 
 ## 6. Conventions

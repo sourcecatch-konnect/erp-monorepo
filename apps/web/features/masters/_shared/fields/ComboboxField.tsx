@@ -22,6 +22,9 @@ type Props<TFormValues extends FieldValues> = {
   onScrollEnd?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
+  /** Optional inline action rendered next to the label, e.g. "+ New trip". */
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 /**
@@ -42,6 +45,8 @@ export default function ComboboxField<TFormValues extends FieldValues>({
   onScrollEnd,
   hasMore,
   isLoadingMore,
+  actionLabel,
+  onAction,
 }: Props<TFormValues>) {
   const {
     watch,
@@ -54,10 +59,21 @@ export default function ComboboxField<TFormValues extends FieldValues>({
 
   return (
     <div className="grid gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground">
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
-      </label>
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-xs font-medium text-muted-foreground">
+          {label}
+          {required ? <span className="text-red-600"> *</span> : null}
+        </label>
+        {onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            {actionLabel ?? "+ Add new"}
+          </button>
+        ) : null}
+      </div>
       <Combobox
         options={options}
         value={typeof value === "string" ? value : undefined}

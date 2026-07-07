@@ -101,6 +101,7 @@ type TripRow = {
     sourceCity?: { id: string; name: string } | null;
     destinationCity?: { id: string; name: string } | null;
   } | null;
+  consignor?: { id: string; name: string } | null;
 };
 type OrderRow = {
   id: string;
@@ -164,6 +165,7 @@ export type LROrderContext = {
   truckQuantity: number | null;
   bookingFreightAmount: number | null;
   consignor: string | null;
+  consignorId: string | null;
   consignee: string | null;
   fromBranch: { name: string; branchCode: string } | null;
 toBranch: { name: string; branchCode: string } | null;
@@ -265,10 +267,18 @@ export const lrLookups = {
     }));
   },
 
-  /** Trips an LR can attach to: any non-cancelled trip with no live LR on it. */
-  attachableTrips: async (): Promise<LRTripOption[]> => {
+  /**
+   * Trips an LR can attach to: any non-cancelled trip with no live LR on it.
+   * When `consignorId` is given, only trips for that consignor are returned —
+   * a trip carries one client, so it can only serve an LR for that same client.
+   */
+  attachableTrips: async (consignorId?: string): Promise<LRTripOption[]> => {
     const res = await api.get<ApiResponse<TripRow[]>>("/trips", {
-      params: { ...LOOKUP_SIZE, "filter[unattached]": "true" },
+      params: {
+        ...LOOKUP_SIZE,
+        "filter[unattached]": "true",
+        ...(consignorId ? { "filter[consignorId]": consignorId } : {}),
+      },
     });
     const statusLabel: Record<string, string> = {
       Planned: "Planned",
@@ -348,6 +358,7 @@ export const lrLookups = {
           ? Number(order.bookingFreightAmount)
           : null,
       consignor: order.customer?.name ?? null,
+      consignorId: order.customer?.id ?? null,
       consignee: order.consignee?.name ?? null,
       fromBranch: order.fromBranch
   ? { name: order.fromBranch.name, branchCode: order.fromBranch.branchCode }
@@ -375,7 +386,8 @@ export const lrLookupKeys = {
   goods: ["lookup", "goods"] as const,
   branches: ["lookup", "branches"] as const,
   railheadBranches: ["lookup", "railhead-branches"] as const,
-  attachableTrips: ["lookup", "attachable-trips"] as const,
+  attachableTrips: (consignorId?: string) =>
+    ["lookup", "attachable-trips", consignorId ?? "all"] as const,
   confirmedTruckOrders: ["lookup", "confirmed-truck-orders"] as const,
   customerLocations: (customerId: string) =>
     ["lookup", "customer-locations", customerId] as const,

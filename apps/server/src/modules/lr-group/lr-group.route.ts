@@ -357,6 +357,7 @@ if (!isMarketVehicle && primaryTripId) {
       id: true,
       status: true,
       tripName: true,
+      consignorId: true,
       vehicle: { select: { vehicleNumber: true } },
       driver: { select: { name: true } },
     },
@@ -369,6 +370,12 @@ if (!isMarketVehicle && primaryTripId) {
   if (trip.status !== "Planned") {
     throw new BadRequestError(
       `Trip ${trip.tripName} is not available. Current status is ${trip.status}`,
+    );
+  }
+
+  if (trip.consignorId !== consignorId) {
+    throw new BadRequestError(
+      `Trip ${trip.tripName} belongs to a different consignor and cannot be attached to this LR.`,
     );
   }
 
@@ -490,6 +497,25 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
     ? input.isMarketVehicle
     : existing.isMarketVehicle;
 
+  const nextPrimaryTripId = nextIsMarketVehicle
+    ? null
+    : input.primaryTripId !== undefined
+      ? input.primaryTripId ?? null
+      : existing.primaryTripId;
+
+  if (nextPrimaryTripId && nextPrimaryTripId !== existing.primaryTripId) {
+    const trip = await db.vehicleTrip.findUnique({
+      where: { id: nextPrimaryTripId },
+      select: { id: true, tripName: true, consignorId: true },
+    });
+    if (!trip) throw new BadRequestError("Trip not found");
+    if (trip.consignorId !== existing.consignorId) {
+      throw new BadRequestError(
+        `Trip ${trip.tripName} belongs to a different consignor and cannot be attached to this LR.`,
+      );
+    }
+  }
+
 const updated = await db.lRGroup.update({
   where: { id },
   data: {
@@ -504,11 +530,7 @@ const updated = await db.lRGroup.update({
 
     // If market vehicle, clear own trip.
     // If own vehicle, allow trip and clear market vehicle values.
-    primaryTripId: nextIsMarketVehicle
-      ? null
-      : input.primaryTripId !== undefined
-        ? input.primaryTripId ?? null
-        : existing.primaryTripId,
+    primaryTripId: nextPrimaryTripId,
 
     marketVehicleNumber: nextIsMarketVehicle
       ? input.marketVehicleNumber !== undefined
@@ -723,7 +745,7 @@ router.post("/:id/split-at-hub", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, r
 
     const leg2 = await tx.vehicleTrip.findUnique({
       where: { id: secondaryTripId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, consignorId: true },
     });
     if (!leg2) throw new BadRequestError("Leg 2 trip not found");
     if (secondaryTripId === existing.primaryTripId) {
@@ -731,6 +753,11 @@ router.post("/:id/split-at-hub", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, r
     }
     if (leg2.status !== "Planned") {
       throw new BadRequestError("Leg 2 trip must be a Planned trip");
+    }
+    if (leg2.consignorId !== existing.consignorId) {
+      throw new BadRequestError(
+        "Leg 2 trip belongs to a different consignor and cannot be attached to this LR",
+      );
     }
 
     const result = await tx.lRGroup.update({

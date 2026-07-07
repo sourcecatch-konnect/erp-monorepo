@@ -49,9 +49,24 @@ import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 type Props = {
   mode: "create" | "edit";
   trip?: Trip;
+  /** Rendered inside a dialog (e.g. from Instant LR) instead of as a routed page. */
+  embedded?: boolean;
+  /** Called instead of navigating to the trip detail page when embedded. */
+  onCreated?: (trip: Trip) => void;
+  /** Called instead of navigating to /trips when embedded and the user cancels. */
+  onCancel?: () => void;
+  /** Prefills the client field — e.g. the consignor of the LR this trip is created for. */
+  defaultConsignorId?: string;
 };
 
-export default function TripForm({ mode, trip }: Props) {
+export default function TripForm({
+  mode,
+  trip,
+  embedded,
+  onCreated,
+  onCancel,
+  defaultConsignorId,
+}: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { setLabel } = useBreadcrumbLabels();
@@ -98,6 +113,7 @@ export default function TripForm({ mode, trip }: Props) {
       : {
           tripType: "lr",
           isTripEmpty: false,
+          consignorId: defaultConsignorId,
         },
   });
 
@@ -122,6 +138,8 @@ export default function TripForm({ mode, trip }: Props) {
   const lastLeg = journey?.lastLeg ?? null;
 
   useEffect(() => {
+    if (embedded) return;
+
     if (mode === "create") {
       setLabel("/trips/new", "New Trip");
       return () => setLabel("/trips/new", null);
@@ -132,7 +150,7 @@ export default function TripForm({ mode, trip }: Props) {
       setLabel(href, "edit");
       return () => setLabel(href, null);
     }
-  }, [mode, setLabel, trip?.id]);
+  }, [mode, setLabel, trip?.id, embedded]);
 
   // The journey's driver stays for the whole cycle — lock the field.
   useEffect(() => {
@@ -216,7 +234,8 @@ export default function TripForm({ mode, trip }: Props) {
       } else {
         const created = await tripApi.create(values);
         toast.success(`Trip ${created.tripNumber} created`);
-        router.push(`/trips/${created.id}`);
+        if (embedded) onCreated?.(created);
+        else router.push(`/trips/${created.id}`);
       }
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -227,6 +246,7 @@ export default function TripForm({ mode, trip }: Props) {
 
   const handleCancel = () => {
     if (form.formState.isDirty) setDiscardOpen(true);
+    else if (embedded) onCancel?.();
     else router.push("/trips");
   };
 
@@ -253,7 +273,11 @@ export default function TripForm({ mode, trip }: Props) {
     <FormProvider {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="mx-auto  max-w-4xl space-y-5 p-4 pb-8 md:p-6 md:pb-10"
+        className={
+          embedded
+            ? "space-y-5"
+            : "mx-auto  max-w-4xl space-y-5 p-4 pb-8 md:p-6 md:pb-10"
+        }
       >
         <div className="rounded-lg border bg-background p-4 shadow-sm">
           <div>
@@ -458,12 +482,20 @@ export default function TripForm({ mode, trip }: Props) {
             </div>
 
             {tripType === "lr" ? (
-              <ComboboxField
-                name="consignorId"
-                label="Client"
-                required
-                options={customers.data ?? []}
-              />
+              <div>
+                <ComboboxField
+                  name="consignorId"
+                  label="Client"
+                  required
+                  options={customers.data ?? []}
+                  disabled={embedded && Boolean(defaultConsignorId)}
+                />
+                {embedded && defaultConsignorId ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Locked to the LR&apos;s consignor.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
             {tripType === "dc" ? (
@@ -544,7 +576,7 @@ export default function TripForm({ mode, trip }: Props) {
         </div>
 
         <AnimatePresence>
-          {showStickyActions ? (
+          {!embedded && showStickyActions ? (
             <motion.div
               initial={{ y: 24, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -574,7 +606,11 @@ export default function TripForm({ mode, trip }: Props) {
             </Button>
             <Button
               className="bg-red-600 text-white hover:bg-red-700"
-              onClick={() => router.push("/trips")}
+              onClick={() => {
+                setDiscardOpen(false);
+                if (embedded) onCancel?.();
+                else router.push("/trips");
+              }}
             >
               Discard
             </Button>

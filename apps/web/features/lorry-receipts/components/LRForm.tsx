@@ -10,7 +10,7 @@ import {
   Controller,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconPlus,
@@ -22,7 +22,11 @@ import {
 } from "@tabler/icons-react";
 
 import { createLRGroupSchema } from "@skerp/validators/lr-group";
-import type { CreateLRGroupFormInput, CreateLRGroupBody } from "@skerp/types";
+import type {
+  CreateLRGroupFormInput,
+  CreateLRGroupBody,
+  Trip,
+} from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
@@ -41,6 +45,7 @@ import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation"
 import { lrGroupApi } from "../lr-group.service";
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
 import LRCreateSummary from "./LRCreateSummary";
+import CreateTripDialog from "@/features/trips/CreateTripDialog";
 
 type Props = {
   orderId?: string;
@@ -103,7 +108,9 @@ function ReadOnlyAmount({
       <div className="  px-3 py-2">
         <div
           className={`text-sm ${
-            strong ? "font-semibold text-foreground" : "font-medium text-foreground"
+            strong
+              ? "font-semibold text-foreground"
+              : "font-medium text-foreground"
           }`}
         >
           ₹ {value.toFixed(2)}
@@ -143,7 +150,9 @@ function Segmented<T extends string | boolean>({
 
 export default function LRForm({ orderId, tripId }: Props) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = React.useState(false);
+  const [createTripOpen, setCreateTripOpen] = React.useState(false);
 
   const source = orderId ? "FROM_ORDER" : "INSTANT";
 
@@ -159,10 +168,6 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryKey: lrLookupKeys.railheadBranches,
     queryFn: lrLookups.railheadBranches,
     enabled: source === "FROM_ORDER",
-  });
-  const trips = useQuery({
-    queryKey: lrLookupKeys.attachableTrips,
-    queryFn: lrLookups.attachableTrips,
   });
   const marketVehicles = useQuery({
     queryKey: lrLookupKeys.marketVehicles,
@@ -231,6 +236,29 @@ export default function LRForm({ orderId, tripId }: Props) {
       ],
     });
 
+  // A trip carries one client, so only offer trips for the LR's own
+  // consignor once one is chosen — show every unattached trip until then.
+  const activeConsignorId =
+    source === "INSTANT"
+      ? ((watchConsignor as string | undefined) ?? undefined)
+      : (orderContext.data?.consignorId ?? undefined);
+
+  const trips = useQuery({
+    queryKey: lrLookupKeys.attachableTrips(activeConsignorId),
+    queryFn: () => lrLookups.attachableTrips(activeConsignorId),
+  });
+
+  // Clear a previously-picked trip if it no longer matches the consignor.
+  const prevConsignorRef = React.useRef(activeConsignorId);
+  React.useEffect(() => {
+    if (prevConsignorRef.current !== activeConsignorId) {
+      prevConsignorRef.current = activeConsignorId;
+      form.setValue("primaryTripId" as never, undefined as never, {
+        shouldValidate: true,
+      });
+    }
+  }, [activeConsignorId, form]);
+
   // Instant lines pick loading/unloading from the parties' saved locations.
   const consignorLocations = useQuery({
     queryKey: lrLookupKeys.customerLocations((watchConsignor as string) ?? ""),
@@ -254,6 +282,16 @@ export default function LRForm({ orderId, tripId }: Props) {
     hint: t.hint,
     badge: t.badge,
   }));
+
+  const handleTripCreated = async (created: Trip) => {
+    await queryClient.invalidateQueries({
+      queryKey: ["lookup", "attachable-trips"],
+    });
+    form.setValue("primaryTripId" as never, created.id as never, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
   const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
     value: g.name,
     hint: g.description ?? undefined,
@@ -336,492 +374,529 @@ export default function LRForm({ orderId, tripId }: Props) {
       setSubmitting(false);
     }
   };
-const moneyNumber = (value: unknown) => {
-  const n =
-    typeof value === "number"
-      ? value
-      : Number(String(value ?? "").trim() || 0);
+  const moneyNumber = (value: unknown) => {
+    const n =
+      typeof value === "number"
+        ? value
+        : Number(String(value ?? "").trim() || 0);
 
-  return Number.isFinite(n) ? n : 0;
-};
+    return Number.isFinite(n) ? n : 0;
+  };
 
-const marketFreightAmount = form.watch("marketFreightAmount" as never);
-const marketAdvanceAmount = form.watch("marketAdvanceAmount" as never);
-const marketCommissionAmount = form.watch("marketCommissionAmount" as never);
-const marketHamaliAmount = form.watch("marketHamaliAmount" as never);
-const marketTdsAmount = form.watch("marketTdsAmount" as never);
+  const marketFreightAmount = form.watch("marketFreightAmount" as never);
+  const marketAdvanceAmount = form.watch("marketAdvanceAmount" as never);
+  const marketCommissionAmount = form.watch("marketCommissionAmount" as never);
+  const marketHamaliAmount = form.watch("marketHamaliAmount" as never);
+  const marketTdsAmount = form.watch("marketTdsAmount" as never);
 
-const totalFreightAdvance =
-  moneyNumber(marketAdvanceAmount) +
-  moneyNumber(marketCommissionAmount) +
-  moneyNumber(marketHamaliAmount) +
-  moneyNumber(marketTdsAmount);
+  const totalFreightAdvance =
+    moneyNumber(marketAdvanceAmount) +
+    moneyNumber(marketCommissionAmount) +
+    moneyNumber(marketHamaliAmount) +
+    moneyNumber(marketTdsAmount);
 
-const netBalanceFreight =
-  moneyNumber(marketFreightAmount) - totalFreightAdvance;
+  const netBalanceFreight =
+    moneyNumber(marketFreightAmount) - totalFreightAdvance;
   return (
     <FormProvider {...form}>
       <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="order-2 min-w-0 space-y-5 lg:order-1"
-      >
-        <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">
-              {source === "FROM_ORDER"
-                ? "Create LR Group from Order"
-                : "Create Instant LR Group"}
-            </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="order-2 min-w-0 space-y-5 lg:order-1"
+        >
+          <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-lg font-semibold">
+                {source === "FROM_ORDER"
+                  ? "Create LR Group from Order"
+                  : "Create Instant LR Group"}
+              </h1>
+              {/* <p className="mt-0.5 text-xs text-muted-foreground">
               {source === "FROM_ORDER"
                 ? "LRs are generated from the order's consignment lines for the chosen truck."
                 : "Standalone Road group — you can add consignment lines now or later."}
-            </p>
+            </p> */}
+            </div>
+            <div className="flex items-end gap-2">
+              <Controller
+                name="priority"
+                control={form.control}
+                render={({ field }) => (
+                  <div className="min-w-36">
+                    <FieldLabel>Priority</FieldLabel>
+                    <Select
+                      value={(field.value as string) ?? "Normal"}
+                      onValueChange={field.onChange as (v: string) => void}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  router.push(
+                    orderId ? `/orders/${orderId}` : "/lorry-receipts",
+                  )
+                }
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? "Creating…" : "Create group"}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-end gap-2">
-            <Controller
-              name="priority"
-              control={form.control}
-              render={({ field }) => (
-                <div className="min-w-36">
-                  <FieldLabel>Priority</FieldLabel>
-                  <Select
-                    value={(field.value as string) ?? "Normal"}
-                    onValueChange={field.onChange as (v: string) => void}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder="Priority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRIORITY_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                router.push(orderId ? `/orders/${orderId}` : "/lorry-receipts")
-              }
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating…" : "Create group"}
-            </Button>
-          </div>
-        </div>
 
-        {source === "FROM_ORDER" && (
+          {source === "FROM_ORDER" && (
+            <FormSection
+              icon={<IconRoute size={16} />}
+              title="Truck & transport"
+              columns={2}
+            >
+              <Controller
+                name="truckIndex"
+                control={form.control}
+                render={({ field }) => (
+                  <div>
+                    <FieldLabel required>Truck #</FieldLabel>
+                    <Select
+                      value={
+                        field.value != null &&
+                        truckOptions.some(
+                          (o) => o.value === String(field.value),
+                        )
+                          ? String(field.value)
+                          : undefined
+                      }
+                      onValueChange={(v) => field.onChange(Number(v))}
+                      disabled={trucksLoading || truckOptions.length === 0}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue
+                          placeholder={
+                            trucksLoading ? "Loading trucks…" : "Select truck"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {truckOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!trucksLoading && truckOptions.length === 0 && (
+                      <p className="mt-1 text-xs text-amber-600">
+                        {(orderContext.data?.trucks?.length ?? 0) === 0
+                          ? "This order has no consignment lines — add them on the order first."
+                          : "All trucks for this order already have a group."}
+                      </p>
+                    )}
+                  </div>
+                )}
+              />
+              <Controller
+                name="transportType"
+                control={form.control}
+                render={({ field }) => (
+                  <div>
+                    <FieldLabel>Mode</FieldLabel>
+                    <Segmented
+                      value={(field.value as string) ?? "Road"}
+                      onChange={(v) => {
+                        field.onChange(v);
+                        if (v !== "RoadAndRail")
+                          form.setValue(
+                            "railheadBranchId" as never,
+                            undefined as never,
+                          );
+                      }}
+                      options={TRANSPORT_OPTIONS}
+                    />
+                  </div>
+                )}
+              />
+              {showRailhead && (
+                <ComboboxField
+                  name="railheadBranchId"
+                  label="Railhead branch"
+                  required
+                  options={(railheads.data ?? []).map((b) => ({
+                    value: b.value,
+                    label: b.label,
+                  }))}
+                  emptyText="No railhead branches found"
+                />
+              )}
+            </FormSection>
+          )}
+
+          {source === "INSTANT" && (
+            <FormSection
+              icon={<IconUsers size={16} />}
+              title="Parties"
+              columns={2}
+            >
+              <ComboboxField
+                name="consignorId"
+                label="Consignor"
+                required
+                options={customerOptions}
+              />
+              <ComboboxField
+                name="consigneeId"
+                label="Consignee"
+                required
+                options={customerOptions}
+              />
+              <ComboboxField
+                name="originBranchId"
+                label="Origin branch"
+                required
+                options={branchOptions}
+              />
+              <ComboboxField
+                name="destinationBranchId"
+                label="Destination branch"
+                required
+                options={branchOptions}
+              />
+            </FormSection>
+          )}
+
+          {/* Vehicle */}
           <FormSection
-            icon={<IconRoute size={16} />}
-            title="Truck & transport"
-            columns={2}
+            icon={<IconTruck size={16} />}
+            title="Vehicle"
+            columns={1}
           >
             <Controller
-              name="truckIndex"
+              name="isMarketVehicle"
               control={form.control}
               render={({ field }) => (
                 <div>
-                  <FieldLabel required>Truck #</FieldLabel>
-                  <Select
-                    value={
-                      field.value != null && truckOptions.some(
-                        (o) => o.value === String(field.value),
-                      )
-                        ? String(field.value)
-                        : undefined
-                    }
-                    onValueChange={(v) => field.onChange(Number(v))}
-                    disabled={trucksLoading || truckOptions.length === 0}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue
-                        placeholder={
-                          trucksLoading ? "Loading trucks…" : "Select truck"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {truckOptions.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!trucksLoading && truckOptions.length === 0 && (
-                    <p className="mt-1 text-xs text-amber-600">
-                      {(orderContext.data?.trucks?.length ?? 0) === 0
-                        ? "This order has no consignment lines — add them on the order first."
-                        : "All trucks for this order already have a group."}
-                    </p>
-                  )}
-                </div>
-              )}
-            />
-            <Controller
-              name="transportType"
-              control={form.control}
-              render={({ field }) => (
-                <div>
-                  <FieldLabel>Mode</FieldLabel>
+                  <FieldLabel>Transport by</FieldLabel>
                   <Segmented
-                    value={(field.value as string) ?? "Road"}
+                    value={(field.value as boolean) ?? false}
                     onChange={(v) => {
                       field.onChange(v);
-                      if (v !== "RoadAndRail")
+
+                      if (v) {
+                        // Market vehicle selected, own trip not required
                         form.setValue(
-                          "railheadBranchId" as never,
+                          "primaryTripId" as never,
                           undefined as never,
                         );
+                      } else {
+                        // Own vehicle selected, clear market vehicle data
+                        form.setValue(
+                          "marketVehicleNumber" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
+                          "marketDriverName" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
+                          "marketFreightAmount" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
+                          "marketAdvanceAmount" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
+                          "marketCommissionAmount" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
+                          "marketHamaliAmount" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
+                          "marketTdsAmount" as never,
+                          undefined as never,
+                        );
+                      }
                     }}
-                    options={TRANSPORT_OPTIONS}
+                    options={[
+                      { value: false, label: "Own Vehicle" },
+                      { value: true, label: "Market Vehicle" },
+                    ]}
                   />
                 </div>
               )}
             />
-            {showRailhead && (
-              <ComboboxField
-                name="railheadBranchId"
-                label="Railhead branch"
-                required
-                options={(railheads.data ?? []).map((b) => ({
-                  value: b.value,
-                  label: b.label,
-                }))}
-                emptyText="No railhead branches found"
-              />
-            )}
-          </FormSection>
-        )}
 
-        {source === "INSTANT" && (
-          <FormSection
-            icon={<IconUsers size={16} />}
-            title="Parties"
-            columns={2}
-          >
-            <ComboboxField
-              name="consignorId"
-              label="Consignor"
-              required
-              options={customerOptions}
-            />
-            <ComboboxField
-              name="consigneeId"
-              label="Consignee"
-              required
-              options={customerOptions}
-            />
-            <ComboboxField
-              name="originBranchId"
-              label="Origin branch"
-              required
-              options={branchOptions}
-            />
-            <ComboboxField
-              name="destinationBranchId"
-              label="Destination branch"
-              required
-              options={branchOptions}
-            />
-          </FormSection>
-        )}
-
-        {/* Vehicle */}
-        <FormSection icon={<IconTruck size={16} />} title="Vehicle" columns={1}>
-          <Controller
-            name="isMarketVehicle"
-            control={form.control}
-            render={({ field }) => (
-              <div>
-                <FieldLabel>Transport by</FieldLabel>
-                <Segmented
-  value={(field.value as boolean) ?? false}
-  onChange={(v) => {
-    field.onChange(v);
-
-    if (v) {
-      // Market vehicle selected, own trip not required
-      form.setValue("primaryTripId" as never, undefined as never);
-    } else {
-      // Own vehicle selected, clear market vehicle data
-      form.setValue("marketVehicleNumber" as never, undefined as never);
-      form.setValue("marketDriverName" as never, undefined as never);
-      form.setValue("marketFreightAmount" as never, undefined as never);
-      form.setValue("marketAdvanceAmount" as never, undefined as never);
-      form.setValue("marketCommissionAmount" as never, undefined as never);
-      form.setValue("marketHamaliAmount" as never, undefined as never);
-      form.setValue("marketTdsAmount" as never, undefined as never);
-    }
-  }}
-  options={[
-    { value: false, label: "Own Vehicle" },
-    { value: true, label: "Market Vehicle" },
-  ]}
-/>
+            {!watchIsMarket && (
+              <div className="mt-3 max-w-xl">
+                <ComboboxField
+                  name="primaryTripId"
+                  label="Trip"
+                  required
+                  options={tripOptions}
+                  emptyText="No trips available — create a trip first"
+                  actionLabel="+ New Trip"
+                  onAction={() => setCreateTripOpen(true)}
+                />
               </div>
             )}
-          />
 
-          {!watchIsMarket && (
-            <div className="mt-3 max-w-xl">
-              <ComboboxField
-                name="primaryTripId"
-                label="Trip"
-                required
-                options={tripOptions}
-                emptyText="No trips available — create a trip first"
-              />
-            </div>
-          )}
-
-          {watchIsMarket && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <Controller
-                name="marketVehicleNumber"
-                control={form.control}
-                render={({ field }) => (
-                  <div>
-                    <FieldLabel required>Vehicle number</FieldLabel>
-                    <SuggestInput
-                      value={(field.value as string) ?? ""}
-                      onChange={(value) =>
-                        field.onChange(value.toUpperCase().replace(/\s+/g, ""))
-                      }
-                      onBlur={field.onBlur}
-                      suggestions={marketVehicleSuggestions}
-                      placeholder={
-                        marketVehicles.isLoading
-                          ? "Loading market vehicles..."
-                          : "Select or type vehicle"
-                      }
-                      invalid={Boolean(errors.marketVehicleNumber?.message)}
-                      className="[&_input]:h-9 [&_input]:uppercase"
-                    />
-                  </div>
-                )}
-              />
-
-              <Controller
-                name="marketDriverName"
-                control={form.control}
-                render={({ field }) => (
-                  <div>
-                    <FieldLabel>Driver</FieldLabel>
-                    <SuggestInput
-                      value={(field.value as string) ?? ""}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      suggestions={driverSuggestions}
-                      placeholder={
-                        drivers.isLoading
-                          ? "Loading drivers..."
-                          : "Select or type driver"
-                      }
-                      invalid={Boolean(errors.marketDriverName?.message)}
-                      className="[&_input]:h-9"
-                    />
-                  </div>
-                )}
-              />
-
-              <div>
-                <FieldLabel>Freight amount</FieldLabel>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  className="h-9"
-                  {...form.register("marketFreightAmount")}
-                />
-              </div>
-
-              <div>
-                <FieldLabel>Advance amount</FieldLabel>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  className="h-9"
-                  {...form.register("marketAdvanceAmount")}
-                />
-              </div>
-
-              <div>
-                <FieldLabel>Commission</FieldLabel>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  className="h-9"
-                  {...form.register("marketCommissionAmount")}
-                />
-              </div>
-
-              <div>
-                <FieldLabel>Hamali</FieldLabel>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  className="h-9"
-                  {...form.register("marketHamaliAmount")}
-                />
-              </div>
-
-              <div>
-                <FieldLabel>TDS</FieldLabel>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  className="h-9"
-                  {...form.register("marketTdsAmount")}
-                />
-              </div>
-  <ReadOnlyAmount
-  label="Total Freight Advance"
-  value={totalFreightAdvance}
-/>
-
-<ReadOnlyAmount
-  label="Net Balance Freight"
-  value={netBalanceFreight}
-  strong
-/>
-            </div>
-          )}
-        </FormSection>
-
-        {/* Consignment lines (INSTANT only — FROM_ORDER reads from the order) */}
-        {source === "INSTANT" && (
-          <FormSection
-            icon={<IconPackage size={16} />}
-            title="Consignments / LR Lines"
-            columns={1}
-          >
-            <div className="space-y-3">
-              {fields.length === 0 && (
-  <div className="rounded-lg border border-dashed bg-muted/20 p-4">
-    <p className="text-sm font-medium">No consignment line added</p>
-    <p className="mt-1 text-xs text-muted-foreground">
-      You can create the LR group now and add LR lines later.
-    </p>
-  </div>
-)}
-              {fields.map((field, idx) => {
-                const base = `lrs.${idx}` as const;
-                // `lrs` only exists on the INSTANT branch of the union; narrow it.
-                const lrsErrors = (
-                  errors as {
-                    lrs?: { goods?: { name?: { message?: string } }[] }[];
-                  }
-                ).lrs;
-                const lineErr = lrsErrors?.[idx];
-                return (
-                  <div
-                    key={field.id}
-                    className="relative rounded-lg border bg-muted/20 p-3"
-                  >
-                    {fields.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => remove(idx)}
-                        className="absolute right-2 top-2 rounded-sm p-1 text-muted-foreground hover:text-red-600"
-                        aria-label="Remove consignment line"
-                      >
-                        <IconTrash size={14} />
-                      </button>
-                    )}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <ComboboxField
-                        name={`${base}.loadingLocationId`}
-                        label="Loading point"
-                        options={loadingOptions}
-                        emptyText={
-                          watchConsignor
-                            ? "No saved locations"
-                            : "Pick a consignor first"
+            {watchIsMarket && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <Controller
+                  name="marketVehicleNumber"
+                  control={form.control}
+                  render={({ field }) => (
+                    <div>
+                      <FieldLabel required>Vehicle number</FieldLabel>
+                      <SuggestInput
+                        value={(field.value as string) ?? ""}
+                        onChange={(value) =>
+                          field.onChange(
+                            value.toUpperCase().replace(/\s+/g, ""),
+                          )
                         }
-                      />
-                      <ComboboxField
-                        name={`${base}.unloadingLocationId`}
-                        label="Unloading point"
-                        options={unloadingOptions}
-                        emptyText={
-                          watchConsignee
-                            ? "No saved locations"
-                            : "Pick a consignee first"
+                        onBlur={field.onBlur}
+                        suggestions={marketVehicleSuggestions}
+                        placeholder={
+                          marketVehicles.isLoading
+                            ? "Loading market vehicles..."
+                            : "Select or type vehicle"
                         }
+                        invalid={Boolean(errors.marketVehicleNumber?.message)}
+                        className="[&_input]:h-9 [&_input]:uppercase"
                       />
                     </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-4">
-                      <div className="sm:col-span-2">
-                        <FieldLabel required>Goods name</FieldLabel>
-                        <Controller
-                          name={`${base}.goods.0.name`}
-                          control={form.control}
-                          render={({ field }) => (
-                            <SuggestInput
-                              value={(field.value as string) ?? ""}
-                              onChange={field.onChange}
-                              onBlur={field.onBlur}
-                              suggestions={goodsSuggestions}
-                              placeholder="Select or type goods"
-                              invalid={Boolean(
-                                lineErr?.goods?.[0]?.name?.message,
-                              )}
-                            />
-                          )}
-                        />
-                      </div>
-                      <div>
-                        <FieldLabel required>Qty</FieldLabel>
-                        <Input
-                          {...form.register(`${base}.goods.0.quantity`)}
-                          type="number"
-                          min={1}
-                          className="h-9"
-                        />
-                      </div>
-                      <div>
-                        <FieldLabel required>Unit</FieldLabel>
-                        <Input
-                          {...form.register(`${base}.goods.0.unit`)}
-                          placeholder="MT / PCS"
-                          className="h-9"
-                        />
-                      </div>
+                  )}
+                />
+
+                <Controller
+                  name="marketDriverName"
+                  control={form.control}
+                  render={({ field }) => (
+                    <div>
+                      <FieldLabel>Driver</FieldLabel>
+                      <SuggestInput
+                        value={(field.value as string) ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        suggestions={driverSuggestions}
+                        placeholder={
+                          drivers.isLoading
+                            ? "Loading drivers..."
+                            : "Select or type driver"
+                        }
+                        invalid={Boolean(errors.marketDriverName?.message)}
+                        className="[&_input]:h-9"
+                      />
                     </div>
-                  </div>
-                );
-              })}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => append(EMPTY_LINE)}
-              >
-                <IconPlus size={14} className="mr-1" /> Add consignment line
-              </Button>
-            </div>
+                  )}
+                />
+
+                <div>
+                  <FieldLabel>Freight amount</FieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0.00"
+                    className="h-9"
+                    {...form.register("marketFreightAmount")}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Advance amount</FieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0.00"
+                    className="h-9"
+                    {...form.register("marketAdvanceAmount")}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Commission</FieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0.00"
+                    className="h-9"
+                    {...form.register("marketCommissionAmount")}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Hamali</FieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0.00"
+                    className="h-9"
+                    {...form.register("marketHamaliAmount")}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>TDS</FieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0.00"
+                    className="h-9"
+                    {...form.register("marketTdsAmount")}
+                  />
+                </div>
+                <ReadOnlyAmount
+                  label="Total Freight Advance"
+                  value={totalFreightAdvance}
+                />
+
+                <ReadOnlyAmount
+                  label="Net Balance Freight"
+                  value={netBalanceFreight}
+                  strong
+                />
+              </div>
+            )}
           </FormSection>
-        )}
-      </form>
+
+          {/* Consignment lines (INSTANT only — FROM_ORDER reads from the order) */}
+          {source === "INSTANT" && (
+            <FormSection
+              icon={<IconPackage size={16} />}
+              title="Consignments / LR Lines"
+              columns={1}
+            >
+              <div className="space-y-3">
+                {fields.length === 0 && (
+                  <div className="rounded-lg border border-dashed bg-muted/20 p-4">
+                    <p className="text-sm font-medium">
+                      No consignment line added
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      You can create the LR group now and add LR lines later.
+                    </p>
+                  </div>
+                )}
+                {fields.map((field, idx) => {
+                  const base = `lrs.${idx}` as const;
+                  // `lrs` only exists on the INSTANT branch of the union; narrow it.
+                  const lrsErrors = (
+                    errors as {
+                      lrs?: { goods?: { name?: { message?: string } }[] }[];
+                    }
+                  ).lrs;
+                  const lineErr = lrsErrors?.[idx];
+                  return (
+                    <div
+                      key={field.id}
+                      className="relative rounded-lg border bg-muted/20 p-3"
+                    >
+                      {fields.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => remove(idx)}
+                          className="absolute right-2 top-2 rounded-sm p-1 text-muted-foreground hover:text-red-600"
+                          aria-label="Remove consignment line"
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      )}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <ComboboxField
+                          name={`${base}.loadingLocationId`}
+                          label="Loading point"
+                          options={loadingOptions}
+                          emptyText={
+                            watchConsignor
+                              ? "No saved locations"
+                              : "Pick a consignor first"
+                          }
+                        />
+                        <ComboboxField
+                          name={`${base}.unloadingLocationId`}
+                          label="Unloading point"
+                          options={unloadingOptions}
+                          emptyText={
+                            watchConsignee
+                              ? "No saved locations"
+                              : "Pick a consignee first"
+                          }
+                        />
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                        <div className="sm:col-span-2">
+                          <FieldLabel required>Goods name</FieldLabel>
+                          <Controller
+                            name={`${base}.goods.0.name`}
+                            control={form.control}
+                            render={({ field }) => (
+                              <SuggestInput
+                                value={(field.value as string) ?? ""}
+                                onChange={field.onChange}
+                                onBlur={field.onBlur}
+                                suggestions={goodsSuggestions}
+                                placeholder="Select or type goods"
+                                invalid={Boolean(
+                                  lineErr?.goods?.[0]?.name?.message,
+                                )}
+                              />
+                            )}
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel required>Qty</FieldLabel>
+                          <Input
+                            {...form.register(`${base}.goods.0.quantity`)}
+                            type="number"
+                            min={1}
+                            className="h-9"
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel required>Unit</FieldLabel>
+                          <Input
+                            {...form.register(`${base}.goods.0.unit`)}
+                            placeholder="MT / PCS"
+                            className="h-9"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => append(EMPTY_LINE)}
+                >
+                  <IconPlus size={14} className="mr-1" /> Add consignment line
+                </Button>
+              </div>
+            </FormSection>
+          )}
+        </form>
 
         <div className="order-1 lg:order-2">
           <LRCreateSummary
@@ -835,6 +910,13 @@ const netBalanceFreight =
           />
         </div>
       </div>
+
+      <CreateTripDialog
+        open={createTripOpen}
+        onOpenChange={setCreateTripOpen}
+        defaultConsignorId={activeConsignorId}
+        onCreated={handleTripCreated}
+      />
     </FormProvider>
   );
 }

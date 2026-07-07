@@ -434,6 +434,7 @@ const finaliseTitle = hasNoLrs
         onOpenChange={setSplitOpen}
         lrNumber={g.groupNumber}
         primaryTripId={g.primaryTripId}
+        consignorId={g.consignorId}
         isPending={split.isPending}
         onConfirm={(secondaryTripId) => split.mutate(secondaryTripId)}
       />

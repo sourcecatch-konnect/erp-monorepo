@@ -228,6 +228,9 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
       ? { tripType: query.filter.tripType as TripType }
       : {}),
     ...(query.filter.journeyId ? { journeyId: query.filter.journeyId } : {}),
+    ...(query.filter.consignorId
+      ? { consignorId: query.filter.consignorId }
+      : {}),
   };
   const [data, total] = await Promise.all([
     db.vehicleTrip.findMany({
