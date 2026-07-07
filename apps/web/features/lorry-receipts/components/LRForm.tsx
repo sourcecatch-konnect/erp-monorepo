@@ -236,8 +236,6 @@ export default function LRForm({ orderId, tripId }: Props) {
       ],
     });
 
-  // A trip carries one client, so only offer trips for the LR's own
-  // consignor once one is chosen — show every unattached trip until then.
   const activeConsignorId =
     source === "INSTANT"
       ? ((watchConsignor as string | undefined) ?? undefined)
