@@ -1,6 +1,6 @@
 
 import { ProtectedRoute } from "@/features/auth";
-import GrnListPage from "@/features/grn/grnListPage";
+import GrnListPage from "@/features/grn/grnListpage";
 
 
 import { PERMS } from "@skerp/types";

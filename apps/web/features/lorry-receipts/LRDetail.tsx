@@ -121,11 +121,13 @@ export default function LRDetail({ id }: { id: string }) {
 
   const addLine = useMutation({
     mutationFn: (payload: LinePayload) =>
-      lrGroupApi.addLorryReceipt(actionGroupId, {
-        loadingLocationId: payload.loadingLocationId,
-        unloadingLocationId: payload.unloadingLocationId,
-        goods: payload.goods,
-      }),
+    lrGroupApi.addLorryReceipt(actionGroupId, {
+  loadingLocationId: payload.loadingLocationId,
+  unloadingLocationId: payload.unloadingLocationId,
+  totalWeight: payload.totalWeight,
+  totalWeightUnit: payload.totalWeightUnit,
+  goods: payload.goods,
+}),
     onSuccess: () => {
       toast.success("LR added");
       setAddLineOpen(false);
@@ -136,13 +138,15 @@ export default function LRDetail({ id }: { id: string }) {
 
   const updateLine = useMutation({
     mutationFn: (vars: { lrId: string; payload: LinePayload }) =>
-      lorryReceiptApi.update(vars.lrId, {
-        loadingLocationId: vars.payload.loadingLocationId,
-        unloadingLocationId: vars.payload.unloadingLocationId,
-        goods: vars.payload.goods,
-        invoiceNumber: vars.payload.invoiceNumber,
-        invoiceAmount: vars.payload.invoiceAmount,
-      }),
+     lorryReceiptApi.update(vars.lrId, {
+  loadingLocationId: vars.payload.loadingLocationId,
+  unloadingLocationId: vars.payload.unloadingLocationId,
+  totalWeight: vars.payload.totalWeight,
+  totalWeightUnit: vars.payload.totalWeightUnit,
+  goods: vars.payload.goods,
+  invoiceNumber: vars.payload.invoiceNumber,
+  invoiceAmount: vars.payload.invoiceAmount,
+}),
     onSuccess: () => {
       toast.success("LR updated");
       setEditLine(null);
@@ -190,19 +194,22 @@ const hasNoLrs = g.lorryReceipts.length === 0;
 
 const hasIncompleteLr = g.lorryReceipts.some(
   (lr) =>
-    !lr.loadingLocationId || !lr.unloadingLocationId || lr.goods.length === 0,
+    !lr.loadingLocationId ||
+    !lr.unloadingLocationId ||
+    lr.goods.length === 0 ||
+    lr.totalWeight == null ||
+    !lr.unit,
 );
-
 const cannotFinalise = hasNoLrs || hasIncompleteLr;
 
 const finaliseBlockMessage = hasNoLrs
   ? "Add at least one consignment LR before finalising this group."
-  : "One or more LRs are incomplete. Keep the group in draft, edit those LRs, and add loading point, unloading point, and goods before finalising.";
+  : "One or more LRs are incomplete. Add loading point, unloading point, goods, total weight, and unit before finalising.";
 
 const finaliseTitle = hasNoLrs
   ? "Add at least one consignment LR before finalising"
   : hasIncompleteLr
-    ? "Add loading point, unloading point, and goods to every LR before finalising"
+    ? "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising"
     : undefined;
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
@@ -380,20 +387,24 @@ const finaliseTitle = hasNoLrs
                     key={gd.id}
                     className="rounded-sm bg-muted px-2 py-0.5 text-xs"
                   >
-                    {gd.name} · {gd.quantity} {gd.unit}
+                    {gd.name} · Qty {gd.quantity}
                   </span>
                 ))}
               </div>
             )}
             {(!lr.loadingLocationId ||
-              !lr.unloadingLocationId ||
-              lr.goods.length === 0) && (
+  !lr.unloadingLocationId ||
+  lr.goods.length === 0 ||
+  lr.totalWeight == null ||
+  !lr.unit) && (
               <div className="mb-3 flex w-fit flex-wrap items-center gap-1 rounded-sm bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                 <IconAlertTriangle size={13} />
                 Complete before finalise:
                 {!lr.loadingLocationId ? " loading point" : ""}
                 {!lr.unloadingLocationId ? " unloading point" : ""}
                 {lr.goods.length === 0 ? " goods" : ""}
+                {lr.totalWeight == null ? " total weight" : ""}
+                {!lr.unit ? " unit" : ""}
               </div>
             )}
 
@@ -478,12 +489,13 @@ const finaliseTitle = hasNoLrs
             ? {
                 loadingLocationId: editLine.loadingLocationId ?? undefined,
                 unloadingLocationId: editLine.unloadingLocationId ?? undefined,
-                goods: editLine.goods.map((goods) => ({
-                  name: goods.name,
-                  quantity:
-                    goods.quantity != null ? String(goods.quantity) : "",
-                  unit: goods.unit,
-                })),
+                totalWeight:
+  editLine.totalWeight != null ? String(editLine.totalWeight) : "",
+totalWeightUnit: editLine.unit ?? "MT",
+goods: editLine.goods.map((goods) => ({
+  name: goods.name,
+  quantity: goods.quantity != null ? String(goods.quantity) : "",
+})),
                 invoiceNumber: editLine.invoiceNumber ?? "",
                 invoiceAmount:
                   editLine.invoiceAmount != null

@@ -66,13 +66,18 @@ type LRGoodsCreate = {
   name: string;
   description: string | null;
   quantity: number;
-  unit: string;
-  weight: number | null;
   length: number | null;
   width: number | null;
   height: number | null;
 };
 
+type LRLineCreate = {
+  loadingLocationId: string | null;
+  unloadingLocationId: string | null;
+  totalWeight: number | null;
+  unit: string | null;
+  goods: LRGoodsCreate[];
+};
 /* ------------------------------------------------------------------ */
 /* List                                                                */
 /* ------------------------------------------------------------------ */
@@ -181,11 +186,7 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   let orderId: string | null = null;
   let truckIndex = 1;
   // Each LR is one consignment: its loading/unloading location + goods lines.
-  let lines: {
-    loadingLocationId: string | null;
-    unloadingLocationId: string | null;
-    goods: LRGoodsCreate[];
-  }[];
+  let lines: LRLineCreate[];
 
   if (input.source === "FROM_ORDER") {
     const order = await db.order.findUnique({
@@ -234,33 +235,33 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
     consigneeId = order.consigneeId;
     orderId = order.id;
     lines = consignments.map((c) => ({
-      loadingLocationId: c.loadingLocationId,
-      unloadingLocationId: c.unloadingLocationId,
-      goods: c.goods.map((g) => ({
-        name: g.goods.name,
-        description: null,
-        quantity: g.quantity,
-        unit: g.unit,
-        weight: g.weight ? Number(g.weight) : null,
-        length: null,
-        width: null,
-        height: null,
-      })),
-    }));
+  loadingLocationId: c.loadingLocationId,
+  unloadingLocationId: c.unloadingLocationId,
+  totalWeight: c.totalWeight != null ? Number(c.totalWeight) : null,
+  unit: c.unit ?? null,
+  goods: c.goods.map((g) => ({
+    name: g.goods.name,
+    description: null,
+    quantity: g.quantity,
+    length: null,
+    width: null,
+    height: null,
+  })),
+}));
   } else {
     originBranchId = input.originBranchId;
     destinationBranchId = input.destinationBranchId;
     consignorId = input.consignorId;
     consigneeId = input.consigneeId;
-    lines = (input.lrs ?? []).map((l) => ({
+lines = (input.lrs ?? []).map((l) => ({
   loadingLocationId: l.loadingLocationId ?? null,
   unloadingLocationId: l.unloadingLocationId ?? null,
+  totalWeight: l.totalWeight ?? null,
+  unit: l.totalWeightUnit ?? null,
   goods: l.goods.map((g) => ({
     name: g.name,
     description: g.description ?? null,
     quantity: g.quantity,
-    unit: g.unit,
-    weight: g.weight ?? null,
     length: g.length ?? null,
     width: g.width ?? null,
     height: g.height ?? null,
@@ -430,13 +431,15 @@ if (!isMarketVehicle && primaryTripId) {
           marketTdsAmount: isMarketVehicle ? (input.marketTdsAmount ?? null) : null,
           status: "DRAFT",
           createdById: me,
-          lorryReceipts: lines.length
+       lorryReceipts: lines.length
   ? {
       create: lines.map((line, i) => ({
         lrNumber: lrNumbers[i]!,
         fyCode,
         loadingLocationId: line.loadingLocationId,
         unloadingLocationId: line.unloadingLocationId,
+        totalWeight: line.totalWeight,
+        unit: line.unit,
         status: "DRAFT",
         createdById: me,
         goods: line.goods.length ? { create: line.goods } : undefined,
@@ -450,6 +453,17 @@ if (!isMarketVehicle && primaryTripId) {
       // Own-vehicle group attached to a Planned trip dispatches it (-> InTransit).
       if (primaryTripId) {
         await dispatchTripOnAttach(tx, primaryTripId, group.groupNumber, me);
+      }
+
+      if (input.source === "FROM_ORDER" && orderId) {
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            status: "LRCreated",
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
       }
 
       return group;
@@ -577,13 +591,15 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
       lorryReceipts: {
         where: { deletedAt: null },
         select: {
-          id: true,
-          status: true,
-          loadingLocationId: true,
-          unloadingLocationId: true,
-          ewayBill: { select: { id: true } },
-          goods: { select: { id: true } },
-        },
+  id: true,
+  status: true,
+  loadingLocationId: true,
+  unloadingLocationId: true,
+  totalWeight: true,
+  unit: true,
+  ewayBill: { select: { id: true } },
+  goods: { select: { id: true } },
+},
       },
     },
   });
@@ -624,12 +640,18 @@ router.post("/:id/finalise", can(PERMS.LORRY_RECEIPT.APPROVE), async (req, res) 
   // Do all validation BEFORE transaction.
   for (const line of lrs) {
     const lr = existingLrsById.get(line.lrId);
-    if (!lr || !lr.loadingLocationId || !lr.unloadingLocationId || lr.goods.length === 0) {
-      throw new BadRequestError(
-        "Add loading point, unloading point, and goods to every LR before finalising the group",
-      );
-    }
-
+    if (
+  !lr ||
+  !lr.loadingLocationId ||
+  !lr.unloadingLocationId ||
+  lr.goods.length === 0 ||
+  lr.totalWeight == null ||
+  !lr.unit
+) {
+  throw new BadRequestError(
+    "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising the group",
+  );
+}
     if (line.existingEwayBillId) {
       if (lr?.ewayBill?.id !== line.existingEwayBillId) {
         throw new BadRequestError("Existing e-way bill does not belong to this LR");
@@ -797,30 +819,32 @@ router.post("/:id/lorry-receipts", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, 
     );
 
     await tx.lorryReceipt.create({
-      data: {
-        lrNumber,
-        fyCode: group.fyCode,
-        groupId: group.id,
-        loadingLocationId: line.loadingLocationId ?? null,
-        unloadingLocationId: line.unloadingLocationId ?? null,
-        status: "DRAFT",
-        createdById: me,
-        goods: (line.goods ?? []).length
-          ? {
-              create: (line.goods ?? []).map((g) => ({
-                name: g.name,
-                description: g.description ?? null,
-                quantity: g.quantity,
-                unit: g.unit,
-                weight: g.weight ?? null,
-                length: g.length ?? null,
-                width: g.width ?? null,
-                height: g.height ?? null,
-              })),
-            }
-          : undefined,
-      },
-    });
+  data: {
+    lrNumber,
+    fyCode: group.fyCode,
+    groupId: group.id,
+    loadingLocationId: line.loadingLocationId ?? null,
+    unloadingLocationId: line.unloadingLocationId ?? null,
+
+    totalWeight: line.totalWeight ?? null,
+    unit: line.totalWeightUnit ?? null,
+
+    status: "DRAFT",
+    createdById: me,
+    goods: (line.goods ?? []).length
+      ? {
+          create: (line.goods ?? []).map((g) => ({
+            name: g.name,
+            description: g.description ?? null,
+            quantity: g.quantity,
+            length: g.length ?? null,
+            width: g.width ?? null,
+            height: g.height ?? null,
+          })),
+        }
+      : undefined,
+  },
+});
   });
 
   const updated = await db.lRGroup.findUniqueOrThrow({

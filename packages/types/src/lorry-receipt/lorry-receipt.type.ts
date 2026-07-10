@@ -38,8 +38,8 @@ export type LRGoods = {
   name: string;
   description: string | null;
   quantity: number;
-  unit: string;
-  weight: number | null;
+   unit: string | null;
+  weight: string | number | null;
   length: number | null;
   width: number | null;
   height: number | null;
@@ -79,6 +79,8 @@ export type LorryReceipt = LRListItem & {
   cancelReason: string | null;
   createdById: string;
   updatedById: string | null;
+  totalWeight: string | number | null;
+unit: string | null;
   version: number;
   updatedAt: string;
   deletedAt: string | null;

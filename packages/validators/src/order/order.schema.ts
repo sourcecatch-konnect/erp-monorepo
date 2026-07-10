@@ -74,6 +74,7 @@ export const orderTypeSchema = z.enum(["Truck", "Item"]);
 export const orderStatusSchema = z.enum([
   "PendingApproval",
   "Confirmed",
+  "LRCreated",
   "Rejected",
   "Cancelled",
   "InProgress",
@@ -87,13 +88,12 @@ export const orderStatusSchema = z.enum([
 export const orderItemSchema = z.object({
   goodsId: z.string().min(1, "Select goods"),
   quantity: positiveIntField("Quantity"),
-  unit: goodsUnitSchema,
-  weight: optionalNumberField("Weight").refine(
-    (value) => value === undefined || value >= 0,
-    "Weight cannot be negative",
-  ),
-});
 
+});
+export const orderConsignmentGoodsSchema = z.object({
+  goodsId: z.string().min(1, "Select goods"),
+  quantity: positiveIntField("Quantity"),
+});
 /* ------------------------------------------------------------------ */
 /* Consignment line (Truck orders, multi-loading-point)               */
 /*                                                                    */
@@ -115,11 +115,19 @@ export const orderConsignmentSchema = z.object({
       (v) => Number.isInteger(v) && v > 0,
       "Truck index must be a positive whole number",
     ),
+
   loadingLocationId: optionalString,
   unloadingLocationId: optionalString,
-  goods: z.array(orderItemSchema).optional().default([]),
-});
 
+  totalWeight: optionalNumberField("Total weight").refine(
+    (value) => value === undefined || value >= 0,
+    "Total weight cannot be negative",
+  ),
+
+  totalWeightUnit: goodsUnitSchema,
+
+  goods: z.array(orderConsignmentGoodsSchema).optional().default([]),
+});
 export type OrderConsignmentInput = z.infer<typeof orderConsignmentSchema>;
 
 /* ------------------------------------------------------------------ */
@@ -189,6 +197,23 @@ const typeRefinement = (
         message: "Add at least one consignment line",
         path: ["consignments"],
       });
+    }
+    if (data.truckQuantity && data.consignments) {
+      const assignedTrucks = new Set(
+        data.consignments.map((line) => line.truckIndex),
+      );
+      const missingTrucks = Array.from(
+        { length: data.truckQuantity },
+        (_, index) => index + 1,
+      ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
+
+      if (missingTrucks.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}`,
+          path: ["consignments"],
+        });
+      }
     }
     // A loading -> unloading pair must not repeat within the same truck: put
     // multiple goods on a single line instead of cloning the line. Different

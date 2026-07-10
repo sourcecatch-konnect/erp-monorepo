@@ -862,8 +862,6 @@ model OrderItem {
   id       String   @id @default(cuid())
   orderId  String
   goodsId  String
-  quantity Int
-  unit     String
   weight   Decimal?
   goods    Goods    @relation(fields: [goodsId], references: [id])
   order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -875,6 +873,8 @@ model OrderConsignment {
   id                  String                  @id @default(cuid())
   orderId             String
   truckIndex          Int                     @default(1)
+  totalWeight         Decimal?
+  unit                String?
   loadingLocationId   String?
   unloadingLocationId String?
   createdAt           DateTime                @default(now())
@@ -892,7 +892,7 @@ model OrderConsignmentGoods {
   consignmentId String
   goodsId       String
   quantity      Int
-  unit          String
+  unit          String?
   weight        Decimal?
   consignment   OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
   goods         Goods            @relation(fields: [goodsId], references: [id])
@@ -1043,6 +1043,8 @@ model LorryReceipt {
   loadingLocationId   String?
   unloadingLocationId String?
   ewayBill            EwayBill?
+  totalWeight         Decimal?
+  unit                String?
   goods               LRGoods[]
   grn                 GRN?
   vpLoadings          VPLoading[]
@@ -1063,7 +1065,7 @@ model LRGoods {
   name           String
   description    String?
   quantity       Int
-  unit           String
+  unit           String?
   weight         Decimal?
   length         Float?
   width          Float?
@@ -1752,10 +1754,11 @@ enum OrderType {
 enum OrderStatus {
   PendingApproval
   Confirmed
-  Rejected
+  LRCreated
   Cancelled
   InProgress
   Completed
+  Rejected
 }
 
 enum BranchScope {

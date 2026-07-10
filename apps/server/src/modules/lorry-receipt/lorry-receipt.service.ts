@@ -12,6 +12,32 @@ type Tx = Prisma.TransactionClient;
  * Reuses the DocumentSequence table with docType "LR". Each LR in a group
  * gets its own number (one per consignment / invoice).
  */
+export const assertOrderLRGroupNotCreated = async (
+  tx: Tx,
+  orderId: string,
+  excludeId?: string,
+): Promise<void> => {
+  const existing = await tx.lRGroup.findFirst({
+    where: {
+      orderId,
+      deletedAt: null,
+      status: { not: "CANCELLED" },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: {
+      id: true,
+      groupNumber: true,
+      status: true,
+    },
+  });
+
+  if (existing) {
+    throw new BadRequestError(
+      `LR group is already created for this order: ${existing.groupNumber}`,
+      "LR_GROUP_ALREADY_CREATED_FOR_ORDER",
+    );
+  }
+};
 export const generateLRNumber = async (
   tx: Tx,
   branchCode: string,

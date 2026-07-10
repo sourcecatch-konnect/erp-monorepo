@@ -35,15 +35,71 @@ import {
   useGRNPreview,
   useGrnSupervisors,
   useSubmitGRN,
+  useUpdateGRN,
 } from "./useHook/useGRN";
-import type { CreateGRNBody, GRN } from "./grn.service";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@skerp/ui/components/table";
-import LRPreviewPanel from "./components/grnPreview";
+import type { CreateGRNBody, GRN as GRNMutation } from "./grn.service";
+import type { GRN as GRNDetail, GRNPreview } from "@skerp/types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@skerp/ui/components/table";
+import LRPreviewPanel, {
+  type LRPreviewPanelData,
+} from "./components/grnPreview";
 import { FieldLabel, MoneyField } from "../lorry-receipts/components/moneyField";
 import { DatePicker } from "@skerp/ui/components/datepicker";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@skerp/ui/components/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
+type EditPreviewTrip = {
+  id?: string;
+  tripNumber?: string | null;
+  tripName?: string | null;
+  onwardFreight?: number | string | bigint | null;
+  vehicle?: {
+    id?: string;
+    vehicleNumber?: string | null;
+  } | null;
+  driver?: {
+    id?: string;
+    name?: string | null;
+    mobile?: string | null;
+  } | null;
+};
 
-type GRNFormValues = CreateGRNBody & {
+type EditPreviewGroup = {
+  isMarketVehicle?: boolean | null;
+
+  marketVehicleNumber?: string | null;
+  marketDriverName?: string | null;
+  marketCommissionAmount?: number | string | bigint | null;
+
+  primaryTrip?: EditPreviewTrip | null;
+  secondaryTrip?: EditPreviewTrip | null;
+};
+
+type EditGRNForPreview = GRNDetail & {
+  lorryReceipt?: (NonNullable<GRNDetail["lorryReceipt"]> & {
+    group?: (NonNullable<
+      NonNullable<GRNDetail["lorryReceipt"]>["group"]
+    > &
+      EditPreviewGroup) | null;
+  }) | null;
+};
+type GRNFormValues = Omit<
+  CreateGRNBody,
+  "inDateTime" | "outDateTime"
+> & {
+  inDateTime?: Date;
+  outDateTime?: Date;
   balanceFreight?: number | string;
   freightPerMT?: number | string;
   detentionDays?: number;
@@ -116,29 +172,105 @@ const paiseToRupeeInput = (value: unknown) => {
   const num = toNumberOrUndefined(value);
   return num === undefined ? undefined : num / 100;
 };
-export default function GRNForm() {
+
+const toApiDateTime = (value?: Date) =>
+  value instanceof Date && !Number.isNaN(value.getTime())
+    ? value.toISOString()
+    : undefined;
+
+type Props = {
+  mode: "create" | "edit";
+  grn?: GRNDetail;
+};
+const grnToFormValues = (grn: GRNDetail): GRNFormValues => ({
+  lorryReceiptId: grn.lorryReceiptId,
+
+  gateNo: grn.gateNo ?? undefined,
+  inDateTime: grn.inDateTime ? new Date(grn.inDateTime) : undefined,
+  outDateTime: grn.outDateTime ? new Date(grn.outDateTime) : undefined,
+  unloadingMinutes: grn.unloadingMinutes ?? undefined,
+
+  goods:
+    grn.goods?.map((item) => ({
+      lrGoodsId: item.lrGoodsId ?? undefined,
+      goodsName: item.goodsName,
+      description: item.description ?? undefined,
+      totalQty: numberValue(item.totalQty),
+      receivedQty: numberValue(item.receivedQty),
+      damageQty: numberValue(item.damageQty),
+      shortageQty: numberValue(item.shortageQty),
+      unit: item.unit ?? undefined,
+      weight: toNumberOrUndefined(item.weight),
+      remarks: item.remarks ?? undefined,
+    })) ?? [],
+
+  damagesBy: grn.damagesBy ?? "NONE",
+
+  detentionDays: grn.detentionDays ?? 0,
+  detentionAmount: paiseToRupeeInput(grn.detentionAmount),
+  totalFreight: paiseToRupeeInput(grn.totalFreight),
+  advanceAmount: paiseToRupeeInput(grn.advanceAmount),
+  damageAmount: paiseToRupeeInput(grn.damageAmount),
+  tdsAmount: paiseToRupeeInput(grn.tdsAmount),
+  hamaliAmount: paiseToRupeeInput(grn.hamaliAmount),
+  printingStationaryAmount: paiseToRupeeInput(grn.printingStationaryAmount),
+  labourCharge: paiseToRupeeInput(grn.labourCharge),
+
+  balanceFreight: paiseToRupeeInput(grn.balanceFreight),
+  freightPerMT: paiseToRupeeInput(grn.freightPerMt),
+  grossTotal: paiseToRupeeInput(grn.grossTotal),
+
+  labourName: grn.labourName ?? undefined,
+  labourId: grn.labourId ?? undefined,
+  unloadingSupervisorId: grn.unloadingSupervisorId ?? undefined,
+
+  damagePhotoAttachmentIds: [],
+});
+const toPreviewMoney = (
+  value: number | string | bigint | null | undefined,
+) => {
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  return value ?? 0;
+};
+export default function GRNForm({ mode, grn }: Props) {
   const router = useRouter();
 
   const createGRN = useCreateGRN();
+  const updateGRN = useUpdateGRN();
   const submitGRN = useSubmitGRN();
   const damagePhotoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [damagePhotoFiles, setDamagePhotoFiles] = React.useState<File[]>([]);
-  const [createdDraft, setCreatedDraft] = React.useState<GRN | null>(null);
+  const [existingDamagePhotos, setExistingDamagePhotos] = React.useState(
+  grn?.damagePhotos ?? [],
+);
+React.useEffect(() => {
+  if (mode === "edit") {
+    setExistingDamagePhotos(grn?.damagePhotos ?? []);
+  }
+}, [mode, grn?.id, grn?.damagePhotos]);
+  const [createdDraft, setCreatedDraft] = React.useState<GRNMutation | null>(
+    null,
+  );
   const [isUploadingDamagePhotos, setIsUploadingDamagePhotos] =
     React.useState(false);
-
 const form = useForm<GRNFormValues>({
-  defaultValues: {
-    lorryReceiptId: "",
-    goods: [],
-    damagePhotoAttachmentIds: [],
-    detentionDays: 0,
-    damagesBy: "NONE",
-    detentionAmount: "0",
-    balanceFreight: 0,
-    freightPerMT: "0",
-    grossTotal: "0",
-  },
+  defaultValues:
+    mode === "edit" && grn
+      ? grnToFormValues(grn)
+      : {
+          lorryReceiptId: "",
+          goods: [],
+          damagePhotoAttachmentIds: [],
+          detentionDays: 0,
+          damagesBy: "NONE",
+          detentionAmount: "0",
+          balanceFreight: 0,
+          freightPerMT: "0",
+          grossTotal: "0",
+        },
 });
   const eligibleLRs = useEligibleGRNLrs({
     page: 0,
@@ -164,7 +296,7 @@ const detentionAmountValue = useWatch({
   control: form.control,
   name: "detentionAmount",
 });
-  const preview = useGRNPreview(selectedLRId);
+ const preview = useGRNPreview(mode === "create" ? selectedLRId : "");
 const isMarketVehicle = preview.data?.vehicleInfo.type === "MARKET";
   const { fields, replace } = useFieldArray({
     control: form.control,
@@ -176,57 +308,59 @@ const isMarketVehicle = preview.data?.vehicleInfo.type === "MARKET";
     name: "goods",
   });
 
-  React.useEffect(() => {
-    setCreatedDraft(null);
-    setDamagePhotoFiles([]);
+React.useEffect(() => {
+  if (mode === "edit") return;
 
-    if (!selectedLRId) {
-      replace([]);
-      return;
-    }
+  setCreatedDraft(null);
+  setDamagePhotoFiles([]);
 
-    if (!preview.data) return;
+  if (!selectedLRId) {
+    replace([]);
+    return;
+  }
 
-    replace(
-      preview.data.goods.map((item) => {
-        const totalQty = numberValue(item.totalQty);
-        const receivedQty = numberValue(item.receivedQty);
+  if (!preview.data) return;
 
-        return {
-          lrGoodsId: item.lrGoodsId,
-          goodsName: item.goodsName,
-          description: item.description ?? undefined,
-          totalQty,
-          receivedQty,
-          damageQty: numberValue(item.damageQty),
-          shortageQty: Math.max(totalQty - receivedQty, 0),
-          unit: item.unit ?? undefined,
-          weight: toNumberOrUndefined(item.weight),
-          remarks: "",
-        };
-      }),
-    );
+  replace(
+    preview.data.goods.map((item) => {
+      const totalQty = numberValue(item.totalQty);
+      const receivedQty = numberValue(item.receivedQty);
 
-form.setValue(
-  "totalFreight",
-  paiseToRupeeInput(preview.data.chargeDefaults.totalFreight),
-);
+      return {
+        lrGoodsId: item.lrGoodsId,
+        goodsName: item.goodsName,
+        description: item.description ?? undefined,
+        totalQty,
+        receivedQty,
+        damageQty: numberValue(item.damageQty),
+        shortageQty: Math.max(totalQty - receivedQty, 0),
+        unit: item.unit ?? undefined,
+        weight: toNumberOrUndefined(item.weight),
+        remarks: "",
+      };
+    }),
+  );
 
-form.setValue(
-  "advanceAmount",
-  paiseToRupeeInput(preview.data.chargeDefaults.advanceAmount),
-);
+  form.setValue(
+    "totalFreight",
+    paiseToRupeeInput(preview.data.chargeDefaults.totalFreight),
+  );
 
-form.setValue(
-  "hamaliAmount",
-  paiseToRupeeInput(preview.data.chargeDefaults.hamaliAmount),
-);
+  form.setValue(
+    "advanceAmount",
+    paiseToRupeeInput(preview.data.chargeDefaults.advanceAmount),
+  );
 
-form.setValue(
-  "tdsAmount",
-  paiseToRupeeInput(preview.data.chargeDefaults.tdsAmount),
-);
-  }, [selectedLRId, preview.data, replace, form]);
+  form.setValue(
+    "hamaliAmount",
+    paiseToRupeeInput(preview.data.chargeDefaults.hamaliAmount),
+  );
+
+  form.setValue(
+    "tdsAmount",
+    paiseToRupeeInput(preview.data.chargeDefaults.tdsAmount),
+  );
+}, [mode, selectedLRId, preview.data, replace, form]);
   
 const freightSummary = React.useMemo(() => {
   const totalFreight = numberValue(totalFreightValue);
@@ -378,6 +512,11 @@ const labourOptions = [
       damagePhotoInputRef.current.value = "";
     }
   };
+  const removeExistingDamagePhoto = (photoId: string) => {
+  setExistingDamagePhotos((currentPhotos) =>
+    currentPhotos.filter((photo) => photo.id !== photoId),
+  );
+};
 const inDateTime = useWatch({
   control: form.control,
   name: "inDateTime",
@@ -436,58 +575,110 @@ React.useEffect(() => {
   return;
 }
 
-    try {
-const { labourName, detentionAmount, grossTotal, freightPerMT, ...apiValues } =
-  values;
+ try {
+  const {
+    detentionAmount,
+    grossTotal,
+    freightPerMT,
+    inDateTime,
+    outDateTime,
+    ...apiValues
+  } = values;
 
-const created =
-  createdDraft?.lorryReceiptId === values.lorryReceiptId
-    ? createdDraft
-    : await createGRN.mutateAsync({
-        ...apiValues,
+  const apiBody = {
+    ...apiValues,
+    inDateTime: toApiDateTime(inDateTime),
+    outDateTime: toApiDateTime(outDateTime),
+    freightPerMt: toNumberOrUndefined(freightPerMT),
+  };
+
+  if (mode === "edit" && grn) {
+    const uploadedPhotos = await Promise.all(
+      damagePhotoFiles.map((file) =>
+        attachmentApi.upload(
+          {
+            entityType: DAMAGE_PHOTO_ENTITY,
+            entityId: grn.id,
+            originalName: file.name,
+            mime: file.type,
+            sizeBytes: file.size,
+          },
+          file,
+        ),
+      ),
+    );
+    await updateGRN.mutateAsync({
+      id: grn.id,
+      body: {
+        ...apiBody,
+        version: grn.version,
         labourId: undefined,
         unloadingSupervisorId: values.unloadingSupervisorId,
         goods,
-        damagePhotoAttachmentIds: [],
-      });
-      setCreatedDraft(created);
+        damagePhotoAttachmentIds: uploadedPhotos.map((photo) => photo.id),
+      },
+    });
+    const identifier = grn.grnNumber || grn.id;
+    toast.success(`GRN ${grn.grnNumber} updated`);
+    router.push(`/vp-management/grn/${encodeURIComponent(identifier)}`);
+    
+    return;
+  }
 
-      setIsUploadingDamagePhotos(true);
-      const uploadedPhotos = await Promise.all(
-        damagePhotoFiles.map((file) =>
-          attachmentApi.upload(
-            {
-              entityType: DAMAGE_PHOTO_ENTITY,
-              entityId: created.id,
-              originalName: file.name,
-              mime: file.type,
-              sizeBytes: file.size,
-            },
-            file,
-          ),
-        ),
-      );
-      setIsUploadingDamagePhotos(false);
+  const created =
+    createdDraft?.lorryReceiptId === values.lorryReceiptId
+      ? createdDraft
+      : await createGRN.mutateAsync({
+          ...apiBody,
+          labourId: undefined,
+          unloadingSupervisorId: values.unloadingSupervisorId,
+          goods,
+          damagePhotoAttachmentIds: [],
+        });
 
-      const submitted = await submitGRN.mutateAsync({
-        id: created.id,
-        body: {
-          version: created.version,
-          damagePhotoAttachmentIds: uploadedPhotos.map((photo) => photo.id),
+  setCreatedDraft(created);
+
+  setIsUploadingDamagePhotos(true);
+
+  const uploadedPhotos = await Promise.all(
+    damagePhotoFiles.map((file) =>
+      attachmentApi.upload(
+        {
+          entityType: DAMAGE_PHOTO_ENTITY,
+          entityId: created.id,
+          originalName: file.name,
+          mime: file.type,
+          sizeBytes: file.size,
         },
-      });
+        file,
+      ),
+    ),
+  );
 
-      toast.success(`GRN ${submitted.grnNumber} created`);
-      setCreatedDraft(null);
-    router.push(`/vp-management/grn/${submitted.id}`);
-    } catch (err) {
-      setIsUploadingDamagePhotos(false);
-      toast.error(getErrorMessage(err));
-    }
+  setIsUploadingDamagePhotos(false);
+
+  const submitted = await submitGRN.mutateAsync({
+    id: created.id,
+    body: {
+      version: created.version,
+      damagePhotoAttachmentIds: uploadedPhotos.map((photo) => photo.id),
+    },
+  });
+
+  toast.success(`GRN ${submitted.grnNumber} created`);
+  setCreatedDraft(null);
+  router.push(`/vp-management/grn/${submitted.grnNumber}`);
+} catch (err) {
+  setIsUploadingDamagePhotos(false);
+  toast.error(getErrorMessage(err));
+}
   };
 
-  const isCreating =
-    createGRN.isPending || submitGRN.isPending || isUploadingDamagePhotos;
+  const isSaving =
+  createGRN.isPending ||
+  submitGRN.isPending ||
+  updateGRN.isPending ||
+  isUploadingDamagePhotos;
 const hasDamageOrShortage = React.useMemo(() => {
   return watchedGoods?.some((row) => {
     const damageQty = numberValue(row?.damageQty);
@@ -513,6 +704,51 @@ React.useEffect(() => {
     });
   }
 }, [form, hasDamageOrShortage]);
+const canShowFormBody = mode === "edit" || Boolean(preview.data);
+const editPreview = React.useMemo<LRPreviewPanelData | undefined>(() => {
+  if (mode !== "edit" || !grn?.lorryReceipt) return undefined;
+
+  const editGrn = grn as EditGRNForPreview;
+
+  const lr = editGrn.lorryReceipt;
+  const group = lr?.group;
+
+  const ownTrip = group?.primaryTrip ?? group?.secondaryTrip ?? null;
+  const isMarketVehicle = Boolean(group?.isMarketVehicle);
+
+  return {
+    lorryReceipt: {
+      lrNumber: lr?.lrNumber,
+      status: lr?.status,
+      invoiceNumber: lr?.invoiceNumber,
+      invoiceAmount: lr?.invoiceAmount,
+    },
+
+    vehicleInfo: isMarketVehicle
+      ? {
+          type: "MARKET",
+          vehicleNumber: group?.marketVehicleNumber ?? null,
+          driverName: group?.marketDriverName ?? null,
+          tripNumber: null,
+          tripName: null,
+        }
+      : {
+          type: "OWN",
+          vehicleNumber: ownTrip?.vehicle?.vehicleNumber ?? null,
+          driverName: ownTrip?.driver?.name ?? null,
+          tripNumber: ownTrip?.tripNumber ?? null,
+          tripName: ownTrip?.tripName ?? null,
+        },
+
+    chargeDefaults: {
+      totalFreight: grn.totalFreight ?? 0,
+      advanceAmount: grn.advanceAmount ?? 0,
+      hamaliAmount: grn.hamaliAmount ?? 0,
+      tdsAmount: grn.tdsAmount ?? 0,
+      commissionAmount: toPreviewMoney(group?.marketCommissionAmount),
+    },
+  };
+}, [mode, grn]);
    return (
 <FormProvider {...form}>
   <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -524,20 +760,30 @@ React.useEffect(() => {
       title="Select LR"
       columns={1}
     >
-      <ComboboxField
-        name="lorryReceiptId"
-        label="LR Number"
-        required
-        options={lrOptions}
-        emptyText={
-          eligibleLRs.isLoading
-            ? "Loading LRs..."
-            : "No eligible LR found"
-        }
-      />
+     <ComboboxField
+  name="lorryReceiptId"
+  label="LR Number"
+  required
+  options={
+    mode === "edit" && grn?.lorryReceipt
+      ? [
+          {
+            value: grn.lorryReceipt.id,
+            label: grn.lorryReceipt.lrNumber,
+          },
+        ]
+      : lrOptions
+  }
+  disabled={mode === "edit"}
+  emptyText={
+    eligibleLRs.isLoading
+      ? "Loading LRs..."
+      : "No eligible LR found"
+  }
+/>
     </FormSection>
 
-{preview.data ? (
+{canShowFormBody ? (
   <FormSection
     icon={<IconPackage size={16} />}
     title="Goods Receive"
@@ -593,74 +839,61 @@ React.useEffect(() => {
                       {/* Total is now manually editable */}
                       <TableCell>
                         <Controller
-                          name={`goods.${index}.totalQty` as const}
-                          control={form.control}
-                          render={({ field }) => (
-                            <Input
-                              type="number"
-                              min={0}
-                              className="h-9"
-                              value={field.value ?? ""}
-                              onChange={(event) => {
-                                const value = numberValue(event.target.value);
-
-                                field.onChange(value);
-
-                                form.setValue(
-                                  `goods.${index}.shortageQty` as const,
-                                  Math.max(value - receivedQty, 0),
-                                  { shouldDirty: true },
-                                );
-                              }}
-                            />
-                          )}
-                        />
+  name={`goods.${index}.totalQty` as const}
+  control={form.control}
+  render={({ field }) => (
+    <Input
+      type="number"
+      min={0}
+      className="h-9"
+      value={field.value ?? ""}
+      onChange={(event) => {
+        field.onChange(event.target.value);
+      }}
+      onBlur={field.onBlur}
+    />
+  )}
+/>
                       </TableCell>
 
                       <TableCell>
                         <Controller
-                          name={`goods.${index}.receivedQty` as const}
-                          control={form.control}
-                          render={({ field }) => (
-                            <Input
-                              type="number"
-                              min={0}
-                              max={totalQty}
-                              className="h-9"
-                              value={field.value ?? ""}
-                              onChange={(event) => {
-                                const value = numberValue(event.target.value);
-
-                                field.onChange(value);
-
-                                form.setValue(
-                                  `goods.${index}.shortageQty` as const,
-                                  Math.max(totalQty - value, 0),
-                                  { shouldDirty: true },
-                                );
-                              }}
-                            />
-                          )}
-                        />
+  name={`goods.${index}.receivedQty` as const}
+  control={form.control}
+  render={({ field }) => (
+    <Input
+      type="number"
+      min={0}
+      max={totalQty}
+      className="h-9"
+      value={field.value ?? ""}
+      onChange={(event) => {
+        field.onChange(event.target.value);
+      }}
+      onBlur={field.onBlur}
+    />
+  )}
+/>
                       </TableCell>
 
                       <TableCell>
-                        <Controller
-                          name={`goods.${index}.damageQty` as const}
-                          control={form.control}
-                          render={({ field }) => (
-                            <Input
-                              type="number"
-                              min={0}
-                              max={receivedQty}
-                              className="h-9"
-                              value={field.value ?? ""}
-                              onChange={(event) =>
-                                field.onChange(numberValue(event.target.value))
-                              }
-                            />
-                          )}
-                        />
+                      <Controller
+  name={`goods.${index}.damageQty` as const}
+  control={form.control}
+  render={({ field }) => (
+    <Input
+      type="number"
+      min={0}
+      max={receivedQty}
+      className="h-9"
+      value={field.value ?? ""}
+      onChange={(event) => {
+        field.onChange(event.target.value);
+      }}
+      onBlur={field.onBlur}
+    />
+  )}
+/>
                       </TableCell>
 
                       <TableCell>
@@ -702,7 +935,7 @@ React.useEffect(() => {
   </FormSection>
 ) : null}
 
-{preview.data ? (
+{canShowFormBody ? (
   <FormSection
     icon={<IconFileText size={16} />}
     title="Receiving Details"
@@ -765,7 +998,7 @@ React.useEffect(() => {
     
   </FormSection>
 ) : null}
-{preview.data ? (
+{canShowFormBody ? (
   <FormSection
     icon={<IconFileText size={16} />}
     title="Labour & Damage Details"
@@ -777,7 +1010,7 @@ React.useEffect(() => {
 
   <Select
     value={String(damageByValue ?? "NONE")}
-    disabled={!hasDamageOrShortage}
+    disabled={!hasDamageOrShortage || isSaving }
     onValueChange={(value) => {
       form.setValue("damagesBy", value as GRNFormValues["damagesBy"], {
         shouldDirty: true,
@@ -802,19 +1035,58 @@ React.useEffect(() => {
 
 <div className="md:col-span-2">
   <FieldLabel>Damage Photos</FieldLabel>
+
   <Input
     ref={damagePhotoInputRef}
     type="file"
     accept="image/*"
     multiple
-    disabled={!hasDamageOrShortage || isCreating}
+    disabled={!hasDamageOrShortage || isSaving}
     onChange={handleDamagePhotosChange}
     className="h-9"
   />
+
+  {mode === "edit" && existingDamagePhotos.length ? (
+    <div className="mt-2 space-y-2">
+      <div className="text-xs font-medium text-muted-foreground">
+        Existing uploaded photos
+      </div>
+
+      <div className="grid max-h-32 gap-1.5 overflow-y-auto rounded-md border bg-muted/20 p-2">
+        {existingDamagePhotos.map((photo) => (
+          <div
+            key={photo.id}
+            className="flex min-w-0 items-center gap-2 rounded-sm bg-background px-2 py-1.5 text-xs"
+          >
+            <span className="min-w-0 flex-1 truncate">
+              {photo.originalName || photo.filename || "Damage Photo"}
+            </span>
+
+            <span className="shrink-0 text-muted-foreground">
+  Existing
+</span>
+
+<Button
+  type="button"
+  variant="ghost"
+  size="icon"
+  className="h-6 w-6 shrink-0"
+  disabled={isSaving}
+  onClick={() => removeExistingDamagePhoto(photo.id)}
+  aria-label={`Remove ${photo.originalName || photo.filename || "Damage Photo"}`}
+>
+  <IconX size={14} />
+</Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null}
+
   {damagePhotoFiles.length > 0 ? (
     <div className="mt-2 space-y-2">
-      <div className="text-xs text-muted-foreground">
-        {damagePhotoFiles.length} photo
+      <div className="text-xs font-medium text-muted-foreground">
+        {damagePhotoFiles.length} new photo
         {damagePhotoFiles.length === 1 ? "" : "s"} selected
       </div>
 
@@ -827,15 +1099,17 @@ React.useEffect(() => {
             <span className="min-w-0 flex-1 truncate" title={file.name}>
               {file.name}
             </span>
+
             <span className="shrink-0 text-muted-foreground">
               {(file.size / 1024 / 1024).toFixed(1)} MB
             </span>
+
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="h-6 w-6 shrink-0"
-              disabled={isCreating}
+              disabled={isSaving}
               onClick={() => removeDamagePhoto(file)}
               aria-label={`Remove ${file.name}`}
             >
@@ -929,7 +1203,7 @@ React.useEffect(() => {
 
   </FormSection>
 ) : null}
-{preview.data ? (
+{canShowFormBody ? (
   <FormSection
     icon={<IconFileText size={16} />}
     title="Detention Summary"
@@ -975,24 +1249,30 @@ React.useEffect(() => {
       <Button
         type="submit"
         disabled={
-          isCreating ||
-          !selectedLRId ||
-          preview.isLoading ||
-          fields.length === 0
-        }
+  isSaving ||
+  !selectedLRId ||
+  (mode === "create" && preview.isLoading) ||
+  fields.length === 0
+}
       >
-        {isCreating ? "Creating..." : "Create GRN"}
+        {isSaving
+  ? mode === "edit"
+    ? "Saving..."
+    : "Creating..."
+  : mode === "edit"
+    ? "Save GRN"
+    : "Create GRN"}
       </Button>
     </div>
   </div>
 
 <div className="sticky top-6 h-[calc(100vh-3rem)] w-[360px] min-w-[360px] max-w-[360px] basis-[360px] flex-none overflow-hidden">
-  <LRPreviewPanel
-    preview={preview.data}
-    loading={preview.isLoading}
-    detentionAmountPaise={detentionAmountPaise}
-    grossTotalPaise={grossTotalPaise}
-  />
+<LRPreviewPanel
+  preview={mode === "edit" ? editPreview : preview.data}
+  loading={mode === "create" && preview.isLoading}
+  detentionAmountPaise={detentionAmountPaise}
+  grossTotalPaise={grossTotalPaise}
+/>
 </div>
 </div>
 </form>

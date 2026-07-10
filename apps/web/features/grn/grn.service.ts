@@ -1,7 +1,7 @@
 // apps/web/src/features/grn/grn.service.ts
 
 import { api } from "@/lib/api";
-import type { ApiResponse } from "@skerp/types";
+import type { ApiResponse, GRN as GRNDetail } from "@skerp/types";
 import {
   ListQuery,
   ListResult,
@@ -198,7 +198,18 @@ export const grnApi = {
 
     return unwrapApiResponse(res);
   },
+  getDamagePhotoViewUrl: async (
+  grnId: string,
+  photoId: string,
+): Promise<{ viewUrl: string }> => {
+  const res = await api.get(
+    `/grn/${encodeURIComponent(grnId)}/damage-photos/${encodeURIComponent(
+      photoId,
+    )}/view-url`,
+  );
 
+  return res.data.data ?? res.data;
+},
   eligibleLRs: async (
     query?: ListQuery,
   ): Promise<ListResult<EligibleLR>> => {
@@ -227,8 +238,8 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
-  detail: async (identifier: string): Promise<GRN> => {
-    const res = await api.get<ApiResponse<GRN>>(
+  detail: async (identifier: string): Promise<GRNDetail> => {
+    const res = await api.get<ApiResponse<GRNDetail>>(
       `/grn/${encodeGRNIdentifier(identifier)}`,
     );
 

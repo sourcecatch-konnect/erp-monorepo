@@ -6,8 +6,32 @@ import * as React from "react";
 import { IconFileText, IconTruck } from "@tabler/icons-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@skerp/ui/components/tooltip";
 import { formatPaise } from "@/lib/money";
-import type { GRNPreview } from "../grn.service";
+type MoneyLike = number | string | null | undefined;
 
+export type LRPreviewPanelData = {
+  lorryReceipt: {
+    lrNumber?: string | null;
+    status?: string | null;
+    invoiceNumber?: string | null;
+    invoiceAmount?: MoneyLike;
+  };
+
+  vehicleInfo: {
+    type?: "MARKET" | "OWN" | string | null;
+    vehicleNumber?: string | null;
+    driverName?: string | null;
+    tripNumber?: string | null;
+    tripName?: string | null;
+  };
+
+  chargeDefaults: {
+    totalFreight?: MoneyLike;
+    advanceAmount?: MoneyLike;
+    hamaliAmount?: MoneyLike;
+    tdsAmount?: MoneyLike;
+    commissionAmount?: MoneyLike;
+  };
+};
 const DASH = <span className="text-muted-foreground">—</span>;
 function PreviewRow({
   label,
@@ -85,7 +109,7 @@ export default function LRPreviewPanel({
   detentionAmountPaise,
   grossTotalPaise,
 }: {
-  preview?: GRNPreview;
+  preview?: LRPreviewPanelData;
   loading: boolean;
   detentionAmountPaise?: number;
   grossTotalPaise?: number;

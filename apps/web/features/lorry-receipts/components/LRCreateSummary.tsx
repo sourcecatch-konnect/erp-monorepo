@@ -363,6 +363,7 @@ export default function LRCreateSummary({
           index={i}
           loading={loading}
           unloading={unloading}
+          totalWeight={line.totalWeight}
           goods={goods}
         />
       );
@@ -461,11 +462,13 @@ function ConsignmentCard({
   index,
   loading,
   unloading,
+  totalWeight,
   goods,
 }: {
   index: number;
   loading?: string | null;
   unloading?: string | null;
+  totalWeight?: number | null;
   goods: string[];
 }) {
   return (
@@ -497,6 +500,15 @@ function ConsignmentCard({
               {unloading || "Unloading not selected"}
             </span>
           </div>
+        </div>
+
+        <div className="rounded-md border p-2">
+          <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
+            Total weight
+          </p>
+          <p className="text-xs font-medium">
+            {totalWeight != null ? totalWeight.toLocaleString() : "Not set"}
+          </p>
         </div>
 
         <div className="rounded-md border p-2">

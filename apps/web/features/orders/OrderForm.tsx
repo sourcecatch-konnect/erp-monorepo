@@ -195,13 +195,14 @@ export default function OrderForm({ mode, order }: Props) {
               truckIndex: c.truckIndex,
               loadingLocationId: c.loadingLocationId ?? undefined,
               unloadingLocationId: c.unloadingLocationId ?? undefined,
+              totalWeight:
+                c.totalWeight != null ? Number(c.totalWeight) : undefined,
               goods:
                 c.goods && c.goods.length
                   ? c.goods.map((g) => ({
                       goodsId: g.goodsId,
                       quantity: g.quantity,
                       unit: g.unit,
-                      weight: g.weight ? Number(g.weight) : undefined,
                     }))
                   : [],
             })) ?? [],
@@ -256,31 +257,53 @@ export default function OrderForm({ mode, order }: Props) {
   }, [orderType, form]);
 
   const onSubmit = async (values: CreateOrderBody) => {
-    console.log("got trigger");
+  if (values.orderType === "Truck") {
+    const truckQty = Number(values.truckQuantity) || 0;
+    const assignedTrucks = new Set(
+      (values.consignments ?? []).map((line) => Number(line.truckIndex)),
+    );
+    const missingTrucks = Array.from(
+      { length: truckQty },
+      (_, index) => index + 1,
+    ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
 
-    setSubmitting(true);
-    try {
-      if (mode === "edit" && order) {
-        await orderApi.update(order.id, { ...values, version: order.version });
-        toast.success(
-          order.status === "Rejected"
-            ? "Order resubmitted for approval"
-            : "Order updated",
-        );
-        router.push(`/orders/${encodeURIComponent(order.orderNumber)}`);
-      } else {
-        const created = await orderApi.create(values);
-        toast.success(
-          `Order ${created.orderNumber} created and sent for approval`,
-        );
-        router.push(`/orders/${encodeURIComponent(created.orderNumber)}`);
-      }
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setSubmitting(false);
+    if (missingTrucks.length > 0) {
+      const message = `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}.`;
+      form.setError("consignments", {
+        type: "manual",
+        message,
+      });
+
+      toast.error(message);
+
+      return;
     }
-  };
+  }
+
+  setSubmitting(true);
+
+  try {
+    if (mode === "edit" && order) {
+      await orderApi.update(order.id, { ...values, version: order.version });
+      toast.success(
+        order.status === "Rejected"
+          ? "Order resubmitted for approval"
+          : "Order updated",
+      );
+      router.push(`/orders/${encodeURIComponent(order.orderNumber)}`);
+    } else {
+      const created = await orderApi.create(values);
+      toast.success(
+        `Order ${created.orderNumber} created and sent for approval`,
+      );
+      router.push(`/orders/${encodeURIComponent(created.orderNumber)}`);
+    }
+  } catch (error) {
+    toast.error(getErrorMessage(error));
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const handleCancel = () => {
     if (form.formState.isDirty) setDiscardOpen(true);

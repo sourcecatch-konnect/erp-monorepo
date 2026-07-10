@@ -12,6 +12,7 @@ import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
+import { presignDownload } from "../../lib/s3.js";
 import {
   buildGRNMoneyData,
   calculateGRNTotals,
@@ -404,10 +405,11 @@ router.get(
 
         // GRN should allow only finalised LR group also
         {
-          group: {
-            status: "FINALISED" as const,
-          },
-        },
+  group: {
+    status: "FINALISED" as const,
+    transportType: "RoadAndRail",
+  },
+},
 
         ...(query.search
           ? [
@@ -437,6 +439,57 @@ router.get(
       page: query.page,
       size: query.size,
       total,
+    });
+  },
+);
+
+router.get(
+  "/:grnId/damage-photos/:photoId/view-url",
+  can(PERMS.GRN.VIEW),
+  async (req, res) => {
+    const grnId = getIdParam(req.params.grnId, "GRN identifier");
+    const photoId = getIdParam(req.params.photoId, "Damage photo identifier");
+
+    const grn = await db.gRN.findFirst({
+      where: grnWhereByIdentifier(grnId, req),
+      select: {
+        id: true,
+      },
+    });
+
+    if (!grn) throw new NotFoundError("GRN not found");
+
+    const photo = await db.attachment.findFirst({
+      where: {
+        id: photoId,
+        entityType: "GRN_DAMAGE",
+        entityId: grn.id,
+        uploaded: true,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        s3Key: true,
+        mime: true,
+        originalName: true,
+        antivirusStatus: true,
+      },
+    });
+
+    if (!photo) throw new NotFoundError("Damage photo not found");
+
+    if (photo.antivirusStatus !== "CLEAN") {
+      throw new Error("Damage photo is not available yet.");
+    }
+
+    if (!photo.s3Key) {
+      throw new Error("Damage photo file path is missing.");
+    }
+
+    const viewUrl = await presignDownload(photo.s3Key);
+
+    return sendOk(res, {
+      viewUrl,
     });
   },
 );
@@ -615,6 +668,7 @@ router.post("/", can(PERMS.GRN.CREATE), async (req, res) => {
         printingStationaryAmount: writeData.printingStationaryAmount,
         netAmount: writeData.netAmount,
         labourId: writeData.labourId,
+        labourName: writeData.labourName,
         labourCharge: writeData.labourCharge,
         unloadingSupervisorId: writeData.unloadingSupervisorId,
         damagesBy: writeData.damagesBy,
@@ -660,9 +714,9 @@ router.put("/:id", can(PERMS.GRN.UPDATE), async (req, res) => {
   });
 
   if (!existing) throw new NotFoundError("GRN not found");
-  if (existing.status !== "DRAFT") {
-    throw new BadRequestError("Only a DRAFT GRN can be updated");
-  }
+if (!["DRAFT", "SUBMITTED"].includes(existing.status)) {
+  throw new BadRequestError("Only a DRAFT or SUBMITTED GRN can be updated");
+}
   if (input.version !== undefined && input.version !== existing.version) {
     throw new ConflictError("GRN was updated by someone else. Please refresh.");
   }

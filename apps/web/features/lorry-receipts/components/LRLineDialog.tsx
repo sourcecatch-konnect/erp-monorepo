@@ -17,29 +17,41 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
+import { SuggestInput } from "@skerp/ui/components/suggest-input";
 
 export type LinePayload = {
   loadingLocationId?: string;
   unloadingLocationId?: string;
-  goods: { name: string; description?: string; quantity: number; unit: string; weight?: number }[];
+
+  totalWeight?: number;
+  totalWeightUnit?: string;
+
+  goods: {
+    name: string;
+    description?: string;
+    quantity: number;
+  }[];
+
   invoiceNumber?: string;
   invoiceAmount?: number;
 };
-
 type GoodsFormLine = {
   name: string;
   quantity: string;
-  unit: string;
 };
 
 type FormShape = {
   loadingLocationId?: string;
   unloadingLocationId?: string;
+
+  totalWeight: string;
+  totalWeightUnit: string;
+
   goods: GoodsFormLine[];
+
   invoiceNumber: string;
   invoiceAmount: string;
 };
-
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -71,66 +83,114 @@ export default function LRLineDialog({
     queryFn: () => lrLookups.customerLocations(consigneeId),
     enabled: open && Boolean(consigneeId),
   });
-
+const UNIT_OPTIONS = [
+  { label: "MT", value: "MT" },
+  { label: "Kg", value: "KG" },
+  { label: "Quintal", value: "QUINTAL" },
+  { label: "Bags", value: "BAGS" },
+  { label: "Boxes", value: "BOXES" },
+  { label: "Cartons", value: "CARTONS" },
+  { label: "Bundles", value: "BUNDLES" },
+  { label: "Pieces", value: "PIECES" },
+  { label: "Drums", value: "DRUMS" },
+  { label: "Pallets", value: "PALLETS" },
+  { label: "Rolls", value: "ROLLS" },
+  { label: "Coils", value: "COILS" },
+];
   const form = useForm<FormShape>({
     defaultValues: {
-      loadingLocationId: undefined,
-      unloadingLocationId: undefined,
-      goods: [],
-      invoiceNumber: "",
-      invoiceAmount: "",
-    },
+  loadingLocationId: undefined,
+  unloadingLocationId: undefined,
+  totalWeight: "",
+  totalWeightUnit: "MT",
+  goods: [],
+  invoiceNumber: "",
+  invoiceAmount: "",
+},
   });
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "goods",
   });
+const goodsMaster = useQuery({
+  queryKey: lrLookupKeys.goods,
+  queryFn: lrLookups.goods,
+  enabled: open,
+});
 
+const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
+  value: g.name,
+  hint: g.description ?? undefined,
+}));
   React.useEffect(() => {
     if (open) {
       form.reset({
-        loadingLocationId: initial?.loadingLocationId,
-        unloadingLocationId: initial?.unloadingLocationId,
-        goods: initial?.goods?.length
-          ? initial.goods.map((g) => ({
-              name: g.name ?? "",
-              quantity: g.quantity ?? "",
-              unit: g.unit ?? "",
-            }))
-          : [],
-        invoiceNumber: initial?.invoiceNumber ?? "",
-        invoiceAmount: initial?.invoiceAmount ?? "",
-      });
+  loadingLocationId: initial?.loadingLocationId,
+  unloadingLocationId: initial?.unloadingLocationId,
+  totalWeight: initial?.totalWeight ?? "",
+  totalWeightUnit: initial?.totalWeightUnit ?? "MT",
+  goods: initial?.goods?.length
+    ? initial.goods.map((g) => ({
+        name: g.name ?? "",
+        quantity: g.quantity ?? "",
+      }))
+    : [],
+  invoiceNumber: initial?.invoiceNumber ?? "",
+  invoiceAmount: initial?.invoiceAmount ?? "",
+});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const submit = (v: FormShape) => {
-    const goods = v.goods.map((g) => ({
-      name: g.name.trim(),
-      quantity: Number(g.quantity),
-      unit: g.unit.trim(),
-    }));
-    const invalidIndex = goods.findIndex(
-      (g) => !g.name || !Number.isInteger(g.quantity) || g.quantity <= 0 || !g.unit,
-    );
+ const submit = (v: FormShape) => {
+  const totalWeight =
+    v.totalWeight === "" ? undefined : Number(v.totalWeight);
 
-    if (invalidIndex >= 0) {
-      form.setError(`goods.${invalidIndex}.name`, {
-        message: "Goods name, qty and unit are required",
-      });
-      return;
-    }
-
-    onSubmit({
-      loadingLocationId: v.loadingLocationId || undefined,
-      unloadingLocationId: v.unloadingLocationId || undefined,
-      goods: goods.length ? goods : [],
-      invoiceNumber: mode === "edit" ? v.invoiceNumber.trim() || undefined : undefined,
-      invoiceAmount:
-        mode === "edit" && v.invoiceAmount ? Number(v.invoiceAmount) : undefined,
+  if (totalWeight === undefined || !Number.isFinite(totalWeight) || totalWeight < 0) {
+    form.setError("totalWeight", {
+      message: "Total weight is required",
     });
-  };
+    return;
+  }
+
+  if (!v.totalWeightUnit) {
+    form.setError("totalWeightUnit", {
+      message: "Unit is required",
+    });
+    return;
+  }
+
+  const goods = v.goods.map((g) => ({
+    name: g.name.trim(),
+    quantity: Number(g.quantity),
+  }));
+
+  const invalidIndex = goods.findIndex(
+    (g) => !g.name || !Number.isInteger(g.quantity) || g.quantity <= 0,
+  );
+
+  if (invalidIndex >= 0) {
+    form.setError(`goods.${invalidIndex}.name`, {
+      message: "Goods name and qty are required",
+    });
+    return;
+  }
+
+  onSubmit({
+    loadingLocationId: v.loadingLocationId || undefined,
+    unloadingLocationId: v.unloadingLocationId || undefined,
+
+    totalWeight,
+    totalWeightUnit: v.totalWeightUnit,
+
+    goods: goods.length ? goods : [],
+
+    invoiceNumber:
+      mode === "edit" ? v.invoiceNumber.trim() || undefined : undefined,
+    invoiceAmount:
+      mode === "edit" && v.invoiceAmount ? Number(v.invoiceAmount) : undefined,
+  });
+};
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -180,7 +240,7 @@ export default function LRLineDialog({
               />
             </div>
           </div>
-
+      
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-muted-foreground">
@@ -190,7 +250,7 @@ export default function LRLineDialog({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => append({ name: "", quantity: "", unit: "" })}
+                onClick={() => append({ name: "", quantity: "" })}
               >
                 <IconPlus size={14} className="mr-1" /> Add goods row
               </Button>
@@ -201,18 +261,31 @@ export default function LRLineDialog({
                 be finalised until every LR has goods.
               </div>
             ) : null}
-
-  {fields.map((field, index) => (
+{fields.map((field, index) => (
   <div key={field.id} className="rounded-md border bg-muted/20 p-3">
-  <div className="flex items-end gap-3">
-      <div className="col-span-6">
+    <div className="flex items-end gap-3">
+      <div className="min-w-0 flex-1">
         <label className="mb-1 block text-xs font-medium text-muted-foreground">
           Goods name
         </label>
-        <Input {...form.register(`goods.${index}.name`)} className="h-9" />
+       <Controller
+  control={form.control}
+  name={`goods.${index}.name`}
+  render={({ field }) => (
+    <SuggestInput
+      value={field.value ?? ""}
+      onChange={field.onChange}
+      onBlur={field.onBlur}
+      suggestions={goodsSuggestions}
+      placeholder={goodsMaster.isLoading ? "Loading goods..." : "Select or type goods"}
+      invalid={Boolean(form.formState.errors.goods?.[index]?.name?.message)}
+      className="[&_input]:h-9"
+    />
+  )}
+/>
       </div>
 
-      <div className="col-span-2">
+      <div className="w-24 shrink-0">
         <label className="mb-1 block text-xs font-medium text-muted-foreground">
           Qty
         </label>
@@ -224,28 +297,15 @@ export default function LRLineDialog({
         />
       </div>
 
-      <div className="col-span-2">
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">
-          Unit
-        </label>
-        <Input
-          {...form.register(`goods.${index}.unit`)}
-          placeholder="MT"
-          className="h-9"
-        />
-      </div>
-
-      <div className="col-span-2 flex justify-end">
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Remove goods"
-          onClick={() => remove(index)}
-        >
-          <IconTrash size={15} />
-        </Button>
-      </div>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        aria-label="Remove goods"
+        onClick={() => remove(index)}
+      >
+        <IconTrash size={15} />
+      </Button>
     </div>
 
     {form.formState.errors.goods?.[index]?.name?.message && (
@@ -256,7 +316,53 @@ export default function LRLineDialog({
   </div>
 ))}
           </div>
+<div className="flex w-full items-start gap-3">
+  <div className="w-48 shrink-0">
+    <label className="mb-1 block text-xs font-medium text-muted-foreground">
+      Total weight <span className="text-red-600">*</span>
+    </label>
 
+    <Input
+      {...form.register("totalWeight")}
+      type="number"
+      min={0}
+      step="0.01"
+      placeholder="Weight"
+      className="h-9 w-full"
+    />
+
+    {form.formState.errors.totalWeight?.message ? (
+      <p className="mt-1 text-xs text-red-600">
+        {form.formState.errors.totalWeight.message}
+      </p>
+    ) : null}
+  </div>
+
+  <div className="w-32 shrink-0">
+    <label className="mb-1 block text-xs font-medium text-muted-foreground">
+      Unit <span className="text-red-600">*</span>
+    </label>
+
+    <Controller
+      control={form.control}
+      name="totalWeightUnit"
+      render={({ field }) => (
+        <Combobox
+          options={UNIT_OPTIONS}
+          value={field.value}
+          onChange={field.onChange}
+          placeholder="Unit"
+        />
+      )}
+    />
+
+    {form.formState.errors.totalWeightUnit?.message ? (
+      <p className="mt-1 text-xs text-red-600">
+        {form.formState.errors.totalWeightUnit.message}
+      </p>
+    ) : null}
+  </div>
+</div>
           {mode === "edit" && (
             <div className="grid grid-cols-2 gap-3">
               <div>

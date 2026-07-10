@@ -123,6 +123,12 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
         ...(input.unloadingLocationId !== undefined
           ? { unloadingLocationId: input.unloadingLocationId ?? null }
           : {}),
+        ...(input.totalWeight !== undefined
+          ? { totalWeight: input.totalWeight }
+          : {}),
+        ...(input.totalWeightUnit !== undefined
+          ? { unit: input.totalWeightUnit }
+          : {}),
         ...(input.invoiceNumber !== undefined
           ? { invoiceNumber: input.invoiceNumber ?? null }
           : {}),
@@ -136,7 +142,7 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
                   name: g.name,
                   description: g.description ?? null,
                   quantity: g.quantity,
-                  unit: g.unit,
+                  unit: g.unit ?? null,
                   weight: g.weight ?? null,
                   length: g.length ?? null,
                   width: g.width ?? null,

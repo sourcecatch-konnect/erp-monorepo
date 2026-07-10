@@ -30,16 +30,33 @@ export type CancelGRNBody = z.output<typeof cancelGRNSchema>;
 
 type Ref = {
   id: string;
-  name: string;
-};
-
-export type GRNBranchLite = {
-  id: string;
   name?: string | null;
-  branchCode?: string | null;
 };
 
+type UserLite = {
+  id: string;
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+};
+export type GRNEwayBillLite = {
+  id: string;
+  ewayBillNo: string;
+  generatedAt?: string | null;
+  expiresAt?: string | null;
+};
 
+export type GRNGroupLite = {
+  id: string;
+  groupNumber: string;
+  transportType?: string | null;
+  sealNumber?: string | null;
+  originBranch?: GRNBranchLite | null;
+  destinationBranch?: GRNBranchLite | null;
+  consignor?: Ref | null;
+  consignee?: Ref | null;
+};
 
 export type GRNLorryReceiptLite = {
   id: string;
@@ -47,7 +64,33 @@ export type GRNLorryReceiptLite = {
   status: string;
   invoiceNumber?: string | null;
   invoiceAmount?: string | null;
+  ewayBill?: GRNEwayBillLite | null;
+  group?: GRNGroupLite | null;
 };
+
+export type GRNAttachmentLite = {
+  id: string;
+  originalName?: string | null;
+  filename?: string | null;
+  mime?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | string | null;
+
+  url?: string | null;
+  publicUrl?: string | null;
+  viewUrl?: string | null;
+
+  path?: string | null;
+  filePath?: string | null;
+  storagePath?: string | null;
+};
+export type GRNBranchLite = {
+  id: string;
+  name?: string | null;
+  branchCode?: string | null;
+};
+
+
 
 
 
@@ -78,14 +121,12 @@ export type GRN = {
   id: string;
 
   grnNumber: string;
-
   lorryReceiptId: string;
-
 
   status: GRNStatus;
 
   gateNo: string | null;
-
+  damagePhotos?: GRNAttachmentLite[];
   inDateTime: string | null;
   outDateTime: string | null;
   unloadingMinutes: number | null;
@@ -116,6 +157,7 @@ export type GRN = {
   netAmount: string;
 
   labourId: string | null;
+  labourName?: string | null;
   labourCharge: string | null;
 
   unloadingSupervisorId: string | null;
@@ -147,23 +189,14 @@ export type GRN = {
 
   lorryReceipt?: GRNLorryReceiptLite | null;
 
-
   labour?: Ref | null;
-  unloadingSupervisor?: Ref | null;
+  unloadingSupervisor?: UserLite | null;
 
-  createdBy?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  };
-
-  updatedBy?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  } | null;
+  createdBy?: UserLite | null;
+  updatedBy?: UserLite | null;
 
   goods?: GRNGoodsRow[];
+
 };
 
 export type GRNQuickView = Pick<

@@ -99,12 +99,25 @@ const lrLiteSelect = {
   status: true,
   invoiceNumber: true,
   invoiceAmount: true,
+
+  ewayBill: {
+    select: {
+      id: true,
+      ewayBillNo: true,
+      generatedAt: true,
+      expiresAt: true,
+    },
+  },
+
   group: {
     select: {
       id: true,
       groupNumber: true,
+      transportType: true,
       originBranchId: true,
       destinationBranchId: true,
+      sealNumber: true,
+
       consignor: { select: customerSelect },
       consignee: { select: customerSelect },
       originBranch: { select: branchSelect },
@@ -112,7 +125,72 @@ const lrLiteSelect = {
     },
   },
 } satisfies Prisma.LorryReceiptSelect;
+const lrDetailSelect = {
+  id: true,
+  lrNumber: true,
+  status: true,
+  fyCode: true,
+  createdAt: true,
+  invoiceNumber: true,
+  invoiceAmount: true,
 
+  loadingLocation: { select: locationSelect },
+  unloadingLocation: { select: locationSelect },
+
+  ewayBill: {
+    select: {
+      id: true,
+      ewayBillNo: true,
+      generatedAt: true,
+      expiresAt: true,
+    },
+  },
+
+  group: {
+    select: {
+      id: true,
+      groupNumber: true,
+      fyCode: true,
+      source: true,
+      transportType: true,
+      tripLegType: true,
+      priority: true,
+
+      originBranchId: true,
+      destinationBranchId: true,
+
+      sealNumber: true,
+      finalisedAt: true,
+
+      // Important for edit preview
+      isMarketVehicle: true,
+
+      // Market vehicle fields
+      marketVehicleNumber: true,
+      marketDriverName: true,
+      marketFreightAmount: true,
+      marketAdvanceAmount: true,
+      marketCommissionAmount: true,
+      marketHamaliAmount: true,
+      marketTdsAmount: true,
+
+      // Own vehicle freight
+      baseFreightAmount: true,
+
+      consignor: { select: customerSelect },
+      consignee: { select: customerSelect },
+
+      originBranch: { select: branchSelect },
+      destinationBranch: { select: branchSelect },
+      hub: { select: branchSelect },
+      railheadBranch: { select: branchSelect },
+
+      // Own vehicle trip data
+      primaryTrip: { select: tripPreviewSelect },
+      secondaryTrip: { select: tripPreviewSelect },
+    },
+  },
+} satisfies Prisma.LorryReceiptSelect;
 /* ------------------------------------------------------------------ */
 /* Eligible LR dropdown select                                         */
 /* ------------------------------------------------------------------ */
@@ -219,13 +297,9 @@ export const grnListSelect = {
   id: true,
   grnNumber: true,
   status: true,
-  gateNo: true,
-  inDateTime: true,
-  outDateTime: true,
-  totalQty: true,
-  receivedQty: true,
-  damageQty: true,
-  shortageQty: true,
+
+
+
   netAmount: true,
   createdAt: true,
   updatedAt: true,
@@ -234,7 +308,7 @@ export const grnListSelect = {
 } satisfies Prisma.GRNSelect;
 
 export const grnDetailInclude = {
-  lorryReceipt: { select: lrLiteSelect },
+  lorryReceipt: { select: lrDetailSelect },
   goods: {
     orderBy: { createdAt: "asc" },
   },
