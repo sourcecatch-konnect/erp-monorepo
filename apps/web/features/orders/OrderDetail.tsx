@@ -130,7 +130,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
     enabled: Boolean(
       order?.id &&
       order?.orderType === "Truck" &&
-      order?.status === "Confirmed",
+      (order?.status === "Confirmed" || order?.status === "LRCreated"),
     ),
     select: (res) => res.meta?.total ?? 0,
   });
@@ -230,10 +230,43 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
       : (order.items?.length ?? 0);
 
   const totalWeight =
-    order.items?.reduce((sum, item) => {
-      const weight = Number(item.weight ?? 0);
-      return sum + (Number.isNaN(weight) ? 0 : weight);
-    }, 0) ?? 0;
+    order.orderType === "Truck"
+      ? (order.consignments?.reduce((sum, consignment) => {
+          const lineWeight = Number(consignment.totalWeight ?? 0);
+          if (!Number.isNaN(lineWeight) && lineWeight > 0) {
+            return sum + lineWeight;
+          }
+
+          const goodsWeight =
+            consignment.goods?.reduce((goodsSum, item) => {
+              const weight = Number(item.weight ?? 0);
+              return goodsSum + (Number.isNaN(weight) ? 0 : weight);
+            }, 0) ?? 0;
+
+          return sum + goodsWeight;
+        }, 0) ?? 0)
+      : (order.items?.reduce((sum, item) => {
+          const weight = Number(item.weight ?? 0);
+          return sum + (Number.isNaN(weight) ? 0 : weight);
+        }, 0) ?? 0);
+
+      const weightUnits =
+  order.orderType === "Truck"
+    ? Array.from(
+        new Set(
+          (order.consignments ?? [])
+            .map((c) => c.unit)
+            .filter((u): u is string => Boolean(u)),
+        ),
+      )
+    : [];
+
+const totalWeightUnit =
+  weightUnits.length === 1
+    ? weightUnits[0]
+    : weightUnits.length > 1
+      ? "Mixed"
+      : undefined;
   const autoFreight =
     order.freightPreview?.matched && order.freightPreview.amount != null
       ? Number(order.freightPreview.amount)
@@ -392,7 +425,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Field label="Vehicle type" value={order.vehicleType?.name} />
                 <Field label="Truck quantity" value={order.truckQuantity} />
-                {order.status === "Confirmed" &&
+                {(order.status === "Confirmed" ||
+                  order.status === "LRCreated") &&
                   order.truckQuantity != null && (
                     <Field
                       label="LRs created"
@@ -545,7 +579,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               <div className="space-y-3">
                 {order.consignments!.map((c, idx) => (
                   <div key={c.id} className="rounded-lg border bg-muted/20 p-4">
-                    <div className="mb-3 flex flex-wrap items-center gap-2.5">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                         LR {idx + 1}
                       </span>
@@ -580,12 +614,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                             <TableHead className="text-xs uppercase">
                               Qty
                             </TableHead>
-                            <TableHead className="text-xs uppercase">
-                              Unit
-                            </TableHead>
-                            <TableHead className="text-xs uppercase">
-                              Weight
-                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -595,8 +623,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                                 {g.goods?.name ?? "—"}
                               </TableCell>
                               <TableCell>{g.quantity}</TableCell>
-                              <TableCell>{g.unit}</TableCell>
-                              <TableCell>{g.weight ?? "—"}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -654,7 +680,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
             <StatCard
               label="Total weight"
               value={totalWeight.toLocaleString()}
-              sub="kg"
+            sub={totalWeightUnit}
             />
             <StatCard label="Items" value={itemCount} />
           </div>

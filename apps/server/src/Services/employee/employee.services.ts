@@ -25,10 +25,10 @@ const toSafeEmployee = <T extends { password: string | null }>(
 /** Find (or lazily create) the "Employee" role. Role.name is not unique. */
 const ensureEmployeeRole = async () => {
   const existing = await db.role.findFirst({
-    where: { name: ROLES.EMPLOYEE },
+    where: { name: ROLES.SUPERVISOR },
   });
   if (existing) return existing;
-  return db.role.create({ data: { name: ROLES.EMPLOYEE } });
+  return db.role.create({ data: { name: ROLES.SUPERVISOR } });
 };
 
 /** Derive a unique userName from the email local-part. */
@@ -53,7 +53,7 @@ const getEmployeeOrThrow = async (id: string) => {
     where: { id },
     include: employeeInclude,
   });
-  if (!user || user.role?.name !== ROLES.EMPLOYEE) {
+  if (!user || user.role?.name !== ROLES.SUPERVISOR) {
     throw new NotFoundError("Employee not found");
   }
   return user;
@@ -114,7 +114,7 @@ export const createEmployeeService = async (args: CreateEmployeeArgs) => {
 
 export const listEmployeesService = async () => {
   const employees = await db.user.findMany({
-    where: { role: { name: ROLES.EMPLOYEE } },
+    where: { role: { name: ROLES.SUPERVISOR } },
     include: employeeInclude,
     orderBy: { createdAt: "desc" },
   });

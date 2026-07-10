@@ -60,6 +60,7 @@ export const refreshCookieOptions = {
 export const ROLES = {
   ADMIN: "Admin",
   EMPLOYEE: "Employee",
+  SUPERVISOR: "SuperVisor"
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];

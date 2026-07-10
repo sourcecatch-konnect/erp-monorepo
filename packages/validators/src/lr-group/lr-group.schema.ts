@@ -27,7 +27,55 @@ const optionalId = z
   .transform((v) => v || undefined);
 
 // Money fields (rupees → paise) come from the shared `_shared/money` boundary.
+const positiveIntField = (label: string) =>
+  z
+    .union([z.string(), z.number()])
+    .transform((value) => Number(value))
+    .refine(
+      (value) => Number.isInteger(value) && value > 0,
+      `${label} must be a positive whole number`,
+    );
 
+const optionalNumberField = (label: string) =>
+  z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((value) => {
+      if (value === "" || value === undefined || value === null) {
+        return undefined;
+      }
+      return Number(value);
+    })
+    .refine(
+      (value) => value === undefined || !Number.isNaN(value),
+      `${label} must be valid`,
+    );
+
+const goodsUnitValues = [
+  "MT",
+  "KG",
+  "QUINTAL",
+  "BAGS",
+  "BOXES",
+  "CARTONS",
+  "BUNDLES",
+  "PIECES",
+  "DRUMS",
+  "PALLETS",
+  "ROLLS",
+  "COILS",
+] as const;
+
+const totalWeightUnitSchema = z
+  .string()
+  .trim()
+  .min(1, "Unit is required")
+  .transform((value) => value.toUpperCase())
+  .pipe(
+    z.enum(goodsUnitValues, {
+      errorMap: () => ({ message: "Select a valid unit" }),
+    }),
+  );
 const truckIndexField = z
   .union([z.string(), z.number()])
   .optional()
@@ -45,12 +93,38 @@ const truckIndexField = z
 /* FROM_ORDER groups read their lines from the order's OrderConsignment.*/
 /* ------------------------------------------------------------------ */
 
+const lrGroupGoodsLineSchema = z.object({
+  name: z.string().trim().min(1, "Goods name is required"),
+  description: optionalString,
+  quantity: positiveIntField("Quantity"),
+
+  // keep only if Instant LR still needs dimensions
+  length: optionalNumberField("Length"),
+  width: optionalNumberField("Width"),
+  height: optionalNumberField("Height"),
+});
+
 export const lrGroupLineSchema = z.object({
   loadingLocationId: optionalId,
   unloadingLocationId: optionalId,
-  goods: z.array(lrGoodsLineSchema).optional().default([]),
-});
 
+  totalWeight: optionalNumberField("Total weight").refine(
+    (value) => value === undefined || value >= 0,
+    "Total weight cannot be negative",
+  ),
+
+  totalWeightUnit: totalWeightUnitSchema.optional(),
+
+  goods: z.array(lrGroupGoodsLineSchema).optional().default([]),
+}).superRefine((line, ctx) => {
+  if (line.totalWeight !== undefined && !line.totalWeightUnit) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Unit is required when total weight is provided",
+      path: ["totalWeightUnit"],
+    });
+  }
+});
 export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
 
 /* ------------------------------------------------------------------ */
@@ -144,31 +218,34 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["primaryTripId"],
     });
   }
-  if (d.source === "INSTANT") {
-    if (!d.lrs || d.lrs.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Add at least one consignment line",
-        path: ["lrs"],
-      });
-    }
-    (d.lrs ?? []).forEach((line, index) => {
-      if (!line.loadingLocationId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Loading point is required",
-          path: ["lrs", index, "loadingLocationId"],
-        });
-      }
-      if (!line.unloadingLocationId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Unloading point is required",
-          path: ["lrs", index, "unloadingLocationId"],
-        });
-      }
+ if (d.source === "INSTANT") {
+  if (!d.lrs || d.lrs.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Add at least one consignment line",
+      path: ["lrs"],
     });
   }
+
+  (d.lrs ?? []).forEach((line, index) => {
+    if (!line.loadingLocationId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Loading point is required",
+        path: ["lrs", index, "loadingLocationId"],
+      });
+    }
+
+    if (!line.unloadingLocationId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unloading point is required",
+        path: ["lrs", index, "unloadingLocationId"],
+      });
+    }
+
+  });
+}
 });
 
 export type CreateLRGroupInput = z.infer<typeof createLRGroupSchema>;

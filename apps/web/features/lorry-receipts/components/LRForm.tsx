@@ -60,6 +60,8 @@ type Props = {
 const EMPTY_LINE = {
   loadingLocationId: undefined as string | undefined,
   unloadingLocationId: undefined as string | undefined,
+  totalWeight: undefined as unknown as number,
+  totalWeightUnit: "MT",
   goods: [],
 };
 type MarketVehicleLookup = {
@@ -78,8 +80,6 @@ const EMPTY_GOODS = {
   name: "",
   description: "",
   quantity: "" as unknown as number,
-  unit: "",
-  weight: "" as unknown as number,
 };
 
 const TRANSPORT_OPTIONS = [
@@ -91,6 +91,21 @@ const PRIORITY_OPTIONS = [
   { value: "Normal", label: "Normal" },
   { value: "Express", label: "Express" },
   { value: "Critical", label: "Critical" },
+] as const;
+
+const UNIT_OPTIONS = [
+  { value: "MT", label: "MT" },
+  { value: "KG", label: "Kg" },
+  { value: "QUINTAL", label: "Quintal" },
+  { value: "BAGS", label: "Bags" },
+  { value: "BOXES", label: "Boxes" },
+  { value: "CARTONS", label: "Cartons" },
+  { value: "BUNDLES", label: "Bundles" },
+  { value: "PIECES", label: "Pieces" },
+  { value: "DRUMS", label: "Drums" },
+  { value: "PALLETS", label: "Pallets" },
+  { value: "ROLLS", label: "Rolls" },
+  { value: "COILS", label: "Coils" },
 ] as const;
 
 function ReadOnlyAmount({
@@ -184,14 +199,19 @@ function InstantLRLineCard({
     name: `${base}.goods`,
   });
   const lineErr = (
-    form.formState.errors as {
-      lrs?: {
-        loadingLocationId?: { message?: string };
-        unloadingLocationId?: { message?: string };
-        goods?: { name?: { message?: string } }[];
+  form.formState.errors as {
+    lrs?: {
+      loadingLocationId?: { message?: string };
+      unloadingLocationId?: { message?: string };
+      totalWeight?: { message?: string };
+      totalWeightUnit?: { message?: string };
+      goods?: {
+        name?: { message?: string };
+        quantity?: { message?: string };
       }[];
-    }
-  ).lrs?.[idx];
+    }[];
+  }
+).lrs?.[idx];
 
   return (
     <div className="relative rounded-lg border bg-muted/20 p-3">
@@ -224,6 +244,7 @@ function InstantLRLineCard({
           }
         />
       </div>
+
       {lineErr?.loadingLocationId?.message ? (
         <p className="mt-1 text-xs text-red-600">
           {lineErr.loadingLocationId.message}
@@ -238,73 +259,82 @@ function InstantLRLineCard({
       <div className="mt-3 rounded-md bg-background/70 p-3">
         <div className="mb-2 flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase text-muted-foreground">
-            Goods
+            Goods <span className="font-normal normal-case">(Optional)</span>
           </p>
         </div>
 
         {goodsFields.length === 0 ? (
-          <div className="rounded-md border border-dashed bg-muted/20 px-3 py-3 text-center text-xs text-muted-foreground">
-            No goods added yet.
+  <div className="rounded-md border border-dashed bg-muted/20 px-3 py-3 text-center text-xs text-muted-foreground">
+    No goods added yet.
+  </div>
+) : (
+  <div className="space-y-2">
+    {goodsFields.map((goodsField, goodsIdx) => {
+      const goodsBase = `${base}.goods.${goodsIdx}` as const;
+      const goodsErr = lineErr?.goods?.[goodsIdx];
+
+      return (
+        <div
+          key={goodsField.id}
+          className="flex items-start gap-2"
+        >
+          <div className="min-w-0 flex-1">
+            <FieldLabel>Goods name</FieldLabel>
+            <Controller
+              name={`${goodsBase}.name`}
+              control={form.control}
+              render={({ field }) => (
+                <SuggestInput
+                  value={(field.value as string) ?? ""}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  suggestions={goodsSuggestions}
+                  placeholder="Select or type goods"
+                  invalid={Boolean(goodsErr?.name?.message)}
+                />
+              )}
+            />
+
+            {goodsErr?.name?.message ? (
+              <p className="mt-1 text-xs text-red-600">
+                {goodsErr.name.message}
+              </p>
+            ) : null}
           </div>
-        ) : (
-          <div className="space-y-2">
-            {goodsFields.map((goodsField, goodsIdx) => {
-              const goodsBase = `${base}.goods.${goodsIdx}` as const;
-              const goodsErr = lineErr?.goods?.[goodsIdx];
-              return (
-                <div
-                  key={goodsField.id}
-                  className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_auto]"
-                >
-                  <div>
-                    <FieldLabel required>Goods name</FieldLabel>
-                    <Controller
-                      name={`${goodsBase}.name`}
-                      control={form.control}
-                      render={({ field }) => (
-                        <SuggestInput
-                          value={(field.value as string) ?? ""}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          suggestions={goodsSuggestions}
-                          placeholder="Select or type goods"
-                          invalid={Boolean(goodsErr?.name?.message)}
-                        />
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel required>Qty</FieldLabel>
-                    <Input
-                      {...form.register(`${goodsBase}.quantity`)}
-                      type="number"
-                      min={1}
-                      className="h-9"
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel required>Unit</FieldLabel>
-                    <Input
-                      {...form.register(`${goodsBase}.unit`)}
-                      placeholder="MT / PCS"
-                      className="h-9"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    className="self-end justify-self-end text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                    onClick={() => removeGoods(goodsIdx)}
-                    aria-label="Remove goods"
-                  >
-                    <IconTrash size={14} />
-                  </Button>
-                </div>
-              );
-            })}
+
+          <div className="w-24 shrink-0">
+            <FieldLabel>Qty</FieldLabel>
+            <Input
+              {...form.register(`${goodsBase}.quantity`)}
+              type="number"
+              min={1}
+              className="h-9"
+              aria-invalid={Boolean(goodsErr?.quantity?.message)}
+            />
+
+            {goodsErr?.quantity?.message ? (
+              <p className="mt-1 text-xs text-red-600">
+                {goodsErr.quantity.message}
+              </p>
+            ) : null}
           </div>
-        )}
+
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="mt-6 shrink-0 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+            onClick={() => removeGoods(goodsIdx)}
+            aria-label="Remove goods"
+          >
+            <IconTrash size={14} />
+          </Button>
+
+        </div>
+      );
+    })}
+  </div>
+)}
 
         <Button
           type="button"
@@ -316,6 +346,61 @@ function InstantLRLineCard({
           <IconPlus size={14} className="mr-1" /> Add goods
         </Button>
       </div>
+         <div className="mt-3 grid gap-1.5">
+  <div className="flex items-center justify-start gap-3">
+    <label className="w-28 shrink-0 text-xs font-medium text-muted-foreground">
+      Total weight
+    </label>
+
+    <div className="w-40 shrink-0">
+      <Input
+        {...form.register(`${base}.totalWeight`)}
+        type="number"
+        min={0}
+        step="0.01"
+        placeholder="Weight"
+        className="h-9"
+        aria-invalid={Boolean(lineErr?.totalWeight)}
+      />
+    </div>
+
+    <div className="w-28 shrink-0">
+      <Controller
+        name={`${base}.totalWeightUnit`}
+        control={form.control}
+        render={({ field }) => (
+          <Select
+            value={(field.value as string) ?? "MT"}
+            onValueChange={field.onChange}
+          >
+            <SelectTrigger className="h-9 w-full">
+              <SelectValue placeholder="Unit" />
+            </SelectTrigger>
+            <SelectContent>
+              {UNIT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      />
+    </div>
+  </div>
+
+  {lineErr?.totalWeight?.message ? (
+    <p className="ml-28 text-xs text-red-600">
+      {lineErr.totalWeight.message}
+    </p>
+  ) : null}
+
+  {lineErr?.totalWeightUnit?.message ? (
+    <p className="ml-28 text-xs text-red-600">
+      {lineErr.totalWeightUnit.message}
+    </p>
+  ) : null}
+</div>
     </div>
   );
 }

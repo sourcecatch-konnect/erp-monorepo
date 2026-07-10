@@ -47,7 +47,7 @@ export const lrGoodsLineSchema = z.object({
   name: z.string().trim().min(1, "Goods name is required").max(100),
   description: optionalString,
   quantity: positiveInt("Quantity"),
-  unit: z.string().trim().min(1, "Unit is required").max(20),
+  unit: optionalString,
   weight: optionalDimension("Weight"),
   length: optionalDimension("Length"),
   width: optionalDimension("Width"),
@@ -59,6 +59,8 @@ export type LRGoodsLine = z.infer<typeof lrGoodsLineSchema>;
 export const updateLRSchema = z.object({
   loadingLocationId: optionalString,
   unloadingLocationId: optionalString,
+  totalWeight: optionalDimension("Total weight"),
+  totalWeightUnit: optionalString,
   invoiceNumber: optionalString,
   invoiceAmount: optionalRupeesToPaise("Invoice amount"),
   goods: z

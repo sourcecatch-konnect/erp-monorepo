@@ -153,6 +153,7 @@ toBranch?: { id: string; name: string; branchCode: string } | null;
   } | null;
   consignments?: {
     truckIndex: number;
+    totalWeight?: string | number | null;
     loadingLocation?: { id: string; name: string } | null;
     unloadingLocation?: { id: string; name: string } | null;
     goods?: {
@@ -166,6 +167,7 @@ toBranch?: { id: string; name: string; branchCode: string } | null;
 /** One consignment line as the LR create summary renders it. */
 export type LROrderContextLine = {
   truckIndex: number;
+  totalWeight: number | null;
   loadingLocation: string | null;
   unloadingLocation: string | null;
   goods: { name: string; quantity: number; unit: string }[];
@@ -347,6 +349,10 @@ export const lrLookups = {
 
     const lines: LROrderContextLine[] = (order.consignments ?? []).map((c) => ({
       truckIndex: c.truckIndex,
+      totalWeight:
+        c.totalWeight != null && !Number.isNaN(Number(c.totalWeight))
+          ? Number(c.totalWeight)
+          : null,
       loadingLocation: c.loadingLocation?.name ?? null,
       unloadingLocation: c.unloadingLocation?.name ?? null,
       goods: (c.goods ?? []).map((g) => ({

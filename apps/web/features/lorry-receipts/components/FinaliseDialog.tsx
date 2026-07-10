@@ -4,7 +4,7 @@ import * as React from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { finaliseGroupSchema } from "@skerp/validators/lr-group";
-import type { EwayBill, FinaliseGroupBody, FinaliseGroupFormInput } from "@skerp/types";
+import type { EwayBill,  FinaliseGroupFormInput, FinaliseGroupBody} from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { DatePicker } from "@skerp/ui/components/datepicker";
@@ -37,7 +37,7 @@ type Props = {
   /** Pre-fill freight from the order's booking freight in rupees. */
   defaultFreight?: number | null;
   isPending: boolean;
-  onConfirm: (data: FinaliseGroupBody) => void;
+  onConfirm: (data: FinaliseGroupFormInput) => void;
 };
 
 const emptyDate = "" as unknown as Date;
@@ -71,15 +71,6 @@ function buildRows(lrs: LrRow[]) {
   }));
 }
 
-/**
- * Group finalise: one sheet finalises every LR in the group at once. The shared
- * freight/seal live at truck level; invoice and e-way bill are captured per LR.
- */
-const today = React.useMemo(() => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}, []);
 export default function FinaliseDialog({
   open,
   onOpenChange,
@@ -89,6 +80,12 @@ export default function FinaliseDialog({
   isPending,
   onConfirm,
 }: Props) {
+  const today = React.useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
   const form = useForm<FinaliseGroupFormInput, unknown, FinaliseGroupBody>({
     resolver: zodResolver(finaliseGroupSchema, undefined, { raw: true }),
     defaultValues: {
@@ -110,7 +107,7 @@ export default function FinaliseDialog({
   const { fields } = useFieldArray({ control: form.control, name: "lrs" });
   const errors = form.formState.errors;
 
-  const onSubmit = (values: FinaliseGroupBody) => onConfirm(values);
+  const onSubmit = (values: FinaliseGroupFormInput) => onConfirm(values);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

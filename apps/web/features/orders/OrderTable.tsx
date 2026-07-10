@@ -283,7 +283,15 @@ console.log(data, "order List")
                   o.status === "PendingApproval" ||
                   o.status === "Rejected" ||
                   o.status === "Cancelled";
+                const hasLRGroup =
+                Boolean((o as any).hasLRGroup) || Number((o as any).lrGroupCount ?? 0) > 0;
 
+              const canCreateLRForOrder =
+                canCreateLR &&
+                o.status === "Confirmed" &&
+                o.orderType === "Truck" &&
+                !hasLRGroup;
+                
                 const cancellable =
                   o.status === "PendingApproval" || o.status === "Confirmed";
 
@@ -349,14 +357,17 @@ console.log(data, "order List")
                                 </Link>
                               </DropdownMenuItem>
                             ) : null}
-                            {canCreateLR &&
-                              o.status === "Confirmed" &&
-                              o.orderType === "Truck" ? (
-                              <DropdownMenuItem onClick={() => onCreateLR(o)}>
-                                <IconFileText size={16} className="mr-2" />{" "}
-                                Create LR
-                              </DropdownMenuItem>
-                            ) : null}
+                            {canCreateLRForOrder ? (
+                            <DropdownMenuItem onClick={() => onCreateLR(o)}>
+                              <IconFileText size={16} className="mr-2" />
+                              Create LR
+                            </DropdownMenuItem>
+                          ) : hasLRGroup ? (
+                            <DropdownMenuItem disabled>
+                              <IconFileText size={16} className="mr-2" />
+                              LR already created
+                            </DropdownMenuItem>
+                          ) : null}
                             {canDownloadPdf ? (
                               <DropdownMenuItem onClick={() => onDownloadPdf(o)}>
                                 <IconDownload size={16} className="mr-2" />

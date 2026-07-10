@@ -87,8 +87,7 @@ model User {
   createdTripExpenses         TripExpense[]                  @relation("CreatedTripExpenses")
   createdDriverAdvances       DriverAdvance[]                @relation("CreatedDriverAdvances")
   generatedLogSlips           LogSlip[]                      @relation("GeneratedLogSlips")
-
-  supervisedGRNs GRN[] @relation("GRNUnloadingSupervisor")
+  supervisedGRNs              GRN[]                          @relation("GRNUnloadingSupervisor")
 }
 
 model Company {
@@ -584,29 +583,29 @@ model Goods {
 }
 
 model Labour {
-  id                   String      @id @default(cuid())
-  name                 String
-  photoPath            String?
-  address              String?
-  contactName          String?
-  contactPhone         String?
-  mobileNo             String?
-  referredBy           String?
-  refContactNo         String?
-  startDate            DateTime?
-  pan                  String?
-  tdsAmount            BigInt?
-  tdsRate              BigInt?
-  type                 WorkerType
-  branchId             String
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-  cityId               String
-  branch               Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
-  city                 City        @relation(fields: [cityId], references: [id])
-  grnLabours           GRN[]       @relation("GRNLabour")
-  vpLoadingLabours     VPLoading[] @relation("VPLoadingLabour")
-  vpLoadingSupervisors VPLoading[] @relation("VPLoadingSupervisor")
+  id                      String      @id @default(cuid())
+  name                    String
+  photoPath               String?
+  address                 String?
+  contactName             String?
+  contactPhone            String?
+  mobileNo                String?
+  referredBy              String?
+  refContactNo            String?
+  startDate               DateTime?
+  pan                     String?
+  tdsAmount               BigInt?
+  tdsRate                 BigInt?
+  type                    WorkerType
+  branchId                String
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  cityId                  String
+  branch                  Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                    City        @relation(fields: [cityId], references: [id])
+  grnLabours              GRN[]       @relation("GRNLabour")
+  vpLoadingLabours        VPLoading[] @relation("VPLoadingLabour")
+  vpLoadingSupervisors    VPLoading[] @relation("VPLoadingSupervisor")
 }
 
 model City {
@@ -865,14 +864,13 @@ model Order {
 }
 
 model OrderItem {
-  id       String   @id @default(cuid())
+  id       String @id @default(cuid())
   orderId  String
   goodsId  String
   quantity Int
-  unit     String
-  weight   Decimal?
-  goods    Goods    @relation(fields: [goodsId], references: [id])
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  goods Goods @relation(fields: [goodsId], references: [id])
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
@@ -881,6 +879,8 @@ model OrderConsignment {
   id                  String                  @id @default(cuid())
   orderId             String
   truckIndex          Int                     @default(1)
+  totalWeight         Decimal?
+  unit                String?
   loadingLocationId   String?
   unloadingLocationId String?
   createdAt           DateTime                @default(now())
@@ -898,7 +898,7 @@ model OrderConsignmentGoods {
   consignmentId String
   goodsId       String
   quantity      Int
-  unit          String
+  unit          String?
   weight        Decimal?
   consignment   OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
   goods         Goods            @relation(fields: [goodsId], references: [id])
@@ -1049,6 +1049,8 @@ model LorryReceipt {
   loadingLocationId   String?
   unloadingLocationId String?
   ewayBill            EwayBill?
+  totalWeight         Decimal?
+  unit                String?
   goods               LRGoods[]
   grn                 GRN?
   vpLoadings          VPLoading[]
@@ -1069,7 +1071,7 @@ model LRGoods {
   name           String
   description    String?
   quantity       Int
-  unit           String
+  unit           String?
   weight         Decimal?
   length         Float?
   width          Float?
@@ -1503,14 +1505,14 @@ model GRN {
 
   netAmount BigInt @default(0)
 
-  labourId     String?
-  labour       Labour? @relation("GRNLabour", fields: [labourId], references: [id])
-  labourName   String?
+  labourId String?
+  labour   Labour? @relation("GRNLabour", fields: [labourId], references: [id])
+  labourName String?
   labourCharge BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   User?         @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
-  damagesBy             GRNDamagesBy?
+  unloadingSupervisor   User? @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+  damagesBy GRNDamagesBy?
 
   lrCopyChecked      Boolean @default(false)
   invoiceChecked     Boolean @default(false)
@@ -1757,10 +1759,11 @@ enum OrderType {
 enum OrderStatus {
   PendingApproval
   Confirmed
-  Rejected
+  LRCreated
   Cancelled
   InProgress
   Completed
+  Rejected
 }
 
 enum BranchScope {

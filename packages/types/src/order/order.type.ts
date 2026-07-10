@@ -48,8 +48,6 @@ export type OrderItemRow = {
   orderId: string;
   goodsId: string;
   quantity: number;
-  unit: string;
-  weight: string | null;
   goods?: Ref;
 };
 
@@ -58,8 +56,6 @@ export type OrderConsignmentGoodsRow = {
   consignmentId: string;
   goodsId: string;
   quantity: number;
-  unit: string;
-  weight: string | null;
   goods?: Ref;
 };
 
@@ -68,7 +64,9 @@ export type OrderConsignmentRow = {
   id: string;
   orderId: string;
   truckIndex: number;
+  totalWeight: string | null;
   loadingLocationId: string | null;
+  unit?: string | null;
   unloadingLocationId: string | null;
   loadingLocation?: { id: string; name: string } | null;
   unloadingLocation?: { id: string; name: string } | null;
@@ -165,4 +163,6 @@ export type OrderQuickView = Pick<
   vehicleType: { id: string; name: string } | null;
   customerLocation: { id: string; name: string } | null;
   route?: OrderRouteDetail | null;
+  lrGroupCount: number;
+  hasLRGroup: boolean;
 };

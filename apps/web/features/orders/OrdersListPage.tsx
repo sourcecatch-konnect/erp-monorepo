@@ -21,7 +21,10 @@ import OrderQuickViewModal from "./OrderQuickViewModal";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
-
+type OrderListRow = Order & {
+  hasLRGroup?: boolean;
+  lrGroupCount?: number;
+};
 export default function OrdersListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -53,9 +56,7 @@ export default function OrdersListPage() {
     setPage(0);
   };
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, statusFilter]);
+
 
   const listQuery = React.useMemo<ListQuery>(
     () => ({
@@ -141,7 +142,19 @@ export default function OrdersListPage() {
       toast.error("Could not download order PDF");
     }
   };
+const onCreateLR = (order: OrderListRow) => {
+  const hasLRGroup =
+    Boolean(order.hasLRGroup) || Number(order.lrGroupCount ?? 0) > 0;
 
+  if (hasLRGroup) {
+    toast.error("LR is already created for this order");
+    return;
+  }
+
+  router.push(
+    `/lorry-receipts/new?orderId=${encodeURIComponent(order.id)}`
+  );
+};
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -176,7 +189,7 @@ export default function OrdersListPage() {
         onApprove={(o) => setApproveId(o.id)}
         onReject={(o) => setRejectOrder(o)}
         onCancel={(o) => setCancelOrder(o)}
-        onCreateLR={(o) => router.push(`/lorry-receipts/new?orderId=${o.id}`)}
+        onCreateLR={onCreateLR}
         onDelete={(o) => setDeleteOrder(o)}
         onDownloadPdf={handleDownloadPdf}
         canDownloadPdf={true}
