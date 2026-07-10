@@ -45,7 +45,9 @@ export const journeyApi = {
     if (query?.filter?.status)
       params["filter[status]"] = String(query.filter.status);
     if (query?.filter?.settlementStatus)
-      params["filter[settlementStatus]"] = String(query.filter.settlementStatus);
+      params["filter[settlementStatus]"] = String(
+        query.filter.settlementStatus,
+      );
 
     const res = await api.get<ApiResponse<VehicleJourney[]>>(
       "/vehicle-journeys",
@@ -141,7 +143,10 @@ export const journeyApi = {
 
 export const expenseApi = {
   create: async (body: CreateTripExpenseBody): Promise<TripExpense> => {
-    const res = await api.post<ApiResponse<TripExpense>>("/trip-expenses", body);
+    const res = await api.post<ApiResponse<TripExpense>>(
+      "/trip-expenses",
+      body,
+    );
     return unwrapApiResponse(res);
   },
   update: async (

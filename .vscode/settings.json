@@ -2,11 +2,18 @@
   "tailwindCSS.experimental.configFile": {
     "apps/web/app/globals.css": [
       "apps/web/**/*.{js,ts,jsx,tsx,mdx}",
-      "packages/ui/src/**/*.{js,ts,jsx,tsx}",
       "packages/notifications-web/src/**/*.{js,ts,jsx,tsx}",
       "packages/attachments-web/src/**/*.{js,ts,jsx,tsx}"
+    ],
+    "packages/ui/src/index.css": [
+      "packages/ui/src/**/*.{js,ts,jsx,tsx}",
+      "packages/ui/.storybook/**/*.{js,ts,jsx,tsx}"
     ]
   },
+  "tailwindCSS.experimental.classRegex": [
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+  ],
   "editor.quickSuggestions": {
     "strings": "on"
   }

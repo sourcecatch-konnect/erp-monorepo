@@ -10,7 +10,7 @@ import {
   Controller,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconPlus,
@@ -22,7 +22,11 @@ import {
 } from "@tabler/icons-react";
 
 import { createLRGroupSchema } from "@skerp/validators/lr-group";
-import type { CreateLRGroupFormInput, CreateLRGroupBody } from "@skerp/types";
+import type {
+  CreateLRGroupFormInput,
+  CreateLRGroupBody,
+  Trip,
+} from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
@@ -32,7 +36,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
-import { SuggestInput, type SuggestOption } from "@skerp/ui/components/suggest-input";
+import {
+  SuggestInput,
+  type SuggestOption,
+} from "@skerp/ui/components/suggest-input";
 
 import FormSection from "@/features/masters/_shared/fields/FormSection";
 import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
@@ -42,6 +49,7 @@ import { lrGroupApi } from "../lr-group.service";
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
 import LRCreateSummary from "./LRCreateSummary";
 import { FieldLabel, MoneyField } from "./moneyField";
+import CreateTripDialog from "@/features/trips/CreateTripDialog";
 
 type Props = {
   orderId?: string;
@@ -253,7 +261,6 @@ function InstantLRLineCard({
           <p className="text-xs font-semibold uppercase text-muted-foreground">
             Goods <span className="font-normal normal-case">(Optional)</span>
           </p>
-
         </div>
 
         {goodsFields.length === 0 ? (
@@ -400,7 +407,9 @@ function InstantLRLineCard({
 
 export default function LRForm({ orderId, tripId }: Props) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = React.useState(false);
+  const [createTripOpen, setCreateTripOpen] = React.useState(false);
 
   const source = orderId ? "FROM_ORDER" : "INSTANT";
 
@@ -416,10 +425,6 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryKey: lrLookupKeys.railheadBranches,
     queryFn: lrLookups.railheadBranches,
     enabled: source === "FROM_ORDER",
-  });
-  const trips = useQuery({
-    queryKey: lrLookupKeys.attachableTrips,
-    queryFn: lrLookups.attachableTrips,
   });
   const marketVehicles = useQuery({
     queryKey: lrLookupKeys.marketVehicles,
@@ -487,6 +492,50 @@ export default function LRForm({ orderId, tripId }: Props) {
         source === "INSTANT" ? "consigneeId" : "orderId",
       ],
     });
+  const activeConsignorId =
+    source === "INSTANT"
+      ? ((watchConsignor as string | undefined) ?? undefined)
+      : (orderContext.data?.consignorId ?? undefined);
+
+  const trips = useQuery({
+    queryKey: lrLookupKeys.attachableTrips(activeConsignorId),
+    queryFn: () => lrLookups.attachableTrips(activeConsignorId),
+  });
+  const watchPrimaryTripId = form.watch("primaryTripId" as never) as unknown as
+    | string
+    | undefined;
+  const allTrips = useQuery({
+    queryKey: lrLookupKeys.attachableTrips(undefined),
+    queryFn: () => lrLookups.attachableTrips(undefined),
+    enabled: source === "INSTANT",
+  });
+  const selectedTrip = React.useMemo(
+    () => (allTrips.data ?? []).find((t) => t.id === watchPrimaryTripId),
+    [allTrips.data, watchPrimaryTripId],
+  );
+
+  React.useEffect(() => {
+    if (source !== "INSTANT") return;
+    const tripConsignorId = selectedTrip?.consignor?.id;
+    if (tripConsignorId && tripConsignorId !== watchConsignor) {
+      form.setValue("consignorId" as never, tripConsignorId as never, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [source, selectedTrip, watchConsignor, form]);
+
+  const prevConsignorRef = React.useRef(activeConsignorId);
+  React.useEffect(() => {
+    if (prevConsignorRef.current !== activeConsignorId) {
+      prevConsignorRef.current = activeConsignorId;
+      if (selectedTrip && selectedTrip.consignor?.id !== activeConsignorId) {
+        form.setValue("primaryTripId" as never, undefined as never, {
+          shouldValidate: true,
+        });
+      }
+    }
+  }, [activeConsignorId, form, selectedTrip]);
 
   // Instant lines pick loading/unloading from the parties' saved locations.
   const consignorLocations = useQuery({
@@ -515,30 +564,33 @@ export default function LRForm({ orderId, tripId }: Props) {
     value: g.name,
     hint: g.description ?? undefined,
   }));
-const marketVehicleRows = (marketVehicles.data ?? []) as MarketVehicleLookup[];
-const driverRows = (drivers.data ?? []) as DriverLookup[];
+  const marketVehicleRows = (marketVehicles.data ??
+    []) as MarketVehicleLookup[];
+  const driverRows = (drivers.data ?? []) as DriverLookup[];
 
-const marketVehicleSuggestions: SuggestOption[] = marketVehicleRows.map((v) => ({
-  value: v.vehicleNumber,
-  hint: v.isAssigned
-    ? v.activeGroupNumber
-      ? `Assigned in ${v.activeGroupNumber}`
-      : "Assigned in active LR group"
-    : "Market vehicle",
-  badge: v.isAssigned ? "Assigned" : "Available",
-  badgeTone: v.isAssigned ? "warning" : "success",
-}));
+  const marketVehicleSuggestions: SuggestOption[] = marketVehicleRows.map(
+    (v) => ({
+      value: v.vehicleNumber,
+      hint: v.isAssigned
+        ? v.activeGroupNumber
+          ? `Assigned in ${v.activeGroupNumber}`
+          : "Assigned in active LR group"
+        : "Market vehicle",
+      badge: v.isAssigned ? "Assigned" : "Available",
+      badgeTone: v.isAssigned ? "warning" : "success",
+    }),
+  );
 
-const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
-  value: d.name,
-  hint: d.isAssigned
-    ? d.activeGroupNumber
-      ? `${d.mobile ?? "No mobile"}`
-      : `${d.mobile ?? "No mobile"}`
-    : d.mobile ?? undefined,
-  badge: d.isAssigned ? "Assigned" : "Available",
-  badgeTone: d.isAssigned ? "warning" : "success",
-}));
+  const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
+    value: d.name,
+    hint: d.isAssigned
+      ? d.activeGroupNumber
+        ? `${d.mobile ?? "No mobile"}`
+        : `${d.mobile ?? "No mobile"}`
+      : (d.mobile ?? undefined),
+    badge: d.isAssigned ? "Assigned" : "Available",
+    badgeTone: d.isAssigned ? "warning" : "success",
+  }));
   const loadingOptions = (consignorLocations.data ?? []).map((l) => ({
     value: l.value,
     label: l.label,
@@ -608,6 +660,18 @@ const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
     } finally {
       setSubmitting(false);
     }
+  };
+  const handleTripCreated = async (created: Trip) => {
+    await queryClient.invalidateQueries({
+      queryKey: lrLookupKeys.attachableTrips(activeConsignorId),
+    });
+    await queryClient.invalidateQueries({
+      queryKey: lrLookupKeys.attachableTrips(undefined),
+    });
+    form.setValue("primaryTripId" as never, created.id as never, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   };
   const moneyNumber = (value: unknown) => {
     const n =
@@ -884,6 +948,8 @@ const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
                   required
                   options={tripOptions}
                   emptyText="No trips available — create a trip first"
+                  actionLabel="+ New Trip"
+                  onAction={() => setCreateTripOpen(true)}
                 />
               </div>
             )}
@@ -941,29 +1007,29 @@ const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
                 />
 
                 <MoneyField<CreateLRGroupFormInput>
-  name="marketFreightAmount"
-  label="Freight amount"
-/>
+                  name="marketFreightAmount"
+                  label="Freight amount"
+                />
 
-<MoneyField<CreateLRGroupFormInput>
-  name="marketAdvanceAmount"
-  label="Advance amount"
-/>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketAdvanceAmount"
+                  label="Advance amount"
+                />
 
-<MoneyField<CreateLRGroupFormInput>
-  name="marketCommissionAmount"
-  label="Commission"
-/>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketCommissionAmount"
+                  label="Commission"
+                />
 
-<MoneyField<CreateLRGroupFormInput>
-  name="marketHamaliAmount"
-  label="Hamali"
-/>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketHamaliAmount"
+                  label="Hamali"
+                />
 
-<MoneyField<CreateLRGroupFormInput>
-  name="marketTdsAmount"
-  label="TDS"
-/>
+                <MoneyField<CreateLRGroupFormInput>
+                  name="marketTdsAmount"
+                  label="TDS"
+                />
                 <ReadOnlyAmount
                   label="Total Freight Advance"
                   value={totalFreightAdvance}
@@ -1038,6 +1104,13 @@ const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
           />
         </div>
       </div>
+
+      <CreateTripDialog
+        open={createTripOpen}
+        onOpenChange={setCreateTripOpen}
+        defaultConsignorId={activeConsignorId}
+        onCreated={handleTripCreated}
+      />
     </FormProvider>
   );
 }

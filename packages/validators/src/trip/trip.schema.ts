@@ -59,6 +59,10 @@ const tripBaseShape = {
   consignorId: optionalString,
   // Required only for DC (rake/rail) trips — see refinement below.
   rakeDate: optionalDate,
+  // Every trip lives in a vehicle journey. When this trip breaks continuity
+  // with the journey chain (from-city, opening KM, or a non-HO journey start)
+  // the server requires this reason plus the chain-override permission.
+  chainExceptionReason: optionalString,
 };
 
 // LR trips carry one client; DC trips are identified by their rake date.

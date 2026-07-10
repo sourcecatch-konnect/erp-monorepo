@@ -6,6 +6,7 @@ import type {
   UpdateTripBody,
   CloseTripBody,
   CancelTripBody,
+  ActiveJourneyInfo,
 } from "@skerp/types";
 import {
   ListQuery,
@@ -56,6 +57,11 @@ export const tripApi = {
     return unwrapApiResponse(res);
   },
 
+  dispatch: async (id: string): Promise<Trip> => {
+    const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/dispatch`, {});
+    return unwrapApiResponse(res);
+  },
+
   close: async (id: string, body: CloseTripBody): Promise<Trip> => {
     const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/close`, body);
     return unwrapApiResponse(res);
@@ -77,6 +83,18 @@ export const tripApi = {
     });
     return res.data;
   },
+
+  /**
+   * Journey context for the trip form: the vehicle's active journey (chain
+   * tip, locked driver) plus the head-office base a new journey starts from.
+   */
+  activeJourney: async (vehicleId: string): Promise<ActiveJourneyInfo> => {
+    const res = await api.get<ApiResponse<ActiveJourneyInfo>>(
+      "/vehicle-journeys/active",
+      { params: { vehicleId } },
+    );
+    return unwrapApiResponse(res);
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -92,13 +110,19 @@ type DriverRow = { id: string; name: string };
 type CustomerRow = { id: string; name: string };
 type RouteRow = {
   id: string;
-  sourceCity?: { name: string } | null;
-  destinationCity?: { name: string } | null;
+  sourceCity?: { id: string; name: string } | null;
+  destinationCity?: { id: string; name: string } | null;
 };
 
 const LOOKUP_QUERY = { size: 1000 } as const;
 
 export type TripOption = { value: string; label: string };
+/** Routes carry their city ids so the form can pre-check chain continuity. */
+export type TripRouteOption = TripOption & {
+  sourceCityId: string | null;
+  sourceCityName: string | null;
+  destinationCityId: string | null;
+};
 
 export const tripLookups = {
   // Trips run on our own vehicles only.
@@ -119,13 +143,16 @@ export const tripLookups = {
       label: d.name,
     }));
   },
-  routes: async (): Promise<TripOption[]> => {
+  routes: async (): Promise<TripRouteOption[]> => {
     const res = await api.get<ApiResponse<RouteRow[]>>("/routes", {
       params: LOOKUP_QUERY,
     });
     return unwrapListResponse(res).data.map((r) => ({
       value: r.id,
       label: `${r.sourceCity?.name ?? "?"} → ${r.destinationCity?.name ?? "?"}`,
+      sourceCityId: r.sourceCity?.id ?? null,
+      sourceCityName: r.sourceCity?.name ?? null,
+      destinationCityId: r.destinationCity?.id ?? null,
     }));
   },
   customers: async (): Promise<TripOption[]> => {
@@ -142,6 +169,8 @@ export const tripLookups = {
 export const tripLookupKeys = {
   ownVehicles: ["lookup", "own-vehicles"] as const,
   drivers: ["lookup", "drivers"] as const,
-  routes: ["lookup", "routes"] as const,
+  routes: ["lookup", "trip-routes"] as const,
   customers: ["lookup", "customers"] as const,
+  activeJourney: (vehicleId: string) =>
+    ["trips", "active-journey", vehicleId] as const,
 };

@@ -282,11 +282,7 @@ export default function TripExpenseDrawer({
             Cancel
           </Button>
           <Button type="submit" form="trip-expense-form" disabled={submitting}>
-            {submitting
-              ? "Saving…"
-              : expense
-                ? "Save Expense"
-                : "Add Expense"}
+            {submitting ? "Saving…" : expense ? "Save Expense" : "Add Expense"}
           </Button>
         </SheetFooter>
       </SheetContent>

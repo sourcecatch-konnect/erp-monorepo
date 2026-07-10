@@ -277,13 +277,13 @@ function ConsignmentLineCard({
               />
             )}
           />
-               {lineErr?.loadingLocationId?.message ? (
-        <p className="mt-1.5 text-xs text-red-600">
-          {lineErr.loadingLocationId.message}
-        </p>
-      ) : null}
+          {lineErr?.loadingLocationId?.message ? (
+            <p className="mt-1.5 text-xs text-red-600">
+              {lineErr.loadingLocationId.message}
+            </p>
+          ) : null}
         </div>
-         
+
         <div className="hidden pb-2.5 text-muted-foreground md:block">
           <IconArrowRight size={18} />
         </div>
@@ -307,13 +307,12 @@ function ConsignmentLineCard({
               />
             )}
           />
-               {lineErr?.unloadingLocationId?.message ? (
-        <p className="mt-1.5 text-xs text-red-600">
-          {lineErr.unloadingLocationId.message}
-        </p>
-      ) : null}
+          {lineErr?.unloadingLocationId?.message ? (
+            <p className="mt-1.5 text-xs text-red-600">
+              {lineErr.unloadingLocationId.message}
+            </p>
+          ) : null}
         </div>
-        
       </div>
 
     

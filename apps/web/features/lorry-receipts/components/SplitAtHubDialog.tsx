@@ -21,6 +21,8 @@ type Props = {
   lrNumber: string;
   /** The leg-1 trip id, excluded from the leg-2 options. */
   primaryTripId?: string | null;
+  /** The LR's consignor — leg-2 trip must carry the same client. */
+  consignorId: string;
   isPending: boolean;
   onConfirm: (secondaryTripId: string) => void;
 };
@@ -34,14 +36,15 @@ export default function SplitAtHubDialog({
   onOpenChange,
   lrNumber,
   primaryTripId,
+  consignorId,
   isPending,
   onConfirm,
 }: Props) {
   const [secondaryTripId, setSecondaryTripId] = React.useState("");
 
   const trips = useQuery({
-    queryKey: lrLookupKeys.attachableTrips,
-    queryFn: lrLookups.attachableTrips,
+    queryKey: lrLookupKeys.attachableTrips(consignorId),
+    queryFn: () => lrLookups.attachableTrips(consignorId),
     enabled: open,
   });
 

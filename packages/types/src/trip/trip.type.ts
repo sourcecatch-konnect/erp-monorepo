@@ -11,9 +11,12 @@ import {
 export type TripType = z.infer<typeof tripTypeSchema>;
 export type TripStatus = z.infer<typeof tripStatusSchema>;
 
-export type CreateTripBody = z.output<typeof createTripSchema>;
+// Both typed as z.input: with the form's `raw: true` resolver, the values
+// reaching onSubmit are the untransformed (rupees) shape, not paise — the
+// server is the sole rupees -> paise boundary. See TripForm.tsx.
+export type CreateTripBody = z.input<typeof createTripSchema>;
 export type CreateTripFormInput = z.input<typeof createTripSchema>;
-export type UpdateTripBody = z.output<typeof updateTripSchema>;
+export type UpdateTripBody = z.input<typeof updateTripSchema>;
 export type CloseTripBody = z.output<typeof closeTripSchema>;
 export type CancelTripBody = z.output<typeof cancelTripSchema>;
 
@@ -60,10 +63,18 @@ export type Trip = {
   updatedAt: string;
   deletedAt: string | null;
 
+  // Journey leg fields — every trip belongs to a vehicle journey (rows from
+  // before the journey module carry null).
+  journeyId: string | null;
+  sequenceNo: number | null;
+  isReturnLeg: boolean;
+  chainExceptionReason: string | null;
+
   vehicle?: { id: string; vehicleNumber: string; ownershipType: string };
   driver?: { id: string; name: string };
   route?: RouteRef;
   consignor?: { id: string; name: string; shortName: string | null } | null;
   createdBy?: { id: string; firstName: string; lastName: string };
+  journey?: { id: string; journeyNumber: string; status: string } | null;
   TripStatusHistory?: TripStatusHistoryRow[];
 };

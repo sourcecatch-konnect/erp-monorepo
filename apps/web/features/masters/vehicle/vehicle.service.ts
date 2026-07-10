@@ -85,4 +85,25 @@ export const vehicleApi = {
 
     return unwrapApiResponse(res);
   },
+
+  lookup: async (query?: {
+    search?: string;
+    page?: number;
+    size?: number;
+    ownershipType?: string;
+  }): Promise<ListResult<Vehicle>> => {
+    const params: Record<string, string | number> = {
+      page: query?.page ?? 0,
+      size: query?.size ?? 20,
+    };
+
+    if (query?.search) params.search = query.search;
+    if (query?.ownershipType) params["filter[ownershipType]"] = query.ownershipType;
+
+    const res = await api.get<ApiResponse<Vehicle[]>>("/vehicles/lookup", {
+      params,
+    });
+
+    return unwrapListResponse(res);
+  },
 };

@@ -15,8 +15,6 @@ export default function OrderEditPage({ orderId }: { orderId: string }) {
     queryFn: () => orderApi.detail(orderId),
   });
 
-  // The [id] route segment may be a raw CUID (Edit links from the table use
-  // order.id). Show the human order code in the breadcrumb instead.
   useEffect(() => {
     const href = `/orders/${encodeURIComponent(orderId)}`;
     setLabel(href, order?.orderNumber ?? null);

@@ -154,11 +154,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
     enabled: Boolean(journey) && !frozenSlipId,
   });
 
-  const form = useForm<
-    GenerateLogSlipFormInput,
-    unknown,
-    GenerateLogSlipBody
-  >({
+  const form = useForm<GenerateLogSlipFormInput, unknown, GenerateLogSlipBody>({
     resolver: zodResolver(generateLogSlipSchema),
     defaultValues: { previousDieselQty: 0 },
   });
@@ -263,8 +259,9 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
             <p className="mt-1 text-sm text-muted-foreground">
               {journey.vehicle?.vehicleNumber} · {journey.driver?.name} · KM{" "}
               {journey.openingKm}
-              {journey.closingKm !== null ? ` → ${journey.closingKm}` : ""} ·{" "}
-              {formatDateTime(journey.startedAt)}
+              {journey.closingKm !== null
+                ? ` → ${journey.closingKm}`
+                : ""} · {formatDateTime(journey.startedAt)}
               {journey.closedAt ? ` → ${formatDateTime(journey.closedAt)}` : ""}
             </p>
           </div>
@@ -273,7 +270,9 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             {slip && canPrint ? (
               <Button
-                variant={slip.status === "GENERATED" && canPost ? "outline" : "default"}
+                variant={
+                  slip.status === "GENERATED" && canPost ? "outline" : "default"
+                }
                 onClick={handlePrint}
               >
                 <IconPrinter size={16} className="mr-1" /> Print
@@ -324,7 +323,10 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
                 <label className="text-xs font-medium text-muted-foreground">
                   Log slip date
                 </label>
-                <Input type="datetime-local" {...form.register("logSlipDate")} />
+                <Input
+                  type="datetime-local"
+                  {...form.register("logSlipDate")}
+                />
               </div>
               <IconTextField<GenerateLogSlipFormInput>
                 name="previousDieselQty"
@@ -361,7 +363,9 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
                 type="submit"
                 disabled={
                   generate.isPending ||
-                  (preview?.warnings ?? []).some((w) => w.includes("still open"))
+                  (preview?.warnings ?? []).some((w) =>
+                    w.includes("still open"),
+                  )
                 }
               >
                 <IconFileInvoice size={16} className="mr-1" />
@@ -403,7 +407,9 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
                 driverPayable > 0
                   ? "Payable to driver"
                   : "Receivable from driver",
-              value: formatPaise(driverPayable > 0 ? driverPayable : driverReceivable),
+              value: formatPaise(
+                driverPayable > 0 ? driverPayable : driverReceivable,
+              ),
             },
             {
               label: "Net vehicle result",

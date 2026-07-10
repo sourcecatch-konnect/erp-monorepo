@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsUpDownIcon, CheckIcon } from "lucide-react";
-
+import { ChevronsUpDownIcon } from "lucide-react";
+import { IconCircleCheckFilled } from "@tabler/icons-react";
 import { cn } from "../lib/util";
 import { Button } from "./button";
 import { Popover, PopoverContent, PopoverTrigger } from "./popver";
@@ -20,6 +20,17 @@ export type ComboboxOption = {
   value: string;
   hint?: string;
   badge?: string;
+  badgeTone?: "success" | "info" | "warning" | "danger";
+};
+
+const badgeToneClasses: Record<
+  NonNullable<ComboboxOption["badgeTone"]>,
+  string
+> = {
+  success: "border-green-200 bg-green-50 text-green-700",
+  info: "border-blue-200 bg-blue-50 text-blue-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  danger: "border-red-200 bg-red-50 text-red-700",
 };
 
 type ComboboxProps = {
@@ -81,7 +92,7 @@ export function Combobox({
           <span className="whitespace-normal break-words text-left">
             {selected ? selected.label : placeholder}
           </span>
-          <ChevronsUpDownIcon className="ml-2 size-4 shrink-0 opacity-50" />
+          <ChevronsUpDownIcon className="ml-2 size-4 shrink-0 opacity-50 text-blue-500" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -121,6 +132,10 @@ export function Combobox({
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
+                  className={cn(
+                    option.value === value &&
+                      "bg-blue-50 border-blue-400 border rounded-md shadow-xs",
+                  )}
                   key={option.value}
                   value={option.label}
                   onSelect={() => {
@@ -129,7 +144,7 @@ export function Combobox({
                   }}
                   data-checked={option.value === value}
                 >
-                  <CheckIcon
+                  <IconCircleCheckFilled
                     className={cn(
                       "mr-2 size-4",
                       option.value === value ? "opacity-100" : "opacity-0",
@@ -147,7 +162,12 @@ export function Combobox({
                       ) : null}
                     </span>
                     {option.badge ? (
-                      <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                          badgeToneClasses[option.badgeTone ?? "warning"],
+                        )}
+                      >
                         {option.badge}
                       </span>
                     ) : null}

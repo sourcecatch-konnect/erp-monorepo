@@ -17,6 +17,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   tripNumber?: string;
   openingKm?: number;
+  /** Closing the return leg brings the whole journey back to base. */
+  isReturnLeg?: boolean;
   isPending?: boolean;
   onConfirm: (closingKm: number) => void | Promise<void>;
 };
@@ -27,6 +29,7 @@ export default function CloseTripDialog({
   onOpenChange,
   tripNumber,
   openingKm,
+  isReturnLeg,
   isPending,
   onConfirm,
 }: Props) {
@@ -50,8 +53,9 @@ export default function CloseTripDialog({
         <DialogHeader>
           <DialogTitle>Close trip {tripNumber ?? ""}</DialogTitle>
           <DialogDescription>
-            Record the vehicle&apos;s closing KM. The trip moves to Closed and
-            the vehicle is marked Available.
+            {isReturnLeg
+              ? "This is the return leg — closing it returns the journey to base, releases the vehicle and driver, and moves the journey to settlement review."
+              : "Record the vehicle's closing KM. The trip moves to Closed."}
           </DialogDescription>
         </DialogHeader>
 
