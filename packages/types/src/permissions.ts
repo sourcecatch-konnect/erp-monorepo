@@ -214,6 +214,8 @@ export const PERMS = {
     APPROVE: "lorry_receipt.approve",
     CANCEL: "lorry_receipt.cancel",
     GENERATE_INVOICE: "lorry_receipt.generate_invoice",
+    DELIVER: "lorry_receipt.deliver",
+    ACKNOWLEDGE: "lorry_receipt.acknowledge",
   },
   VP_LOADING: {
   VIEW: "vp_loading.view",

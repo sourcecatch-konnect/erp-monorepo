@@ -60,6 +60,10 @@ model User {
   updatedLRGroups             LRGroup[]                      @relation("UpdatedLRGroup")
   createdLR                   LorryReceipt[]                 @relation("CreatedLR")
   updatedLR                   LorryReceipt[]                 @relation("UpdatedLR")
+  createdLRDeliveries         LRDelivery[]                   @relation("CreatedLRDelivery")
+  updatedLRDeliveries         LRDelivery[]                   @relation("UpdatedLRDelivery")
+  createdLRAcks               LRAcknowledgement[]            @relation("CreatedLRAck")
+  updatedLRAcks               LRAcknowledgement[]            @relation("UpdatedLRAck")
   notificationDeliveries      NotificationDelivery[]
   approvedOrders              Order[]                        @relation("ApprovedOrders")
   createdOrders               Order[]                        @relation("CreatedOrders")
@@ -997,6 +1001,9 @@ model LRGroup {
   marketTdsAmount        BigInt?
   tripLegType            LRTripLegType   @default(DIRECT)
   hubId                  String?
+  // Stamped by hold-at-hub. With hubId set and secondaryTripId null the group
+  // is "lying at hub" — exempt from the trip-close delivery gate.
+  hubArrivalAt           DateTime?
   railheadBranchId       String?
   baseFreightAmount      BigInt?
   sealNumber             String?
@@ -1054,6 +1061,8 @@ model LorryReceipt {
   goods               LRGoods[]
   grn                 GRN?
   vpLoadings          VPLoading[]
+  delivery            LRDelivery?
+  acknowledgement     LRAcknowledgement?
   createdBy           User              @relation("CreatedLR", fields: [createdById], references: [id])
   group               LRGroup           @relation(fields: [groupId], references: [id])
   loadingLocation     CustomerLocation? @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
@@ -1077,11 +1086,83 @@ model LRGoods {
   width          Float?
   height         Float?
   grnGoods       GRNGoods[]
+  ackItems       LRAcknowledgementItem[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
 
   @@index([lorryReceiptId])
+}
+
+/**
+ * Delivery record — goods handed to the consignee. One per LR; creating it
+ * flips the LR to DELIVERED, deleting it (undo) reverts to FINALISED. The
+ * record is the source of truth, the status is the queryable flag. POD photos
+ * attach via the generic Attachment model (entityType "lr-delivery").
+ */
+model LRDelivery {
+  id               String       @id @default(cuid())
+  lrId             String       @unique
+  deliveredAt      DateTime
+  // Truck arrival at the consignee — the deliveredAt-reportedAt gap is the
+  // detention basis charged at acknowledgement time.
+  reportedAt       DateTime?
+  receiverName     String?
+  receiverPhone    String?
+  unloadingCharges BigInt?
+  remark           String?
+  createdById      String
+  updatedById      String?
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  lr               LorryReceipt @relation(fields: [lrId], references: [id])
+  createdBy        User         @relation("CreatedLRDelivery", fields: [createdById], references: [id])
+  updatedBy        User?        @relation("UpdatedLRDelivery", fields: [updatedById], references: [id])
+
+  @@index([deliveredAt])
+}
+
+/**
+ * Acknowledgement — the signed POD paper is back at the booking branch.
+ * Creating it flips the LR to ACKNOWLEDGED; undo reverts to DELIVERED.
+ * Scans attach via Attachment (entityType "lr-acknowledgement"). Designed as
+ * the future billing gate.
+ */
+model LRAcknowledgement {
+  id              String                  @id @default(cuid())
+  lrId            String                  @unique
+  receivedAt      DateTime
+  courierName     String?
+  courierDocketNo String?
+  courierCharge   BigInt?
+  detentionDays   Int?
+  detentionAmount BigInt?
+  damageAmount    BigInt?
+  remark          String?
+  createdById     String
+  updatedById     String?
+  version         Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  items           LRAcknowledgementItem[]
+  lr              LorryReceipt            @relation(fields: [lrId], references: [id])
+  createdBy       User                    @relation("CreatedLRAck", fields: [createdById], references: [id])
+  updatedBy       User?                   @relation("UpdatedLRAck", fields: [updatedById], references: [id])
+
+  @@index([receivedAt])
+}
+
+model LRAcknowledgementItem {
+  id          String            @id @default(cuid())
+  ackId       String
+  lrGoodsId   String
+  receivedQty Decimal?
+  damagedQty  Decimal?
+  ack         LRAcknowledgement @relation(fields: [ackId], references: [id], onDelete: Cascade)
+  goods       LRGoods           @relation(fields: [lrGoodsId], references: [id])
+
+  @@unique([ackId, lrGoodsId])
 }
 
 model EwayBill {
@@ -1851,6 +1932,8 @@ enum DriverStatus {
 enum LRStatus {
   DRAFT
   FINALISED
+  DELIVERED
+  ACKNOWLEDGED
   CANCELLED
 }
 
