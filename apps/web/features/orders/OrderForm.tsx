@@ -83,8 +83,6 @@ const FIELD_LABELS: Record<string, string> = {
   goods: "Goods",
   goodsId: "Goods",
   quantity: "Quantity",
-  unit: "Unit",
-  weight: "Weight",
   loadingLocationId: "Loading location",
   unloadingLocationId: "Unloading location",
   truckIndex: "Truck",
@@ -187,8 +185,7 @@ export default function OrderForm({ mode, order }: Props) {
             order.items?.map((i) => ({
               goodsId: i.goodsId,
               quantity: i.quantity,
-              unit: i.unit,
-              weight: i.weight ? Number(i.weight) : undefined,
+      
             })) ?? [],
           consignments:
             order.consignments?.map((c) => ({
@@ -202,7 +199,7 @@ export default function OrderForm({ mode, order }: Props) {
                   ? c.goods.map((g) => ({
                       goodsId: g.goodsId,
                       quantity: g.quantity,
-                      unit: g.unit,
+                 
                     }))
                   : [],
             })) ?? [],
@@ -522,7 +519,7 @@ export default function OrderForm({ mode, order }: Props) {
               <p className="mt-2 text-xs text-muted-foreground">
                 {orderType === "Truck"
                   ? "Book one or more trucks by vehicle type, then add consignment lines."
-                  : "Add goods line items with quantity and weight."}
+                  : "Add goods line items with quantity."}
               </p>
             </div>
 

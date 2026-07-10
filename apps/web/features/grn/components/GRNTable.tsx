@@ -10,10 +10,9 @@ import {
 } from "@tanstack/react-table";
 import {
   IconDatabaseOff,
-  IconEye,
   IconDotsVertical,
   IconEdit,
-  IconTrash,
+  IconBan,
   IconListDetails,
 } from "@tabler/icons-react";
 import {
@@ -77,8 +76,8 @@ type Props = {
   isError?: boolean;
 
   canUpdate?: boolean;
-  canDelete?: boolean;
-  onDelete?: (grn: GRNListItem) => void;
+  canCancel?: boolean;
+  onCancel?: (grn: GRNListItem) => void;
 };
 
 const formatDate = (value: unknown) => {
@@ -112,8 +111,8 @@ export default function GRNTable({
   isLoading,
   isError,
   canUpdate = true,
-  canDelete = true,
-  onDelete,
+  canCancel = true,
+  onCancel,
 }: Props) {
   const columns = React.useMemo<ColumnDef<GRNListItem>[]>(
     () => [
@@ -249,8 +248,8 @@ export default function GRNTable({
   const viewHref = `/vp-management/grn/${encodeURIComponent(identifier)}`;
   const editHref = `/vp-management/grn/${encodeURIComponent(grn.id)}/edit`;
 
-  const editable = grn.status === "SUBMITTED";
-  const deletable = grn.status === "SUBMITTED" || grn.status === "CANCELLED";
+  const editable = grn.status === "DRAFT" || grn.status === "SUBMITTED";
+  const cancellable = grn.status !== "CANCELLED";
 
   return (
     <TableRow key={row.id} className="hover:bg-muted/30">
@@ -295,15 +294,15 @@ export default function GRNTable({
                 </DropdownMenuItem>
               ) : null}
 
-              {canDelete && onDelete && deletable ? (
+              {canCancel && onCancel && cancellable ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-red-600"
-                    onClick={() => onDelete(grn)}
+                    onClick={() => onCancel(grn)}
                   >
-                    <IconTrash size={16} className="mr-2" />
-                    Delete
+                    <IconBan size={16} className="mr-2" />
+                    Cancel
                   </DropdownMenuItem>
                 </>
               ) : null}

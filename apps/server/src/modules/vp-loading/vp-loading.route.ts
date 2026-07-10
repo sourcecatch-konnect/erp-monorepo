@@ -281,37 +281,6 @@ router.get(
             },
           },
         },
-
-        grns: {
-          where: {
-            deletedAt: null,
-            status: "SUBMITTED",
-          },
-          select: {
-            id: true,
-            grnNumber: true,
-            lorryReceiptId: true,
-            receivedQty: true,
-            status: true,
-
-            lorryReceipt: {
-              select: {
-                id: true,
-                lrNumber: true,
-              },
-            },
-
-            vpLoadings: {
-              where: {
-                deletedAt: null,
-                status: "LOADED",
-              },
-              select: {
-                loadedQty: true,
-              },
-            },
-          },
-        },
       },
     });
 

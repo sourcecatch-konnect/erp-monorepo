@@ -48,8 +48,6 @@ export type OrderItemRow = {
   orderId: string;
   goodsId: string;
   quantity: number;
-  unit: string;
-  weight: string | null;
   goods?: Ref;
 };
 
@@ -58,8 +56,6 @@ export type OrderConsignmentGoodsRow = {
   consignmentId: string;
   goodsId: string;
   quantity: number;
-  unit: string;
-  weight: string | null;
   goods?: Ref;
 };
 

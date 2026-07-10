@@ -18,15 +18,6 @@ import { IconTrash, IconPlus } from "@tabler/icons-react";
 
 type FormValues = CreateOrderFormInput;
 
-const UNIT_OPTIONS: ComboboxOption[] = [
-  { label: "MT", value: "MT" },
-  { label: "Kg", value: "Kg" },
-  { label: "Nos", value: "Nos" },
-  { label: "Boxes", value: "Boxes" },
-  { label: "Bags", value: "Bags" },
-  { label: "Pallets", value: "Pallets" },
-];
-
 export default function ItemLinesEditor({
   goodsOptions,
 }: {
@@ -44,8 +35,12 @@ export default function ItemLinesEditor({
   });
 
   const addRow = React.useCallback(
-    () => append({ goodsId: "", quantity: 1, unit: "MT", weight: undefined }),
-    [append]
+    () =>
+      append({
+        goodsId: "",
+        quantity: 1,
+      }),
+    [append],
   );
 
   // After a save attempt, re-run the resolver on remove so the removed row's
@@ -69,17 +64,19 @@ export default function ItemLinesEditor({
         <Table className="min-w-full">
           <TableHeader>
             <TableRow className="bg-muted/40">
-              <TableHead className="min-w-[220px] text-xs uppercase">Goods</TableHead>
+              <TableHead className="min-w-[220px] text-xs uppercase">
+                Goods
+              </TableHead>
               <TableHead className="w-28 text-xs uppercase">Qty</TableHead>
-              <TableHead className="w-32 text-xs uppercase">Unit</TableHead>
-              <TableHead className="w-32 text-xs uppercase">Weight</TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {fields.map((field, index) => {
               const rowErr = errors.items?.[index];
               const isLast = index === fields.length - 1;
+
               return (
                 <TableRow key={field.id} className="align-top">
                   <TableCell>
@@ -89,19 +86,23 @@ export default function ItemLinesEditor({
                       render={({ field: f }) => (
                         <Combobox
                           options={goodsOptions}
-                          value={typeof f.value === "string" ? f.value : undefined}
+                          value={
+                            typeof f.value === "string" ? f.value : undefined
+                          }
                           onChange={f.onChange}
                           placeholder="Select goods"
                           invalid={Boolean(rowErr?.goodsId)}
                         />
                       )}
                     />
+
                     {rowErr?.goodsId?.message ? (
                       <p className="mt-1 text-xs text-red-600">
                         {rowErr.goodsId.message}
                       </p>
                     ) : null}
                   </TableCell>
+
                   <TableCell>
                     <Controller
                       control={control}
@@ -111,59 +112,31 @@ export default function ItemLinesEditor({
                           type="number"
                           min={1}
                           value={(f.value as number | string) ?? ""}
-                          onChange={(e) => f.onChange(e.target.value)}
-                          aria-invalid={Boolean(rowErr?.quantity)}
-                        />
-                      )}
-                    />
-                    {rowErr?.quantity?.message ? (
-                      <p className="mt-1 text-xs text-red-600">
-                        {rowErr.quantity.message}
-                      </p>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <Controller
-                      control={control}
-                      name={`items.${index}.unit`}
-                      render={({ field: f }) => (
-                        <Combobox
-                          options={UNIT_OPTIONS}
-                          value={typeof f.value === "string" ? f.value : undefined}
-                          onChange={f.onChange}
-                          placeholder="Unit"
-                          invalid={Boolean(rowErr?.unit)}
-                        />
-                      )}
-                    />
-                    {rowErr?.unit?.message ? (
-                      <p className="mt-1 text-xs text-red-600">
-                        {rowErr.unit.message}
-                      </p>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <Controller
-                      control={control}
-                      name={`items.${index}.weight`}
-                      render={({ field: f }) => (
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          placeholder="optional"
-                          value={(f.value as number | string) ?? ""}
-                          onChange={(e) => f.onChange(e.target.value)}
+                          onChange={(e) => {
+                            f.onChange(
+                              e.target.value === ""
+                                ? ""
+                                : Number(e.target.value),
+                            );
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && isLast) {
                               e.preventDefault();
                               addRow();
                             }
                           }}
+                          aria-invalid={Boolean(rowErr?.quantity)}
                         />
                       )}
                     />
+
+                    {rowErr?.quantity?.message ? (
+                      <p className="mt-1 text-xs text-red-600">
+                        {rowErr.quantity.message}
+                      </p>
+                    ) : null}
                   </TableCell>
+
                   <TableCell>
                     <Button
                       type="button"
@@ -190,6 +163,7 @@ export default function ItemLinesEditor({
         ) : (
           <span />
         )}
+
         <Button type="button" variant="outline" size="sm" onClick={addRow}>
           <IconPlus size={16} className="mr-1" /> Add item
         </Button>

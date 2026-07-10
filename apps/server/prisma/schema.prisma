@@ -864,12 +864,13 @@ model Order {
 }
 
 model OrderItem {
-  id       String   @id @default(cuid())
+  id       String @id @default(cuid())
   orderId  String
   goodsId  String
-  weight   Decimal?
-  goods    Goods    @relation(fields: [goodsId], references: [id])
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  quantity Int
+
+  goods Goods @relation(fields: [goodsId], references: [id])
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }

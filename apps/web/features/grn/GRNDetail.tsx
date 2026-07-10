@@ -290,7 +290,7 @@ const damagePhotoImages = React.useMemo<LightboxImage[]>(() => {
     );
   }
 
-const isEditable = ["DRAFT", "FINALISED"].includes(grn.status);
+const isEditable = ["DRAFT", "SUBMITTED"].includes(grn.status);
 
 
   return (
