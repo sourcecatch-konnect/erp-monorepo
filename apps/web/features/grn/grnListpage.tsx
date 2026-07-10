@@ -51,12 +51,14 @@ export default function GrnListPage() {
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">GRN</h1>
-          <p className="text-sm text-muted-foreground">
-            Goods Receipt Note list
-          </p>
-        </div>
+     <div>
+  <h1 className="text-lg font-semibold">
+    Goods Receipt Notes at Rail Head
+  </h1>
+  <p className="text-sm text-muted-foreground">
+    Manage and track all rail head goods receipt notes.
+  </p>
+</div>
 
         {canCreate ? (
           <Button asChild>
