@@ -142,6 +142,59 @@ export type LRListItem = {
   acknowledgement?: { receivedAt: string } | null;
 };
 
+/* ---- delivery worklists (docs/LR_DELIVERY_ACK_PLAN.md §8) ---- */
+
+export type WorklistGroupRef = {
+  id: string;
+  groupNumber: string;
+  finalisedAt: string | null;
+  isMarketVehicle: boolean;
+  marketVehicleNumber: string | null;
+  consignee: { id: string; name: string; shortName: string | null } | null;
+  originBranch: { id: string; name: string; branchCode: string } | null;
+  destinationBranch: { id: string; name: string; branchCode: string } | null;
+  primaryTrip: { id: string; vehicle: { vehicleNumber: string } | null } | null;
+  secondaryTrip: {
+    id: string;
+    vehicle: { vehicleNumber: string } | null;
+  } | null;
+};
+
+export type PendingDeliveryRow = {
+  id: string;
+  lrNumber: string;
+  status: LRStatus;
+  unloadingLocation: { id: string; name: string } | null;
+  group: WorklistGroupRef;
+};
+
+export type PendingPodRow = {
+  id: string;
+  lrNumber: string;
+  status: LRStatus;
+  delivery: { deliveredAt: string; receiverName: string | null } | null;
+  group: WorklistGroupRef;
+};
+
+export type AtHubRow = {
+  id: string;
+  groupNumber: string;
+  hubArrivalAt: string | null;
+  finalisedAt: string | null;
+  consignee: { id: string; name: string; shortName: string | null } | null;
+  originBranch: { id: string; name: string; branchCode: string } | null;
+  destinationBranch: { id: string; name: string; branchCode: string } | null;
+  hub: { id: string; name: string } | null;
+  lorryReceipts: { id: string; lrNumber: string }[];
+};
+
+export type DeliveryStats = {
+  pendingDelivery: number;
+  atHub: number;
+  pendingPod: number;
+  avgDeliveryDays: number | null;
+};
+
 export type LorryReceipt = LRListItem & {
   loadingLocationId: string | null;
   unloadingLocationId: string | null;

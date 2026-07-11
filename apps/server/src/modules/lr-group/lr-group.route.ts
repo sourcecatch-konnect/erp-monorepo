@@ -144,6 +144,44 @@ router.get(
 );
 
 /* ------------------------------------------------------------------ */
+/* At-hub worklist — groups lying at Jalgaon awaiting leg-2 dispatch    */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/worklists/at-hub",
+  can(PERMS.LORRY_RECEIPT.VIEW),
+  async (req, res) => {
+    const data = await db.lRGroup.findMany({
+      where: {
+        deletedAt: null,
+        status: "FINALISED",
+        hubId: { not: null },
+        secondaryTripId: null,
+        ...groupBranchFilter(req),
+      },
+      select: {
+        id: true,
+        groupNumber: true,
+        hubArrivalAt: true,
+        finalisedAt: true,
+        consignee: { select: { id: true, name: true, shortName: true } },
+        originBranch: { select: { id: true, name: true, branchCode: true } },
+        destinationBranch: {
+          select: { id: true, name: true, branchCode: true },
+        },
+        hub: { select: { id: true, name: true } },
+        lorryReceipts: {
+          where: { deletedAt: null },
+          select: { id: true, lrNumber: true },
+        },
+      },
+      orderBy: { hubArrivalAt: "asc" },
+      take: 500,
+    });
+    return sendOk(res, data);
+  },
+);
+
+/* ------------------------------------------------------------------ */
 /* Detail                                                              */
 /* ------------------------------------------------------------------ */
 router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {

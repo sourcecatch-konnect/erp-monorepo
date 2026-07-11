@@ -66,6 +66,179 @@ const lrForAction = async (id: string) => {
   return lr;
 };
 
+/** Origin-or-destination branch scope for worklist queries. */
+type LRScopeWhere = {
+  id?: { in: string[] };
+  group?: { OR: Record<string, unknown>[] };
+};
+const lrBranchFilter = (
+  req: Parameters<typeof assertBranchAccess>[0],
+): LRScopeWhere => {
+  if (!req.ctx) return {};
+  if (req.ctx.branchScope === "ALL") return {};
+  if (req.ctx.branchIds.length === 0) {
+    return { id: { in: [] as string[] } };
+  }
+  return {
+    group: {
+      OR: [
+        { originBranchId: { in: req.ctx.branchIds } },
+        { destinationBranchId: { in: req.ctx.branchIds } },
+      ],
+    },
+  };
+};
+
+const worklistGroupSelect = {
+  id: true,
+  groupNumber: true,
+  finalisedAt: true,
+  isMarketVehicle: true,
+  marketVehicleNumber: true,
+  consignee: { select: { id: true, name: true, shortName: true } },
+  originBranch: { select: { id: true, name: true, branchCode: true } },
+  destinationBranch: { select: { id: true, name: true, branchCode: true } },
+  primaryTrip: {
+    select: { id: true, vehicle: { select: { vehicleNumber: true } } },
+  },
+  secondaryTrip: {
+    select: { id: true, vehicle: { select: { vehicleNumber: true } } },
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/* Worklists (docs/LR_DELIVERY_ACK_PLAN.md §8)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * FINALISED LRs on dispatched groups — fleet AND market — oldest first.
+ * Groups lying at the hub are excluded; they have their own worklist.
+ */
+router.get(
+  "/worklists/pending-delivery",
+  can(PERMS.LORRY_RECEIPT.VIEW),
+  async (req, res) => {
+    const scope = lrBranchFilter(req);
+    const data = await db.lorryReceipt.findMany({
+      where: {
+        deletedAt: null,
+        status: "FINALISED",
+        ...(scope.id ? { id: scope.id } : {}),
+        group: {
+          ...(scope.group ?? {}),
+          status: "FINALISED",
+          deletedAt: null,
+          NOT: { hubId: { not: null }, secondaryTripId: null },
+        },
+      },
+      select: {
+        id: true,
+        lrNumber: true,
+        status: true,
+        unloadingLocation: { select: { id: true, name: true } },
+        group: { select: worklistGroupSelect },
+      },
+      orderBy: { group: { finalisedAt: "asc" } },
+      take: 500,
+    });
+    return sendOk(res, data);
+  },
+);
+
+/** DELIVERED-but-not-ACKNOWLEDGED LRs — POD paper still in the field. */
+router.get(
+  "/worklists/pending-pod",
+  can(PERMS.LORRY_RECEIPT.VIEW),
+  async (req, res) => {
+    const data = await db.lorryReceipt.findMany({
+      where: {
+        deletedAt: null,
+        status: "DELIVERED",
+        ...lrBranchFilter(req),
+      },
+      select: {
+        id: true,
+        lrNumber: true,
+        status: true,
+        delivery: { select: { deliveredAt: true, receiverName: true } },
+        group: { select: worklistGroupSelect },
+      },
+      orderBy: { delivery: { deliveredAt: "asc" } },
+      take: 500,
+    });
+    return sendOk(res, data);
+  },
+);
+
+/** Counts + average delivery days for the dashboard cards. */
+router.get(
+  "/worklists/delivery-stats",
+  can(PERMS.LORRY_RECEIPT.VIEW),
+  async (req, res) => {
+    const scope = lrBranchFilter(req);
+    const lrScope = {
+      ...(scope.id ? { id: scope.id } : {}),
+      ...(scope.group ? { group: scope.group } : {}),
+    };
+
+    const [pendingDelivery, atHub, pendingPod, recentDeliveries] =
+      await Promise.all([
+        db.lorryReceipt.count({
+          where: {
+            deletedAt: null,
+            status: "FINALISED",
+            ...(scope.id ? { id: scope.id } : {}),
+            group: {
+              ...(scope.group ?? {}),
+              status: "FINALISED",
+              deletedAt: null,
+              NOT: { hubId: { not: null }, secondaryTripId: null },
+            },
+          },
+        }),
+        db.lRGroup.count({
+          where: {
+            deletedAt: null,
+            status: "FINALISED",
+            hubId: { not: null },
+            secondaryTripId: null,
+            ...(scope.group ?? {}),
+          },
+        }),
+        db.lorryReceipt.count({
+          where: { deletedAt: null, status: "DELIVERED", ...lrScope },
+        }),
+        db.lRDelivery.findMany({
+          where: {
+            deliveredAt: {
+              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            },
+            lr: { deletedAt: null, ...lrScope },
+          },
+          select: {
+            deliveredAt: true,
+            lr: { select: { group: { select: { finalisedAt: true } } } },
+          },
+          take: 1000,
+        }),
+      ]);
+
+    const spans = recentDeliveries
+      .map((d) =>
+        d.lr.group.finalisedAt
+          ? (d.deliveredAt.getTime() - d.lr.group.finalisedAt.getTime()) /
+            86_400_000
+          : null,
+      )
+      .filter((v): v is number => v != null && v >= 0);
+    const avgDeliveryDays = spans.length
+      ? Math.round((spans.reduce((a, b) => a + b, 0) / spans.length) * 10) / 10
+      : null;
+
+    return sendOk(res, { pendingDelivery, atHub, pendingPod, avgDeliveryDays });
+  },
+);
+
 /* ------------------------------------------------------------------ */
 /* Mark delivered                                                      */
 /* ------------------------------------------------------------------ */

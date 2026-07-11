@@ -41,6 +41,7 @@ import DeliverySection, {
   DELIVERY_POD_ENTITY,
   ACK_SCAN_ENTITY,
 } from "./components/DeliverySection";
+import LRTimeline from "./components/LRTimeline";
 import type {
   LRGroup,
   LorryReceipt,
@@ -561,6 +562,8 @@ const finaliseTitle = hasNoLrs
                 )}
               </div>
             </div>
+
+            {g.status !== "DRAFT" && <LRTimeline lr={lr} group={g} />}
 
             {lr.goods.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">

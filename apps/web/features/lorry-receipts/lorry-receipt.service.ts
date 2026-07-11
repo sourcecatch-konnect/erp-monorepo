@@ -10,6 +10,10 @@ import type {
   LRAcknowledgement,
   DeliverLRFormInput,
   AcknowledgeLRFormInput,
+  PendingDeliveryRow,
+  PendingPodRow,
+  AtHubRow,
+  DeliveryStats,
 } from "@skerp/types";
 import {
   type ListQuery,
@@ -127,6 +131,42 @@ export const lorryReceiptApi = {
     );
     return unwrapApiResponse(res);
   },
+};
+
+/** Delivery worklists + dashboard stats. */
+export const deliveryWorklistApi = {
+  pendingDelivery: async (): Promise<PendingDeliveryRow[]> => {
+    const res = await api.get<ApiResponse<PendingDeliveryRow[]>>(
+      "/lorry-receipts/worklists/pending-delivery",
+    );
+    return unwrapApiResponse(res);
+  },
+  pendingPod: async (): Promise<PendingPodRow[]> => {
+    const res = await api.get<ApiResponse<PendingPodRow[]>>(
+      "/lorry-receipts/worklists/pending-pod",
+    );
+    return unwrapApiResponse(res);
+  },
+  atHub: async (): Promise<AtHubRow[]> => {
+    const res = await api.get<ApiResponse<AtHubRow[]>>(
+      "/lr-groups/worklists/at-hub",
+    );
+    return unwrapApiResponse(res);
+  },
+  stats: async (): Promise<DeliveryStats> => {
+    const res = await api.get<ApiResponse<DeliveryStats>>(
+      "/lorry-receipts/worklists/delivery-stats",
+    );
+    return unwrapApiResponse(res);
+  },
+};
+
+export const deliveryWorklistKeys = {
+  all: ["delivery-worklists"] as const,
+  pendingDelivery: ["delivery-worklists", "pending-delivery"] as const,
+  pendingPod: ["delivery-worklists", "pending-pod"] as const,
+  atHub: ["delivery-worklists", "at-hub"] as const,
+  stats: ["delivery-worklists", "stats"] as const,
 };
 
 /* ------------------------------------------------------------------ */
