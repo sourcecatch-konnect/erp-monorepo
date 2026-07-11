@@ -7,6 +7,7 @@ import {
   cancelGroupSchema,
   lrGroupLineSchema,
   deliverGroupSchema,
+  holdGroupAtHubSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -762,10 +763,15 @@ const existing = await db.lRGroup.findFirst({
   },
 );
 /* ------------------------------------------------------------------ */
-/* Split at hub (HO action) — attach leg-2 trip to a FINALISED group    */
+/* Hold at hub (HO action) — goods unloaded at Jalgaon, awaiting leg 2  */
 /* ------------------------------------------------------------------ */
+/**
+ * First half of the decomposed hub split (docs/LR_DELIVERY_ACK_PLAN.md §5).
+ * Marks the group as lying at the head-office hub, which exempts its leg-1
+ * trip from the close delivery gate and puts it on the "at hub" worklist.
+ */
 router.post(
-  "/:id/split-at-hub",
+  "/:id/hold-at-hub",
   can(PERMS.LORRY_RECEIPT.APPROVE),
   async (req, res) => {
     const id = getParamId(req);
@@ -775,7 +781,71 @@ router.post(
     if (!existing) throw new NotFoundError("Lorry receipt group not found");
     if (existing.status !== "FINALISED") {
       throw new BadRequestError(
-        "Hub split is only allowed on a finalised group",
+        "Only a finalised group can be held at the hub",
+      );
+    }
+    if (existing.secondaryTripId) {
+      throw new BadRequestError(
+        "This group has already been dispatched from the hub",
+      );
+    }
+    if (existing.hubId) {
+      throw new BadRequestError("This group is already held at the hub");
+    }
+
+    const parsed = holdGroupAtHubSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const me = actorId(req);
+    const hubId = await resolveHubBranchId(db);
+
+    const updated = await db.lRGroup.update({
+      where: { id },
+      data: {
+        hubId,
+        hubArrivalAt: parsed.data.hubArrivalAt ?? new Date(),
+        tripLegType: "TO_HUB",
+        updatedById: me,
+        version: { increment: 1 },
+      },
+      include: groupDetailInclude,
+    });
+
+    return sendOk(res, updated);
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Dispatch from hub (HO action) — attach the leg-2 trip               */
+/* ------------------------------------------------------------------ */
+/**
+ * Second half of the decomposed hub split: the group must already be held at
+ * the hub. Attaching the leg-2 trip makes it the group's final trip, so the
+ * close delivery gate moves onto leg 2.
+ */
+router.post(
+  "/:id/dispatch-from-hub",
+  can(PERMS.LORRY_RECEIPT.APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.lRGroup.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) throw new NotFoundError("Lorry receipt group not found");
+    if (existing.status !== "FINALISED") {
+      throw new BadRequestError(
+        "Hub dispatch is only allowed on a finalised group",
+      );
+    }
+    if (!existing.hubId) {
+      throw new BadRequestError(
+        "Hold the group at the hub before dispatching it",
+      );
+    }
+    if (existing.secondaryTripId) {
+      throw new BadRequestError(
+        "This group has already been dispatched from the hub",
       );
     }
 
@@ -786,43 +856,40 @@ router.post(
     const { secondaryTripId } = parsed.data;
     const me = actorId(req);
 
-    const updated = await db.$transaction(async (tx) => {
-      const hubId = await resolveHubBranchId(tx);
-
-      // Leg 1 must have completed before the hub -> destination leg picks up.
-      if (existing.primaryTripId) {
-        const leg1 = await tx.vehicleTrip.findUnique({
-          where: { id: existing.primaryTripId },
-          select: { status: true },
-        });
-        if (leg1 && leg1.status !== "Closed") {
-          throw new BadRequestError(
-            "The leg 1 trip must be Closed before attaching a leg 2 trip",
-          );
-        }
-      }
-
-      const leg2 = await tx.vehicleTrip.findUnique({
-        where: { id: secondaryTripId },
-        select: { id: true, status: true, consignorId: true },
+    // Leg 1 must have completed before the hub -> destination leg picks up.
+    if (existing.primaryTripId) {
+      const leg1 = await db.vehicleTrip.findUnique({
+        where: { id: existing.primaryTripId },
+        select: { status: true },
       });
-      if (!leg2) throw new BadRequestError("Leg 2 trip not found");
-      if (secondaryTripId === existing.primaryTripId) {
-        throw new BadRequestError("Leg 2 trip must differ from the leg 1 trip");
-      }
-      if (leg2.status !== "Planned") {
-        throw new BadRequestError("Leg 2 trip must be a Planned trip");
-      }
-      if (leg2.consignorId !== existing.consignorId) {
+      if (leg1 && leg1.status !== "Closed") {
         throw new BadRequestError(
-          "Leg 2 trip belongs to a different consignor and cannot be attached to this LR",
+          "The leg 1 trip must be Closed before attaching a leg 2 trip",
         );
       }
+    }
 
+    const leg2 = await db.vehicleTrip.findUnique({
+      where: { id: secondaryTripId },
+      select: { id: true, status: true, consignorId: true },
+    });
+    if (!leg2) throw new BadRequestError("Leg 2 trip not found");
+    if (secondaryTripId === existing.primaryTripId) {
+      throw new BadRequestError("Leg 2 trip must differ from the leg 1 trip");
+    }
+    if (leg2.status !== "Planned") {
+      throw new BadRequestError("Leg 2 trip must be a Planned trip");
+    }
+    if (leg2.consignorId !== existing.consignorId) {
+      throw new BadRequestError(
+        "Leg 2 trip belongs to a different consignor and cannot be attached to this LR",
+      );
+    }
+
+    const updated = await db.$transaction(async (tx) => {
       const result = await tx.lRGroup.update({
         where: { id },
         data: {
-          hubId,
           secondaryTripId,
           tripLegType: "FROM_HUB",
           updatedById: me,

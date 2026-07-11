@@ -33,6 +33,7 @@ import {
   tripListSelect,
   writeTripStatus,
 } from "./trip.service.js";
+import { undeliveredLRNumbersForTrip } from "../lorry-receipt/lr-delivery.service.js";
 import {
   chainViolations,
   closeLegAndUpdateJourney,
@@ -850,6 +851,18 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
 
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
+  }
+
+  // Delivery gate ("Way 1", docs/LR_DELIVERY_ACK_PLAN.md §4): a trip that is
+  // the FINAL leg of an LR group cannot close while its LRs are undelivered.
+  // A leg-1 group already held at hub is exempt — its goods sit at the hub.
+  const blockers = await undeliveredLRNumbersForTrip(id);
+  if (blockers.length > 0) {
+    throw new BadRequestError(
+      `Cannot close trip — ${blockers.length} LR(s) not delivered: ${blockers.join(", ")}. ` +
+        "Mark them delivered or hold the group at hub.",
+      "TRIP_CLOSE_UNDELIVERED_LRS",
+    );
   }
   const me = actorId(req);
 
