@@ -70,6 +70,12 @@ export type Trip = {
   isReturnLeg: boolean;
   chainExceptionReason: string | null;
 
+  /**
+   * List rows only: live FINALISED (undelivered) LRs on groups whose final
+   * leg is this trip — the server blocks Close while it's > 0 ("Way 1" gate).
+   */
+  undeliveredLrCount?: number;
+
   vehicle?: { id: string; vehicleNumber: string; ownershipType: string };
   driver?: { id: string; name: string };
   route?: RouteRef;

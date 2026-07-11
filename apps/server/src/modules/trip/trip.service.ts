@@ -40,8 +40,12 @@ export const buildTripName = (args: {
   const truck = args.truckNumber.toUpperCase();
   return `${route}/${truck}/${middle}/${stamp(args.at)}`;
 };
-/** Columns for the trips list table. */
-export const tripListSelect = {
+/**
+ * Scalars + row-action data every trips-list row needs regardless of which
+ * columns are visible (dialogs read openingKm / isReturnLeg off the row, the
+ * Close gate reads the group counts).
+ */
+export const tripListBaseSelect = {
   id: true,
   vehicleId: true,
   tripNumber: true,
@@ -52,36 +56,70 @@ export const tripListSelect = {
   onwardFreight: true,
   isTripEmpty: true,
   rakeDate: true,
+  openingKm: true,
+  closingKm: true,
   startDateTime: true,
   createdAt: true,
   journeyId: true,
   sequenceNo: true,
   legType: true,
   isReturnLeg: true,
-  journey: {
-    select: { id: true, journeyNumber: true, status: true },
-  },
-
-  vehicle: {
-    select: { id: true, vehicleNumber: true, ownershipType: true },
-  },
-  driver: {
-    select: { id: true, name: true },
-  },
-  route: {
+  // Trip-close delivery gate ("Way 1"): groups whose FINAL leg is this trip,
+  // still FINALISED, counting their live FINALISED (undelivered) LRs. Must
+  // mirror `undeliveredLRNumbersForTrip` — a leg-1 group held at hub is exempt.
+  primaryGroups: {
+    where: {
+      deletedAt: null,
+      status: "FINALISED",
+      secondaryTripId: null,
+      hubId: null,
+    },
     select: {
-      id: true,
-      sourceCity: { select: { id: true, name: true } },
-      destinationCity: { select: { id: true, name: true } },
+      _count: {
+        select: {
+          lorryReceipts: { where: { deletedAt: null, status: "FINALISED" } },
+        },
+      },
     },
   },
-  consignor: {
-    select: { id: true, name: true, shortName: true },
-  },
-  createdBy: {
-    select: { id: true, firstName: true, lastName: true },
+  secondaryGroups: {
+    where: { deletedAt: null, status: "FINALISED" },
+    select: {
+      _count: {
+        select: {
+          lorryReceipts: { where: { deletedAt: null, status: "FINALISED" } },
+        },
+      },
+    },
   },
 } satisfies Prisma.VehicleTripSelect;
+
+/**
+ * Relation blocks the list joins only when the matching table column is
+ * visible (`?fields=journey,vehicle,...`). Keys are the web table column ids;
+ * omitting the param selects everything (backward compatible).
+ */
+export const tripListRelationSelects = {
+  journey: {
+    journey: { select: { id: true, journeyNumber: true, status: true } },
+  },
+  vehicle: {
+    vehicle: { select: { id: true, vehicleNumber: true, ownershipType: true } },
+    driver: { select: { id: true, name: true } },
+  },
+  route: {
+    route: {
+      select: {
+        id: true,
+        sourceCity: { select: { id: true, name: true } },
+        destinationCity: { select: { id: true, name: true } },
+      },
+    },
+  },
+  client: {
+    consignor: { select: { id: true, name: true, shortName: true } },
+  },
+} satisfies Record<string, Prisma.VehicleTripSelect>;
 
 /** Fully-hydrated trip for the detail page. */
 export const tripInclude = {
