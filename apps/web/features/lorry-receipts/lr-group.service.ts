@@ -10,6 +10,8 @@ import type {
   CancelGroupBody,
   LRGroupLineInput,
   FinaliseGroupFormInput,
+  DeliverGroupFormInput,
+  HoldGroupAtHubBody,
 } from "@skerp/types";
 import {
   type ListQuery,
@@ -68,8 +70,36 @@ detail: async (identifier: string): Promise<LRGroup> => {
     return unwrapApiResponse(res);
   },
 
-  splitAtHub: async (id: string, body: SplitGroupAtHubBody): Promise<LRGroup> => {
-    const res = await api.post<ApiResponse<LRGroup>>(`/lr-groups/${id}/split-at-hub`, body);
+  /** First half of the hub split: mark the group as lying at the HO hub. */
+  holdAtHub: async (id: string, body?: HoldGroupAtHubBody): Promise<LRGroup> => {
+    const res = await api.post<ApiResponse<LRGroup>>(
+      `/lr-groups/${id}/hold-at-hub`,
+      body ?? {},
+    );
+    return unwrapApiResponse(res);
+  },
+
+  /** Second half: attach the leg-2 trip to a held-at-hub group. */
+  dispatchFromHub: async (
+    id: string,
+    body: SplitGroupAtHubBody,
+  ): Promise<LRGroup> => {
+    const res = await api.post<ApiResponse<LRGroup>>(
+      `/lr-groups/${id}/dispatch-from-hub`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  /** Bulk mark every (selected) LR in the group delivered in one shot. */
+  deliverAll: async (
+    id: string,
+    body: DeliverGroupFormInput,
+  ): Promise<LRGroup> => {
+    const res = await api.post<ApiResponse<LRGroup>>(
+      `/lr-groups/${id}/deliver-all`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 

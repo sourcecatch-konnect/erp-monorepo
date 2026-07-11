@@ -21,19 +21,33 @@ import {
 
 import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { attachmentApi } from "@/features/attachments/attachment.client";
 import { formatPaise, paiseToRupees } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { lrGroupApi } from "./lr-group.service";
 import { lrGroupKeys } from "./lr-group.keys";
 import { lorryReceiptApi } from "./lorry-receipt.service";
-import { LRStatusBadge, SOURCE_LABELS } from "./lorry-receipt-ui";
+import { LRStatusBadge, SOURCE_LABELS, daysSince } from "./lorry-receipt-ui";
 import FinaliseDialog from "./components/FinaliseDialog";
 import SplitAtHubDialog from "./components/SplitAtHubDialog";
 import EwayBillSection from "./components/EwayBillSection";
 import EditGroupDialog from "./components/EditGroupDialog";
 import LRLineDialog, { type LinePayload } from "./components/LRLineDialog";
-import type { LRGroup } from "@skerp/types";
+import DeliverDialog from "./components/DeliverDialog";
+import BulkDeliverDialog from "./components/BulkDeliverDialog";
+import AcknowledgeDialog from "./components/AcknowledgeDialog";
+import DeliverySection, {
+  DELIVERY_POD_ENTITY,
+  ACK_SCAN_ENTITY,
+} from "./components/DeliverySection";
+import type {
+  LRGroup,
+  LorryReceipt,
+  DeliverLRFormInput,
+  AcknowledgeLRFormInput,
+  DeliverGroupFormInput,
+} from "@skerp/types";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -56,10 +70,18 @@ export default function LRDetail({ id }: { id: string }) {
   const [editGroupOpen, setEditGroupOpen] = React.useState(false);
   const [addLineOpen, setAddLineOpen] = React.useState(false);
   const [editLine, setEditLine] = React.useState<LRGroup["lorryReceipts"][number] | null>(null);
+  const [bulkDeliverOpen, setBulkDeliverOpen] = React.useState(false);
+  const [deliverLr, setDeliverLr] = React.useState<LorryReceipt | null>(null);
+  const [editDeliveryLr, setEditDeliveryLr] =
+    React.useState<LorryReceipt | null>(null);
+  const [ackLr, setAckLr] = React.useState<LorryReceipt | null>(null);
+  const [editAckLr, setEditAckLr] = React.useState<LorryReceipt | null>(null);
 
   const canApprove = useCan(PERMS.LORRY_RECEIPT.APPROVE);
   const canCancel = useCan(PERMS.LORRY_RECEIPT.CANCEL);
   const canUpdate = useCan(PERMS.LORRY_RECEIPT.UPDATE);
+  const canDeliver = useCan(PERMS.LORRY_RECEIPT.DELIVER);
+  const canAcknowledge = useCan(PERMS.LORRY_RECEIPT.ACKNOWLEDGE);
 
   const group = useQuery({
     queryKey: lrGroupKeys.detail(id),
@@ -86,12 +108,136 @@ export default function LRDetail({ id }: { id: string }) {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
-  const split = useMutation({
+  const holdAtHub = useMutation({
+    mutationFn: () => lrGroupApi.holdAtHub(actionGroupId),
+    onSuccess: () => {
+      toast.success("Group held at hub — leg-1 trip can now be closed");
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const dispatchFromHub = useMutation({
     mutationFn: (secondaryTripId: string) =>
-      lrGroupApi.splitAtHub(actionGroupId, { secondaryTripId }),
+      lrGroupApi.dispatchFromHub(actionGroupId, { secondaryTripId }),
     onSuccess: () => {
       toast.success("Leg 2 trip attached");
       setSplitOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const uploadFiles = async (
+    entityType: string,
+    entityId: string,
+    files: File[],
+  ) => {
+    if (files.length === 0) return;
+    try {
+      await Promise.all(
+        files.map((file) =>
+          attachmentApi.upload(
+            {
+              entityType,
+              entityId,
+              originalName: file.name,
+              mime: file.type || "application/octet-stream",
+              sizeBytes: file.size,
+            },
+            file,
+          ),
+        ),
+      );
+    } catch (err) {
+      toast.error(
+        `Record saved, but a file upload failed: ${getErrorMessage(err)}`,
+      );
+    }
+  };
+
+  const deliver = useMutation({
+    mutationFn: async (vars: {
+      lrId: string;
+      values: DeliverLRFormInput;
+      podFiles: File[];
+    }) => {
+      const delivery = await lorryReceiptApi.deliver(vars.lrId, vars.values);
+      await uploadFiles(DELIVERY_POD_ENTITY, delivery.id, vars.podFiles);
+      return delivery;
+    },
+    onSuccess: () => {
+      toast.success("LR marked delivered");
+      setDeliverLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const updateDelivery = useMutation({
+    mutationFn: (vars: { lrId: string; values: DeliverLRFormInput }) =>
+      lorryReceiptApi.updateDelivery(vars.lrId, vars.values),
+    onSuccess: () => {
+      toast.success("Delivery updated");
+      setEditDeliveryLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const undoDelivery = useMutation({
+    mutationFn: (lrId: string) => lorryReceiptApi.undoDelivery(lrId),
+    onSuccess: () => {
+      toast.success("Delivery undone");
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const acknowledge = useMutation({
+    mutationFn: async (vars: {
+      lrId: string;
+      values: AcknowledgeLRFormInput;
+      scanFiles: File[];
+    }) => {
+      const ack = await lorryReceiptApi.acknowledge(vars.lrId, vars.values);
+      await uploadFiles(ACK_SCAN_ENTITY, ack.id, vars.scanFiles);
+      return ack;
+    },
+    onSuccess: () => {
+      toast.success("POD acknowledged");
+      setAckLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const updateAcknowledgement = useMutation({
+    mutationFn: (vars: { lrId: string; values: AcknowledgeLRFormInput }) =>
+      lorryReceiptApi.updateAcknowledgement(vars.lrId, vars.values),
+    onSuccess: () => {
+      toast.success("Acknowledgement updated");
+      setEditAckLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const undoAcknowledgement = useMutation({
+    mutationFn: (lrId: string) => lorryReceiptApi.undoAcknowledgement(lrId),
+    onSuccess: () => {
+      toast.success("Acknowledgement undone");
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const deliverAll = useMutation({
+    mutationFn: (values: DeliverGroupFormInput) =>
+      lrGroupApi.deliverAll(actionGroupId, values),
+    onSuccess: () => {
+      toast.success("LRs marked delivered");
+      setBulkDeliverOpen(false);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -215,6 +361,9 @@ const finaliseTitle = hasNoLrs
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
 
+  const pendingLrs = g.lorryReceipts.filter((lr) => lr.status === "FINALISED");
+  const heldAtHub = Boolean(g.hubId) && !g.secondaryTripId;
+
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
       {/* Header */}
@@ -255,9 +404,26 @@ const finaliseTitle = hasNoLrs
   Finalise group
 </Button>
           )}
-          {g.status === "FINALISED" && canApprove && (
+          {g.status === "FINALISED" && canDeliver && pendingLrs.length > 0 && (
+            <Button onClick={() => setBulkDeliverOpen(true)}>
+              Deliver all
+            </Button>
+          )}
+          {g.status === "FINALISED" &&
+            canApprove &&
+            !g.hubId &&
+            !g.secondaryTripId && (
+              <Button
+                variant="outline"
+                disabled={holdAtHub.isPending}
+                onClick={() => holdAtHub.mutate()}
+              >
+                {holdAtHub.isPending ? "Holding…" : "Hold at hub"}
+              </Button>
+            )}
+          {g.status === "FINALISED" && canApprove && heldAtHub && (
             <Button variant="outline" onClick={() => setSplitOpen(true)}>
-              Split at hub
+              Dispatch from hub
             </Button>
           )}
           {g.status === "DRAFT" && canCancel && (
@@ -278,6 +444,19 @@ const finaliseTitle = hasNoLrs
     <p>{finaliseBlockMessage}</p>
   </div>
 )}
+
+      {heldAtHub && (
+        <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          <IconTruck size={17} className="mt-0.5 shrink-0" />
+          <p>
+            Lying at hub {g.hub?.name ? `(${g.hub.name})` : ""}
+            {g.hubArrivalAt
+              ? ` since ${new Date(g.hubArrivalAt).toLocaleDateString()} — ${daysSince(g.hubArrivalAt)} day(s)`
+              : ""}
+            . Awaiting leg-2 dispatch to {g.destinationBranch?.name ?? "destination"}.
+          </p>
+        </div>
+      )}
 
       {/* Summary */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -342,7 +521,10 @@ const finaliseTitle = hasNoLrs
           <div key={lr.id} className="rounded-lg border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold">{lr.lrNumber}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{lr.lrNumber}</p>
+                  {lr.status !== g.status && <LRStatusBadge status={lr.status} />}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {lr.loadingLocation?.name ?? "—"} →{" "}
                   {lr.unloadingLocation?.name ?? "—"}
@@ -414,6 +596,18 @@ const finaliseTitle = hasNoLrs
               ewayBill={lr.ewayBill}
               canAdd={canUpdate && g.status !== "CANCELLED"}
             />
+
+            <DeliverySection
+              lr={lr}
+              canDeliver={canDeliver}
+              canAcknowledge={canAcknowledge}
+              onDeliver={() => setDeliverLr(lr)}
+              onEditDelivery={() => setEditDeliveryLr(lr)}
+              onUndoDelivery={() => undoDelivery.mutate(lr.id)}
+              onAcknowledge={() => setAckLr(lr)}
+              onEditAcknowledgement={() => setEditAckLr(lr)}
+              onUndoAcknowledgement={() => undoAcknowledgement.mutate(lr.id)}
+            />
           </div>
         ))}
       </div>
@@ -446,8 +640,68 @@ const finaliseTitle = hasNoLrs
         lrNumber={g.groupNumber}
         primaryTripId={g.primaryTripId}
         consignorId={g.consignorId}
-        isPending={split.isPending}
-        onConfirm={(secondaryTripId) => split.mutate(secondaryTripId)}
+        isPending={dispatchFromHub.isPending}
+        onConfirm={(secondaryTripId) => dispatchFromHub.mutate(secondaryTripId)}
+      />
+
+      <DeliverDialog
+        open={Boolean(deliverLr)}
+        onOpenChange={(o) => !o && setDeliverLr(null)}
+        lrNumber={deliverLr?.lrNumber ?? ""}
+        mode="deliver"
+        isPending={deliver.isPending}
+        onConfirm={(values, podFiles) =>
+          deliverLr &&
+          deliver.mutate({ lrId: deliverLr.id, values, podFiles })
+        }
+      />
+
+      <DeliverDialog
+        open={Boolean(editDeliveryLr)}
+        onOpenChange={(o) => !o && setEditDeliveryLr(null)}
+        lrNumber={editDeliveryLr?.lrNumber ?? ""}
+        mode="edit"
+        initial={editDeliveryLr?.delivery ?? null}
+        isPending={updateDelivery.isPending}
+        onConfirm={(values) =>
+          editDeliveryLr &&
+          updateDelivery.mutate({ lrId: editDeliveryLr.id, values })
+        }
+      />
+
+      <BulkDeliverDialog
+        open={bulkDeliverOpen}
+        onOpenChange={setBulkDeliverOpen}
+        groupNumber={g.groupNumber}
+        lrs={pendingLrs}
+        isPending={deliverAll.isPending}
+        onConfirm={(values) => deliverAll.mutate(values)}
+      />
+
+      <AcknowledgeDialog
+        open={Boolean(ackLr)}
+        onOpenChange={(o) => !o && setAckLr(null)}
+        lrNumber={ackLr?.lrNumber ?? ""}
+        goods={ackLr?.goods ?? []}
+        mode="acknowledge"
+        isPending={acknowledge.isPending}
+        onConfirm={(values, scanFiles) =>
+          ackLr && acknowledge.mutate({ lrId: ackLr.id, values, scanFiles })
+        }
+      />
+
+      <AcknowledgeDialog
+        open={Boolean(editAckLr)}
+        onOpenChange={(o) => !o && setEditAckLr(null)}
+        lrNumber={editAckLr?.lrNumber ?? ""}
+        goods={editAckLr?.goods ?? []}
+        mode="edit"
+        initial={editAckLr?.acknowledgement ?? null}
+        isPending={updateAcknowledgement.isPending}
+        onConfirm={(values) =>
+          editAckLr &&
+          updateAcknowledgement.mutate({ lrId: editAckLr.id, values })
+        }
       />
 
       <ReasonDialog
