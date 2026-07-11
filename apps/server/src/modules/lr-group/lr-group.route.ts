@@ -6,6 +6,7 @@ import {
   splitGroupAtHubSchema,
   cancelGroupSchema,
   lrGroupLineSchema,
+  deliverGroupSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -28,6 +29,7 @@ import {
   generateLRNumbers,
   resolveHubBranchId,
 } from "../lorry-receipt/lorry-receipt.service.js";
+import { publishLRDelivered } from "../lorry-receipt/lr-delivery.service.js";
 import {
   generateGroupNumber,
   assertGroupSlotAvailable,
@@ -837,6 +839,111 @@ router.post(
     return sendOk(res, updated);
   },
 );
+/* ------------------------------------------------------------------ */
+/* Bulk deliver — one dialog per truck when everything unloads at once  */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/:id/deliver-all",
+  can(PERMS.LORRY_RECEIPT.DELIVER),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.lRGroup.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        groupNumber: true,
+        status: true,
+        originBranchId: true,
+        destinationBranchId: true,
+        lorryReceipts: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            lrNumber: true,
+            status: true,
+            createdById: true,
+          },
+        },
+      },
+    });
+    if (!existing) throw new NotFoundError("Lorry receipt group not found");
+    if (existing.status !== "FINALISED") {
+      throw new BadRequestError(
+        "Only a finalised group can be marked delivered",
+      );
+    }
+    assertBranchAccess(req, existing.destinationBranchId);
+
+    const parsed = deliverGroupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const input = parsed.data;
+    const me = actorId(req);
+
+    const lrById = new Map(existing.lorryReceipts.map((lr) => [lr.id, lr]));
+    for (const line of input.lrs) {
+      const lr = lrById.get(line.lrId);
+      if (!lr) {
+        throw new BadRequestError(
+          "Every lorry receipt must belong to this group",
+        );
+      }
+      if (lr.status !== "FINALISED") {
+        throw new BadRequestError(
+          `LR ${lr.lrNumber} is ${lr.status.toLowerCase()} — only FINALISED LRs can be delivered`,
+        );
+      }
+    }
+
+    await db.$transaction(async (tx) => {
+      for (const line of input.lrs) {
+        await tx.lRDelivery.create({
+          data: {
+            lrId: line.lrId,
+            deliveredAt: input.deliveredAt,
+            reportedAt: input.reportedAt ?? null,
+            receiverName: input.receiverName ?? null,
+            receiverPhone: input.receiverPhone ?? null,
+            unloadingCharges:
+              line.unloadingCharges ?? input.unloadingCharges ?? null,
+            remark: line.remark ?? input.remark ?? null,
+            createdById: me,
+          },
+          select: { id: true },
+        });
+      }
+      await tx.lorryReceipt.updateMany({
+        where: { id: { in: input.lrs.map((line) => line.lrId) } },
+        data: { status: "DELIVERED", updatedById: me },
+      });
+    });
+
+    for (const line of input.lrs) {
+      const lr = lrById.get(line.lrId)!;
+      await publishLRDelivered(
+        {
+          id: lr.id,
+          lrNumber: lr.lrNumber,
+          createdById: lr.createdById,
+          group: {
+            id: existing.id,
+            originBranchId: existing.originBranchId,
+            destinationBranchId: existing.destinationBranchId,
+          },
+        },
+        me,
+      );
+    }
+
+    const updated = await db.lRGroup.findUniqueOrThrow({
+      where: { id },
+      include: groupDetailInclude,
+    });
+    return sendOk(res, updated);
+  },
+);
+
 /* ------------------------------------------------------------------ */
 /* Add an LR (consignment line) to a DRAFT group                        */
 /* ------------------------------------------------------------------ */

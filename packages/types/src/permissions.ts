@@ -52,7 +52,9 @@ type LorryReceiptPermissionKey =
   | `lorry_receipt.${CrudAction}`
   | "lorry_receipt.approve"
   | "lorry_receipt.cancel"
-  | "lorry_receipt.generate_invoice";
+  | "lorry_receipt.generate_invoice"
+  | "lorry_receipt.deliver"
+  | "lorry_receipt.acknowledge";
 
 type TripPermissionKey =
   | `trip.${CrudAction}`

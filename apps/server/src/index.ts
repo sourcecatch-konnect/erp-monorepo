@@ -35,6 +35,7 @@ import tripExpenseRoute from "./modules/trip-expense/trip-expense.route.js";
 import driverAdvanceRoute from "./modules/trip-expense/driver-advance.route.js";
 import logSlipRoute from "./modules/log-slip/log-slip.route.js";
 import lorryReceiptRoute from "./modules/lorry-receipt/lorry-receipt.route.js";
+import lrDeliveryRoute from "./modules/lorry-receipt/lr-delivery.route.js";
 import lrGroupRoute from "./modules/lr-group/lr-group.route.js";
 import CompanyRoute from "./modules/company/company.route.js";
 import BranchRoute from "./modules/branch/branch.route.js";
@@ -94,6 +95,9 @@ app.use("/trip-expenses", tripExpenseRoute);
 app.use("/driver-advances", driverAdvanceRoute);
 app.use("/log-slips", logSlipRoute);
 app.use("/tracking", trackingRoute);
+// Delivery/ack router first: it owns literal subpaths (e.g. /worklists/...)
+// that the main router's GET /:id would otherwise swallow.
+app.use("/lorry-receipts", lrDeliveryRoute);
 app.use("/lorry-receipts", lorryReceiptRoute);
 app.use("/lr-groups", lrGroupRoute);
 app.use("/drivers", driverRoute);
