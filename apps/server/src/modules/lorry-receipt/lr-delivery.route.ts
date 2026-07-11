@@ -23,6 +23,7 @@ import {
   ackInclude,
   assertFinalTripNotClosed,
   publishLRDelivered,
+  syncGroupDeliveryStatus,
 } from "./lr-delivery.service.js";
 
 /**
@@ -286,6 +287,7 @@ router.post(
         },
         select: { id: true },
       });
+      await syncGroupDeliveryStatus(tx, lr.group.id, me);
     });
 
     await publishLRDelivered(lr, me);
@@ -317,7 +319,11 @@ router.patch(
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
     const input = parsed.data;
-    if (input.reportedAt && input.deliveredAt && input.reportedAt > input.deliveredAt) {
+    if (
+      input.reportedAt &&
+      input.deliveredAt &&
+      input.reportedAt > input.deliveredAt
+    ) {
       throw new BadRequestError(
         "Reporting time cannot be after the delivery time",
       );
@@ -386,6 +392,7 @@ router.post(
         },
         select: { id: true },
       });
+      await syncGroupDeliveryStatus(tx, lr.group.id, me);
     });
 
     return sendOk(res, { id, status: "FINALISED" });

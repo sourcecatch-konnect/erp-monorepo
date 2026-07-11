@@ -1940,6 +1940,7 @@ enum LRStatus {
 enum LRGroupStatus {
   DRAFT
   FINALISED
+  DELIVERED
   CANCELLED
 }
 

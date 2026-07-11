@@ -19,7 +19,7 @@ import type {
   EwayBill,
 } from "../lorry-receipt/lorry-receipt.type.js";
 
-export type LRGroupStatus = "DRAFT" | "FINALISED" | "CANCELLED";
+export type LRGroupStatus = "DRAFT" | "FINALISED" | "DELIVERED" | "CANCELLED";
 
 export type CreateLRGroupBody = z.input<typeof createLRGroupSchema>;
 export type CreateLRGroupFormInput = z.input<typeof createLRGroupSchema>;

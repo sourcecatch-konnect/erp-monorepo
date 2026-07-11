@@ -17,6 +17,7 @@ import {
   IconPencil,
   IconTrash,
   IconAlertTriangle,
+  IconCircleCheck,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
@@ -70,7 +71,9 @@ export default function LRDetail({ id }: { id: string }) {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [editGroupOpen, setEditGroupOpen] = React.useState(false);
   const [addLineOpen, setAddLineOpen] = React.useState(false);
-  const [editLine, setEditLine] = React.useState<LRGroup["lorryReceipts"][number] | null>(null);
+  const [editLine, setEditLine] = React.useState<
+    LRGroup["lorryReceipts"][number] | null
+  >(null);
   const [bulkDeliverOpen, setBulkDeliverOpen] = React.useState(false);
   const [deliverLr, setDeliverLr] = React.useState<LorryReceipt | null>(null);
   const [editDeliveryLr, setEditDeliveryLr] =
@@ -93,7 +96,9 @@ export default function LRDetail({ id }: { id: string }) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(id) });
     if (actionGroupId !== id) {
-      queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(actionGroupId) });
+      queryClient.invalidateQueries({
+        queryKey: lrGroupKeys.detail(actionGroupId),
+      });
     }
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
   };
@@ -268,13 +273,13 @@ export default function LRDetail({ id }: { id: string }) {
 
   const addLine = useMutation({
     mutationFn: (payload: LinePayload) =>
-    lrGroupApi.addLorryReceipt(actionGroupId, {
-  loadingLocationId: payload.loadingLocationId,
-  unloadingLocationId: payload.unloadingLocationId,
-  totalWeight: payload.totalWeight,
-  totalWeightUnit: payload.totalWeightUnit,
-  goods: payload.goods,
-}),
+      lrGroupApi.addLorryReceipt(actionGroupId, {
+        loadingLocationId: payload.loadingLocationId,
+        unloadingLocationId: payload.unloadingLocationId,
+        totalWeight: payload.totalWeight,
+        totalWeightUnit: payload.totalWeightUnit,
+        goods: payload.goods,
+      }),
     onSuccess: () => {
       toast.success("LR added");
       setAddLineOpen(false);
@@ -285,15 +290,15 @@ export default function LRDetail({ id }: { id: string }) {
 
   const updateLine = useMutation({
     mutationFn: (vars: { lrId: string; payload: LinePayload }) =>
-     lorryReceiptApi.update(vars.lrId, {
-  loadingLocationId: vars.payload.loadingLocationId,
-  unloadingLocationId: vars.payload.unloadingLocationId,
-  totalWeight: vars.payload.totalWeight,
-  totalWeightUnit: vars.payload.totalWeightUnit,
-  goods: vars.payload.goods,
-  invoiceNumber: vars.payload.invoiceNumber,
-  invoiceAmount: vars.payload.invoiceAmount,
-}),
+      lorryReceiptApi.update(vars.lrId, {
+        loadingLocationId: vars.payload.loadingLocationId,
+        unloadingLocationId: vars.payload.unloadingLocationId,
+        totalWeight: vars.payload.totalWeight,
+        totalWeightUnit: vars.payload.totalWeightUnit,
+        goods: vars.payload.goods,
+        invoiceNumber: vars.payload.invoiceNumber,
+        invoiceAmount: vars.payload.invoiceAmount,
+      }),
     onSuccess: () => {
       toast.success("LR updated");
       setEditLine(null);
@@ -337,33 +342,43 @@ export default function LRDetail({ id }: { id: string }) {
   }
 
   const g = group.data;
-const hasNoLrs = g.lorryReceipts.length === 0;
+  const hasNoLrs = g.lorryReceipts.length === 0;
+  const hasDeliveredLr = g.lorryReceipts.some((lr) => Boolean(lr.delivery));
 
-const hasIncompleteLr = g.lorryReceipts.some(
-  (lr) =>
-    !lr.loadingLocationId ||
-    !lr.unloadingLocationId ||
-    lr.goods.length === 0 ||
-    lr.totalWeight == null ||
-    !lr.unit,
-);
-const cannotFinalise = hasNoLrs || hasIncompleteLr;
+  const hasIncompleteLr = g.lorryReceipts.some(
+    (lr) =>
+      !lr.loadingLocationId ||
+      !lr.unloadingLocationId ||
+      lr.goods.length === 0 ||
+      lr.totalWeight == null ||
+      !lr.unit,
+  );
+  const cannotFinalise = hasNoLrs || hasIncompleteLr;
 
-const finaliseBlockMessage = hasNoLrs
-  ? "Add at least one consignment LR before finalising this group."
-  : "One or more LRs are incomplete. Add loading point, unloading point, goods, total weight, and unit before finalising.";
+  const finaliseBlockMessage = hasNoLrs
+    ? "Add at least one consignment LR before finalising this group."
+    : "One or more LRs are incomplete. Add loading point, unloading point, goods, total weight, and unit before finalising.";
 
-const finaliseTitle = hasNoLrs
-  ? "Add at least one consignment LR before finalising"
-  : hasIncompleteLr
-    ? "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising"
-    : undefined;
+  const finaliseTitle = hasNoLrs
+    ? "Add at least one consignment LR before finalising"
+    : hasIncompleteLr
+      ? "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising"
+      : undefined;
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
 
   const pendingLrs = g.lorryReceipts.filter((lr) => lr.status === "FINALISED");
-  const heldAtHub = Boolean(g.hubId) && !g.secondaryTripId;
+  const heldAtHub =
+    g.status === "FINALISED" &&
+    Boolean(g.hubId) &&
+    !g.secondaryTripId &&
+    !hasDeliveredLr;
+  const canHoldAtHub =
+    g.status === "FINALISED" &&
+    !hasDeliveredLr &&
+    !g.hubId &&
+    !g.secondaryTripId;
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
@@ -397,31 +412,28 @@ const finaliseTitle = hasNoLrs
             </Button>
           )}
           {g.status === "DRAFT" && canApprove && (
-           <Button
-  onClick={() => setFinaliseOpen(true)}
-  disabled={cannotFinalise}
-  title={finaliseTitle}
->
-  Finalise group
-</Button>
+            <Button
+              onClick={() => setFinaliseOpen(true)}
+              disabled={cannotFinalise}
+              title={finaliseTitle}
+            >
+              Finalise group
+            </Button>
           )}
           {g.status === "FINALISED" && canDeliver && pendingLrs.length > 0 && (
             <Button onClick={() => setBulkDeliverOpen(true)}>
               Deliver all
             </Button>
           )}
-          {g.status === "FINALISED" &&
-            canApprove &&
-            !g.hubId &&
-            !g.secondaryTripId && (
-              <Button
-                variant="outline"
-                disabled={holdAtHub.isPending}
-                onClick={() => holdAtHub.mutate()}
-              >
-                {holdAtHub.isPending ? "Holding…" : "Hold at hub"}
-              </Button>
-            )}
+          {g.status === "FINALISED" && canApprove && canHoldAtHub && (
+            <Button
+              variant="outline"
+              disabled={holdAtHub.isPending}
+              onClick={() => holdAtHub.mutate()}
+            >
+              {holdAtHub.isPending ? "Holding…" : "Hold at hub"}
+            </Button>
+          )}
           {g.status === "FINALISED" && canApprove && heldAtHub && (
             <Button variant="outline" onClick={() => setSplitOpen(true)}>
               Dispatch from hub
@@ -440,11 +452,23 @@ const finaliseTitle = hasNoLrs
       </div>
 
       {cannotFinalise && (
-  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-    <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
-    <p>{finaliseBlockMessage}</p>
-  </div>
-)}
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
+          <p>{finaliseBlockMessage}</p>
+        </div>
+      )}
+
+      {g.status === "DELIVERED" && (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <IconCircleCheck size={17} className="mt-0.5 shrink-0" />
+          <p>
+            All {g.lorryReceipts.length} LR
+            {g.lorryReceipts.length === 1 ? " is" : "s are"} delivered. This
+            group is complete and can no longer be held at or dispatched from a
+            hub.
+          </p>
+        </div>
+      )}
 
       {heldAtHub && (
         <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
@@ -454,7 +478,8 @@ const finaliseTitle = hasNoLrs
             {g.hubArrivalAt
               ? ` since ${new Date(g.hubArrivalAt).toLocaleDateString()} — ${daysSince(g.hubArrivalAt)} day(s)`
               : ""}
-            . Awaiting leg-2 dispatch to {g.destinationBranch?.name ?? "destination"}.
+            . Awaiting leg-2 dispatch to{" "}
+            {g.destinationBranch?.name ?? "destination"}.
           </p>
         </div>
       )}
@@ -513,7 +538,11 @@ const finaliseTitle = hasNoLrs
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Lorry receipts</p>
           {g.status === "DRAFT" && canUpdate && (
-            <Button size="sm" variant="outline" onClick={() => setAddLineOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAddLineOpen(true)}
+            >
               <IconPlus size={14} className="mr-1" /> Add consignment LR
             </Button>
           )}
@@ -524,7 +553,9 @@ const finaliseTitle = hasNoLrs
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold">{lr.lrNumber}</p>
-                  {lr.status !== g.status && <LRStatusBadge status={lr.status} />}
+                  {lr.status !== g.status && (
+                    <LRStatusBadge status={lr.status} />
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {lr.loadingLocation?.name ?? "—"} →{" "}
@@ -553,7 +584,9 @@ const finaliseTitle = hasNoLrs
                       variant="ghost"
                       aria-label="Remove LR"
                       className="text-red-600 hover:bg-red-50"
-                      disabled={removeLine.isPending || g.lorryReceipts.length <= 1}
+                      disabled={
+                        removeLine.isPending || g.lorryReceipts.length <= 1
+                      }
                       onClick={() => removeLine.mutate(lr.id)}
                     >
                       <IconTrash size={15} />
@@ -578,10 +611,10 @@ const finaliseTitle = hasNoLrs
               </div>
             )}
             {(!lr.loadingLocationId ||
-  !lr.unloadingLocationId ||
-  lr.goods.length === 0 ||
-  lr.totalWeight == null ||
-  !lr.unit) && (
+              !lr.unloadingLocationId ||
+              lr.goods.length === 0 ||
+              lr.totalWeight == null ||
+              !lr.unit) && (
               <div className="mb-3 flex w-fit flex-wrap items-center gap-1 rounded-sm bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                 <IconAlertTriangle size={13} />
                 Complete before finalise:
@@ -654,8 +687,7 @@ const finaliseTitle = hasNoLrs
         mode="deliver"
         isPending={deliver.isPending}
         onConfirm={(values, podFiles) =>
-          deliverLr &&
-          deliver.mutate({ lrId: deliverLr.id, values, podFiles })
+          deliverLr && deliver.mutate({ lrId: deliverLr.id, values, podFiles })
         }
       />
 
@@ -748,12 +780,15 @@ const finaliseTitle = hasNoLrs
                 loadingLocationId: editLine.loadingLocationId ?? undefined,
                 unloadingLocationId: editLine.unloadingLocationId ?? undefined,
                 totalWeight:
-  editLine.totalWeight != null ? String(editLine.totalWeight) : "",
-totalWeightUnit: editLine.unit ?? "MT",
-goods: editLine.goods.map((goods) => ({
-  name: goods.name,
-  quantity: goods.quantity != null ? String(goods.quantity) : "",
-})),
+                  editLine.totalWeight != null
+                    ? String(editLine.totalWeight)
+                    : "",
+                totalWeightUnit: editLine.unit ?? "MT",
+                goods: editLine.goods.map((goods) => ({
+                  name: goods.name,
+                  quantity:
+                    goods.quantity != null ? String(goods.quantity) : "",
+                })),
                 invoiceNumber: editLine.invoiceNumber ?? "",
                 invoiceAmount:
                   editLine.invoiceAmount != null

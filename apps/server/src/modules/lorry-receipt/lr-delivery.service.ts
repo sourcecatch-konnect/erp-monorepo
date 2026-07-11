@@ -38,6 +38,40 @@ export const finalTripIdOf = (group: GroupLegs): string | null =>
   group.secondaryTripId ?? group.primaryTripId;
 
 /**
+ * A group's delivery state is derived from whether every live LR has a
+ * delivery record. Acking an LR does not change this; undoing delivery does.
+ */
+export const syncGroupDeliveryStatus = async (
+  tx: Prisma.TransactionClient,
+  groupId: string,
+  userId: string,
+): Promise<"FINALISED" | "DELIVERED"> => {
+  const pendingDeliveries = await tx.lorryReceipt.count({
+    where: {
+      groupId,
+      deletedAt: null,
+      status: { not: "CANCELLED" },
+      delivery: null,
+    },
+  });
+
+  const nextStatus: "FINALISED" | "DELIVERED" =
+    pendingDeliveries === 0 ? "DELIVERED" : "FINALISED";
+
+  await tx.lRGroup.update({
+    where: { id: groupId },
+    data: {
+      status: nextStatus,
+      updatedById: userId,
+      version: { increment: 1 },
+    },
+    select: { id: true },
+  });
+
+  return nextStatus;
+};
+
+/**
  * Trip-close delivery gate ("Way 1" in the plan). Returns the LR numbers that
  * block closing `tripId`:
  *  - groups whose FINAL trip is this trip, with undelivered LRs, block it;
