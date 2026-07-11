@@ -4,6 +4,27 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  restrictToParentElement,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
+import {
   Column,
   ColumnDef,
   VisibilityState,
@@ -32,12 +53,17 @@ import {
 } from "@skerp/ui/components/select";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@skerp/ui/components/dropdown";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@skerp/ui/components/popver";
+import { Checkbox } from "@skerp/ui/components/checkbox";
 import {
   Pagination,
   PaginationContent,
@@ -49,17 +75,25 @@ import {
   IconAlertTriangle,
   IconArrowsSort,
   IconBan,
+  IconBuilding,
+  IconCalendar,
   IconCircleCheck,
   IconColumns3,
+  IconCurrencyRupee,
   IconDatabaseOff,
   IconDotsVertical,
   IconDownload,
   IconEdit,
+  IconGripVertical,
+  IconMapPin,
   IconPlayerPlay,
   IconPlus,
+  IconRoute,
   IconSortAscending,
   IconSortDescending,
+  IconTag,
   IconTrash,
+  IconTruck,
   IconTruckDelivery,
 } from "@tabler/icons-react";
 
@@ -117,6 +151,8 @@ type Props = TripRowActions & {
   onColumnVisibilityChange: React.Dispatch<
     React.SetStateAction<VisibilityState>
   >;
+  columnOrder: string[];
+  onColumnOrderChange: (order: string[]) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
   canDownloadPdf: boolean;
@@ -126,16 +162,95 @@ type Props = TripRowActions & {
 
 const DELETE_ALLOWED_STATUSES = ["Planned", "Cancelled"] as const;
 
-/** Menu labels for the column-visibility picker. */
-const COLUMN_LABELS: Record<string, string> = {
-  journey: "Journey",
-  vehicle: "Vehicle / Driver",
-  route: "Route",
-  client: "Client",
-  type: "Type",
-  freight: "Freight",
-  date: "Date",
+/**
+ * The reorderable middle columns, in default order. Trip stays the anchor
+ * first column and Status/Actions stay pinned right — neither participates.
+ */
+export const DEFAULT_TRIP_COLUMN_ORDER = [
+  "journey",
+  "vehicle",
+  "route",
+  "client",
+  "type",
+  "freight",
+  "date",
+] as const;
+
+/** Label + icon per reorderable column for the picker panel. */
+const COLUMN_META: Record<
+  string,
+  { label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
+> = {
+  journey: { label: "Journey", icon: IconRoute },
+  vehicle: { label: "Vehicle / Driver", icon: IconTruck },
+  route: { label: "Route", icon: IconMapPin },
+  client: { label: "Client", icon: IconBuilding },
+  type: { label: "Type", icon: IconTag },
+  freight: { label: "Freight", icon: IconCurrencyRupee },
+  date: { label: "Date", icon: IconCalendar },
 };
+
+/** One draggable row of the column picker: grab handle, checkbox, icon, label. */
+function SortableColumnRow({
+  id,
+  label,
+  icon: Icon,
+  checked,
+  onCheckedChange,
+}: {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  checked: boolean;
+  onCheckedChange: (visible: boolean) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-center gap-2 rounded-sm px-1 py-1",
+        isDragging && "relative z-10 bg-muted",
+      )}
+    >
+      <button
+        type="button"
+        aria-label={`Reorder ${label} column`}
+        {...attributes}
+        {...listeners}
+        className="cursor-grab touch-none text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+      >
+        <IconGripVertical size={14} />
+      </button>
+      <Checkbox
+        id={`trip-col-${id}`}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+      />
+      <label
+        htmlFor={`trip-col-${id}`}
+        className="flex flex-1 cursor-pointer items-center gap-1.5 text-sm"
+      >
+        <Icon size={14} className="text-muted-foreground" />
+        {label}
+      </label>
+    </div>
+  );
+}
 
 /**
  * Right-pinned cells sit over scrolled content, so they need an opaque
@@ -227,6 +342,8 @@ export default function TripTable(props: Props) {
     onSortChange,
     columnVisibility,
     onColumnVisibilityChange,
+    columnOrder,
+    onColumnOrderChange,
     counts,
     isLoading,
     onStart,
@@ -563,6 +680,12 @@ export default function TripTable(props: Props) {
     ],
   );
 
+  // Pinned columns keep their slots regardless of the user's middle order.
+  const tableColumnOrder = React.useMemo(
+    () => ["trip", ...columnOrder, "status", "actions"],
+    [columnOrder],
+  );
+
   const table = useReactTable({
     data,
     columns,
@@ -571,8 +694,30 @@ export default function TripTable(props: Props) {
     state: {
       columnPinning: { right: ["status", "actions"] },
       columnVisibility,
+      columnOrder: tableColumnOrder,
     },
   });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleColumnDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = columnOrder.indexOf(String(active.id));
+    const newIndex = columnOrder.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    onColumnOrderChange(arrayMove(columnOrder, oldIndex, newIndex));
+  };
+
+  const resetColumns = () => {
+    onColumnOrderChange([...DEFAULT_TRIP_COLUMN_ORDER]);
+    onColumnVisibilityChange({});
+  };
 
   const visibleColumnCount = table.getVisibleLeafColumns().length;
   const pageCount = Math.max(1, Math.ceil(total / size));
@@ -654,30 +799,58 @@ export default function TripTable(props: Props) {
           </SelectContent>
         </Select>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <Popover>
+          <PopoverTrigger asChild>
             <Button variant="outline" className="ml-auto h-9">
               <IconColumns3 size={16} className="mr-1" /> Columns
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            {table
-              .getAllLeafColumns()
-              .filter((col) => col.getCanHide())
-              .map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  checked={col.getIsVisible()}
-                  onCheckedChange={(value) =>
-                    col.toggleVisibility(Boolean(value))
-                  }
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {COLUMN_LABELS[col.id] ?? col.id}
-                </DropdownMenuCheckboxItem>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-60 p-2">
+            <div className="mb-1 flex items-center justify-between px-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                Show & order columns
+              </span>
+              <button
+                type="button"
+                onClick={resetColumns}
+                className="cursor-pointer text-xs text-primary transition-colors hover:underline"
+              >
+                Reset
+              </button>
+            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+              onDragEnd={handleColumnDragEnd}
+            >
+              <SortableContext
+                items={columnOrder}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-0.5">
+                  {columnOrder.map((id) => {
+                    const meta = COLUMN_META[id];
+                    if (!meta) return null;
+                    const col = table.getColumn(id);
+                    return (
+                      <SortableColumnRow
+                        key={id}
+                        id={id}
+                        label={meta.label}
+                        icon={meta.icon}
+                        checked={col?.getIsVisible() ?? true}
+                        onCheckedChange={(visible) =>
+                          col?.toggleVisibility(visible)
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <Table className="bg-card">
