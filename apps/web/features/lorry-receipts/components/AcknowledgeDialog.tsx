@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FormProvider, useForm } from "react-hook-form";
+import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { acknowledgeLRSchema } from "@skerp/validators/lorry-receipt/delivery";
 import type {
@@ -11,6 +11,7 @@ import type {
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Textarea } from "@skerp/ui/components/textarea";
 import {
   Sheet,
@@ -23,6 +24,7 @@ import {
 import { IconPaperclip, IconX } from "@tabler/icons-react";
 
 import { MoneyField, FieldLabel } from "./moneyField";
+import { toValidDate } from "@/lib/date";
 
 type Props = {
   open: boolean;
@@ -141,10 +143,17 @@ export default function AcknowledgeDialog({
             <section className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
               <div>
                 <FieldLabel required>POD received at</FieldLabel>
-                <Input
-                  type="datetime-local"
-                  {...form.register("receivedAt")}
-                  className="h-9"
+                <Controller
+                  name="receivedAt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      selected={toValidDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="Select POD receipt date and time"
+                      clearable={false}
+                    />
+                  )}
                 />
                 {errors.receivedAt?.message ? (
                   <p className="mt-1 text-xs text-red-600">

@@ -51,7 +51,7 @@ import LRPreviewPanel, {
   type LRPreviewPanelData,
 } from "./components/grnPreview";
 import { FieldLabel, MoneyField } from "../lorry-receipts/components/moneyField";
-import { DatePicker } from "@skerp/ui/components/datepicker";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import {
   Select,
   SelectContent,
@@ -963,12 +963,11 @@ const editPreview = React.useMemo<LRPreviewPanelData | undefined>(() => {
   render={({ field }) => (
     <div className="w-full md:col-span-2">
       <FieldLabel>In Date </FieldLabel>
-      <DatePicker
+      <DateTimePicker
   
         placeholder="Select in date"
         selected={toDateValue(field.value)}
         onSelect={(date) => field.onChange(date)}
-        withTime
       />
     </div>
   )}
@@ -985,12 +984,11 @@ const editPreview = React.useMemo<LRPreviewPanelData | undefined>(() => {
   render={({ field }) => (
      <div className="w-full md:col-span-2">
       <FieldLabel>Out Date </FieldLabel>
-    <DatePicker
+    <DateTimePicker
 
       placeholder="Select out date"
       selected={toDateValue(field.value)}
       onSelect={(date) => field.onChange(date)}
-      withTime
     />
     </div>
   )}

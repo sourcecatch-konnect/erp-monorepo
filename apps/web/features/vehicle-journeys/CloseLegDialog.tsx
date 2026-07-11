@@ -15,9 +15,11 @@ import {
 } from "@skerp/ui/components/dialog";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Textarea } from "@skerp/ui/components/textarea";
 
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
+import { toLocalDateTimeValue, toValidDate } from "@/lib/date";
 import { journeyApi } from "./journey.service";
 import { journeyKeys } from "./journey.keys";
 
@@ -77,9 +79,7 @@ export default function CloseLegDialog({
         closeReason: remarks || undefined,
       });
       toast.success(
-        isReturnToBase
-          ? "Leg closed — journey returned to base"
-          : "Leg closed",
+        isReturnToBase ? "Leg closed — journey returned to base" : "Leg closed",
       );
       queryClient.invalidateQueries({ queryKey: journeyKeys.all });
       onOpenChange(false);
@@ -138,10 +138,12 @@ export default function CloseLegDialog({
             <label className="text-xs font-medium text-muted-foreground">
               Arrival / end date-time
             </label>
-            <Input
-              type="datetime-local"
-              value={endDateTime}
-              onChange={(e) => setEndDateTime(e.target.value)}
+            <DateTimePicker
+              selected={toValidDate(endDateTime)}
+              onSelect={(date) =>
+                setEndDateTime(date ? toLocalDateTimeValue(date) : "")
+              }
+              placeholder="Select arrival date and time"
             />
           </div>
 
@@ -149,10 +151,12 @@ export default function CloseLegDialog({
             <label className="text-xs font-medium text-muted-foreground">
               Unloading completed at
             </label>
-            <Input
-              type="datetime-local"
-              value={unloadingAt}
-              onChange={(e) => setUnloadingAt(e.target.value)}
+            <DateTimePicker
+              selected={toValidDate(unloadingAt)}
+              onSelect={(date) =>
+                setUnloadingAt(date ? toLocalDateTimeValue(date) : "")
+              }
+              placeholder="Select unloading completion date and time"
             />
           </div>
 
@@ -173,7 +177,10 @@ export default function CloseLegDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={submitting || (touched && invalid)} onClick={onConfirm}>
+          <Button
+            disabled={submitting || (touched && invalid)}
+            onClick={onConfirm}
+          >
             {submitting
               ? "Closing…"
               : isReturnToBase

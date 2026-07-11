@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useForm, FormProvider } from "react-hook-form";
+import { Controller, useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -16,7 +16,7 @@ import type {
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import {
   Table,
   TableBody,
@@ -38,6 +38,7 @@ import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import { formatPaise } from "@/lib/money";
+import { toValidDate } from "@/lib/date";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import IconTextField from "../masters/_shared/fields/IconTextField";
 import TextAreaField from "../masters/_shared/fields/TextAreaField";
@@ -319,15 +320,18 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
               requires permission and a reason.
             </p>
             <div className="mt-3 grid gap-3 md:grid-cols-4">
-              <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Log slip date
-                </label>
-                <Input
-                  type="datetime-local"
-                  {...form.register("logSlipDate")}
-                />
-              </div>
+              <Controller
+                name="logSlipDate"
+                control={form.control}
+                render={({ field }) => (
+                  <DateTimePicker
+                    label="Log slip date"
+                    selected={toValidDate(field.value)}
+                    onSelect={field.onChange}
+                    placeholder="Select log slip date and time"
+                  />
+                )}
+              />
               <IconTextField<GenerateLogSlipFormInput>
                 name="previousDieselQty"
                 label="Previous diesel (L)"

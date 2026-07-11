@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { FormProvider, useForm } from "react-hook-form";
+import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { deliverLRSchema } from "@skerp/validators/lorry-receipt/delivery";
 import type { DeliverLRFormInput, LRDelivery } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Textarea } from "@skerp/ui/components/textarea";
 import {
   Dialog,
@@ -43,6 +44,12 @@ const toLocalInputValue = (date: Date): string => {
 
 const toRupeesInput = (paise?: number | null) =>
   paise != null ? (paise / 100).toString() : "";
+
+const toDate = (value: string | Date | undefined) => {
+  if (!value) return undefined;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
 
 const buildDefaults = (initial?: LRDelivery | null): DeliverLRFormInput => ({
   deliveredAt: initial
@@ -114,10 +121,17 @@ export default function DeliverDialog({
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <FieldLabel required>Delivered at</FieldLabel>
-                <Input
-                  type="datetime-local"
-                  {...form.register("deliveredAt")}
-                  className="h-9"
+                <Controller
+                  name="deliveredAt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      selected={toDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="Select delivery date and time"
+                      clearable={false}
+                    />
+                  )}
                 />
                 {errors.deliveredAt?.message ? (
                   <p className="mt-1 text-xs text-red-600">
@@ -127,10 +141,16 @@ export default function DeliverDialog({
               </div>
               <div>
                 <FieldLabel>Truck reported at</FieldLabel>
-                <Input
-                  type="datetime-local"
-                  {...form.register("reportedAt")}
-                  className="h-9"
+                <Controller
+                  name="reportedAt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      selected={toDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="Select reporting date and time"
+                    />
+                  )}
                 />
                 {errors.reportedAt?.message ? (
                   <p className="mt-1 text-xs text-red-600">

@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { FormProvider, useForm } from "react-hook-form";
+import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { deliverGroupSchema } from "@skerp/validators/lorry-receipt/delivery";
 import type { DeliverGroupFormInput } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Textarea } from "@skerp/ui/components/textarea";
 import { Checkbox } from "@skerp/ui/components/checkbox";
 import {
@@ -53,6 +54,12 @@ const buildDefaults = (lrs: PendingLr[]): DeliverGroupFormInput => ({
   remark: "",
   lrs: lrs.map((lr) => ({ lrId: lr.id, unloadingCharges: "", remark: "" })),
 });
+
+const toDate = (value: string | Date | undefined) => {
+  if (!value) return undefined;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
 
 /**
  * One dialog per truck: when everything unloads at one point, mark every
@@ -110,10 +117,17 @@ export default function BulkDeliverDialog({
             <section className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
               <div>
                 <FieldLabel required>Delivered at</FieldLabel>
-                <Input
-                  type="datetime-local"
-                  {...form.register("deliveredAt")}
-                  className="h-9"
+                <Controller
+                  name="deliveredAt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      selected={toDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="Select delivery date and time"
+                      clearable={false}
+                    />
+                  )}
                 />
                 {errors.deliveredAt?.message ? (
                   <p className="mt-1 text-xs text-red-600">
@@ -123,10 +137,16 @@ export default function BulkDeliverDialog({
               </div>
               <div>
                 <FieldLabel>Truck reported at</FieldLabel>
-                <Input
-                  type="datetime-local"
-                  {...form.register("reportedAt")}
-                  className="h-9"
+                <Controller
+                  name="reportedAt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      selected={toDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="Select reporting date and time"
+                    />
+                  )}
                 />
               </div>
               <div>
