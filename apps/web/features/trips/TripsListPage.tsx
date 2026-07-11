@@ -7,11 +7,18 @@ import { toast } from "sonner";
 import type { Trip } from "@skerp/types";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { IconPlus } from "@tabler/icons-react";
+import {
+  IconBan,
+  IconCircleCheck,
+  IconClipboardList,
+  IconPlus,
+  IconTruckDelivery,
+} from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import type { ListQuery } from "../masters/_shared/master-api";
@@ -21,6 +28,50 @@ import { tripKeys } from "./trip.keys";
 import TripTable from "./TripTable";
 import CloseTripDialog from "./CloseTripDialog";
 
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex cursor-pointer items-center gap-3 rounded-lg border bg-card p-4 text-left transition-colors",
+        onClick && "hover:bg-muted/40",
+        active && "border-primary",
+      )}
+    >
+      <Icon size={20} className="shrink-0 text-muted-foreground" />
+      <div>
+        <div className="text-xl font-semibold tabular-nums">{value}</div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+      </div>
+    </button>
+  );
+}
+
+const STAT_CARDS: {
+  status: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}[] = [
+  { status: "Planned", label: "Planned", icon: IconClipboardList },
+  { status: "InTransit", label: "In Transit", icon: IconTruckDelivery },
+  { status: "Closed", label: "Closed", icon: IconCircleCheck },
+  { status: "Cancelled", label: "Cancelled", icon: IconBan },
+];
+
 export default function TripsListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -29,6 +80,8 @@ export default function TripsListPage() {
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [typeFilter, setTypeFilter] = React.useState("ALL");
+  const [sort, setSort] = React.useState("createdAt:desc");
   const debouncedSearch = useDebouncedValue(search);
 
   const [closeTrip, setCloseTrip] = React.useState<Trip | null>(null);
@@ -42,26 +95,30 @@ export default function TripsListPage() {
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
+  const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
 
-  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
+  React.useEffect(
+    () => setPage(0),
+    [debouncedSearch, statusFilter, typeFilter],
+  );
 
   const handleSizeChange = (nextSize: number) => {
     setSize(nextSize);
     setPage(0);
   };
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, statusFilter]);
-
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
+      sort,
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
-      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
+      filter: {
+        ...(statusFilter !== "ALL" ? { status: statusFilter } : {}),
+        ...(typeFilter !== "ALL" ? { tripType: typeFilter } : {}),
+      },
     }),
-    [page, size, debouncedSearch, statusFilter],
+    [page, size, sort, debouncedSearch, statusFilter, typeFilter],
   );
 
   const trips = useQuery({
@@ -122,17 +179,9 @@ export default function TripsListPage() {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
-  const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
-
-  const downloadTripPdf = async (id: string) => {
-    const res = await fetch(`/api/trips/${id}/pdf`, { method: "GET" });
-    if (!res.ok) throw new Error("Failed to fetch PDF");
-    return res.blob();
-  };
-
   const handleDownloadPdf = async (trip: Trip) => {
     try {
-      const blob = await downloadTripPdf(trip.id);
+      const blob = await tripApi.downloadPdf(trip.id);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
 
@@ -158,6 +207,23 @@ export default function TripsListPage() {
         ) : null}
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {STAT_CARDS.map((card) => (
+          <StatCard
+            key={card.status}
+            label={card.label}
+            icon={card.icon}
+            value={counts.data?.[card.status] ?? "…"}
+            active={statusFilter === card.status}
+            onClick={() =>
+              setStatusFilter(
+                statusFilter === card.status ? "ALL" : card.status,
+              )
+            }
+          />
+        ))}
+      </div>
+
       <TripTable
         data={trips.data?.data ?? []}
         total={trips.data?.meta?.total ?? 0}
@@ -169,6 +235,10 @@ export default function TripsListPage() {
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        sort={sort}
+        onSortChange={setSort}
         counts={counts.data ?? {}}
         isLoading={trips.isLoading}
         canStart={canCreateLR}
@@ -184,6 +254,7 @@ export default function TripsListPage() {
         onDelete={(t) => setDeleteTrip(t)}
         canDownloadPdf={canDownloadPdf}
         onDownloadPdf={handleDownloadPdf}
+        onRowClick={(t) => router.push(`/trips/${t.id}`)}
       />
 
       <CloseTripDialog
