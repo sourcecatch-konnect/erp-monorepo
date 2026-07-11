@@ -5,7 +5,6 @@ import type {
   LRGroupListItem,
   CreateLRGroupBody,
   UpdateLRGroupBody,
-  FinaliseGroupBody,
   SplitGroupAtHubBody,
   CancelGroupBody,
   LRGroupLineInput,
