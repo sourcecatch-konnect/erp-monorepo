@@ -92,6 +92,20 @@ model User {
   createdDriverAdvances       DriverAdvance[]                @relation("CreatedDriverAdvances")
   generatedLogSlips           LogSlip[]                      @relation("GeneratedLogSlips")
   supervisedGRNs              GRN[]                          @relation("GRNUnloadingSupervisor")
+  tablePrefs                  UserTablePref[]
+}
+
+/// Per-user UI table layout (column order + visibility), keyed per table.
+model UserTablePref {
+  id        String   @id @default(cuid())
+  userId    String
+  tableKey  String
+  prefs     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tableKey])
 }
 
 model Company {

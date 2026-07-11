@@ -61,6 +61,7 @@ import { authMiddleware } from "./middlewares/auth.middlware.js";
 import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
 import { ensurePermissionCatalog } from "./auth/permission-catalog.js";
 import grnRoute from "./modules/grn/grn.route.js"
+import tablePrefRoute from "./modules/user-pref/table-pref.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -128,6 +129,7 @@ app.use("/vp-schedules", vpScheduleRoute);
 app.use("/mrrr",MRRRRoute)
 app.use("/grn", grnRoute)
 app.use("/vp-loading",vpLoadingRoute)
+app.use("/me/table-prefs", tablePrefRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use(errorMiddleware);

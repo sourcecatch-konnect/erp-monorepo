@@ -93,6 +93,10 @@
     "./log-slip": {
       "types": "./src/log-slip/log-slip.schema.ts",
       "import": "./dist/log-slip/log-slip.schema.js"
+    },
+    "./user/table-pref": {
+      "types": "./src/user/table-pref.schema.ts",
+      "import": "./dist/user/table-pref.schema.js"
     }
   },
   "scripts": {
