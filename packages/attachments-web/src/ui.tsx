@@ -118,36 +118,36 @@ export function AttachmentPanel({ api, entityType, entityId }: SharedProps) {
     },
     [uploadMutation],
   );
-const [downloadingId, setDownloadingId] = useState<string | null>(null);
-const handleDownload = async (att: Attachment) => {
-  try {
-    setDownloadingId(att.id);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const handleDownload = async (att: Attachment) => {
+    try {
+      setDownloadingId(att.id);
 
-    const url = await api.getDownloadUrl(att.id);
+      const url = await api.getDownloadUrl(att.id);
 
-    const response = await fetch(url);
+      const response = await fetch(url);
 
-    if (!response.ok) {
-      throw new Error("Download failed");
+      if (!response.ok) {
+        throw new Error("Download failed");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = att.originalName || "attachment.pdf";
+      document.body.appendChild(link);
+      link.click();
+
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast.error("File is not available for download yet");
+    } finally {
+      setDownloadingId(null);
     }
-
-    const blob = await response.blob();
-    const blobUrl = window.URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = blobUrl;
-    link.download = att.originalName || "attachment.pdf";
-    document.body.appendChild(link);
-    link.click();
-
-    link.remove();
-    window.URL.revokeObjectURL(blobUrl);
-  } catch {
-    toast.error("File is not available for download yet");
-  } finally {
-    setDownloadingId(null);
-  }
-};
+  };
 
   const items = list.data ?? [];
 
@@ -215,39 +215,39 @@ const handleDownload = async (att: Attachment) => {
                 </p>
               </div>
               <StatusBadge status={att.antivirusStatus} />
-        <Button
-  type="button"
-  variant="ghost"
-  size="icon-sm"
-  title="Download"
-  disabled={
-    att.antivirusStatus !== "CLEAN" || downloadingId === att.id
-  }
-  onClick={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    void handleDownload(att);
-  }}
->
-  {downloadingId === att.id ? (
-    <span className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-  ) : (
-    <IconDownload className="size-4" />
-  )}
-</Button>
-            <Button
-  type="button"
-  variant="ghost"
-  size="icon-sm"
-  title="Delete"
-  onClick={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    removeMutation.mutate(att.id);
-  }}
->
-  <IconTrash />
-</Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                title="Download"
+                disabled={
+                  att.antivirusStatus !== "CLEAN" || downloadingId === att.id
+                }
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void handleDownload(att);
+                }}
+              >
+                {downloadingId === att.id ? (
+                  <span className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                ) : (
+                  <IconDownload className="size-4" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                title="Delete"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  removeMutation.mutate(att.id);
+                }}
+              >
+                <IconTrash />
+              </Button>
             </div>
           ))
         )}
@@ -338,7 +338,6 @@ export function ProfilePhotoUploader({
         {uploading || status === "PENDING" ? (
           <Skeleton className="size-full rounded-full" />
         ) : status === "CLEAN" && photo.data ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={photo.data}
             alt="Profile"
@@ -353,7 +352,7 @@ export function ProfilePhotoUploader({
 
       <div className="flex flex-col gap-1">
         <Button
-        type="button"
+          type="button"
           variant="outline"
           size="sm"
           onClick={() => inputRef.current?.click()}

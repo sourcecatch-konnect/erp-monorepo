@@ -3,7 +3,6 @@ import {
   lrTransportTypeSchema,
   lrTripLegTypeSchema,
   lrPrioritySchema,
-  lrGoodsLineSchema,
   ewayBillSchema,
 } from "../lorry-receipt/lorry-receipt.schema.js";
 import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
@@ -104,27 +103,29 @@ const lrGroupGoodsLineSchema = z.object({
   height: optionalNumberField("Height"),
 });
 
-export const lrGroupLineSchema = z.object({
-  loadingLocationId: optionalId,
-  unloadingLocationId: optionalId,
+export const lrGroupLineSchema = z
+  .object({
+    loadingLocationId: optionalId,
+    unloadingLocationId: optionalId,
 
-  totalWeight: optionalNumberField("Total weight").refine(
-    (value) => value === undefined || value >= 0,
-    "Total weight cannot be negative",
-  ),
+    totalWeight: optionalNumberField("Total weight").refine(
+      (value) => value === undefined || value >= 0,
+      "Total weight cannot be negative",
+    ),
 
-  totalWeightUnit: totalWeightUnitSchema.optional(),
+    totalWeightUnit: totalWeightUnitSchema.optional(),
 
-  goods: z.array(lrGroupGoodsLineSchema).optional().default([]),
-}).superRefine((line, ctx) => {
-  if (line.totalWeight !== undefined && !line.totalWeightUnit) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Unit is required when total weight is provided",
-      path: ["totalWeightUnit"],
-    });
-  }
-});
+    goods: z.array(lrGroupGoodsLineSchema).optional().default([]),
+  })
+  .superRefine((line, ctx) => {
+    if (line.totalWeight !== undefined && !line.totalWeightUnit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unit is required when total weight is provided",
+        path: ["totalWeightUnit"],
+      });
+    }
+  });
 export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
 
 /* ------------------------------------------------------------------ */
@@ -218,34 +219,33 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["primaryTripId"],
     });
   }
- if (d.source === "INSTANT") {
-  if (!d.lrs || d.lrs.length === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Add at least one consignment line",
-      path: ["lrs"],
+  if (d.source === "INSTANT") {
+    if (!d.lrs || d.lrs.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add at least one consignment line",
+        path: ["lrs"],
+      });
+    }
+
+    (d.lrs ?? []).forEach((line, index) => {
+      if (!line.loadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Loading point is required",
+          path: ["lrs", index, "loadingLocationId"],
+        });
+      }
+
+      if (!line.unloadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unloading point is required",
+          path: ["lrs", index, "unloadingLocationId"],
+        });
+      }
     });
   }
-
-  (d.lrs ?? []).forEach((line, index) => {
-    if (!line.loadingLocationId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Loading point is required",
-        path: ["lrs", index, "loadingLocationId"],
-      });
-    }
-
-    if (!line.unloadingLocationId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Unloading point is required",
-        path: ["lrs", index, "unloadingLocationId"],
-      });
-    }
-
-  });
-}
 });
 
 export type CreateLRGroupInput = z.infer<typeof createLRGroupSchema>;

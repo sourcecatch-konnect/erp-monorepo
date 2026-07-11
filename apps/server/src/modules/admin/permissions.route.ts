@@ -1,8 +1,6 @@
 import { Router } from "express";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
-import { can } from "../../auth/can.middleware.js";
-import { PERMS } from "../../auth/permissions.js";
 
 import { sendOk } from "../_shared/response.js";
 
@@ -28,12 +26,11 @@ router.get("/modules", async (_req, res) => {
         .split(/[\s._:-]+/)
         .filter(Boolean)
         .map(
-          (word) =>
-            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
         )
         .join(" "),
       permissionCount: m._count.key,
-    }))
+    })),
   );
 });
 router.get("/", async (req, res) => {

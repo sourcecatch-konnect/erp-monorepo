@@ -91,28 +91,17 @@ function Row({
     <div className="grid gap-1 text-sm">
       <span className="text-xs text-muted-foreground">{label}</span>
 
-      <div className="min-w-0 font-medium text-foreground">
-        {children}
-      </div>
+      <div className="min-w-0 font-medium text-foreground">{children}</div>
     </div>
   );
 }
 
-function Pair({
-  from,
-  to,
-}: {
-  from: React.ReactNode;
-  to: React.ReactNode;
-}) {
+function Pair({ from, to }: { from: React.ReactNode; to: React.ReactNode }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1.5">
       <span className="min-w-0 truncate">{from ?? DASH}</span>
 
-      <IconArrowRight
-        size={13}
-        className="shrink-0 text-muted-foreground"
-      />
+      <IconArrowRight size={13} className="shrink-0 text-muted-foreground" />
 
       <span className="min-w-0 truncate">{to ?? DASH}</span>
     </span>
@@ -230,10 +219,18 @@ export default function LRCreateSummary({
 
                 <Section icon={<IconRoute size={14} />} title="Route">
                   <Row label="Branches">
-                   <Pair
-  from={order.fromBranch?.name ?? order.fromBranch?.branchCode ?? "—"}
-  to={order.toBranch?.name ?? order.toBranch?.branchCode ?? "—"}
-/>
+                    <Pair
+                      from={
+                        order.fromBranch?.name ??
+                        order.fromBranch?.branchCode ??
+                        "—"
+                      }
+                      to={
+                        order.toBranch?.name ??
+                        order.toBranch?.branchCode ??
+                        "—"
+                      }
+                    />
                   </Row>
                   {order.route &&
                     (order.route.source || order.route.destination) && (
@@ -247,32 +244,36 @@ export default function LRCreateSummary({
                   <Row label="Mode">{transportLabel}</Row>
                 </Section>
 
-          <Section icon={<IconUsers size={14} />} title="Parties">
-  <div className="space-y-2">
-    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
-      <span className="text-muted-foreground">Consignor</span>
-      <span className="line-clamp-2 break-words font-medium text-foreground">
-        {order.consignor || "—"}
-      </span>
-    </div>
+                <Section icon={<IconUsers size={14} />} title="Parties">
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
+                      <span className="text-muted-foreground">Consignor</span>
+                      <span className="line-clamp-2 break-words font-medium text-foreground">
+                        {order.consignor || "—"}
+                      </span>
+                    </div>
 
+                    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
+                      <span className="text-muted-foreground">Consignee</span>
+                      <span className="line-clamp-2 break-words font-medium text-foreground">
+                        {order.consignee || "Consignee not selected"}
+                      </span>
+                    </div>
 
-
-    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
-      <span className="text-muted-foreground">Consignee</span>
-      <span className="line-clamp-2 break-words font-medium text-foreground">
-        {order.consignee || "Consignee not selected"}
-      </span>
-    </div>
-
-    {!order.consignee && (
-      <p className="flex items-start gap-1.5 pt-1 text-xs leading-snug text-amber-600">
-        <IconAlertTriangle size={13} className="mt-0.5 shrink-0" />
-        <span>Set the order&apos;s consignee before creating the group.</span>
-      </p>
-    )}
-  </div>
-</Section>
+                    {!order.consignee && (
+                      <p className="flex items-start gap-1.5 pt-1 text-xs leading-snug text-amber-600">
+                        <IconAlertTriangle
+                          size={13}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <span>
+                          Set the order&apos;s consignee before creating the
+                          group.
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                </Section>
 
                 <Section icon={<IconTruck size={14} />} title="This truck">
                   <Row label="Truck">
@@ -324,88 +325,97 @@ export default function LRCreateSummary({
             )}
 
             {/* Consignment lines — the core "what will be created" detail. */}
-          <Section
-  icon={<IconPackage size={14} />}
-  title={`Consignments (${lrCount} LR${lrCount === 1 ? "" : "s"})`}
->
-  {lrCount === 0 ? (
-    <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center">
-      <IconPackage className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
-      <p className="text-xs font-medium text-muted-foreground">
-        No consignment lines yet.
-      </p>
-    </div>
-  ) : (
-    <div className="space-y-2">
-      {source === "FROM_ORDER"
-  ? truckLines.map((line, i) => {
-      const loading = line.loadingLocation;
-      const unloading = line.unloadingLocation;
+            <Section
+              icon={<IconPackage size={14} />}
+              title={`Consignments (${lrCount} LR${lrCount === 1 ? "" : "s"})`}
+            >
+              {lrCount === 0 ? (
+                <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center">
+                  <IconPackage className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+                  <p className="text-xs font-medium text-muted-foreground">
+                    No consignment lines yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {source === "FROM_ORDER"
+                    ? truckLines.map((line, i) => {
+                        const loading = line.loadingLocation;
+                        const unloading = line.unloadingLocation;
 
-      const goods = (line.goods ?? [])
-        .map((g) =>
-          [
-            g.name,
-            g.quantity && g.unit
-              ? `${g.quantity} ${g.unit}`
-              : g.quantity
-                ? String(g.quantity)
-                : null,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        )
-        .filter(Boolean);
+                        const goods = (line.goods ?? [])
+                          .map((g) =>
+                            [
+                              g.name,
+                              g.quantity && g.unit
+                                ? `${g.quantity} ${g.unit}`
+                                : g.quantity
+                                  ? String(g.quantity)
+                                  : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · "),
+                          )
+                          .filter(Boolean);
 
-      return (
-        <ConsignmentCard
-          key={i}
-          index={i}
-          loading={loading}
-          unloading={unloading}
-          totalWeight={line.totalWeight}
-          goods={goods}
-        />
-      );
-    })
-  : instantLines.map((line, i) => {
-      const loading = labelOf(locationOptions, line.loadingLocationId);
-      const unloading = labelOf(locationOptions, line.unloadingLocationId);
+                        return (
+                          <ConsignmentCard
+                            key={i}
+                            index={i}
+                            loading={loading}
+                            unloading={unloading}
+                            totalWeight={line.totalWeight}
+                            goods={goods}
+                          />
+                        );
+                      })
+                    : instantLines.map((line, i) => {
+                        const loading = labelOf(
+                          locationOptions,
+                          line.loadingLocationId,
+                        );
+                        const unloading = labelOf(
+                          locationOptions,
+                          line.unloadingLocationId,
+                        );
 
-      const goods = (line.goods ?? [])
-        .map((g) =>
-          [
-            g.name,
-            g.quantity && g.unit
-              ? `${g.quantity} ${g.unit}`
-              : g.quantity
-                ? String(g.quantity)
-                : null,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        )
-        .filter(Boolean);
+                        const goods = (line.goods ?? [])
+                          .map((g) =>
+                            [
+                              g.name,
+                              g.quantity && g.unit
+                                ? `${g.quantity} ${g.unit}`
+                                : g.quantity
+                                  ? String(g.quantity)
+                                  : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · "),
+                          )
+                          .filter(Boolean);
 
-      return (
-        <ConsignmentCard
-          key={i}
-          index={i}
-          loading={loading}
-          unloading={unloading}
-          goods={goods}
-        />
-      );
-    })}
-    </div>
-  )}
-</Section>
+                        return (
+                          <ConsignmentCard
+                            key={i}
+                            index={i}
+                            loading={loading}
+                            unloading={unloading}
+                            goods={goods}
+                          />
+                        );
+                      })}
+                </div>
+              )}
+            </Section>
 
             <Section icon={<IconTruck size={14} />} title="Vehicle">
               {VehicleRows}
             </Section>
 
-            <Section icon={<IconReceipt2 size={14} />} title="Freight & priority">
+            <Section
+              icon={<IconReceipt2 size={14} />}
+              title="Freight & priority"
+            >
               {source === "FROM_ORDER" && (
                 <Row label="Booking freight">
                   {order?.bookingFreightAmount != null
@@ -414,11 +424,12 @@ export default function LRCreateSummary({
                 </Row>
               )}
               <Row label="Priority">{priority || "Normal"}</Row>
-              {source === "FROM_ORDER" && order?.bookingFreightAmount != null && (
-                <p className="text-xs text-muted-foreground">
-                  Defaults the group's base freight at finalise.
-                </p>
-              )}
+              {source === "FROM_ORDER" &&
+                order?.bookingFreightAmount != null && (
+                  <p className="text-xs text-muted-foreground">
+                    Defaults the group&apos;s base freight at finalise.
+                  </p>
+                )}
             </Section>
           </>
         )}
@@ -446,7 +457,10 @@ function SummaryLine({
         </span>
         <span className="flex min-w-0 items-center gap-1 text-xs">
           <span className="truncate">{loading ?? DASH}</span>
-          <IconArrowRight size={12} className="shrink-0 text-muted-foreground" />
+          <IconArrowRight
+            size={12}
+            className="shrink-0 text-muted-foreground"
+          />
           <span className="truncate">{unloading ?? DASH}</span>
         </span>
       </div>

@@ -4,11 +4,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import MasterListPage from "../_shared/MasterListPage";
-import {
-  downloadBlob,
-  ListQuery,
-  parseCsvRows,
-} from "../_shared/master-api";
+import { downloadBlob, ListQuery, parseCsvRows } from "../_shared/master-api";
 
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 import getErrorMessage, {
@@ -17,19 +13,12 @@ import getErrorMessage, {
 
 import { toast } from "sonner";
 
-import type {
-  RailwayFreightMatrixWithRelations,
-} from "@skerp/types";
+import type { RailwayFreightMatrixWithRelations } from "@skerp/types";
 import { railwayFreightApi } from "./railwayfreight.service";
 import { railwayFreightKeys } from "./railwayfreight.key";
 import { railwayFreightColumns } from "./railwayfreightTable";
 import RailwayFreightDetailDialog from "./railwayfreightDialog";
 import RailwayFreightForm from "./railwayfreightForm";
-
-
-
-
-
 
 type RailwayFreightCsvRow = Record<
   "wagonId" | "sourceCityId" | "destinationCityId" | "freightAmount",
@@ -58,11 +47,9 @@ export default function RailwayFreightPage() {
       page,
       size,
       sort: "createdAt:desc",
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
     }),
-    [debouncedSearch, page, size]
+    [debouncedSearch, page, size],
   );
 
   React.useEffect(() => {
@@ -75,10 +62,10 @@ export default function RailwayFreightPage() {
     queryFn: () => railwayFreightApi.list(listQuery),
   });
 
-  console.log(railwayFreights.data,"railway freight")
+  console.log(railwayFreights.data, "railway freight");
 
   // CRUD
-  const {  remove } = useMasterMutations({
+  const { remove } = useMasterMutations({
     api: railwayFreightApi,
     queryKey: railwayFreightKeys.all,
     entityName: "Railway Freight",
@@ -115,7 +102,6 @@ export default function RailwayFreightPage() {
     onError: (err) => toast.error(getErrorMessage(err)),
   });
 
-
   return (
     <MasterListPage
       title="Railway Freight"
@@ -123,7 +109,6 @@ export default function RailwayFreightPage() {
       columns={railwayFreightColumns}
       isLoading={railwayFreights.isLoading}
       defaultHiddenColumns={["createdAt", "updatedAt"]}
-
       search={search}
       onSearchChange={setSearch}
       page={page}
@@ -137,44 +122,34 @@ export default function RailwayFreightPage() {
         setSelected(null);
         setOpen(true);
       }}
-
       onEdit={(row) => {
         setSelected(row);
         setOpen(true);
       }}
-
       onView={(row) => {
         setDetailId(row.id);
         setDetailOpen(true);
       }}
-
       onDelete={(id) => remove.mutateAsync(id)}
       onBulkDelete={() => bulkRemove.mutateAsync(selectedIds)}
-
       onImport={async (file) => {
         const text = await file.text();
         const rows = parseCsvRows<RailwayFreightCsvRow>(text);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await bulkImport.mutateAsync(rows as any);
       }}
-
       onExport={() => exportFreight.mutate(listQuery)}
       isBulkDeleting={bulkRemove.isPending}
       isImporting={bulkImport.isPending}
       isExporting={exportFreight.isPending}
     >
-     <RailwayFreightDetailDialog
-  open={detailOpen}
-  onOpenChange={setDetailOpen}
-  id={detailId}
-/>
+      <RailwayFreightDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        id={detailId}
+      />
 
-<RailwayFreightForm
-  open={open}
-  onOpenChange={setOpen}
-  row={selected}
-/>
+      <RailwayFreightForm open={open} onOpenChange={setOpen} row={selected} />
     </MasterListPage>
   );
 }

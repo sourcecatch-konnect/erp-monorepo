@@ -2,7 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { sendOk } from "../_shared/response.js";
-import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
 import { store } from "./ewaybill.store.js";
 import {
   authenticate,
@@ -30,7 +34,7 @@ router.get("/", (req, res) => {
   }
   if (fromGstin) {
     rows = rows.filter((b) =>
-      b.fromGstin.toLowerCase().includes(fromGstin.toLowerCase())
+      b.fromGstin.toLowerCase().includes(fromGstin.toLowerCase()),
     );
   }
   if (status) {
@@ -47,13 +51,13 @@ router.get("/", (req, res) => {
         b.fromTrdName.toLowerCase().includes(q) ||
         b.toTrdName.toLowerCase().includes(q) ||
         b.docNo.toLowerCase().includes(q) ||
-        b.vehicleNo.toLowerCase().includes(q)
+        b.vehicleNo.toLowerCase().includes(q),
     );
   }
 
   rows = [...rows].sort(
     (a, b) =>
-      new Date(b.generatedDate).getTime() - new Date(a.generatedDate).getTime()
+      new Date(b.generatedDate).getTime() - new Date(a.generatedDate).getTime(),
   );
 
   return sendOk(res, rows, { page: 0, size: rows.length, total: rows.length });
@@ -65,7 +69,7 @@ router.get("/summary", (_req, res) => {
   const nowMs = Date.now();
 
   const active = rows.filter(
-    (b) => b.status === "ACTIVE" || b.status === "IN_TRANSIT"
+    (b) => b.status === "ACTIVE" || b.status === "IN_TRANSIT",
   );
   const partBPending = rows.filter((b) => b.status === "PART_B_PENDING");
   const inTransit = rows.filter((b) => b.status === "IN_TRANSIT");
@@ -77,25 +81,24 @@ router.get("/summary", (_req, res) => {
     })
     .sort(
       (a, b) =>
-        new Date(a.validUntil).getTime() - new Date(b.validUntil).getTime()
+        new Date(a.validUntil).getTime() - new Date(b.validUntil).getTime(),
     );
 
   const byState = Object.values(
-    rows.reduce<Record<string, { stateCode: number; stateName: string; count: number }>>(
-      (acc, b) => {
-        const key = String(b.fromStateCode);
-        if (!acc[key]) {
-          acc[key] = {
-            stateCode: b.fromStateCode,
-            stateName: b.fromStateName,
-            count: 0,
-          };
-        }
-        acc[key].count += 1;
-        return acc;
-      },
-      {}
-    )
+    rows.reduce<
+      Record<string, { stateCode: number; stateName: string; count: number }>
+    >((acc, b) => {
+      const key = String(b.fromStateCode);
+      if (!acc[key]) {
+        acc[key] = {
+          stateCode: b.fromStateCode,
+          stateName: b.fromStateName,
+          count: 0,
+        };
+      }
+      acc[key].count += 1;
+      return acc;
+    }, {}),
   ).sort((a, b) => b.count - a.count);
 
   return sendOk(res, {
@@ -124,7 +127,7 @@ const updateVehicleSchema = z.object({
     .string()
     .min(7, "Vehicle number too short")
     .max(20)
-    .regex(/^[A-Za-z0-9 \-]+$/, "Invalid vehicle number"),
+    .regex(/^[A-Za-z0-9 -]+$/, "Invalid vehicle number"),
   transDocNo: z.string().max(40).optional(),
   transDocDate: z.string().optional(),
   fromPlace: z.string().min(2).max(60),
@@ -142,7 +145,7 @@ router.post("/:ewbNo/update-vehicle", (req, res) => {
   if (!existing) throw new NotFoundError("E-way bill not found");
   if (existing.status === "DELIVERED" || existing.status === "CANCELLED") {
     throw new BadRequestError(
-      `Cannot update vehicle on a ${existing.status.toLowerCase()} e-way bill`
+      `Cannot update vehicle on a ${existing.status.toLowerCase()} e-way bill`,
     );
   }
 
@@ -166,7 +169,7 @@ router.post("/:ewbNo/extend", (req, res) => {
   if (!existing) throw new NotFoundError("E-way bill not found");
   if (existing.status === "DELIVERED" || existing.status === "CANCELLED") {
     throw new BadRequestError(
-      `Cannot extend a ${existing.status.toLowerCase()} e-way bill`
+      `Cannot extend a ${existing.status.toLowerCase()} e-way bill`,
     );
   }
 

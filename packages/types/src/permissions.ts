@@ -11,37 +11,33 @@
  * `Permission` catalog table. Never hard-code a string at a call site.
  */
 
-const CRUD = ["view", "create", "update", "delete"] as const;
-type CrudAction = (typeof CRUD)[number];
+type CrudAction = "view" | "create" | "update" | "delete";
 
-const MASTER_SLUGS = [
-  "state",
-  "city",
-  "area",
-  "transport",
-  "vehicle",
-  "spare-category",
-  "spare-part",
-  "spare-part-supplier",
-  "customer",
-  "company",
-  "branch",
-  "route",
-  "warehouse",
-  "driver",
-  "labour",
-  "goods",
-  "pump",
-  "wagon",
-  "railway-freight",
-  "agreement",
-  "rate-matrix",
-  "vehicle-type",
-  "creditor",
-  "cash-account",
-] as const;
-
-export type MasterSlug = (typeof MASTER_SLUGS)[number];
+export type MasterSlug =
+  | "state"
+  | "city"
+  | "area"
+  | "transport"
+  | "vehicle"
+  | "spare-category"
+  | "spare-part"
+  | "spare-part-supplier"
+  | "customer"
+  | "company"
+  | "branch"
+  | "route"
+  | "warehouse"
+  | "driver"
+  | "labour"
+  | "goods"
+  | "pump"
+  | "wagon"
+  | "railway-freight"
+  | "agreement"
+  | "rate-matrix"
+  | "vehicle-type"
+  | "creditor"
+  | "cash-account";
 
 type MasterPermissionKey =
   | `masters.${MasterSlug}.${CrudAction}`
@@ -56,10 +52,7 @@ type LorryReceiptPermissionKey =
   | "lorry_receipt.deliver"
   | "lorry_receipt.acknowledge";
 
-type TripPermissionKey =
-  | `trip.${CrudAction}`
-  | "trip.close"
-  | "trip.cancel";
+type TripPermissionKey = `trip.${CrudAction}` | "trip.close" | "trip.cancel";
 
 type VehicleJourneyPermissionKey =
   | "vehicle_journey.view"
@@ -93,15 +86,9 @@ type VPSchedulePermissionKey =
   | "vp_schedule.confirm"
   | "vp_schedule.cancel";
 
-type MRRRPermissionKey =
-  | `mrrr.${CrudAction}`
-  | "mrrr.submit"
-  | "mrrr.cancel";
-  
-type GRNPermissionKey =
-  | `grn.${CrudAction}`
-  | "grn.submit"
-  | "grn.cancel";
+type MRRRPermissionKey = `mrrr.${CrudAction}` | "mrrr.submit" | "mrrr.cancel";
+
+type GRNPermissionKey = `grn.${CrudAction}` | "grn.submit" | "grn.cancel";
 
 type VPLoadingPermissionKey =
   | `vp_loading.${CrudAction}`
@@ -127,9 +114,7 @@ type CashPlanningPermissionKey =
   | "cashplanning.approve"
   | "cashplanning.close";
 
-type AdminPermissionKey =
-  | "admin.rbac.manage"
-  | "admin.audit_log.view";
+type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
 
 type NotificationPermissionKey =
   | "notifications.view"
@@ -172,7 +157,9 @@ type MasterPerms<Slug extends MasterSlug> = {
   EXPORT: `masters.${Slug}.export`;
 };
 
-const masterPerms = <Slug extends MasterSlug>(slug: Slug): MasterPerms<Slug> => ({
+const masterPerms = <Slug extends MasterSlug>(
+  slug: Slug,
+): MasterPerms<Slug> => ({
   VIEW: `masters.${slug}.view`,
   CREATE: `masters.${slug}.create`,
   UPDATE: `masters.${slug}.update`,
@@ -220,13 +207,13 @@ export const PERMS = {
     ACKNOWLEDGE: "lorry_receipt.acknowledge",
   },
   VP_LOADING: {
-  VIEW: "vp_loading.view",
-  CREATE: "vp_loading.create",
-  UPDATE: "vp_loading.update",
-  DELETE: "vp_loading.delete",
-  MARK_LOADED: "vp_loading.mark_loaded",
-  CANCEL: "vp_loading.cancel",
-},
+    VIEW: "vp_loading.view",
+    CREATE: "vp_loading.create",
+    UPDATE: "vp_loading.update",
+    DELETE: "vp_loading.delete",
+    MARK_LOADED: "vp_loading.mark_loaded",
+    CANCEL: "vp_loading.cancel",
+  },
   TRIP: {
     VIEW: "trip.view",
     CREATE: "trip.create",
@@ -263,29 +250,29 @@ export const PERMS = {
     PRINT: "logslip.print",
   },
   VP_SCHEDULE: {
-  VIEW: "vp_schedule.view",
-  CREATE: "vp_schedule.create",
-  UPDATE: "vp_schedule.update",
-  DELETE: "vp_schedule.delete",
-  CONFIRM: "vp_schedule.confirm",
-  CANCEL: "vp_schedule.cancel",
-},
-MRRR: {
-  VIEW: "mrrr.view",
-  CREATE: "mrrr.create",
-  UPDATE: "mrrr.update",
-  DELETE: "mrrr.delete",
-  SUBMIT: "mrrr.submit",
-  CANCEL: "mrrr.cancel",
-},
-GRN: {
-  VIEW: "grn.view",
-  CREATE: "grn.create",
-  UPDATE: "grn.update",
-  DELETE: "grn.delete",
-  SUBMIT: "grn.submit",
-  CANCEL: "grn.cancel",
-},
+    VIEW: "vp_schedule.view",
+    CREATE: "vp_schedule.create",
+    UPDATE: "vp_schedule.update",
+    DELETE: "vp_schedule.delete",
+    CONFIRM: "vp_schedule.confirm",
+    CANCEL: "vp_schedule.cancel",
+  },
+  MRRR: {
+    VIEW: "mrrr.view",
+    CREATE: "mrrr.create",
+    UPDATE: "mrrr.update",
+    DELETE: "mrrr.delete",
+    SUBMIT: "mrrr.submit",
+    CANCEL: "mrrr.cancel",
+  },
+  GRN: {
+    VIEW: "grn.view",
+    CREATE: "grn.create",
+    UPDATE: "grn.update",
+    DELETE: "grn.delete",
+    SUBMIT: "grn.submit",
+    CANCEL: "grn.cancel",
+  },
   ORDER: {
     VIEW: "order.view",
     CREATE: "order.create",

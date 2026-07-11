@@ -185,7 +185,6 @@ export default function OrderForm({ mode, order }: Props) {
             order.items?.map((i) => ({
               goodsId: i.goodsId,
               quantity: i.quantity,
-      
             })) ?? [],
           consignments:
             order.consignments?.map((c) => ({
@@ -199,7 +198,6 @@ export default function OrderForm({ mode, order }: Props) {
                   ? c.goods.map((g) => ({
                       goodsId: g.goodsId,
                       quantity: g.quantity,
-                 
                     }))
                   : [],
             })) ?? [],
@@ -254,53 +252,53 @@ export default function OrderForm({ mode, order }: Props) {
   }, [orderType, form]);
 
   const onSubmit = async (values: CreateOrderBody) => {
-  if (values.orderType === "Truck") {
-    const truckQty = Number(values.truckQuantity) || 0;
-    const assignedTrucks = new Set(
-      (values.consignments ?? []).map((line) => Number(line.truckIndex)),
-    );
-    const missingTrucks = Array.from(
-      { length: truckQty },
-      (_, index) => index + 1,
-    ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
-
-    if (missingTrucks.length > 0) {
-      const message = `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}.`;
-      form.setError("consignments", {
-        type: "manual",
-        message,
-      });
-
-      toast.error(message);
-
-      return;
-    }
-  }
-
-  setSubmitting(true);
-
-  try {
-    if (mode === "edit" && order) {
-      await orderApi.update(order.id, { ...values, version: order.version });
-      toast.success(
-        order.status === "Rejected"
-          ? "Order resubmitted for approval"
-          : "Order updated",
+    if (values.orderType === "Truck") {
+      const truckQty = Number(values.truckQuantity) || 0;
+      const assignedTrucks = new Set(
+        (values.consignments ?? []).map((line) => Number(line.truckIndex)),
       );
-      router.push(`/orders/${encodeURIComponent(order.orderNumber)}`);
-    } else {
-      const created = await orderApi.create(values);
-      toast.success(
-        `Order ${created.orderNumber} created and sent for approval`,
-      );
-      router.push(`/orders/${encodeURIComponent(created.orderNumber)}`);
+      const missingTrucks = Array.from(
+        { length: truckQty },
+        (_, index) => index + 1,
+      ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
+
+      if (missingTrucks.length > 0) {
+        const message = `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}.`;
+        form.setError("consignments", {
+          type: "manual",
+          message,
+        });
+
+        toast.error(message);
+
+        return;
+      }
     }
-  } catch (error) {
-    toast.error(getErrorMessage(error));
-  } finally {
-    setSubmitting(false);
-  }
-};
+
+    setSubmitting(true);
+
+    try {
+      if (mode === "edit" && order) {
+        await orderApi.update(order.id, { ...values, version: order.version });
+        toast.success(
+          order.status === "Rejected"
+            ? "Order resubmitted for approval"
+            : "Order updated",
+        );
+        router.push(`/orders/${encodeURIComponent(order.orderNumber)}`);
+      } else {
+        const created = await orderApi.create(values);
+        toast.success(
+          `Order ${created.orderNumber} created and sent for approval`,
+        );
+        router.push(`/orders/${encodeURIComponent(created.orderNumber)}`);
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleCancel = () => {
     if (form.formState.isDirty) setDiscardOpen(true);
@@ -328,10 +326,7 @@ export default function OrderForm({ mode, order }: Props) {
   // Flattened validation issues, surfaced above the footer once a save is
   // attempted so the user can see everything they missed at a glance.
   const { errors, submitCount } = form.formState;
-  const validationIssues = React.useMemo(
-    () => collectErrors(errors),
-    [errors, submitCount],
-  );
+  const validationIssues = React.useMemo(() => collectErrors(errors), [errors]);
   const showValidationSummary = submitCount > 0 && validationIssues.length > 0;
 
   return (

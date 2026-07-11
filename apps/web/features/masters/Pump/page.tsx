@@ -5,11 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Pump, CreatePumpBody } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
-import {
-  downloadBlob,
-  ListQuery,
-  parseCsvRows,
-} from "../_shared/master-api";
+import { downloadBlob, ListQuery, parseCsvRows } from "../_shared/master-api";
 
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 import getErrorMessage, {
@@ -69,11 +65,9 @@ export default function PumpPage() {
       page,
       size,
       sort: "name:asc",
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
     }),
-    [debouncedSearch, page, size]
+    [debouncedSearch, page, size],
   );
 
   React.useEffect(() => {
@@ -86,9 +80,8 @@ export default function PumpPage() {
     queryFn: () => pumpApi.list(listQuery),
   });
 
-
   // CRUD
-  const {  remove } = useMasterMutations({
+  const { remove } = useMasterMutations({
     api: pumpApi,
     queryKey: pumpKeys.all,
     entityName: "Pump",
@@ -124,7 +117,6 @@ export default function PumpPage() {
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   });
-
 
   return (
     <MasterListPage
@@ -167,7 +159,6 @@ export default function PumpPage() {
         const text = await file.text();
         const rows = parseCsvRows<PumpCsvRow>(text);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await bulkImport.mutateAsync(rows as any);
       }}
       onExport={() => exportPumps.mutate(listQuery)}
@@ -179,16 +170,11 @@ export default function PumpPage() {
       <PumpDetailDialog
         open={detailOpen}
         onOpenChange={setDetailOpen}
-         id={detailId}
+        id={detailId}
       />
 
       {/* FORM */}
-      <PumpForm
-  open={open}
-  onOpenChange={setOpen}
-  row={selected}
-
-/>
+      <PumpForm open={open} onOpenChange={setOpen} row={selected} />
     </MasterListPage>
   );
 }

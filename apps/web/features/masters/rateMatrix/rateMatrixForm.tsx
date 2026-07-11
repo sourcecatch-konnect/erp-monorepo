@@ -94,109 +94,106 @@ export default function RateMatrixForm({
   const [unitValue, setUnitValue] = React.useState("");
   const [unitType, setUnitType] = React.useState<UnitType>("HQ");
   const [unitError, setUnitError] = React.useState<string | null>(null);
-const routesQuery = useQuery({
-  queryKey: ["routes"],
-  queryFn: () => routeApi.list(),
-  enabled: open,
-});
+  const routesQuery = useQuery({
+    queryKey: ["routes"],
+    queryFn: () => routeApi.list(),
+    enabled: open,
+  });
 
-const vehicleTypesQuery = useQuery({
-  queryKey: ["vehicleTypes"],
-  queryFn: () => vehicleTypeApi.list(),
-  enabled: open,
-});
+  const vehicleTypesQuery = useQuery({
+    queryKey: ["vehicleTypes"],
+    queryFn: () => vehicleTypeApi.list(),
+    enabled: open,
+  });
 
-const rateUnitsQuery = useQuery({
-  queryKey: ["rateMatrix", "units"],
-  queryFn: () => rateMatrixApi.units.list(),
-  enabled: open,
-});
+  const rateUnitsQuery = useQuery({
+    queryKey: ["rateMatrix", "units"],
+    queryFn: () => rateMatrixApi.units.list(),
+    enabled: open,
+  });
 
-const routeOptions = (routesQuery.data?.data ?? []).map((route) => ({
-  id: route.id,
-  name: `${route.sourceCity?.name ?? "-"} to ${
-    route.destinationCity?.name ?? "-"
-  }`,
-}));
+  const routeOptions = (routesQuery.data?.data ?? []).map((route) => ({
+    id: route.id,
+    name: `${route.sourceCity?.name ?? "-"} to ${
+      route.destinationCity?.name ?? "-"
+    }`,
+  }));
 
-const vehicleTypeOptions = vehicleTypesQuery.data?.data ?? [];
+  const vehicleTypeOptions = React.useMemo(
+    () => vehicleTypesQuery.data?.data ?? [],
+    [vehicleTypesQuery.data],
+  );
 
-const rateUnitOptions = rateUnitsQuery.data?.data ?? [];
+  const rateUnitOptions = rateUnitsQuery.data?.data ?? [];
 
-
-const form = useForm<CreateRateMatrixFormInput>({
-  resolver: zodResolver(createRateMatrixSchema),
-  defaultValues,
-  mode: "onChange",
-  reValidateMode: "onChange",
-});
-const agreementOptions = useQuery({
-  queryKey: agreementKeys.list({
-    page: 0,
-    size: 1000,
-    sort: "createdAt:desc",
-  }),
-  queryFn: () =>
-    agreementApi.list({
+  const form = useForm<CreateRateMatrixFormInput>({
+    resolver: zodResolver(createRateMatrixSchema),
+    defaultValues,
+    mode: "onChange",
+    reValidateMode: "onChange",
+  });
+  const agreementOptions = useQuery({
+    queryKey: agreementKeys.list({
       page: 0,
       size: 1000,
       sort: "createdAt:desc",
     }),
-  enabled: open,
-});
-
-
-
-const { create, update } = useMasterMutations({
-  api: rateMatrixApi,
-  queryKey: rateMatrixKeys.all,
-  entityName: "Rate Matrix",
-});
-
-const handleSubmit = async (data: CreateRateMatrixBody) => {
-  if (row) {
-    await update.mutateAsync({ id: row.id, data });
-  } else {
-    await create.mutateAsync(data);
-  }
-
-  await queryClient.invalidateQueries({
-    queryKey: rateMatrixKeys.byAgreement(data.agreementId),
+    queryFn: () =>
+      agreementApi.list({
+        page: 0,
+        size: 1000,
+        sort: "createdAt:desc",
+      }),
+    enabled: open,
   });
 
-  await queryClient.invalidateQueries({
+  const { create, update } = useMasterMutations({
+    api: rateMatrixApi,
     queryKey: rateMatrixKeys.all,
+    entityName: "Rate Matrix",
   });
 
-  onOpenChange(false);
-};
-const isSubmitting = create.isPending || update.isPending;
-const agreements = (
-  (agreementOptions.data?.data ?? []) as AgreementWithRelations[]
-).map((a) => ({
-  id: a.id,
-  name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
-}));
+  const handleSubmit = async (data: CreateRateMatrixBody) => {
+    if (row) {
+      await update.mutateAsync({ id: row.id, data });
+    } else {
+      await create.mutateAsync(data);
+    }
 
+    await queryClient.invalidateQueries({
+      queryKey: rateMatrixKeys.byAgreement(data.agreementId),
+    });
 
+    await queryClient.invalidateQueries({
+      queryKey: rateMatrixKeys.all,
+    });
 
-const selectedVehicleTypeId = form.watch("vehicleTypeId");
+    onOpenChange(false);
+  };
+  const isSubmitting = create.isPending || update.isPending;
+  const agreements = (
+    (agreementOptions.data?.data ?? []) as AgreementWithRelations[]
+  ).map((a) => ({
+    id: a.id,
+    name: `${a.company?.name ?? "-"} - ${a.client?.name ?? "-"}`,
+  }));
 
-const selectedVehicleType = React.useMemo(
-  () => vehicleTypeOptions.find((v) => v.id === selectedVehicleTypeId),
-  [vehicleTypeOptions, selectedVehicleTypeId]
-);
+  const selectedVehicleTypeId = form.watch("vehicleTypeId");
 
-const isContainerVehicle =
-  selectedVehicleType?.name?.trim().toLowerCase() === "container";
-const handleFormSubmit: SubmitHandler<CreateRateMatrixFormInput> =
-  async (data) => {
+  const selectedVehicleType = React.useMemo(
+    () => vehicleTypeOptions.find((v) => v.id === selectedVehicleTypeId),
+    [vehicleTypeOptions, selectedVehicleTypeId],
+  );
+
+  const isContainerVehicle =
+    selectedVehicleType?.name?.trim().toLowerCase() === "container";
+  const handleFormSubmit: SubmitHandler<CreateRateMatrixFormInput> = async (
+    data,
+  ) => {
     const payload: CreateRateMatrixBody = {
       ...data,
       rate: Number(data.rate),
-      transitDays: data.transitDays
-        ? Number(data.transitDays)
-        : undefined,
+      transitDays: data.transitDays ? Number(data.transitDays) : undefined,
     };
 
     if (isContainerVehicle && !payload.unitId) {
@@ -259,20 +256,20 @@ const handleFormSubmit: SubmitHandler<CreateRateMatrixFormInput> =
     setUnitError(null);
   }, [form, open, row, agreementId]);
 
-React.useEffect(() => {
-  if (!isContainerVehicle) {
-    form.setValue("unitId", "", {
-      shouldDirty: true,
-      shouldTouch: true,
-      shouldValidate: true,
-    });
+  React.useEffect(() => {
+    if (!isContainerVehicle) {
+      form.setValue("unitId", "", {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
 
-    setShowUnitFields(false);
-    setUnitValue("");
-    setUnitType("HQ");
-    setUnitError(null);
-  }
-}, [isContainerVehicle, form]);
+      setShowUnitFields(false);
+      setUnitValue("");
+      setUnitType("HQ");
+      setUnitError(null);
+    }
+  }, [isContainerVehicle, form]);
   const handleAddUnit = async () => {
     const trimmedValue = unitValue.trim();
     const value = Number(trimmedValue);
@@ -291,7 +288,7 @@ React.useEffect(() => {
 
     if (alreadyExists) {
       setUnitError(
-        `${value} ${unitType} already exists. Please select it from the dropdown instead of adding it again.`
+        `${value} ${unitType} already exists. Please select it from the dropdown instead of adding it again.`,
       );
       return;
     }
@@ -333,10 +330,10 @@ React.useEffect(() => {
           name="routeId"
           label="Route"
           options={routeOptions.map((r) => ({
-  label: r.name,
-  value: r.id,
-}))}
-required
+            label: r.name,
+            value: r.id,
+          }))}
+          required
         />
       </FormSection>
 
@@ -349,10 +346,10 @@ required
           name="vehicleTypeId"
           label="Vehicle Type"
           required
-      options={vehicleTypeOptions.map((v) => ({
-  label: v.name,
-  value: v.id,
-}))}
+          options={vehicleTypeOptions.map((v) => ({
+            label: v.name,
+            value: v.id,
+          }))}
         />
 
         <SelectField
@@ -371,132 +368,133 @@ required
         />
       </FormSection>
 
-     {isContainerVehicle ? (
-      <div className="col-span-1 md:col-span-2">
-        <FormSection
-          icon={<IconPackage size={18} />}
-          title="Unit"
-          description="Select or add HQ/LQ unit for this rate"
-          columns={2}
-        >
-          <div className="col-span-full">
-            <SelectField
-              name="unitId"
-              label="Unit"
-             options={rateUnitOptions.map((unit) => ({
-  label: `${unit.unitValue} ${unit.unitType}`,
-  value: unit.id,
-}))}
-            />
-          </div>
-
-          {!showUnitFields ? (
-            <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">
-                    Additional unit setup
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Add a new HQ/LQ unit if it is not available in the dropdown.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowUnitFields(true)}
-                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
-                >
-                  <IconPlus size={14} />
-                  Add Unit
-                </button>
-              </div>
+      {isContainerVehicle ? (
+        <div className="col-span-1 md:col-span-2">
+          <FormSection
+            icon={<IconPackage size={18} />}
+            title="Unit"
+            description="Select or add HQ/LQ unit for this rate"
+            columns={2}
+          >
+            <div className="col-span-full">
+              <SelectField
+                name="unitId"
+                label="Unit"
+                options={rateUnitOptions.map((unit) => ({
+                  label: `${unit.unitValue} ${unit.unitType}`,
+                  value: unit.id,
+                }))}
+              />
             </div>
-          ) : (
-            <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">
-                    Add New Unit
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Create a new HQ/LQ unit without leaving this form.
-                  </p>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUnitFields(false);
-                    setUnitValue("");
-                    setUnitType("HQ");
-                    setUnitError(null);
-                  }}
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                >
-                  <IconX size={14} />
-                  Remove
-                </button>
-              </div>
+            {!showUnitFields ? (
+              <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">
+                      Additional unit setup
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Add a new HQ/LQ unit if it is not available in the
+                      dropdown.
+                    </p>
+                  </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">
-                    Unit Value
-                  </label>
-
-                  <input
-                    value={unitValue}
-                    onChange={(event) => {
-                      setUnitValue(event.target.value);
-                      setUnitError(null);
-                    }}
-                    placeholder="Enter unit value"
-                    type="number"
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">
-                    Unit Type
-                  </label>
-
-                  <select
-                    value={unitType}
-                    onChange={(event) => {
-                      setUnitType(event.target.value as UnitType);
-                      setUnitError(null);
-                    }}
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  <button
+                    type="button"
+                    onClick={() => setShowUnitFields(true)}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
                   >
-                    <option value="HQ">HQ</option>
-                    <option value="LQ">LQ</option>
-                  </select>
+                    <IconPlus size={14} />
+                    Add Unit
+                  </button>
                 </div>
               </div>
+            ) : (
+              <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">
+                      Add New Unit
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Create a new HQ/LQ unit without leaving this form.
+                    </p>
+                  </div>
 
-              {unitError ? (
-                <p className="mt-2 text-xs font-medium text-red-600">
-                  {unitError}
-                </p>
-              ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUnitFields(false);
+                      setUnitValue("");
+                      setUnitType("HQ");
+                      setUnitError(null);
+                    }}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                  >
+                    <IconX size={14} />
+                    Remove
+                  </button>
+                </div>
 
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleAddUnit}
-                  disabled={createUnitMutation.isPending}
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {createUnitMutation.isPending ? "Adding..." : "Save Unit"}
-                </button>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Unit Value
+                    </label>
+
+                    <input
+                      value={unitValue}
+                      onChange={(event) => {
+                        setUnitValue(event.target.value);
+                        setUnitError(null);
+                      }}
+                      placeholder="Enter unit value"
+                      type="number"
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Unit Type
+                    </label>
+
+                    <select
+                      value={unitType}
+                      onChange={(event) => {
+                        setUnitType(event.target.value as UnitType);
+                        setUnitError(null);
+                      }}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    >
+                      <option value="HQ">HQ</option>
+                      <option value="LQ">LQ</option>
+                    </select>
+                  </div>
+                </div>
+
+                {unitError ? (
+                  <p className="mt-2 text-xs font-medium text-red-600">
+                    {unitError}
+                  </p>
+                ) : null}
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleAddUnit}
+                    disabled={createUnitMutation.isPending}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {createUnitMutation.isPending ? "Adding..." : "Save Unit"}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </FormSection>
-      </div>
-) : null}
+            )}
+          </FormSection>
+        </div>
+      ) : null}
       <FormSection
         icon={<IconCurrencyRupee size={18} />}
         title="Pricing & Transit"
