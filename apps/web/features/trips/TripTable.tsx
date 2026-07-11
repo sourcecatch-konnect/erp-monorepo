@@ -2,9 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { motion } from "motion/react";
 import {
   Column,
   ColumnDef,
+  VisibilityState,
   flexRender,
   getCoreRowModel,
   useReactTable,
@@ -30,6 +32,7 @@ import {
 } from "@skerp/ui/components/select";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -43,9 +46,11 @@ import {
   PaginationPrevious,
 } from "@skerp/ui/components/pagination";
 import {
+  IconAlertTriangle,
   IconArrowsSort,
   IconBan,
   IconCircleCheck,
+  IconColumns3,
   IconDatabaseOff,
   IconDotsVertical,
   IconDownload,
@@ -108,6 +113,10 @@ type Props = TripRowActions & {
   onTypeFilterChange: (value: string) => void;
   sort: string;
   onSortChange: (value: string) => void;
+  columnVisibility: VisibilityState;
+  onColumnVisibilityChange: React.Dispatch<
+    React.SetStateAction<VisibilityState>
+  >;
   counts: Record<string, number>;
   isLoading?: boolean;
   canDownloadPdf: boolean;
@@ -116,6 +125,17 @@ type Props = TripRowActions & {
 };
 
 const DELETE_ALLOWED_STATUSES = ["Planned", "Cancelled"] as const;
+
+/** Menu labels for the column-visibility picker. */
+const COLUMN_LABELS: Record<string, string> = {
+  journey: "Journey",
+  vehicle: "Vehicle / Driver",
+  route: "Route",
+  client: "Client",
+  type: "Type",
+  freight: "Freight",
+  date: "Date",
+};
 
 /**
  * Right-pinned cells sit over scrolled content, so they need an opaque
@@ -205,6 +225,8 @@ export default function TripTable(props: Props) {
     onTypeFilterChange,
     sort,
     onSortChange,
+    columnVisibility,
+    onColumnVisibilityChange,
     counts,
     isLoading,
     onStart,
@@ -250,6 +272,7 @@ export default function TripTable(props: Props) {
       {
         id: "trip",
         header: "Trip",
+        enableHiding: false,
         cell: ({ row }) => (
           <Link
             href={`/trips/${row.original.id}`}
@@ -375,13 +398,22 @@ export default function TripTable(props: Props) {
       {
         id: "status",
         header: "Status",
-        size: 120,
+        size: 112,
+        enableHiding: false,
         cell: ({ row }) => {
-          const km = tripKmRun(row.original);
+          const t = row.original;
+          const km = tripKmRun(t);
+          const lrPending =
+            t.status === "InTransit" && (t.undeliveredLrCount ?? 0) > 0;
           return (
             <div className="flex flex-col items-start gap-0.5">
-              <TripStatusBadge status={row.original.status} />
-              {row.original.status === "Closed" && km !== null ? (
+              <TripStatusBadge status={t.status} />
+              {lrPending ? (
+                <span className="flex items-center gap-1 pl-0.5 text-xs text-amber-700 dark:text-amber-400">
+                  <IconAlertTriangle size={12} /> LR undelivered
+                </span>
+              ) : null}
+              {t.status === "Closed" && km !== null ? (
                 <span className="pl-0.5 text-xs text-muted-foreground tabular-nums">
                   {km.toLocaleString("en-IN")} km
                 </span>
@@ -393,7 +425,8 @@ export default function TripTable(props: Props) {
       {
         id: "actions",
         header: () => <span className="block text-right">Actions</span>,
-        size: 150,
+        size: 136,
+        enableHiding: false,
         cell: ({ row }) => {
           const t = row.original;
           // LR trips carrying goods dispatch by attaching an LR; DC and
@@ -401,6 +434,9 @@ export default function TripTable(props: Props) {
           const attachableLR = tripAttachesLR(t);
           const dispatchableDirect = tripDispatchesDirect(t);
           const closeable = t.status === "InTransit";
+          // Server-side "Way 1" gate: the final leg of an LR group cannot
+          // close while its LRs are undelivered.
+          const lrPending = (t.undeliveredLrCount ?? 0) > 0;
           const editable = t.status === "Planned";
           // Journey legs keep their chain slot — cancel, never delete.
           const deletable =
@@ -423,30 +459,36 @@ export default function TripTable(props: Props) {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 px-2 text-xs"
+                  className="h-6 px-1.5 text-xs"
                   onClick={() => onStart(t)}
                 >
-                  <IconTruckDelivery size={14} className="mr-1" /> Start
+                  <IconTruckDelivery size={13} className="mr-1" /> Start
                 </Button>
               ) : null}
               {canDispatch && dispatchableDirect ? (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 px-2 text-xs"
+                  className="h-6 px-1.5 text-xs"
                   onClick={() => onDispatch(t)}
                 >
-                  <IconPlayerPlay size={14} className="mr-1" /> Dispatch
+                  <IconPlayerPlay size={13} className="mr-1" /> Dispatch
                 </Button>
               ) : null}
               {canClose && closeable ? (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 px-2 text-xs"
+                  className="h-6 px-1.5 text-xs"
+                  disabled={lrPending}
+                  title={
+                    lrPending
+                      ? "LRs on this trip are not delivered yet — mark them delivered or hold the group at hub"
+                      : undefined
+                  }
                   onClick={() => onClose(t)}
                 >
-                  <IconCircleCheck size={14} className="mr-1" /> Close
+                  <IconCircleCheck size={13} className="mr-1" /> Close
                 </Button>
               ) : null}
               <DropdownMenu>
@@ -525,41 +567,60 @@ export default function TripTable(props: Props) {
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    state: { columnPinning: { right: ["status", "actions"] } },
+    onColumnVisibilityChange,
+    state: {
+      columnPinning: { right: ["status", "actions"] },
+      columnVisibility,
+    },
   });
 
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
   const pageCount = Math.max(1, Math.ceil(total / size));
   const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
   return (
     <div className="w-full space-y-3">
-      {/* Status tabs */}
-      <div className="flex flex-wrap items-center gap-1">
+      {/* Status tabs — Notion-style underline with a shared sliding indicator */}
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-border">
         {TRIP_STATUS_ORDER.map((tab) => {
           const active = statusFilter === tab.key;
           const count = counts[tab.key];
+          const Icon = tab.icon;
           return (
             <button
               key={tab.key}
               type="button"
               onClick={() => onStatusFilterChange(tab.key)}
-              className={`cursor-pointer rounded-sm px-3 py-1.5 text-sm transition-colors ${
+              className={cn(
+                "relative flex cursor-pointer items-center gap-1.5 rounded-t-sm px-3 py-2 text-sm transition-colors",
                 active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
             >
+              <Icon
+                size={15}
+                className={active ? "text-primary" : undefined}
+              />
               {tab.label}
               {typeof count === "number" ? (
                 <span
-                  className={`ml-1.5 rounded-sm px-1 text-xs ${
+                  className={cn(
+                    "rounded-sm px-1 text-xs tabular-nums",
                     active
-                      ? "bg-primary-foreground/20"
-                      : "bg-muted-foreground/10"
-                  }`}
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted text-muted-foreground",
+                  )}
                 >
                   {count}
                 </span>
+              ) : null}
+              {active ? (
+                <motion.span
+                  layoutId="trips-status-tab"
+                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary"
+                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                />
               ) : null}
             </button>
           );
@@ -592,6 +653,31 @@ export default function TripTable(props: Props) {
             <SelectItem value="dc">Rake (DC)</SelectItem>
           </SelectContent>
         </Select>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="ml-auto h-9">
+              <IconColumns3 size={16} className="mr-1" /> Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {table
+              .getAllLeafColumns()
+              .filter((col) => col.getCanHide())
+              .map((col) => (
+                <DropdownMenuCheckboxItem
+                  key={col.id}
+                  checked={col.getIsVisible()}
+                  onCheckedChange={(value) =>
+                    col.toggleVisibility(Boolean(value))
+                  }
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {COLUMN_LABELS[col.id] ?? col.id}
+                </DropdownMenuCheckboxItem>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <Table className="bg-card">
@@ -622,14 +708,14 @@ export default function TripTable(props: Props) {
           {isLoading ? (
             Array.from({ length: 8 }).map((_, r) => (
               <TableRow key={r}>
-                {table.getAllLeafColumns().map((col) => {
+                {table.getVisibleLeafColumns().map((col) => {
                   const pinned = col.getIsPinned() === "right";
                   return (
                     <TableCell
                       key={col.id}
                       style={pinStyle(col)}
                       className={cn(
-                        "h-14",
+                        "h-12",
                         pinned && `sticky z-10 ${PIN_CELL_BG}`,
                         col.id === "status" && "border-l border-border",
                       )}
@@ -648,7 +734,7 @@ export default function TripTable(props: Props) {
           ) : data.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={columns.length}
+                colSpan={visibleColumnCount}
                 className="py-14 text-center text-muted-foreground"
               >
                 <div className="flex flex-col items-center gap-2">
@@ -673,7 +759,7 @@ export default function TripTable(props: Props) {
                       key={cell.id}
                       style={pinStyle(cell.column)}
                       className={cn(
-                        "h-14 text-sm",
+                        "h-12 text-sm",
                         pinned && `sticky z-10 ${PIN_CELL_BG} transition-colors`,
                         cell.column.id === "status" &&
                           "border-l border-border",

@@ -15,13 +15,20 @@ import {
   unwrapListResponse,
 } from "../masters/_shared/master-api";
 
+/**
+ * `fields` narrows the relations the server joins to the visible table
+ * columns (comma-separated column ids). Omit it to fetch everything.
+ */
+export type TripListQuery = ListQuery & { fields?: string };
+
 export const tripApi = {
-  list: async (query?: ListQuery): Promise<ListResult<Trip>> => {
+  list: async (query?: TripListQuery): Promise<ListResult<Trip>> => {
     const params: Record<string, string | number> = {};
     if (query?.page !== undefined) params.page = query.page;
     if (query?.size !== undefined) params.size = query.size;
     if (query?.search) params.search = query.search;
     if (query?.sort) params.sort = query.sort;
+    if (query?.fields) params.fields = query.fields;
     if (query?.filter?.status)
       params["filter[status]"] = String(query.filter.status);
     if (query?.filter?.tripType) {

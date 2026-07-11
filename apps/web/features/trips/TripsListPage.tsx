@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { VisibilityState } from "@tanstack/react-table";
 import { toast } from "sonner";
 import type { Trip } from "@skerp/types";
 import { PERMS } from "@skerp/types";
@@ -21,12 +27,17 @@ import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
-import type { ListQuery } from "../masters/_shared/master-api";
 
 import { tripApi } from "./trip.service";
+import type { TripListQuery } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import TripTable from "./TripTable";
 import CloseTripDialog from "./CloseTripDialog";
+
+/** Columns whose data is a relation join the server can skip when hidden. */
+const RELATION_COLUMNS = ["journey", "vehicle", "route", "client"] as const;
+
+const COLUMNS_STORAGE_KEY = "trips.column-visibility";
 
 function StatCard({
   label,
@@ -79,10 +90,43 @@ export default function TripsListPage() {
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [statusFilter, setStatusFilter] = React.useState("InTransit");
   const [typeFilter, setTypeFilter] = React.useState("ALL");
   const [sort, setSort] = React.useState("createdAt:desc");
   const debouncedSearch = useDebouncedValue(search);
+
+  // Hydrated from localStorage after mount (not in the initializer — the
+  // SSR pass has no localStorage and the markup must match on hydration).
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({});
+  const visibilityLoaded = React.useRef(false);
+
+  React.useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLUMNS_STORAGE_KEY);
+      if (raw) setColumnVisibility(JSON.parse(raw) as VisibilityState);
+    } catch {
+      // corrupted entry — fall back to all columns visible
+    }
+    visibilityLoaded.current = true;
+  }, []);
+
+  React.useEffect(() => {
+    if (!visibilityLoaded.current) return;
+    try {
+      window.localStorage.setItem(
+        COLUMNS_STORAGE_KEY,
+        JSON.stringify(columnVisibility),
+      );
+    } catch {
+      // storage full/blocked — visibility just won't persist
+    }
+  }, [columnVisibility]);
+
+  // Only ask the server to join relations for columns that are shown.
+  const fields = RELATION_COLUMNS.filter(
+    (col) => columnVisibility[col] !== false,
+  ).join(",");
 
   const [closeTrip, setCloseTrip] = React.useState<Trip | null>(null);
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
@@ -107,24 +151,28 @@ export default function TripsListPage() {
     setPage(0);
   };
 
-  const listQuery = React.useMemo<ListQuery>(
+  const listQuery = React.useMemo<TripListQuery>(
     () => ({
       page,
       size,
       sort,
+      fields,
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       filter: {
         ...(statusFilter !== "ALL" ? { status: statusFilter } : {}),
         ...(typeFilter !== "ALL" ? { tripType: typeFilter } : {}),
       },
     }),
-    [page, size, sort, debouncedSearch, statusFilter, typeFilter],
+    [page, size, sort, fields, debouncedSearch, statusFilter, typeFilter],
   );
 
   const trips = useQuery({
     queryKey: tripKeys.list(listQuery),
     queryFn: () => tripApi.list(listQuery),
     staleTime: 60_000,
+    // Keep the previous rows on screen while a page/filter/column change
+    // refetches — no skeleton flash between transitions.
+    placeholderData: keepPreviousData,
   });
 
   const counts = useQuery({
@@ -239,6 +287,8 @@ export default function TripsListPage() {
         onTypeFilterChange={setTypeFilter}
         sort={sort}
         onSortChange={setSort}
+        columnVisibility={columnVisibility}
+        onColumnVisibilityChange={setColumnVisibility}
         counts={counts.data ?? {}}
         isLoading={trips.isLoading}
         canStart={canCreateLR}

@@ -1,6 +1,16 @@
 import * as React from "react";
 import type { Trip, TripStatus, TripType } from "@skerp/types";
-import { IconArrowBackUp, IconFileText, IconTrain, IconUser } from "@tabler/icons-react";
+import {
+  IconArrowBackUp,
+  IconBan,
+  IconCircleCheck,
+  IconClipboardList,
+  IconFileText,
+  IconList,
+  IconTrain,
+  IconTruckDelivery,
+  IconUser,
+} from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<TripStatus, string> = {
@@ -23,7 +33,7 @@ export function TripStatusBadge({ status }: { status: TripStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5",
+        "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px",
         "text-xs font-medium whitespace-nowrap",
         STATUS_STYLES[status],
       )}
@@ -57,7 +67,7 @@ export function TripTypeChip({ type }: { type: TripType }) {
 /** Vehicle registration rendered as a license-plate chip. */
 export function VehiclePlate({ number }: { number: string }) {
   return (
-    <span className="inline-flex items-center rounded-sm border border-border bg-muted/50 px-1.5 py-0.5 font-mono text-xs font-semibold uppercase">
+    <span className="inline-flex items-center rounded-sm border border-border bg-muted/50 px-1 py-px font-mono text-xs font-semibold uppercase">
       {number}
     </span>
   );
@@ -92,7 +102,7 @@ export function ClientCell({
 }) {
   if (!name) {
     return isTripEmpty ? (
-      <span className="inline-flex items-center rounded-sm border border-border bg-muted/50 px-1.5 py-0.5 text-xs text-muted-foreground">
+      <span className="inline-flex items-center rounded-sm border border-border bg-muted/50 px-1 py-px text-xs text-muted-foreground">
         Empty leg
       </span>
     ) : (
@@ -105,8 +115,8 @@ export function ClientCell({
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
         {initials}
       </span>
       <span className="text-sm">{name}</span>
@@ -123,7 +133,7 @@ export function LegChip({
   isReturnLeg: boolean;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-sm border border-border bg-muted/50 px-1 py-px text-[10px] font-medium text-muted-foreground">
+    <span className="inline-flex items-center gap-1 rounded-sm border border-border bg-muted/50 px-1 py-0 text-xs font-medium text-muted-foreground">
       Leg {sequenceNo ?? "?"}
       {isReturnLeg ? <IconArrowBackUp size={11} /> : null}
     </span>
@@ -163,12 +173,16 @@ export function tripKmRun(trip: Pick<Trip, "openingKm" | "closingKm">): number |
   return run >= 0 ? run : null;
 }
 
-export const TRIP_STATUS_ORDER: { key: string; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "Planned", label: "Planned" },
-  { key: "InTransit", label: "In Transit" },
-  { key: "Closed", label: "Closed" },
-  { key: "Cancelled", label: "Cancelled" },
+export const TRIP_STATUS_ORDER: {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}[] = [
+  { key: "ALL", label: "All", icon: IconList },
+  { key: "Planned", label: "Planned", icon: IconClipboardList },
+  { key: "InTransit", label: "In Transit", icon: IconTruckDelivery },
+  { key: "Closed", label: "Closed", icon: IconCircleCheck },
+  { key: "Cancelled", label: "Cancelled", icon: IconBan },
 ];
 
 type DispatchGateInput = Pick<Trip, "status" | "tripType" | "isTripEmpty">;
