@@ -84,6 +84,7 @@ import {
   IconDotsVertical,
   IconDownload,
   IconEdit,
+  IconFileDescription,
   IconGripVertical,
   IconMapPin,
   IconPlayerPlay,
@@ -163,10 +164,11 @@ type Props = TripRowActions & {
 const DELETE_ALLOWED_STATUSES = ["Planned", "Cancelled"] as const;
 
 /**
- * The reorderable middle columns, in default order. Trip stays the anchor
- * first column and Status/Actions stay pinned right — neither participates.
+ * The reorderable columns, in default order. Only Status/Actions sit outside
+ * the user's control — they stay pinned right.
  */
 export const DEFAULT_TRIP_COLUMN_ORDER = [
+  "trip",
   "journey",
   "vehicle",
   "route",
@@ -181,6 +183,7 @@ const COLUMN_META: Record<
   string,
   { label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
 > = {
+  trip: { label: "Trip", icon: IconFileDescription },
   journey: { label: "Journey", icon: IconRoute },
   vehicle: { label: "Vehicle / Driver", icon: IconTruck },
   route: { label: "Route", icon: IconMapPin },
@@ -389,7 +392,6 @@ export default function TripTable(props: Props) {
       {
         id: "trip",
         header: "Trip",
-        enableHiding: false,
         cell: ({ row }) => (
           <Link
             href={`/trips/${row.original.id}`}
@@ -680,9 +682,9 @@ export default function TripTable(props: Props) {
     ],
   );
 
-  // Pinned columns keep their slots regardless of the user's middle order.
+  // Pinned columns keep their slots regardless of the user's order.
   const tableColumnOrder = React.useMemo(
-    () => ["trip", ...columnOrder, "status", "actions"],
+    () => [...columnOrder, "status", "actions"],
     [columnOrder],
   );
 

@@ -8,7 +8,6 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { VisibilityState } from "@tanstack/react-table";
 import { toast } from "sonner";
 import type { Trip } from "@skerp/types";
 import { PERMS } from "@skerp/types";
@@ -22,6 +21,7 @@ import {
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import { useTablePrefs } from "@/features/table-prefs";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { cn } from "@/lib/utils";
@@ -36,23 +36,6 @@ import CloseTripDialog from "./CloseTripDialog";
 
 /** Columns whose data is a relation join the server can skip when hidden. */
 const RELATION_COLUMNS = ["journey", "vehicle", "route", "client"] as const;
-
-const COLUMNS_STORAGE_KEY = "trips.column-visibility";
-const COLUMN_ORDER_STORAGE_KEY = "trips.column-order";
-
-/**
- * A stored order may predate columns added later (or hold junk) — keep the
- * known ids in their saved order and append anything new at the end.
- */
-const sanitizeColumnOrder = (stored: unknown): string[] => {
-  const known = DEFAULT_TRIP_COLUMN_ORDER as readonly string[];
-  const valid = Array.isArray(stored)
-    ? stored.filter(
-        (id): id is string => typeof id === "string" && known.includes(id),
-      )
-    : [];
-  return [...valid, ...known.filter((id) => !valid.includes(id))];
-};
 
 function StatCard({
   label,
@@ -110,44 +93,10 @@ export default function TripsListPage() {
   const [sort, setSort] = React.useState("createdAt:desc");
   const debouncedSearch = useDebouncedValue(search);
 
-  // Hydrated from localStorage after mount (not in the initializer — the
-  // SSR pass has no localStorage and the markup must match on hydration).
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
-  const [columnOrder, setColumnOrder] = React.useState<string[]>([
-    ...DEFAULT_TRIP_COLUMN_ORDER,
-  ]);
-  const prefsLoaded = React.useRef(false);
-
-  React.useEffect(() => {
-    try {
-      const rawVisibility = window.localStorage.getItem(COLUMNS_STORAGE_KEY);
-      if (rawVisibility) {
-        setColumnVisibility(JSON.parse(rawVisibility) as VisibilityState);
-      }
-      const rawOrder = window.localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
-      if (rawOrder) setColumnOrder(sanitizeColumnOrder(JSON.parse(rawOrder)));
-    } catch {
-      // corrupted entry — fall back to the default table layout
-    }
-    prefsLoaded.current = true;
-  }, []);
-
-  React.useEffect(() => {
-    if (!prefsLoaded.current) return;
-    try {
-      window.localStorage.setItem(
-        COLUMNS_STORAGE_KEY,
-        JSON.stringify(columnVisibility),
-      );
-      window.localStorage.setItem(
-        COLUMN_ORDER_STORAGE_KEY,
-        JSON.stringify(columnOrder),
-      );
-    } catch {
-      // storage full/blocked — the layout just won't persist
-    }
-  }, [columnVisibility, columnOrder]);
+  // Per-user layout, persisted server-side (follows the account, not the
+  // browser). Defaults render until the saved layout loads.
+  const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder } =
+    useTablePrefs("trips", DEFAULT_TRIP_COLUMN_ORDER);
 
   // Only ask the server to join relations for columns that are shown.
   const fields = RELATION_COLUMNS.filter(
