@@ -40,6 +40,14 @@ const templateBodies: Record<
     subject: "POD uploaded",
     body: "POD has been uploaded for LR {{lrNumber}}.",
   },
+  "lr.at_hub.overdue": {
+    subject: "Group waiting at hub",
+    body: "Group {{groupNumber}} has been lying at the hub for {{days}} day(s) awaiting dispatch to {{destination}}.",
+  },
+  "lr.pod.overdue": {
+    subject: "POD not received",
+    body: "LR {{lrNumber}} was delivered {{days}} day(s) ago but the signed POD has not been received yet.",
+  },
   "trip.created": {
     subject: "Trip created",
     body: "Trip {{tripNumber}} has been created.",
@@ -112,9 +120,28 @@ const rules: RuleSeed[] = [
     eventType: "lr.delivered",
     name: "LR delivered",
     severity: NotificationSeverity.SUCCESS,
-    recipientResolverKey: "lr.creator",
+    // Deliver events carry fromBranchId (the booking branch) in the payload.
+    recipientResolverKey: "fromBranch.users",
     channels: [...defaultChannels],
     templateCode: "lr.delivered",
+  },
+  {
+    eventType: "lr.at_hub.overdue",
+    name: "Group waiting at hub",
+    severity: NotificationSeverity.WARNING,
+    // Sweep sets the event branch to the hub (head-office) branch.
+    recipientResolverKey: "subscribers",
+    channels: [NotificationChannel.IN_APP],
+    templateCode: "lr.at_hub.overdue",
+  },
+  {
+    eventType: "lr.pod.overdue",
+    name: "POD not received",
+    severity: NotificationSeverity.WARNING,
+    // Sweep sets the event branch to the origin (booking) branch.
+    recipientResolverKey: "role:Accounts@branch",
+    channels: [...defaultChannels],
+    templateCode: "lr.pod.overdue",
   },
   {
     eventType: "lr.pod_uploaded",

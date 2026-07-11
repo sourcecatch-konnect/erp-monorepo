@@ -53,6 +53,7 @@ import vpLoadingRoute from "./modules/vp-loading/vp-loading.route.js"
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
+import { startDeliverySweeps } from "./modules/lorry-receipt/lr-delivery.sweeps.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
 import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
 import MRRRRoute from "./modules/mrrr/mrrr.route.js"
@@ -143,6 +144,7 @@ async function bootstrap() {
   const io = initNotificationRealtime(server);
   initTrackingRealtime(io);
   startNotificationWorkers();
+  startDeliverySweeps();
 
   seedNotificationDefaults().catch((error) => {
     console.error("[notifications] Failed to seed defaults:", error);
