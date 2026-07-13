@@ -5,6 +5,7 @@ import type {
   CreateEmployeeInput,
   Employee,
   EmployeeMutationResult,
+  RoleOption,
   UpdateEmployeeInput,
 } from "../types";
 
@@ -72,5 +73,10 @@ export const listBranches = async (
   const res = await api.get<ApiSuccess<Branch[]>>("/branches", {
     params: companyId ? { companyId } : undefined,
   });
+  return res.data.data;
+};
+
+export const listRoles = async (): Promise<RoleOption[]> => {
+  const res = await api.get<ApiSuccess<RoleOption[]>>("/admin/roles");
   return res.data.data;
 };

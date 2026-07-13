@@ -30,6 +30,7 @@ export const createEmployeeSchema = z.object({
   password: employeePasswordSchema,
   companyId: z.string().min(1, "Company is required"),
   branchId: z.string().min(1, "Branch is required"),
+  roleId: z.string().min(1, "Role is required"),
 });
 
 export const updateEmployeeSchema = z.object({
@@ -37,6 +38,7 @@ export const updateEmployeeSchema = z.object({
   middleName: z.string().optional(),
   lastName: z.string().min(1).optional(),
   email: z.string().email("Invalid email format").optional(),
+  roleId: z.string().min(1, "Role is required").optional(),
   mobile: z
     .string()
     .trim()
