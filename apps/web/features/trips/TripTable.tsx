@@ -72,7 +72,6 @@ import {
   PaginationPrevious,
 } from "@skerp/ui/components/pagination";
 import {
-  IconAlertTriangle,
   IconArrowsSort,
   IconBan,
   IconBuilding,
@@ -107,6 +106,7 @@ import {
   LegChip,
   RouteCell,
   timeAgo,
+  TripCargoLine,
   TripStatusBadge,
   TripTypeChip,
   TRIP_STATUS_ORDER,
@@ -522,16 +522,10 @@ export default function TripTable(props: Props) {
         cell: ({ row }) => {
           const t = row.original;
           const km = tripKmRun(t);
-          const lrPending =
-            t.status === "InTransit" && (t.undeliveredLrCount ?? 0) > 0;
           return (
             <div className="flex flex-col items-start gap-0.5">
               <TripStatusBadge status={t.status} />
-              {lrPending ? (
-                <span className="flex items-center gap-1 pl-0.5 text-xs text-amber-700 dark:text-amber-400">
-                  <IconAlertTriangle size={12} /> LR undelivered
-                </span>
-              ) : null}
+              <TripCargoLine trip={t} />
               {t.status === "Closed" && km !== null ? (
                 <span className="pl-0.5 text-xs text-muted-foreground tabular-nums">
                   {km.toLocaleString("en-IN")} km
@@ -554,8 +548,9 @@ export default function TripTable(props: Props) {
           const dispatchableDirect = tripDispatchesDirect(t);
           const closeable = t.status === "InTransit";
           // Server-side "Way 1" gate: the final leg of an LR group cannot
-          // close while its LRs are undelivered.
+          // close while its LRs are undelivered — a draft LR blocks too.
           const lrPending = (t.undeliveredLrCount ?? 0) > 0;
+          const lrDraft = (t.lrSummary?.draft ?? 0) > 0;
           const editable = t.status === "Planned";
           // Journey legs keep their chain slot — cancel, never delete.
           const deletable =
@@ -601,9 +596,11 @@ export default function TripTable(props: Props) {
                   className="h-6 px-1.5 text-xs"
                   disabled={lrPending}
                   title={
-                    lrPending
-                      ? "LRs on this trip are not delivered yet — mark them delivered or hold the group at hub"
-                      : undefined
+                    lrDraft
+                      ? "The LR on this trip is still a draft — finalise and deliver it before closing"
+                      : lrPending
+                        ? "LRs on this trip are not delivered yet — mark them delivered or hold the group at hub"
+                        : undefined
                   }
                   onClick={() => onClose(t)}
                 >

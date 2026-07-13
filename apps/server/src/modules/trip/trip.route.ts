@@ -29,6 +29,7 @@ import {
 } from "../../lib/error.js";
 import {
   buildTripName,
+  summariseTripCargo,
   tripInclude,
   tripListBaseSelect,
   tripListRelationSelects,
@@ -279,13 +280,11 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
     db.vehicleTrip.count({ where }),
   ]);
 
-  // Flatten the delivery-gate relations to a single count the web can gate
-  // the Close action on (see tripListBaseSelect).
+  // Flatten the group relations into the Close gate count + the cargo-line
+  // summary (see tripListBaseSelect / summariseTripCargo).
   const rows = data.map(({ primaryGroups, secondaryGroups, ...trip }) => ({
     ...trip,
-    undeliveredLrCount:
-      primaryGroups.reduce((n, g) => n + g._count.lorryReceipts, 0) +
-      secondaryGroups.reduce((n, g) => n + g._count.lorryReceipts, 0),
+    ...summariseTripCargo(primaryGroups, secondaryGroups),
   }));
 
   return sendOk(res, rows, { page: query.page, size: query.size, total });
@@ -892,7 +891,7 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   if (blockers.length > 0) {
     throw new BadRequestError(
       `Cannot close trip — ${blockers.length} LR(s) not delivered: ${blockers.join(", ")}. ` +
-        "Mark them delivered or hold the group at hub.",
+        "Finalise and deliver them, or hold the group at hub.",
       "TRIP_CLOSE_UNDELIVERED_LRS",
     );
   }

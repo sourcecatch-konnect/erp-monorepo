@@ -30,6 +30,15 @@ export type TripStatusHistoryRow = {
   changedBy?: { id: string; firstName: string; lastName: string };
 };
 
+/** Cargo-state buckets for a trip's live LRs (trips list rows). */
+export type TripLrSummary = {
+  total: number;
+  draft: number;
+  undelivered: number;
+  atHub: number;
+  delivered: number;
+};
+
 type RouteRef = {
   id: string;
   sourceCity?: { id: string; name: string };
@@ -71,10 +80,18 @@ export type Trip = {
   chainExceptionReason: string | null;
 
   /**
-   * List rows only: live FINALISED (undelivered) LRs on groups whose final
-   * leg is this trip — the server blocks Close while it's > 0 ("Way 1" gate).
+   * List rows only: live not-yet-delivered LRs (DRAFT or FINALISED) on groups
+   * whose final leg is this trip — the server blocks Close while it's > 0
+   * ("Way 1" gate). A leg-1 group held at hub is exempt.
    */
   undeliveredLrCount?: number;
+
+  /**
+   * List rows only: live-LR status buckets for the cargo line under the trip
+   * status badge. `delivered` includes ACKNOWLEDGED; cancelled LRs and groups
+   * already handed over to a leg-2 trip are excluded.
+   */
+  lrSummary?: TripLrSummary;
 
   vehicle?: { id: string; vehicleNumber: string; ownershipType: string };
   driver?: { id: string; name: string };

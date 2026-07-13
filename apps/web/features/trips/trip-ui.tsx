@@ -3,10 +3,14 @@ import type { Trip, TripStatus, TripType } from "@skerp/types";
 import {
   IconArrowBackUp,
   IconBan,
+  IconBuildingWarehouse,
   IconCircleCheck,
   IconClipboardList,
+  IconFileOff,
   IconFileText,
+  IconHourglass,
   IconList,
+  IconPencil,
   IconTrain,
   IconTruckDelivery,
   IconUser,
@@ -45,6 +49,65 @@ export function TripStatusBadge({ status }: { status: TripStatus }) {
         )}
       />
       {STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+type CargoLineInput = Pick<
+  Trip,
+  "status" | "tripType" | "isTripEmpty" | "lrSummary"
+>;
+
+/**
+ * The cargo (LR) lifecycle line under the trip status badge — the vehicle
+ * lifecycle answers "where is the truck?", this answers "where are the
+ * goods/paperwork?". Rendered only for LR trips carrying goods that are still
+ * live (Planned/InTransit); Closed rows show the km line instead.
+ */
+export function TripCargoLine({ trip }: { trip: CargoLineInput }) {
+  const s = trip.lrSummary;
+  if (!s) return null;
+  if (trip.tripType !== "lr" || trip.isTripEmpty) return null;
+  if (trip.status !== "Planned" && trip.status !== "InTransit") return null;
+
+  let icon: React.ReactNode;
+  let label: string;
+  let tone: string;
+
+  if (s.total === 0) {
+    icon = <IconFileOff size={12} />;
+    label = "No LR";
+    tone = "text-muted-foreground";
+  } else if (s.draft > 0) {
+    icon = <IconPencil size={12} />;
+    label = s.draft > 1 ? `${s.draft} LR drafts` : "LR draft";
+    tone = "text-amber-700 dark:text-amber-400";
+  } else if (s.undelivered > 0) {
+    icon = <IconHourglass size={12} />;
+    label =
+      s.delivered > 0
+        ? `${s.delivered}/${s.delivered + s.undelivered} delivered`
+        : "Undelivered";
+    tone = "text-amber-700 dark:text-amber-400";
+  } else if (s.atHub > 0) {
+    icon = <IconBuildingWarehouse size={12} />;
+    label = "At hub";
+    tone = "text-primary";
+  } else {
+    icon = <IconCircleCheck size={12} />;
+    label = "Delivered";
+    tone = "text-emerald-700 dark:text-emerald-400";
+  }
+
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-1 pl-0.5 text-xs whitespace-nowrap",
+        tone,
+      )}
+    >
+      {icon}
+      {label}
     </span>
   );
 }
