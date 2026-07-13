@@ -920,7 +920,8 @@ model OrderConsignment {
   id                  String                  @id @default(cuid())
   orderId             String
   truckIndex          Int                     @default(1)
-  totalWeight         Decimal?
+  totalWeight         Decimal?                @db.Decimal(14, 4)
+  weightUnitId        String?
   unit                String?
   loadingLocationId   String?
   unloadingLocationId String?
@@ -929,22 +930,30 @@ model OrderConsignment {
   loadingLocation     CustomerLocation?       @relation("ConsignmentLoading", fields: [loadingLocationId], references: [id])
   order               Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   unloadingLocation   CustomerLocation?       @relation("ConsignmentUnloading", fields: [unloadingLocationId], references: [id])
+  weightUnit          UnitOfMeasure?          @relation("OrderConsignmentWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
   goods               OrderConsignmentGoods[]
 
   @@index([orderId])
+  @@index([weightUnitId])
 }
 
 model OrderConsignmentGoods {
-  id            String           @id @default(cuid())
-  consignmentId String
-  goodsId       String
-  quantity      Int
-  unit          String?
-  weight        Decimal?
-  consignment   OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
-  goods         Goods            @relation(fields: [goodsId], references: [id])
+  id             String           @id @default(cuid())
+  consignmentId  String
+  goodsId        String
+  quantity       Int
+  unit           String?
+  weight         Decimal?         @db.Decimal(14, 4)
+  quantityUnitId String?
+  weightUnitId   String?
+  consignment    OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  goods          Goods            @relation(fields: [goodsId], references: [id])
+  quantityUnit   UnitOfMeasure?   @relation("OrderGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit     UnitOfMeasure?   @relation("OrderGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([consignmentId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
 }
 
 model OrderEvent {
@@ -1093,7 +1102,8 @@ model LorryReceipt {
   loadingLocationId   String?
   unloadingLocationId String?
   ewayBill            EwayBill?
-  totalWeight         Decimal?
+  totalWeight         Decimal?           @db.Decimal(14, 4)
+  weightUnitId        String?
   unit                String?
   goods               LRGoods[]
   grn                 GRN?
@@ -1104,10 +1114,12 @@ model LorryReceipt {
   loadingLocation     CustomerLocation?  @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
   unloadingLocation   CustomerLocation?  @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
   updatedBy           User?              @relation("UpdatedLR", fields: [updatedById], references: [id])
+  weightUnit          UnitOfMeasure?     @relation("LRWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([status])
   @@index([groupId])
   @@index([fyCode])
+  @@index([weightUnitId])
 }
 
 model LRGoods {
@@ -1116,8 +1128,10 @@ model LRGoods {
   name           String
   description    String?
   quantity       Int
+  quantityUnitId String?
+  weight         Decimal?                @db.Decimal(14, 4)
+  weightUnitId   String?
   unit           String?
-  weight         Decimal?
   length         Float?
   width          Float?
   height         Float?
@@ -1126,8 +1140,12 @@ model LRGoods {
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   lorryReceipt   LorryReceipt            @relation(fields: [lorryReceiptId], references: [id])
+  quantityUnit   UnitOfMeasure?          @relation("LRGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit     UnitOfMeasure?          @relation("LRGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([lorryReceiptId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
 }
 
 /**
@@ -1682,16 +1700,22 @@ model GRNGoods {
   damageQty      Int              @default(0)
   shortageQty    Int              @default(0)
   vpLoadingGoods VPLoadingGoods[]
+  quantityUnitId String?
+  weight         Decimal?         @db.Decimal(14, 4)
+  weightUnitId   String?
   unit           String?
-  weight         Decimal?
 
   remarks String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  quantityUnit UnitOfMeasure? @relation("GRNGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit   UnitOfMeasure? @relation("GRNGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([grnId])
   @@index([lrGoodsId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
 }
 
 model VPLoading {
@@ -2339,6 +2363,40 @@ model LogSlipLine {
   logSlip LogSlip @relation(fields: [logSlipId], references: [id], onDelete: Cascade)
 
   @@index([logSlipId])
+}
+
+model UnitOfMeasure {
+  id               String       @id @default(cuid())
+  code             String       @unique
+  name             String
+  category         UnitCategory
+  conversionToBase Decimal?     @db.Decimal(14, 6)
+  baseUnitCode     String?
+  description      String?
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  orderConsignmentWeightUnits OrderConsignment[]      @relation("OrderConsignmentWeightUnit")
+  orderGoodsQuantityUnits     OrderConsignmentGoods[] @relation("OrderGoodsQuantityUnit")
+  orderGoodsWeightUnits       OrderConsignmentGoods[] @relation("OrderGoodsWeightUnit")
+  lrWeightUnits               LorryReceipt[]          @relation("LRWeightUnit")
+  lrGoodsQuantityUnits        LRGoods[]               @relation("LRGoodsQuantityUnit")
+  lrGoodsWeightUnits          LRGoods[]               @relation("LRGoodsWeightUnit")
+  grnGoodsQuantityUnits       GRNGoods[]              @relation("GRNGoodsQuantityUnit")
+  grnGoodsWeightUnits         GRNGoods[]              @relation("GRNGoodsWeightUnit")
+
+  @@index([category])
+  @@index([isActive])
+  @@index([name])
+}
+
+enum UnitCategory {
+  WEIGHT
+  PACKAGING
+  COUNT
+  LENGTH
+  VOLUME
 }
 
 enum VehicleJourneyStatus {
