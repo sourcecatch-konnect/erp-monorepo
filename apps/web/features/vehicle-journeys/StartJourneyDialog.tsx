@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useForm, FormProvider } from "react-hook-form";
+import { Controller, useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -19,12 +19,14 @@ import {
 } from "@skerp/ui/components/dialog";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 
 import ComboboxField from "../masters/_shared/fields/ComboboxField";
 import IconTextField from "../masters/_shared/fields/IconTextField";
 import SelectField from "../masters/_shared/fields/SelectField";
 import CheckboxField from "../masters/_shared/fields/CheckBoxField";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
+import { toValidDate } from "@/lib/date";
 
 import { journeyApi, journeyLookups } from "./journey.service";
 import { journeyKeys, journeyLookupKeys } from "./journey.keys";
@@ -181,12 +183,18 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
                   min={1}
                   required
                 />
-                <div className="grid gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Start date/time
-                  </label>
-                  <Input type="datetime-local" {...form.register("startedAt")} />
-                </div>
+                <Controller
+                  name="startedAt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      label="Start date/time"
+                      selected={toValidDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="Select journey start date and time"
+                    />
+                  )}
+                />
               </div>
             </div>
 
@@ -218,7 +226,10 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
                     <label className="text-xs font-medium text-muted-foreground">
                       Rake date <span className="text-red-600">*</span>
                     </label>
-                    <Input type="date" {...form.register("firstLeg.rakeDate")} />
+                    <Input
+                      type="date"
+                      {...form.register("firstLeg.rakeDate")}
+                    />
                   </div>
                 ) : null}
                 <IconTextField<StartJourneyFormInput>
@@ -283,11 +294,7 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            form="start-journey-form"
-            disabled={submitting}
-          >
+          <Button type="submit" form="start-journey-form" disabled={submitting}>
             {submitting ? "Starting…" : "Start Journey"}
           </Button>
         </DialogFooter>

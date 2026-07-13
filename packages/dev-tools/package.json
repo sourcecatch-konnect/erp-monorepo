@@ -8,7 +8,9 @@
     "./fake/gstin": "./src/fake/gstin.ts",
     "./fake/phone": "./src/fake/phone.ts",
     "./fake/identity": "./src/fake/identity.ts",
-    "./prefill/customer": "./src/prefill/customer.ts"
+    "./prefill/customer": "./src/prefill/customer.ts",
+    "./prefill/vehicle": "./src/prefill/vehicle.ts",
+    "./prefill/driver": "./src/prefill/driver.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit"

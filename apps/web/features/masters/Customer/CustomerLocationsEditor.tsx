@@ -34,8 +34,8 @@ export default function CustomerLocationsEditor({ customerId, cities }: Props) {
         page: 0,
         size: 10,
         search: areaSearch.trim() || undefined,
-        cityId,
-      } as any),
+        filter: { cityId },
+      }),
     enabled: cityId.length > 0,
   });
 
@@ -47,13 +47,13 @@ export default function CustomerLocationsEditor({ customerId, cities }: Props) {
 
   const selectedArea = areas.data?.data.find((area) => area.id === areaId);
 
-const locations = useQuery({
-  queryKey: customerLocationKeys.list(customerId, cityId || undefined),
-  queryFn: () =>
-    customerLocationApi.list(customerId, {
-      cityId: cityId || undefined,
-    }),
-});
+  const locations = useQuery({
+    queryKey: customerLocationKeys.list(customerId, cityId || undefined),
+    queryFn: () =>
+      customerLocationApi.list(customerId, {
+        cityId: cityId || undefined,
+      }),
+  });
 
   const invalidate = () =>
     queryClient.invalidateQueries({
@@ -109,14 +109,14 @@ const locations = useQuery({
                 <IconMapPin size={15} className="text-muted-foreground" />
 
                 <div>
-  <div className="text-sm font-medium">
-    {loc.area?.name ?? loc.name}
-  </div>
+                  <div className="text-sm font-medium">
+                    {loc.area?.name ?? loc.name}
+                  </div>
 
-  <div className="text-xs text-muted-foreground">
-    {loc.city?.name ?? ""}
-  </div>
-</div>
+                  <div className="text-xs text-muted-foreground">
+                    {loc.city?.name ?? ""}
+                  </div>
+                </div>
               </div>
 
               <Button

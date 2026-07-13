@@ -19,7 +19,7 @@ import type {
   EwayBill,
 } from "../lorry-receipt/lorry-receipt.type.js";
 
-export type LRGroupStatus = "DRAFT" | "FINALISED" | "CANCELLED";
+export type LRGroupStatus = "DRAFT" | "FINALISED" | "DELIVERED" | "CANCELLED";
 
 export type CreateLRGroupBody = z.input<typeof createLRGroupSchema>;
 export type CreateLRGroupFormInput = z.input<typeof createLRGroupSchema>;
@@ -53,6 +53,8 @@ export type LRGroupListReceipt = {
   invoiceAmount: number | null;
   goods?: { id: string }[];
   ewayBill: EwayBill | null;
+  delivery?: { deliveredAt: string } | null;
+  acknowledgement?: { receivedAt: string } | null;
 };
 
 export type TripRef = {
@@ -84,6 +86,7 @@ export type LRGroupListItem = {
   isMarketVehicle: boolean;
   marketVehicleNumber: string | null;
   marketDriverName: string | null;
+  hubArrivalAt: string | null;
   baseFreightAmount: number | null;
   sealNumber: string | null;
   primaryTrip: TripRef | null;

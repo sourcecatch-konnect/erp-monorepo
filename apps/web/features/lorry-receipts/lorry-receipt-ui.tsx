@@ -5,12 +5,16 @@ import { cn } from "@/lib/utils";
 const STATUS_LABELS: Record<LRStatus, string> = {
   DRAFT: "Draft",
   FINALISED: "Finalised",
+  DELIVERED: "Delivered",
+  ACKNOWLEDGED: "POD received",
   CANCELLED: "Cancelled",
 };
 
 const STATUS_STYLES: Record<LRStatus, string> = {
   DRAFT: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   FINALISED: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
+  DELIVERED: "bg-sky-500/10 text-sky-700 border-sky-500/20",
+  ACKNOWLEDGED: "bg-violet-500/10 text-violet-700 border-violet-500/20",
   CANCELLED: "bg-slate-500/10 text-slate-600 border-slate-500/20",
 };
 
@@ -38,5 +42,15 @@ export const LR_STATUS_ORDER: { key: string; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "DRAFT", label: "Draft" },
   { key: "FINALISED", label: "Finalised" },
+  { key: "DELIVERED", label: "Delivered" },
+  { key: "ACKNOWLEDGED", label: "POD received" },
   { key: "CANCELLED", label: "Cancelled" },
 ];
+
+/** Whole days elapsed since an ISO timestamp — worklist aging columns. */
+export function daysSince(iso: string): number {
+  return Math.max(
+    0,
+    Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000),
+  );
+}

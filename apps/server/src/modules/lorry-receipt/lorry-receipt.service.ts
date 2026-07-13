@@ -134,6 +134,8 @@ export const lrListSelect = {
   loadingLocation: { select: locationSelect },
   unloadingLocation: { select: locationSelect },
   group: { select: groupRefSelect },
+  delivery: { select: { deliveredAt: true } },
+  acknowledgement: { select: { receivedAt: true } },
 } satisfies Prisma.LorryReceiptSelect;
 
 export const lrDetailInclude = {
@@ -142,6 +144,19 @@ export const lrDetailInclude = {
   group: { select: groupRefSelect },
   goods: true,
   ewayBill: true,
+  delivery: {
+    include: {
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
+      updatedBy: { select: { id: true, firstName: true, lastName: true } },
+    },
+  },
+  acknowledgement: {
+    include: {
+      items: true,
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
+      updatedBy: { select: { id: true, firstName: true, lastName: true } },
+    },
+  },
   createdBy: { select: { id: true, firstName: true, lastName: true } },
   updatedBy: { select: { id: true, firstName: true, lastName: true } },
 } satisfies Prisma.LorryReceiptInclude;

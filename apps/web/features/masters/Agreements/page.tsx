@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Agreement, CreateAgreementBody } from "@skerp/types";
+import type { Agreement } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
@@ -10,17 +10,11 @@ import { toast } from "sonner";
 
 
 
-import { cityApi } from "../city/city.service";
-import { branchApi } from "../branch/branch.service";
 import AgreementDetailDialog from "./agreementDialog";
-import getErrorMessage from "../_shared/hooks/useMasterMutation";
-import { companyApi } from "../Company/company.service";
-import { customerApi } from "../Customer/customer.service";
 import { agreementKeys } from "./agreements.key";
 import { agreementApi } from "./agreements.service";
 import { agreementColumns } from "./agreementsTable";
 import AgreementForm from "./agreementsForm";
-import { attachmentApi } from "@/features/attachments/attachment.client";
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 import { ListQuery } from "../_shared/master-api";
 

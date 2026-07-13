@@ -18,7 +18,6 @@ import {
   IconMapPin,
   IconBuildingStore,
   IconCalendarCheck,
-  IconTruck,
   IconClockEdit,
   IconCirclePlus,
   IconFileDescription,

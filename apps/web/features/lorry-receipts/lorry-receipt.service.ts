@@ -6,6 +6,14 @@ import type {
   UpdateLRBody,
   AddEwayBillBody,
   EwayBill,
+  LRDelivery,
+  LRAcknowledgement,
+  DeliverLRFormInput,
+  AcknowledgeLRFormInput,
+  PendingDeliveryRow,
+  PendingPodRow,
+  AtHubRow,
+  DeliveryStats,
 } from "@skerp/types";
 import {
   type ListQuery,
@@ -66,6 +74,99 @@ export const lorryReceiptApi = {
     const res = await api.delete<ApiResponse<{ id: string }>>(`/lorry-receipts/${id}`);
     return unwrapApiResponse(res);
   },
+
+  /* ---- delivery / acknowledgement (docs/LR_DELIVERY_ACK_PLAN.md) ---- */
+
+  deliver: async (id: string, body: DeliverLRFormInput): Promise<LRDelivery> => {
+    const res = await api.post<ApiResponse<LRDelivery>>(
+      `/lorry-receipts/${id}/deliver`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  updateDelivery: async (
+    id: string,
+    body: DeliverLRFormInput,
+  ): Promise<LRDelivery> => {
+    const res = await api.patch<ApiResponse<LRDelivery>>(
+      `/lorry-receipts/${id}/delivery`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  undoDelivery: async (id: string): Promise<{ id: string }> => {
+    const res = await api.post<ApiResponse<{ id: string }>>(
+      `/lorry-receipts/${id}/undo-delivery`,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  acknowledge: async (
+    id: string,
+    body: AcknowledgeLRFormInput,
+  ): Promise<LRAcknowledgement> => {
+    const res = await api.post<ApiResponse<LRAcknowledgement>>(
+      `/lorry-receipts/${id}/acknowledge`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  updateAcknowledgement: async (
+    id: string,
+    body: AcknowledgeLRFormInput,
+  ): Promise<LRAcknowledgement> => {
+    const res = await api.patch<ApiResponse<LRAcknowledgement>>(
+      `/lorry-receipts/${id}/acknowledgement`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  undoAcknowledgement: async (id: string): Promise<{ id: string }> => {
+    const res = await api.post<ApiResponse<{ id: string }>>(
+      `/lorry-receipts/${id}/undo-acknowledgement`,
+    );
+    return unwrapApiResponse(res);
+  },
+};
+
+/** Delivery worklists + dashboard stats. */
+export const deliveryWorklistApi = {
+  pendingDelivery: async (): Promise<PendingDeliveryRow[]> => {
+    const res = await api.get<ApiResponse<PendingDeliveryRow[]>>(
+      "/lorry-receipts/worklists/pending-delivery",
+    );
+    return unwrapApiResponse(res);
+  },
+  pendingPod: async (): Promise<PendingPodRow[]> => {
+    const res = await api.get<ApiResponse<PendingPodRow[]>>(
+      "/lorry-receipts/worklists/pending-pod",
+    );
+    return unwrapApiResponse(res);
+  },
+  atHub: async (): Promise<AtHubRow[]> => {
+    const res = await api.get<ApiResponse<AtHubRow[]>>(
+      "/lr-groups/worklists/at-hub",
+    );
+    return unwrapApiResponse(res);
+  },
+  stats: async (): Promise<DeliveryStats> => {
+    const res = await api.get<ApiResponse<DeliveryStats>>(
+      "/lorry-receipts/worklists/delivery-stats",
+    );
+    return unwrapApiResponse(res);
+  },
+};
+
+export const deliveryWorklistKeys = {
+  all: ["delivery-worklists"] as const,
+  pendingDelivery: ["delivery-worklists", "pending-delivery"] as const,
+  pendingPod: ["delivery-worklists", "pending-pod"] as const,
+  atHub: ["delivery-worklists", "at-hub"] as const,
+  stats: ["delivery-worklists", "stats"] as const,
 };
 
 /* ------------------------------------------------------------------ */

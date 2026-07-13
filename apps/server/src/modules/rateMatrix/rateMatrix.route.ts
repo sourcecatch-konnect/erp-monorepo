@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { ZodTypeAny } from "zod";
 
 import {
   createRateMatrixSchema,
@@ -15,7 +14,15 @@ import { convertRupeeFieldsToPaise } from "../../lib/money.js";
 
 const moneyFields = ["rate"];
 
-async function ensureUniqueRateMatrix(data: any, id?: string) {
+type RateMatrixIdentity = {
+  agreementId: string;
+  routeId: string;
+  vehicleTypeId?: string | null;
+  unitId?: string | null;
+  transportType?: "RAIL_ROAD" | "ROAD" | null;
+};
+
+async function ensureUniqueRateMatrix(data: RateMatrixIdentity, id?: string) {
   const existing = await db.rateMatrix.findFirst({
     where: {
       agreementId: data.agreementId,
@@ -35,34 +42,44 @@ async function ensureUniqueRateMatrix(data: any, id?: string) {
 
   if (existing) {
     throw new Error(
-      "A rate matrix already exists for this Agreement, Route, Vehicle Type, Unit and Transport Type."
+      "A rate matrix already exists for this Agreement, Route, Vehicle Type, Unit and Transport Type.",
     );
   }
 }
 const rateMatrixRouter: Router = createCrudRouter({
   model: db.rateMatrix,
 
-  createSchema: createRateMatrixSchema as ZodTypeAny,
+  createSchema: createRateMatrixSchema,
 
-  updateSchema: updateRateMatrixSchema as ZodTypeAny,
+  updateSchema: updateRateMatrixSchema,
 
   permissionKey: "masters.rate-matrix",
   uniqueErrorMessages: {
-  agreementId_routeId_vehicleTypeId_unitId_transportType:
-    "A rate matrix already exists for this Agreement, Route, Vehicle Type, Unit and Transport Type.",
-},
-hooks: {
-  beforeCreate: async (data: any) => {
-    await ensureUniqueRateMatrix(data);
-
-    return convertRupeeFieldsToPaise(data, moneyFields);
+    agreementId_routeId_vehicleTypeId_unitId_transportType:
+      "A rate matrix already exists for this Agreement, Route, Vehicle Type, Unit and Transport Type.",
   },
-  beforeUpdate: async (data: any) => {
-    await ensureUniqueRateMatrix(data, data.id);
+  hooks: {
+    beforeCreate: async (data) => {
+      await ensureUniqueRateMatrix(data);
 
-    return convertRupeeFieldsToPaise(data, moneyFields);
+      return convertRupeeFieldsToPaise(data, moneyFields);
+    },
+    beforeUpdate: async (data, row) => {
+      const current = row as RateMatrixIdentity & { id: string };
+      await ensureUniqueRateMatrix(
+        {
+          agreementId: data.agreementId ?? current.agreementId,
+          routeId: data.routeId ?? current.routeId,
+          vehicleTypeId: data.vehicleTypeId ?? current.vehicleTypeId,
+          unitId: data.unitId ?? current.unitId,
+          transportType: data.transportType ?? current.transportType,
+        },
+        current.id,
+      );
+
+      return convertRupeeFieldsToPaise(data, moneyFields);
+    },
   },
-},
 
   listOptions: {
     searchableFields: ["remarks"],
@@ -125,24 +142,28 @@ hooks: {
     },
 
     blockDeleteIfExists: [
-  {
-    model: db.vehicleTrip,
+      {
+        model: db.vehicleTrip,
 
-    label: "Vehicle Trips",
+        label: "Vehicle Trips",
 
-    where: (id: string) => ({
-      rateMatrixId: id,
-    }),
+        where: (id: string) => ({
+          rateMatrixId: id,
+        }),
 
-    select: {
-      id: true,
-      tripNumber: true,
-      tripName: true,
-    },
+        select: {
+          id: true,
+          tripNumber: true,
+          tripName: true,
+        },
 
-    getName: (row: any) => row.tripNumber || row.tripName || row.id,
-  },
-],
+        getName: (row: {
+          id: string;
+          tripNumber?: string | null;
+          tripName?: string | null;
+        }) => row.tripNumber || row.tripName || row.id,
+      },
+    ],
   },
 });
 
@@ -153,14 +174,14 @@ hooks: {
 const rateUnitRouter: Router = createCrudRouter({
   model: db.rateUnit,
 
-  createSchema: createRateUnitSchema as ZodTypeAny,
+  createSchema: createRateUnitSchema,
 
-  updateSchema: updateRateUnitSchema as ZodTypeAny,
+  updateSchema: updateRateUnitSchema,
 
   permissionKey: "masters.rate-matrix",
   uniqueErrorMessages: {
-  unitValue_unitType: "This rate unit already exists.",
-},
+    unitValue_unitType: "This rate unit already exists.",
+  },
   listOptions: {
     searchableFields: [],
 
@@ -182,7 +203,7 @@ const rateUnitRouter: Router = createCrudRouter({
           id: true,
         },
 
-        getName: (row: any) => row.id,
+        getName: (row: { id: string }) => row.id,
       },
     ],
   },

@@ -70,6 +70,12 @@ export const NAV_SECTIONS: NavSection[] = [
         disabled: false,
       },
       {
+        title: "Deliveries",
+        href: "/lorry-receipts/deliveries",
+        icon: IconTruckDelivery,
+        permission: PERMS.LORRY_RECEIPT.VIEW,
+      },
+      {
   title: "VP Management",
   icon: IconTrain,
   items: [

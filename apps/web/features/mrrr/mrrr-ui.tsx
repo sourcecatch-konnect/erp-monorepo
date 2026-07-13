@@ -24,11 +24,7 @@ const isMRRRStatus = (
   return status === "DRAFT" || status === "SUBMITTED" || status === "CANCELLED";
 };
 
-export function MRRRStatusBadge({
-  status,
-}: {
-  status?: string | null;
-}) {
+export function MRRRStatusBadge({ status }: { status?: string | null }) {
   if (!isMRRRStatus(status)) {
     return (
       <span
@@ -89,7 +85,9 @@ export const formatMRRRDateTime = (date?: string | Date | null) => {
     minute: "2-digit",
   });
 };
-export const formatFreight = (value: string | number | bigint | null | undefined) => {
+export const formatFreight = (
+  value: string | number | bigint | null | undefined,
+) => {
   if (value === null || value === undefined || value === "") return "—";
 
   const amount = Number(value);

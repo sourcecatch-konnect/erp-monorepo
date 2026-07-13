@@ -4,7 +4,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import type { CreateLabourBody, LabourWithRelations } from "@skerp/types";
+import type { LabourWithRelations } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import {

@@ -12,7 +12,6 @@ import {
 import {
   SectionLabel,
   Field,
-  PartyCard,
   formatDate,
   formatCurrencyFromPaise,
   SkeletonBody,
@@ -24,15 +23,10 @@ import {
   IconPhone,
   IconUser,
   IconCalendar,
-  IconRuler,
   IconCash,
-  IconDoor,
   IconCircleCheckFilled,
   IconClockEdit,
   IconCalendarCheck,
-  IconArrowsHorizontal,
-  IconArrowsVertical,
-  IconBoxSeam,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { warehouseApi } from "./warehouse.service";

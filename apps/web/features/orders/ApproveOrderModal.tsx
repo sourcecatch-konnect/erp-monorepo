@@ -14,9 +14,8 @@ import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
 import { Checkbox } from "@skerp/ui/components/checkbox";
-import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-react";
+import { IconAlertTriangle } from "@tabler/icons-react";
 
-import { useAppSelector } from "@/store/hooks";
 import { orderApi, type OrderDetail } from "./order.service";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { formatRupees, formatPaise, paiseToRupees } from "@/lib/money";
@@ -35,12 +34,10 @@ export default function ApproveOrderModal({
   onApproved,
 }: Props) {
   console.log(order, "orders");
-  const currentUserId = useAppSelector((s) => s.auth.user?.id);
   const disallow = Boolean(
     (order.customer as { disallowNewLRBooking?: boolean } | undefined)
       ?.disallowNewLRBooking,
   );
-  const selfApprove = order.createdById === currentUserId;
 
   const prefill =
     order.bookingFreightAmount != null
@@ -97,12 +94,6 @@ export default function ApproveOrderModal({
       : 0;
 
   const rateMatrix = order.freightPreview?.rateMatrix;
-
-  const rateMatrixRoute =
-    rateMatrix?.route?.sourceCity?.name &&
-    rateMatrix?.route?.destinationCity?.name
-      ? `${rateMatrix.route.sourceCity.name} → ${rateMatrix.route.destinationCity.name}`
-      : routeLabel;
 
   const handleApprove = async () => {
     setPending(true);

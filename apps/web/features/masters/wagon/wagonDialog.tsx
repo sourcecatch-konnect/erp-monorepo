@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import { SectionLabel, Field, SkeletonBody } from "../_shared/dialog-parts";
 

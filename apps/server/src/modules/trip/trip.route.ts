@@ -30,9 +30,11 @@ import {
 import {
   buildTripName,
   tripInclude,
-  tripListSelect,
+  tripListBaseSelect,
+  tripListRelationSelects,
   writeTripStatus,
 } from "./trip.service.js";
+import { undeliveredLRNumbersForTrip } from "../lorry-receipt/lr-delivery.service.js";
 import {
   chainViolations,
   closeLegAndUpdateJourney,
@@ -242,12 +244,34 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
       ? { consignorId: query.filter.consignorId }
       : {}),
   };
+  // Join only the relations whose table columns are visible on the client.
+  // No `fields` param (other consumers, e.g. the LR trip picker) = join all.
+  const fieldsParam =
+    typeof req.query.fields === "string"
+      ? new Set(
+          req.query.fields
+            .split(",")
+            .map((f) => f.trim())
+            .filter(Boolean),
+        )
+      : null;
+  const wants = (key: keyof typeof tripListRelationSelects) =>
+    fieldsParam === null || fieldsParam.has(key);
+
+  const select = {
+    ...tripListBaseSelect,
+    ...(wants("journey") ? tripListRelationSelects.journey : {}),
+    ...(wants("vehicle") ? tripListRelationSelects.vehicle : {}),
+    ...(wants("route") ? tripListRelationSelects.route : {}),
+    ...(wants("client") ? tripListRelationSelects.client : {}),
+  };
+
   const [data, total] = await Promise.all([
     db.vehicleTrip.findMany({
       where,
       skip: query.page * query.size,
       take: query.size,
-      select: tripListSelect,
+      select,
       orderBy: query.sort
         ? { [query.sort.field]: query.sort.direction }
         : { createdAt: "desc" },
@@ -255,7 +279,16 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
     db.vehicleTrip.count({ where }),
   ]);
 
-  return sendOk(res, data, { page: query.page, size: query.size, total });
+  // Flatten the delivery-gate relations to a single count the web can gate
+  // the Close action on (see tripListBaseSelect).
+  const rows = data.map(({ primaryGroups, secondaryGroups, ...trip }) => ({
+    ...trip,
+    undeliveredLrCount:
+      primaryGroups.reduce((n, g) => n + g._count.lorryReceipts, 0) +
+      secondaryGroups.reduce((n, g) => n + g._count.lorryReceipts, 0),
+  }));
+
+  return sendOk(res, rows, { page: query.page, size: query.size, total });
 });
 
 /* ------------------------------------------------------------------ */
@@ -850,6 +883,18 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
 
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
+  }
+
+  // Delivery gate ("Way 1", docs/LR_DELIVERY_ACK_PLAN.md §4): a trip that is
+  // the FINAL leg of an LR group cannot close while its LRs are undelivered.
+  // A leg-1 group already held at hub is exempt — its goods sit at the hub.
+  const blockers = await undeliveredLRNumbersForTrip(id);
+  if (blockers.length > 0) {
+    throw new BadRequestError(
+      `Cannot close trip — ${blockers.length} LR(s) not delivered: ${blockers.join(", ")}. ` +
+        "Mark them delivered or hold the group at hub.",
+      "TRIP_CLOSE_UNDELIVERED_LRS",
+    );
   }
   const me = actorId(req);
 

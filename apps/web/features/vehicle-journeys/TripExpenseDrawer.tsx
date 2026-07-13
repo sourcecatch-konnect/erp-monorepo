@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useForm, FormProvider } from "react-hook-form";
+import { Controller, useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -22,9 +22,10 @@ import {
   SheetTitle,
 } from "@skerp/ui/components/sheet";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 
 import { paiseToRupees, formatPaise } from "@/lib/money";
+import { toValidDate } from "@/lib/date";
 import ComboboxField from "../masters/_shared/fields/ComboboxField";
 import IconTextField from "../masters/_shared/fields/IconTextField";
 import SelectField from "../masters/_shared/fields/SelectField";
@@ -247,12 +248,18 @@ export default function TripExpenseDrawer({
               options={cities.data ?? []}
             />
 
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                Expense date
-              </label>
-              <Input type="datetime-local" {...form.register("expenseDate")} />
-            </div>
+            <Controller
+              name="expenseDate"
+              control={form.control}
+              render={({ field }) => (
+                <DateTimePicker
+                  label="Expense date"
+                  selected={toValidDate(field.value)}
+                  onSelect={field.onChange}
+                  placeholder="Select expense date and time"
+                />
+              )}
+            />
 
             <IconTextField<TripExpenseFormInput>
               name="receiptNo"

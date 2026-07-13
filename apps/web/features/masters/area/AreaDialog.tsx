@@ -1,6 +1,5 @@
 "use client";
 
-import type { Area } from "@skerp/types";
 
 import {
   Dialog,

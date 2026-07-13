@@ -1,11 +1,5 @@
 import { z } from "zod";
 
-const optionalString = z
-  .string()
-  .trim()
-  .optional()
-  .transform((value) => (value ? value : undefined));
-
 const optionalLimitedString = (max: number, message: string) =>
   z
     .string()
@@ -26,11 +20,7 @@ const dateString = (label: string) =>
 const idString = (label: string) =>
   z.string().trim().min(1, `${label} is required`);
 
-export const vpScheduleStatusSchema = z.enum([
-  "DRAFT",
-  "PLANNED",
-  "CANCELLED",
-]);
+export const vpScheduleStatusSchema = z.enum(["DRAFT", "PLANNED", "CANCELLED"]);
 
 export const vpScheduleWagonCountSchema = z.object({
   id: z.string().optional(),
@@ -84,32 +74,32 @@ export const vpScheduleSchema = z.object({
     .optional(),
 
   sourceArea: z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    city: z
-      .object({
-        id: z.string(),
-        name: z.string(),
-      })
-      .nullable()
-      .optional(),
-  })
-  .optional(),
+    .object({
+      id: z.string(),
+      name: z.string(),
+      city: z
+        .object({
+          id: z.string(),
+          name: z.string(),
+        })
+        .nullable()
+        .optional(),
+    })
+    .optional(),
 
-destinationArea: z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    city: z
-      .object({
-        id: z.string(),
-        name: z.string(),
-      })
-      .nullable()
-      .optional(),
-  })
-  .optional(),
+  destinationArea: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      city: z
+        .object({
+          id: z.string(),
+          name: z.string(),
+        })
+        .nullable()
+        .optional(),
+    })
+    .optional(),
 
   wagonCounts: z
     .array(
@@ -159,10 +149,7 @@ const vpScheduleBodySchema = z.object({
   sourceAreaId: idString("Source area"),
   destinationAreaId: idString("Destination area"),
 
-  remarks: optionalLimitedString(
-    250,
-    "Remarks cannot exceed 250 characters",
-  ),
+  remarks: optionalLimitedString(250, "Remarks cannot exceed 250 characters"),
 
   wagonCounts: z
     .array(vpScheduleWagonCountSchema)
@@ -227,10 +214,7 @@ export const updateVPScheduleSchema = vpScheduleBodySchema
   .superRefine(validateVPScheduleBody);
 
 export const confirmVPScheduleSchema = z.object({
-  remarks: optionalLimitedString(
-    250,
-    "Remarks cannot exceed 250 characters",
-  ),
+  remarks: optionalLimitedString(250, "Remarks cannot exceed 250 characters"),
 });
 
 export const cancelVPScheduleSchema = z.object({

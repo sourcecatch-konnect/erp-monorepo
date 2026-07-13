@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { SparePartSupplier } from "@skerp/types";
 
 import {
   Dialog,

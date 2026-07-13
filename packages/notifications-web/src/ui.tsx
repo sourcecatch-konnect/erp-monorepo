@@ -173,10 +173,11 @@ function ChannelChip({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-sm transition-colors ${active
+      className={`inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-sm transition-colors ${
+        active
           ? "border-primary bg-primary/10 text-primary"
           : "border-border text-muted-foreground hover:bg-muted"
-        } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+      } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
     >
       <Icon size={14} />
       {channelLabels[channel]}
@@ -706,10 +707,11 @@ export function NotificationPreferencesPanel({
                   return (
                     <label
                       key={key}
-                      className={`flex items-center gap-1.5 text-sm ${isCritical(event.eventType)
+                      className={`flex items-center gap-1.5 text-sm ${
+                        isCritical(event.eventType)
                           ? "text-muted-foreground"
                           : ""
-                        }`}
+                      }`}
                     >
                       <Checkbox
                         checked={checked}
@@ -788,10 +790,11 @@ function ChannelSummary({
             key={channel}
             aria-hidden
             title={`${channelLabels[channel]}: ${on ? "on" : "off"}`}
-            className={`inline-flex size-6 items-center justify-center rounded-sm border ${on
+            className={`inline-flex size-6 items-center justify-center rounded-sm border ${
+              on
                 ? "border-primary/30 bg-primary/10 text-primary"
                 : "border-border text-muted-foreground/40"
-              }`}
+            }`}
           >
             <Icon size={13} />
           </span>
@@ -1072,10 +1075,11 @@ function StatusFilter({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.key)}
-            className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active
+            className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              active
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
+            }`}
           >
             {option.label}
             <span className={active ? "opacity-80" : "opacity-60"}>
@@ -1105,7 +1109,7 @@ function RulesPage({ api }: { api: NotificationApi }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<RuleStatusFilter>("all");
 
-  const all = rules.data ?? [];
+  const all = useMemo(() => rules.data ?? [], [rules.data]);
   const counts = useMemo<Record<RuleStatusFilter, number>>(
     () => ({
       all: all.length,
@@ -1615,10 +1619,11 @@ function TemplatesPage({ api }: { api: NotificationApi }) {
                   <button
                     key={template.id}
                     type="button"
-                    className={`flex w-full items-center justify-between gap-2 border-l-2 px-3 py-2 text-left text-sm transition-colors ${active
+                    className={`flex w-full items-center justify-between gap-2 border-l-2 px-3 py-2 text-left text-sm transition-colors ${
+                      active
                         ? "border-primary bg-primary/5 font-medium text-foreground"
                         : "border-transparent text-muted-foreground hover:bg-muted/50"
-                      }`}
+                    }`}
                     onClick={() => setSelectedId(template.id)}
                   >
                     <span className="flex items-center gap-2">
@@ -1750,10 +1755,11 @@ function TestSendPage({
   const modeTab = (value: "quick" | "event", label: string) => (
     <button
       type="button"
-      className={`rounded-sm px-3 py-1 transition-colors ${mode === value
+      className={`rounded-sm px-3 py-1 transition-colors ${
+        mode === value
           ? "bg-card font-medium text-foreground shadow-sm"
           : "text-muted-foreground"
-        }`}
+      }`}
       onClick={() => setMode(value)}
     >
       {label}

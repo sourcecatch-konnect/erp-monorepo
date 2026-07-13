@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateRouteBody, Route } from "@skerp/types";
+import type { Route } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
@@ -12,18 +12,10 @@ import { routeKeys } from "./route.key";
 import { routeColumns } from "./routeTable";
 import RouteForm from "./routeForm";
 
-import { cityApi } from "../city/city.service";
-import { cityKeys } from "../city/city.keys";
 
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { routeApi } from "./routes.service";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import RouteDetailDialog from "./routeDialog";
-
-type RouteCsvRow = Record<
-  "sourceCityId" | "destinationCityId",
-  string
->;
 
 export default function RoutePage() {
   const queryClient = useQueryClient();

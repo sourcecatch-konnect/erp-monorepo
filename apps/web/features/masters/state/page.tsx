@@ -57,7 +57,7 @@ const { remove } = useMasterMutations({
 
 const bulkRemove = useMutation({
   mutationFn: stateApi.bulkRemove,
-  onSuccess: (result) => {
+  onSuccess: () => {
     toast.success("Selected states deleted successfully");
     setSelectedIds([]);
     queryClient.invalidateQueries({ queryKey: stateKeys.all });

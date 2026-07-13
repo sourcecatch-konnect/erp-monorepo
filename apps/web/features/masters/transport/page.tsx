@@ -12,11 +12,7 @@ import {
 } from "../_shared/master-api";
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
-import { stateApi } from "../state/state.service";
-import { stateKeys } from "../state/state.keys";
 
-import { cityApi } from "../city/city.service";
-import { cityKeys } from "../city/city.keys";
 
 
 import { transportApi } from "./transport.service";
@@ -24,7 +20,6 @@ import { transportKeys } from "./transport.key";
 import TransportForm from "./transportForm";
 import { transportColumns } from "./transportTable";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import TransportDetailDialog from "./transportDialog";
 
 export default function TransportPage() {

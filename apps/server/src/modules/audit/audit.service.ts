@@ -33,13 +33,13 @@ export const recordAuditEntry = async (entry: AuditEntry): Promise<void> => {
         action: entry.action,
         entity: entry.entity,
         entityId: entry.entityId,
-        before: entry.before === undefined ? undefined : (entry.before as object),
+        before:
+          entry.before === undefined ? undefined : (entry.before as object),
         after: entry.after === undefined ? undefined : (entry.after as object),
       },
     });
   } catch (err) {
     // Audit logging must never break the underlying mutation.
-    // eslint-disable-next-line no-console
     console.error("[audit] failed to record entry", err);
   }
 };

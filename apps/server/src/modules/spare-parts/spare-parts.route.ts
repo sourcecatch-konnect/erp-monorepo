@@ -15,8 +15,8 @@ const router: Router = createCrudRouter({
   updateSchema: updateSparePartSchema,
   permissionKey: "masters.spare-part",
   hooks: {
-    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
-    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeCreate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
   },
   listOptions: {
     searchableFields: ["name", "unit", "description"],

@@ -64,18 +64,37 @@ Commit the new `prisma/migrations/<ts>_<change_name>/` folder.
 
 `migrate deploy` only applies pending migrations — no shadow, no replay.
 
-**PowerShell:**
-```powershell
-$env:DIRECT_URL=$env:SUPABASE_DIRECT_URL; pnpm --filter @skerp/server db:deploy
-```
+⚠️ Running plain `pnpm prisma migrate deploy` deploys to the **local container**,
+not Supabase — the CLI reads `DIRECT_URL`, which points at localhost. You must
+override it with the Supabase session-mode URL for this one command.
+`SUPABASE_DIRECT_URL` lives in `apps/server/.env` and is **not** exported to your
+shell automatically, so read it from the file:
 
-**bash / git-bash:**
+**bash / git-bash** (from `apps/server/`):
 ```bash
-DIRECT_URL="$SUPABASE_DIRECT_URL" pnpm --filter @skerp/server db:deploy
+DIRECT_URL="$(grep '^SUPABASE_DIRECT_URL=' .env | cut -d= -f2- | tr -d '\"')" \
+  pnpm exec prisma migrate deploy
 ```
 
-> Both env vars come from `apps/server/.env`. The override is needed because the CLI
-> reads `DIRECT_URL`, which normally points at your local container.
+**PowerShell** (from `apps/server/`):
+```powershell
+$env:DIRECT_URL = (Get-Content .env | Select-String '^SUPABASE_DIRECT_URL=').ToString().Split('=',2)[1].Trim('"')
+pnpm exec prisma migrate deploy
+Remove-Item Env:DIRECT_URL   # so later migrate commands hit local again
+```
+
+Confirm the output line says `pooler.supabase.com`, not `localhost:5432`.
+
+### 4. After a migration that adds permission keys
+
+If the change added entries to `packages/types/src/permissions.ts`, rebuild the
+packages and re-run the RBAC seed (it targets `DATABASE_URL`, which already
+points at Supabase):
+
+```bash
+pnpm build:packages
+pnpm --filter @skerp/server exec tsx prisma/seed-admin.ts
+```
 
 ### Other commands
 

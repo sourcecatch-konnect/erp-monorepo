@@ -17,23 +17,39 @@ import {
   IconPencil,
   IconTrash,
   IconAlertTriangle,
+  IconCircleCheck,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { attachmentApi } from "@/features/attachments/attachment.client";
 import { formatPaise, paiseToRupees } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { lrGroupApi } from "./lr-group.service";
 import { lrGroupKeys } from "./lr-group.keys";
 import { lorryReceiptApi } from "./lorry-receipt.service";
-import { LRStatusBadge, SOURCE_LABELS } from "./lorry-receipt-ui";
+import { LRStatusBadge, SOURCE_LABELS, daysSince } from "./lorry-receipt-ui";
 import FinaliseDialog from "./components/FinaliseDialog";
 import SplitAtHubDialog from "./components/SplitAtHubDialog";
 import EwayBillSection from "./components/EwayBillSection";
 import EditGroupDialog from "./components/EditGroupDialog";
 import LRLineDialog, { type LinePayload } from "./components/LRLineDialog";
-import type { LRGroup } from "@skerp/types";
+import DeliverDialog from "./components/DeliverDialog";
+import BulkDeliverDialog from "./components/BulkDeliverDialog";
+import AcknowledgeDialog from "./components/AcknowledgeDialog";
+import DeliverySection, {
+  DELIVERY_POD_ENTITY,
+  ACK_SCAN_ENTITY,
+} from "./components/DeliverySection";
+import LRTimeline from "./components/LRTimeline";
+import type {
+  LRGroup,
+  LorryReceipt,
+  DeliverLRFormInput,
+  AcknowledgeLRFormInput,
+  DeliverGroupFormInput,
+} from "@skerp/types";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -55,11 +71,21 @@ export default function LRDetail({ id }: { id: string }) {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [editGroupOpen, setEditGroupOpen] = React.useState(false);
   const [addLineOpen, setAddLineOpen] = React.useState(false);
-  const [editLine, setEditLine] = React.useState<LRGroup["lorryReceipts"][number] | null>(null);
+  const [editLine, setEditLine] = React.useState<
+    LRGroup["lorryReceipts"][number] | null
+  >(null);
+  const [bulkDeliverOpen, setBulkDeliverOpen] = React.useState(false);
+  const [deliverLr, setDeliverLr] = React.useState<LorryReceipt | null>(null);
+  const [editDeliveryLr, setEditDeliveryLr] =
+    React.useState<LorryReceipt | null>(null);
+  const [ackLr, setAckLr] = React.useState<LorryReceipt | null>(null);
+  const [editAckLr, setEditAckLr] = React.useState<LorryReceipt | null>(null);
 
   const canApprove = useCan(PERMS.LORRY_RECEIPT.APPROVE);
   const canCancel = useCan(PERMS.LORRY_RECEIPT.CANCEL);
   const canUpdate = useCan(PERMS.LORRY_RECEIPT.UPDATE);
+  const canDeliver = useCan(PERMS.LORRY_RECEIPT.DELIVER);
+  const canAcknowledge = useCan(PERMS.LORRY_RECEIPT.ACKNOWLEDGE);
 
   const group = useQuery({
     queryKey: lrGroupKeys.detail(id),
@@ -70,7 +96,9 @@ export default function LRDetail({ id }: { id: string }) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(id) });
     if (actionGroupId !== id) {
-      queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(actionGroupId) });
+      queryClient.invalidateQueries({
+        queryKey: lrGroupKeys.detail(actionGroupId),
+      });
     }
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
   };
@@ -86,12 +114,136 @@ export default function LRDetail({ id }: { id: string }) {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
-  const split = useMutation({
+  const holdAtHub = useMutation({
+    mutationFn: () => lrGroupApi.holdAtHub(actionGroupId),
+    onSuccess: () => {
+      toast.success("Group held at hub — leg-1 trip can now be closed");
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const dispatchFromHub = useMutation({
     mutationFn: (secondaryTripId: string) =>
-      lrGroupApi.splitAtHub(actionGroupId, { secondaryTripId }),
+      lrGroupApi.dispatchFromHub(actionGroupId, { secondaryTripId }),
     onSuccess: () => {
       toast.success("Leg 2 trip attached");
       setSplitOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const uploadFiles = async (
+    entityType: string,
+    entityId: string,
+    files: File[],
+  ) => {
+    if (files.length === 0) return;
+    try {
+      await Promise.all(
+        files.map((file) =>
+          attachmentApi.upload(
+            {
+              entityType,
+              entityId,
+              originalName: file.name,
+              mime: file.type || "application/octet-stream",
+              sizeBytes: file.size,
+            },
+            file,
+          ),
+        ),
+      );
+    } catch (err) {
+      toast.error(
+        `Record saved, but a file upload failed: ${getErrorMessage(err)}`,
+      );
+    }
+  };
+
+  const deliver = useMutation({
+    mutationFn: async (vars: {
+      lrId: string;
+      values: DeliverLRFormInput;
+      podFiles: File[];
+    }) => {
+      const delivery = await lorryReceiptApi.deliver(vars.lrId, vars.values);
+      await uploadFiles(DELIVERY_POD_ENTITY, delivery.id, vars.podFiles);
+      return delivery;
+    },
+    onSuccess: () => {
+      toast.success("LR marked delivered");
+      setDeliverLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const updateDelivery = useMutation({
+    mutationFn: (vars: { lrId: string; values: DeliverLRFormInput }) =>
+      lorryReceiptApi.updateDelivery(vars.lrId, vars.values),
+    onSuccess: () => {
+      toast.success("Delivery updated");
+      setEditDeliveryLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const undoDelivery = useMutation({
+    mutationFn: (lrId: string) => lorryReceiptApi.undoDelivery(lrId),
+    onSuccess: () => {
+      toast.success("Delivery undone");
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const acknowledge = useMutation({
+    mutationFn: async (vars: {
+      lrId: string;
+      values: AcknowledgeLRFormInput;
+      scanFiles: File[];
+    }) => {
+      const ack = await lorryReceiptApi.acknowledge(vars.lrId, vars.values);
+      await uploadFiles(ACK_SCAN_ENTITY, ack.id, vars.scanFiles);
+      return ack;
+    },
+    onSuccess: () => {
+      toast.success("POD acknowledged");
+      setAckLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const updateAcknowledgement = useMutation({
+    mutationFn: (vars: { lrId: string; values: AcknowledgeLRFormInput }) =>
+      lorryReceiptApi.updateAcknowledgement(vars.lrId, vars.values),
+    onSuccess: () => {
+      toast.success("Acknowledgement updated");
+      setEditAckLr(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const undoAcknowledgement = useMutation({
+    mutationFn: (lrId: string) => lorryReceiptApi.undoAcknowledgement(lrId),
+    onSuccess: () => {
+      toast.success("Acknowledgement undone");
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const deliverAll = useMutation({
+    mutationFn: (values: DeliverGroupFormInput) =>
+      lrGroupApi.deliverAll(actionGroupId, values),
+    onSuccess: () => {
+      toast.success("LRs marked delivered");
+      setBulkDeliverOpen(false);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -121,13 +273,13 @@ export default function LRDetail({ id }: { id: string }) {
 
   const addLine = useMutation({
     mutationFn: (payload: LinePayload) =>
-    lrGroupApi.addLorryReceipt(actionGroupId, {
-  loadingLocationId: payload.loadingLocationId,
-  unloadingLocationId: payload.unloadingLocationId,
-  totalWeight: payload.totalWeight,
-  totalWeightUnit: payload.totalWeightUnit,
-  goods: payload.goods,
-}),
+      lrGroupApi.addLorryReceipt(actionGroupId, {
+        loadingLocationId: payload.loadingLocationId,
+        unloadingLocationId: payload.unloadingLocationId,
+        totalWeight: payload.totalWeight,
+        totalWeightUnit: payload.totalWeightUnit,
+        goods: payload.goods,
+      }),
     onSuccess: () => {
       toast.success("LR added");
       setAddLineOpen(false);
@@ -138,15 +290,15 @@ export default function LRDetail({ id }: { id: string }) {
 
   const updateLine = useMutation({
     mutationFn: (vars: { lrId: string; payload: LinePayload }) =>
-     lorryReceiptApi.update(vars.lrId, {
-  loadingLocationId: vars.payload.loadingLocationId,
-  unloadingLocationId: vars.payload.unloadingLocationId,
-  totalWeight: vars.payload.totalWeight,
-  totalWeightUnit: vars.payload.totalWeightUnit,
-  goods: vars.payload.goods,
-  invoiceNumber: vars.payload.invoiceNumber,
-  invoiceAmount: vars.payload.invoiceAmount,
-}),
+      lorryReceiptApi.update(vars.lrId, {
+        loadingLocationId: vars.payload.loadingLocationId,
+        unloadingLocationId: vars.payload.unloadingLocationId,
+        totalWeight: vars.payload.totalWeight,
+        totalWeightUnit: vars.payload.totalWeightUnit,
+        goods: vars.payload.goods,
+        invoiceNumber: vars.payload.invoiceNumber,
+        invoiceAmount: vars.payload.invoiceAmount,
+      }),
     onSuccess: () => {
       toast.success("LR updated");
       setEditLine(null);
@@ -190,30 +342,43 @@ export default function LRDetail({ id }: { id: string }) {
   }
 
   const g = group.data;
-const hasNoLrs = g.lorryReceipts.length === 0;
+  const hasNoLrs = g.lorryReceipts.length === 0;
+  const hasDeliveredLr = g.lorryReceipts.some((lr) => Boolean(lr.delivery));
 
-const hasIncompleteLr = g.lorryReceipts.some(
-  (lr) =>
-    !lr.loadingLocationId ||
-    !lr.unloadingLocationId ||
-    lr.goods.length === 0 ||
-    lr.totalWeight == null ||
-    !lr.unit,
-);
-const cannotFinalise = hasNoLrs || hasIncompleteLr;
+  const hasIncompleteLr = g.lorryReceipts.some(
+    (lr) =>
+      !lr.loadingLocationId ||
+      !lr.unloadingLocationId ||
+      lr.goods.length === 0 ||
+      lr.totalWeight == null ||
+      !lr.unit,
+  );
+  const cannotFinalise = hasNoLrs || hasIncompleteLr;
 
-const finaliseBlockMessage = hasNoLrs
-  ? "Add at least one consignment LR before finalising this group."
-  : "One or more LRs are incomplete. Add loading point, unloading point, goods, total weight, and unit before finalising.";
+  const finaliseBlockMessage = hasNoLrs
+    ? "Add at least one consignment LR before finalising this group."
+    : "One or more LRs are incomplete. Add loading point, unloading point, goods, total weight, and unit before finalising.";
 
-const finaliseTitle = hasNoLrs
-  ? "Add at least one consignment LR before finalising"
-  : hasIncompleteLr
-    ? "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising"
-    : undefined;
+  const finaliseTitle = hasNoLrs
+    ? "Add at least one consignment LR before finalising"
+    : hasIncompleteLr
+      ? "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising"
+      : undefined;
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
+
+  const pendingLrs = g.lorryReceipts.filter((lr) => lr.status === "FINALISED");
+  const heldAtHub =
+    g.status === "FINALISED" &&
+    Boolean(g.hubId) &&
+    !g.secondaryTripId &&
+    !hasDeliveredLr;
+  const canHoldAtHub =
+    g.status === "FINALISED" &&
+    !hasDeliveredLr &&
+    !g.hubId &&
+    !g.secondaryTripId;
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
@@ -247,17 +412,31 @@ const finaliseTitle = hasNoLrs
             </Button>
           )}
           {g.status === "DRAFT" && canApprove && (
-           <Button
-  onClick={() => setFinaliseOpen(true)}
-  disabled={cannotFinalise}
-  title={finaliseTitle}
->
-  Finalise group
-</Button>
+            <Button
+              onClick={() => setFinaliseOpen(true)}
+              disabled={cannotFinalise}
+              title={finaliseTitle}
+            >
+              Finalise group
+            </Button>
           )}
-          {g.status === "FINALISED" && canApprove && (
+          {g.status === "FINALISED" && canDeliver && pendingLrs.length > 0 && (
+            <Button onClick={() => setBulkDeliverOpen(true)}>
+              Deliver all
+            </Button>
+          )}
+          {g.status === "FINALISED" && canApprove && canHoldAtHub && (
+            <Button
+              variant="outline"
+              disabled={holdAtHub.isPending}
+              onClick={() => holdAtHub.mutate()}
+            >
+              {holdAtHub.isPending ? "Holding…" : "Hold at hub"}
+            </Button>
+          )}
+          {g.status === "FINALISED" && canApprove && heldAtHub && (
             <Button variant="outline" onClick={() => setSplitOpen(true)}>
-              Split at hub
+              Dispatch from hub
             </Button>
           )}
           {g.status === "DRAFT" && canCancel && (
@@ -273,11 +452,37 @@ const finaliseTitle = hasNoLrs
       </div>
 
       {cannotFinalise && (
-  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-    <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
-    <p>{finaliseBlockMessage}</p>
-  </div>
-)}
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
+          <p>{finaliseBlockMessage}</p>
+        </div>
+      )}
+
+      {g.status === "DELIVERED" && (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <IconCircleCheck size={17} className="mt-0.5 shrink-0" />
+          <p>
+            All {g.lorryReceipts.length} LR
+            {g.lorryReceipts.length === 1 ? " is" : "s are"} delivered. This
+            group is complete and can no longer be held at or dispatched from a
+            hub.
+          </p>
+        </div>
+      )}
+
+      {heldAtHub && (
+        <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          <IconTruck size={17} className="mt-0.5 shrink-0" />
+          <p>
+            Lying at hub {g.hub?.name ? `(${g.hub.name})` : ""}
+            {g.hubArrivalAt
+              ? ` since ${new Date(g.hubArrivalAt).toLocaleDateString()} — ${daysSince(g.hubArrivalAt)} day(s)`
+              : ""}
+            . Awaiting leg-2 dispatch to{" "}
+            {g.destinationBranch?.name ?? "destination"}.
+          </p>
+        </div>
+      )}
 
       {/* Summary */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -333,7 +538,11 @@ const finaliseTitle = hasNoLrs
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Lorry receipts</p>
           {g.status === "DRAFT" && canUpdate && (
-            <Button size="sm" variant="outline" onClick={() => setAddLineOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAddLineOpen(true)}
+            >
               <IconPlus size={14} className="mr-1" /> Add consignment LR
             </Button>
           )}
@@ -342,7 +551,12 @@ const finaliseTitle = hasNoLrs
           <div key={lr.id} className="rounded-lg border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold">{lr.lrNumber}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{lr.lrNumber}</p>
+                  {lr.status !== g.status && (
+                    <LRStatusBadge status={lr.status} />
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {lr.loadingLocation?.name ?? "—"} →{" "}
                   {lr.unloadingLocation?.name ?? "—"}
@@ -370,7 +584,9 @@ const finaliseTitle = hasNoLrs
                       variant="ghost"
                       aria-label="Remove LR"
                       className="text-red-600 hover:bg-red-50"
-                      disabled={removeLine.isPending || g.lorryReceipts.length <= 1}
+                      disabled={
+                        removeLine.isPending || g.lorryReceipts.length <= 1
+                      }
                       onClick={() => removeLine.mutate(lr.id)}
                     >
                       <IconTrash size={15} />
@@ -379,6 +595,8 @@ const finaliseTitle = hasNoLrs
                 )}
               </div>
             </div>
+
+            {g.status !== "DRAFT" && <LRTimeline lr={lr} group={g} />}
 
             {lr.goods.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
@@ -393,10 +611,10 @@ const finaliseTitle = hasNoLrs
               </div>
             )}
             {(!lr.loadingLocationId ||
-  !lr.unloadingLocationId ||
-  lr.goods.length === 0 ||
-  lr.totalWeight == null ||
-  !lr.unit) && (
+              !lr.unloadingLocationId ||
+              lr.goods.length === 0 ||
+              lr.totalWeight == null ||
+              !lr.unit) && (
               <div className="mb-3 flex w-fit flex-wrap items-center gap-1 rounded-sm bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                 <IconAlertTriangle size={13} />
                 Complete before finalise:
@@ -413,6 +631,18 @@ const finaliseTitle = hasNoLrs
               groupId={g.id}
               ewayBill={lr.ewayBill}
               canAdd={canUpdate && g.status !== "CANCELLED"}
+            />
+
+            <DeliverySection
+              lr={lr}
+              canDeliver={canDeliver}
+              canAcknowledge={canAcknowledge}
+              onDeliver={() => setDeliverLr(lr)}
+              onEditDelivery={() => setEditDeliveryLr(lr)}
+              onUndoDelivery={() => undoDelivery.mutate(lr.id)}
+              onAcknowledge={() => setAckLr(lr)}
+              onEditAcknowledgement={() => setEditAckLr(lr)}
+              onUndoAcknowledgement={() => undoAcknowledgement.mutate(lr.id)}
             />
           </div>
         ))}
@@ -446,8 +676,67 @@ const finaliseTitle = hasNoLrs
         lrNumber={g.groupNumber}
         primaryTripId={g.primaryTripId}
         consignorId={g.consignorId}
-        isPending={split.isPending}
-        onConfirm={(secondaryTripId) => split.mutate(secondaryTripId)}
+        isPending={dispatchFromHub.isPending}
+        onConfirm={(secondaryTripId) => dispatchFromHub.mutate(secondaryTripId)}
+      />
+
+      <DeliverDialog
+        open={Boolean(deliverLr)}
+        onOpenChange={(o) => !o && setDeliverLr(null)}
+        lrNumber={deliverLr?.lrNumber ?? ""}
+        mode="deliver"
+        isPending={deliver.isPending}
+        onConfirm={(values, podFiles) =>
+          deliverLr && deliver.mutate({ lrId: deliverLr.id, values, podFiles })
+        }
+      />
+
+      <DeliverDialog
+        open={Boolean(editDeliveryLr)}
+        onOpenChange={(o) => !o && setEditDeliveryLr(null)}
+        lrNumber={editDeliveryLr?.lrNumber ?? ""}
+        mode="edit"
+        initial={editDeliveryLr?.delivery ?? null}
+        isPending={updateDelivery.isPending}
+        onConfirm={(values) =>
+          editDeliveryLr &&
+          updateDelivery.mutate({ lrId: editDeliveryLr.id, values })
+        }
+      />
+
+      <BulkDeliverDialog
+        open={bulkDeliverOpen}
+        onOpenChange={setBulkDeliverOpen}
+        groupNumber={g.groupNumber}
+        lrs={pendingLrs}
+        isPending={deliverAll.isPending}
+        onConfirm={(values) => deliverAll.mutate(values)}
+      />
+
+      <AcknowledgeDialog
+        open={Boolean(ackLr)}
+        onOpenChange={(o) => !o && setAckLr(null)}
+        lrNumber={ackLr?.lrNumber ?? ""}
+        goods={ackLr?.goods ?? []}
+        mode="acknowledge"
+        isPending={acknowledge.isPending}
+        onConfirm={(values, scanFiles) =>
+          ackLr && acknowledge.mutate({ lrId: ackLr.id, values, scanFiles })
+        }
+      />
+
+      <AcknowledgeDialog
+        open={Boolean(editAckLr)}
+        onOpenChange={(o) => !o && setEditAckLr(null)}
+        lrNumber={editAckLr?.lrNumber ?? ""}
+        goods={editAckLr?.goods ?? []}
+        mode="edit"
+        initial={editAckLr?.acknowledgement ?? null}
+        isPending={updateAcknowledgement.isPending}
+        onConfirm={(values) =>
+          editAckLr &&
+          updateAcknowledgement.mutate({ lrId: editAckLr.id, values })
+        }
       />
 
       <ReasonDialog
@@ -491,12 +780,15 @@ const finaliseTitle = hasNoLrs
                 loadingLocationId: editLine.loadingLocationId ?? undefined,
                 unloadingLocationId: editLine.unloadingLocationId ?? undefined,
                 totalWeight:
-  editLine.totalWeight != null ? String(editLine.totalWeight) : "",
-totalWeightUnit: editLine.unit ?? "MT",
-goods: editLine.goods.map((goods) => ({
-  name: goods.name,
-  quantity: goods.quantity != null ? String(goods.quantity) : "",
-})),
+                  editLine.totalWeight != null
+                    ? String(editLine.totalWeight)
+                    : "",
+                totalWeightUnit: editLine.unit ?? "MT",
+                goods: editLine.goods.map((goods) => ({
+                  name: goods.name,
+                  quantity:
+                    goods.quantity != null ? String(goods.quantity) : "",
+                })),
                 invoiceNumber: editLine.invoiceNumber ?? "",
                 invoiceAmount:
                   editLine.invoiceAmount != null

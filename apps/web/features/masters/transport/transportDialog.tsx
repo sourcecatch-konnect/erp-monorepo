@@ -13,7 +13,6 @@ import {
 
 import {
   IconBuildingWarehouse,
-  IconHash,
   IconMapPin,
   IconPhone,
   IconTruck,
@@ -62,7 +61,6 @@ const display = (value?: React.ReactNode) => {
 export default function TransportDetailDialog({
   open,
   onOpenChange,
-  data,
   id,
 }: Props) {
    const detailQuery = useQuery({

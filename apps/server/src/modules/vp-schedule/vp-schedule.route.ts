@@ -5,6 +5,7 @@ import {
   updateVPScheduleSchema,
   confirmVPScheduleSchema,
   cancelVPScheduleSchema,
+  vpScheduleStatusSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 import { db } from "../../../prisma/prisma.js";
@@ -216,10 +217,11 @@ const buildWagonCountRows = async (
 router.get("/", can(PERMS.VP_SCHEDULE.VIEW), async (req, res) => {
   const query = parseListQuery(req);
 
+  const parsedStatus = vpScheduleStatusSchema.safeParse(query.filter.status);
   const where: Prisma.VPScheduleWhereInput = {
     deletedAt: null,
     ...branchFilter(req, "fromBranchId"),
-    ...(query.filter.status ? { status: query.filter.status as any } : {}),
+    ...(parsedStatus.success ? { status: parsedStatus.data } : {}),
     ...(query.search
       ? {
           OR: [
@@ -358,53 +360,53 @@ router.post("/", can(PERMS.VP_SCHEDULE.CREATE), async (req, res) => {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
 
-const data = parsed.data;
+  const data = parsed.data;
 
-assertBranchAccess(req, data.fromBranchId);
+  assertBranchAccess(req, data.fromBranchId);
 
-const me = actorId(req);
+  const me = actorId(req);
 
-await assertVPScheduleReferences(readClient, data);
-await assertVPScheduleBranchAreaAlignment(readClient, data);
+  await assertVPScheduleReferences(readClient, data);
+  await assertVPScheduleBranchAreaAlignment(readClient, data);
 
-const { start, end } = getDateRange(data.scheduleDate);
+  const { start, end } = getDateRange(data.scheduleDate);
 
-const duplicate = await db.vPSchedule.findFirst({
-  where: {
-    deletedAt: null,
+  const duplicate = await db.vPSchedule.findFirst({
+    where: {
+      deletedAt: null,
 
-    scheduleDate: {
-      gte: start,
-      lt: end,
+      scheduleDate: {
+        gte: start,
+        lt: end,
+      },
+
+      fromBranchId: data.fromBranchId,
+      toBranchId: data.toBranchId,
+
+      sourceAreaId: data.sourceAreaId,
+      destinationAreaId: data.destinationAreaId,
     },
+    select: {
+      id: true,
+      scheduleNumber: true,
+    },
+  });
 
-    fromBranchId: data.fromBranchId,
-    toBranchId: data.toBranchId,
+  if (duplicate) {
+    throw new ConflictError(
+      `VP Schedule already exists for this date, branch route and area route: ${duplicate.scheduleNumber}`,
+    );
+  }
 
+  await assertVPScheduleFreightMatrices(readClient, data);
+
+  const totals = await calculateVPScheduleTotals(readClient, data.wagonCounts);
+
+  const wagonRows = await buildWagonCountRows(readClient, {
     sourceAreaId: data.sourceAreaId,
     destinationAreaId: data.destinationAreaId,
-  },
-  select: {
-    id: true,
-    scheduleNumber: true,
-  },
-});
-
-if (duplicate) {
-  throw new ConflictError(
-    `VP Schedule already exists for this date, branch route and area route: ${duplicate.scheduleNumber}`,
-  );
-}
-
-await assertVPScheduleFreightMatrices(readClient, data);
-
-const totals = await calculateVPScheduleTotals(readClient, data.wagonCounts);
-
-const wagonRows = await buildWagonCountRows(readClient, {
-  sourceAreaId: data.sourceAreaId,
-  destinationAreaId: data.destinationAreaId,
-  wagonCounts: data.wagonCounts,
-});
+    wagonCounts: data.wagonCounts,
+  });
   const schedule = await db.$transaction(async (tx) => {
     const { scheduleNumber } = await generateVPScheduleNumber(
       tx,
@@ -524,17 +526,16 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
     wagonCounts: data.wagonCounts ?? existing.wagonCounts,
   });
 
-  const wagonUpdate =
-    data.wagonCounts
-      ? {
-          totals: await calculateVPScheduleTotals(readClient, data.wagonCounts),
-          rows: await buildWagonCountRows(readClient, {
-  sourceAreaId: effectiveRoute.sourceAreaId,
-  destinationAreaId: effectiveRoute.destinationAreaId,
-  wagonCounts: data.wagonCounts,
-}),
-        }
-      : null;
+  const wagonUpdate = data.wagonCounts
+    ? {
+        totals: await calculateVPScheduleTotals(readClient, data.wagonCounts),
+        rows: await buildWagonCountRows(readClient, {
+          sourceAreaId: effectiveRoute.sourceAreaId,
+          destinationAreaId: effectiveRoute.destinationAreaId,
+          wagonCounts: data.wagonCounts,
+        }),
+      }
+    : null;
 
   const updated = await db.$transaction(async (tx) => {
     let wagonUpdateData = {};
@@ -681,54 +682,50 @@ router.post(
 /* Cancel -> DRAFT / PLANNED to CANCELLED                             */
 /* ------------------------------------------------------------------ */
 
-router.post(
-  "/:id/cancel",
-  can(PERMS.VP_SCHEDULE.CANCEL),
-  async (req, res) => {
-    const identifier = getVPScheduleIdentifier(req);
+router.post("/:id/cancel", can(PERMS.VP_SCHEDULE.CANCEL), async (req, res) => {
+  const identifier = getVPScheduleIdentifier(req);
 
-    const existing = await db.vPSchedule.findFirst({
-      where: vpScheduleWhereByIdentifier(identifier),
-    });
+  const existing = await db.vPSchedule.findFirst({
+    where: vpScheduleWhereByIdentifier(identifier),
+  });
 
-    if (!existing) {
-      throw new NotFoundError("VP Schedule not found");
-    }
+  if (!existing) {
+    throw new NotFoundError("VP Schedule not found");
+  }
 
-    assertBranchAccess(req, existing.fromBranchId);
+  assertBranchAccess(req, existing.fromBranchId);
 
-    if (!["DRAFT", "PLANNED"].includes(existing.status)) {
-      throw new BadRequestError(
-        "Only a DRAFT or PLANNED VP Schedule can be cancelled",
-      );
-    }
+  if (!["DRAFT", "PLANNED"].includes(existing.status)) {
+    throw new BadRequestError(
+      "Only a DRAFT or PLANNED VP Schedule can be cancelled",
+    );
+  }
 
-    const parsed = cancelVPScheduleSchema.safeParse(req.body);
+  const parsed = cancelVPScheduleSchema.safeParse(req.body);
 
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
 
-    const me = actorId(req);
+  const me = actorId(req);
 
-    const updated = await db.vPSchedule.update({
-      where: {
-        id: existing.id,
+  const updated = await db.vPSchedule.update({
+    where: {
+      id: existing.id,
+    },
+    data: {
+      status: "CANCELLED",
+      remarks: parsed.data.reason,
+      updatedById: me,
+      version: {
+        increment: 1,
       },
-      data: {
-        status: "CANCELLED",
-        remarks: parsed.data.reason,
-        updatedById: me,
-        version: {
-          increment: 1,
-        },
-      },
-      include: vpScheduleInclude,
-    });
+    },
+    include: vpScheduleInclude,
+  });
 
-    return sendOk(res, updated);
-  },
-);
+  return sendOk(res, updated);
+});
 
 /* ------------------------------------------------------------------ */
 /* Delete -> only DRAFT soft delete                                   */
@@ -746,7 +743,6 @@ router.delete("/:id", can(PERMS.VP_SCHEDULE.DELETE), async (req, res) => {
   }
 
   assertBranchAccess(req, existing.fromBranchId);
-
 
   const me = actorId(req);
 

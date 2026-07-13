@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import axios from "axios";
 
@@ -103,19 +100,17 @@ export function useMasterMutations<TCreate, TUpdate, TResult>({
       queryClient.invalidateQueries({ queryKey });
     },
     onError: (error: unknown) => {
-  console.log("FULL ERROR OBJECT:", error);
-  console.log("RESPONSE:", (error as any)?.response);
-  console.log("DATA:", (error as any)?.response?.data);
+      console.log("FULL ERROR OBJECT:", error);
+      if (axios.isAxiosError(error)) {
+        console.log("RESPONSE:", error.response);
+        console.log("DATA:", error.response?.data);
+      }
 
-  toast.error(getErrorMessage(error));
-},
+      toast.error(getErrorMessage(error));
+    },
   });
 
-  const update = useMutation<
-    TResult,
-    unknown,
-    { id: string; data: TUpdate }
-  >({
+  const update = useMutation<TResult, unknown, { id: string; data: TUpdate }>({
     mutationFn: ({ id, data }) => api.update(id, data),
     onSuccess: () => {
       toast.success(`${entityName} updated successfully`);

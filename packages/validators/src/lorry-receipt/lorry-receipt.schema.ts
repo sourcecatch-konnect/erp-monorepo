@@ -21,7 +21,13 @@ const requiredDate = z
   .transform((value) => new Date(value))
   .refine((value) => !Number.isNaN(value.getTime()), "Enter a valid date");
 
-export const lrStatusSchema = z.enum(["DRAFT", "FINALISED", "CANCELLED"]);
+export const lrStatusSchema = z.enum([
+  "DRAFT",
+  "FINALISED",
+  "DELIVERED",
+  "ACKNOWLEDGED",
+  "CANCELLED",
+]);
 export const lrSourceSchema = z.enum(["FROM_ORDER", "INSTANT"]);
 export const lrTransportTypeSchema = z.enum(["Road", "Rail", "RoadAndRail"]);
 export const lrTripLegTypeSchema = z.enum(["DIRECT", "TO_HUB", "FROM_HUB"]);

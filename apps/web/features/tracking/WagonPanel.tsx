@@ -13,10 +13,12 @@ import {
 } from "@tabler/icons-react";
 import type { FleetVehicle, TrailPoint } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import { StatusBadge, formatDateTime, formatLastUpdate } from "./tracking-ui";
+import { toLocalInputValue } from "./tracking-ui";
+import { toValidDate } from "@/lib/date";
 
 type WagonPanelProps = {
   vehicle: FleetVehicle;
@@ -170,7 +172,8 @@ function HistoryControls({
   onSeek,
   onExitHistory,
 }: WagonPanelProps) {
-  const current = trail && trail.length ? trail[Math.min(playIndex, trail.length - 1)] : null;
+  const current =
+    trail && trail.length ? trail[Math.min(playIndex, trail.length - 1)] : null;
 
   return (
     <div className="mt-3 space-y-3">
@@ -179,20 +182,20 @@ function HistoryControls({
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
             From
           </span>
-          <Input
-            type="datetime-local"
-            value={from}
-            onChange={(e) => onFrom(e.target.value)}
+          <DateTimePicker
+            selected={toValidDate(from)}
+            onSelect={(date) => onFrom(date ? toLocalInputValue(date) : "")}
+            placeholder="Select start date and time"
           />
         </label>
         <label className="space-y-1">
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
             To
           </span>
-          <Input
-            type="datetime-local"
-            value={to}
-            onChange={(e) => onTo(e.target.value)}
+          <DateTimePicker
+            selected={toValidDate(to)}
+            onSelect={(date) => onTo(date ? toLocalInputValue(date) : "")}
+            placeholder="Select end date and time"
           />
         </label>
       </div>

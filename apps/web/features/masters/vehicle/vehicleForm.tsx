@@ -12,14 +12,12 @@ import type {
 
 import { createVehicleSchema } from "@skerp/validators";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
-import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
 import ComboboxField from "../_shared/fields/ComboboxField";
-import NumberField from "../_shared/fields/NumberField";
 import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
 import { vehicleTypeKeys } from "../vehicleType/vehicleType.key";
 import VehicleNumberField from "../_shared/fields/vehicleNumberField";
@@ -43,6 +41,7 @@ import IconTextField from "../_shared/fields/IconTextField";
 import { vehicleApi } from "./vehicle.service";
 import { vehicleKeys } from "./vehicle.key";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
+import { usePrefillVehicle } from "@/features/dev-tools/usePrefillVehicle";
 
 
 type Props = {
@@ -124,6 +123,9 @@ const handleSubmit = async (data: CreateVehicleBody) => {
     label: vt.name,
     value: vt.id,
   }));
+  const prefillVehicle = usePrefillVehicle({
+    vehicleTypes: vehicleTypes.data?.data ?? [],
+  });
 const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
@@ -158,6 +160,35 @@ const isSubmitting = create.isPending || update.isPending;
       onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={3}
+      footerLeft={
+        prefillVehicle ? (
+          <button
+            type="button"
+            onClick={() => form.reset(prefillVehicle())}
+            className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 4-1 1" />
+              <path d="m4 15 1-1" />
+              <path d="m10.5 6.5-5 5" />
+              <path d="M6 6l12 12" />
+              <path d="m18 6-1.5 1.5" />
+              <path d="m8.5 18-1 1" />
+            </svg>
+            Fill Test Data
+          </button>
+        ) : undefined
+      }
     >
       {/* BASIC INFO */}
       <FormSection

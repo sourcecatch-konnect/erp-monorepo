@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import * as React from "react";
-import { addDays, subDays } from "date-fns";
 
 import { DatePicker } from "./datepicker";
 const meta: Meta<typeof DatePicker> = {
@@ -19,7 +18,7 @@ export const Default: Story = {
 
 // ---- Pre-selected Date ----
 export const PreSelected: Story = {
-  render: () => {
+  render: function PreSelectedDatePicker() {
     const [date, setDate] = React.useState<Date | undefined>(new Date());
     return <DatePicker selected={date} onSelect={setDate} />;
   },
@@ -48,4 +47,12 @@ export const WithMaxDate: Story = {
       label="Past Dates Only"
     />
   ),
+};
+
+export const WithTime: Story = {
+  render: function DatePickerWithTime() {
+    const [date, setDate] = React.useState<Date | undefined>();
+
+    return <DatePicker selected={date} onSelect={setDate} withTime />;
+  },
 };

@@ -45,7 +45,11 @@ import {
 
 import { formatDate } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
-import { LRStatusBadge, SOURCE_LABELS, LR_STATUS_ORDER } from "../lorry-receipt-ui";
+import {
+  LRStatusBadge,
+  SOURCE_LABELS,
+  LR_STATUS_ORDER,
+} from "../lorry-receipt-ui";
 
 type Props = {
   data: LRGroupListItem[];
@@ -65,11 +69,19 @@ type Props = {
 
 export default function LRTable(props: Props) {
   const {
-    data, total, page, size, onPageChange,
-    search, onSearchChange,
-    statusFilter, onStatusFilterChange,
-    counts, isLoading,
-    canCancel, onCancel,
+    data,
+    total,
+    page,
+    size,
+    onPageChange,
+    search,
+    onSearchChange,
+    statusFilter,
+    onStatusFilterChange,
+    counts,
+    isLoading,
+    canCancel,
+    onCancel,
   } = props;
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
 
@@ -94,7 +106,11 @@ export default function LRTable(props: Props) {
                 }))
               }
             >
-              {isExpanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+              {isExpanded ? (
+                <IconChevronDown size={16} />
+              ) : (
+                <IconChevronRight size={16} />
+              )}
             </Button>
           );
         },
@@ -102,20 +118,32 @@ export default function LRTable(props: Props) {
       {
         header: "Group #",
         cell: ({ row }) => (
-         <Link
-  href={`/lorry-receipts/${encodeURIComponent(row.original.groupNumber)}`}
-  className="block"
->
+          <Link
+            href={`/lorry-receipts/${encodeURIComponent(row.original.groupNumber)}`}
+            className="block"
+          >
             <span className="font-medium text-primary hover:underline">
               {row.original.groupNumber}
             </span>
           </Link>
         ),
       },
-      { header: "Consignor", cell: ({ row }) => row.original.consignor?.name ?? "—" },
-      { header: "Consignee", cell: ({ row }) => row.original.consignee?.name ?? "—" },
-      { header: "Origin", cell: ({ row }) => row.original.originBranch?.name ?? "—" },
-      { header: "Destination", cell: ({ row }) => row.original.destinationBranch?.name ?? "—" },
+      {
+        header: "Consignor",
+        cell: ({ row }) => row.original.consignor?.name ?? "—",
+      },
+      {
+        header: "Consignee",
+        cell: ({ row }) => row.original.consignee?.name ?? "—",
+      },
+      {
+        header: "Origin",
+        cell: ({ row }) => row.original.originBranch?.name ?? "—",
+      },
+      {
+        header: "Destination",
+        cell: ({ row }) => row.original.destinationBranch?.name ?? "—",
+      },
       {
         header: "Vehicle",
         cell: ({ row }) => {
@@ -133,15 +161,14 @@ export default function LRTable(props: Props) {
               !lr.unloadingLocation ||
               (lr.goods?.length ?? 0) === 0,
           );
+          return (
+            <div className="flex flex-col gap-1">
+              <span>{row.original.lrCount ?? "—"}</span>
               {hasIncompleteLr ? (
                 <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
                   <IconAlertTriangle size={12} /> Details pending
                 </span>
               ) : null}
-          return (
-            <div className="flex flex-col gap-1">
-              <span>{row.original.lrCount ?? "—"}</span>
-        
             </div>
           );
         },
@@ -153,13 +180,23 @@ export default function LRTable(props: Props) {
             ? formatPaise(row.original.baseFreightAmount)
             : "—",
       },
-      { header: "Source", cell: ({ row }) => SOURCE_LABELS[row.original.source] },
-      { header: "Status", cell: ({ row }) => <LRStatusBadge status={row.original.status} /> },
+      {
+        header: "Source",
+        cell: ({ row }) => SOURCE_LABELS[row.original.source],
+      },
+      {
+        header: "Status",
+        cell: ({ row }) => <LRStatusBadge status={row.original.status} />,
+      },
     ],
     [expanded],
   );
 
-  const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
   const pageCount = Math.max(1, Math.ceil(total / size));
 
   return (
@@ -183,7 +220,9 @@ export default function LRTable(props: Props) {
               {typeof count === "number" ? (
                 <span
                   className={`ml-1.5 rounded-sm px-1 text-xs ${
-                    active ? "bg-primary-foreground/20" : "bg-muted-foreground/10"
+                    active
+                      ? "bg-primary-foreground/20"
+                      : "bg-muted-foreground/10"
                   }`}
                 >
                   {count}
@@ -246,7 +285,9 @@ export default function LRTable(props: Props) {
                     <div className="flex size-10 items-center justify-center rounded-full bg-muted">
                       <IconDatabaseOff size={18} />
                     </div>
-                    <span className="text-sm font-medium">No LR groups found</span>
+                    <span className="text-sm font-medium">
+                      No LR groups found
+                    </span>
                   </div>
                 </TableCell>
               </TableRow>
@@ -261,25 +302,42 @@ export default function LRTable(props: Props) {
                     <TableRow className="hover:bg-muted/30">
                       {row.getVisibleCells().map((cell) => (
                         <TableCell key={cell.id} className="h-12 text-sm">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
                         </TableCell>
                       ))}
                       <TableCell className="w-16 text-right">
                         <div className="flex justify-end gap-1">
-                        <Button size="icon-sm" variant="ghost" aria-label="View group" asChild>
-  <Link href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}>
-    <IconEye size={16} />
-  </Link>
-</Button>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label="View group"
+                            asChild
+                          >
+                            <Link
+                              href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}
+                            >
+                              <IconEye size={16} />
+                            </Link>
+                          </Button>
                           {canCancel && cancellable ? (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button size="icon-sm" variant="ghost" aria-label="Row actions">
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label="Row actions"
+                                >
                                   <IconDotsVertical size={16} />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem className="text-red-600" onClick={() => onCancel(g)}>
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={() => onCancel(g)}
+                                >
                                   <IconBan size={16} className="mr-2" /> Cancel
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -296,26 +354,42 @@ export default function LRTable(props: Props) {
                               <table className="w-full min-w-[720px] text-sm">
                                 <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                                   <tr>
-                                    <th className="px-3 py-2 font-semibold">LR #</th>
-                                    <th className="px-3 py-2 font-semibold">Route</th>
-                                    <th className="px-3 py-2 font-semibold">Goods</th>
-                                    <th className="px-3 py-2 font-semibold">Invoice</th>
-                                    <th className="px-3 py-2 font-semibold">E-way bill</th>
-                                    <th className="px-3 py-2 font-semibold">Status</th>
+                                    <th className="px-3 py-2 font-semibold">
+                                      LR #
+                                    </th>
+                                    <th className="px-3 py-2 font-semibold">
+                                      Route
+                                    </th>
+                                    <th className="px-3 py-2 font-semibold">
+                                      Goods
+                                    </th>
+                                    <th className="px-3 py-2 font-semibold">
+                                      Invoice
+                                    </th>
+                                    <th className="px-3 py-2 font-semibold">
+                                      E-way bill
+                                    </th>
+                                    <th className="px-3 py-2 font-semibold">
+                                      Status
+                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {childRows.map((lr) => (
                                     <tr key={lr.id} className="border-t">
                                       <td className="px-3 py-2 font-medium text-primary">
-                                        <Link href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`} className="hover:underline">
+                                        <Link
+                                          href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}
+                                          className="hover:underline"
+                                        >
                                           {lr.lrNumber}
                                         </Link>
                                       </td>
                                       <td className="px-3 py-2 text-muted-foreground">
                                         <div className="flex flex-col gap-1">
                                           <span>
-                                            {lr.loadingLocation?.name ?? "-"} -&gt;{" "}
+                                            {lr.loadingLocation?.name ?? "-"}{" "}
+                                            -&gt;{" "}
                                             {lr.unloadingLocation?.name ?? "-"}
                                           </span>
                                           {(!lr.loadingLocation ||
@@ -351,7 +425,9 @@ export default function LRTable(props: Props) {
                                             ) : null}
                                           </div>
                                         ) : (
-                                          <span className="text-muted-foreground">-</span>
+                                          <span className="text-muted-foreground">
+                                            -
+                                          </span>
                                         )}
                                       </td>
                                       <td className="px-3 py-2">
@@ -359,11 +435,16 @@ export default function LRTable(props: Props) {
                                           <div>
                                             <p>{lr.ewayBill.ewayBillNo}</p>
                                             <p className="text-xs text-muted-foreground">
-                                              Expires {formatDate(lr.ewayBill.expiresAt)}
+                                              Expires{" "}
+                                              {formatDate(
+                                                lr.ewayBill.expiresAt,
+                                              )}
                                             </p>
                                           </div>
                                         ) : (
-                                          <span className="text-muted-foreground">-</span>
+                                          <span className="text-muted-foreground">
+                                            -
+                                          </span>
                                         )}
                                       </td>
                                       <td className="px-3 py-2">
@@ -397,15 +478,23 @@ export default function LRTable(props: Props) {
                 href="#"
                 aria-disabled={page === 0}
                 className={page === 0 ? "pointer-events-none opacity-50" : ""}
-                onClick={(e) => { e.preventDefault(); if (page > 0) onPageChange(page - 1); }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (page > 0) onPageChange(page - 1);
+                }}
               />
             </PaginationItem>
             <PaginationItem>
               <PaginationNext
                 href="#"
                 aria-disabled={page + 1 >= pageCount}
-                className={page + 1 >= pageCount ? "pointer-events-none opacity-50" : ""}
-                onClick={(e) => { e.preventDefault(); if (page + 1 < pageCount) onPageChange(page + 1); }}
+                className={
+                  page + 1 >= pageCount ? "pointer-events-none opacity-50" : ""
+                }
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (page + 1 < pageCount) onPageChange(page + 1);
+                }}
               />
             </PaginationItem>
           </PaginationContent>

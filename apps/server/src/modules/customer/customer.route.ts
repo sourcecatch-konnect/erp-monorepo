@@ -8,7 +8,6 @@ import {
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
-import { ZodTypeAny } from "zod";
 import { can } from "../../auth/can.middleware.js";
 import { getParamId } from "../_shared/param.js";
 import { sendOk } from "../_shared/response.js";
@@ -19,14 +18,12 @@ const moneyFields = ["creditLimit"];
 
 const router: Router = createCrudRouter({
   model: db.customer,
-  createSchema: createCustomerSchema as ZodTypeAny,
-  updateSchema: updateCustomerSchema as ZodTypeAny,
+  createSchema: createCustomerSchema,
+  updateSchema: updateCustomerSchema,
   permissionKey: "masters.customer",
   hooks: {
-    beforeCreate: async (data: any) =>
-      convertRupeeFieldsToPaise(data, moneyFields),
-    beforeUpdate: async (data: any) =>
-      convertRupeeFieldsToPaise(data, moneyFields),
+    beforeCreate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
   },
   listOptions: {
     searchableFields: [
@@ -52,14 +49,15 @@ const router: Router = createCrudRouter({
         label: "Agreements",
         where: (id: string) => ({ clientId: id }),
         select: { id: true, cityId: true },
-        getName: (row: any) => row.id,
+        getName: (row: { id: string }) => row.id,
       },
       {
         model: db.order,
         label: "Orders",
         where: (id: string) => ({ customerId: id }),
         select: { id: true, orderNumber: true },
-        getName: (row: any) => row.orderNumber ?? row.id,
+        getName: (row: { id: string; orderNumber?: string | null }) =>
+          row.orderNumber ?? row.id,
       },
       {
         model: db.lRGroup,
@@ -68,14 +66,15 @@ const router: Router = createCrudRouter({
           OR: [{ consignorId: id }, { consigneeId: id }],
         }),
         select: { id: true, groupNumber: true },
-        getName: (row: any) => row.groupNumber ?? row.id,
+        getName: (row: { id: string; groupNumber?: string | null }) =>
+          row.groupNumber ?? row.id,
       },
       {
         model: db.vehicleTrip,
         label: "Vehicle Trips",
         where: (id: string) => ({ consignorId: id }),
         select: { id: true },
-        getName: (row: any) => row.id,
+        getName: (row: { id: string }) => row.id,
       },
     ],
   },
@@ -99,7 +98,6 @@ const customerLocationInclude = {
 // List a customer's saved pickup locations (used by the Order form dropdown).
 router.get("/:id/locations", can("masters.customer.view"), async (req, res) => {
   const customerId = getParamId(req);
-
 
   const cityId =
     typeof req.query.cityId === "string" && req.query.cityId.trim()

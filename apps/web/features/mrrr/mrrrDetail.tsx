@@ -22,22 +22,11 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
-import { formatPaise } from "@/lib/money";
 import { formatFreight, MRRRStatusBadge } from "./mrrr-ui";
 
-import { 
-  useCancelMRRR,
-  useMRRRDetail,
-  useSubmitMRRR,
-} from "./hook/useMrrr";
+import { useCancelMRRR, useMRRRDetail, useSubmitMRRR } from "./hook/useMrrr";
 
-function Field({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid gap-0.5">
       <dt className="text-xs uppercase text-muted-foreground">{label}</dt>
@@ -75,10 +64,6 @@ function CardSection({
   );
 }
 
-
-
-
-
 const formatDate = (value?: string | Date | null) => {
   if (!value) return "—";
 
@@ -109,7 +94,6 @@ const formatDateTime = (value?: string | Date | null) => {
   }).format(date);
 };
 
-
 export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
   const router = useRouter();
 
@@ -119,7 +103,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
   const submit = useSubmitMRRR();
   const cancel = useCancelMRRR();
 
-  const mrrr = mrrrQuery.data as any;
+  const mrrr = mrrrQuery.data;
 
   if (mrrrQuery.isLoading || !mrrr) {
     return (
@@ -156,7 +140,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
 
   const vpSchedule = mrrr.vpSchedule;
 
-  const rows = mrrr.rows ?? mrrr.mrrrRows ?? [];
+  const rows = mrrr.rows ?? [];
 
   const status = mrrr.status ?? "DRAFT";
 
@@ -168,35 +152,18 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
   const canSubmit = isDraft;
   const canCancel = isDraft || isSubmitted;
 
-  const sourceArea = vpSchedule?.sourceArea?.name ?? mrrr.sourceArea?.name ?? "—";
-  const destinationArea =
-    vpSchedule?.destinationArea?.name ?? mrrr.destinationArea?.name ?? "—";
+  const sourceArea = vpSchedule?.sourceArea?.name ?? "—";
+  const destinationArea = vpSchedule?.destinationArea?.name ?? "—";
 
-  const sourceCity =
-    vpSchedule?.sourceArea?.city?.name ??
-    vpSchedule?.sourceCity?.name ??
-    mrrr.sourceCity?.name ??
-    "—";
+  const sourceCity = vpSchedule?.sourceArea?.city?.name ?? "—";
 
-  const destinationCity =
-    vpSchedule?.destinationArea?.city?.name ??
-    vpSchedule?.destinationCity?.name ??
-    mrrr.destinationCity?.name ??
-    "—";
+  const destinationCity = vpSchedule?.destinationArea?.city?.name ?? "—";
 
   const fromBranch =
-    vpSchedule?.fromBranch?.name ||
-    vpSchedule?.fromBranch?.branchCode ||
-    mrrr.fromBranch?.name ||
-    mrrr.fromBranch?.branchCode ||
-    "—";
+    vpSchedule?.fromBranch?.name || vpSchedule?.fromBranch?.branchCode || "—";
 
   const toBranch =
-    vpSchedule?.toBranch?.name ||
-    vpSchedule?.toBranch?.branchCode ||
-    mrrr.toBranch?.name ||
-    mrrr.toBranch?.branchCode ||
-    "—";
+    vpSchedule?.toBranch?.name || vpSchedule?.toBranch?.branchCode || "—";
 
   const createdBy = mrrr.createdBy
     ? `${mrrr.createdBy.firstName ?? ""} ${
@@ -206,16 +173,12 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
 
   const totalRows = rows.length;
 
+  const totalFreight = rows.reduce((sum: number, row) => {
+    const freight =
+      row.vpScheduleWagonCount?.freightAmount ?? row.freightAmount ?? 0;
 
-
- const totalFreight = rows.reduce((sum: number, row: any) => {
-  const freight =
-    row.vpScheduleWagonCount?.freightAmount ??
-    row.freightAmount ??
-    0;
-
-  return sum + Number(freight);
-}, 0);
+    return sum + Number(freight);
+  }, 0);
 
   const handleSubmit = () => {
     submit.mutate(
@@ -268,7 +231,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-semibold tracking-tight">
-              {mrrr.mrrrNumber ?? mrrr.mrRrNumber ?? mrrr.documentNumber ?? "MR/RR"}
+              {mrrr.mrRrNumber ?? "MR/RR"}
             </h1>
 
             <MRRRStatusBadge status={status} />
@@ -336,41 +299,33 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         <div className="space-y-4">
           <CardSection
-  title="MR/RR Overview"
-  icon={<IconFileDescription size={14} />}
->
-  <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-    <Field
-      label="MR/RR no"
-      value={
-        mrrr.mrRrNumber ??
-        mrrr.mrrrNumber ??
-        mrrr.documentNumber ??
-        "Not generated yet"
-      }
-    />
+            title="MR/RR Overview"
+            icon={<IconFileDescription size={14} />}
+          >
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <Field
+                label="MR/RR no"
+                value={mrrr.mrRrNumber ?? "Not generated yet"}
+              />
 
-    <Field
-      label="MR/RR date"
-      value={formatDate(mrrr.mrRrDate ?? mrrr.mrrrDate ?? mrrr.createdAt)}
-    />
+              <Field label="MR/RR date" value={formatDate(mrrr.createdAt)} />
 
-    <Field
-      label="Rake type"
-      value={mrrr.rakeType ?? "—"}
-    />
+              <Field label="Rake type" value={mrrr.rakeType ?? "—"} />
 
-    <Field
-      label="Status"
-      value={<MRRRStatusBadge status={status} />}
-    />
+              <Field
+                label="Status"
+                value={<MRRRStatusBadge status={status} />}
+              />
 
-    <Field label="From branch" value={fromBranch} />
-    <Field label="To branch" value={toBranch} />
-    <Field label="Created by" value={createdBy} />
-    <Field label="Last updated" value={formatDateTime(mrrr.updatedAt)} />
-  </dl>
-</CardSection>
+              <Field label="From branch" value={fromBranch} />
+              <Field label="To branch" value={toBranch} />
+              <Field label="Created by" value={createdBy} />
+              <Field
+                label="Last updated"
+                value={formatDateTime(mrrr.updatedAt)}
+              />
+            </dl>
+          </CardSection>
 
           <CardSection title="VP Schedule" icon={<IconTrain size={14} />}>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -403,7 +358,9 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                 label="Total CFT"
                 value={
                   vpSchedule?.totalCapacityCft != null
-                    ? Number(vpSchedule.totalCapacityCft).toLocaleString("en-IN")
+                    ? Number(vpSchedule.totalCapacityCft).toLocaleString(
+                        "en-IN",
+                      )
                     : "—"
                 }
               />
@@ -420,7 +377,10 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                 value={
                   <span className="inline-flex items-center gap-1.5 font-medium">
                     <span>{sourceCity}</span>
-                    <IconArrowRight size={14} className="text-muted-foreground" />
+                    <IconArrowRight
+                      size={14}
+                      className="text-muted-foreground"
+                    />
                     <span>{destinationCity}</span>
                   </span>
                 }
@@ -474,7 +434,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                         <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
                           VP No
                         </th>
-                
+
                         <th className="px-3 py-2 text-right text-xs font-medium uppercase text-muted-foreground">
                           Freight
                         </th>
@@ -482,12 +442,9 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                     </thead>
 
                     <tbody>
-                      {rows.map((row: any, index: number) => {
+                      {rows.map((row, index: number) => {
                         const wagonName =
-                          row.wagon?.name ??
-                          row.wagonTypeLabel ??
-                          row.wagonName ??
-                          "—";
+                          row.wagon?.name ?? row.wagonTypeLabel ?? "—";
 
                         return (
                           <tr
@@ -501,25 +458,19 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                             <td className="px-3 py-2 font-medium">
                               {wagonName}
                             </td>
-                            <td className="px-3 py-2">
-                              {row.mrRrNo || "—"}
-                            </td>
+                            <td className="px-3 py-2">{row.mrRrNo || "—"}</td>
                             <td className="px-3 py-2">
                               {row.sequenceNo || "—"}
                             </td>
 
-                            <td className="px-3 py-2">
-                              {row.vpNo || "—"}
+                            <td className="px-3 py-2">{row.vpNo || "—"}</td>
+
+                            <td className="px-3 py-2 text-right font-medium">
+                              {formatFreight(
+                                row.vpScheduleWagonCount?.freightAmount ??
+                                  row.freightAmount,
+                              )}
                             </td>
-
-           
-
-<td className="px-3 py-2 text-right font-medium">
-  {formatFreight(
-    row.vpScheduleWagonCount?.freightAmount ??
-      row.freightAmount
-  )}
-</td>
                           </tr>
                         );
                       })}
@@ -540,16 +491,12 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                 {mrrr.remarks}
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No remarks added.
-              </p>
+              <p className="text-sm text-muted-foreground">No remarks added.</p>
             )}
           </CardSection>
         </div>
 
         <div className="space-y-4">
-       
-
           <CardSection title="Timeline" icon={<IconCalendar size={14} />}>
             <div className="space-y-3 text-sm">
               <div className="flex gap-3">
@@ -605,9 +552,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
       <ReasonDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
-        title={`Cancel MR/RR ${
-          mrrr.mrrrNumber ?? mrrr.mrRrNumber ?? mrrr.documentNumber ?? ""
-        }`}
+        title={`Cancel MR/RR ${mrrr.mrRrNumber ?? ""}`}
         description="This will cancel the MR/RR and it cannot continue in the railway process."
         confirmLabel="Cancel MR/RR"
         destructive

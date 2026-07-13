@@ -13,11 +13,6 @@ import {
 } from "@tabler/icons-react";
 import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
-const formatNumber = (value?: number | null, suffix = "") => {
-  if (value == null) return "-";
-  return `${value}${suffix}`;
-};
-
 export const railwayFreightColumns:
 ColumnDef<RailwayFreightMatrixWithRelations>[] = [
   {

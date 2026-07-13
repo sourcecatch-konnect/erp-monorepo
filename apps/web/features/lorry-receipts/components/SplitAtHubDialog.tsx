@@ -28,8 +28,9 @@ type Props = {
 };
 
 /**
- * HO action on a FINALISED LR: attach the leg-2 trip (hub → destination). The
- * hub itself is always Jalgaon and is set server-side — never picked here.
+ * HO action on a held-at-hub group: attach the leg-2 trip (hub → destination).
+ * Second half of the decomposed hub split — the hold-at-hub action must have
+ * run first. The hub itself is always the head office — never picked here.
  */
 export default function SplitAtHubDialog({
   open,
@@ -58,10 +59,10 @@ export default function SplitAtHubDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Split LR {lrNumber} at hub</DialogTitle>
+          <DialogTitle>Dispatch {lrNumber} from hub</DialogTitle>
           <DialogDescription>
-            Attach the leg-2 trip (hub → destination). The hub is set to the head
-            office automatically.
+            Attach the leg-2 trip (hub → destination). Once attached, that trip
+            cannot close until every LR on it is delivered.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,7 +95,7 @@ export default function SplitAtHubDialog({
             disabled={isPending || !secondaryTripId}
             onClick={() => onConfirm(secondaryTripId)}
           >
-            {isPending ? "Splitting…" : "Split at hub"}
+            {isPending ? "Dispatching…" : "Dispatch from hub"}
           </Button>
         </DialogFooter>
       </DialogContent>

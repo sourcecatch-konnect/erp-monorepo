@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateCustomerBody, Customer } from "@skerp/types";
+import type { Customer } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import {

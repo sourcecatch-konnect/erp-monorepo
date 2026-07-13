@@ -11,7 +11,6 @@ import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 
-
 import { IconMapPin } from "@tabler/icons-react";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { areaApi } from "./area.service";
@@ -20,7 +19,6 @@ import CitySelectField from "../_shared/fields/CitySelectField";
 
 declare global {
   interface Window {
-    google?: any;
     initGoogleAutocomplete?: () => void;
   }
 }
@@ -48,101 +46,99 @@ const getAreaNameFromAddress = (address: string, cityName?: string) => {
   return areaName.replace(/,\s*$/, "").trim() || address;
 };
 
-export default function AreaForm({
-  open,
-  onOpenChange,
-  row,
-}: Props) {
+export default function AreaForm({ open, onOpenChange, row }: Props) {
   const form = useForm<CreateAreaBody>({
     resolver: zodResolver(createAreaSchema),
     defaultValues,
   });
 
+  const { create, update } = useMasterMutations({
+    api: areaApi,
+    queryKey: areaKeys.all,
+    entityName: "Area",
+  });
 
-const { create, update } = useMasterMutations({
-  api: areaApi,
-  queryKey: areaKeys.all,
-  entityName: "Area",
-});
+  const handleSubmit = async (data: CreateAreaBody) => {
+    if (row) {
+      await update.mutateAsync({ id: row.id, data });
+    } else {
+      await create.mutateAsync(data);
+    }
 
-const handleSubmit = async (data: CreateAreaBody) => {
-  if (row) {
-    await update.mutateAsync({ id: row.id, data });
-  } else {
-    await create.mutateAsync(data);
-  }
-
-  onOpenChange(false);
-};
+    onOpenChange(false);
+  };
   const areaInputRef = React.useRef<HTMLInputElement | null>(null);
-  const autocompleteRef = React.useRef<any>(null);
+  const autocompleteRef = React.useRef<google.maps.places.Autocomplete | null>(
+    null,
+  );
 
-const [selectedCity, setSelectedCity] =
-  React.useState<Pick<City, "id" | "name"> | null>(null);
-const previousCityIdRef = React.useRef<string>("");
+  const [selectedCity, setSelectedCity] = React.useState<Pick<
+    City,
+    "id" | "name"
+  > | null>(null);
+  const previousCityIdRef = React.useRef<string>("");
   const latitude = form.watch("latitude");
   const longitude = form.watch("longitude");
-
 
   const hasMapLocation =
     typeof latitude === "number" && typeof longitude === "number";
 
-React.useEffect(() => {
-  if (!open) return;
+  React.useEffect(() => {
+    if (!open) return;
 
-  form.reset({
-    name: row?.name ?? "",
-    cityId: row?.cityId ?? "",
-    googlePlaceId: row?.googlePlaceId ?? null,
-    formattedAddress: row?.formattedAddress ?? null,
-    latitude: row?.latitude ?? null,
-    longitude: row?.longitude ?? null,
-  });
+    form.reset({
+      name: row?.name ?? "",
+      cityId: row?.cityId ?? "",
+      googlePlaceId: row?.googlePlaceId ?? null,
+      formattedAddress: row?.formattedAddress ?? null,
+      latitude: row?.latitude ?? null,
+      longitude: row?.longitude ?? null,
+    });
 
-  const initialCity = row?.city
-    ? {
-        id: row.city.id,
-        name: row.city.name,
+    const initialCity = row?.city
+      ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+      : null;
+
+    setSelectedCity(initialCity);
+    previousCityIdRef.current = row?.cityId ?? "";
+  }, [form, open, row]);
+  const handleCityChange = React.useCallback(
+    (city: Pick<City, "id" | "name"> | null) => {
+      const nextCityId = city?.id ?? "";
+      const previousCityId = previousCityIdRef.current;
+
+      setSelectedCity(city);
+
+      if (previousCityId && previousCityId !== nextCityId) {
+        form.setValue("name", "", {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+
+        form.setValue("googlePlaceId", null, {
+          shouldDirty: true,
+        });
+
+        form.setValue("formattedAddress", null, {
+          shouldDirty: true,
+        });
+
+        form.setValue("latitude", null, {
+          shouldDirty: true,
+        });
+
+        form.setValue("longitude", null, {
+          shouldDirty: true,
+        });
       }
-    : null;
 
-  setSelectedCity(initialCity);
-  previousCityIdRef.current = row?.cityId ?? "";
-}, [form, open, row]);
-const handleCityChange = React.useCallback(
-  (city: Pick<City, "id" | "name"> | null) => {
-    const nextCityId = city?.id ?? "";
-    const previousCityId = previousCityIdRef.current;
-
-    setSelectedCity(city);
-
-    if (previousCityId && previousCityId !== nextCityId) {
-      form.setValue("name", "", {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-
-      form.setValue("googlePlaceId", null, {
-        shouldDirty: true,
-      });
-
-      form.setValue("formattedAddress", null, {
-        shouldDirty: true,
-      });
-
-      form.setValue("latitude", null, {
-        shouldDirty: true,
-      });
-
-      form.setValue("longitude", null, {
-        shouldDirty: true,
-      });
-    }
-
-    previousCityIdRef.current = nextCityId;
-  },
-  [form],
-);
+      previousCityIdRef.current = nextCityId;
+    },
+    [form],
+  );
   React.useEffect(() => {
     if (!open) return;
 
@@ -162,11 +158,11 @@ const handleCityChange = React.useCallback(
 
       autocompleteRef.current = new window.google.maps.places.Autocomplete(
         inputElement,
-       {
-  fields: ["place_id", "name", "formatted_address", "geometry"],
-  componentRestrictions: { country: "in" },
-  strictBounds: false,
-},
+        {
+          fields: ["place_id", "name", "formatted_address", "geometry"],
+          componentRestrictions: { country: "in" },
+          strictBounds: false,
+        },
       );
 
       inputElement.addEventListener("keydown", (event) => {
@@ -174,44 +170,44 @@ const handleCityChange = React.useCallback(
       });
 
       autocompleteRef.current.addListener("place_changed", () => {
-  const place = autocompleteRef.current?.getPlace?.();
+        const place = autocompleteRef.current?.getPlace?.();
 
-  if (!place) {
-    return;
-  }
+        if (!place) {
+          return;
+        }
 
-  const selectedAddress = place.formatted_address ?? place.name ?? "";
+        const selectedAddress = place.formatted_address ?? place.name ?? "";
 
-  if (!selectedAddress) {
-    return;
-  }
+        if (!selectedAddress) {
+          return;
+        }
 
-  const areaName = getAreaNameFromAddress(
-    selectedAddress,
-    selectedCity?.name,
-  );
+        const areaName = getAreaNameFromAddress(
+          selectedAddress,
+          selectedCity?.name,
+        );
 
-  form.setValue("name", areaName, {
-    shouldDirty: true,
-    shouldValidate: true,
-  });
+        form.setValue("name", areaName, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
 
-  form.setValue("googlePlaceId", place.place_id ?? null, {
-    shouldDirty: true,
-  });
+        form.setValue("googlePlaceId", place.place_id ?? null, {
+          shouldDirty: true,
+        });
 
-  form.setValue("formattedAddress", selectedAddress || null, {
-    shouldDirty: true,
-  });
+        form.setValue("formattedAddress", selectedAddress || null, {
+          shouldDirty: true,
+        });
 
-  form.setValue("latitude", place.geometry?.location?.lat?.() ?? null, {
-    shouldDirty: true,
-  });
+        form.setValue("latitude", place.geometry?.location?.lat?.() ?? null, {
+          shouldDirty: true,
+        });
 
-  form.setValue("longitude", place.geometry?.location?.lng?.() ?? null, {
-    shouldDirty: true,
-  });
-});
+        form.setValue("longitude", place.geometry?.location?.lng?.() ?? null, {
+          shouldDirty: true,
+        });
+      });
     };
 
     if (window.google?.maps?.places) {
@@ -250,78 +246,79 @@ const handleCityChange = React.useCallback(
     }
 
     const geocoder = new window.google.maps.Geocoder();
+    const autocomplete = autocompleteRef.current;
 
     geocoder.geocode(
       { address: `${selectedCity.name}, India` },
-      (results: any, status: string) => {
+      (results, status) => {
         if (status !== "OK" || !results?.[0]?.geometry?.viewport) return;
 
-        autocompleteRef.current.setBounds(results[0].geometry.viewport);
-autocompleteRef.current.setOptions({
-  strictBounds: false,
-});
+        autocomplete.setBounds(results[0].geometry.viewport);
+        autocomplete.setOptions({
+          strictBounds: false,
+        });
       },
     );
   }, [open, selectedCity?.name]);
 
   return (
-<MasterFormDialog
-  open={open}
-  onOpenChange={onOpenChange}
-  title={row ? "Edit Area" : "Add Area"}
-  form={form}
-  onSubmit={handleSubmit}
-  isSubmitting={create.isPending || update.isPending}
-  columns={2}
->
+    <MasterFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={row ? "Edit Area" : "Add Area"}
+      form={form}
+      onSubmit={handleSubmit}
+      isSubmitting={create.isPending || update.isPending}
+      columns={2}
+    >
       <FormSection
         icon={<IconMapPin size={18} />}
         title="Area Information"
         description="Search and select the area from Google Places"
       >
-<CitySelectField<CreateAreaBody>
-  name="cityId"
-  label="City"
-  required
-  initialCity={
-    row?.city
-      ? {
-          id: row.city.id,
-          name: row.city.name,
-        }
-      : null
-  }
-  onCityChange={handleCityChange}
-/>
-       <TextField<CreateAreaBody>
-  name="name"
-  label="Area"
-  placeholder={
-    selectedCity
-      ? `Search area in ${selectedCity.name}`
-      : "Select city first"
-  }
-  required
-  inputRef={areaInputRef}
-  disabled={!selectedCity}
-/>
-      {hasMapLocation ? (
-  <div className="col-span-2 overflow-hidden rounded-lg border bg-muted/20">
-    <div className="border-b px-3 py-2">
-      <p className="text-sm font-medium">Location Preview</p>
-      <p className="text-xs text-muted-foreground">
-        Map preview based on the selected Google location
-      </p>
-    </div>
+        <CitySelectField<CreateAreaBody>
+          name="cityId"
+          label="City"
+          required
+          initialCity={
+            row?.city
+              ? {
+                  id: row.city.id,
+                  name: row.city.name,
+                }
+              : null
+          }
+          onCityChange={handleCityChange}
+        />
+        <TextField<CreateAreaBody>
+          name="name"
+          label="Area"
+          placeholder={
+            selectedCity
+              ? `Search area in ${selectedCity.name}`
+              : "Select city first"
+          }
+          required
+          inputRef={areaInputRef}
+          disabled={!selectedCity}
+        />
+        {hasMapLocation ? (
+          <div className="col-span-2 overflow-hidden rounded-lg border bg-muted/20">
+            <div className="border-b px-3 py-2">
+              <p className="text-sm font-medium">Location Preview</p>
+              <p className="text-xs text-muted-foreground">
+                Map preview based on the selected Google location
+              </p>
+            </div>
 
-    <iframe
-      title="Area location map"
-      className="h-[220px] w-full border-0"
-      loading="lazy"
-      src={`https://www.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`}
-    />
-  </div>
-) : null}
+            <iframe
+              title="Area location map"
+              className="h-[220px] w-full border-0"
+              loading="lazy"
+              src={`https://www.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`}
+            />
+          </div>
+        ) : null}
       </FormSection>
     </MasterFormDialog>
   );

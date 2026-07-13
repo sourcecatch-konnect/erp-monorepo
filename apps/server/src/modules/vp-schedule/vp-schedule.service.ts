@@ -1,5 +1,4 @@
 import { Prisma } from "../../../generated/prisma/index.js";
-import { db } from "../../../prisma/prisma.js";
 import { BadRequestError } from "../../lib/error.js";
 import {
   fyCodeFor,
@@ -126,21 +125,21 @@ export const vpScheduleInclude = {
   },
 
   wagonCounts: {
-  include: {
-    wagon: {
-      select: {
-        id: true,
-        name: true,
-        height: true,
-        width: true,
-        weight: true,
-        totalCft: true,
-        capacityMt: true,
-        isActive: true,
+    include: {
+      wagon: {
+        select: {
+          id: true,
+          name: true,
+          height: true,
+          width: true,
+          weight: true,
+          totalCft: true,
+          capacityMt: true,
+          isActive: true,
+        },
       },
     },
   },
-},
 
   createdBy: {
     select: {
@@ -331,7 +330,9 @@ export const assertVPScheduleFreightMatrices = async (
   if (!missing.length) return;
 
   const routeLabel = `${sourceArea.name}-${sourceArea.city.name} to ${destinationArea.name}-${destinationArea.city.name}`;
-  const missingLines = missing.map((wagonName) => `${wagonName} (${routeLabel})`);
+  const missingLines = missing.map(
+    (wagonName) => `${wagonName} (${routeLabel})`,
+  );
 
   throw new BadRequestError(
     `Railway Freight not found for below Route and Wagon:\n${missingLines.join(
@@ -464,7 +465,9 @@ export const assertVPScheduleBranchAreaAlignment = async (
   }
 
   if (sourceArea.cityId !== fromBranch.cityId) {
-    throw new BadRequestError("Source area must belong to the from branch city");
+    throw new BadRequestError(
+      "Source area must belong to the from branch city",
+    );
   }
 
   if (destinationArea.cityId !== toBranch.cityId) {

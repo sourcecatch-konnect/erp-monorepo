@@ -6,8 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   SparePart,
-  SpareCategory,
-  SparePartSupplier,
   CreateSparePartBody,
   CreateSparePartFormInput,
 } from "@skerp/types";
@@ -19,7 +17,6 @@ import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
 import SelectField from "../_shared/fields/SelectField";
-import NumberField from "../_shared/fields/NumberField";
 import CheckboxField from "../_shared/fields/CheckBoxField";
 
 import {
@@ -29,7 +26,7 @@ import {
   IconCurrencyRupee,
 } from "@tabler/icons-react";
 import IconTextField from "../_shared/fields/IconTextField";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { spareCategoryKeys } from "../spare-category/spare-category.key";
 import { spareCategoryApi } from "../spare-category/spare-cateogry.service";
 import { sparePartSupplierKeys } from "../spare-partSuppiler/spare-partSupplier.key";
@@ -54,25 +51,16 @@ const defaultValues: CreateSparePartFormInput = {
   type: "Item",
   categoryId: "",
   supplierId: "",
-  rate: undefined as any,
-minimumStock: undefined as any,
+  rate: 0,
+  minimumStock: 0,
   unit: "",
   isRecyclable: false,
   isBatchTracked: false,
   description: "",
 };
 
-export default function SparePartForm({
-  open,
-  onOpenChange,
-  row,
-
-}: Props) {
-  const form = useForm<
-    CreateSparePartFormInput,
-    unknown,
-    CreateSparePartBody
-  >({
+export default function SparePartForm({ open, onOpenChange, row }: Props) {
+  const form = useForm<CreateSparePartFormInput, unknown, CreateSparePartBody>({
     resolver: zodResolver(createSparePartSchema),
     mode: "onChange",
     reValidateMode: "onChange",
@@ -88,54 +76,51 @@ export default function SparePartForm({
       categoryId: row?.categoryId ?? "",
       supplierId: row?.supplierId ?? "",
       rate: row?.rate != null ? paiseToRupees(row.rate) : 0,
-minimumStock: row?.minimumStock ?? 0,
+      minimumStock: row?.minimumStock ?? 0,
       unit: row?.unit ?? "",
       isRecyclable: row?.isRecyclable ?? false,
       isBatchTracked: row?.isBatchTracked ?? false,
       description: row?.description ?? "",
     });
   }, [form, open, row]);
-const queryClient = useQueryClient();
 
-const categories = useQuery({
-  queryKey: spareCategoryKeys.list(),
-  queryFn: () => spareCategoryApi.list(),
-  enabled: open,
-});
+  const categories = useQuery({
+    queryKey: spareCategoryKeys.list(),
+    queryFn: () => spareCategoryApi.list(),
+    enabled: open,
+  });
 
-const suppliers = useQuery({
-  queryKey: sparePartSupplierKeys.list(),
-  queryFn: () => sparePartSupplierApi.list(),
-  enabled: open,
-});
+  const suppliers = useQuery({
+    queryKey: sparePartSupplierKeys.list(),
+    queryFn: () => sparePartSupplierApi.list(),
+    enabled: open,
+  });
 
+  const { create, update } = useMasterMutations({
+    api: sparePartApi,
+    queryKey: sparePartKeys.all,
+  });
 
-const { create, update } = useMasterMutations({
-  api: sparePartApi,
-  queryKey: sparePartKeys.all,
-});
+  const handleSubmit = async (data: CreateSparePartBody) => {
+    if (row) {
+      await update.mutateAsync({ id: row.id, data });
+    } else {
+      await create.mutateAsync(data);
+    }
 
-const handleSubmit = async (data: CreateSparePartBody) => {
-  if (row) {
-    await update.mutateAsync({ id: row.id, data });
-  } else {
-    await create.mutateAsync(data);
-  }
+    onOpenChange(false);
+  };
+  const isSubmitting = create.isPending || update.isPending;
 
-  onOpenChange(false);
-};
-const isSubmitting = create.isPending || update.isPending;
+  const categoryOptions = (categories.data?.data ?? []).map((c) => ({
+    label: c.name,
+    value: c.id,
+  }));
 
-
-const categoryOptions = (categories.data?.data ?? []).map((c) => ({
-  label: c.name,
-  value: c.id,
-}));
-
-const supplierOptions = (suppliers.data?.data ?? []).map((s) => ({
-  label: s.shopName ? `${s.name} - ${s.shopName}` : s.name,
-  value: s.id,
-}));
+  const supplierOptions = (suppliers.data?.data ?? []).map((s) => ({
+    label: s.shopName ? `${s.name} - ${s.shopName}` : s.name,
+    value: s.id,
+  }));
 
   return (
     <MasterFormDialog<CreateSparePartFormInput, CreateSparePartBody>
@@ -166,7 +151,7 @@ const supplierOptions = (suppliers.data?.data ?? []).map((s) => ({
           options={partTypeOptions}
           required
         />
-  
+
         <TextField<CreateSparePartFormInput>
           name="unit"
           label="Unit"
@@ -198,36 +183,36 @@ const supplierOptions = (suppliers.data?.data ?? []).map((s) => ({
 
       {/* PRICING & STOCK */}
       <FormSection
-  icon={<IconTruck size={18} />}
-  title="Stock & Pricing"
-  description="Inventory and pricing details"
->
-  <IconTextField<CreateSparePartFormInput>
-    name="rate"
-    label="Rate"
-    type="number"
-    placeholder="e.g. 1250"
-    icon={<IconCurrencyRupee size={15} />}
-    min={0}
-    max={9999999}
-    step="0.01"
-    inputMode="decimal"
-    required
-  />
+        icon={<IconTruck size={18} />}
+        title="Stock & Pricing"
+        description="Inventory and pricing details"
+      >
+        <IconTextField<CreateSparePartFormInput>
+          name="rate"
+          label="Rate"
+          type="number"
+          placeholder="e.g. 1250"
+          icon={<IconCurrencyRupee size={15} />}
+          min={0}
+          max={9999999}
+          step="0.01"
+          inputMode="decimal"
+          required
+        />
 
-  <IconTextField<CreateSparePartFormInput>
-    name="minimumStock"
-    label="Minimum Stock"
-    type="number"
-    placeholder="e.g. 10"
-    icon={<IconPackage size={15} />}
-    min={0}
-    max={999999}
-    step={1}
-    inputMode="numeric"
-    required
-  />
-</FormSection>
+        <IconTextField<CreateSparePartFormInput>
+          name="minimumStock"
+          label="Minimum Stock"
+          type="number"
+          placeholder="e.g. 10"
+          icon={<IconPackage size={15} />}
+          min={0}
+          max={999999}
+          step={1}
+          inputMode="numeric"
+          required
+        />
+      </FormSection>
 
       {/* OPTIONS */}
       <FormSection
@@ -247,10 +232,7 @@ const supplierOptions = (suppliers.data?.data ?? []).map((s) => ({
       </FormSection>
 
       {/* DESCRIPTION */}
-      <FormSection
-        icon={<IconTool size={18} />}
-        title="Additional Details"
-      >
+      <FormSection icon={<IconTool size={18} />} title="Additional Details">
         <TextField<CreateSparePartFormInput>
           name="description"
           label="Description"

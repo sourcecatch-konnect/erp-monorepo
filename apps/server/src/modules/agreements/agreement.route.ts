@@ -147,7 +147,7 @@ const crudRouter: Router = createCrudRouter({
           id: true,
         },
 
-        getName: (row: any) => row.id,
+        getName: (row: { id: string }) => row.id,
       },
 
       {
@@ -163,9 +163,8 @@ const crudRouter: Router = createCrudRouter({
           id: true,
         },
 
-        getName: (row: any) => row.id,
+        getName: (row: { id: string }) => row.id,
       },
-      
     ],
   },
 });

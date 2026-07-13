@@ -6,8 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Company,
-  State,
-  City,
   CreateCompanyBody,
   CreateCompanyFormInput,
 } from "@skerp/types";

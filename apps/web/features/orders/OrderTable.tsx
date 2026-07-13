@@ -129,7 +129,7 @@ export default function OrderTable(props: Props) {
     canCreateLR,
     canDownloadPdf,
   } = props;
-console.log(data, "order List")
+  console.log(data, "order List");
   const columns = React.useMemo<ColumnDef<Order>[]>(
     () => [
       {
@@ -193,18 +193,20 @@ console.log(data, "order List")
               key={tab.key}
               type="button"
               onClick={() => onStatusFilterChange(tab.key)}
-              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted"
-                }`}
+              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
             >
               {tab.label}
               {typeof count === "number" ? (
                 <span
-                  className={`ml-1.5 rounded-sm px-1 text-xs ${active
-                    ? "bg-primary-foreground/20"
-                    : "bg-muted-foreground/10"
-                    }`}
+                  className={`ml-1.5 rounded-sm px-1 text-xs ${
+                    active
+                      ? "bg-primary-foreground/20"
+                      : "bg-muted-foreground/10"
+                  }`}
                 >
                   {count}
                 </span>
@@ -284,14 +286,14 @@ console.log(data, "order List")
                   o.status === "Rejected" ||
                   o.status === "Cancelled";
                 const hasLRGroup =
-                Boolean((o as any).hasLRGroup) || Number((o as any).lrGroupCount ?? 0) > 0;
+                  Boolean(o.hasLRGroup) || Number(o.lrGroupCount ?? 0) > 0;
 
-              const canCreateLRForOrder =
-                canCreateLR &&
-                o.status === "Confirmed" &&
-                o.orderType === "Truck" &&
-                !hasLRGroup;
-                
+                const canCreateLRForOrder =
+                  canCreateLR &&
+                  o.status === "Confirmed" &&
+                  o.orderType === "Truck" &&
+                  !hasLRGroup;
+
                 const cancellable =
                   o.status === "PendingApproval" || o.status === "Confirmed";
 
@@ -358,18 +360,20 @@ console.log(data, "order List")
                               </DropdownMenuItem>
                             ) : null}
                             {canCreateLRForOrder ? (
-                            <DropdownMenuItem onClick={() => onCreateLR(o)}>
-                              <IconFileText size={16} className="mr-2" />
-                              Create LR
-                            </DropdownMenuItem>
-                          ) : hasLRGroup ? (
-                            <DropdownMenuItem disabled>
-                              <IconFileText size={16} className="mr-2" />
-                              LR already created
-                            </DropdownMenuItem>
-                          ) : null}
+                              <DropdownMenuItem onClick={() => onCreateLR(o)}>
+                                <IconFileText size={16} className="mr-2" />
+                                Create LR
+                              </DropdownMenuItem>
+                            ) : hasLRGroup ? (
+                              <DropdownMenuItem disabled>
+                                <IconFileText size={16} className="mr-2" />
+                                LR already created
+                              </DropdownMenuItem>
+                            ) : null}
                             {canDownloadPdf ? (
-                              <DropdownMenuItem onClick={() => onDownloadPdf(o)}>
+                              <DropdownMenuItem
+                                onClick={() => onDownloadPdf(o)}
+                              >
                                 <IconDownload size={16} className="mr-2" />
                                 Download PDF
                               </DropdownMenuItem>

@@ -27,6 +27,7 @@ import {
   ValidationError,
 } from "../../lib/error.js";
 import { buildTripName, writeTripStatus } from "../trip/trip.service.js";
+import { undeliveredLRNumbersForTrip } from "../lorry-receipt/lr-delivery.service.js";
 import {
   chainViolations,
   computeJourneyTotals,
@@ -729,6 +730,17 @@ router.post(
     if (!trip) throw new NotFoundError("Journey leg not found");
     if (trip.status !== "InTransit") {
       throw new BadRequestError("Only an InTransit leg can be closed");
+    }
+
+    // Delivery gate ("Way 1", docs/LR_DELIVERY_ACK_PLAN.md §4): a leg that is
+    // the FINAL trip of an LR group cannot close while LRs are undelivered.
+    const blockers = await undeliveredLRNumbersForTrip(tripId);
+    if (blockers.length > 0) {
+      throw new BadRequestError(
+        `Cannot close leg — ${blockers.length} LR(s) not delivered: ${blockers.join(", ")}. ` +
+          "Mark them delivered or hold the group at hub.",
+        "TRIP_CLOSE_UNDELIVERED_LRS",
+      );
     }
 
     const parsed = closeJourneyLegSchema.safeParse(req.body);

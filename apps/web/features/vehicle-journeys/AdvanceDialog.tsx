@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useForm, FormProvider } from "react-hook-form";
+import { Controller, useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -21,9 +21,10 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 
 import { formatPaise } from "@/lib/money";
+import { toValidDate } from "@/lib/date";
 import ComboboxField from "../masters/_shared/fields/ComboboxField";
 import IconTextField from "../masters/_shared/fields/IconTextField";
 import SelectField from "../masters/_shared/fields/SelectField";
@@ -141,12 +142,18 @@ export default function AdvanceDialog({ open, onOpenChange, journey }: Props) {
               options={legOptions}
               placeholder="Whole journey"
             />
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                Paid at
-              </label>
-              <Input type="datetime-local" {...form.register("paidAt")} />
-            </div>
+            <Controller
+              name="paidAt"
+              control={form.control}
+              render={({ field }) => (
+                <DateTimePicker
+                  label="Paid at"
+                  selected={toValidDate(field.value)}
+                  onSelect={field.onChange}
+                  placeholder="Select payment date and time"
+                />
+              )}
+            />
             <TextAreaField<DriverAdvanceFormInput>
               name="narration"
               label="Narration"

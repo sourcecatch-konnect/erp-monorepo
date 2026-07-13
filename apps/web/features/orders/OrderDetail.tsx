@@ -22,12 +22,7 @@ import {
   IconEdit,
   IconArrowLeft,
   IconDownload,
-  IconCopy,
-  IconMail,
   IconAlertCircle,
-  IconCircleCheck,
-  IconClock,
-  IconCircleDot,
   IconLoader2,
   IconArrowRight,
   IconPackage,
@@ -245,28 +240,25 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
 
           return sum + goodsWeight;
         }, 0) ?? 0)
-      : (order.items?.reduce((sum, item) => {
-          const weight = Number(item.weight ?? 0);
-          return sum + (Number.isNaN(weight) ? 0 : weight);
-        }, 0) ?? 0);
+      : (order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0);
 
-      const weightUnits =
-  order.orderType === "Truck"
-    ? Array.from(
-        new Set(
-          (order.consignments ?? [])
-            .map((c) => c.unit)
-            .filter((u): u is string => Boolean(u)),
-        ),
-      )
-    : [];
+  const weightUnits =
+    order.orderType === "Truck"
+      ? Array.from(
+          new Set(
+            (order.consignments ?? [])
+              .map((c) => c.unit)
+              .filter((u): u is string => Boolean(u)),
+          ),
+        )
+      : [];
 
-const totalWeightUnit =
-  weightUnits.length === 1
-    ? weightUnits[0]
-    : weightUnits.length > 1
-      ? "Mixed"
-      : undefined;
+  const totalWeightUnit =
+    weightUnits.length === 1
+      ? weightUnits[0]
+      : weightUnits.length > 1
+        ? "Mixed"
+        : undefined;
   const autoFreight =
     order.freightPreview?.matched && order.freightPreview.amount != null
       ? Number(order.freightPreview.amount)
@@ -277,13 +269,6 @@ const totalWeightUnit =
       ? paiseToRupees(Number(order.bookingFreightAmount))
       : null;
   const hasApprovedFreight = approvedFreight != null;
-  const displayedFreight =
-    hasApprovedFreight && order.bookingFreightAmount != null
-      ? formatPaise(order.bookingFreightAmount)
-      : autoFreight != null
-        ? formatRupees(autoFreight)
-        : "-";
-
   const freightWasEdited =
     approvedFreight != null &&
     autoFreight != null &&
@@ -456,31 +441,17 @@ const totalWeightUnit =
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableHead className="text-xs uppercase">Goods</TableHead>
                       <TableHead className="text-xs uppercase">Qty</TableHead>
-                      <TableHead className="text-xs uppercase">Unit</TableHead>
-                      <TableHead className="text-xs uppercase">
-                        Weight
-                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {order.items?.map(
-                      (i: {
-                        id: string;
-                        goods?: { name: string } | null;
-                        quantity: number;
-                        unit: string;
-                        weight?: string | null;
-                      }) => (
-                        <TableRow key={i.id}>
-                          <TableCell className="font-medium">
-                            {i.goods?.name ?? "—"}
-                          </TableCell>
-                          <TableCell>{i.quantity}</TableCell>
-                          <TableCell>{i.unit}</TableCell>
-                          <TableCell>{i.weight ?? "—"}</TableCell>
-                        </TableRow>
-                      ),
-                    )}
+                    {order.items?.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          {item.goods?.name ?? "—"}
+                        </TableCell>
+                        <TableCell>{item.quantity}</TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -678,9 +649,11 @@ const totalWeightUnit =
           {/* Summary stats */}
           <div className="grid grid-cols-2 gap-2">
             <StatCard
-              label="Total weight"
+              label={
+                order.orderType === "Truck" ? "Total weight" : "Total quantity"
+              }
               value={totalWeight.toLocaleString()}
-            sub={totalWeightUnit}
+              sub={totalWeightUnit}
             />
             <StatCard label="Items" value={itemCount} />
           </div>
