@@ -175,7 +175,31 @@ const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
     });
     return;
   }
+  const invoiceNumber = v.invoiceNumber.trim();
 
+const invoiceAmount =
+  v.invoiceAmount === "" ? undefined : Number(v.invoiceAmount);
+
+if (mode === "edit" && !invoiceNumber) {
+  form.setError("invoiceNumber", {
+    type: "required",
+    message: "Invoice number is required",
+  });
+  return;
+}
+
+if (
+  mode === "edit" &&
+  (invoiceAmount === undefined ||
+    !Number.isFinite(invoiceAmount) ||
+    invoiceAmount <= 0)
+) {
+  form.setError("invoiceAmount", {
+    type: "required",
+    message: "Invoice amount must be greater than 0",
+  });
+  return;
+}
   onSubmit({
     loadingLocationId: v.loadingLocationId || undefined,
     unloadingLocationId: v.unloadingLocationId || undefined,
@@ -185,10 +209,8 @@ const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
 
     goods: goods.length ? goods : [],
 
-    invoiceNumber:
-      mode === "edit" ? v.invoiceNumber.trim() || undefined : undefined,
-    invoiceAmount:
-      mode === "edit" && v.invoiceAmount ? Number(v.invoiceAmount) : undefined,
+    invoiceNumber: mode === "edit" ? invoiceNumber : undefined,
+invoiceAmount: mode === "edit" ? invoiceAmount : undefined,
   });
 };
 
@@ -323,14 +345,18 @@ const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
     </label>
 
     <Input
-      {...form.register("totalWeight")}
-      type="number"
-      min={0}
-      step="0.01"
-      placeholder="Weight"
-      className="h-9 w-full"
-    />
-
+  {...form.register("totalWeight")}
+  type="number"
+  min={0.01}
+  step="0.01"
+  placeholder="Weight"
+  className="h-9 w-full"
+  onKeyDown={(event) => {
+    if (event.key === "-" || event.key === "e") {
+      event.preventDefault();
+    }
+  }}
+/>
     {form.formState.errors.totalWeight?.message ? (
       <p className="mt-1 text-xs text-red-600">
         {form.formState.errors.totalWeight.message}
@@ -364,21 +390,45 @@ const goodsSuggestions = (goodsMaster.data ?? []).map((g) => ({
   </div>
 </div>
           {mode === "edit" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Invoice no.
-                </label>
-                <Input {...form.register("invoiceNumber")} className="h-9" />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Invoice amount (₹)
-                </label>
-                <Input {...form.register("invoiceAmount")} type="number" min={0} className="h-9" />
-              </div>
-            </div>
-          )}
+  <div className="grid grid-cols-2 gap-3">
+    <div>
+      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Invoice no. <span className="text-red-600">*</span>
+      </label>
+
+      <Input
+        {...form.register("invoiceNumber")}
+        className="h-9"
+      />
+
+      {form.formState.errors.invoiceNumber?.message ? (
+        <p className="mt-1 text-xs text-red-600">
+          {form.formState.errors.invoiceNumber.message}
+        </p>
+      ) : null}
+    </div>
+
+    <div>
+      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Invoice amount (₹) <span className="text-red-600">*</span>
+      </label>
+
+      <Input
+        {...form.register("invoiceAmount")}
+        type="number"
+        min={0.01}
+        step="0.01"
+        className="h-9"
+      />
+
+      {form.formState.errors.invoiceAmount?.message ? (
+        <p className="mt-1 text-xs text-red-600">
+          {form.formState.errors.invoiceAmount.message}
+        </p>
+      ) : null}
+    </div>
+  </div>
+)}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
