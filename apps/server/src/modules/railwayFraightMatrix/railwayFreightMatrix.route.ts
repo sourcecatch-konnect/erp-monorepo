@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { ZodTypeAny } from "zod";
 
 import {
   createRailwayFreightMatrixSchema,
@@ -54,149 +53,153 @@ const validateAreaCity = async ({
 
     if (!destinationArea) {
       throw new Error(
-        "Destination area does not belong to selected destination city."
+        "Destination area does not belong to selected destination city.",
       );
     }
   }
 };
 
-const railwayFreightCrudRouter: Router =
-  createCrudRouter({
-    model: db.railwayFreightMatrix,
+const railwayFreightCrudRouter: Router = createCrudRouter({
+  model: db.railwayFreightMatrix,
 
-    createSchema:
-      createRailwayFreightMatrixSchema as ZodTypeAny,
+  createSchema: createRailwayFreightMatrixSchema,
 
-    updateSchema:
-      updateRailwayFreightMatrixSchema as ZodTypeAny,
+  updateSchema: updateRailwayFreightMatrixSchema,
 
-    permissionKey: "masters.railway-freight",
+  permissionKey: "masters.railway-freight",
 
-    hooks: {
-      beforeCreate: async (data: any) => {
-        await validateAreaCity({
+  hooks: {
+    beforeCreate: async (data) => {
+      await validateAreaCity({
+        sourceCityId: data.sourceCityId,
+        sourceAreaId: data.sourceAreaId,
+        destinationCityId: data.destinationCityId,
+        destinationAreaId: data.destinationAreaId,
+      });
+
+      const exists = await db.railwayFreightMatrix.findFirst({
+        where: {
+          wagonId: data.wagonId,
           sourceCityId: data.sourceCityId,
-          sourceAreaId: data.sourceAreaId,
           destinationCityId: data.destinationCityId,
-          destinationAreaId: data.destinationAreaId,
-        });
+          sourceAreaId: data.sourceAreaId ?? null,
+          destinationAreaId: data.destinationAreaId ?? null,
+        },
+        select: { id: true },
+      });
 
-        const exists = await db.railwayFreightMatrix.findFirst({
-          where: {
-            wagonId: data.wagonId,
-            sourceCityId: data.sourceCityId,
-            destinationCityId: data.destinationCityId,
-            sourceAreaId: data.sourceAreaId ?? null,
-            destinationAreaId: data.destinationAreaId ?? null,
-          },
-          select: { id: true },
-        });
+      if (exists) {
+        throw new Error(
+          "Railway freight already exists for this wagon, route and area.",
+        );
+      }
 
-        if (exists) {
-          throw new Error(
-            "Railway freight already exists for this wagon, route and area."
-          );
-        }
+      return convertRupeeFieldsToPaise(data, moneyFields);
+    },
 
-        return convertRupeeFieldsToPaise(data, moneyFields);
-      },
+    beforeUpdate: async (data, row) => {
+        const current = row as {
+          id: string;
+        wagonId: string;
+        sourceCityId: string;
+        sourceAreaId: string | null;
+        destinationCityId: string;
+        destinationAreaId: string | null;
+      };
+      const next = {
+        wagonId: data.wagonId ?? current.wagonId,
+        sourceCityId: data.sourceCityId ?? current.sourceCityId,
+        sourceAreaId:
+          data.sourceAreaId !== undefined
+            ? data.sourceAreaId
+            : current.sourceAreaId,
+        destinationCityId: data.destinationCityId ?? current.destinationCityId,
+        destinationAreaId:
+          data.destinationAreaId !== undefined
+            ? data.destinationAreaId
+            : current.destinationAreaId,
+      };
 
-      beforeUpdate: async (data: any, row: any) => {
-        const next = {
-          wagonId: data.wagonId ?? row.wagonId,
-          sourceCityId: data.sourceCityId ?? row.sourceCityId,
-          sourceAreaId:
-            data.sourceAreaId !== undefined
-              ? data.sourceAreaId
-              : row.sourceAreaId,
-          destinationCityId:
-            data.destinationCityId ?? row.destinationCityId,
-          destinationAreaId:
-            data.destinationAreaId !== undefined
-              ? data.destinationAreaId
-              : row.destinationAreaId,
-        };
+      await validateAreaCity({
+        sourceCityId: next.sourceCityId,
+        sourceAreaId: next.sourceAreaId,
+        destinationCityId: next.destinationCityId,
+        destinationAreaId: next.destinationAreaId,
+      });
 
-        await validateAreaCity({
+      const exists = await db.railwayFreightMatrix.findFirst({
+        where: {
+          wagonId: next.wagonId,
           sourceCityId: next.sourceCityId,
-          sourceAreaId: next.sourceAreaId,
           destinationCityId: next.destinationCityId,
-          destinationAreaId: next.destinationAreaId,
-        });
-
-        const exists = await db.railwayFreightMatrix.findFirst({
-          where: {
-            wagonId: next.wagonId,
-            sourceCityId: next.sourceCityId,
-            destinationCityId: next.destinationCityId,
-            sourceAreaId: next.sourceAreaId ?? null,
-            destinationAreaId: next.destinationAreaId ?? null,
-            NOT: {
-              id: row.id,
-            },
+          sourceAreaId: next.sourceAreaId ?? null,
+          destinationAreaId: next.destinationAreaId ?? null,
+          NOT: {
+            id: current.id,
           },
-          select: { id: true },
-        });
+        },
+        select: { id: true },
+      });
 
-        if (exists) {
-          throw new Error(
-            "Railway freight already exists for this wagon, route and area."
-          );
-        }
+      if (exists) {
+        throw new Error(
+          "Railway freight already exists for this wagon, route and area.",
+        );
+      }
 
-        return convertRupeeFieldsToPaise(data, moneyFields);
+      return convertRupeeFieldsToPaise(data, moneyFields);
+    },
+  },
+
+  listOptions: {
+    searchableFields: [],
+
+    defaultInclude: {
+      sourceCity: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+
+      destinationCity: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+
+      sourceArea: {
+        select: {
+          id: true,
+          name: true,
+          cityId: true,
+        },
+      },
+
+      destinationArea: {
+        select: {
+          id: true,
+          name: true,
+          cityId: true,
+        },
+      },
+
+      wagon: {
+        select: {
+          id: true,
+          name: true,
+        },
       },
     },
 
-    listOptions: {
-      searchableFields: [],
-
-      defaultInclude: {
-        sourceCity: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-
-        destinationCity: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-
-        sourceArea: {
-          select: {
-            id: true,
-            name: true,
-            cityId: true,
-          },
-        },
-
-        destinationArea: {
-          select: {
-            id: true,
-            name: true,
-            cityId: true,
-          },
-        },
-
-        wagon: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-
-      defaultOrderBy: {
-        createdAt: "desc",
-      },
-
-      blockDeleteIfExists: [],
+    defaultOrderBy: {
+      createdAt: "desc",
     },
-  });
+
+    blockDeleteIfExists: [],
+  },
+});
 
 const router: Router = Router();
 
@@ -216,7 +219,9 @@ router.get(
         : "";
 
     if (!sourceAreaId || !destinationAreaId) {
-      throw new BadRequestError("Source area and destination area are required");
+      throw new BadRequestError(
+        "Source area and destination area are required",
+      );
     }
 
     const [sourceArea, destinationArea] = await Promise.all([
@@ -280,13 +285,16 @@ router.get(
       },
     });
 
-    const unique = new Map<string, {
-      id: string;
-      name: string;
-      totalCft: number | null;
-      capacityMt: number | null;
-      isActive: boolean;
-    }>();
+    const unique = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        totalCft: number | null;
+        capacityMt: number | null;
+        isActive: boolean;
+      }
+    >();
 
     for (const row of rows) {
       if (row.wagon && !unique.has(row.wagonId)) {

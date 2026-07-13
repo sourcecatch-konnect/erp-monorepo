@@ -4,7 +4,6 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
-  CreateSparePartBody,
   SparePart,
 } from "@skerp/types";
 
@@ -22,13 +21,8 @@ import SparePartForm from "./spare-partsForm";
 import { sparePartColumns } from "./spare-partTable";
 import { createSparePartSchema } from "@skerp/validators";
 
-import { spareCategoryApi } from "../spare-category/spare-cateogry.service";
-import { spareCategoryKeys } from "../spare-category/spare-category.key";
 
-import { sparePartSupplierApi } from "../spare-partSuppiler/spare-partSupplier.service";
-import { sparePartSupplierKeys } from "../spare-partSuppiler/spare-partSupplier.key";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import SparePartDetailDialog from "./spare-partDialog";
 type SparePartCsvRow = Record<
   | "name"

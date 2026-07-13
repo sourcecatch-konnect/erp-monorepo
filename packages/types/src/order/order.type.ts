@@ -132,6 +132,8 @@ export type Order = {
   items?: OrderItemRow[];
   consignments?: OrderConsignmentRow[];
   events?: OrderEvent[];
+  lrGroupCount?: number;
+  hasLRGroup?: boolean;
 };
 /** Freight preview returned by the detail endpoint / freight lookup. */
 export type FreightPreview = {

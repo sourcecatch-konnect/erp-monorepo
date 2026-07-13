@@ -34,7 +34,7 @@ import {
   IconEye,
   IconTrash,
 } from "@tabler/icons-react";
-import { formatVPScheduleDate, TruncatedTooltipText, VPScheduleStatusBadge } from "./vp-schedule-ui";
+import { TruncatedTooltipText, VPScheduleStatusBadge } from "./vp-schedule-ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@skerp/ui/components/tooltip";
 import { useDeleteVPSchedule } from "./hook/useVPSchedule";
 import { toast } from "sonner";
@@ -132,7 +132,7 @@ export default function VPScheduleTable({
     try {
       await deleteMutation.mutateAsync(schedule.id);
       toast.success("VP schedule deleted");
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete VP schedule");
     }
   };

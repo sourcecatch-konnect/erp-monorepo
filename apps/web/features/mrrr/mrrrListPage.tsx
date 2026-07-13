@@ -19,8 +19,6 @@ import {
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import type { ListQuery } from "@/features/masters/_shared/master-api";
 
-
-
 import { useMRRRList } from "./hook/useMrrr";
 import MRRRTable from "./mrrrTable";
 
@@ -42,9 +40,7 @@ export function MRRRListPage() {
     () => ({
       page,
       size,
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       ...(status !== "ALL"
         ? {
             filter: {

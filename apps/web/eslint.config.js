@@ -1,15 +1,14 @@
 import { nextJsConfig } from "@skerp/eslint-config/next-js";
+import unusedImports from "eslint-plugin-unused-imports";
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
   ...nextJsConfig,
   {
     files: ["**/*.{ts,tsx}"],
+    plugins: { "unused-imports": unusedImports },
     rules: {
-      // Existing feature modules predate strict unused/any enforcement. Keep
-      // the rest of the Next.js and React correctness rules blocking in CI.
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "error",
       // Several authenticated/blob-backed images cannot use next/image.
       "@next/next/no-img-element": "off",
     },

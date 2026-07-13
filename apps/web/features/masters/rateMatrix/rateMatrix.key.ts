@@ -1,4 +1,3 @@
-import type { ListQuery } from "../_shared/master-api";
 
 export const rateMatrixKeys = {
   all: ["rate-matrix"] as const,

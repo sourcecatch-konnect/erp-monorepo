@@ -35,16 +35,12 @@ export default function GrnListPage() {
     search: debouncedSearch.trim(),
   });
 
-  const payload = grns.data as any;
-
-  const rows = payload?.data ?? [];
-  const total = payload?.meta?.total ?? payload?.total ?? payload?.count ?? 0;
+  const rows = grns.data?.data ?? [];
+  const total = grns.data?.meta?.total ?? 0;
 
   const handleCancel = (grn: GRNListItem) => {
     const identifier = grn.grnNumber || grn.id;
-    const confirmed = window.confirm(
-      `Cancel GRN ${grn.grnNumber ?? grn.id}?`,
-    );
+    const confirmed = window.confirm(`Cancel GRN ${grn.grnNumber ?? grn.id}?`);
 
     if (!confirmed) return;
 
@@ -63,14 +59,14 @@ export default function GrnListPage() {
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
-     <div>
-  <h1 className="text-lg font-semibold">
-    Goods Receipt Notes at Rail Head
-  </h1>
-  <p className="text-sm text-muted-foreground">
-    Manage and track all rail head goods receipt notes.
-  </p>
-</div>
+        <div>
+          <h1 className="text-lg font-semibold">
+            Goods Receipt Notes at Rail Head
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Manage and track all rail head goods receipt notes.
+          </p>
+        </div>
 
         {canCreate ? (
           <Button asChild>

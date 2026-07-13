@@ -34,32 +34,6 @@ const labelOf = (opts: Option[], value?: string | null) =>
   value ? (opts.find((o) => o.value === value)?.label ?? null) : null;
 
 const DASH = <span className="text-muted-foreground/60">—</span>;
-const goodsLabel = (
-  goods?: {
-    name?: string | null;
-    quantity?: string | number | null;
-    unit?: string | null;
-  }[],
-) => {
-  if (!goods?.length) return ["No goods added"];
-
-  return goods
-    .map((g) => {
-      const name = g.name?.trim();
-
-      const qtyUnit =
-        g.quantity && g.unit
-          ? `${g.quantity} ${g.unit}`
-          : g.quantity
-            ? String(g.quantity)
-            : g.unit
-              ? g.unit
-              : null;
-
-      return [name, qtyUnit].filter(Boolean).join(" · ");
-    })
-    .filter(Boolean);
-};
 function Section({
   icon,
   title,
@@ -438,40 +412,6 @@ export default function LRCreateSummary({
   );
 }
 
-function SummaryLine({
-  index,
-  loading,
-  unloading,
-  goods,
-}: {
-  index: number;
-  loading: string | null;
-  unloading: string | null;
-  goods: string[];
-}) {
-  return (
-    <li className="rounded-md border bg-background p-2.5">
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
-          LR {index + 1}
-        </span>
-        <span className="flex min-w-0 items-center gap-1 text-xs">
-          <span className="truncate">{loading ?? DASH}</span>
-          <IconArrowRight
-            size={12}
-            className="shrink-0 text-muted-foreground"
-          />
-          <span className="truncate">{unloading ?? DASH}</span>
-        </span>
-      </div>
-      {goods.length > 0 && (
-        <p className="mt-1.5 truncate text-xs text-muted-foreground">
-          {goods.join("  •  ")}
-        </p>
-      )}
-    </li>
-  );
-}
 function ConsignmentCard({
   index,
   loading,

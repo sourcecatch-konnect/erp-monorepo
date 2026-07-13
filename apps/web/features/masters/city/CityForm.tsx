@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import type { City, CreateCityBody, State } from "@skerp/types";
+import type { City, CreateCityBody } from "@skerp/types";
 import { createCitySchema } from "@skerp/validators/master/city";
 import { useQuery } from "@tanstack/react-query";
 import { cityApi } from "./city.service";
@@ -110,7 +110,6 @@ const exactCityMatch = filteredCitySuggestions.find(
 
 const showCityAlreadyExistsAlert =
   Boolean(exactCityMatch && !row);
-const firstCitySuggestion = filteredCitySuggestions[0];
   React.useEffect(() => {
     if (!open) return;
 

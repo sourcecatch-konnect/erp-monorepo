@@ -259,7 +259,7 @@ function Advanced({
   overrideMap: Map<string, "GRANT" | "DENY">;
   onChange: (key: string, effect: "GRANT" | "DENY" | "none") => void;
 }) {
-  const { data: modules = [], isLoading: modulesLoading } = useQuery({
+  const { data: modules = [] } = useQuery({
     queryKey: rbacKeys.permissionModules,
     queryFn: () => rbacApi.permissionModules(),
     staleTime: 10 * 60 * 1000,

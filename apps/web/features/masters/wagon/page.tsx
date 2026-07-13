@@ -127,7 +127,15 @@ export default function WagonPage() {
         const text = await file.text();
         const rows = parseCsvRows<WagonCsvRow>(text);
 
-        await bulkImport.mutateAsync(rows as any);
+        const payload: CreateWagonBody[] = rows.map((item) => ({
+          name: item.name,
+          height: Number(item.height),
+          width: Number(item.width),
+          weight: Number(item.weight),
+          totalCft: null,
+          capacityMt: null,
+        }));
+        await bulkImport.mutateAsync(payload);
       }}
       onExport={() => exportWagons.mutate(listQuery)}
       isBulkDeleting={bulkRemove.isPending}

@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { ZodTypeAny } from "zod";
 
 import {
   createWarehouseSchema,
@@ -15,8 +14,8 @@ const moneyFields = ["monthlyRent", "securityDeposit"];
 
 const router: Router = createCrudRouter({
   model: db.warehouse,
-  createSchema: createWarehouseSchema as ZodTypeAny,
-  updateSchema: updateWarehouseSchema as ZodTypeAny,
+  createSchema: createWarehouseSchema,
+  updateSchema: updateWarehouseSchema,
   permissionKey: "masters.warehouse",
 
   listOptions: {
@@ -28,7 +27,7 @@ const router: Router = createCrudRouter({
       "contactPhone",
     ],
 
-       defaultInclude: {
+    defaultInclude: {
       city: {
         select: {
           id: true,
@@ -51,27 +50,27 @@ const router: Router = createCrudRouter({
   },
 
   hooks: {
-    beforeCreate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeCreate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
 
-    beforeUpdate: async (data: any) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
 
-   beforeDelete: async (id) => {
-  const branches = await db.branch.count({
-    where: { warehouseId: id },
-  });
+    beforeDelete: async (id) => {
+      const branches = await db.branch.count({
+        where: { warehouseId: id },
+      });
 
-  const dependencies: string[] = [];
+      const dependencies: string[] = [];
 
-  if (branches) {
-    dependencies.push(`${branches} Branches`);
-  }
+      if (branches) {
+        dependencies.push(`${branches} Branches`);
+      }
 
-  if (dependencies.length) {
-    throw new BadRequestError(
-      `Cannot delete Warehouse. Linked records: ${dependencies.join(", ")}`
-    );
-  }
-},
+      if (dependencies.length) {
+        throw new BadRequestError(
+          `Cannot delete Warehouse. Linked records: ${dependencies.join(", ")}`,
+        );
+      }
+    },
   },
 });
 

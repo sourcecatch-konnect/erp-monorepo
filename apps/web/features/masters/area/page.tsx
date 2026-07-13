@@ -13,8 +13,6 @@ import {
 } from "../_shared/master-api";
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
-import { cityApi } from "../city/city.service";
-import { cityKeys } from "../city/city.keys";
 
 import AreaForm from "./AreaForm";
 

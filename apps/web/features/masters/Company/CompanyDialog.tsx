@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { CompanyWithRelations } from "@skerp/types";
 
 import {
   Dialog,
@@ -34,7 +33,6 @@ import {
   IconPhoto,
   IconCircleCheckFilled,
   IconClockEdit,
-  IconTruck,
   IconCalendarCheck,
   IconUser,
   IconFileDescription,

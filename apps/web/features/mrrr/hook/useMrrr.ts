@@ -14,7 +14,6 @@ import type { ListQuery } from "@/features/masters/_shared/master-api";
 import { mrrrApi } from "../mrrr.service";
 import { mrrrKeys, mrrrLookupKeys } from "../mrr.key";
 
-
 export const useMRRRList = (query: ListQuery) => {
   return useQuery({
     queryKey: mrrrKeys.list(query),
@@ -30,17 +29,16 @@ export const useMRRRDetail = (id: string) => {
   });
 };
 
-export const useMRRRVPSchedules = (query?: ListQuery) => {
+export const useMRRRVPSchedules = (
+  query?: ListQuery & { scheduleDate?: string },
+) => {
   return useQuery({
     queryKey: mrrrLookupKeys.vpSchedules(query),
     queryFn: () => mrrrApi.vpSchedules(query),
   });
 };
 
-export const useMRRRPreview = (
-  vpScheduleId?: string,
-  enabled = true,
-) => {
+export const useMRRRPreview = (vpScheduleId?: string, enabled = true) => {
   return useQuery({
     queryKey: mrrrLookupKeys.preview(vpScheduleId ?? ""),
     queryFn: () => mrrrApi.preview(vpScheduleId!),
@@ -89,13 +87,8 @@ export const useUpdateMRRRRows = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: UpdateMRRRRowsBody;
-    }) => mrrrApi.updateRows(id, body),
+    mutationFn: ({ id, body }: { id: string; body: UpdateMRRRRowsBody }) =>
+      mrrrApi.updateRows(id, body),
 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: mrrrKeys.all });
@@ -110,13 +103,8 @@ export const useSubmitMRRR = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: SubmitMRRRBody;
-    }) => mrrrApi.submit(id, body),
+    mutationFn: ({ id, body }: { id: string; body: SubmitMRRRBody }) =>
+      mrrrApi.submit(id, body),
 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: mrrrKeys.all });
@@ -131,13 +119,8 @@ export const useCancelMRRR = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: CancelMRRRBody;
-    }) => mrrrApi.cancel(id, body),
+    mutationFn: ({ id, body }: { id: string; body: CancelMRRRBody }) =>
+      mrrrApi.cancel(id, body),
 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: mrrrKeys.all });

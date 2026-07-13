@@ -7,6 +7,7 @@ import {
   FormProvider,
   useFieldArray,
   useForm,
+  type Resolver,
   type SubmitHandler,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,7 +24,6 @@ import {
 import type {
   CreateMRRRBody,
   MRRRFormValues,
-  MRRRWithRelations,
   UpdateMRRRRowsBody,
   UpdateMRRRBody,
 } from "@skerp/types";
@@ -174,7 +174,9 @@ export function MRRRForm({ mode, mrrrId }: Props) {
   const detailQuery = useMRRRDetail(mrrrId ?? "");
 
   const form = useForm<MRRRFormInput>({
-    resolver: zodResolver(isEdit ? updateMRRRSchema : createMRRRSchema) as any,
+    resolver: zodResolver(
+      isEdit ? updateMRRRSchema : createMRRRSchema,
+    ) as unknown as Resolver<MRRRFormInput>,
     mode: "onTouched",
     defaultValues: {
       scheduleDate: "",
@@ -195,32 +197,31 @@ export function MRRRForm({ mode, mrrrId }: Props) {
   const watchedRows = form.watch("rows") ?? [];
   const watchedMrRrNumber = form.watch("mrRrNumber");
   const watchedScheduleDate = form.watch("scheduleDate");
-const [selectedScheduleDate, setSelectedScheduleDate] = React.useState("");
-const vpSchedules = useMRRRVPSchedules({
-  page: 0,
-  size: 20,
-  scheduleDate: watchedScheduleDate || undefined,
-} as any);
+  const vpSchedules = useMRRRVPSchedules({
+    page: 0,
+    size: 20,
+    scheduleDate: watchedScheduleDate || undefined,
+  });
 
-const previewQuery = useMRRRPreview(
-  watchedVPScheduleId,
-  !isEdit && Boolean(watchedVPScheduleId),
-);
+  const previewQuery = useMRRRPreview(
+    watchedVPScheduleId,
+    !isEdit && Boolean(watchedVPScheduleId),
+  );
 
   React.useEffect(() => {
-    const mrrr = detailQuery.data as MRRRWithRelations | undefined;
+    const mrrr = detailQuery.data;
 
     if (!isEdit || !mrrr) return;
 
     form.reset({
       scheduleDate: mrrr.vpSchedule?.scheduleDate
-    ? new Date(mrrr.vpSchedule.scheduleDate).toISOString()
-    : "",
+        ? new Date(mrrr.vpSchedule.scheduleDate).toISOString()
+        : "",
       vpScheduleId: mrrr.vpScheduleId ?? "",
       rakeType:
-  mrrr.rakeType === "INDENT" || mrrr.rakeType === "LEASE"
-    ? mrrr.rakeType
-    : undefined,
+        mrrr.rakeType === "INDENT" || mrrr.rakeType === "LEASE"
+          ? mrrr.rakeType
+          : undefined,
       mrRrNumber: mrrr.mrRrNumber ?? "",
       remarks: mrrr.remarks ?? "",
       rows:
@@ -238,14 +239,14 @@ const previewQuery = useMRRRPreview(
         })) ?? [],
     });
     if (mrrr.rakeType === "INDENT" || mrrr.rakeType === "LEASE") {
-  form.setValue("rakeType", mrrr.rakeType, {
-    shouldValidate: false,
-    shouldDirty: false,
-    shouldTouch: false,
-  });
-}
+      form.setValue("rakeType", mrrr.rakeType, {
+        shouldValidate: false,
+        shouldDirty: false,
+        shouldTouch: false,
+      });
+    }
 
-form.clearErrors("rakeType");
+    form.clearErrors("rakeType");
   }, [detailQuery.data, form, isEdit]);
 
   React.useEffect(() => {
@@ -270,20 +271,18 @@ form.clearErrors("rakeType");
     );
   }, [isEdit, previewQuery.data, replace, watchedVPScheduleId]);
 
-const totalRows = watchedRows.length;
+  const totalRows = watchedRows.length;
 
-const mrrrDetail = detailQuery.data as MRRRWithRelations | undefined;
-const preview = previewQuery.data;
+  const mrrrDetail = detailQuery.data;
+  const preview = previewQuery.data;
 
-const previewSchedule = isEdit
-  ? (mrrrDetail?.vpSchedule as any)
-  : preview?.vpSchedule;
+  const previewSchedule = isEdit ? mrrrDetail?.vpSchedule : preview?.vpSchedule;
 
-const previewWagonCounts = previewSchedule?.wagonCounts ?? [];
-const previewTotalFreight = previewWagonCounts.reduce(
-  (sum: number, wagon: any) => sum + Number(wagon.totalFreight ?? 0),
-  0,
-);
+  const previewWagonCounts = previewSchedule?.wagonCounts ?? [];
+  const previewTotalFreight = previewWagonCounts.reduce(
+    (sum: number, wagon) => sum + Number(wagon.totalFreight ?? 0),
+    0,
+  );
   const { errors, submitCount } = form.formState;
   const validationIssues = React.useMemo(() => collectErrors(errors), [errors]);
   const showValidationSummary = submitCount > 0 && validationIssues.length > 0;
@@ -291,14 +290,11 @@ const previewTotalFreight = previewWagonCounts.reduce(
     createMutation.isPending ||
     updateMutation.isPending ||
     updateRowsMutation.isPending;
- const vpScheduleOptions =
-  vpSchedules.data?.data?.map((schedule: any) => ({
-    label:
-      schedule.scheduleName ??
-      schedule.scheduleNumber ??
-      schedule.id,
-    value: schedule.id,
-  })) ?? [];
+  const vpScheduleOptions =
+    vpSchedules.data?.data?.map((schedule) => ({
+      label: schedule.scheduleName ?? schedule.scheduleNumber ?? schedule.id,
+      value: schedule.id,
+    })) ?? [];
 
   const buildRowsBody = (rows: MRRRFormRow[]): UpdateMRRRRowsBody => ({
     rows: rows
@@ -316,12 +312,12 @@ const previewTotalFreight = previewWagonCounts.reduce(
     try {
       if (isEdit && mrrrId) {
         const body: UpdateMRRRBody = {
-  rakeType:
-    values.rakeType === "INDENT" || values.rakeType === "LEASE"
-      ? values.rakeType
-      : undefined,
-  remarks: values.remarks,
-};
+          rakeType:
+            values.rakeType === "INDENT" || values.rakeType === "LEASE"
+              ? values.rakeType
+              : undefined,
+          remarks: values.remarks,
+        };
 
         await updateMutation.mutateAsync({
           id: mrrrId,
@@ -343,9 +339,9 @@ const previewTotalFreight = previewWagonCounts.reduce(
       const body: CreateMRRRBody = {
         vpScheduleId: values.vpScheduleId,
         rakeType:
-  values.rakeType === "INDENT" || values.rakeType === "LEASE"
-    ? values.rakeType
-    : undefined,
+          values.rakeType === "INDENT" || values.rakeType === "LEASE"
+            ? values.rakeType
+            : undefined,
         remarks: values.remarks,
         rows: values.rows.map((row, index) => ({
           rowNumber: row.rowNumber ?? index + 1,
@@ -401,37 +397,37 @@ const previewTotalFreight = previewWagonCounts.reduce(
             title="MR/RR Details"
             columns={2}
           >
-      <Controller
-  control={form.control}
-  name="scheduleDate"
-  render={({ field, fieldState }) => (
-    <div className="grid gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground">
-        Schedule date <span className="text-red-600">*</span>
-      </label>
+            <Controller
+              control={form.control}
+              name="scheduleDate"
+              render={({ field, fieldState }) => (
+                <div className="grid gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Schedule date <span className="text-red-600">*</span>
+                  </label>
 
-      <DatePicker
-        selected={selectedDate(field.value)}
-        onSelect={(date) => {
-          const value = date ? date.toISOString() : "";
+                  <DatePicker
+                    selected={selectedDate(field.value)}
+                    onSelect={(date) => {
+                      const value = date ? date.toISOString() : "";
 
-          field.onChange(value);
+                      field.onChange(value);
 
-          form.setValue("vpScheduleId", "");
-          replace([]);
-        }}
-        placeholder="Select schedule date"
-        disabled={isEdit}
-      />
+                      form.setValue("vpScheduleId", "");
+                      replace([]);
+                    }}
+                    placeholder="Select schedule date"
+                    disabled={isEdit}
+                  />
 
-      {fieldState.error?.message ? (
-        <p className="text-xs text-red-600">
-          {fieldState.error.message}
-        </p>
-      ) : null}
-    </div>
-  )}
-/>
+                  {fieldState.error?.message ? (
+                    <p className="text-xs text-red-600">
+                      {fieldState.error.message}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            />
             <ComboboxField<MRRRFormInput>
               name="vpScheduleId"
               label="VP Schedule"
@@ -458,182 +454,201 @@ const previewTotalFreight = previewWagonCounts.reduce(
             ) : null}
           </FormSection>
 
-<FormSection
-  icon={<IconTrain size={16} />}
-  title="VP Schedule Preview"
-  columns={1}
->
-  {!watchedVPScheduleId ? (
-    <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-      Select VP Schedule to load MR/RR preview rows.
-    </div>
-  ) : previewQuery.isLoading ? (
-    <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-      Loading VP Schedule preview...
-    </div>
-  ) : previewSchedule ? (
-    <div className="space-y-4">
-      <div className="rounded-xl border bg-muted/20 p-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Schedule No</p>
-            <p className="text-sm font-medium">
-              {previewSchedule.scheduleNumber ?? "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Schedule Date</p>
-            <p className="text-sm font-medium">
-              {previewSchedule.scheduleDate
-                ? new Date(previewSchedule.scheduleDate).toLocaleDateString(
-                    "en-IN",
-                    {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    },
-                  )
-                : "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">From Branch</p>
-            <p className="text-sm font-medium">
-              {previewSchedule.fromBranch?.name ??
-                previewSchedule.fromBranch?.branchCode ??
-                "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">To Branch</p>
-            <p className="text-sm font-medium">
-              {previewSchedule.toBranch?.name ??
-                previewSchedule.toBranch?.branchCode ??
-                "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Total Wagons</p>
-            <p className="text-sm font-medium">
-              {previewSchedule.totalWagonCount ??
-                previewQuery.data?.rows?.length ??
-                0}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Total MT</p>
-            <p className="text-sm font-medium">
-              {previewSchedule.totalCapacityMt ?? "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Total CFT</p>
-            <p className="text-sm font-medium">
-              {previewSchedule.totalCapacityCft != null
-                ? Number(previewSchedule.totalCapacityCft).toLocaleString(
-                    "en-IN",
-                  )
-                : "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Total Freight</p>
-            <p className="text-sm font-medium">
-              {formatFreight(previewTotalFreight)}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border bg-background p-3">
-          <p className="text-xs text-muted-foreground">Route</p>
-          <p className="text-sm font-medium">
-            {previewSchedule.sourceArea?.name ?? "—"} →{" "}
-            {previewSchedule.destinationArea?.name ?? "—"}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-3">
-        {previewWagonCounts.map((wagon: any) => (
-          <div
-            key={wagon.id}
-            className="rounded-xl border bg-background p-4 shadow-sm"
+          <FormSection
+            icon={<IconTrain size={16} />}
+            title="VP Schedule Preview"
+            columns={1}
           >
-            <div className="flex items-center justify-between gap-3 border-b pb-3">
-              <p className="text-sm font-semibold text-foreground">
-                {wagon.wagon?.name ?? "—"}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                Wagon Count:{" "}
-                <span className="font-medium text-foreground">
-                  {wagon.count ?? "—"}
-                </span>
-              </p>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-6">
-              <div>
-                <p className="text-xs text-muted-foreground">Capacity MT</p>
-                <p className="font-medium">
-                  {wagon.capacityMt ?? "—"}
-                </p>
+            {!watchedVPScheduleId ? (
+              <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                Select VP Schedule to load MR/RR preview rows.
               </div>
-
-              <div>
-                <p className="text-xs text-muted-foreground">Capacity CFT</p>
-                <p className="font-medium">
-                  {wagon.capacityCft ?? "—"}
-                </p>
+            ) : previewQuery.isLoading ? (
+              <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+                Loading VP Schedule preview...
               </div>
+            ) : previewSchedule ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Schedule No
+                      </p>
+                      <p className="text-sm font-medium">
+                        {previewSchedule.scheduleNumber ?? "—"}
+                      </p>
+                    </div>
 
-              <div>
-                <p className="text-xs text-muted-foreground">Total MT</p>
-                <p className="font-medium">
-                  {wagon.totalMt ?? "—"}
-                </p>
-              </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Schedule Date
+                      </p>
+                      <p className="text-sm font-medium">
+                        {previewSchedule.scheduleDate
+                          ? new Date(
+                              previewSchedule.scheduleDate,
+                            ).toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </p>
+                    </div>
 
-              <div>
-                <p className="text-xs text-muted-foreground">Total CFT</p>
-                <p className="font-medium">
-                  {wagon.totalCft != null
-                    ? Number(wagon.totalCft).toLocaleString("en-IN")
-                    : "—"}
-                </p>
-              </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        From Branch
+                      </p>
+                      <p className="text-sm font-medium">
+                        {previewSchedule.fromBranch?.name ??
+                          previewSchedule.fromBranch?.branchCode ??
+                          "—"}
+                      </p>
+                    </div>
 
-              <div>
-                <p className="text-xs text-muted-foreground">Freight / Wagon</p>
-                <p className="font-medium">
-                  {formatFreight(wagon.freightAmount)}
-                </p>
-              </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">To Branch</p>
+                      <p className="text-sm font-medium">
+                        {previewSchedule.toBranch?.name ??
+                          previewSchedule.toBranch?.branchCode ??
+                          "—"}
+                      </p>
+                    </div>
 
-              <div>
-                <p className="text-xs text-muted-foreground">Total Freight</p>
-                <p className="font-medium">
-                  {formatFreight(wagon.totalFreight)}
-                </p>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Total Wagons
+                      </p>
+                      <p className="text-sm font-medium">
+                        {previewSchedule.totalWagonCount ??
+                          previewQuery.data?.rows?.length ??
+                          0}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total MT</p>
+                      <p className="text-sm font-medium">
+                        {previewSchedule.totalCapacityMt ?? "—"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total CFT</p>
+                      <p className="text-sm font-medium">
+                        {previewSchedule.totalCapacityCft != null
+                          ? Number(
+                              previewSchedule.totalCapacityCft,
+                            ).toLocaleString("en-IN")
+                          : "—"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Total Freight
+                      </p>
+                      <p className="text-sm font-medium">
+                        {formatFreight(previewTotalFreight)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border bg-background p-3">
+                    <p className="text-xs text-muted-foreground">Route</p>
+                    <p className="text-sm font-medium">
+                      {previewSchedule.sourceArea?.name ?? "—"} →{" "}
+                      {previewSchedule.destinationArea?.name ?? "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  {previewWagonCounts.map((wagon) => (
+                    <div
+                      key={wagon.id}
+                      className="rounded-xl border bg-background p-4 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between gap-3 border-b pb-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          {wagon.wagon?.name ?? "—"}
+                        </p>
+
+                        <p className="text-xs text-muted-foreground">
+                          Wagon Count:{" "}
+                          <span className="font-medium text-foreground">
+                            {wagon.count ?? "—"}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-6">
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Capacity MT
+                          </p>
+                          <p className="font-medium">
+                            {wagon.capacityMt ?? "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Capacity CFT
+                          </p>
+                          <p className="font-medium">
+                            {wagon.capacityCft ?? "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Total MT
+                          </p>
+                          <p className="font-medium">{wagon.totalMt ?? "—"}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Total CFT
+                          </p>
+                          <p className="font-medium">
+                            {wagon.totalCft != null
+                              ? Number(wagon.totalCft).toLocaleString("en-IN")
+                              : "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Freight / Wagon
+                          </p>
+                          <p className="font-medium">
+                            {formatFreight(wagon.freightAmount)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Total Freight
+                          </p>
+                          <p className="font-medium">
+                            {formatFreight(wagon.totalFreight)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  ) : (
-    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-      Preview not available for selected VP Schedule.
-    </div>
-  )}
-</FormSection>
+            ) : (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                Preview not available for selected VP Schedule.
+              </div>
+            )}
+          </FormSection>
           <FormSection
             icon={<IconClipboardList size={16} />}
             title="MR/RR Rows"
@@ -662,7 +677,6 @@ const previewTotalFreight = previewWagonCounts.reduce(
                                 watchedRows[index]?.wagonTypeLabel ||
                                 "-"}
                             </div>
-                   
                           </TableCell>
 
                           <TableCell className="align-top">
@@ -709,10 +723,8 @@ const previewTotalFreight = previewWagonCounts.reduce(
                 </Table>
               </div>
 
-              {typeof (errors as any).rows?.message === "string" ? (
-                <p className="text-xs text-red-600">
-                  {(errors as any).rows.message}
-                </p>
+              {typeof errors.rows?.message === "string" ? (
+                <p className="text-xs text-red-600">{errors.rows.message}</p>
               ) : null}
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
@@ -735,7 +747,11 @@ const previewTotalFreight = previewWagonCounts.reduce(
             </div>
           </FormSection>
 
-          <FormSection icon={<IconNotes size={16} />} title="Remarks" columns={1}>
+          <FormSection
+            icon={<IconNotes size={16} />}
+            title="Remarks"
+            columns={1}
+          >
             <TextAreaField<MRRRFormInput>
               name="remarks"
               label="Remarks"
@@ -795,7 +811,11 @@ const previewTotalFreight = previewWagonCounts.reduce(
                 Cancel
               </Button>
 
-              <Button type="submit" disabled={isSubmitting} className="min-w-32">
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="min-w-32"
+              >
                 {isSubmitting
                   ? "Saving..."
                   : isEdit

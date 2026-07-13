@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { SparePart } from "@skerp/types";
 
 import {
   Dialog,
@@ -9,7 +8,6 @@ import {
   DialogTitle,
 } from "@skerp/ui/components/dialog";
 
-import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import {
   SectionLabel,

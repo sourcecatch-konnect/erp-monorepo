@@ -20,7 +20,6 @@ import {
   IconFileDescription,
   IconHome,
   IconId,
-  IconIdBadge2,
   IconLicense,
   IconMail,
   IconMapPin,
@@ -44,7 +43,7 @@ import { driverApi } from "./driver.service";
 import { createDriverSchema } from "@skerp/validators";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { paiseToRupees } from "@/lib/money";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { stateKeys } from "../state/state.keys";
 import { stateApi } from "../state/state.service";
 import { cityKeys } from "../city/city.keys";
@@ -421,7 +420,7 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
 
     setPhotoPreviewUrl("");
 
-    form.setValue("photoPath", null as any, {
+    form.setValue("photoPath", null, {
       shouldDirty: true,
       shouldValidate: true,
     });

@@ -1,8 +1,5 @@
 import { Router } from "express";
-import {
-  createGoodsSchema,
-  updateGoodsSchema,
-} from "@skerp/validators";
+import { createGoodsSchema, updateGoodsSchema } from "@skerp/validators";
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
@@ -17,10 +14,7 @@ const router: Router = createCrudRouter({
   permissionKey: "masters.goods",
 
   listOptions: {
-    searchableFields: [
-      "name",
-      "description",
-    ],
+    searchableFields: ["name", "description"],
 
     defaultOrderBy: {
       name: "asc",
@@ -39,9 +33,8 @@ const router: Router = createCrudRouter({
           id: true,
         },
 
-        getName: (row: any) => row.id,
+        getName: (row: { id: string }) => row.id,
       },
-
     ],
   },
 });

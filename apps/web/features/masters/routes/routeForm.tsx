@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Route,
-  City,
   CreateRouteBody,
   CreateRouteFormInput,
 } from "@skerp/types";
@@ -14,8 +13,6 @@ import type {
 import { createRouteSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
-import SelectField from "../_shared/fields/SelectField";
-import { useQuery } from "@tanstack/react-query";
 
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { routeApi } from "./routes.service";

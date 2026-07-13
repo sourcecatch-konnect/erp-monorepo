@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { Branch } from "@skerp/types";
 
 import {
   Dialog,
@@ -14,7 +13,6 @@ import {
 import {
   SectionLabel,
   Field,
-  PartyCard,
   formatDate,
   SkeletonBody,
 } from "../_shared/dialog-parts";

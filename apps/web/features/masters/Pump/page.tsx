@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Pump, CreatePumpBody } from "@skerp/types";
+import type { CreatePumpBody, Pump } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import { downloadBlob, ListQuery, parseCsvRows } from "../_shared/master-api";
@@ -21,10 +21,6 @@ import { pumpColumns } from "./pumpTable";
 import PumpForm from "./pumpForm";
 import PumpDetailDialog from "./pumpDialog";
 import { pumpKeys } from "./pump.key";
-import { stateKeys } from "../state/state.keys";
-import { stateApi } from "../state/state.service";
-import { cityKeys } from "../city/city.keys";
-import { cityApi } from "../city/city.service";
 
 type PumpCsvRow = Record<
   | "name"
@@ -159,7 +155,26 @@ export default function PumpPage() {
         const text = await file.text();
         const rows = parseCsvRows<PumpCsvRow>(text);
 
-        await bulkImport.mutateAsync(rows as any);
+        const payload: CreatePumpBody[] = rows.map((item) => ({
+          name: item.name,
+          address: item.address || undefined,
+          cityId: item.cityId,
+          stateId: item.stateId,
+          country: item.country,
+          contactName: item.contactPerson || undefined,
+          contactPhone: item.contactPhone || undefined,
+          currentDieselRate: item.currentDieselRate
+            ? Number(item.currentDieselRate)
+            : undefined,
+          rateLastUpdated: item.rateLastUpdated
+            ? new Date(item.rateLastUpdated)
+            : undefined,
+          gstIn: item.gstIn || undefined,
+          pan: item.pan || undefined,
+          creditLimit: item.creditLimit ? Number(item.creditLimit) : undefined,
+          isBlackListed: item.isBlackListed.trim().toLowerCase() === "true",
+        }));
+        await bulkImport.mutateAsync(payload);
       }}
       onExport={() => exportPumps.mutate(listQuery)}
       isBulkDeleting={bulkRemove.isPending}

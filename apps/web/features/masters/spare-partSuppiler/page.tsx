@@ -4,7 +4,6 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
-  CreateSparePartSupplierBody,
   SparePartSupplier,
 } from "@skerp/types";
 
@@ -16,8 +15,6 @@ import {
 } from "../_shared/master-api";
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
-import { cityApi } from "../city/city.service";
-import { cityKeys } from "../city/city.keys";
 
 import { sparePartSupplierKeys } from "./spare-partSupplier.key";
 import { sparePartSupplierApi } from "./spare-partSupplier.service";
@@ -25,7 +22,6 @@ import SparePartSupplierForm from "./spare-partSupplierForm";
 import { sparePartSupplierColumns } from "./spare-partSupplierTable";
 import { createSparePartSupplierSchema } from "@skerp/validators";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import SparePartSupplierDetailDialog from "./spare-partSupplierDialog";
 
 type SparePartSupplierCsvRow = Record<
@@ -75,11 +71,6 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
   const suppliers = useQuery({
     queryKey: sparePartSupplierKeys.list(listQuery),
     queryFn: () => sparePartSupplierApi.list(listQuery),
-  });
-
-  const cities = useQuery({
-    queryKey: cityKeys.list(),
-    queryFn: () => cityApi.list(),
   });
 
 

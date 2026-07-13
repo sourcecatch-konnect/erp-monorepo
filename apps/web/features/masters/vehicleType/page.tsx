@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
-import type { VehicleType, CreateVehicleTypeBody } from "@skerp/types";
+import type { VehicleType } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import { downloadBlob, ListQuery, parseCsvRows } from "../_shared/master-api";

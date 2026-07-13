@@ -16,7 +16,24 @@ import {
   unwrapListResponse,
 } from "../masters/_shared/master-api";
 
-export type MRRRDetail = MRRR & {
+export type MRRRDetailRow = NonNullable<MRRR["rows"]>[number] & {
+  freightAmount?: number | string | null;
+  vpScheduleWagonCount?: {
+    id: string;
+    count: number;
+    wagonId: string;
+    capacityCft?: number | null;
+    capacityMt?: number | null;
+    totalCft?: number | null;
+    totalMt?: number | null;
+    freightAmount?: number | string | null;
+    totalFreight?: number | string | null;
+  } | null;
+};
+
+export type MRRRDetail = Omit<MRRR, "vpSchedule" | "rows"> & {
+  vpSchedule?: VPSchedule | null;
+  rows?: MRRRDetailRow[];
   createdBy?: {
     id: string;
     firstName?: string | null;
@@ -32,11 +49,7 @@ export type MRRRDetail = MRRR & {
 
 export type MRRRVPScheduleOption = Pick<
   VPSchedule,
-  | "id"
-  | "scheduleNumber"
-  | "scheduleDate"
-  | "scheduleName"
-  | "totalWagonCount"
+  "id" | "scheduleNumber" | "scheduleDate" | "scheduleName" | "totalWagonCount"
 > & {
   label: string;
   value: string;
@@ -68,29 +81,29 @@ const encodeMRRRIdentifier = (identifier: string) =>
 
 export const mrrrApi = {
   vpSchedules: async (
-  query?: ListQuery,
-): Promise<ListResult<MRRRVPScheduleOption>> => {
-  const params: Record<string, string | number> = {};
+    query?: ListQuery & { scheduleDate?: string },
+  ): Promise<ListResult<MRRRVPScheduleOption>> => {
+    const params: Record<string, string | number> = {};
 
-  if (query?.page !== undefined) params.page = query.page;
-  if (query?.size !== undefined) params.size = query.size;
-  if (query?.search) params.search = query.search;
+    if (query?.page !== undefined) params.page = query.page;
+    if (query?.size !== undefined) params.size = query.size;
+    if (query?.search) params.search = query.search;
+    if (query?.scheduleDate) params.scheduleDate = query.scheduleDate;
 
+    const res = await api.get<ApiResponse<MRRRVPScheduleOption[]>>(
+      "/mrrr/vp-schedules",
+      { params },
+    );
 
-  const res = await api.get<ApiResponse<MRRRVPScheduleOption[]>>(
-    "/mrrr/vp-schedules",
-    { params },
-  );
+    if (!res.data.ok) {
+      throw new Error(res.data.error.message);
+    }
 
-  if (!res.data.ok) {
-    throw new Error(res.data.error.message);
-  }
-
-  return {
-    data: res.data.data,
-    meta: res.data.meta,
-  };
-},
+    return {
+      data: res.data.data,
+      meta: res.data.meta,
+    };
+  },
 
   preview: async (vpScheduleId: string): Promise<MRRRPreviewResponse> => {
     const res = await api.get<ApiResponse<MRRRPreviewResponse>>(
@@ -157,10 +170,7 @@ export const mrrrApi = {
     return unwrapApiResponse(res);
   },
 
-  submit: async (
-    identifier: string,
-    body: SubmitMRRRBody,
-  ): Promise<MRRR> => {
+  submit: async (identifier: string, body: SubmitMRRRBody): Promise<MRRR> => {
     const res = await api.post<ApiResponse<MRRR>>(
       `/mrrr/${encodeMRRRIdentifier(identifier)}/submit`,
       body,
@@ -169,10 +179,7 @@ export const mrrrApi = {
     return unwrapApiResponse(res);
   },
 
-  cancel: async (
-    identifier: string,
-    body: CancelMRRRBody,
-  ): Promise<MRRR> => {
+  cancel: async (identifier: string, body: CancelMRRRBody): Promise<MRRR> => {
     const res = await api.post<ApiResponse<MRRR>>(
       `/mrrr/${encodeMRRRIdentifier(identifier)}/cancel`,
       body,

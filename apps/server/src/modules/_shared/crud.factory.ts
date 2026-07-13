@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { ZodType, ZodTypeDef } from "zod";
 import { PermissionAction } from "@skerp/types";
+import { Prisma } from "../../../generated/prisma/index.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import {
   BadRequestError,
@@ -15,13 +16,15 @@ const getUniqueConstraintMessage = (
   error: unknown,
   uniqueErrorMessages?: Record<string, string>,
 ) => {
-  const err = error as any;
-
-  if (err?.code !== "P2002") {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
     return null;
   }
 
-  const target = err?.meta?.target;
+  if (error.code !== "P2002") {
+    return null;
+  }
+
+  const target = error.meta?.target;
 
   const fields = Array.isArray(target)
     ? target
@@ -57,6 +60,7 @@ type PrismaDelegate = {
 };
 
 type CrudAction = Exclude<PermissionAction, "view"> | "view";
+type DependencyRow = Record<string, unknown>;
 
 type CrudOptions<Create, Update> = {
   model: PrismaDelegate;
@@ -75,11 +79,11 @@ type CrudOptions<Create, Update> = {
     extraWhere?: (req: Request) => Record<string, unknown>;
     mapRows?: (rows: unknown[], req: Request) => Promise<unknown[]> | unknown[];
     blockDeleteIfExists?: {
-      model: any;
+      model: Pick<PrismaDelegate, "findMany">;
       label: string;
       where: (id: string) => object;
       select?: Record<string, boolean>;
-      getName?: (row: any) => string;
+      getName?: (row: never) => string;
     }[];
   };
 
@@ -449,8 +453,14 @@ export function createCrudRouter<Create, Update>({
 
           if (rows.length > 0) {
             const names = rows
-              .map((row: any) =>
-                dep.getName ? dep.getName(row) : row.name || row.code || row.id,
+              .map((row) =>
+                dep.getName
+                  ? dep.getName(row as never)
+                  : String(
+                      (row as DependencyRow).name ||
+                        (row as DependencyRow).code ||
+                        (row as DependencyRow).id,
+                    ),
               )
               .join(", ");
 
@@ -504,10 +514,14 @@ export function createCrudRouter<Create, Update>({
 
             if (rows.length > 0) {
               const names = rows
-                .map((row: any) =>
+                .map((row) =>
                   dep.getName
-                    ? dep.getName(row)
-                    : row.name || row.code || row.id,
+                    ? dep.getName(row as never)
+                    : String(
+                        (row as DependencyRow).name ||
+                          (row as DependencyRow).code ||
+                          (row as DependencyRow).id,
+                      ),
                 )
                 .join(", ");
 

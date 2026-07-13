@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { Driver } from "@skerp/types";
 
 import {
   Dialog,
@@ -22,7 +21,6 @@ import {
   IconPhone,
   IconId,
   IconCalendar,
-  IconShield,
   IconBan,
   IconClock,
   IconMapPin,

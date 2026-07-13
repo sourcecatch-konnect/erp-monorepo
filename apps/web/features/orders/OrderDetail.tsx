@@ -22,12 +22,7 @@ import {
   IconEdit,
   IconArrowLeft,
   IconDownload,
-  IconCopy,
-  IconMail,
   IconAlertCircle,
-  IconCircleCheck,
-  IconClock,
-  IconCircleDot,
   IconLoader2,
   IconArrowRight,
   IconPackage,
@@ -274,13 +269,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
       ? paiseToRupees(Number(order.bookingFreightAmount))
       : null;
   const hasApprovedFreight = approvedFreight != null;
-  const displayedFreight =
-    hasApprovedFreight && order.bookingFreightAmount != null
-      ? formatPaise(order.bookingFreightAmount)
-      : autoFreight != null
-        ? formatRupees(autoFreight)
-        : "-";
-
   const freightWasEdited =
     approvedFreight != null &&
     autoFreight != null &&

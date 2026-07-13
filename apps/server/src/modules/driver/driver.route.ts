@@ -1,8 +1,5 @@
 import { Router } from "express";
-import {
-  createDriverSchema,
-  updateDriverSchema,
-} from "@skerp/validators";
+import { createDriverSchema, updateDriverSchema } from "@skerp/validators";
 import { randomUUID } from "node:crypto";
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
@@ -44,10 +41,7 @@ const withActiveLRGroupAssignment = async (rows: unknown[]) => {
           g.marketDriverName &&
           requested.has(normalizeDriverName(g.marketDriverName)),
       )
-      .map((g) => [
-        normalizeDriverName(g.marketDriverName!),
-        g.groupNumber,
-      ]),
+      .map((g) => [normalizeDriverName(g.marketDriverName!), g.groupNumber]),
   );
 
   return drivers.map((driver) => {
@@ -77,21 +71,24 @@ router.post("/_photo/upload-url", async (req, res, next) => {
       throw new Error("Only JPG, PNG, and WebP driver photos are allowed.");
     }
 
-   const MAX_DRIVER_PHOTO_SIZE = 500 * 1024; // 500 KB
+    const MAX_DRIVER_PHOTO_SIZE = 500 * 1024; // 500 KB
 
-const fileSizeNumber = Number(fileSize);
+    const fileSizeNumber = Number(fileSize);
 
-if (!Number.isFinite(fileSizeNumber) || fileSizeNumber <= 0) {
-  throw new Error("Driver photo size is required.");
-}
+    if (!Number.isFinite(fileSizeNumber) || fileSizeNumber <= 0) {
+      throw new Error("Driver photo size is required.");
+    }
 
-if (fileSizeNumber > MAX_DRIVER_PHOTO_SIZE) {
-  throw new Error("Driver photo must be less than 500 KB.");
-}
+    if (fileSizeNumber > MAX_DRIVER_PHOTO_SIZE) {
+      throw new Error("Driver photo must be less than 500 KB.");
+    }
 
     const extension =
-      String(fileName).split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") ||
-      "jpg";
+      String(fileName)
+        .split(".")
+        .pop()
+        ?.toLowerCase()
+        .replace(/[^a-z0-9]/g, "") || "jpg";
 
     const key = `drivers/photos/${Date.now()}-${randomUUID()}.${extension}`;
 
@@ -122,12 +119,12 @@ router.get("/_photo/view-url", async (req, res, next) => {
 
     const viewUrl = await presignDownload(key);
 
- res.json({
-  ok: true,
-  data: {
-    viewUrl,
-  },
-});
+    res.json({
+      ok: true,
+      data: {
+        viewUrl,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -139,11 +136,9 @@ const crudRouter: Router = createCrudRouter({
   permissionKey: "masters.driver",
 
   hooks: {
-    beforeCreate: async (data: any) =>
-      convertRupeeFieldsToPaise(data, moneyFields),
+    beforeCreate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
 
-    beforeUpdate: async (data: any) =>
-      convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
 
     beforeDelete: async (id: string) => {
       const usedInTrip = await db.vehicleTrip.findFirst({
@@ -153,7 +148,7 @@ const crudRouter: Router = createCrudRouter({
 
       if (usedInTrip) {
         throw new Error(
-          "This driver cannot be deleted because existing vehicle trip records are linked with this driver. To preserve trip history, mark the driver as On Leave or Blacklisted instead."
+          "This driver cannot be deleted because existing vehicle trip records are linked with this driver. To preserve trip history, mark the driver as On Leave or Blacklisted instead.",
         );
       }
     },

@@ -6,14 +6,14 @@ export function normalizeName(name: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function createDuplicateError(
-  field: string,
-  message: string,
-) {
-  const error = new Error(message);
+export function createDuplicateError(field: string, message: string) {
+  const error: Error & {
+    statusCode?: number;
+    details?: { fieldErrors: Record<string, string[]> };
+  } = new Error(message);
 
-  (error as any).statusCode = 409;
-  (error as any).details = {
+  error.statusCode = 409;
+  error.details = {
     fieldErrors: {
       [field]: [message],
     },

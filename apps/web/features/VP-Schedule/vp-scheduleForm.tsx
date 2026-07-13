@@ -217,8 +217,8 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
       areaApi.list({
         page: 0,
         size: 1000,
-        cityId: sourceCityId,
-      } as any),
+        filter: { cityId: sourceCityId ?? "" },
+      }),
     enabled: Boolean(sourceCityId),
   });
 
@@ -228,8 +228,8 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
       areaApi.list({
         page: 0,
         size: 1000,
-        cityId: destinationCityId,
-      } as any),
+        filter: { cityId: destinationCityId ?? "" },
+      }),
     enabled: Boolean(destinationCityId),
   });
   const sourceAreaOptions = React.useMemo(
@@ -375,10 +375,6 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
   ]);
   const watchedWagons = form.watch("wagonCounts") ?? [];
   const wagonOptions = React.useMemo(() => wagons.data ?? [], [wagons.data]);
-  const wagonMap = React.useMemo(
-    () => new Map(wagonOptions.map((wagon) => [wagon.value, wagon])),
-    [wagonOptions],
-  );
 
   const totalWagons = watchedWagons.reduce(
     (sum, row) => sum + (Number(row?.count) || 0),
@@ -550,8 +546,6 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
 
                 <TableBody>
                   {fields.map((row, index) => {
-                    const wagonId = watchedWagons[index]?.wagonId ?? "";
-                    const wagon = wagonMap.get(wagonId);
                     const wagonError = form.getFieldState(
                       `wagonCounts.${index}.wagonId`,
                     ).error?.message;

@@ -13,7 +13,10 @@ import getErrorMessage, {
 
 import { toast } from "sonner";
 
-import type { RailwayFreightMatrixWithRelations } from "@skerp/types";
+import type {
+  CreateRailwayFreightMatrixBody,
+  RailwayFreightMatrixWithRelations,
+} from "@skerp/types";
 import { railwayFreightApi } from "./railwayfreight.service";
 import { railwayFreightKeys } from "./railwayfreight.key";
 import { railwayFreightColumns } from "./railwayfreightTable";
@@ -136,7 +139,15 @@ export default function RailwayFreightPage() {
         const text = await file.text();
         const rows = parseCsvRows<RailwayFreightCsvRow>(text);
 
-        await bulkImport.mutateAsync(rows as any);
+        const payload: CreateRailwayFreightMatrixBody[] = rows.map((item) => ({
+          wagonId: item.wagonId,
+          sourceCityId: item.sourceCityId,
+          destinationCityId: item.destinationCityId,
+          sourceAreaId: null,
+          destinationAreaId: null,
+          freightAmount: Number(item.freightAmount),
+        }));
+        await bulkImport.mutateAsync(payload);
       }}
       onExport={() => exportFreight.mutate(listQuery)}
       isBulkDeleting={bulkRemove.isPending}

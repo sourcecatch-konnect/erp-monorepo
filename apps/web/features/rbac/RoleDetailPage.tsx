@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,7 +15,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { rbacApi } from "./rbac.service";
 import { rbacKeys } from "./rbac.keys";
-import type { PermissionDefDto } from "./types";
+import type { PermissionDefDto, RoleDetail } from "./types";
 
 const titleizeIdentifier = (value: string): string =>
   value
@@ -38,11 +38,11 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
     queryKey: rbacKeys.role(roleId),
     queryFn: () => rbacApi.getRole(roleId),
   });
-const { data: modules = [], isLoading: modulesLoading } = useQuery({
-  queryKey: rbacKeys.permissionModules,
-  queryFn: () => rbacApi.permissionModules(),
-  staleTime: 10 * 60 * 1000,
-});
+  const { data: modules = [] } = useQuery({
+    queryKey: rbacKeys.permissionModules,
+    queryFn: () => rbacApi.permissionModules(),
+    staleTime: 10 * 60 * 1000,
+  });
 
   const [granted, setGranted] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -55,46 +55,26 @@ const { data: modules = [], isLoading: modulesLoading } = useQuery({
     return () => setLabel(href, null);
   }, [role?.name, roleId, setLabel]);
 
-const [openModules, setOpenModules] = useState<string[]>([]);
-const saveMut = useMutation({
-  mutationFn: () => rbacApi.setRolePermissions(roleId, Array.from(granted)),
-  onSuccess: () => {
-    qc.setQueryData(rbacKeys.role(roleId), (old: any) => {
-      if (!old) return old;
+  const [openModules, setOpenModules] = useState<string[]>([]);
+  const saveMut = useMutation({
+    mutationFn: () => rbacApi.setRolePermissions(roleId, Array.from(granted)),
+    onSuccess: () => {
+      qc.setQueryData<RoleDetail>(rbacKeys.role(roleId), (old) => {
+        if (!old) return old;
 
-      return {
-        ...old,
-        permissionKeys: Array.from(granted),
-        _count: {
-          ...old._count,
-          rolePermissions: granted.size,
-        },
-      };
-    });
+        return {
+          ...old,
+          permissionKeys: Array.from(granted),
+          _count: {
+            ...old._count,
+            rolePermissions: granted.size,
+          },
+        };
+      });
 
-    qc.invalidateQueries({ queryKey: rbacKeys.roles });
-  },
-});
-
-  const toggle = (key: string) => {
-    setGranted((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const toggleModule = (perms: PermissionDefDto[], on: boolean) => {
-    setGranted((prev) => {
-      const next = new Set(prev);
-      for (const p of perms) {
-        if (on) next.add(p.key);
-        else next.delete(p.key);
-      }
-      return next;
-    });
-  };
+      qc.invalidateQueries({ queryKey: rbacKeys.roles });
+    },
+  });
 
   const readOnly = role?.isSystem ?? false;
   const dirty =
@@ -135,94 +115,96 @@ const saveMut = useMutation({
   return (
     <div className="space-y-6 p-6">
       <header className="flex items-start justify-between gap-4">
-          <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href="/settings/roles"
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← All roles
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold text-foreground">
-            {role.name}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {role.isSystem
-              ? "System role — managed by the seed script, not editable here."
-              : `${role._count.users} user${role._count.users === 1 ? "" : "s"} · ${granted.size} permission${granted.size === 1 ? "" : "s"}`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {!readOnly && dirty && (
-            <Button
-              variant="outline"
-              onClick={() => setGranted(new Set(role.permissionKeys))}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Link
+              href="/settings/roles"
+              className="text-sm text-muted-foreground hover:underline"
             >
-              Discard
-            </Button>
-          )}
-          {!readOnly && (
-            <Button
-              onClick={() => saveMut.mutate()}
-              disabled={!dirty || saveMut.isPending}
-            >
-              {saveMut.isPending ? "Saving…" : "Save changes"}
-            </Button>
-          )}
-        </div>
+              ← All roles
+            </Link>
+            <h1 className="mt-2 text-2xl font-semibold text-foreground">
+              {role.name}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {role.isSystem
+                ? "System role — managed by the seed script, not editable here."
+                : `${role._count.users} user${role._count.users === 1 ? "" : "s"} · ${granted.size} permission${granted.size === 1 ? "" : "s"}`}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {!readOnly && dirty && (
+              <Button
+                variant="outline"
+                onClick={() => setGranted(new Set(role.permissionKeys))}
+              >
+                Discard
+              </Button>
+            )}
+            {!readOnly && (
+              <Button
+                onClick={() => saveMut.mutate()}
+                disabled={!dirty || saveMut.isPending}
+              >
+                {saveMut.isPending ? "Saving…" : "Save changes"}
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
       {readOnly && (
         <div className="rounded-sm border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           This role is locked. To change system-role permissions, edit
-          <code className="mx-1 rounded-sm bg-background px-1">prisma/seed-admin.ts</code>
+          <code className="mx-1 rounded-sm bg-background px-1">
+            prisma/seed-admin.ts
+          </code>
           and re-seed.
         </div>
       )}
 
-  <Accordion
-  type="multiple"
-  value={openModules}
-  onValueChange={setOpenModules}
-  className="space-y-3"
->
-  {modules.map((m) => (
-    <RolePermissionModule
-      key={m.moduleCode}
-      moduleCode={m.moduleCode}
-      moduleLabel={m.label}
-      permissionCount={m.permissionCount}
-      granted={granted}
-      setGranted={setGranted}
-      readOnly={readOnly}
-      isOpen={openModules.includes(m.moduleCode)}
-    />
-  ))}
-</Accordion>
-{!readOnly && dirty && (
-  <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-lg border bg-background/95 p-4 shadow-lg backdrop-blur">
-    <p className="text-sm text-muted-foreground">
-      You have unsaved permission changes.
-    </p>
-
-    <div className="flex gap-2">
-      <Button
-        variant="outline"
-        onClick={() => setGranted(new Set(role.permissionKeys))}
+      <Accordion
+        type="multiple"
+        value={openModules}
+        onValueChange={setOpenModules}
+        className="space-y-3"
       >
-        Discard
-      </Button>
+        {modules.map((m) => (
+          <RolePermissionModule
+            key={m.moduleCode}
+            moduleCode={m.moduleCode}
+            moduleLabel={m.label}
+            permissionCount={m.permissionCount}
+            granted={granted}
+            setGranted={setGranted}
+            readOnly={readOnly}
+            isOpen={openModules.includes(m.moduleCode)}
+          />
+        ))}
+      </Accordion>
+      {!readOnly && dirty && (
+        <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-lg border bg-background/95 p-4 shadow-lg backdrop-blur">
+          <p className="text-sm text-muted-foreground">
+            You have unsaved permission changes.
+          </p>
 
-      <Button
-        onClick={() => saveMut.mutate()}
-        disabled={saveMut.isPending}
-      >
-        {saveMut.isPending ? "Saving..." : "Save changes"}
-      </Button>
-    </div>
-  </div>
-)}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setGranted(new Set(role.permissionKeys))}
+            >
+              Discard
+            </Button>
+
+            <Button
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+            >
+              {saveMut.isPending ? "Saving..." : "Save changes"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -277,10 +259,10 @@ function RolePermissionModule({
   return (
     <AccordionItem
       value={moduleCode}
-    className="overflow-hidden rounded-lg border bg-card shadow-sm transition hover:shadow-md"
+      className="overflow-hidden rounded-lg border bg-card shadow-sm transition hover:shadow-md"
     >
-     <div className="flex items-center gap-4 border-b bg-muted/30 px-5">
-      <AccordionTrigger className="flex-1 py-4 text-left hover:no-underline">
+      <div className="flex items-center gap-4 border-b bg-muted/30 px-5">
+        <AccordionTrigger className="flex-1 py-4 text-left hover:no-underline">
           <span className="flex min-w-0 flex-col">
             <span className="font-medium text-foreground">{moduleLabel}</span>
             <span className="text-xs font-normal text-muted-foreground">
@@ -313,7 +295,7 @@ function RolePermissionModule({
             {perms.map((p) => (
               <li
                 key={p.key}
-               className="flex items-center justify-between gap-4 px-5 py-3 transition hover:bg-muted/40"
+                className="flex items-center justify-between gap-4 px-5 py-3 transition hover:bg-muted/40"
               >
                 <div>
                   <div className="text-sm font-medium text-foreground">
@@ -339,9 +321,6 @@ function RolePermissionModule({
           </ul>
         )}
       </AccordionContent>
-      
     </AccordionItem>
-    
-    
   );
 }

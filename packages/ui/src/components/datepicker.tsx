@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { format, setMonth, setYear } from "date-fns";
+import { format } from "date-fns";
 import { CalendarSearch, Check, Clock, X } from "lucide-react";
 import { type DayPicker } from "react-day-picker";
 import { Field, FieldLabel } from "@skerp/ui/components/Field";
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@skerp/ui/components/select";
 
-interface DatePickerProps {
+export interface DatePickerProps {
   selected?: Date;
   onSelect?: (date: Date | undefined) => void;
   disabled?: boolean | React.ComponentProps<typeof DayPicker>["disabled"];
@@ -30,17 +30,6 @@ interface DatePickerProps {
   toYear?: number;
   clearable?: boolean;
   withTime?: boolean;
-}
-
-function hasTimeValue(date?: Date) {
-  if (!date) return false;
-
-  return (
-    date.getHours() !== 0 ||
-    date.getMinutes() !== 0 ||
-    date.getSeconds() !== 0 ||
-    date.getMilliseconds() !== 0
-  );
 }
 
 function mergeDateWithExistingTime(
@@ -59,66 +48,107 @@ function mergeDateWithExistingTime(
   return next;
 }
 
-function clearTime(existingDate: Date | undefined) {
-  if (!existingDate) return existingDate;
-
-  const next = new Date(existingDate);
-  next.setHours(0);
-  next.setMinutes(0);
-  next.setSeconds(0);
-  next.setMilliseconds(0);
-
-  return next;
-}
-
-function setTimePart(
+function setTime(
   existingDate: Date | undefined,
-  part: "hour" | "minute" | "period",
-  value: string,
+  hourValue: string,
+  minuteValue: string,
+  period: "AM" | "PM",
 ) {
-  if (!existingDate) return existingDate;
+  const hour = Number(hourValue);
+  const minutes = Number(minuteValue);
 
-  const next = new Date(existingDate);
-  const currentHours = next.getHours();
-  const currentMinutes = next.getMinutes();
-  const currentPeriod = currentHours >= 12 ? "PM" : "AM";
-  let hour12 = currentHours % 12 || 12;
-  let minutes = currentMinutes;
-  let period = currentPeriod;
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minutes) ||
+    hour < 1 ||
+    hour > 12 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return existingDate;
+  }
 
-  if (part === "hour") hour12 = Number(value);
-  if (part === "minute") minutes = Number(value);
-  if (part === "period") period = value;
-
-  const hours =
-    period === "PM" ? (hour12 === 12 ? 12 : hour12 + 12) : hour12 === 12 ? 0 : hour12;
-
-  next.setHours(hours);
-  next.setMinutes(minutes);
-  next.setSeconds(0);
-  next.setMilliseconds(0);
+  const next = new Date(existingDate ?? new Date());
+  const hours = period === "PM" ? (hour % 12) + 12 : hour % 12;
+  next.setHours(hours, minutes, 0, 0);
 
   return next;
 }
-const months = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
-const hours = Array.from({ length: 12 }, (_, index) => String(index + 1));
-const minutes = Array.from({ length: 60 }, (_, index) =>
-  String(index).padStart(2, "0"),
-);
+function TimePicker({
+  date,
+  onChange,
+}: {
+  date: Date | undefined;
+  onChange: (date: Date | undefined) => void;
+}) {
+  const [hour, setHour] = React.useState("12");
+  const [minute, setMinute] = React.useState("00");
+  const [period, setPeriod] = React.useState<"AM" | "PM">("AM");
+
+  React.useEffect(() => {
+    if (!date) return;
+    setHour(String(date.getHours() % 12 || 12).padStart(2, "0"));
+    setMinute(String(date.getMinutes()).padStart(2, "0"));
+    setPeriod(date.getHours() >= 12 ? "PM" : "AM");
+  }, [date]);
+
+  const commit = (
+    nextHour = hour,
+    nextMinute = minute,
+    nextPeriod = period,
+  ) => onChange(setTime(date, nextHour, nextMinute, nextPeriod));
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="relative min-w-0 flex-1">
+        <input
+          aria-label="Hour"
+          inputMode="numeric"
+          maxLength={2}
+          value={hour}
+          onChange={(event) => setHour(event.target.value)}
+          onBlur={() => commit()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit();
+          }}
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-center text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        />
+      </div>
+      <span className="font-medium text-muted-foreground">:</span>
+      <div className="relative min-w-0 flex-1">
+        <input
+          aria-label="Minute"
+          inputMode="numeric"
+          maxLength={2}
+          value={minute}
+          onChange={(event) => setMinute(event.target.value)}
+          onBlur={() => commit()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit();
+          }}
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-center text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        />
+      </div>
+      <Select
+        value={period}
+        onValueChange={(value) => {
+          const nextPeriod = value as "AM" | "PM";
+          setPeriod(nextPeriod);
+          commit(hour, minute, nextPeriod);
+        }}
+      >
+        <SelectTrigger aria-label="AM or PM" className="h-8 w-[74px] rounded-md px-2 text-sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="AM">AM</SelectItem>
+          <SelectItem value="PM">PM</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 export function DatePicker({
   selected: selectedProp,
@@ -133,6 +163,7 @@ export function DatePicker({
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [internalDate, setInternalDate] = React.useState<Date | undefined>();
+  const inputId = React.useId();
 
 
   const date = selectedProp ?? internalDate;
@@ -148,35 +179,17 @@ export function DatePicker({
     }
   }, [date]);
 
-
-  const years = React.useMemo(() => {
-    const list: number[] = [];
-
-    for (let year = toYear; year >= fromYear; year -= 1) {
-      list.push(year);
-    }
-
-    return list;
-  }, [fromYear, toYear]);
-
-  const displayFormat =
-    withTime && date  ? "dd MMM yyyy hh:mm a" : "dd MMM yyyy";
-  const currentHour = date ? String(date.getHours() % 12 || 12) : "12";
-  const currentMinute = date
-    ? String(date.getMinutes()).padStart(2, "0")
-    : "00";
-  const currentPeriod = date && date.getHours() >= 12 ? "PM" : "AM";
-
+  const displayFormat = withTime ? "dd MMM yyyy, hh:mm a" : "dd MMM yyyy";
   return (
     <Field className="w-full">
-      {label ? <FieldLabel htmlFor="date-picker">{label}</FieldLabel> : null}
+      {label ? <FieldLabel htmlFor={inputId}>{label}</FieldLabel> : null}
 
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
             variant="outline"
-            id="date-picker"
+            id={inputId}
             disabled={disabled === true}
             className="h-10 w-full justify-between rounded-lg px-3 font-normal"
           >
@@ -213,65 +226,40 @@ export function DatePicker({
           </Button>
         </PopoverTrigger>
 
-<PopoverContent
-  align="start"
-  sideOffset={6}
-  className="rounded-xl border bg-popover p-3 shadow-xl"
-  style={{
-    width: withTime ? 570 : 330,
-    maxWidth: "calc(100vw - 24px)",
-  }}
->
-  <div
-    className="grid gap-3"
-    style={{
-      gridTemplateColumns: withTime ? "320px 220px" : "320px",
-    }}
-  >
-    {/* LEFT SIDE: DATE */}
-    <div>
-      <div className="mb-3 grid grid-cols-[1.4fr_1fr] gap-2">
-        <Select
-          value={String(calendarMonth.getMonth())}
-          onValueChange={(value) => {
-            setCalendarMonth((current) => setMonth(current, Number(value)));
-          }}
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[min(264px,calc(100vw-12px))] rounded-lg border bg-popover p-1.5 shadow-lg"
         >
-          <SelectTrigger className="h-9 rounded-lg text-sm">
-            <SelectValue placeholder="Month" />
-          </SelectTrigger>
+          {withTime ? (
+            <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-muted/40 p-1.5">
+              <Clock size={14} className="shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <TimePicker date={date} onChange={setDate} />
+              </div>
+            </div>
+          ) : null}
 
-          <SelectContent className="max-h-72">
-            {months.map((month, index) => (
-              <SelectItem key={month} value={String(index)}>
-                {month}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={String(calendarMonth.getFullYear())}
-          onValueChange={(value) => {
-            setCalendarMonth((current) => setYear(current, Number(value)));
-          }}
-        >
-          <SelectTrigger className="h-9 rounded-lg text-sm">
-            <SelectValue placeholder="Year" />
-          </SelectTrigger>
-
-          <SelectContent className="max-h-72">
-            {years.map((year) => (
-              <SelectItem key={year} value={String(year)}>
-                {year}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="rounded-lg border bg-background p-1">
+          <div>
+      <div className="overflow-hidden rounded-md border bg-background p-1">
         <Calendar
+          className="w-full p-0 [--cell-size:1.4rem]"
+          classNames={{
+            root: "w-full",
+            months: "relative flex w-full flex-col",
+            month: "flex w-full flex-col gap-1",
+            month_grid: "w-full border-collapse",
+            week: "mt-0.5 flex w-full",
+            dropdowns: "flex h-7 items-center justify-center gap-1 text-xs font-medium",
+            dropdown_root:
+              "relative rounded-md border border-input bg-muted/40 px-1.5 py-0.5 transition-colors hover:bg-muted",
+            dropdown: "absolute inset-0 cursor-pointer opacity-0",
+            caption_label:
+              "flex items-center gap-0.5 text-xs font-medium [&>svg]:size-3 [&>svg]:text-muted-foreground",
+          }}
+          captionLayout="dropdown"
+          startMonth={new Date(fromYear, 0)}
+          endMonth={new Date(toYear, 11)}
           mode="single"
           month={calendarMonth}
           onMonthChange={setCalendarMonth}
@@ -289,107 +277,22 @@ export function DatePicker({
           disabled={disabled !== true ? disabled : undefined}
         />
       </div>
-    </div>
-
-    {/* RIGHT SIDE: TIME */}
-    {withTime ? (
-  <div className="rounded-lg border bg-muted/20 p-3">
-    <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-      <Clock size={14} />
-      Time
-    </div>
-
-    <div className="space-y-3">
-      <div>
-        <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-          Hour
-        </p>
-
-        <Select
-          value={currentHour}
-          disabled={!date}
-          onValueChange={(value) => {
-            setDate(setTimePart(date, "hour", value));
-          }}
-        >
-          <SelectTrigger className="h-9 rounded-lg text-sm">
-            <SelectValue />
-          </SelectTrigger>
-
-          <SelectContent className="max-h-72">
-            {hours.map((hour) => (
-              <SelectItem key={hour} value={hour}>
-                {hour.padStart(2, "0")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-          Minute
-        </p>
-
-        <Select
-          value={currentMinute}
-          disabled={!date}
-          onValueChange={(value) => {
-            setDate(setTimePart(date, "minute", value));
-          }}
-        >
-          <SelectTrigger className="h-9 rounded-lg text-sm">
-            <SelectValue />
-          </SelectTrigger>
-
-          <SelectContent className="max-h-72">
-            {minutes.map((minute) => (
-              <SelectItem key={minute} value={minute}>
-                {minute}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-          Period
-        </p>
-
-        <Select
-          value={currentPeriod}
-          disabled={!date}
-          onValueChange={(value) => {
-            setDate(setTimePart(date, "period", value));
-          }}
-        >
-          <SelectTrigger className="h-9 rounded-lg text-sm">
-            <SelectValue />
-          </SelectTrigger>
-
-          <SelectContent>
-            <SelectItem value="AM">AM</SelectItem>
-            <SelectItem value="PM">PM</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
+            {withTime ? (
+              <div className="mt-1.5 flex justify-end border-t pt-1.5">
       <Button
         type="button"
         size="sm"
-        className="w-full"
+        className="h-7 px-2.5 text-xs"
         disabled={!date}
         onClick={() => setOpen(false)}
       >
         <Check size={14} className="mr-1.5" />
         Apply
       </Button>
-    </div>
-  </div>
-) : null}
-  </div>
-</PopoverContent>
+              </div>
+            ) : null}
+          </div>
+        </PopoverContent>
       </Popover>
     </Field>
   );

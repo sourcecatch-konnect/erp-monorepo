@@ -15,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
-import { Button } from "@skerp/ui/components/button";
 
 export type LightboxImage = {
   id: string;

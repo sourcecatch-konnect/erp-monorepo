@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { IconSearch, IconArrowRight, IconTruck, IconDatabaseOff } from "@tabler/icons-react";
 
-import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
