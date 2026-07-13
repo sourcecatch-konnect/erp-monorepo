@@ -48,7 +48,6 @@ import vpScheduleRoute from "./modules/vp-schedule/vp-schedule.route.js";
 import creditorRoute from "./modules/creditor/creditor.route.js";
 import cashAccountRoute from "./modules/cash-account/cash-account.route.js";
 import cashPlanningRoute from "./modules/cash-planning/cash-planning.route.js";
-import vpLoadingRoute from "./modules/vp-loading/vp-loading.route.js";
 import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
@@ -127,7 +126,6 @@ app.use("/attachments", attachmentRoute);
 app.use("/vp-schedules", vpScheduleRoute);
 app.use("/mrrr", MRRRRoute);
 app.use("/grn", grnRoute);
-app.use("/vp-loading", vpLoadingRoute);
 app.use("/me/table-prefs", tablePrefRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
