@@ -217,6 +217,8 @@ export type VehicleJourney = {
  */
 export type ActiveJourneyInfo = {
   headOffice: { branchId: string; cityId: string; cityName: string };
+  /** The vehicle's odometer — a new journey's opening KM can't be below it. */
+  vehicleCurrentKm: number | null;
   journey: {
     id: string;
     journeyNumber: string;

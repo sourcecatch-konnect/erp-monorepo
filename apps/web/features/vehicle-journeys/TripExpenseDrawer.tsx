@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { createTripExpenseSchema } from "@skerp/validators";
 import type {
   TripExpenseFormInput,
-  CreateTripExpenseBody,
   VehicleJourney,
   TripExpense,
 } from "@skerp/types";
@@ -116,8 +115,10 @@ export default function TripExpenseDrawer({
     [expense, journey.id],
   );
 
-  const form = useForm<TripExpenseFormInput, unknown, CreateTripExpenseBody>({
-    resolver: zodResolver(createTripExpenseSchema),
+  const form = useForm<TripExpenseFormInput, unknown, TripExpenseFormInput>({
+    // Validate rupee inputs in the browser, but leave the conversion to paise
+    // to the server's schema so money fields are not transformed twice.
+    resolver: zodResolver(createTripExpenseSchema, undefined, { raw: true }),
     defaultValues: defaults(),
   });
 
@@ -146,7 +147,7 @@ export default function TripExpenseDrawer({
     form.setValue("paidByDriver", paymentMode === "CASH");
   }, [paymentMode, form]);
 
-  const onSubmit = async (values: CreateTripExpenseBody) => {
+  const onSubmit = async (values: TripExpenseFormInput) => {
     setSubmitting(true);
     try {
       if (expense) {

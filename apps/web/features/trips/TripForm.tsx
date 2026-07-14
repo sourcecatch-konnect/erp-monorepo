@@ -136,6 +136,36 @@ export default function TripForm({
   const info = mode === "create" ? journeyInfo.data : undefined;
   const journey = info?.journey ?? null;
   const lastLeg = journey?.lastLeg ?? null;
+  const vehicleCurrentKm = info?.vehicleCurrentKm ?? null;
+
+  // The server rejects a new journey whose opening KM is below the vehicle's
+  // odometer — mirror that check on blur so it doesn't surface at save time.
+  // (With an active journey, continuity vs the previous leg applies instead.)
+  const openingKmBelowCurrent = (value: unknown): boolean => {
+    const km = Number(value);
+    return (
+      mode === "create" &&
+      !journey &&
+      vehicleCurrentKm != null &&
+      Number.isFinite(km) &&
+      km > 0 &&
+      km < vehicleCurrentKm
+    );
+  };
+
+  const validateOpeningKm = (): boolean => {
+    if (openingKmBelowCurrent(form.getValues("openingKm"))) {
+      form.setError("openingKm", {
+        type: "belowCurrentKm",
+        message: `Below the vehicle's current KM — enter ${vehicleCurrentKm!.toLocaleString("en-IN")} or more.`,
+      });
+      return false;
+    }
+    if (form.formState.errors.openingKm?.type === "belowCurrentKm") {
+      form.clearErrors("openingKm");
+    }
+    return true;
+  };
 
   useEffect(() => {
     if (embedded) return;
@@ -158,6 +188,18 @@ export default function TripForm({
       form.setValue("driverId", journey.driverId, { shouldValidate: true });
     }
   }, [journey?.driverId, form]);
+
+  // Clear the below-current-KM error as soon as the value becomes valid
+  // (typing a higher number, picking another vehicle, journey context loading).
+  useEffect(() => {
+    if (
+      form.formState.errors.openingKm?.type === "belowCurrentKm" &&
+      !openingKmBelowCurrent(openingKmRaw)
+    ) {
+      form.clearErrors("openingKm");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openingKmRaw, vehicleCurrentKm, journey?.id]);
 
   // Suggest the continuous opening KM (previous closing + 1) when empty.
   useEffect(() => {
@@ -224,6 +266,7 @@ export default function TripForm({
   );
 
   const onSubmit = async (values: CreateTripBody) => {
+    if (!validateOpeningKm()) return;
     setSubmitting(true);
     try {
       if (mode === "edit" && trip) {
@@ -438,11 +481,19 @@ export default function TripForm({
               placeholder={
                 lastLeg?.closingKm != null
                   ? `${lastLeg.closingKm + 1} (previous closing + 1)`
-                  : "e.g. 145200"
+                  : vehicleCurrentKm != null
+                    ? `${vehicleCurrentKm} or more`
+                    : "e.g. 145200"
+              }
+              hint={
+                mode === "create" && !journey && vehicleCurrentKm != null
+                  ? `Vehicle's current KM: ${vehicleCurrentKm.toLocaleString("en-IN")} — opening KM can't be below this.`
+                  : undefined
               }
               type="number"
               min={1}
               required
+              onBlur={() => validateOpeningKm()}
             />
 
             {/* Trip type toggle */}

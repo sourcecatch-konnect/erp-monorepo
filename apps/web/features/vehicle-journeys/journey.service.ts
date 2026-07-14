@@ -15,8 +15,7 @@ import type {
   DispatchJourneyLegBody,
   CancelJourneyBody,
   CloseJourneyBody,
-  CreateTripExpenseBody,
-  UpdateTripExpenseBody,
+  TripExpenseFormInput,
   CreateDriverAdvanceBody,
   GenerateLogSlipBody,
 } from "@skerp/types";
@@ -142,7 +141,8 @@ export const journeyApi = {
 };
 
 export const expenseApi = {
-  create: async (body: CreateTripExpenseBody): Promise<TripExpense> => {
+  // The wire accepts rupees; the server schema validates and converts to paise.
+  create: async (body: TripExpenseFormInput): Promise<TripExpense> => {
     const res = await api.post<ApiResponse<TripExpense>>(
       "/trip-expenses",
       body,
@@ -151,7 +151,7 @@ export const expenseApi = {
   },
   update: async (
     id: string,
-    body: UpdateTripExpenseBody,
+    body: TripExpenseFormInput,
   ): Promise<TripExpense> => {
     const res = await api.patch<ApiResponse<TripExpense>>(
       `/trip-expenses/${id}`,
@@ -253,7 +253,12 @@ export const logSlipApi = {
 /* Lookups (reuse master list endpoints)                              */
 /* ------------------------------------------------------------------ */
 
-type VehicleRow = { id: string; vehicleNumber: string; ownershipType: string };
+type VehicleRow = {
+  id: string;
+  vehicleNumber: string;
+  ownershipType: string;
+  currentKM?: number | null;
+};
 type NamedRow = { id: string; name: string };
 type BranchRow = { id: string; name: string; branchCode: string };
 type RouteRow = {
@@ -266,6 +271,10 @@ type CashAccountRow = { id: string; name: string; isActive?: boolean };
 const LOOKUP_QUERY = { size: 1000 } as const;
 
 export type JourneyOption = { value: string; label: string };
+export type JourneyVehicleOption = JourneyOption & {
+  /** Odometer reading — a journey's opening KM can't be below it. */
+  currentKM: number | null;
+};
 export type JourneyRouteOption = JourneyOption & {
   sourceCityId: string | null;
   destinationCityId: string | null;
@@ -273,13 +282,17 @@ export type JourneyRouteOption = JourneyOption & {
 
 export const journeyLookups = {
   // Journeys run on our own vehicles only.
-  ownVehicles: async (): Promise<JourneyOption[]> => {
+  ownVehicles: async (): Promise<JourneyVehicleOption[]> => {
     const res = await api.get<ApiResponse<VehicleRow[]>>("/vehicles", {
       params: LOOKUP_QUERY,
     });
     return unwrapListResponse(res)
       .data.filter((v) => v.ownershipType === "Own_Vehicle")
-      .map((v) => ({ value: v.id, label: v.vehicleNumber }));
+      .map((v) => ({
+        value: v.id,
+        label: v.vehicleNumber,
+        currentKM: v.currentKM ?? null,
+      }));
   },
   drivers: async (): Promise<JourneyOption[]> => {
     const res = await api.get<ApiResponse<NamedRow[]>>("/drivers", {
