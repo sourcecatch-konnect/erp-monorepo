@@ -183,11 +183,77 @@ export const tripListRelationSelects = {
   },
 } satisfies Record<string, Prisma.VehicleTripSelect>;
 
+/**
+ * Live LR group shape for the trip detail's cargo card — everything the web
+ * needs to tell the goods' story (branch flow, hub hold, market vehicle, LR
+ * rows with delivery info). Cancelled groups/LRs are excluded, matching the
+ * list's cargo summary.
+ */
+const tripGroupSelect = {
+  where: { deletedAt: null, status: { not: "CANCELLED" } },
+  select: {
+    id: true,
+    groupNumber: true,
+    status: true,
+    transportType: true,
+    priority: true,
+    sealNumber: true,
+    isMarketVehicle: true,
+    marketVehicleNumber: true,
+    marketDriverName: true,
+    tripLegType: true,
+    hubId: true,
+    hubArrivalAt: true,
+    primaryTripId: true,
+    secondaryTripId: true,
+    consignor: { select: { id: true, name: true } },
+    consignee: { select: { id: true, name: true } },
+    originBranch: { select: { id: true, name: true } },
+    destinationBranch: { select: { id: true, name: true } },
+    hub: { select: { id: true, name: true } },
+    lorryReceipts: {
+      where: { deletedAt: null, status: { not: "CANCELLED" } },
+      orderBy: { lrNumber: "asc" as const },
+      select: {
+        id: true,
+        lrNumber: true,
+        status: true,
+        totalWeight: true,
+        unit: true,
+        invoiceNumber: true,
+        delivery: {
+          select: {
+            deliveredAt: true,
+            receiverName: true,
+            receiverPhone: true,
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 /** Fully-hydrated trip for the detail page. */
 export const tripInclude = {
   journey: { select: { id: true, journeyNumber: true, status: true } },
-  vehicle: { select: { id: true, vehicleNumber: true, ownershipType: true } },
-  driver: { select: { id: true, name: true } },
+  vehicle: {
+    select: {
+      id: true,
+      vehicleNumber: true,
+      ownershipType: true,
+      capacityMT: true,
+      bodyType: true,
+    },
+  },
+  driver: {
+    select: {
+      id: true,
+      name: true,
+      mobile: true,
+      licenseNo: true,
+      licenseExpiryDate: true,
+    },
+  },
   route: {
     select: {
       id: true,
@@ -201,6 +267,26 @@ export const tripInclude = {
     orderBy: { changedAt: "asc" as const },
     include: {
       changedBy: { select: { id: true, firstName: true, lastName: true } },
+    },
+  },
+  primaryGroups: tripGroupSelect,
+  secondaryGroups: tripGroupSelect,
+  TripUnloadingPoint: {
+    orderBy: { sequence: "asc" as const },
+    select: {
+      id: true,
+      sequence: true,
+      plannedDate: true,
+      actualDate: true,
+      actualArrivalAt: true,
+      actualUnloadingAt: true,
+      actualDepartureAt: true,
+      receivedQty: true,
+      damageQty: true,
+      shortageQty: true,
+      remarks: true,
+      city: { select: { id: true, name: true } },
+      location: { select: { id: true, name: true } },
     },
   },
 } satisfies Prisma.VehicleTripInclude;

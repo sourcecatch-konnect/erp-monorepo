@@ -39,6 +39,62 @@ export type TripLrSummary = {
   delivered: number;
 };
 
+/** LR row inside a trip detail's cargo card. */
+export type TripLR = {
+  id: string;
+  lrNumber: string;
+  status: "DRAFT" | "FINALISED" | "DELIVERED" | "ACKNOWLEDGED" | "CANCELLED";
+  totalWeight: string | null;
+  unit: string | null;
+  invoiceNumber: string | null;
+  delivery: {
+    deliveredAt: string;
+    receiverName: string | null;
+    receiverPhone: string | null;
+  } | null;
+};
+
+/** Live LR group attached to a trip (trip detail only). */
+export type TripLRGroup = {
+  id: string;
+  groupNumber: string;
+  status: "DRAFT" | "FINALISED" | "DELIVERED" | "CANCELLED";
+  transportType: string;
+  priority: string;
+  sealNumber: string | null;
+  isMarketVehicle: boolean;
+  marketVehicleNumber: string | null;
+  marketDriverName: string | null;
+  tripLegType: string;
+  hubId: string | null;
+  hubArrivalAt: string | null;
+  primaryTripId: string | null;
+  secondaryTripId: string | null;
+  consignor: { id: string; name: string };
+  consignee: { id: string; name: string };
+  originBranch: { id: string; name: string };
+  destinationBranch: { id: string; name: string };
+  hub: { id: string; name: string } | null;
+  lorryReceipts: TripLR[];
+};
+
+/** Unloading stop on a trip (mainly DC/rake trips; trip detail only). */
+export type TripUnloadingPointRow = {
+  id: string;
+  sequence: number;
+  plannedDate: string | null;
+  actualDate: string | null;
+  actualArrivalAt: string | null;
+  actualUnloadingAt: string | null;
+  actualDepartureAt: string | null;
+  receivedQty: number | null;
+  damageQty: number | null;
+  shortageQty: number | null;
+  remarks: string | null;
+  city: { id: string; name: string };
+  location: { id: string; name: string } | null;
+};
+
 type RouteRef = {
   id: string;
   sourceCity?: { id: string; name: string };
@@ -93,11 +149,31 @@ export type Trip = {
    */
   lrSummary?: TripLrSummary;
 
-  vehicle?: { id: string; vehicleNumber: string; ownershipType: string };
-  driver?: { id: string; name: string };
+  vehicle?: {
+    id: string;
+    vehicleNumber: string;
+    ownershipType: string;
+    // Detail include only.
+    capacityMT?: number;
+    bodyType?: string | null;
+  };
+  driver?: {
+    id: string;
+    name: string;
+    // Detail include only.
+    mobile?: string;
+    licenseNo?: string;
+    licenseExpiryDate?: string | null;
+  };
   route?: RouteRef;
   consignor?: { id: string; name: string; shortName: string | null } | null;
   createdBy?: { id: string; firstName: string; lastName: string };
   journey?: { id: string; journeyNumber: string; status: string } | null;
   TripStatusHistory?: TripStatusHistoryRow[];
+
+  // Detail include only: live LR groups riding this trip (leg 1 / leg 2) and
+  // the trip's unloading stops.
+  primaryGroups?: TripLRGroup[];
+  secondaryGroups?: TripLRGroup[];
+  TripUnloadingPoint?: TripUnloadingPointRow[];
 };

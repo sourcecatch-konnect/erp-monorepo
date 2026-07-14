@@ -319,7 +319,12 @@ router.get("/:id", can(PERMS.TRIP.VIEW), async (req, res) => {
     include: tripInclude,
   });
   if (!trip) throw new NotFoundError("Trip not found");
-  return sendOk(res, trip);
+  // Same cargo fields the list rows carry — the detail page gates Close and
+  // renders the cargo chip off them.
+  return sendOk(res, {
+    ...trip,
+    ...summariseTripCargo(trip.primaryGroups, trip.secondaryGroups),
+  });
 });
 
 /* ------------------------------------------------------------------ */
