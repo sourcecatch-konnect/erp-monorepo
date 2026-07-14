@@ -10,6 +10,7 @@ import {
   listBranches,
   listCompanies,
   listEmployees,
+  listRoles,
   resetEmployeePassword,
   setEmployeeStatus,
   updateEmployee,
@@ -29,6 +30,9 @@ export const useBranches = (companyId?: string) =>
     queryFn: () => listBranches(companyId),
     enabled: Boolean(companyId),
   });
+
+export const useRoles = () =>
+  useQuery({ queryKey: ["roles"], queryFn: listRoles });
 
 export const useCreateEmployee = () => {
   const qc = useQueryClient();

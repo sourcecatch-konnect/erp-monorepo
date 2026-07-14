@@ -39,6 +39,7 @@ import {
 import {
   useBranches,
   useCompanies,
+  useRoles,
   useUpdateEmployee,
 } from "../hooks/useEmployees";
 import type { Employee } from "../types";
@@ -48,6 +49,7 @@ type FormValues = {
   middleName: string;
   lastName: string;
   email: string;
+  roleId: string;
   mobile: string;
   companyId: string;
   branchId: string;
@@ -75,6 +77,7 @@ const toFormValues = (employee: Employee): FormValues => ({
   middleName: employee.middleName ?? "",
   lastName: employee.lastName,
   email: employee.email,
+  roleId: employee.roleId,
   mobile: toLocalMobile(employee.mobile),
   companyId: employee.companyId,
   branchId: employee.branchId,
@@ -178,6 +181,7 @@ export function EmployeeDetailDialog({
   const [editing, setEditing] = useState(false);
   const updateMutation = useUpdateEmployee();
   const companies = useCompanies();
+  const roles = useRoles();
   const {
     register,
     handleSubmit,
@@ -220,6 +224,7 @@ export function EmployeeDetailDialog({
         middleName: values.middleName.trim(),
         lastName: values.lastName.trim(),
         email: values.email.trim(),
+        roleId: values.roleId,
         mobile: values.mobile.trim() ? `+91${values.mobile.trim()}` : null,
         companyId: values.companyId,
         branchId: values.branchId,
@@ -361,6 +366,35 @@ export function EmployeeDetailDialog({
 
             <Section title="Assignment" icon={<IconBuilding size={16} />}>
               <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Role</Label>
+                  <Controller
+                    control={control}
+                    name="roleId"
+                    rules={{ required: "Role is required" }}
+                    render={({ field }) => (
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={roles.isLoading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.data?.map((role) => (
+                            <SelectItem key={role.id} value={role.id}>
+                              {role.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  {errors.roleId && (
+                    <p className={fieldError}>{errors.roleId.message}</p>
+                  )}
+                </div>
                 <div className="space-y-1.5">
                   <Label>Company</Label>
                   <Controller

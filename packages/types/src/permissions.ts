@@ -30,6 +30,7 @@ export type MasterSlug =
   | "driver"
   | "labour"
   | "goods"
+  | "unit-of-measure"
   | "pump"
   | "wagon"
   | "railway-freight"
@@ -186,6 +187,7 @@ export const PERMS = {
     DRIVER: masterPerms("driver"),
     LABOUR: masterPerms("labour"),
     GOODS: masterPerms("goods"),
+    UNIT_OF_MEASURE: masterPerms("unit-of-measure"),
     PUMP: masterPerms("pump"),
     WAGON: masterPerms("wagon"),
     RAILWAY_FREIGHT: masterPerms("railway-freight"),

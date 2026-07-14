@@ -16,23 +16,10 @@ import {
 } from "@skerp/ui/components/select";
 import { IconTrash, IconPlus, IconArrowRight } from "@tabler/icons-react";
 
+import { useUnitOfMeasureOptions } from "@/features/masters/unitOfMeasure/useUnitOfMeasureOptions";
+
 type FormValues = CreateOrderFormInput;
 
-const UNIT_OPTIONS: ComboboxOption[] = [
-  { label: "MT", value: "MT" },
-  { label: "Kg", value: "KG" },
-  { label: "Quintal", value: "QUINTAL" },
-
-  { label: "Bags", value: "BAGS" },
-  { label: "Boxes", value: "BOXES" },
-  { label: "Cartons", value: "CARTONS" },
-  { label: "Bundles", value: "BUNDLES" },
-  { label: "Pieces", value: "PIECES" },
-  { label: "Drums", value: "DRUMS" },
-  { label: "Pallets", value: "PALLETS" },
-  { label: "Rolls", value: "ROLLS" },
-  { label: "Coils", value: "COILS" },
-];
 const emptyGoods = () => ({
   goodsId: "",
   quantity: 1,
@@ -80,6 +67,7 @@ export default function ConsignmentLinesEditor({
     control,
     name: "consignments",
   });
+  const units = useUnitOfMeasureOptions();
 
   // After a save attempt, removing a line must re-run the resolver — otherwise
   // the stale error for the removed line lingers in formState.errors.
@@ -128,6 +116,7 @@ export default function ConsignmentLinesEditor({
               goodsOptions={goodsOptions}
               loadingOptions={loadingOptions}
               unloadingOptions={unloadingOptions}
+              unitOptions={units.options}
               consigneeChosen={consigneeChosen}
               truckCount={truckCount}
               onRemove={() => removeLine(index)}
@@ -160,6 +149,7 @@ function ConsignmentLineCard({
   goodsOptions,
   loadingOptions,
   unloadingOptions,
+  unitOptions,
   consigneeChosen,
   truckCount,
   onRemove,
@@ -169,6 +159,7 @@ function ConsignmentLineCard({
   goodsOptions: ComboboxOption[];
   loadingOptions: ComboboxOption[];
   unloadingOptions: ComboboxOption[];
+  unitOptions: ComboboxOption[];
   consigneeChosen: boolean;
   truckCount: number;
   onRemove: () => void;
@@ -441,10 +432,11 @@ function ConsignmentLineCard({
         name={`consignments.${index}.totalWeightUnit`}
         render={({ field: f }) => (
           <Combobox
-            options={UNIT_OPTIONS}
+            options={unitOptions}
             value={typeof f.value === "string" ? f.value : undefined}
             onChange={f.onChange}
             placeholder="Unit"
+            emptyText="No units found"
             invalid={Boolean(lineErr?.totalWeightUnit)}
           />
         )}

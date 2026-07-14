@@ -28,6 +28,7 @@ export type CreateEmployeeInput = {
   password: string;
   companyId: string;
   branchId: string;
+  roleId: string;
 };
 
 export type UpdateEmployeeInput = {
@@ -35,6 +36,7 @@ export type UpdateEmployeeInput = {
   middleName?: string;
   lastName?: string;
   email?: string;
+  roleId?: string;
   mobile?: string | null;
   companyId?: string;
   branchId?: string;
@@ -44,6 +46,7 @@ export type UpdateEmployeeInput = {
 
 export type Company = { id: string; name: string };
 export type Branch = { id: string; name: string; companyId: string };
+export type RoleOption = { id: string; name: string; isSystem: boolean };
 
 /** Server response for create / password-reset. */
 export type EmployeeMutationResult = {

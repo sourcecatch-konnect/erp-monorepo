@@ -30,6 +30,7 @@ export const createEmployeeSchema = z.object({
   password: employeePasswordSchema,
   companyId: z.string().min(1, "Company is required"),
   branchId: z.string().min(1, "Branch is required"),
+  roleId: z.string().min(1, "Role is required"),
 });
 
 export const updateEmployeeSchema = z.object({
@@ -37,6 +38,7 @@ export const updateEmployeeSchema = z.object({
   middleName: z.string().optional(),
   lastName: z.string().min(1).optional(),
   email: z.string().email("Invalid email format").optional(),
+  roleId: z.string().min(1, "Role is required").optional(),
   mobile: z
     .string()
     .trim()
@@ -81,6 +83,7 @@ export * from "./master/route.schema.js";
 export * from "./master/warehouse.schema.js"
 export * from "./master/customer.schema.js"
 export * from "./master/goods.schema.js"
+export * from "./master/unit-of-measure.schema.js"
 export * from "./master/labour.schema.js"
 export * from "./master/pump.schema.js"
 export * from "./master/wagon.schema.js"

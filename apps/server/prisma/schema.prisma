@@ -2370,9 +2370,6 @@ model UnitOfMeasure {
   code             String       @unique
   name             String
   category         UnitCategory
-  conversionToBase Decimal?     @db.Decimal(14, 6)
-  baseUnitCode     String?
-  description      String?
   isActive         Boolean      @default(true)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt

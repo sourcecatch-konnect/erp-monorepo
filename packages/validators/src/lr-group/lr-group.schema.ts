@@ -3,7 +3,6 @@ import {
   lrTransportTypeSchema,
   lrTripLegTypeSchema,
   lrPrioritySchema,
-  ewayBillSchema,
 } from "../lorry-receipt/lorry-receipt.schema.js";
 import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
 
@@ -284,28 +283,9 @@ export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
 /* DRAFT -> FINALISED together (all-or-nothing).                       */
 /* ------------------------------------------------------------------ */
 
-export const finaliseGroupLineSchema = z
-  .object({
-    lrId: requiredId("Lorry receipt"),
-    invoiceNumber: optionalString,
-    // Entered in rupees, stored as paise.
-    invoiceAmount: optionalRupeesToPaise("Invoice amount"),
-    existingEwayBillId: optionalId,
-    ewayBill: ewayBillSchema.optional(),
-  })
-  .superRefine((line, ctx) => {
-    const hasExisting = Boolean(line.existingEwayBillId);
-    const hasNew = Boolean(line.ewayBill);
-
-    if (hasExisting === hasNew) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["ewayBill"],
-        message: "Provide exactly one e-way bill for this LR",
-      });
-    }
-  });
-
+export const finaliseGroupLineSchema = z.object({
+  lrId: requiredId("Lorry receipt"),
+});
 export const finaliseGroupSchema = z.object({
   baseFreightAmount: rupeesToPaise("Base freight amount"),
   sealNumber: optionalString,

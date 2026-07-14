@@ -28,7 +28,7 @@ export default function LRListPage() {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
   const debouncedSearch = useDebouncedValue(search);
-  const size = 25;
+  const size = 10;
 
   const [cancelGroup, setCancelGroup] = React.useState<LRGroupListItem | null>(null);
   const [orderPickerOpen, setOrderPickerOpen] = React.useState(false);

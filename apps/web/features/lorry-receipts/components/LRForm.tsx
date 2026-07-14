@@ -44,6 +44,7 @@ import {
 import FormSection from "@/features/masters/_shared/fields/FormSection";
 import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
+import { useUnitOfMeasureOptions } from "@/features/masters/unitOfMeasure/useUnitOfMeasureOptions";
 
 import { lrGroupApi } from "../lr-group.service";
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
@@ -91,21 +92,6 @@ const PRIORITY_OPTIONS = [
   { value: "Normal", label: "Normal" },
   { value: "Express", label: "Express" },
   { value: "Critical", label: "Critical" },
-] as const;
-
-const UNIT_OPTIONS = [
-  { value: "MT", label: "MT" },
-  { value: "KG", label: "Kg" },
-  { value: "QUINTAL", label: "Quintal" },
-  { value: "BAGS", label: "Bags" },
-  { value: "BOXES", label: "Boxes" },
-  { value: "CARTONS", label: "Cartons" },
-  { value: "BUNDLES", label: "Bundles" },
-  { value: "PIECES", label: "Pieces" },
-  { value: "DRUMS", label: "Drums" },
-  { value: "PALLETS", label: "Pallets" },
-  { value: "ROLLS", label: "Rolls" },
-  { value: "COILS", label: "Coils" },
 ] as const;
 
 function ReadOnlyAmount({
@@ -174,6 +160,7 @@ function InstantLRLineCard({
   totalLines,
   loadingOptions,
   unloadingOptions,
+  unitOptions,
   goodsSuggestions,
   watchConsignor,
   watchConsignee,
@@ -184,6 +171,7 @@ function InstantLRLineCard({
   totalLines: number;
   loadingOptions: { value: string; label: string }[];
   unloadingOptions: { value: string; label: string }[];
+  unitOptions: { value: string; label: string }[];
   goodsSuggestions: { value: string; hint?: string }[];
   watchConsignor: unknown;
   watchConsignee: unknown;
@@ -377,7 +365,7 @@ function InstantLRLineCard({
               <SelectValue placeholder="Unit" />
             </SelectTrigger>
             <SelectContent>
-              {UNIT_OPTIONS.map((o) => (
+              {unitOptions.map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>
@@ -438,6 +426,7 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryKey: lrLookupKeys.goods,
     queryFn: lrLookups.goods,
   });
+  const units = useUnitOfMeasureOptions();
 
   // FROM_ORDER: the order's context (parties, route, freight, consignment lines
   // per truck) and the groups already created against it — so we offer only
@@ -1072,6 +1061,7 @@ export default function LRForm({ orderId, tripId }: Props) {
                       totalLines={fields.length}
                       loadingOptions={loadingOptions}
                       unloadingOptions={unloadingOptions}
+                      unitOptions={units.options}
                       goodsSuggestions={goodsSuggestions}
                       watchConsignor={watchConsignor}
                       watchConsignee={watchConsignee}
