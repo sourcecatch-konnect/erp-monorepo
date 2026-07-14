@@ -8,15 +8,6 @@ export const UnitCategoryEnum = z.enum([
   "VOLUME",
 ]);
 
-const optionalText = z.preprocess(
-  (value) => (value === "" ? undefined : value),
-  z.string().trim().optional(),
-);
-
-const optionalDecimal = z.preprocess(
-  (value) => (value === "" || value == null ? undefined : value),
-  z.coerce.number().positive("Conversion factor must be greater than 0").optional(),
-);
 
 export const unitOfMeasureSchema = z.object({
   id: z.string(),

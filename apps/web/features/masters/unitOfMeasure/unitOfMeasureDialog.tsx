@@ -35,8 +35,7 @@ const categoryLabel = (value?: string) =>
         .join(" ")
     : "-";
 
-const text = (value: unknown) =>
-  value == null || value === "" ? "-" : String(value);
+
 
 export default function UnitOfMeasureDetailDialog({
   open,

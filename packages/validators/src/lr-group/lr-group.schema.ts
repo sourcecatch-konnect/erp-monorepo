@@ -3,7 +3,6 @@ import {
   lrTransportTypeSchema,
   lrTripLegTypeSchema,
   lrPrioritySchema,
-  ewayBillSchema,
 } from "../lorry-receipt/lorry-receipt.schema.js";
 import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
 

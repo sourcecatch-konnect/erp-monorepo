@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
+import {  useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { finaliseGroupSchema } from "@skerp/validators/lr-group";
 import type { EwayBill,  FinaliseGroupFormInput, FinaliseGroupBody} from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
-import { DatePicker } from "@skerp/ui/components/datepicker";
+
 import {
   Sheet,
   SheetContent,
@@ -75,20 +75,6 @@ type Props = {
   onConfirm: (data: FinaliseGroupFormInput) => void;
 };
 
-const emptyDate = "" as unknown as Date;
-
-const blankEwayBill = () => ({
-  ewayBillNo: "",
-  generatedAt: emptyDate,
-  expiresAt: emptyDate,
-  generatedBy: "",
-  documentUrl: "",
-});
-
-
-
-const toRupeesInput = (paise?: number | null) =>
-  paise != null ? (paise / 100).toString() : "";
 
 function buildRows(lrs: LrRow[]) {
   return lrs.map((lr) => ({
