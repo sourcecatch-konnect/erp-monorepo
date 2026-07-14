@@ -83,6 +83,7 @@ export * from "./master/route.schema.js";
 export * from "./master/warehouse.schema.js"
 export * from "./master/customer.schema.js"
 export * from "./master/goods.schema.js"
+export * from "./master/unit-of-measure.schema.js"
 export * from "./master/labour.schema.js"
 export * from "./master/pump.schema.js"
 export * from "./master/wagon.schema.js"

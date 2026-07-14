@@ -18,6 +18,7 @@ import {
 
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
 import { SuggestInput } from "@skerp/ui/components/suggest-input";
+import { useUnitOfMeasureOptions } from "@/features/masters/unitOfMeasure/useUnitOfMeasureOptions";
 
 export type LinePayload = {
   loadingLocationId?: string;
@@ -83,20 +84,7 @@ export default function LRLineDialog({
     queryFn: () => lrLookups.customerLocations(consigneeId),
     enabled: open && Boolean(consigneeId),
   });
-const UNIT_OPTIONS = [
-  { label: "MT", value: "MT" },
-  { label: "Kg", value: "KG" },
-  { label: "Quintal", value: "QUINTAL" },
-  { label: "Bags", value: "BAGS" },
-  { label: "Boxes", value: "BOXES" },
-  { label: "Cartons", value: "CARTONS" },
-  { label: "Bundles", value: "BUNDLES" },
-  { label: "Pieces", value: "PIECES" },
-  { label: "Drums", value: "DRUMS" },
-  { label: "Pallets", value: "PALLETS" },
-  { label: "Rolls", value: "ROLLS" },
-  { label: "Coils", value: "COILS" },
-];
+  const units = useUnitOfMeasureOptions(open);
   const form = useForm<FormShape>({
     defaultValues: {
   loadingLocationId: undefined,
@@ -374,10 +362,11 @@ invoiceAmount: mode === "edit" ? invoiceAmount : undefined,
       name="totalWeightUnit"
       render={({ field }) => (
         <Combobox
-          options={UNIT_OPTIONS}
+          options={units.options}
           value={field.value}
           onChange={field.onChange}
-          placeholder="Unit"
+          placeholder={units.isLoading ? "Loading..." : "Unit"}
+          emptyText="No units found"
         />
       )}
     />
