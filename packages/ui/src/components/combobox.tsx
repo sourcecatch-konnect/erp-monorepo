@@ -21,6 +21,7 @@ export type ComboboxOption = {
   hint?: string;
   badge?: string;
   badgeTone?: "success" | "info" | "warning" | "danger";
+  disabled?: boolean;
 };
 
 const badgeToneClasses: Record<
@@ -135,10 +136,13 @@ export function Combobox({
                   className={cn(
                     option.value === value &&
                       "bg-blue-50 border-blue-400 border rounded-md shadow-xs",
+                    option.disabled && "cursor-not-allowed opacity-55",
                   )}
                   key={option.value}
                   value={option.label}
+                  disabled={option.disabled}
                   onSelect={() => {
+                    if (option.disabled) return;
                     onChange(option.value);
                     setOpen(false);
                   }}

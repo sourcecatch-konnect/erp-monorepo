@@ -250,3 +250,47 @@ export type ActiveJourneyInfo = {
     } | null;
   } | null;
 };
+
+/** Contextual eligibility shown by the vehicle picker when creating a trip. */
+export type TripVehicleSelectionState =
+  | "AVAILABLE_FOR_NEW_JOURNEY"
+  | "READY_FOR_NEXT_TRIP"
+  | "TRIP_PLANNED"
+  | "IN_TRANSIT"
+  | "INSURANCE_EXPIRED"
+  | "UNAVAILABLE";
+
+export type TripVehicleChoice = {
+  id: string;
+  vehicleNumber: string;
+  status: "AVAILABLE" | "ON_TRIP";
+  selectionState: TripVehicleSelectionState;
+  selectable: boolean;
+  currentCityName: string | null;
+  journeyNumber: string | null;
+  lastTripNumber: string | null;
+  lastTripSequenceNo: number | null;
+};
+
+export type TripDriverSelectionState =
+  | "AVAILABLE_FOR_NEW_JOURNEY"
+  | "ASSIGNED_READY_FOR_NEXT_TRIP"
+  | "TRIP_PLANNED"
+  | "IN_TRANSIT"
+  | "ON_LEAVE"
+  | "BLACKLISTED"
+  | "UNAVAILABLE";
+
+export type TripDriverChoice = {
+  id: string;
+  name: string;
+  status: "AVAILABLE" | "ON_TRIP";
+  selectionState: TripDriverSelectionState;
+  selectable: boolean;
+  vehicleId: string | null;
+  currentCityName: string | null;
+  journeyNumber: string | null;
+  vehicleNumber: string | null;
+  lastTripNumber: string | null;
+  lastTripSequenceNo: number | null;
+};

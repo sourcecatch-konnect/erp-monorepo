@@ -32,8 +32,7 @@ export default function CreateTripDialog({
         <DialogHeader>
           <DialogTitle>Create Trip</DialogTitle>
           <DialogDescription>
-            Save a trip here and it will be selected automatically once
-            created.
+            Save a trip here and it will be selected automatically once created.
           </DialogDescription>
         </DialogHeader>
         {open ? (
