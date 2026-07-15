@@ -2,30 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { motion } from "motion/react";
 import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  restrictToParentElement,
-  restrictToVerticalAxis,
-} from "@dnd-kit/modifiers";
-import {
-  Column,
   ColumnDef,
   VisibilityState,
   flexRender,
@@ -42,7 +19,6 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   Select,
@@ -59,38 +35,18 @@ import {
   DropdownMenuTrigger,
 } from "@skerp/ui/components/dropdown";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@skerp/ui/components/popver";
-import { Checkbox } from "@skerp/ui/components/checkbox";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@skerp/ui/components/pagination";
-import {
-  IconArrowsSort,
   IconBan,
   IconBuilding,
   IconCalendar,
   IconCircleCheck,
-  IconColumns3,
   IconCurrencyRupee,
-  IconDatabaseOff,
   IconDotsVertical,
   IconDownload,
   IconEdit,
   IconFileDescription,
-  IconGripVertical,
   IconMapPin,
   IconPlayerPlay,
-  IconPlus,
   IconRoute,
-  IconSortAscending,
-  IconSortDescending,
   IconTag,
   IconTrash,
   IconTruck,
@@ -100,6 +56,18 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
+import {
+  ColumnPickerPopover,
+  PIN_CELL_BG,
+  PIN_HEAD_BG,
+  SortHeader,
+  StatusTabs,
+  TableEmptyState,
+  TablePaginationFooter,
+  TableSearchInput,
+  pinStyle,
+  type ColumnMeta,
+} from "@/components/data-table";
 import {
   ClientCell,
   DriverLine,
@@ -178,11 +146,7 @@ export const DEFAULT_TRIP_COLUMN_ORDER = [
   "date",
 ] as const;
 
-/** Label + icon per reorderable column for the picker panel. */
-const COLUMN_META: Record<
-  string,
-  { label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
-> = {
+const COLUMN_META: ColumnMeta = {
   trip: { label: "Trip", icon: IconFileDescription },
   journey: { label: "Journey", icon: IconRoute },
   vehicle: { label: "Vehicle / Driver", icon: IconTruck },
@@ -192,127 +156,6 @@ const COLUMN_META: Record<
   freight: { label: "Freight", icon: IconCurrencyRupee },
   date: { label: "Date", icon: IconCalendar },
 };
-
-/** One draggable row of the column picker: grab handle, checkbox, icon, label. */
-function SortableColumnRow({
-  id,
-  label,
-  icon: Icon,
-  checked,
-  onCheckedChange,
-}: {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  checked: boolean;
-  onCheckedChange: (visible: boolean) => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "flex items-center gap-2 rounded-sm px-1 py-1",
-        isDragging && "relative z-10 bg-muted",
-      )}
-    >
-      <button
-        type="button"
-        aria-label={`Reorder ${label} column`}
-        {...attributes}
-        {...listeners}
-        className="cursor-grab touch-none text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
-      >
-        <IconGripVertical size={14} />
-      </button>
-      <Checkbox
-        id={`trip-col-${id}`}
-        checked={checked}
-        onCheckedChange={(value) => onCheckedChange(value === true)}
-      />
-      <label
-        htmlFor={`trip-col-${id}`}
-        className="flex flex-1 cursor-pointer items-center gap-1.5 text-sm"
-      >
-        <Icon size={14} className="text-muted-foreground" />
-        {label}
-      </label>
-    </div>
-  );
-}
-
-/**
- * Right-pinned cells sit over scrolled content, so they need an opaque
- * background. Hover/header tints elsewhere are translucent over `bg-card`,
- * so the pinned equivalents pre-mix the same tint with the card color.
- */
-const PIN_HEAD_BG = "bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]";
-const PIN_CELL_BG =
-  "bg-card group-hover/row:bg-[color-mix(in_oklab,var(--muted)_50%,var(--card))]";
-
-const pinStyle = (
-  column: Column<Trip, unknown>,
-): React.CSSProperties | undefined =>
-  column.getIsPinned() === "right"
-    ? {
-        right: column.getAfter("right"),
-        width: column.getSize(),
-        minWidth: column.getSize(),
-      }
-    : undefined;
-
-function SortHeader({
-  label,
-  field,
-  sort,
-  onSortChange,
-}: {
-  label: string;
-  field: string;
-  sort: string;
-  onSortChange: (value: string) => void;
-}) {
-  const [activeField, direction] = sort.split(":");
-  const active = activeField === field;
-  const Icon = active
-    ? direction === "asc"
-      ? IconSortAscending
-      : IconSortDescending
-    : IconArrowsSort;
-  return (
-    <button
-      type="button"
-      onClick={() =>
-        onSortChange(
-          active
-            ? `${field}:${direction === "desc" ? "asc" : "desc"}`
-            : `${field}:desc`,
-        )
-      }
-      className={cn(
-        "inline-flex cursor-pointer items-center gap-1 uppercase transition-colors hover:text-foreground",
-        active && "text-foreground",
-      )}
-    >
-      {label}
-      <Icon size={13} className={active ? undefined : "opacity-50"} />
-    </button>
-  );
-}
 
 const SKELETON_WIDTHS: Record<string, string> = {
   trip: "w-32",
@@ -364,28 +207,6 @@ export default function TripTable(props: Props) {
     onDownloadPdf,
     onRowClick,
   } = props;
-
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const isCtrlF = event.ctrlKey && event.key.toLowerCase() === "f";
-      const isMetaF = event.metaKey && event.key.toLowerCase() === "f";
-
-      if (!isCtrlF && !isMetaF) return;
-
-      event.preventDefault();
-
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
 
   const columns = React.useMemo<ColumnDef<Trip>[]>(
     () => [
@@ -697,95 +518,24 @@ export default function TripTable(props: Props) {
     },
   });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-
-  const handleColumnDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = columnOrder.indexOf(String(active.id));
-    const newIndex = columnOrder.indexOf(String(over.id));
-    if (oldIndex < 0 || newIndex < 0) return;
-    onColumnOrderChange(arrayMove(columnOrder, oldIndex, newIndex));
-  };
-
-  const resetColumns = () => {
-    onColumnOrderChange([...DEFAULT_TRIP_COLUMN_ORDER]);
-    onColumnVisibilityChange({});
-  };
-
   const visibleColumnCount = table.getVisibleLeafColumns().length;
-  const pageCount = Math.max(1, Math.ceil(total / size));
-  const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
   return (
     <div className="w-full space-y-3">
-      {/* Status tabs — Notion-style underline with a shared sliding indicator */}
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border">
-        {TRIP_STATUS_ORDER.map((tab) => {
-          const active = statusFilter === tab.key;
-          const count = counts[tab.key];
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => onStatusFilterChange(tab.key)}
-              className={cn(
-                "relative flex cursor-pointer items-center gap-1.5 rounded-t-sm px-3 py-2 text-sm transition-colors",
-                active
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <Icon
-                size={15}
-                className={active ? "text-primary" : undefined}
-              />
-              {tab.label}
-              {typeof count === "number" ? (
-                <span
-                  className={cn(
-                    "rounded-sm px-1 text-xs tabular-nums",
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {count}
-                </span>
-              ) : null}
-              {active ? (
-                <motion.span
-                  layoutId="trips-status-tab"
-                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary"
-                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <StatusTabs
+        tabs={TRIP_STATUS_ORDER}
+        active={statusFilter}
+        onChange={onStatusFilterChange}
+        counts={counts}
+        layoutId="trips-status-tab"
+      />
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:max-w-sm">
-          <Input
-            ref={searchInputRef}
-            placeholder="Search trip no. or vehicle no..."
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pr-16"
-          />
-          <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
-            <span>Ctrl</span>
-            <IconPlus size={10} />
-            <span>F</span>
-          </kbd>
-        </div>
+        <TableSearchInput
+          value={search}
+          onChange={onSearchChange}
+          placeholder="Search trip no. or vehicle no..."
+        />
 
         <Select value={typeFilter} onValueChange={onTypeFilterChange}>
           <SelectTrigger className="h-9 w-[150px]">
@@ -798,58 +548,14 @@ export default function TripTable(props: Props) {
           </SelectContent>
         </Select>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="ml-auto h-9">
-              <IconColumns3 size={16} className="mr-1" /> Columns
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-60 p-2">
-            <div className="mb-1 flex items-center justify-between px-1">
-              <span className="text-xs font-medium text-muted-foreground">
-                Show & order columns
-              </span>
-              <button
-                type="button"
-                onClick={resetColumns}
-                className="cursor-pointer text-xs text-primary transition-colors hover:underline"
-              >
-                Reset
-              </button>
-            </div>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-              onDragEnd={handleColumnDragEnd}
-            >
-              <SortableContext
-                items={columnOrder}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-0.5">
-                  {columnOrder.map((id) => {
-                    const meta = COLUMN_META[id];
-                    if (!meta) return null;
-                    const col = table.getColumn(id);
-                    return (
-                      <SortableColumnRow
-                        key={id}
-                        id={id}
-                        label={meta.label}
-                        icon={meta.icon}
-                        checked={col?.getIsVisible() ?? true}
-                        onCheckedChange={(visible) =>
-                          col?.toggleVisibility(visible)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
-          </PopoverContent>
-        </Popover>
+        <ColumnPickerPopover
+          columnOrder={columnOrder}
+          onColumnOrderChange={onColumnOrderChange}
+          columnVisibility={columnVisibility}
+          onColumnVisibilityChange={onColumnVisibilityChange}
+          columnMeta={COLUMN_META}
+          defaultOrder={DEFAULT_TRIP_COLUMN_ORDER}
+        />
       </div>
 
       <Table className="bg-card">
@@ -904,19 +610,10 @@ export default function TripTable(props: Props) {
               </TableRow>
             ))
           ) : data.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={visibleColumnCount}
-                className="py-14 text-center text-muted-foreground"
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-                    <IconDatabaseOff size={18} />
-                  </div>
-                  <span className="text-sm font-medium">No trips found</span>
-                </div>
-              </TableCell>
-            </TableRow>
+            <TableEmptyState
+              colSpan={visibleColumnCount}
+              message="No trips found"
+            />
           ) : (
             table.getRowModel().rows.map((row) => (
               <TableRow
@@ -950,68 +647,13 @@ export default function TripTable(props: Props) {
         </TableBody>
       </Table>
 
-      <div className="flex flex-col gap-3 border-t px-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <span>
-            {total === 0
-              ? "Showing 0"
-              : `Showing ${page * size + 1}-${Math.min((page + 1) * size, total)}`}{" "}
-            of {total}
-          </span>
-
-          <div className="flex items-center gap-2">
-            <span>Rows per page</span>
-            <Select
-              value={String(size)}
-              onValueChange={(v) => onSizeChange(Number(v))}
-            >
-              <SelectTrigger size="sm" className="h-8 w-[72px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_SIZE_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={String(option)}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <span>
-            Page {page + 1} of {pageCount}
-          </span>
-        </div>
-
-        <Pagination className="mx-0 w-auto">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                href="#"
-                aria-disabled={page === 0}
-                className={page === 0 ? "pointer-events-none opacity-50" : ""}
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (page > 0) onPageChange(page - 1);
-                }}
-              />
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationNext
-                href="#"
-                aria-disabled={page + 1 >= pageCount}
-                className={
-                  page + 1 >= pageCount ? "pointer-events-none opacity-50" : ""
-                }
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (page + 1 < pageCount) onPageChange(page + 1);
-                }}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </div>
+      <TablePaginationFooter
+        total={total}
+        page={page}
+        size={size}
+        onPageChange={onPageChange}
+        onSizeChange={onSizeChange}
+      />
     </div>
   );
 }

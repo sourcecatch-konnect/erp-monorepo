@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ColumnDef,
+  VisibilityState,
   flexRender,
   getCoreRowModel,
   useReactTable,
@@ -18,33 +19,48 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@skerp/ui/components/dropdown";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@skerp/ui/components/pagination";
-import {
-  IconEye,
-  IconDotsVertical,
+  IconAlertTriangle,
   IconBan,
-  IconDatabaseOff,
+  IconBuilding,
+  IconBuildingStore,
+  IconCalendar,
   IconChevronDown,
   IconChevronRight,
-  IconAlertTriangle,
+  IconCurrencyRupee,
+  IconDotsVertical,
+  IconEye,
+  IconFileDescription,
+  IconFlag,
+  IconHash,
+  IconMapPin,
+  IconTag,
+  IconTruck,
 } from "@tabler/icons-react";
 
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
+import {
+  ColumnPickerPopover,
+  PIN_CELL_BG,
+  PIN_HEAD_BG,
+  SortHeader,
+  StatusTabs,
+  TableEmptyState,
+  TablePaginationFooter,
+  TableSearchInput,
+  pinStyle,
+  type ColumnMeta,
+} from "@/components/data-table";
 import {
   LRStatusBadge,
   SOURCE_LABELS,
@@ -57,15 +73,166 @@ type Props = {
   page: number;
   size: number;
   onPageChange: (page: number) => void;
+  onSizeChange: (size: number) => void;
   search: string;
   onSearchChange: (value: string) => void;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
+  sort: string;
+  onSortChange: (value: string) => void;
+  columnVisibility: VisibilityState;
+  onColumnVisibilityChange: React.Dispatch<
+    React.SetStateAction<VisibilityState>
+  >;
+  columnOrder: string[];
+  onColumnOrderChange: (order: string[]) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
   canCancel: boolean;
   onCancel: (group: LRGroupListItem) => void;
+  onRowClick: (group: LRGroupListItem) => void;
 };
+
+/**
+ * The reorderable columns, in default order. Expand stays pinned first,
+ * Status/Actions stay pinned right — outside the user's control.
+ */
+export const DEFAULT_LR_COLUMN_ORDER = [
+  "group",
+  "consignor",
+  "consignee",
+  "origin",
+  "destination",
+  "vehicle",
+  "lrs",
+  "freight",
+  "source",
+  "date",
+] as const;
+
+const COLUMN_META: ColumnMeta = {
+  group: { label: "Group #", icon: IconHash },
+  consignor: { label: "Consignor", icon: IconBuilding },
+  consignee: { label: "Consignee", icon: IconBuildingStore },
+  origin: { label: "Origin", icon: IconMapPin },
+  destination: { label: "Destination", icon: IconFlag },
+  vehicle: { label: "Vehicle", icon: IconTruck },
+  lrs: { label: "LRs", icon: IconFileDescription },
+  freight: { label: "Freight", icon: IconCurrencyRupee },
+  source: { label: "Source", icon: IconTag },
+  date: { label: "Date", icon: IconCalendar },
+};
+
+const SKELETON_WIDTHS: Record<string, string> = {
+  expand: "w-4",
+  group: "w-28",
+  consignor: "w-28",
+  consignee: "w-28",
+  origin: "w-20",
+  destination: "w-20",
+  vehicle: "w-24",
+  lrs: "w-10",
+  freight: "ml-auto w-16",
+  source: "w-16",
+  date: "w-20",
+  status: "w-20",
+  actions: "ml-auto w-8",
+};
+
+/** Nested per-LR breakdown shown when a group row is expanded. */
+function LRChildRows({ group }: { group: LRGroupListItem }) {
+  const childRows = group.lorryReceipts ?? [];
+  return (
+    <div className="px-4 py-3">
+      <Table className="min-w-[720px] bg-background">
+        <TableHeader>
+          <TableRow>
+            {["LR #", "Route", "Goods", "Invoice", "E-way bill", "Status"].map(
+              (label) => (
+                <TableHead
+                  key={label}
+                  className="h-9 text-xs font-semibold uppercase text-muted-foreground"
+                >
+                  {label}
+                </TableHead>
+              ),
+            )}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {childRows.map((lr) => (
+            <TableRow key={lr.id}>
+              <TableCell className="font-medium text-primary">
+                <Link
+                  href={`/lorry-receipts/${encodeURIComponent(group.groupNumber)}`}
+                  className="hover:underline"
+                >
+                  {lr.lrNumber}
+                </Link>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                <div className="flex flex-col gap-1">
+                  <span>
+                    {lr.loadingLocation?.name ?? "-"} -&gt;{" "}
+                    {lr.unloadingLocation?.name ?? "-"}
+                  </span>
+                  {(!lr.loadingLocation || !lr.unloadingLocation) && (
+                    <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      <IconAlertTriangle size={13} />
+                      Location pending
+                    </span>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                {(lr.goods?.length ?? 0) > 0 ? (
+                  <span className="text-muted-foreground">
+                    {lr.goods?.length} row
+                    {lr.goods?.length === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    <IconAlertTriangle size={13} />
+                    Goods not added
+                  </span>
+                )}
+              </TableCell>
+              <TableCell>
+                {lr.invoiceNumber ? (
+                  <div>
+                    <p>{lr.invoiceNumber}</p>
+                    {lr.invoiceAmount != null ? (
+                      <p className="text-xs text-muted-foreground">
+                        {formatPaise(lr.invoiceAmount)}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {lr.ewayBill ? (
+                  <div>
+                    <p>{lr.ewayBill.ewayBillNo}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Expires {formatDate(lr.ewayBill.expiresAt)}
+                    </p>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <LRStatusBadge status={lr.status} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 export default function LRTable(props: Props) {
   const {
@@ -74,14 +241,22 @@ export default function LRTable(props: Props) {
     page,
     size,
     onPageChange,
+    onSizeChange,
     search,
     onSearchChange,
     statusFilter,
     onStatusFilterChange,
+    sort,
+    onSortChange,
+    columnVisibility,
+    onColumnVisibilityChange,
+    columnOrder,
+    onColumnOrderChange,
     counts,
     isLoading,
     canCancel,
     onCancel,
+    onRowClick,
   } = props;
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
 
@@ -90,6 +265,8 @@ export default function LRTable(props: Props) {
       {
         id: "expand",
         header: "",
+        size: 36,
+        enableHiding: false,
         cell: ({ row }) => {
           const lrs = row.original.lorryReceipts ?? [];
           const isExpanded = Boolean(expanded[row.original.id]);
@@ -99,12 +276,13 @@ export default function LRTable(props: Props) {
               variant="ghost"
               aria-label={isExpanded ? "Collapse LRs" : "Expand LRs"}
               disabled={lrs.length === 0}
-              onClick={() =>
+              onClick={(e) => {
+                e.stopPropagation();
                 setExpanded((current) => ({
                   ...current,
                   [row.original.id]: !current[row.original.id],
-                }))
-              }
+                }));
+              }}
             >
               {isExpanded ? (
                 <IconChevronDown size={16} />
@@ -116,43 +294,69 @@ export default function LRTable(props: Props) {
         },
       },
       {
+        id: "group",
         header: "Group #",
         cell: ({ row }) => (
           <Link
             href={`/lorry-receipts/${encodeURIComponent(row.original.groupNumber)}`}
             className="block"
+            onClick={(e) => e.stopPropagation()}
           >
-            <span className="font-medium text-primary hover:underline">
+            <span className="block font-medium text-primary hover:underline">
               {row.original.groupNumber}
+            </span>
+            <span className="block font-mono text-xs text-muted-foreground">
+              {row.original.fyCode}
             </span>
           </Link>
         ),
       },
       {
+        id: "consignor",
         header: "Consignor",
         cell: ({ row }) => row.original.consignor?.name ?? "—",
       },
       {
+        id: "consignee",
         header: "Consignee",
         cell: ({ row }) => row.original.consignee?.name ?? "—",
       },
       {
+        id: "origin",
         header: "Origin",
         cell: ({ row }) => row.original.originBranch?.name ?? "—",
       },
       {
+        id: "destination",
         header: "Destination",
         cell: ({ row }) => row.original.destinationBranch?.name ?? "—",
       },
       {
+        id: "vehicle",
         header: "Vehicle",
         cell: ({ row }) => {
           const g = row.original;
-          if (g.isMarketVehicle) return g.marketVehicleNumber ?? "—";
-          return g.primaryTrip?.vehicle?.vehicleNumber ?? "—";
+          const number = g.isMarketVehicle
+            ? g.marketVehicleNumber
+            : g.primaryTrip?.vehicle?.vehicleNumber;
+          const driver = g.isMarketVehicle
+            ? g.marketDriverName
+            : g.primaryTrip?.driver?.name;
+          if (!number) return <span className="text-muted-foreground">—</span>;
+          return (
+            <div>
+              <span className="block">{number}</span>
+              {driver ? (
+                <span className="block text-xs text-muted-foreground">
+                  {driver}
+                </span>
+              ) : null}
+            </div>
+          );
         },
       },
       {
+        id: "lrs",
         header: "LRs",
         cell: ({ row }) => {
           const hasIncompleteLr = (row.original.lorryReceipts ?? []).some(
@@ -174,332 +378,251 @@ export default function LRTable(props: Props) {
         },
       },
       {
-        header: "Freight",
-        cell: ({ row }) =>
-          row.original.baseFreightAmount != null
-            ? formatPaise(row.original.baseFreightAmount)
-            : "—",
+        id: "freight",
+        header: () => (
+          <SortHeader
+            label="Freight"
+            field="baseFreightAmount"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
+        ),
+        cell: ({ row }) => (
+          <div className="text-right font-medium tabular-nums">
+            {row.original.baseFreightAmount != null ? (
+              formatPaise(row.original.baseFreightAmount)
+            ) : (
+              <span className="font-normal text-muted-foreground">—</span>
+            )}
+          </div>
+        ),
       },
       {
+        id: "source",
         header: "Source",
         cell: ({ row }) => SOURCE_LABELS[row.original.source],
       },
       {
+        id: "date",
+        header: () => (
+          <SortHeader
+            label="Date"
+            field="createdAt"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
+        ),
+        cell: ({ row }) => formatDate(row.original.createdAt),
+      },
+      {
+        id: "status",
         header: "Status",
+        size: 128,
+        enableHiding: false,
         cell: ({ row }) => <LRStatusBadge status={row.original.status} />,
       },
+      {
+        id: "actions",
+        header: () => <span className="block text-right">Actions</span>,
+        size: 72,
+        enableHiding: false,
+        cell: ({ row }) => {
+          const g = row.original;
+          const cancellable = canCancel && g.status === "DRAFT";
+          return (
+            <div
+              className="flex items-center justify-end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon-sm" variant="ghost" aria-label="Row actions">
+                    <IconDotsVertical size={16} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}
+                    >
+                      <IconEye size={16} className="mr-2" /> View group
+                    </Link>
+                  </DropdownMenuItem>
+                  {cancellable ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => onCancel(g)}
+                      >
+                        <IconBan size={16} className="mr-2" /> Cancel
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        },
+      },
     ],
-    [expanded],
+    [expanded, sort, onSortChange, canCancel, onCancel],
+  );
+
+  // Pinned columns keep their slots regardless of the user's order.
+  const tableColumnOrder = React.useMemo(
+    () => ["expand", ...columnOrder, "status", "actions"],
+    [columnOrder],
   );
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    onColumnVisibilityChange,
+    state: {
+      columnPinning: { right: ["status", "actions"] },
+      columnVisibility,
+      columnOrder: tableColumnOrder,
+    },
   });
-  const pageCount = Math.max(1, Math.ceil(total / size));
+
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
 
   return (
     <div className="w-full space-y-3">
-      <div className="flex flex-wrap items-center gap-1">
-        {LR_STATUS_ORDER.map((tab) => {
-          const active = statusFilter === tab.key;
-          const count = counts[tab.key];
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => onStatusFilterChange(tab.key)}
-              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {tab.label}
-              {typeof count === "number" ? (
-                <span
-                  className={`ml-1.5 rounded-sm px-1 text-xs ${
-                    active
-                      ? "bg-primary-foreground/20"
-                      : "bg-muted-foreground/10"
-                  }`}
-                >
-                  {count}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <StatusTabs
+        tabs={LR_STATUS_ORDER}
+        active={statusFilter}
+        onChange={onStatusFilterChange}
+        counts={counts}
+        layoutId="lr-status-tab"
+      />
 
-      <div className="flex items-center justify-between gap-2">
-        <Input
+      <div className="flex flex-wrap items-center gap-2">
+        <TableSearchInput
           value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search group number…"
-          className="h-9 max-w-xs"
+          onChange={onSearchChange}
+          placeholder="Search group number..."
+        />
+
+        <ColumnPickerPopover
+          columnOrder={columnOrder}
+          onColumnOrderChange={onColumnOrderChange}
+          columnVisibility={columnVisibility}
+          onColumnVisibilityChange={onColumnVisibilityChange}
+          columnMeta={COLUMN_META}
+          defaultOrder={DEFAULT_LR_COLUMN_ORDER}
         />
       </div>
 
-      <div className="w-full overflow-x-auto rounded-lg bg-card">
-        <Table className="w-full">
-          <TableHeader>
-            {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id} className="bg-muted/40">
-                {hg.headers.map((h) => (
+      <Table className="bg-card">
+        <TableHeader>
+          {table.getHeaderGroups().map((hg) => (
+            <TableRow key={hg.id}>
+              {hg.headers.map((h) => {
+                const pinned = h.column.getIsPinned() === "right";
+                return (
                   <TableHead
                     key={h.id}
-                    className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
+                    style={pinStyle(h.column)}
+                    className={cn(
+                      "h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground",
+                      pinned && `sticky z-10 ${PIN_HEAD_BG}`,
+                      h.column.id === "status" && "border-l border-border",
+                      h.column.id === "freight" && "text-right",
+                    )}
                   >
                     {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
-                ))}
-                <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
-                  Actions
-                </TableHead>
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 8 }).map((_, r) => (
-                <TableRow key={r}>
-                  {columns.map((_, c) => (
-                    <TableCell key={c} className="h-12">
-                      <Skeleton className="h-4 w-24" />
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, r) => (
+              <TableRow key={r}>
+                {table.getVisibleLeafColumns().map((col) => {
+                  const pinned = col.getIsPinned() === "right";
+                  return (
+                    <TableCell
+                      key={col.id}
+                      style={pinStyle(col)}
+                      className={cn(
+                        "h-12",
+                        pinned && `sticky z-10 ${PIN_CELL_BG}`,
+                        col.id === "status" && "border-l border-border",
+                      )}
+                    >
+                      <Skeleton
+                        className={cn("h-4", SKELETON_WIDTHS[col.id] ?? "w-24")}
+                      />
                     </TableCell>
-                  ))}
-                  <TableCell className="w-16">
-                    <Skeleton className="ml-auto size-7 rounded-md" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : data.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length + 1}
-                  className="py-14 text-center text-muted-foreground"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-                      <IconDatabaseOff size={18} />
-                    </div>
-                    <span className="text-sm font-medium">
-                      No LR groups found
-                    </span>
-                  </div>
-                </TableCell>
+                  );
+                })}
               </TableRow>
-            ) : (
-              table.getRowModel().rows.map((row) => {
-                const g = row.original;
-                const cancellable = g.status === "DRAFT";
-                const childRows = g.lorryReceipts ?? [];
-                const isExpanded = Boolean(expanded[g.id]);
-                return (
-                  <React.Fragment key={row.id}>
-                    <TableRow className="hover:bg-muted/30">
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id} className="h-12 text-sm">
+            ))
+          ) : data.length === 0 ? (
+            <TableEmptyState
+              colSpan={visibleColumnCount}
+              message="No LR groups found"
+            />
+          ) : (
+            table.getRowModel().rows.map((row) => {
+              const g = row.original;
+              const isExpanded = Boolean(expanded[g.id]);
+              return (
+                <React.Fragment key={row.id}>
+                  <TableRow
+                    className="group/row cursor-pointer"
+                    onClick={() => onRowClick(g)}
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      const pinned = cell.column.getIsPinned() === "right";
+                      return (
+                        <TableCell
+                          key={cell.id}
+                          style={pinStyle(cell.column)}
+                          className={cn(
+                            "h-12 text-sm",
+                            pinned &&
+                              `sticky z-10 ${PIN_CELL_BG} transition-colors`,
+                            cell.column.id === "status" &&
+                              "border-l border-border",
+                          )}
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext(),
                           )}
                         </TableCell>
-                      ))}
-                      <TableCell className="w-16 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label="View group"
-                            asChild
-                          >
-                            <Link
-                              href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}
-                            >
-                              <IconEye size={16} />
-                            </Link>
-                          </Button>
-                          {canCancel && cancellable ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  aria-label="Row actions"
-                                >
-                                  <IconDotsVertical size={16} />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  className="text-red-600"
-                                  onClick={() => onCancel(g)}
-                                >
-                                  <IconBan size={16} className="mr-2" /> Cancel
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
-                        </div>
+                      );
+                    })}
+                  </TableRow>
+                  {isExpanded ? (
+                    <TableRow className="bg-muted/20 hover:bg-muted/20">
+                      <TableCell colSpan={visibleColumnCount} className="p-0">
+                        <LRChildRows group={g} />
                       </TableCell>
                     </TableRow>
-                    {isExpanded ? (
-                      <TableRow className="bg-muted/20 hover:bg-muted/20">
-                        <TableCell colSpan={columns.length + 1} className="p-0">
-                          <div className="px-4 py-3">
-                            <div className="overflow-x-auto rounded-md border bg-background">
-                              <table className="w-full min-w-[720px] text-sm">
-                                <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                                  <tr>
-                                    <th className="px-3 py-2 font-semibold">
-                                      LR #
-                                    </th>
-                                    <th className="px-3 py-2 font-semibold">
-                                      Route
-                                    </th>
-                                    <th className="px-3 py-2 font-semibold">
-                                      Goods
-                                    </th>
-                                    <th className="px-3 py-2 font-semibold">
-                                      Invoice
-                                    </th>
-                                    <th className="px-3 py-2 font-semibold">
-                                      E-way bill
-                                    </th>
-                                    <th className="px-3 py-2 font-semibold">
-                                      Status
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {childRows.map((lr) => (
-                                    <tr key={lr.id} className="border-t">
-                                      <td className="px-3 py-2 font-medium text-primary">
-                                        <Link
-                                          href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}
-                                          className="hover:underline"
-                                        >
-                                          {lr.lrNumber}
-                                        </Link>
-                                      </td>
-                                      <td className="px-3 py-2 text-muted-foreground">
-                                        <div className="flex flex-col gap-1">
-                                          <span>
-                                            {lr.loadingLocation?.name ?? "-"}{" "}
-                                            -&gt;{" "}
-                                            {lr.unloadingLocation?.name ?? "-"}
-                                          </span>
-                                          {(!lr.loadingLocation ||
-                                            !lr.unloadingLocation) && (
-                                            <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                              <IconAlertTriangle size={13} />
-                                              Location pending
-                                            </span>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {(lr.goods?.length ?? 0) > 0 ? (
-                                          <span className="text-muted-foreground">
-                                            {lr.goods?.length} row
-                                            {lr.goods?.length === 1 ? "" : "s"}
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                            <IconAlertTriangle size={13} />
-                                            Goods not added
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {lr.invoiceNumber ? (
-                                          <div>
-                                            <p>{lr.invoiceNumber}</p>
-                                            {lr.invoiceAmount != null ? (
-                                              <p className="text-xs text-muted-foreground">
-                                                {formatPaise(lr.invoiceAmount)}
-                                              </p>
-                                            ) : null}
-                                          </div>
-                                        ) : (
-                                          <span className="text-muted-foreground">
-                                            -
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {lr.ewayBill ? (
-                                          <div>
-                                            <p>{lr.ewayBill.ewayBillNo}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              Expires{" "}
-                                              {formatDate(
-                                                lr.ewayBill.expiresAt,
-                                              )}
-                                            </p>
-                                          </div>
-                                        ) : (
-                                          <span className="text-muted-foreground">
-                                            -
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <LRStatusBadge status={lr.status} />
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </React.Fragment>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                  ) : null}
+                </React.Fragment>
+              );
+            })
+          )}
+        </TableBody>
+      </Table>
 
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {total} group{total === 1 ? "" : "s"} · page {page + 1} of {pageCount}
-        </p>
-        <Pagination className="mx-0 w-auto">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                href="#"
-                aria-disabled={page === 0}
-                className={page === 0 ? "pointer-events-none opacity-50" : ""}
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (page > 0) onPageChange(page - 1);
-                }}
-              />
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationNext
-                href="#"
-                aria-disabled={page + 1 >= pageCount}
-                className={
-                  page + 1 >= pageCount ? "pointer-events-none opacity-50" : ""
-                }
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (page + 1 < pageCount) onPageChange(page + 1);
-                }}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </div>
+      <TablePaginationFooter
+        total={total}
+        page={page}
+        size={size}
+        onPageChange={onPageChange}
+        onSizeChange={onSizeChange}
+        pageSizeOptions={[10, 25, 50, 100]}
+      />
     </div>
   );
 }
