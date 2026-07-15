@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PERMS, type Trip } from "@skerp/types";
+import { PERMS, type CloseTripBody, type Trip } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
@@ -36,6 +36,7 @@ import {
 
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import CloseTripDialog from "@/components/feedback/CloseTripDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -71,7 +72,6 @@ import {
   UnloadingPointsCard,
   VehicleCard,
 } from "./trip-detail-ui";
-import CloseTripDialog from "./CloseTripDialog";
 
 export default function TripDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -116,7 +116,7 @@ export default function TripDetail({ id }: { id: string }) {
   });
 
   const close = useMutation({
-    mutationFn: (closingKm: number) => tripApi.close(id, { closingKm }),
+    mutationFn: (body: CloseTripBody) => tripApi.close(id, body),
     onSuccess: () => {
       toast.success("Trip closed");
       setCloseOpen(false);
@@ -458,11 +458,12 @@ export default function TripDetail({ id }: { id: string }) {
       <CloseTripDialog
         open={closeOpen}
         onOpenChange={setCloseOpen}
-        tripNumber={t.tripNumber}
+        entity="trip"
+        reference={t.tripNumber}
         openingKm={t.openingKm}
-        isReturnLeg={t.isReturnLeg}
+        isReturnToBase={t.isReturnLeg}
         isPending={close.isPending}
-        onConfirm={(closingKm) => close.mutate(closingKm)}
+        onConfirm={(body) => close.mutate(body)}
       />
 
       <ReasonDialog

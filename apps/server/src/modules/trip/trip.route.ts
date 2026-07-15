@@ -883,8 +883,6 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
-  assertNotJourneyLeg(existing);
-
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
   }
@@ -951,7 +949,13 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
     if (!parsed.success) {
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
-    const { closingKm, endDateTime } = parsed.data;
+    const {
+      closingKm,
+      endDateTime,
+      arrivalDateTime,
+      unloadingCompletedAt,
+      closeReason,
+    } = parsed.data;
 
     if (closingKm < existing.openingKm) {
       throw new BadRequestError(
@@ -959,13 +963,19 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
       );
     }
 
+    const closedAt = endDateTime ?? new Date();
+
     await db.$transaction(async (tx) => {
       await tx.vehicleTrip.update({
         where: { id },
         data: {
           status: "Closed",
           closingKm,
-          endDateTime: endDateTime ?? new Date(),
+          endDateTime: closedAt,
+          arrivalDateTime: arrivalDateTime ?? closedAt,
+          unloadingCompletedAt: unloadingCompletedAt ?? null,
+          closedById: me,
+          closeReason: closeReason ?? null,
           updatedById: me,
           version: { increment: 1 },
         },
