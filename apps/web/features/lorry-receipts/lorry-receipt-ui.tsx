@@ -21,11 +21,11 @@ const STATUS_LABELS: Record<LRStatus, string> = {
 };
 
 const STATUS_STYLES: Record<LRStatus, string> = {
-  DRAFT: "bg-amber-500/10 text-amber-700 border-amber-500/20",
-  FINALISED: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
-  DELIVERED: "bg-sky-500/10 text-sky-700 border-sky-500/20",
-  ACKNOWLEDGED: "bg-violet-500/10 text-violet-700 border-violet-500/20",
-  CANCELLED: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+  DRAFT: "border-warning/40 bg-warning/15 text-warning-foreground",
+  FINALISED: "border-primary/30 bg-primary/10 text-primary",
+  DELIVERED: "border-success/35 bg-success/10 text-success",
+  ACKNOWLEDGED: "border-success/50 bg-success/15 text-success",
+  CANCELLED: "border-border bg-muted text-muted-foreground",
 };
 
 export function LRStatusBadge({ status }: { status: LRStatus }) {
@@ -33,11 +33,11 @@ export function LRStatusBadge({ status }: { status: LRStatus }) {
     <span
       className={cn(
         "inline-flex items-center gap-2 rounded-md border px-2.5 py-1",
-        "text-xs font-semibold shadow-sm",
-        STATUS_STYLES[status]
+        "text-sm font-semibold",
+        STATUS_STYLES[status],
       )}
     >
-      <span className="h-2 w-2 rounded-full bg-current shadow-[0_0_0_3px_currentColor]/10" />
+      <span className="size-2 rounded-full bg-current" />
       {STATUS_LABELS[status]}
     </span>
   );
@@ -125,9 +125,7 @@ export function lrGroupDisplay(g: LRGroupLike): LRGroupDisplay {
   // A cancelled LR no longer counts toward the truckload — unless the whole
   // group is cancelled, where the original composition is what identifies it.
   const cancelled = g.status === "CANCELLED";
-  const live = cancelled
-    ? all
-    : all.filter((lr) => lr.status !== "CANCELLED");
+  const live = cancelled ? all : all.filter((lr) => lr.status !== "CANCELLED");
   const lrs = live.length > 0 ? live : all;
 
   if (lrs.length === 1) {

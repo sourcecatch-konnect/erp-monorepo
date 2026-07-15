@@ -18,6 +18,8 @@ import {
   IconTrash,
   IconAlertTriangle,
   IconCircleCheck,
+  IconFileDescription,
+  IconPackage,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
@@ -36,7 +38,6 @@ import {
   lrGroupDisplay,
   RouteInline,
 } from "./lorry-receipt-ui";
-import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import FinaliseDialog from "./components/FinaliseDialog";
 import SplitAtHubDialog from "./components/SplitAtHubDialog";
@@ -61,12 +62,34 @@ import type {
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className="text-sm font-medium">{value ?? "—"}</p>
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mt-1 text-sm font-semibold leading-6 text-foreground">
+        {value ?? "—"}
+      </div>
     </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-4 flex items-center gap-3 border-b border-border pb-3">
+        <span className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Icon size={17} />
+        </span>
+        <h2 className="text-base font-semibold">{title}</h2>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
   );
 }
 function getMissingLRFields(lr: LorryReceipt): string[] {
@@ -420,83 +443,127 @@ export default function LRDetail({ id }: { id: string }) {
     !g.secondaryTripId;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4">
-      {/* Header */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => router.push("/lorry-receipts")}
-          >
-            <IconArrowLeft size={18} />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold">{display.title}</h1>
-              <LRStatusBadge status={display.status ?? g.status} />
+    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
+      {/* Document header */}
+      <header className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <Button
+              size="icon-lg"
+              variant="outline"
+              aria-label="Back to lorry receipts"
+              onClick={() => router.push("/lorry-receipts")}
+            >
+              <IconArrowLeft size={19} />
+            </Button>
+            <div className="min-w-0">
+              <p className="mb-1 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <IconFileDescription size={16} />
+                {display.isSingleton ? "Lorry receipt" : "LR truckload"}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="break-all font-mono text-xl font-semibold tracking-tight text-foreground">
+                  {display.title}
+                </h1>
+                <LRStatusBadge status={display.status ?? g.status} />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                <span>{SOURCE_LABELS[g.source]}</span>
+                <span aria-hidden>·</span>
+                <span>{display.subtitle}</span>
+                {!display.isSingleton &&
+                deliveredCount > 0 &&
+                deliveredCount < display.lrCount ? (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>
+                      {deliveredCount} of {display.lrCount} delivered
+                    </span>
+                  </>
+                ) : null}
+                {g.order ? (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>Order {g.order.orderNumber}</span>
+                  </>
+                ) : null}
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {SOURCE_LABELS[g.source]} · {display.subtitle}
-              {!display.isSingleton &&
-              deliveredCount > 0 &&
-              deliveredCount < display.lrCount
-                ? ` · ${deliveredCount} of ${display.lrCount} delivered`
-                : ""}
-              {g.order ? ` · ${g.order.orderNumber}` : ""}
-            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {g.status === "DRAFT" && canUpdate && (
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => setEditGroupOpen(true)}
+              >
+                {display.isSingleton ? "Edit LR" : "Edit group"}
+              </Button>
+            )}
+            {g.status === "DRAFT" && canApprove && (
+              <Button
+                size="lg"
+                onClick={() => setFinaliseOpen(true)}
+                title={finaliseTitle}
+              >
+                {display.isSingleton
+                  ? "Finalise LR"
+                  : `Finalise ${display.lrCount} LRs`}
+              </Button>
+            )}
+            {g.status === "FINALISED" &&
+              canDeliver &&
+              pendingLrs.length > 0 && (
+                <Button size="lg" onClick={() => setBulkDeliverOpen(true)}>
+                  {display.isSingleton
+                    ? "Deliver LR"
+                    : `Deliver all (${pendingLrs.length})`}
+                </Button>
+              )}
+            {g.status === "FINALISED" && canApprove && canHoldAtHub && (
+              <Button
+                variant="outline"
+                size="lg"
+                disabled={holdAtHub.isPending}
+                onClick={() => holdAtHub.mutate()}
+              >
+                {holdAtHub.isPending ? "Holding…" : "Hold at hub"}
+              </Button>
+            )}
+            {g.status === "FINALISED" && canApprove && heldAtHub && (
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => setSplitOpen(true)}
+              >
+                Dispatch from hub
+              </Button>
+            )}
+            {g.status === "DRAFT" && canCancel && (
+              <Button
+                size="lg"
+                variant="destructive"
+                onClick={() => setCancelOpen(true)}
+              >
+                Cancel
+              </Button>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {g.status === "DRAFT" && canUpdate && (
-            <Button variant="outline" onClick={() => setEditGroupOpen(true)}>
-              {display.isSingleton ? "Edit LR" : "Edit group"}
-            </Button>
-          )}
-          {g.status === "DRAFT" && canApprove && (
-            <Button onClick={() => setFinaliseOpen(true)} title={finaliseTitle}>
-              {display.isSingleton
-                ? "Finalise LR"
-                : `Finalise ${display.lrCount} LRs`}
-            </Button>
-          )}
-          {g.status === "FINALISED" && canDeliver && pendingLrs.length > 0 && (
-            <Button onClick={() => setBulkDeliverOpen(true)}>
-              {display.isSingleton
-                ? "Deliver LR"
-                : `Deliver all (${pendingLrs.length})`}
-            </Button>
-          )}
-          {g.status === "FINALISED" && canApprove && canHoldAtHub && (
-            <Button
-              variant="outline"
-              disabled={holdAtHub.isPending}
-              onClick={() => holdAtHub.mutate()}
-            >
-              {holdAtHub.isPending ? "Holding…" : "Hold at hub"}
-            </Button>
-          )}
-          {g.status === "FINALISED" && canApprove && heldAtHub && (
-            <Button variant="outline" onClick={() => setSplitOpen(true)}>
-              Dispatch from hub
-            </Button>
-          )}
-          {g.status === "DRAFT" && canCancel && (
-            <Button
-              variant="outline"
-              className="text-red-600 hover:bg-red-50"
-              onClick={() => setCancelOpen(true)}
-            >
-              Cancel
-            </Button>
-          )}
+        <div className="border-t border-border bg-muted/30 px-5 py-4">
+          <RouteInline
+            from={g.originBranch?.name}
+            to={g.destinationBranch?.name}
+            className="text-base"
+          />
         </div>
-      </div>
+      </header>
 
       {cannotFinalise && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
+        <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
+          <IconAlertTriangle size={19} className="mt-0.5 shrink-0" />
 
           <div className="space-y-1">
             {hasNoLrs ? (
@@ -524,8 +591,8 @@ export default function LRDetail({ id }: { id: string }) {
         </div>
       )}
       {g.status === "DELIVERED" && (
-        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <IconCircleCheck size={17} className="mt-0.5 shrink-0" />
+        <div className="flex items-start gap-3 rounded-lg border border-success/35 bg-success/10 px-4 py-3 text-sm text-foreground">
+          <IconCircleCheck size={19} className="mt-0.5 shrink-0 text-success" />
           <p>
             {display.isSingleton
               ? "This LR is delivered. It can no longer be held at or dispatched from a hub."
@@ -535,8 +602,8 @@ export default function LRDetail({ id }: { id: string }) {
       )}
 
       {heldAtHub && (
-        <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-          <IconTruck size={17} className="mt-0.5 shrink-0" />
+        <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          <IconTruck size={19} className="mt-0.5 shrink-0 text-primary" />
           <p>
             Lying at hub {g.hub?.name ? `(${g.hub.name})` : ""}
             {g.hubArrivalAt
@@ -550,107 +617,110 @@ export default function LRDetail({ id }: { id: string }) {
 
       {/* Summary */}
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg border bg-card p-4">
-          <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-            <IconUsers size={13} /> Parties
-          </p>
-          <div className="space-y-3">
-            <Field label="Consignor" value={g.consignor?.name} />
-            <Field label="Consignee" value={g.consignee?.name} />
-            <Field
-              label="Route"
-              value={
-                <RouteInline
-                  from={g.originBranch?.name}
-                  to={g.destinationBranch?.name}
-                />
-              }
-            />
-          </div>
-        </div>
+        <SummaryCard title="Parties & route" icon={IconUsers}>
+          <Field label="Consignor" value={g.consignor?.name} />
+          <Field label="Consignee" value={g.consignee?.name} />
+          <Field
+            label="Branch route"
+            value={
+              <RouteInline
+                from={g.originBranch?.name}
+                to={g.destinationBranch?.name}
+              />
+            }
+          />
+        </SummaryCard>
 
-        <div className="rounded-lg border bg-card p-4">
-          <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-            <IconTruck size={13} /> Vehicle & transport
-          </p>
-          <div className="space-y-3">
-            <Field label="Vehicle" value={vehicle} />
-            <Field label="Transport" value={g.transportType} />
-            <Field label="Trip" value={g.primaryTrip?.tripName} />
-            {g.secondaryTrip && (
-              <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />
-            )}
-          </div>
-        </div>
+        <SummaryCard title="Vehicle & transport" icon={IconTruck}>
+          <Field
+            label="Vehicle"
+            value={
+              <span className="font-mono text-base uppercase">{vehicle}</span>
+            }
+          />
+          <Field label="Transport type" value={g.transportType} />
+          <Field label="Primary trip" value={g.primaryTrip?.tripName} />
+          {g.secondaryTrip && (
+            <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />
+          )}
+        </SummaryCard>
 
-        <div className="rounded-lg border bg-card p-4">
-          <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-            <IconCoin size={13} /> Freight & seal
-          </p>
-          <div className="space-y-3">
-            <Field
-              label="Base freight"
-              value={
-                g.baseFreightAmount != null
-                  ? formatPaise(g.baseFreightAmount)
-                  : "—"
-              }
-            />
-            <Field label="Seal number" value={g.sealNumber} />
-            <Field label="Priority" value={g.priority} />
-          </div>
-        </div>
+        <SummaryCard title="Freight & handling" icon={IconCoin}>
+          <Field
+            label="Base freight"
+            value={
+              g.baseFreightAmount != null
+                ? formatPaise(g.baseFreightAmount)
+                : "—"
+            }
+          />
+          <Field label="Seal number" value={g.sealNumber} />
+          <Field label="Priority" value={g.priority} />
+        </SummaryCard>
       </div>
 
       {/* Lorry receipts — a singleton renders as the page's own consignment
           section; only true truckloads present a list of LR cards. */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">
-            {display.isSingleton ? "Consignment" : "Lorry receipts"}
-          </p>
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <IconPackage size={19} className="text-primary" />
+              {display.isSingleton ? "Consignment details" : "Lorry receipts"}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {display.isSingleton
+                ? "Goods, invoice, e-way bill and delivery record"
+                : `${display.lrCount} consignments moving in this truckload`}
+            </p>
+          </div>
           {g.status === "DRAFT" && canUpdate && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setAddLineOpen(true)}
-            >
-              <IconPlus size={14} className="mr-1" /> Add consignment LR
+            <Button variant="outline" onClick={() => setAddLineOpen(true)}>
+              <IconPlus size={16} /> Add consignment LR
             </Button>
           )}
         </div>
-        {g.lorryReceipts.map((lr, lrIdx) => (
-          <motion.div
+        {g.lorryReceipts.map((lr) => (
+          <div
             key={lr.id}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: lrIdx * 0.05, ease: "easeOut" }}
             className={cn(
-              "rounded-lg border bg-card p-4 transition-colors",
-              focusedLrNumber === lr.lrNumber && "border-primary",
+              "rounded-lg border border-border bg-card p-5 transition-colors",
+              focusedLrNumber === lr.lrNumber &&
+                "border-primary ring-2 ring-primary/15",
             )}
           >
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                {!display.isSingleton && (
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">{lr.lrNumber}</p>
-                    {lr.status !== g.status && (
-                      <LRStatusBadge status={lr.status} />
-                    )}
-                  </div>
-                )}
+            <div className="mb-5 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-mono text-base font-semibold text-foreground">
+                    {lr.lrNumber}
+                  </p>
+                  {lr.status !== g.status && (
+                    <LRStatusBadge status={lr.status} />
+                  )}
+                </div>
                 <RouteInline
                   from={lr.loadingLocation?.name}
                   to={lr.unloadingLocation?.name}
-                  className={display.isSingleton ? "text-sm" : "text-xs"}
+                  className="mt-2 text-base"
                 />
               </div>
-              <div className="flex items-start gap-3">
-                <div className="text-right text-xs text-muted-foreground">
-                  {lr.invoiceNumber ? <p>Invoice {lr.invoiceNumber}</p> : null}
+              <div className="flex items-start justify-between gap-4 sm:justify-end">
+                <div className="text-left text-sm sm:text-right">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Invoice
+                  </p>
+                  {lr.invoiceNumber ? (
+                    <p className="mt-1 font-mono font-semibold">
+                      {lr.invoiceNumber}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-muted-foreground">Not added</p>
+                  )}
                   {lr.invoiceAmount != null ? (
-                    <p>{formatPaise(lr.invoiceAmount)}</p>
+                    <p className="mt-1 font-semibold tabular-nums">
+                      {formatPaise(lr.invoiceAmount)}
+                    </p>
                   ) : null}
                 </div>
                 {g.status === "DRAFT" && canUpdate && (
@@ -666,9 +736,8 @@ export default function LRDetail({ id }: { id: string }) {
                     {g.lorryReceipts.length > 1 && (
                       <Button
                         size="icon-sm"
-                        variant="ghost"
+                        variant="destructive"
                         aria-label="Remove LR"
-                        className="text-red-600 hover:bg-red-50"
                         disabled={removeLine.isPending}
                         onClick={() => removeLine.mutate(lr.id)}
                       >
@@ -687,7 +756,7 @@ export default function LRDetail({ id }: { id: string }) {
                 {lr.goods.map((gd) => (
                   <span
                     key={gd.id}
-                    className="rounded-sm bg-muted px-2 py-0.5 text-xs"
+                    className="rounded-sm border border-border bg-muted/60 px-2.5 py-1 text-sm font-medium"
                   >
                     {gd.name} · Qty {gd.quantity}
                   </span>
@@ -699,8 +768,8 @@ export default function LRDetail({ id }: { id: string }) {
               lr.goods.length === 0 ||
               lr.totalWeight == null ||
               !lr.unit) && (
-              <div className="mb-3 flex w-fit flex-wrap items-center gap-1 rounded-sm bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                <IconAlertTriangle size={13} />
+              <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-sm border border-warning/30 bg-warning/10 px-3 py-2 text-sm font-medium text-warning-foreground">
+                <IconAlertTriangle size={16} />
                 Complete before finalise:
                 {!lr.loadingLocationId ? " loading point" : ""}
                 {!lr.unloadingLocationId ? " unloading point" : ""}
@@ -729,9 +798,9 @@ export default function LRDetail({ id }: { id: string }) {
               onEditAcknowledgement={() => setEditAckLr(lr)}
               onUndoAcknowledgement={() => undoAcknowledgement.mutate(lr.id)}
             />
-          </motion.div>
+          </div>
         ))}
-      </div>
+      </section>
 
       <FinaliseDialog
         open={finaliseOpen}

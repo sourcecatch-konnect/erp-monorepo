@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { PERMS } from "@skerp/types";
 import type { LRGroupListItem } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { IconFileText } from "@tabler/icons-react";
+import { IconFileText, IconPlus, IconReceipt } from "@tabler/icons-react";
 import LRFromOrderPickerDialog from "./components/LRFromOrderPickerDialog";
 
 import { useCan } from "@/features/auth";
@@ -93,16 +93,36 @@ export default function LRListPage() {
   const cancelDisplay = cancelGroup ? lrGroupDisplay(cancelGroup) : null;
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Lorry Receipts</h1>
+    <div className="space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <IconReceipt size={22} />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">
+              Lorry Receipts
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Track every consignment from draft and dispatch through delivery
+              and POD acknowledgement.
+            </p>
+          </div>
+        </div>
         {canCreate ? (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setOrderPickerOpen(true)}>
-              <IconFileText size={16} className="mr-1" /> Create from Order
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => setOrderPickerOpen(true)}
+            >
+              <IconFileText size={17} /> Create from Order
             </Button>
-            <Button onClick={() => router.push("/lorry-receipts/new")}>
-              Create Instant LR
+            <Button
+              size="lg"
+              onClick={() => router.push("/lorry-receipts/new")}
+            >
+              <IconPlus size={17} /> Create Instant LR
             </Button>
           </div>
         ) : null}
