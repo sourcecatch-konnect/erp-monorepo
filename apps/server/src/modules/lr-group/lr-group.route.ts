@@ -673,24 +673,48 @@ router.post(
   async (req, res) => {
     const id = getParamId(req);
 
-    const existing = await db.lRGroup.findFirst({
-      where: { id, deletedAt: null },
-      include: {
-        lorryReceipts: {
-          where: { deletedAt: null },
+   const existing = await db.lRGroup.findFirst({
+  where: {
+    id,
+    deletedAt: null,
+  },
+  select: {
+    id: true,
+    status: true,
+    originBranchId: true,
+
+    lorryReceipts: {
+      where: {
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        lrNumber: true,
+        status: true,
+
+        loadingLocationId: true,
+        unloadingLocationId: true,
+        totalWeight: true,
+        unit: true,
+
+        invoiceNumber: true,
+        invoiceAmount: true,
+
+        ewayBill: {
           select: {
             id: true,
-            status: true,
-            loadingLocationId: true,
-            unloadingLocationId: true,
-            totalWeight: true,
-            unit: true,
-            ewayBill: { select: { id: true } },
-            goods: { select: { id: true } },
+          },
+        },
+
+        goods: {
+          select: {
+            id: true,
           },
         },
       },
-    });
+    },
+  },
+});
 
     if (!existing) throw new NotFoundError("Lorry receipt group not found");
 
@@ -721,78 +745,88 @@ router.post(
       );
     }
 
-    const existingLrsById = new Map(
-      existing.lorryReceipts.map((lr) => [lr.id, lr]),
+ const existingLrsById = new Map(
+  existing.lorryReceipts.map((lr) => [lr.id, lr]),
+);
+
+for (const line of lrs) {
+  const lr = existingLrsById.get(line.lrId);
+
+  if (!lr) {
+    throw new BadRequestError(
+      "Lorry receipt does not belong to this group",
     );
+  }
 
-    // Do all validation BEFORE transaction.
-    for (const line of lrs) {
-      const lr = existingLrsById.get(line.lrId);
-      if (
-        !lr ||
-        !lr.loadingLocationId ||
-        !lr.unloadingLocationId ||
-        lr.goods.length === 0 ||
-        lr.totalWeight == null ||
-        !lr.unit
-      ) {
-        throw new BadRequestError(
-          "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising the group",
-        );
-      }
+  const missingFields: string[] = [];
 
-      if (line.existingEwayBillId) {
-        if (lr?.ewayBill?.id !== line.existingEwayBillId) {
-          throw new BadRequestError(
-            "Existing e-way bill does not belong to this LR",
-          );
-        }
-      } else if (line.ewayBill && lr.ewayBill) {
-        throw new BadRequestError("This LR already has an e-way bill");
-      }
-    }
+  if (!lr.loadingLocationId) {
+    missingFields.push("loading point");
+  }
 
-    await db.$transaction(async (tx) => {
-      for (const line of lrs) {
-        if (line.ewayBill && !line.existingEwayBillId) {
-          await tx.ewayBill.create({
-            data: {
-              lorryReceiptId: line.lrId,
-              ewayBillNo: line.ewayBill.ewayBillNo,
-              generatedAt: line.ewayBill.generatedAt,
-              expiresAt: line.ewayBill.expiresAt,
-              generatedBy: line.ewayBill.generatedBy ?? null,
-              documentUrl: line.ewayBill.documentUrl ?? null,
-            },
-          });
-        }
+  if (!lr.unloadingLocationId) {
+    missingFields.push("unloading point");
+  }
 
-        await tx.lorryReceipt.update({
-          where: { id: line.lrId },
-          data: {
-            status: "FINALISED",
-            invoiceNumber: line.invoiceNumber ?? null,
-            invoiceAmount: line.invoiceAmount ?? null,
-            updatedById: me,
-            version: { increment: 1 },
-          },
-        });
-      }
+  if (lr.goods.length === 0) {
+    missingFields.push("goods");
+  }
 
-      await tx.lRGroup.update({
-        where: { id },
-        data: {
-          status: "FINALISED",
-          baseFreightAmount,
-          sealNumber: sealNumber ?? null,
-          finalisedAt: new Date(),
-          finalisedById: me,
-          updatedById: me,
-          version: { increment: 1 },
-        },
-        select: { id: true },
-      });
+  if (lr.totalWeight == null) {
+    missingFields.push("total weight");
+  }
+
+  if (!lr.unit) {
+    missingFields.push("weight unit");
+  }
+
+  if (!lr.invoiceNumber?.trim()) {
+    missingFields.push("invoice number");
+  }
+
+  if (lr.invoiceAmount == null) {
+    missingFields.push("invoice amount");
+  }
+
+  if (!lr.ewayBill) {
+    missingFields.push("e-way bill");
+  }
+
+  if (missingFields.length > 0) {
+    throw new BadRequestError(
+      `LR ${lr.lrNumber} is incomplete. Add: ${missingFields.join(", ")}`,
+    );
+  }
+}
+
+   await db.$transaction(async (tx) => {
+  for (const line of lrs) {
+    await tx.lorryReceipt.update({
+      where: { id: line.lrId },
+      data: {
+        status: "FINALISED",
+        updatedById: me,
+        version: { increment: 1 },
+      },
     });
+  }
+
+  await tx.lRGroup.update({
+    where: { id },
+    data: {
+      status: "FINALISED",
+      baseFreightAmount,
+      sealNumber: sealNumber ?? null,
+      finalisedAt: new Date(),
+      finalisedById: me,
+      updatedById: me,
+      version: { increment: 1 },
+    },
+    select: {
+      id: true,
+    },
+  });
+});
 
     // Fetch heavy detail AFTER transaction commit.
     const updated = await db.lRGroup.findUniqueOrThrow({

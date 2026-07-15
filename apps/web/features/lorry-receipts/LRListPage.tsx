@@ -32,7 +32,9 @@ export default function LRListPage() {
   const [sort, setSort] = React.useState("createdAt:desc");
   const debouncedSearch = useDebouncedValue(search);
 
-  const [cancelGroup, setCancelGroup] = React.useState<LRGroupListItem | null>(null);
+  const [cancelGroup, setCancelGroup] = React.useState<LRGroupListItem | null>(
+    null,
+  );
   const [orderPickerOpen, setOrderPickerOpen] = React.useState(false);
 
   const canCreate = useCan(PERMS.LORRY_RECEIPT.CREATE);
@@ -69,7 +71,8 @@ export default function LRListPage() {
     queryFn: lrGroupApi.statusCounts,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
 
   const cancel = useMutation({
     mutationFn: (vars: { id: string; reason: string }) =>
@@ -137,7 +140,10 @@ export default function LRListPage() {
         }}
       />
 
-      <LRFromOrderPickerDialog open={orderPickerOpen} onOpenChange={setOrderPickerOpen} />
+      <LRFromOrderPickerDialog
+        open={orderPickerOpen}
+        onOpenChange={setOrderPickerOpen}
+      />
     </div>
   );
 }

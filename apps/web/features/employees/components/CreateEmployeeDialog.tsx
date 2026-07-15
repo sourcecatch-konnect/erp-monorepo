@@ -25,6 +25,7 @@ import {
   useBranches,
   useCompanies,
   useCreateEmployee,
+  useRoles,
 } from "../hooks/useEmployees";
 import type { EmployeeCredentials } from "../types";
 
@@ -36,6 +37,7 @@ type FormValues = {
   password: string;
   companyId: string;
   branchId: string;
+  roleId: string;
 };
 
 const emptyValues = (): FormValues => ({
@@ -46,6 +48,7 @@ const emptyValues = (): FormValues => ({
   password: generatePassword(),
   companyId: "",
   branchId: "",
+  roleId: "",
 });
 
 const fieldError = "text-xs text-destructive";
@@ -72,6 +75,7 @@ export function CreateEmployeeDialog({
   const companyId = watch("companyId");
   const companies = useCompanies();
   const branches = useBranches(companyId);
+  const roles = useRoles();
   const createMutation = useCreateEmployee();
 
   // Fresh form (and password) each time the dialog opens.
@@ -97,6 +101,7 @@ export function CreateEmployeeDialog({
       password: values.password,
       companyId: values.companyId,
       branchId: values.branchId,
+      roleId: values.roleId,
     });
     onCreated({
       name: `${result.employee.firstName} ${result.employee.lastName}`,
@@ -111,10 +116,9 @@ export function CreateEmployeeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create employee</DialogTitle>
+          <DialogTitle>Create user</DialogTitle>
           <DialogDescription>
-            The employee can sign in to the employee portal with the email
-            and password below.
+            Select a role and create login credentials for this user.
           </DialogDescription>
         </DialogHeader>
 
@@ -166,6 +170,36 @@ export function CreateEmployeeDialog({
             />
             {errors.email && (
               <p className={fieldError}>{errors.email.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Role</Label>
+            <Controller
+              control={control}
+              name="roleId"
+              rules={{ required: "Role is required" }}
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  disabled={roles.isLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.data?.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.roleId && (
+              <p className={fieldError}>{errors.roleId.message}</p>
             )}
           </div>
 
@@ -280,7 +314,7 @@ export function CreateEmployeeDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creating…" : "Create employee"}
+              {createMutation.isPending ? "Creating..." : "Create user"}
             </Button>
           </DialogFooter>
         </form>

@@ -237,6 +237,11 @@ export const NAV_SECTIONS: NavSection[] = [
             permission: PERMS.MASTERS.GOODS.VIEW,
           },
           {
+            title: "Units of Measure",
+            href: "/masters/unit-of-measure",
+            permission: PERMS.MASTERS.UNIT_OF_MEASURE.VIEW,
+          },
+          {
             title: "Pumps",
             href: "/masters/pumps",
             permission: PERMS.MASTERS.PUMP.VIEW,

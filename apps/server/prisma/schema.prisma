@@ -33,66 +33,89 @@ model Attachment {
 }
 
 model User {
-  id                          String                         @id @default(uuid())
-  userName                    String                         @unique
+  id                          String      @id @default(uuid())
+  userName                    String      @unique
   firstName                   String
   middleName                  String?
   lastName                    String
-  email                       String                         @unique
+  email                       String      @unique
   companyId                   String
   branchId                    String
   roleId                      String
-  createdAt                   DateTime                       @default(now())
-  updatedAt                   DateTime                       @updatedAt
+  createdAt                   DateTime    @default(now())
+  updatedAt                   DateTime    @updatedAt
   password                    String?
   status                      Boolean
-  branchScope                 BranchScope                    @default(ASSIGNED)
+  branchScope                 BranchScope @default(ASSIGNED)
   mobile                      String?
-  whatsappOptIn               Boolean                        @default(false)
-  emailOptIn                  Boolean                        @default(true)
+  whatsappOptIn               Boolean     @default(false)
+  emailOptIn                  Boolean     @default(true)
   notificationQuietHoursStart String?
   notificationQuietHoursEnd   String?
-  attachments                 Attachment[]
-  auditLogs                   AuditLog[]
-  inAppNotifications          InAppNotification[]
-  createdLRGroups             LRGroup[]                      @relation("CreatedLRGroup")
-  finalisedLRGroups           LRGroup[]                      @relation("FinalisedLRGroup")
-  updatedLRGroups             LRGroup[]                      @relation("UpdatedLRGroup")
-  createdLR                   LorryReceipt[]                 @relation("CreatedLR")
-  updatedLR                   LorryReceipt[]                 @relation("UpdatedLR")
-  createdLRDeliveries         LRDelivery[]                   @relation("CreatedLRDelivery")
-  updatedLRDeliveries         LRDelivery[]                   @relation("UpdatedLRDelivery")
-  createdLRAcks               LRAcknowledgement[]            @relation("CreatedLRAck")
-  updatedLRAcks               LRAcknowledgement[]            @relation("UpdatedLRAck")
-  notificationDeliveries      NotificationDelivery[]
-  approvedOrders              Order[]                        @relation("ApprovedOrders")
-  createdOrders               Order[]                        @relation("CreatedOrders")
-  updatedOrders               Order[]                        @relation("UpdatedOrders")
-  orderEvents                 OrderEvent[]
-  TripStatusHistory           TripStatusHistory[]
-  branch                      Branch                         @relation(fields: [branchId], references: [id])
-  company                     Company                        @relation(fields: [companyId], references: [id])
-  role                        Role                           @relation(fields: [roleId], references: [id])
-  userBranches                UserBranch[]
-  notificationSubscriptions   UserNotificationSubscription[]
-  userPermissions             UserPermission[]
-  createdTrips                VehicleTrip[]                  @relation("CreatedTrips")
-  updatedTrips                VehicleTrip[]                  @relation("UpdatedTrips")
-  createdVPSchedules          VPSchedule[]                   @relation("CreatedVPSchedules")
-  updatedVPSchedules          VPSchedule[]                   @relation("UpdatedVPSchedules")
-  createdMRRRs                MRRR[]                         @relation("CreatedMRRR")
-  updatedMRRRs                MRRR[]                         @relation("UpdatedMRRR")
-  createdGRNs                 GRN[]                          @relation("CreatedGRN")
-  updatedGRNs                 GRN[]                          @relation("UpdatedGRN")
-  createdVPLoadings           VPLoading[]                    @relation("CreatedVPLoading")
-  updatedVPLoadings           VPLoading[]                    @relation("UpdatedVPLoading")
-  createdJourneys             VehicleJourney[]               @relation("CreatedJourneys")
-  updatedJourneys             VehicleJourney[]               @relation("UpdatedJourneys")
-  createdTripExpenses         TripExpense[]                  @relation("CreatedTripExpenses")
-  createdDriverAdvances       DriverAdvance[]                @relation("CreatedDriverAdvances")
-  generatedLogSlips           LogSlip[]                      @relation("GeneratedLogSlips")
-  supervisedGRNs              GRN[]                          @relation("GRNUnloadingSupervisor")
-  tablePrefs                  UserTablePref[]
+
+  attachments               Attachment[]
+  auditLogs                 AuditLog[]
+  inAppNotifications        InAppNotification[]
+  notificationDeliveries    NotificationDelivery[]
+  notificationSubscriptions UserNotificationSubscription[]
+  userPermissions           UserPermission[]
+  userBranches              UserBranch[]
+
+  branch  Branch  @relation(fields: [branchId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+  role    Role    @relation(fields: [roleId], references: [id])
+
+  createdLRGroups   LRGroup[] @relation("CreatedLRGroup")
+  finalisedLRGroups LRGroup[] @relation("FinalisedLRGroup")
+  updatedLRGroups   LRGroup[] @relation("UpdatedLRGroup")
+
+  createdLR LorryReceipt[] @relation("CreatedLR")
+  updatedLR LorryReceipt[] @relation("UpdatedLR")
+
+  createdLRDeliveries LRDelivery[]        @relation("CreatedLRDelivery")
+  updatedLRDeliveries LRDelivery[]        @relation("UpdatedLRDelivery")
+  createdLRAcks       LRAcknowledgement[] @relation("CreatedLRAck")
+  updatedLRAcks       LRAcknowledgement[] @relation("UpdatedLRAck")
+
+  approvedOrders Order[]      @relation("ApprovedOrders")
+  createdOrders  Order[]      @relation("CreatedOrders")
+  updatedOrders  Order[]      @relation("UpdatedOrders")
+  orderEvents    OrderEvent[]
+
+  TripStatusHistory TripStatusHistory[]
+
+  createdTrips VehicleTrip[] @relation("CreatedTrips")
+  updatedTrips VehicleTrip[] @relation("UpdatedTrips")
+
+  createdVPSchedules VPSchedule[] @relation("CreatedVPSchedules")
+  updatedVPSchedules VPSchedule[] @relation("UpdatedVPSchedules")
+
+  createdMRRRs MRRR[] @relation("CreatedMRRR")
+  updatedMRRRs MRRR[] @relation("UpdatedMRRR")
+
+  createdGRNs    GRN[] @relation("CreatedGRN")
+  updatedGRNs    GRN[] @relation("UpdatedGRN")
+  supervisedGRNs GRN[] @relation("GRNUnloadingSupervisor")
+
+  createdVPLoadings   VPLoading[] @relation("CreatedVPLoading")
+  updatedVPLoadings   VPLoading[] @relation("UpdatedVPLoading")
+  cancelledVPLoadings VPLoading[] @relation("CancelledVPLoading")
+
+  supervisedVPWagonLoadings       VPWagonLoading[] @relation("VPWagonLoadingSupervisor")
+  createdVPWagonLoadings          VPWagonLoading[] @relation("CreatedVPWagonLoading")
+  updatedVPWagonLoadings          VPWagonLoading[] @relation("UpdatedVPWagonLoading")
+  verifiedVPWagonLoadings         VPWagonLoading[] @relation("VerifiedVPWagonLoading")
+  cancelledVPWagonLoadings        VPWagonLoading[] @relation("CancelledVPWagonLoading")
+  capacityOverrideVPWagonLoadings VPWagonLoading[] @relation("VPWagonCapacityOverride")
+
+  createdJourneys VehicleJourney[] @relation("CreatedJourneys")
+  updatedJourneys VehicleJourney[] @relation("UpdatedJourneys")
+
+  createdTripExpenses   TripExpense[]   @relation("CreatedTripExpenses")
+  createdDriverAdvances DriverAdvance[] @relation("CreatedDriverAdvances")
+  generatedLogSlips     LogSlip[]       @relation("GeneratedLogSlips")
+
+  tablePrefs UserTablePref[]
 }
 
 /// Per-user UI table layout (column order + visibility), keyed per table.
@@ -103,7 +126,8 @@ model UserTablePref {
   prefs     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, tableKey])
 }
@@ -601,29 +625,28 @@ model Goods {
 }
 
 model Labour {
-  id                   String      @id @default(cuid())
-  name                 String
-  photoPath            String?
-  address              String?
-  contactName          String?
-  contactPhone         String?
-  mobileNo             String?
-  referredBy           String?
-  refContactNo         String?
-  startDate            DateTime?
-  pan                  String?
-  tdsAmount            BigInt?
-  tdsRate              BigInt?
-  type                 WorkerType
-  branchId             String
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-  cityId               String
-  branch               Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
-  city                 City        @relation(fields: [cityId], references: [id])
-  grnLabours           GRN[]       @relation("GRNLabour")
-  vpLoadingLabours     VPLoading[] @relation("VPLoadingLabour")
-  vpLoadingSupervisors VPLoading[] @relation("VPLoadingSupervisor")
+  id              String           @id @default(cuid())
+  name            String
+  photoPath       String?
+  address         String?
+  contactName     String?
+  contactPhone    String?
+  mobileNo        String?
+  referredBy      String?
+  refContactNo    String?
+  startDate       DateTime?
+  pan             String?
+  tdsAmount       BigInt?
+  tdsRate         BigInt?
+  type            WorkerType
+  branchId        String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  cityId          String
+  branch          Branch           @relation("WorkerBranch", fields: [branchId], references: [id])
+  city            City             @relation(fields: [cityId], references: [id])
+  grnLabours      GRN[]            @relation("GRNLabour")
+  vpWagonLoadings VPWagonLoading[] @relation("VPWagonLoadingLabour")
 }
 
 model City {
@@ -897,7 +920,8 @@ model OrderConsignment {
   id                  String                  @id @default(cuid())
   orderId             String
   truckIndex          Int                     @default(1)
-  totalWeight         Decimal?
+  totalWeight         Decimal?                @db.Decimal(14, 4)
+  weightUnitId        String?
   unit                String?
   loadingLocationId   String?
   unloadingLocationId String?
@@ -906,22 +930,30 @@ model OrderConsignment {
   loadingLocation     CustomerLocation?       @relation("ConsignmentLoading", fields: [loadingLocationId], references: [id])
   order               Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   unloadingLocation   CustomerLocation?       @relation("ConsignmentUnloading", fields: [unloadingLocationId], references: [id])
+  weightUnit          UnitOfMeasure?          @relation("OrderConsignmentWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
   goods               OrderConsignmentGoods[]
 
   @@index([orderId])
+  @@index([weightUnitId])
 }
 
 model OrderConsignmentGoods {
-  id            String           @id @default(cuid())
-  consignmentId String
-  goodsId       String
-  quantity      Int
-  unit          String?
-  weight        Decimal?
-  consignment   OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
-  goods         Goods            @relation(fields: [goodsId], references: [id])
+  id             String           @id @default(cuid())
+  consignmentId  String
+  goodsId        String
+  quantity       Int
+  unit           String?
+  weight         Decimal?         @db.Decimal(14, 4)
+  quantityUnitId String?
+  weightUnitId   String?
+  consignment    OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  goods          Goods            @relation(fields: [goodsId], references: [id])
+  quantityUnit   UnitOfMeasure?   @relation("OrderGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit     UnitOfMeasure?   @relation("OrderGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([consignmentId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
 }
 
 model OrderEvent {
@@ -1070,11 +1102,11 @@ model LorryReceipt {
   loadingLocationId   String?
   unloadingLocationId String?
   ewayBill            EwayBill?
-  totalWeight         Decimal?
+  totalWeight         Decimal?           @db.Decimal(14, 4)
+  weightUnitId        String?
   unit                String?
   goods               LRGoods[]
   grn                 GRN?
-  vpLoadings          VPLoading[]
   delivery            LRDelivery?
   acknowledgement     LRAcknowledgement?
   createdBy           User               @relation("CreatedLR", fields: [createdById], references: [id])
@@ -1082,10 +1114,12 @@ model LorryReceipt {
   loadingLocation     CustomerLocation?  @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
   unloadingLocation   CustomerLocation?  @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
   updatedBy           User?              @relation("UpdatedLR", fields: [updatedById], references: [id])
+  weightUnit          UnitOfMeasure?     @relation("LRWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([status])
   @@index([groupId])
   @@index([fyCode])
+  @@index([weightUnitId])
 }
 
 model LRGoods {
@@ -1094,8 +1128,10 @@ model LRGoods {
   name           String
   description    String?
   quantity       Int
+  quantityUnitId String?
+  weight         Decimal?                @db.Decimal(14, 4)
+  weightUnitId   String?
   unit           String?
-  weight         Decimal?
   length         Float?
   width          Float?
   height         Float?
@@ -1104,8 +1140,12 @@ model LRGoods {
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   lorryReceipt   LorryReceipt            @relation(fields: [lorryReceiptId], references: [id])
+  quantityUnit   UnitOfMeasure?          @relation("LRGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit     UnitOfMeasure?          @relation("LRGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([lorryReceiptId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
 }
 
 /**
@@ -1312,14 +1352,14 @@ model VPSchedule {
   createdById String
   updatedById String?
 
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  deletedAt  DateTime?
-  version    Int         @default(1)
-  mrRr       MRRR?
-  vpLoadings VPLoading[]
-  fromBranch Branch      @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
-  toBranch   Branch      @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+  mrRr      MRRR?
+
+  fromBranch Branch @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
+  toBranch   Branch @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
 
   sourceArea      Area @relation("VPScheduleSourceArea", fields: [sourceAreaId], references: [id])
   destinationArea Area @relation("VPScheduleDestinationArea", fields: [destinationAreaId], references: [id])
@@ -1510,13 +1550,13 @@ model MRRR {
   createdById String
   updatedById String?
 
-  createdBy  User        @relation("CreatedMRRR", fields: [createdById], references: [id])
-  updatedBy  User?       @relation("UpdatedMRRR", fields: [updatedById], references: [id])
-  vpLoadings VPLoading[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  deletedAt  DateTime?
-  version    Int         @default(1)
+  createdBy User  @relation("CreatedMRRR", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedMRRR", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
 
   rows MRRRRow[]
 
@@ -1536,8 +1576,7 @@ model MRRRRow {
   vpScheduleWagonCount   VPScheduleWagonCount @relation(fields: [vpScheduleWagonCountId], references: [id])
 
   wagonId        String
-  wagon          Wagon       @relation(fields: [wagonId], references: [id])
-  vpLoadings     VPLoading[]
+  wagon          Wagon  @relation(fields: [wagonId], references: [id])
   wagonTypeLabel String
   rowNumber      Int
   rowLabel       String
@@ -1547,8 +1586,9 @@ model MRRRRow {
   mrRrNo     String?
   sealNo     String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  vpWagonLoading VPWagonLoading?
 
   @@unique([mrRrId, rowNumber])
   @@index([mrRrId])
@@ -1655,84 +1695,191 @@ model GRNGoods {
   goodsName   String
   description String?
 
-  totalQty    Int @default(0)
-  receivedQty Int @default(0)
-  damageQty   Int @default(0)
-  shortageQty Int @default(0)
-
-  unit   String?
-  weight Decimal?
+  totalQty       Int              @default(0)
+  receivedQty    Int              @default(0)
+  damageQty      Int              @default(0)
+  shortageQty    Int              @default(0)
+  vpLoadingGoods VPLoadingGoods[]
+  quantityUnitId String?
+  weight         Decimal?         @db.Decimal(14, 4)
+  weightUnitId   String?
+  unit           String?
 
   remarks String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  quantityUnit UnitOfMeasure? @relation("GRNGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit   UnitOfMeasure? @relation("GRNGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([grnId])
   @@index([lrGoodsId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
 }
 
 model VPLoading {
   id String @id @default(cuid())
 
-  loadingNumber String @unique
+  loadingNumber    String @unique
+  vpWagonLoadingId String
 
-  vpScheduleId String
-  vpSchedule   VPSchedule @relation(fields: [vpScheduleId], references: [id])
-
-  mrRrId String
-  mrRr   MRRR   @relation(fields: [mrRrId], references: [id])
-
-  mrRrRowId String
-  mrRrRow   MRRRRow @relation(fields: [mrRrRowId], references: [id])
-
-  lorryReceiptId String
-  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+  vpWagonLoading VPWagonLoading @relation(fields: [vpWagonLoadingId], references: [id], onDelete: Restrict)
 
   grnId String
-  grn   GRN    @relation(fields: [grnId], references: [id])
+  grn   GRN    @relation(fields: [grnId], references: [id], onDelete: Restrict)
 
   status VPLoadingStatus @default(DRAFT)
 
-  gateNo String?
-
   loadedQty      Int      @default(0)
-  loadedCft      Float?
-  loadedWeightMt Decimal?
+  loadedCft      Decimal? @db.Decimal(14, 4)
+  loadedWeightMt Decimal? @db.Decimal(14, 4)
 
-  labourId String?
-  labour   Labour? @relation("VPLoadingLabour", fields: [labourId], references: [id])
+  remarks       String?
+  cancelReason  String?
+  cancelledById String?
 
-  labourCharge BigInt?
+  cancelledBy User? @relation("CancelledVPLoading", fields: [cancelledById], references: [id])
 
-  loadingSupervisorId String?
-  loadingSupervisor   Labour? @relation("VPLoadingSupervisor", fields: [loadingSupervisorId], references: [id])
-
-  loadingStartedAt   DateTime?
-  loadingCompletedAt DateTime?
-
-  remarks      String?
-  cancelReason String?
-
+  cancelledAt DateTime?
   createdById String
   updatedById String?
 
   createdBy User  @relation("CreatedVPLoading", fields: [createdById], references: [id])
   updatedBy User? @relation("UpdatedVPLoading", fields: [updatedById], references: [id])
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-  version   Int       @default(1)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  version   Int              @default(1)
+  goods     VPLoadingGoods[]
 
-  @@unique([mrRrRowId, lorryReceiptId])
-  @@index([vpScheduleId])
-  @@index([mrRrId])
-  @@index([mrRrRowId])
-  @@index([lorryReceiptId])
+  @@unique([vpWagonLoadingId, grnId])
+  @@index([vpWagonLoadingId])
   @@index([grnId])
   @@index([status])
-  @@index([deletedAt])
+}
+
+model VPWagonLoading {
+  id String @id @default(cuid())
+
+  mrRrRowId String  @unique
+  mrRrRow   MRRRRow @relation(fields: [mrRrRowId], references: [id], onDelete: Restrict)
+
+  status VPWagonLoadingStatus @default(DRAFT)
+
+  gateNo String?
+
+  // Hamal / labour handling the wagon loading
+  labourId String?
+  labour   Labour? @relation("VPWagonLoadingLabour", fields: [labourId], references: [id])
+
+  labourCharge BigInt?
+
+  wagonCapacityCftSnapshot Decimal? @db.Decimal(14, 4)
+  wagonCapacityMtSnapshot  Decimal? @db.Decimal(14, 4)
+
+  capacityCheckStatus CapacityCheckStatus @default(NOT_CHECKED)
+
+  capacityExceededCft Decimal? @db.Decimal(14, 4)
+  capacityExceededMt  Decimal? @db.Decimal(14, 4)
+
+  capacityOverrideReason String?
+  capacityOverrideById   String?
+  capacityOverrideBy     User?     @relation("VPWagonCapacityOverride", fields: [capacityOverrideById], references: [id])
+  capacityOverrideAt     DateTime?
+
+  loadingSupervisorId String?
+  loadingSupervisor   User?   @relation("VPWagonLoadingSupervisor", fields: [loadingSupervisorId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("CreatedVPWagonLoading", fields: [createdById], references: [id])
+
+  updatedById String?
+  updatedBy   User?   @relation("UpdatedVPWagonLoading", fields: [updatedById], references: [id])
+
+  verifiedById String?
+  verifiedBy   User?     @relation("VerifiedVPWagonLoading", fields: [verifiedById], references: [id])
+  verifiedAt   DateTime?
+
+  cancelledById      String?
+  cancelledBy        User?     @relation("CancelledVPWagonLoading", fields: [cancelledById], references: [id])
+  cancelledAt        DateTime?
+  cancelReason       String?
+  loadingStartedAt   DateTime?
+  loadingCompletedAt DateTime?
+
+  totalLoadedQty      Int      @default(0)
+  totalLoadedCft      Decimal? @db.Decimal(14, 4)
+  totalLoadedWeightMt Decimal? @db.Decimal(14, 4)
+
+  remarks String?
+
+  version Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations VPLoading[]
+
+  @@index([mrRrRowId])
+  @@index([labourId])
+  @@index([loadingSupervisorId])
+  @@index([status])
+}
+
+model VPLoadingGoods {
+  id String @id @default(cuid())
+
+  vpLoadingId String
+  vpLoading   VPLoading @relation(fields: [vpLoadingId], references: [id], onDelete: Cascade)
+
+  grnGoodsId String
+  grnGoods   GRNGoods @relation(fields: [grnGoodsId], references: [id], onDelete: Restrict)
+
+  loadedQty        Int @default(0)
+  loadingDamageQty Int @default(0)
+
+  unitWeightKgSnapshot Decimal? @db.Decimal(12, 3)
+  unitCftSnapshot      Decimal? @db.Decimal(12, 4)
+
+  loadedWeightMt    Decimal?          @db.Decimal(14, 4)
+  loadedCft         Decimal?          @db.Decimal(14, 4)
+  measurementSource MeasurementSource @default(UNKNOWN)
+  remarks           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([vpLoadingId, grnGoodsId])
+  @@index([vpLoadingId])
+  @@index([grnGoodsId])
+}
+
+enum CapacityCheckStatus {
+  NOT_CHECKED
+  UNKNOWN
+  WITHIN_ESTIMATE
+  EXCEEDED_ESTIMATE
+  OVERRIDDEN
+}
+
+enum MeasurementSource {
+  UNKNOWN
+  GOODS_MASTER_ESTIMATE
+  LR_DECLARED
+  GRN_DECLARED
+  CUSTOMER_DECLARED
+  INVOICE
+  WEIGHBRIDGE
+  MANUAL_OVERRIDE
+}
+
+enum VPWagonLoadingStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  CANCELLED
 }
 
 enum GRNStatus {
@@ -1750,9 +1897,13 @@ enum GRNDamagesBy {
   UNKNOWN
 }
 
-enum VPLoadingStatus {
+enum VPScheduleStatus {
   DRAFT
+  PLANNED
+  MRRR_CREATED
+  LOADING
   LOADED
+  VERIFIED
   CANCELLED
 }
 
@@ -1776,10 +1927,9 @@ enum CreditorCategory {
   OTHER
 }
 
-enum VPScheduleStatus {
+enum VPLoadingStatus {
   DRAFT
-  PLANNED
-  MRRR_CREATED
+  LOADED
   CANCELLED
 }
 
@@ -2228,6 +2378,37 @@ model LogSlipLine {
   logSlip LogSlip @relation(fields: [logSlipId], references: [id], onDelete: Cascade)
 
   @@index([logSlipId])
+}
+
+model UnitOfMeasure {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  category  UnitCategory
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  orderConsignmentWeightUnits OrderConsignment[]      @relation("OrderConsignmentWeightUnit")
+  orderGoodsQuantityUnits     OrderConsignmentGoods[] @relation("OrderGoodsQuantityUnit")
+  orderGoodsWeightUnits       OrderConsignmentGoods[] @relation("OrderGoodsWeightUnit")
+  lrWeightUnits               LorryReceipt[]          @relation("LRWeightUnit")
+  lrGoodsQuantityUnits        LRGoods[]               @relation("LRGoodsQuantityUnit")
+  lrGoodsWeightUnits          LRGoods[]               @relation("LRGoodsWeightUnit")
+  grnGoodsQuantityUnits       GRNGoods[]              @relation("GRNGoodsQuantityUnit")
+  grnGoodsWeightUnits         GRNGoods[]              @relation("GRNGoodsWeightUnit")
+
+  @@index([category])
+  @@index([isActive])
+  @@index([name])
+}
+
+enum UnitCategory {
+  WEIGHT
+  PACKAGING
+  COUNT
+  LENGTH
+  VOLUME
 }
 
 enum VehicleJourneyStatus {

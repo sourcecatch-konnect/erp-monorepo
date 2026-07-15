@@ -21,7 +21,7 @@ import { ResetPasswordDialog } from "./ResetPasswordDialog";
 import { CredentialsDialog } from "./CredentialsDialog";
 import { EmployeeDetailDialog } from "./EmployeeDetailDialog";
 
-/** Employee management screen — list, create, reset password, activate/deactivate. */
+/** User management screen - list, create, reset password, activate/deactivate. */
 export function EmployeeList() {
   const { data: employees, isLoading, isError, error } = useEmployees();
   const statusMutation = useSetEmployeeStatus();
@@ -37,13 +37,13 @@ export function EmployeeList() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">
-            Employees
+            Users
           </h1>
           <p className="text-sm text-muted-foreground">
-            Create and manage employee accounts and passwords.
+            Create users, assign roles, and manage passwords.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Create employee</Button>
+        <Button onClick={() => setCreateOpen(true)}>Create user</Button>
       </div>
 
       <div className="rounded-md border border-border bg-card">
@@ -52,6 +52,7 @@ export function EmployeeList() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Role</TableHead>
               <TableHead>Branch</TableHead>
               <TableHead>Active</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -60,22 +61,22 @@ export function EmployeeList() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
+                <TableCell colSpan={6} className="text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {isError && (
               <TableRow>
-                <TableCell colSpan={5} className="text-destructive">
-                  {(error as Error)?.message ?? "Failed to load employees"}
+                <TableCell colSpan={6} className="text-destructive">
+                  {(error as Error)?.message ?? "Failed to load users"}
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && !isError && employees?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
-                  No employees yet. Create the first one.
+                <TableCell colSpan={6} className="text-muted-foreground">
+                  No users yet. Create the first one.
                 </TableCell>
               </TableRow>
             )}
@@ -91,6 +92,7 @@ export function EmployeeList() {
                   </button>
                 </TableCell>
                 <TableCell>{emp.email}</TableCell>
+                <TableCell>{emp.role.name}</TableCell>
                 <TableCell>{emp.branch.name}</TableCell>
                 <TableCell>
                   <Switch

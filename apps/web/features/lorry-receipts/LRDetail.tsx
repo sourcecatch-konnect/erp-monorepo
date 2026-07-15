@@ -61,7 +61,17 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
     </div>
   );
 }
+function getMissingLRFields(lr: LorryReceipt): string[] {
+  const missing: string[] = [];
 
+  if (!lr.loadingLocationId) missing.push("Loading point");
+  if (!lr.unloadingLocationId) missing.push("Unloading point");
+  if (lr.goods.length === 0) missing.push("Goods");
+  if (lr.totalWeight == null) missing.push("Total weight");
+  if (!lr.unit) missing.push("Weight unit");
+
+  return missing;
+}
 export default function LRDetail({ id }: { id: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -345,25 +355,24 @@ export default function LRDetail({ id }: { id: string }) {
   const hasNoLrs = g.lorryReceipts.length === 0;
   const hasDeliveredLr = g.lorryReceipts.some((lr) => Boolean(lr.delivery));
 
-  const hasIncompleteLr = g.lorryReceipts.some(
-    (lr) =>
-      !lr.loadingLocationId ||
-      !lr.unloadingLocationId ||
-      lr.goods.length === 0 ||
-      lr.totalWeight == null ||
-      !lr.unit,
-  );
-  const cannotFinalise = hasNoLrs || hasIncompleteLr;
+const incompleteLrs = g.lorryReceipts
+  .map((lr) => ({
+    id: lr.id,
+    lrNumber: lr.lrNumber,
+    missingFields: getMissingLRFields(lr),
+  }))
+  .filter((lr) => lr.missingFields.length > 0);
 
-  const finaliseBlockMessage = hasNoLrs
-    ? "Add at least one consignment LR before finalising this group."
-    : "One or more LRs are incomplete. Add loading point, unloading point, goods, total weight, and unit before finalising.";
+const hasIncompleteLr = incompleteLrs.length > 0;
+const cannotFinalise = hasNoLrs || hasIncompleteLr;
 
-  const finaliseTitle = hasNoLrs
-    ? "Add at least one consignment LR before finalising"
-    : hasIncompleteLr
-      ? "Add loading point, unloading point, goods, total weight, and unit to every LR before finalising"
-      : undefined;
+const finaliseTitle = hasNoLrs
+  ? "Add at least one consignment LR before finalising."
+  : incompleteLrs
+      .map(
+        (lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`,
+      )
+      .join(" | ");
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
@@ -414,7 +423,7 @@ export default function LRDetail({ id }: { id: string }) {
           {g.status === "DRAFT" && canApprove && (
             <Button
               onClick={() => setFinaliseOpen(true)}
-              disabled={cannotFinalise}
+       
               title={finaliseTitle}
             >
               Finalise group
@@ -451,13 +460,33 @@ export default function LRDetail({ id }: { id: string }) {
         </div>
       </div>
 
-      {cannotFinalise && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
-          <p>{finaliseBlockMessage}</p>
-        </div>
-      )}
+     {cannotFinalise && (
+  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
 
+    <div className="space-y-1">
+      {hasNoLrs ? (
+        <p>Add at least one consignment LR before finalising this group.</p>
+      ) : (
+        <>
+          <p className="font-medium">
+            The following LR information is missing:
+          </p>
+
+          <ul className="list-disc space-y-1 pl-5">
+            {incompleteLrs.map((lr) => (
+              <li key={lr.id}>
+                <span className="font-semibold">{lr.lrNumber}</span>
+                {" — "}
+                {lr.missingFields.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  </div>
+)}
       {g.status === "DELIVERED" && (
         <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           <IconCircleCheck size={17} className="mt-0.5 shrink-0" />
@@ -650,26 +679,27 @@ export default function LRDetail({ id }: { id: string }) {
       </div>
 
       <FinaliseDialog
-        open={finaliseOpen}
-        onOpenChange={setFinaliseOpen}
-        groupNumber={g.groupNumber}
-        lrs={g.lorryReceipts.map((lr) => ({
-          id: lr.id,
-          lrNumber: lr.lrNumber,
-          loadingLocation: lr.loadingLocation,
-          unloadingLocation: lr.unloadingLocation,
-          invoiceNumber: lr.invoiceNumber,
-          invoiceAmount: lr.invoiceAmount,
-          ewayBill: lr.ewayBill,
-        }))}
-        defaultFreight={
-          g.order?.bookingFreightAmount != null
-            ? paiseToRupees(g.order.bookingFreightAmount)
-            : null
-        }
-        isPending={finalise.isPending}
-        onConfirm={(data) => finalise.mutate(data)}
-      />
+  open={finaliseOpen}
+  onOpenChange={setFinaliseOpen}
+  groupNumber={g.groupNumber}
+  lrs={g.lorryReceipts.map((lr) => ({
+    id: lr.id,
+    lrNumber: lr.lrNumber,
+    loadingLocation: lr.loadingLocation,
+    unloadingLocation: lr.unloadingLocation,
+    invoiceNumber: lr.invoiceNumber,
+    invoiceAmount: lr.invoiceAmount,
+    ewayBill: lr.ewayBill,
+    missingFields: getMissingLRFields(lr),
+  }))}
+  defaultFreight={
+    g.order?.bookingFreightAmount != null
+      ? paiseToRupees(g.order.bookingFreightAmount)
+      : null
+  }
+  isPending={finalise.isPending}
+  onConfirm={(data) => finalise.mutate(data)}
+/>
 
       <SplitAtHubDialog
         open={splitOpen}
