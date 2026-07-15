@@ -167,9 +167,11 @@ export default function LRCreateSummary({
         <div className="border-b border-border bg-muted/30 px-4 py-3">
           <p className="text-sm font-semibold">Summary</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {lrCount > 0
-              ? `This will generate ${lrCount} lorry receipt${lrCount === 1 ? "" : "s"} in one group.`
-              : "Configure the group to see what will be created."}
+            {lrCount === 1
+              ? "This will create 1 lorry receipt."
+              : lrCount > 1
+                ? `This will create ${lrCount} LRs travelling together on one truck.`
+                : "Add consignment details to see what will be created."}
           </p>
         </div>
 
@@ -242,7 +244,7 @@ export default function LRCreateSummary({
                         />
                         <span>
                           Set the order&apos;s consignee before creating the
-                          group.
+                          LR.
                         </span>
                       </p>
                     )}
@@ -401,7 +403,7 @@ export default function LRCreateSummary({
               {source === "FROM_ORDER" &&
                 order?.bookingFreightAmount != null && (
                   <p className="text-xs text-muted-foreground">
-                    Defaults the group&apos;s base freight at finalise.
+                    Defaults the truck&apos;s base freight at finalise.
                   </p>
                 )}
             </Section>

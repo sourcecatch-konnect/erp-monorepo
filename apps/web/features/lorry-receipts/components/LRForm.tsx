@@ -638,11 +638,28 @@ export default function LRForm({ orderId, tripId }: Props) {
   const showRailhead =
     source === "FROM_ORDER" && (watchTransport as string) === "RoadAndRail";
 
+  // How many LRs this submit will create — drives LR-first button/toast copy.
+  const watchTruckIndex = form.watch("truckIndex" as never) as unknown as
+    | number
+    | string
+    | undefined;
+  const plannedLrCount =
+    source === "FROM_ORDER"
+      ? ((orderContext.data?.trucks ?? []).find(
+          (t) => t.truckIndex === Number(watchTruckIndex),
+        )?.lineCount ?? 0)
+      : fields.length;
+
   const onSubmit = async (values: CreateLRGroupBody) => {
     setSubmitting(true);
     try {
       const group = await lrGroupApi.create(values);
-      toast.success(`Group ${group.groupNumber} created`);
+      const createdLrs = group.lorryReceipts ?? [];
+      toast.success(
+        createdLrs.length === 1
+          ? `LR ${createdLrs[0]!.lrNumber} created`
+          : `Group ${group.groupNumber} created — ${createdLrs.length} LRs`,
+      );
       router.push(`/lorry-receipts/${group.id}`);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -696,13 +713,15 @@ export default function LRForm({ orderId, tripId }: Props) {
             <div>
               <h1 className="text-lg font-semibold">
                 {source === "FROM_ORDER"
-                  ? "Create LR Group from Order"
-                  : "Create Instant LR Group"}
+                  ? "Create LR from Order"
+                  : "Create Instant LR"}
               </h1>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {source === "FROM_ORDER"
-                  ? "LRs are generated from the order's consignment lines for the chosen truck."
-                  : "Standalone Road group — add at least one loading and unloading point to create the group."}
+                  ? plannedLrCount > 1
+                    ? `This truck will create ${plannedLrCount} LRs travelling together.`
+                    : "The LR is generated from the order's consignment line for the chosen truck."
+                  : "Standalone Road LR — add at least one loading and unloading point."}
               </p>
             </div>
             <div className="flex items-end gap-2">
@@ -742,7 +761,11 @@ export default function LRForm({ orderId, tripId }: Props) {
                 Cancel
               </Button>
               <Button type="submit" disabled={submitting}>
-                {submitting ? "Creating…" : "Create group"}
+                {submitting
+                  ? "Creating…"
+                  : plannedLrCount > 1
+                    ? `Create ${plannedLrCount} LRs`
+                    : "Create LR"}
               </Button>
             </div>
           </div>

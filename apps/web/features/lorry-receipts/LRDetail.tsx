@@ -29,7 +29,15 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { lrGroupApi } from "./lr-group.service";
 import { lrGroupKeys } from "./lr-group.keys";
 import { lorryReceiptApi } from "./lorry-receipt.service";
-import { LRStatusBadge, SOURCE_LABELS, daysSince } from "./lorry-receipt-ui";
+import {
+  LRStatusBadge,
+  SOURCE_LABELS,
+  daysSince,
+  lrGroupDisplay,
+  RouteInline,
+} from "./lorry-receipt-ui";
+import { motion } from "motion/react";
+import { cn } from "@/lib/utils";
 import FinaliseDialog from "./components/FinaliseDialog";
 import SplitAtHubDialog from "./components/SplitAtHubDialog";
 import EwayBillSection from "./components/EwayBillSection";
@@ -103,6 +111,15 @@ export default function LRDetail({ id }: { id: string }) {
   });
   const actionGroupId = group.data?.id ?? id;
 
+  // The page may have been opened via an LR number (deep link); when the
+  // group holds several LRs, highlight the one the user came for.
+  const requestedIdentifier = decodeURIComponent(id).trim();
+
+  // LR-first toast copy — reads the loaded group at call time because the
+  // mutations are declared before the query resolves.
+  const isSingleton = () =>
+    group.data ? lrGroupDisplay(group.data).isSingleton : false;
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(id) });
     if (actionGroupId !== id) {
@@ -117,7 +134,7 @@ export default function LRDetail({ id }: { id: string }) {
     mutationFn: (body: Parameters<typeof lrGroupApi.finalise>[1]) =>
       lrGroupApi.finalise(actionGroupId, body),
     onSuccess: () => {
-      toast.success("Group finalised");
+      toast.success(isSingleton() ? "LR finalised" : "Group finalised");
       setFinaliseOpen(false);
       invalidate();
     },
@@ -127,7 +144,11 @@ export default function LRDetail({ id }: { id: string }) {
   const holdAtHub = useMutation({
     mutationFn: () => lrGroupApi.holdAtHub(actionGroupId),
     onSuccess: () => {
-      toast.success("Group held at hub — leg-1 trip can now be closed");
+      toast.success(
+        isSingleton()
+          ? "LR held at hub — leg-1 trip can now be closed"
+          : "Group held at hub — leg-1 trip can now be closed",
+      );
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -263,7 +284,7 @@ export default function LRDetail({ id }: { id: string }) {
     mutationFn: (reason: string) =>
       lrGroupApi.cancel(actionGroupId, { cancelReason: reason }),
     onSuccess: () => {
-      toast.success("Group cancelled");
+      toast.success(isSingleton() ? "LR cancelled" : "Group cancelled");
       setCancelOpen(false);
       invalidate();
     },
@@ -274,7 +295,7 @@ export default function LRDetail({ id }: { id: string }) {
     mutationFn: (body: Parameters<typeof lrGroupApi.update>[1]) =>
       lrGroupApi.update(actionGroupId, body),
     onSuccess: () => {
-      toast.success("Group updated");
+      toast.success(isSingleton() ? "LR updated" : "Group updated");
       setEditGroupOpen(false);
       invalidate();
     },
@@ -352,27 +373,36 @@ export default function LRDetail({ id }: { id: string }) {
   }
 
   const g = group.data;
+  const display = lrGroupDisplay(g);
   const hasNoLrs = g.lorryReceipts.length === 0;
   const hasDeliveredLr = g.lorryReceipts.some((lr) => Boolean(lr.delivery));
+  const deliveredCount = g.lorryReceipts.filter((lr) =>
+    Boolean(lr.delivery),
+  ).length;
+  // Deep link by LR number: highlight the LR the user came for when the
+  // truckload holds several.
+  const focusedLrNumber =
+    !display.isSingleton &&
+    g.lorryReceipts.some((lr) => lr.lrNumber === requestedIdentifier)
+      ? requestedIdentifier
+      : null;
 
-const incompleteLrs = g.lorryReceipts
-  .map((lr) => ({
-    id: lr.id,
-    lrNumber: lr.lrNumber,
-    missingFields: getMissingLRFields(lr),
-  }))
-  .filter((lr) => lr.missingFields.length > 0);
+  const incompleteLrs = g.lorryReceipts
+    .map((lr) => ({
+      id: lr.id,
+      lrNumber: lr.lrNumber,
+      missingFields: getMissingLRFields(lr),
+    }))
+    .filter((lr) => lr.missingFields.length > 0);
 
-const hasIncompleteLr = incompleteLrs.length > 0;
-const cannotFinalise = hasNoLrs || hasIncompleteLr;
+  const hasIncompleteLr = incompleteLrs.length > 0;
+  const cannotFinalise = hasNoLrs || hasIncompleteLr;
 
-const finaliseTitle = hasNoLrs
-  ? "Add at least one consignment LR before finalising."
-  : incompleteLrs
-      .map(
-        (lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`,
-      )
-      .join(" | ");
+  const finaliseTitle = hasNoLrs
+    ? "Add at least one consignment LR before finalising."
+    : incompleteLrs
+        .map((lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`)
+        .join(" | ");
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
@@ -403,12 +433,16 @@ const finaliseTitle = hasNoLrs
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold">{g.groupNumber}</h1>
-              <LRStatusBadge status={g.status} />
+              <h1 className="text-lg font-semibold">{display.title}</h1>
+              <LRStatusBadge status={display.status ?? g.status} />
             </div>
             <p className="text-xs text-muted-foreground">
-              {SOURCE_LABELS[g.source]} · {g.lorryReceipts.length} LR
-              {g.lorryReceipts.length === 1 ? "" : "s"}
+              {SOURCE_LABELS[g.source]} · {display.subtitle}
+              {!display.isSingleton &&
+              deliveredCount > 0 &&
+              deliveredCount < display.lrCount
+                ? ` · ${deliveredCount} of ${display.lrCount} delivered`
+                : ""}
               {g.order ? ` · ${g.order.orderNumber}` : ""}
             </p>
           </div>
@@ -417,21 +451,21 @@ const finaliseTitle = hasNoLrs
         <div className="flex flex-wrap gap-2">
           {g.status === "DRAFT" && canUpdate && (
             <Button variant="outline" onClick={() => setEditGroupOpen(true)}>
-              Edit group
+              {display.isSingleton ? "Edit LR" : "Edit group"}
             </Button>
           )}
           {g.status === "DRAFT" && canApprove && (
-            <Button
-              onClick={() => setFinaliseOpen(true)}
-       
-              title={finaliseTitle}
-            >
-              Finalise group
+            <Button onClick={() => setFinaliseOpen(true)} title={finaliseTitle}>
+              {display.isSingleton
+                ? "Finalise LR"
+                : `Finalise ${display.lrCount} LRs`}
             </Button>
           )}
           {g.status === "FINALISED" && canDeliver && pendingLrs.length > 0 && (
             <Button onClick={() => setBulkDeliverOpen(true)}>
-              Deliver all
+              {display.isSingleton
+                ? "Deliver LR"
+                : `Deliver all (${pendingLrs.length})`}
             </Button>
           )}
           {g.status === "FINALISED" && canApprove && canHoldAtHub && (
@@ -460,41 +494,42 @@ const finaliseTitle = hasNoLrs
         </div>
       </div>
 
-     {cannotFinalise && (
-  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-    <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
+      {cannotFinalise && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
 
-    <div className="space-y-1">
-      {hasNoLrs ? (
-        <p>Add at least one consignment LR before finalising this group.</p>
-      ) : (
-        <>
-          <p className="font-medium">
-            The following LR information is missing:
-          </p>
+          <div className="space-y-1">
+            {hasNoLrs ? (
+              <p>
+                Add at least one consignment LR before finalising this group.
+              </p>
+            ) : (
+              <>
+                <p className="font-medium">
+                  The following LR information is missing:
+                </p>
 
-          <ul className="list-disc space-y-1 pl-5">
-            {incompleteLrs.map((lr) => (
-              <li key={lr.id}>
-                <span className="font-semibold">{lr.lrNumber}</span>
-                {" — "}
-                {lr.missingFields.join(", ")}
-              </li>
-            ))}
-          </ul>
-        </>
+                <ul className="list-disc space-y-1 pl-5">
+                  {incompleteLrs.map((lr) => (
+                    <li key={lr.id}>
+                      <span className="font-semibold">{lr.lrNumber}</span>
+                      {" — "}
+                      {lr.missingFields.join(", ")}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </div>
       )}
-    </div>
-  </div>
-)}
       {g.status === "DELIVERED" && (
         <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           <IconCircleCheck size={17} className="mt-0.5 shrink-0" />
           <p>
-            All {g.lorryReceipts.length} LR
-            {g.lorryReceipts.length === 1 ? " is" : "s are"} delivered. This
-            group is complete and can no longer be held at or dispatched from a
-            hub.
+            {display.isSingleton
+              ? "This LR is delivered. It can no longer be held at or dispatched from a hub."
+              : `All ${display.lrCount} LRs are delivered. This truckload is complete and can no longer be held at or dispatched from a hub.`}
           </p>
         </div>
       )}
@@ -524,7 +559,12 @@ const finaliseTitle = hasNoLrs
             <Field label="Consignee" value={g.consignee?.name} />
             <Field
               label="Route"
-              value={`${g.originBranch?.name ?? "—"} → ${g.destinationBranch?.name ?? "—"}`}
+              value={
+                <RouteInline
+                  from={g.originBranch?.name}
+                  to={g.destinationBranch?.name}
+                />
+              }
             />
           </div>
         </div>
@@ -562,10 +602,13 @@ const finaliseTitle = hasNoLrs
         </div>
       </div>
 
-      {/* Lorry receipts */}
+      {/* Lorry receipts — a singleton renders as the page's own consignment
+          section; only true truckloads present a list of LR cards. */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Lorry receipts</p>
+          <p className="text-sm font-semibold">
+            {display.isSingleton ? "Consignment" : "Lorry receipts"}
+          </p>
           {g.status === "DRAFT" && canUpdate && (
             <Button
               size="sm"
@@ -576,20 +619,32 @@ const finaliseTitle = hasNoLrs
             </Button>
           )}
         </div>
-        {g.lorryReceipts.map((lr) => (
-          <div key={lr.id} className="rounded-lg border bg-card p-4">
+        {g.lorryReceipts.map((lr, lrIdx) => (
+          <motion.div
+            key={lr.id}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: lrIdx * 0.05, ease: "easeOut" }}
+            className={cn(
+              "rounded-lg border bg-card p-4 transition-colors",
+              focusedLrNumber === lr.lrNumber && "border-primary",
+            )}
+          >
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold">{lr.lrNumber}</p>
-                  {lr.status !== g.status && (
-                    <LRStatusBadge status={lr.status} />
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {lr.loadingLocation?.name ?? "—"} →{" "}
-                  {lr.unloadingLocation?.name ?? "—"}
-                </p>
+                {!display.isSingleton && (
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold">{lr.lrNumber}</p>
+                    {lr.status !== g.status && (
+                      <LRStatusBadge status={lr.status} />
+                    )}
+                  </div>
+                )}
+                <RouteInline
+                  from={lr.loadingLocation?.name}
+                  to={lr.unloadingLocation?.name}
+                  className={display.isSingleton ? "text-sm" : "text-xs"}
+                />
               </div>
               <div className="flex items-start gap-3">
                 <div className="text-right text-xs text-muted-foreground">
@@ -608,18 +663,18 @@ const finaliseTitle = hasNoLrs
                     >
                       <IconPencil size={15} />
                     </Button>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="Remove LR"
-                      className="text-red-600 hover:bg-red-50"
-                      disabled={
-                        removeLine.isPending || g.lorryReceipts.length <= 1
-                      }
-                      onClick={() => removeLine.mutate(lr.id)}
-                    >
-                      <IconTrash size={15} />
-                    </Button>
+                    {g.lorryReceipts.length > 1 && (
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Remove LR"
+                        className="text-red-600 hover:bg-red-50"
+                        disabled={removeLine.isPending}
+                        onClick={() => removeLine.mutate(lr.id)}
+                      >
+                        <IconTrash size={15} />
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -674,37 +729,37 @@ const finaliseTitle = hasNoLrs
               onEditAcknowledgement={() => setEditAckLr(lr)}
               onUndoAcknowledgement={() => undoAcknowledgement.mutate(lr.id)}
             />
-          </div>
+          </motion.div>
         ))}
       </div>
 
       <FinaliseDialog
-  open={finaliseOpen}
-  onOpenChange={setFinaliseOpen}
-  groupNumber={g.groupNumber}
-  lrs={g.lorryReceipts.map((lr) => ({
-    id: lr.id,
-    lrNumber: lr.lrNumber,
-    loadingLocation: lr.loadingLocation,
-    unloadingLocation: lr.unloadingLocation,
-    invoiceNumber: lr.invoiceNumber,
-    invoiceAmount: lr.invoiceAmount,
-    ewayBill: lr.ewayBill,
-    missingFields: getMissingLRFields(lr),
-  }))}
-  defaultFreight={
-    g.order?.bookingFreightAmount != null
-      ? paiseToRupees(g.order.bookingFreightAmount)
-      : null
-  }
-  isPending={finalise.isPending}
-  onConfirm={(data) => finalise.mutate(data)}
-/>
+        open={finaliseOpen}
+        onOpenChange={setFinaliseOpen}
+        groupNumber={g.groupNumber}
+        lrs={g.lorryReceipts.map((lr) => ({
+          id: lr.id,
+          lrNumber: lr.lrNumber,
+          loadingLocation: lr.loadingLocation,
+          unloadingLocation: lr.unloadingLocation,
+          invoiceNumber: lr.invoiceNumber,
+          invoiceAmount: lr.invoiceAmount,
+          ewayBill: lr.ewayBill,
+          missingFields: getMissingLRFields(lr),
+        }))}
+        defaultFreight={
+          g.order?.bookingFreightAmount != null
+            ? paiseToRupees(g.order.bookingFreightAmount)
+            : null
+        }
+        isPending={finalise.isPending}
+        onConfirm={(data) => finalise.mutate(data)}
+      />
 
       <SplitAtHubDialog
         open={splitOpen}
         onOpenChange={setSplitOpen}
-        lrNumber={g.groupNumber}
+        lrNumber={display.title}
         primaryTripId={g.primaryTripId}
         consignorId={g.consignorId}
         isPending={dispatchFromHub.isPending}
@@ -776,9 +831,17 @@ const finaliseTitle = hasNoLrs
       <ReasonDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
-        title={`Cancel group ${g.groupNumber}`}
-        description="This cancels the group and all its LRs, and frees up the truck slot."
-        confirmLabel="Cancel group"
+        title={
+          display.isSingleton
+            ? `Cancel LR ${display.title}`
+            : `Cancel group ${g.groupNumber}`
+        }
+        description={
+          display.isSingleton
+            ? "This cancels the LR and frees up the truck slot."
+            : `This cancels the group and all its ${display.lrCount} LRs, and frees up the truck slot.`
+        }
+        confirmLabel={display.isSingleton ? "Cancel LR" : "Cancel group"}
         destructive
         isPending={cancel.isPending}
         onConfirm={(reason) => cancel.mutate(reason)}

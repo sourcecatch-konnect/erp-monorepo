@@ -46,7 +46,7 @@ import {
   deliveryWorklistApi,
   deliveryWorklistKeys,
 } from "./lorry-receipt.service";
-import { daysSince } from "./lorry-receipt-ui";
+import { daysSince, lrGroupDisplay } from "./lorry-receipt-ui";
 import type {
   AtHubRow,
   PendingDeliveryRow,
@@ -92,7 +92,7 @@ function AgeText({
 function GroupLink({ id, label }: { id: string; label: string }) {
   return (
     <Link
-      href={`/lorry-receipts/${id}`}
+      href={`/lorry-receipts/${encodeURIComponent(id)}`}
       className="font-medium text-primary hover:underline"
     >
       {label}
@@ -255,7 +255,7 @@ const PENDING_DELIVERY_COLUMNS: ColumnDef<PendingDeliveryRow>[] = [
     id: "lr",
     header: "LR",
     cell: ({ row }) => (
-      <GroupLink id={row.original.group.id} label={row.original.lrNumber} />
+      <GroupLink id={row.original.lrNumber} label={row.original.lrNumber} />
     ),
   },
   {
@@ -307,7 +307,7 @@ const AT_HUB_ORDER = [
 ] as const;
 
 const AT_HUB_META: ColumnMeta = {
-  group: { label: "Group", icon: IconHash },
+  group: { label: "LR / Group", icon: IconHash },
   lrs: { label: "LRs", icon: IconFileDescription },
   route: { label: "Route", icon: IconMapPin },
   consignee: { label: "Consignee", icon: IconBuildingStore },
@@ -318,10 +318,18 @@ const AT_HUB_META: ColumnMeta = {
 const AT_HUB_COLUMNS: ColumnDef<AtHubRow>[] = [
   {
     id: "group",
-    header: "Group",
-    cell: ({ row }) => (
-      <GroupLink id={row.original.id} label={row.original.groupNumber} />
-    ),
+    header: "LR / Group",
+    cell: ({ row }) => {
+      const d = lrGroupDisplay(row.original);
+      return (
+        <div>
+          <GroupLink id={row.original.id} label={d.title} />
+          <span className="block text-xs text-muted-foreground">
+            {d.subtitle}
+          </span>
+        </div>
+      );
+    },
   },
   {
     id: "lrs",
@@ -381,7 +389,7 @@ const PENDING_POD_COLUMNS: ColumnDef<PendingPodRow>[] = [
     id: "lr",
     header: "LR",
     cell: ({ row }) => (
-      <GroupLink id={row.original.group.id} label={row.original.lrNumber} />
+      <GroupLink id={row.original.lrNumber} label={row.original.lrNumber} />
     ),
   },
   {

@@ -19,6 +19,7 @@ import type { ListQuery } from "../masters/_shared/master-api";
 
 import { lrGroupApi } from "./lr-group.service";
 import { lrGroupKeys } from "./lr-group.keys";
+import { lrGroupDisplay } from "./lorry-receipt-ui";
 import LRTable, { DEFAULT_LR_COLUMN_ORDER } from "./components/LRTable";
 
 export default function LRListPage() {
@@ -78,12 +79,18 @@ export default function LRListPage() {
     mutationFn: (vars: { id: string; reason: string }) =>
       lrGroupApi.cancel(vars.id, { cancelReason: vars.reason }),
     onSuccess: () => {
-      toast.success("Group cancelled");
+      toast.success(
+        cancelGroup && lrGroupDisplay(cancelGroup).isSingleton
+          ? "LR cancelled"
+          : "Group cancelled",
+      );
       setCancelGroup(null);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
+
+  const cancelDisplay = cancelGroup ? lrGroupDisplay(cancelGroup) : null;
 
   return (
     <div className="space-y-4 p-4">
@@ -95,7 +102,7 @@ export default function LRListPage() {
               <IconFileText size={16} className="mr-1" /> Create from Order
             </Button>
             <Button onClick={() => router.push("/lorry-receipts/new")}>
-              Create Instant Group
+              Create Instant LR
             </Button>
           </div>
         ) : null}
@@ -123,16 +130,26 @@ export default function LRListPage() {
         canCancel={canCancel}
         onCancel={(g) => setCancelGroup(g)}
         onRowClick={(g) =>
-          router.push(`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`)
+          router.push(
+            `/lorry-receipts/${encodeURIComponent(lrGroupDisplay(g).title)}`,
+          )
         }
       />
 
       <ReasonDialog
         open={Boolean(cancelGroup)}
         onOpenChange={(open) => !open && setCancelGroup(null)}
-        title={`Cancel group ${cancelGroup?.groupNumber ?? ""}`}
-        description="This cancels the group and all its LRs, and frees up the truck slot."
-        confirmLabel="Cancel group"
+        title={
+          cancelDisplay?.isSingleton
+            ? `Cancel LR ${cancelDisplay.title}`
+            : `Cancel group ${cancelGroup?.groupNumber ?? ""}`
+        }
+        description={
+          cancelDisplay?.isSingleton
+            ? "This cancels the LR and frees up the truck slot."
+            : `This cancels the group and all its ${cancelDisplay?.lrCount ?? ""} LRs, and frees up the truck slot.`
+        }
+        confirmLabel={cancelDisplay?.isSingleton ? "Cancel LR" : "Cancel group"}
         destructive
         isPending={cancel.isPending}
         onConfirm={(reason) => {

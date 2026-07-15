@@ -104,7 +104,11 @@ export default function BulkDeliverDialog({
         className="h-screen w-full overflow-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
       >
         <SheetHeader className="shrink-0 border-b">
-          <SheetTitle>Deliver group {groupNumber}</SheetTitle>
+          <SheetTitle>
+            {lrs.length === 1
+              ? `Deliver LR ${lrs[0]!.lrNumber}`
+              : `Deliver group ${groupNumber} — ${lrs.length} LRs`}
+          </SheetTitle>
           <SheetDescription>
             Shared delivery details apply to every selected LR
             {isMarketVehicle
