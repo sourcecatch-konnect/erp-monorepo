@@ -4,6 +4,7 @@ import type {
   VehicleJourney,
   JourneyLeg,
   TripExpense,
+  TripExpenseType,
   DriverAdvance,
   LogSlip,
   LogSlipPreview,
@@ -183,6 +184,22 @@ export const expenseApi = {
     const res = await api.post<ApiResponse<TripExpense>>(
       `/trip-expenses/${id}/reverse`,
       { reason },
+    );
+    return unwrapApiResponse(res);
+  },
+};
+
+export const expenseTypeApi = {
+  list: async (): Promise<TripExpenseType[]> => {
+    const res = await api.get<ApiResponse<TripExpenseType[]>>(
+      "/trip-expense-types",
+    );
+    return unwrapApiResponse(res);
+  },
+  create: async (name: string): Promise<TripExpenseType> => {
+    const res = await api.post<ApiResponse<TripExpenseType>>(
+      "/trip-expense-types",
+      { name },
     );
     return unwrapApiResponse(res);
   },

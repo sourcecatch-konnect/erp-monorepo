@@ -20,6 +20,7 @@ import {
 } from "../../lib/error.js";
 import {
   assertTripInJourney,
+  loadActiveExpenseType,
   loadJourneyForMoneyEntry,
   tripExpenseInclude,
 } from "./trip-expense.service.js";
@@ -75,6 +76,7 @@ router.post("/", can(PERMS.TRIP_EXPENSE.CREATE), async (req, res) => {
 
   await loadJourneyForMoneyEntry(data.journeyId);
   if (data.tripId) await assertTripInJourney(data.tripId, data.journeyId);
+  await loadActiveExpenseType(data.expenseTypeId, data.dieselQty);
   if (data.pumpId) {
     const pump = await db.pump.findUnique({
       where: { id: data.pumpId },
@@ -87,7 +89,7 @@ router.post("/", can(PERMS.TRIP_EXPENSE.CREATE), async (req, res) => {
     data: {
       journeyId: data.journeyId,
       tripId: data.tripId ?? null,
-      expenseType: data.expenseType,
+      expenseTypeId: data.expenseTypeId,
       amountPaise: data.amount,
       paymentMode: data.paymentMode,
       cityId: data.cityId ?? null,
@@ -130,12 +132,13 @@ router.patch("/:id", can(PERMS.TRIP_EXPENSE.UPDATE), async (req, res) => {
   }
   await loadJourneyForMoneyEntry(data.journeyId);
   if (data.tripId) await assertTripInJourney(data.tripId, data.journeyId);
+  await loadActiveExpenseType(data.expenseTypeId, data.dieselQty);
 
   const updated = await db.tripExpense.update({
     where: { id },
     data: {
       tripId: data.tripId ?? null,
-      expenseType: data.expenseType,
+      expenseTypeId: data.expenseTypeId,
       amountPaise: data.amount,
       paymentMode: data.paymentMode,
       cityId: data.cityId ?? null,
@@ -179,94 +182,106 @@ router.delete("/:id", can(PERMS.TRIP_EXPENSE.UPDATE), async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Approve / Reject / Reverse                                         */
 /* ------------------------------------------------------------------ */
-router.post("/:id/approve", can(PERMS.TRIP_EXPENSE.APPROVE), async (req, res) => {
-  const id = getParamId(req);
-  const existing = await db.tripExpense.findFirst({
-    where: { id, deletedAt: null },
-  });
-  if (!existing) throw new NotFoundError("Expense not found");
-  if (existing.status !== "DRAFT") {
-    throw new BadRequestError("Only a draft expense can be approved");
-  }
+router.post(
+  "/:id/approve",
+  can(PERMS.TRIP_EXPENSE.APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.tripExpense.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) throw new NotFoundError("Expense not found");
+    if (existing.status !== "DRAFT") {
+      throw new BadRequestError("Only a draft expense can be approved");
+    }
 
-  const updated = await db.tripExpense.update({
-    where: { id },
-    data: {
-      status: "APPROVED",
-      approvedById: actorId(req),
-      approvedAt: new Date(),
-    },
-    include: tripExpenseInclude,
-  });
-  return sendOk(res, updated);
-});
+    const updated = await db.tripExpense.update({
+      where: { id },
+      data: {
+        status: "APPROVED",
+        approvedById: actorId(req),
+        approvedAt: new Date(),
+      },
+      include: tripExpenseInclude,
+    });
+    return sendOk(res, updated);
+  },
+);
 
-router.post("/:id/reject", can(PERMS.TRIP_EXPENSE.APPROVE), async (req, res) => {
-  const id = getParamId(req);
-  const existing = await db.tripExpense.findFirst({
-    where: { id, deletedAt: null },
-  });
-  if (!existing) throw new NotFoundError("Expense not found");
-  if (existing.status !== "DRAFT") {
-    throw new BadRequestError("Only a draft expense can be rejected");
-  }
+router.post(
+  "/:id/reject",
+  can(PERMS.TRIP_EXPENSE.APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.tripExpense.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) throw new NotFoundError("Expense not found");
+    if (existing.status !== "DRAFT") {
+      throw new BadRequestError("Only a draft expense can be rejected");
+    }
 
-  const parsed = rejectTripExpenseSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ValidationError(parsed.error.flatten().fieldErrors);
-  }
+    const parsed = rejectTripExpenseSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
 
-  const updated = await db.tripExpense.update({
-    where: { id },
-    data: {
-      status: "REJECTED",
-      approvedById: actorId(req),
-      approvedAt: new Date(),
-      rejectReason: parsed.data.reason,
-    },
-    include: tripExpenseInclude,
-  });
-  return sendOk(res, updated);
-});
+    const updated = await db.tripExpense.update({
+      where: { id },
+      data: {
+        status: "REJECTED",
+        approvedById: actorId(req),
+        approvedAt: new Date(),
+        rejectReason: parsed.data.reason,
+      },
+      include: tripExpenseInclude,
+    });
+    return sendOk(res, updated);
+  },
+);
 
-router.post("/:id/reverse", can(PERMS.TRIP_EXPENSE.REVERSE), async (req, res) => {
-  const id = getParamId(req);
-  const existing = await db.tripExpense.findFirst({
-    where: { id, deletedAt: null },
-    include: { journey: { select: { settlementStatus: true } } },
-  });
-  if (!existing) throw new NotFoundError("Expense not found");
-  if (!["APPROVED", "POSTED"].includes(existing.status)) {
-    throw new BadRequestError(
-      "Only an approved or posted expense can be reversed",
-    );
-  }
-  if (
-    ["GENERATED", "POSTED", "TALLY_SYNCED"].includes(
-      existing.journey.settlementStatus,
-    )
-  ) {
-    throw new BadRequestError(
-      "The journey's log slip is already generated — reopen it before reversing expenses",
-    );
-  }
+router.post(
+  "/:id/reverse",
+  can(PERMS.TRIP_EXPENSE.REVERSE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const existing = await db.tripExpense.findFirst({
+      where: { id, deletedAt: null },
+      include: { journey: { select: { settlementStatus: true } } },
+    });
+    if (!existing) throw new NotFoundError("Expense not found");
+    if (!["APPROVED", "POSTED"].includes(existing.status)) {
+      throw new BadRequestError(
+        "Only an approved or posted expense can be reversed",
+      );
+    }
+    if (
+      ["GENERATED", "POSTED", "TALLY_SYNCED"].includes(
+        existing.journey.settlementStatus,
+      )
+    ) {
+      throw new BadRequestError(
+        "The journey's log slip is already generated — reopen it before reversing expenses",
+      );
+    }
 
-  const parsed = reverseTripExpenseSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ValidationError(parsed.error.flatten().fieldErrors);
-  }
+    const parsed = reverseTripExpenseSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
 
-  const updated = await db.tripExpense.update({
-    where: { id },
-    data: {
-      status: "REVERSED",
-      reversedById: actorId(req),
-      reversedAt: new Date(),
-      reverseReason: parsed.data.reason,
-    },
-    include: tripExpenseInclude,
-  });
-  return sendOk(res, updated);
-});
+    const updated = await db.tripExpense.update({
+      where: { id },
+      data: {
+        status: "REVERSED",
+        reversedById: actorId(req),
+        reversedAt: new Date(),
+        reverseReason: parsed.data.reason,
+      },
+      include: tripExpenseInclude,
+    });
+    return sendOk(res, updated);
+  },
+);
 
 export default router;

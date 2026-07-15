@@ -74,9 +74,7 @@ export type SnapshotLine = {
 };
 
 export type LogSlipComputation = {
-  journey: NonNullable<
-    Awaited<ReturnType<typeof loadJourneyForSettlement>>
-  >;
+  journey: NonNullable<Awaited<ReturnType<typeof loadJourneyForSettlement>>>;
   totalFreightPaise: bigint;
   totalAdvancePaise: bigint;
   totalDieselQty: number;
@@ -149,7 +147,9 @@ export const loadJourneyForSettlement = (journeyId: string) =>
         orderBy: { expenseDate: "asc" as const },
         select: {
           id: true,
-          expenseType: true,
+          expenseType: {
+            select: { name: true, requiresDieselDetails: true },
+          },
           amountPaise: true,
           paymentMode: true,
           dieselQty: true,
@@ -269,7 +269,7 @@ export const computeLogSlip = async (
   }
 
   for (const expense of journey.expenses) {
-    const isDiesel = expense.expenseType === "DIESEL";
+    const isDiesel = expense.expenseType.requiresDieselDetails;
     const place = expense.pump?.name ?? expense.city?.name;
     lines.push({
       lineType: isDiesel ? "DIESEL" : "EXPENSE",
@@ -277,7 +277,7 @@ export const computeLogSlip = async (
       sourceId: expense.id,
       description: isDiesel
         ? `Diesel${place ? ` — ${place}` : ""} (${expense.paymentMode})`
-        : `${expense.expenseType}${place ? ` — ${place}` : ""} (${expense.paymentMode})${expense.remarks ? ` — ${expense.remarks}` : ""}`,
+        : `${expense.expenseType.name}${place ? ` — ${place}` : ""} (${expense.paymentMode})${expense.remarks ? ` — ${expense.remarks}` : ""}`,
       quantity: isDiesel ? (expense.dieselQty ?? null) : null,
       ratePaise: isDiesel ? (expense.dieselRatePaise ?? null) : null,
       amountPaise: expense.amountPaise,

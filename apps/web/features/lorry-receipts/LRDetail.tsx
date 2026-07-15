@@ -635,6 +635,7 @@ export default function LRDetail({ id }: { id: string }) {
 
             <DeliverySection
               lr={lr}
+              isMarketVehicle={g.isMarketVehicle}
               canDeliver={canDeliver}
               canAcknowledge={canAcknowledge}
               onDeliver={() => setDeliverLr(lr)}
@@ -684,6 +685,7 @@ export default function LRDetail({ id }: { id: string }) {
         open={Boolean(deliverLr)}
         onOpenChange={(o) => !o && setDeliverLr(null)}
         lrNumber={deliverLr?.lrNumber ?? ""}
+        isMarketVehicle={g.isMarketVehicle}
         mode="deliver"
         isPending={deliver.isPending}
         onConfirm={(values, podFiles) =>
@@ -695,6 +697,7 @@ export default function LRDetail({ id }: { id: string }) {
         open={Boolean(editDeliveryLr)}
         onOpenChange={(o) => !o && setEditDeliveryLr(null)}
         lrNumber={editDeliveryLr?.lrNumber ?? ""}
+        isMarketVehicle={g.isMarketVehicle}
         mode="edit"
         initial={editDeliveryLr?.delivery ?? null}
         isPending={updateDelivery.isPending}
@@ -708,6 +711,7 @@ export default function LRDetail({ id }: { id: string }) {
         open={bulkDeliverOpen}
         onOpenChange={setBulkDeliverOpen}
         groupNumber={g.groupNumber}
+        isMarketVehicle={g.isMarketVehicle}
         lrs={pendingLrs}
         isPending={deliverAll.isPending}
         onConfirm={(values) => deliverAll.mutate(values)}

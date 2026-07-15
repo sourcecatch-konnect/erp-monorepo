@@ -46,6 +46,7 @@ function InfoField({
 
 type Props = {
   lr: LorryReceipt;
+  isMarketVehicle: boolean;
   canDeliver: boolean;
   canAcknowledge: boolean;
   onDeliver: () => void;
@@ -62,6 +63,7 @@ type Props = {
  */
 export default function DeliverySection({
   lr,
+  isMarketVehicle,
   canDeliver,
   canAcknowledge,
   onDeliver,
@@ -137,14 +139,16 @@ export default function DeliverySection({
                 : "—"
             }
           />
-          <InfoField
-            label="Unloading charges"
-            value={
-              delivery.unloadingCharges != null
-                ? formatPaise(delivery.unloadingCharges)
-                : "—"
-            }
-          />
+          {isMarketVehicle && (
+            <InfoField
+              label="Unloading charge paid"
+              value={
+                delivery.unloadingCharges != null
+                  ? formatPaise(delivery.unloadingCharges)
+                  : "—"
+              }
+            />
+          )}
           <InfoField
             label="Recorded by"
             value={
@@ -196,10 +200,7 @@ export default function DeliverySection({
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <InfoField
-              label="Received"
-              value={formatDate(ack.receivedAt)}
-            />
+            <InfoField label="Received" value={formatDate(ack.receivedAt)} />
             <InfoField
               label="Courier"
               value={

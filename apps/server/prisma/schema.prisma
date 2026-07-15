@@ -601,29 +601,29 @@ model Goods {
 }
 
 model Labour {
-  id                      String      @id @default(cuid())
-  name                    String
-  photoPath               String?
-  address                 String?
-  contactName             String?
-  contactPhone            String?
-  mobileNo                String?
-  referredBy              String?
-  refContactNo            String?
-  startDate               DateTime?
-  pan                     String?
-  tdsAmount               BigInt?
-  tdsRate                 BigInt?
-  type                    WorkerType
-  branchId                String
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
-  cityId                  String
-  branch                  Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
-  city                    City        @relation(fields: [cityId], references: [id])
-  grnLabours              GRN[]       @relation("GRNLabour")
-  vpLoadingLabours        VPLoading[] @relation("VPLoadingLabour")
-  vpLoadingSupervisors    VPLoading[] @relation("VPLoadingSupervisor")
+  id                   String      @id @default(cuid())
+  name                 String
+  photoPath            String?
+  address              String?
+  contactName          String?
+  contactPhone         String?
+  mobileNo             String?
+  referredBy           String?
+  refContactNo         String?
+  startDate            DateTime?
+  pan                  String?
+  tdsAmount            BigInt?
+  tdsRate              BigInt?
+  type                 WorkerType
+  branchId             String
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  cityId               String
+  branch               Branch      @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                 City        @relation(fields: [cityId], references: [id])
+  grnLabours           GRN[]       @relation("GRNLabour")
+  vpLoadingLabours     VPLoading[] @relation("VPLoadingLabour")
+  vpLoadingSupervisors VPLoading[] @relation("VPLoadingSupervisor")
 }
 
 model City {
@@ -1053,17 +1053,17 @@ model LRGroup {
 }
 
 model LorryReceipt {
-  id                  String            @id @default(cuid())
+  id                  String             @id @default(cuid())
   cancelReason        String?
   createdById         String
   updatedById         String?
-  createdAt           DateTime          @default(now())
+  createdAt           DateTime           @default(now())
   deletedAt           DateTime?
   fyCode              String
-  lrNumber            String            @unique
-  status              LRStatus          @default(DRAFT)
-  updatedAt           DateTime          @updatedAt
-  version             Int               @default(1)
+  lrNumber            String             @unique
+  status              LRStatus           @default(DRAFT)
+  updatedAt           DateTime           @updatedAt
+  version             Int                @default(1)
   invoiceAmount       BigInt?
   invoiceNumber       String?
   groupId             String
@@ -1077,11 +1077,11 @@ model LorryReceipt {
   vpLoadings          VPLoading[]
   delivery            LRDelivery?
   acknowledgement     LRAcknowledgement?
-  createdBy           User              @relation("CreatedLR", fields: [createdById], references: [id])
-  group               LRGroup           @relation(fields: [groupId], references: [id])
-  loadingLocation     CustomerLocation? @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
-  unloadingLocation   CustomerLocation? @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
-  updatedBy           User?             @relation("UpdatedLR", fields: [updatedById], references: [id])
+  createdBy           User               @relation("CreatedLR", fields: [createdById], references: [id])
+  group               LRGroup            @relation(fields: [groupId], references: [id])
+  loadingLocation     CustomerLocation?  @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
+  unloadingLocation   CustomerLocation?  @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
+  updatedBy           User?              @relation("UpdatedLR", fields: [updatedById], references: [id])
 
   @@index([status])
   @@index([groupId])
@@ -1089,7 +1089,7 @@ model LorryReceipt {
 }
 
 model LRGoods {
-  id             String       @id @default(cuid())
+  id             String                  @id @default(cuid())
   lorryReceiptId String
   name           String
   description    String?
@@ -1101,9 +1101,9 @@ model LRGoods {
   height         Float?
   grnGoods       GRNGoods[]
   ackItems       LRAcknowledgementItem[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  lorryReceipt   LorryReceipt            @relation(fields: [lorryReceiptId], references: [id])
 
   @@index([lorryReceiptId])
 }
@@ -1600,14 +1600,14 @@ model GRN {
 
   netAmount BigInt @default(0)
 
-  labourId String?
-  labour   Labour? @relation("GRNLabour", fields: [labourId], references: [id])
-  labourName String?
+  labourId     String?
+  labour       Labour? @relation("GRNLabour", fields: [labourId], references: [id])
+  labourName   String?
   labourCharge BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   User? @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
-  damagesBy GRNDamagesBy?
+  unloadingSupervisor   User?         @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+  damagesBy             GRNDamagesBy?
 
   lrCopyChecked      Boolean @default(false)
   invoiceChecked     Boolean @default(false)
@@ -2056,14 +2056,11 @@ model VehicleJourney {
   @@index([status])
 }
 
-/// A journey/trip expense. Money events - never just a number on the trip.
-/// Cash expenses paid from the driver advance settle at log slip time;
-/// credit/card expenses are payables to the pump/vendor ledger.
 model TripExpense {
   id              String            @id @default(cuid())
   journeyId       String
   tripId          String?
-  expenseType     TripExpenseType
+  expenseTypeId   String
   amountPaise     BigInt
   paymentMode     TripPaymentMode
   cityId          String?
@@ -2072,7 +2069,6 @@ model TripExpense {
   dieselRatePaise BigInt?
   expenseDate     DateTime
   receiptNo       String?
-  // Paid out of the driver's cash advance (settles at log slip).
   paidByDriver    Boolean           @default(true)
   remarks         String?
   status          TripExpenseStatus @default(DRAFT)
@@ -2082,22 +2078,41 @@ model TripExpense {
   reversedById    String?
   reversedAt      DateTime?
   reverseReason   String?
-  // Set by the accounts posting service (Phase 6) — null until posted.
   journalEntryId  String?
   createdById     String
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   deletedAt       DateTime?
 
-  journey   VehicleJourney @relation(fields: [journeyId], references: [id])
-  trip      VehicleTrip?   @relation(fields: [tripId], references: [id])
-  city      City?          @relation("TripExpenseCity", fields: [cityId], references: [id])
-  pump      Pump?          @relation(fields: [pumpId], references: [id])
-  createdBy User           @relation("CreatedTripExpenses", fields: [createdById], references: [id])
+  journey     VehicleJourney  @relation(fields: [journeyId], references: [id])
+  trip        VehicleTrip?    @relation(fields: [tripId], references: [id])
+  expenseType TripExpenseType @relation(fields: [expenseTypeId], references: [id])
+  city        City?           @relation("TripExpenseCity", fields: [cityId], references: [id])
+  pump        Pump?           @relation(fields: [pumpId], references: [id])
+  createdBy   User            @relation("CreatedTripExpenses", fields: [createdById], references: [id])
 
   @@index([journeyId])
   @@index([tripId])
+  @@index([expenseTypeId])
   @@index([status])
+}
+
+/// Configurable journey expense category. System categories seed the standard
+/// ERP behaviour; users can add further categories without a code deployment.
+model TripExpenseType {
+  id                    String   @id @default(cuid())
+  code                  String   @unique
+  name                  String   @unique
+  requiresDieselDetails Boolean  @default(false)
+  isSystem              Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  expenses TripExpense[]
+
+  @@index([isActive, sortOrder])
 }
 
 /// Cash/bank/card advance handed to the driver for a journey. Settled against
@@ -2250,18 +2265,6 @@ enum TripPaymentMode {
   CARD
   UPI
   CREDIT
-}
-
-enum TripExpenseType {
-  DIESEL
-  TOLL
-  PARKING
-  FOOD
-  REPAIR
-  FINE
-  LOADING
-  UNLOADING
-  MISC
 }
 
 enum TripExpenseStatus {

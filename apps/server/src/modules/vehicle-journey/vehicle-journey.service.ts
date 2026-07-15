@@ -202,7 +202,7 @@ export const computeJourneyTotals = async (
         select: {
           amountPaise: true,
           paymentMode: true,
-          expenseType: true,
+          expenseType: { select: { requiresDieselDetails: true } },
           dieselQty: true,
           paidByDriver: true,
         },
@@ -228,7 +228,7 @@ export const computeJourneyTotals = async (
 
   for (const e of expenses) {
     totalExpensePaise += e.amountPaise;
-    if (e.expenseType === "DIESEL") {
+    if (e.expenseType.requiresDieselDetails) {
       totalDieselQty += e.dieselQty ?? 0;
       totalDieselAmountPaise += e.amountPaise;
     }

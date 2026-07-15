@@ -5,7 +5,6 @@ import type {
   TripLegType,
   TripStatus,
   TripExpenseStatus,
-  TripExpenseType,
 } from "@skerp/types";
 import {
   IconArrowBackUp,
@@ -128,18 +127,6 @@ export const LEG_TYPE_LABELS: Record<TripLegType, string> = {
 /* ------------------------------------------------------------------ */
 /* Expense                                                            */
 /* ------------------------------------------------------------------ */
-
-export const EXPENSE_TYPE_LABELS: Record<TripExpenseType, string> = {
-  DIESEL: "Diesel",
-  TOLL: "Toll",
-  PARKING: "Parking",
-  FOOD: "Food",
-  REPAIR: "Repair",
-  FINE: "Fine",
-  LOADING: "Loading",
-  UNLOADING: "Unloading",
-  MISC: "Miscellaneous",
-};
 
 const EXPENSE_STATUS_STYLES: Record<TripExpenseStatus, string> = {
   DRAFT: "bg-amber-500/10 text-amber-700 border-amber-500/20",
