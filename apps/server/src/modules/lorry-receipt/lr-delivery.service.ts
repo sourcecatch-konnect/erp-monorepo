@@ -74,7 +74,9 @@ export const syncGroupDeliveryStatus = async (
 /**
  * Trip-close delivery gate ("Way 1" in the plan). Returns the LR numbers that
  * block closing `tripId`:
- *  - groups whose FINAL trip is this trip, with undelivered LRs, block it;
+ *  - groups whose FINAL trip is this trip, with LRs not yet delivered — still
+ *    DRAFT or FINALISED — block it. A draft LR blocks too: it has to be
+ *    finalised and delivered, not silently closed over.
  *  - a leg-1 group already held at hub (hubId set, no leg 2 yet) is exempt —
  *    the goods are accounted for at the hub, awaiting dispatch.
  */
@@ -84,7 +86,7 @@ export const undeliveredLRNumbersForTrip = async (
   const groups = await db.lRGroup.findMany({
     where: {
       deletedAt: null,
-      status: "FINALISED",
+      status: { in: ["DRAFT", "FINALISED"] },
       OR: [
         { secondaryTripId: tripId },
         { primaryTripId: tripId, secondaryTripId: null, hubId: null },
@@ -92,7 +94,7 @@ export const undeliveredLRNumbersForTrip = async (
     },
     select: {
       lorryReceipts: {
-        where: { deletedAt: null, status: "FINALISED" },
+        where: { deletedAt: null, status: { in: ["DRAFT", "FINALISED"] } },
         select: { lrNumber: true },
       },
     },

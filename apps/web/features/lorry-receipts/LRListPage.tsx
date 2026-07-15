@@ -11,6 +11,7 @@ import { IconFileText } from "@tabler/icons-react";
 import LRFromOrderPickerDialog from "./components/LRFromOrderPickerDialog";
 
 import { useCan } from "@/features/auth";
+import { useTablePrefs } from "@/features/table-prefs";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -18,34 +19,46 @@ import type { ListQuery } from "../masters/_shared/master-api";
 
 import { lrGroupApi } from "./lr-group.service";
 import { lrGroupKeys } from "./lr-group.keys";
-import LRTable from "./components/LRTable";
+import LRTable, { DEFAULT_LR_COLUMN_ORDER } from "./components/LRTable";
 
 export default function LRListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
   const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(25);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [sort, setSort] = React.useState("createdAt:desc");
   const debouncedSearch = useDebouncedValue(search);
-  const size = 10;
 
-  const [cancelGroup, setCancelGroup] = React.useState<LRGroupListItem | null>(null);
+  const [cancelGroup, setCancelGroup] = React.useState<LRGroupListItem | null>(
+    null,
+  );
   const [orderPickerOpen, setOrderPickerOpen] = React.useState(false);
 
   const canCreate = useCan(PERMS.LORRY_RECEIPT.CREATE);
   const canCancel = useCan(PERMS.LORRY_RECEIPT.CANCEL);
 
-  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
+  // Per-user layout, persisted server-side (follows the account, not the
+  // browser). Defaults render until the saved layout loads.
+  const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder } =
+    useTablePrefs("lr-groups", DEFAULT_LR_COLUMN_ORDER);
+
+  React.useEffect(
+    () => setPage(0),
+    [debouncedSearch, statusFilter, sort, size],
+  );
 
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
+      sort,
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
     }),
-    [page, debouncedSearch, statusFilter],
+    [page, size, sort, debouncedSearch, statusFilter],
   );
 
   const groupList = useQuery({
@@ -58,7 +71,8 @@ export default function LRListPage() {
     queryFn: lrGroupApi.statusCounts,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
 
   const cancel = useMutation({
     mutationFn: (vars: { id: string; reason: string }) =>
@@ -93,14 +107,24 @@ export default function LRListPage() {
         page={page}
         size={size}
         onPageChange={setPage}
+        onSizeChange={setSize}
         search={search}
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        sort={sort}
+        onSortChange={setSort}
+        columnVisibility={columnVisibility}
+        onColumnVisibilityChange={setColumnVisibility}
+        columnOrder={columnOrder}
+        onColumnOrderChange={setColumnOrder}
         counts={counts.data ?? {}}
         isLoading={groupList.isLoading}
         canCancel={canCancel}
         onCancel={(g) => setCancelGroup(g)}
+        onRowClick={(g) =>
+          router.push(`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`)
+        }
       />
 
       <ReasonDialog
@@ -116,7 +140,10 @@ export default function LRListPage() {
         }}
       />
 
-      <LRFromOrderPickerDialog open={orderPickerOpen} onOpenChange={setOrderPickerOpen} />
+      <LRFromOrderPickerDialog
+        open={orderPickerOpen}
+        onOpenChange={setOrderPickerOpen}
+      />
     </div>
   );
 }

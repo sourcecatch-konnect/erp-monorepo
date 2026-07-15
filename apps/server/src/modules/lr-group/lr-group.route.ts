@@ -1024,6 +1024,7 @@ router.post(
       select: {
         id: true,
         groupNumber: true,
+        isMarketVehicle: true,
         status: true,
         originBranchId: true,
         destinationBranchId: true,
@@ -1077,8 +1078,9 @@ router.post(
             reportedAt: input.reportedAt ?? null,
             receiverName: input.receiverName ?? null,
             receiverPhone: input.receiverPhone ?? null,
-            unloadingCharges:
-              line.unloadingCharges ?? input.unloadingCharges ?? null,
+            unloadingCharges: existing.isMarketVehicle
+              ? (line.unloadingCharges ?? input.unloadingCharges ?? null)
+              : null,
             remark: line.remark ?? input.remark ?? null,
             createdById: me,
           },

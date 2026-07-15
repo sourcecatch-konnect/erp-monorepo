@@ -10,13 +10,14 @@ import { Button } from "@skerp/ui/components/button";
 import { IconPlus } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import { useTablePrefs } from "@/features/table-prefs";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import type { ListQuery } from "../masters/_shared/master-api";
 
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
-import OrderTable from "./OrderTable";
+import OrderTable, { DEFAULT_ORDER_COLUMN_ORDER } from "./OrderTable";
 import OrderQuickViewModal from "./OrderQuickViewModal";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
@@ -33,8 +34,14 @@ export default function OrdersListPage() {
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [sort, setSort] = React.useState("createdAt:desc");
 
   const debouncedSearch = useDebouncedValue(search);
+
+  // Per-user layout, persisted server-side (follows the account, not the
+  // browser). Defaults render until the saved layout loads.
+  const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder } =
+    useTablePrefs("orders", DEFAULT_ORDER_COLUMN_ORDER);
 
   const [quickViewId, setQuickViewId] = React.useState<string | null>(null);
   const [approveId, setApproveId] = React.useState<string | null>(null);
@@ -49,19 +56,18 @@ export default function OrdersListPage() {
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
   const canDelete = useCan(PERMS.ORDER.DELETE);
 
-  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
+  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter, sort]);
 
   const handleSizeChange = (nextSize: number) => {
     setSize(nextSize);
     setPage(0);
   };
 
-
-
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
+      sort,
       ...(debouncedSearch.trim()
         ? { search: debouncedSearch.trim() }
         : {}),
@@ -69,7 +75,7 @@ export default function OrdersListPage() {
         ? { filter: { status: statusFilter } }
         : {}),
     }),
-    [page, size, debouncedSearch, statusFilter]
+    [page, size, sort, debouncedSearch, statusFilter]
   );
 
   const orders = useQuery({
@@ -177,6 +183,12 @@ const onCreateLR = (order: OrderListRow) => {
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        sort={sort}
+        onSortChange={setSort}
+        columnVisibility={columnVisibility}
+        onColumnVisibilityChange={setColumnVisibility}
+        columnOrder={columnOrder}
+        onColumnOrderChange={setColumnOrder}
         counts={counts.data ?? {}}
         isLoading={orders.isLoading}
         canApprove={canApprove}

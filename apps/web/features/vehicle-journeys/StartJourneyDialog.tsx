@@ -102,6 +102,48 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
   const legType = form.watch("firstLeg.legType");
   const routeId = form.watch("firstLeg.routeId");
   const openingKm = form.watch("openingKm");
+  const vehicleId = form.watch("vehicleId");
+
+  // The server rejects a journey whose opening KM is below the vehicle's
+  // odometer — mirror that check on blur so it doesn't surface at save time.
+  const vehicleCurrentKm =
+    (vehicles.data ?? []).find((v) => v.value === vehicleId)?.currentKM ?? null;
+
+  const openingKmBelowCurrent = (value: unknown): boolean => {
+    const km = Number(value);
+    return (
+      vehicleCurrentKm != null &&
+      Number.isFinite(km) &&
+      km > 0 &&
+      km < vehicleCurrentKm
+    );
+  };
+
+  const validateOpeningKm = (): boolean => {
+    if (openingKmBelowCurrent(form.getValues("openingKm"))) {
+      form.setError("openingKm", {
+        type: "belowCurrentKm",
+        message: `Below the vehicle's current KM — enter ${vehicleCurrentKm!.toLocaleString("en-IN")} or more.`,
+      });
+      return false;
+    }
+    if (form.formState.errors.openingKm?.type === "belowCurrentKm") {
+      form.clearErrors("openingKm");
+    }
+    return true;
+  };
+
+  // Clear the below-current-KM error as soon as the value becomes valid
+  // (typing a higher number or picking another vehicle).
+  React.useEffect(() => {
+    if (
+      form.formState.errors.openingKm?.type === "belowCurrentKm" &&
+      !openingKmBelowCurrent(openingKm)
+    ) {
+      form.clearErrors("openingKm");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openingKm, vehicleCurrentKm]);
 
   // Leg 1 always opens at the journey's opening KM.
   React.useEffect(() => {
@@ -120,6 +162,7 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
   }, [routeId, routes.data, form]);
 
   const onSubmit = async (values: StartJourneyBody) => {
+    if (!validateOpeningKm()) return;
     setSubmitting(true);
     try {
       const created = await journeyApi.start(values);
@@ -178,10 +221,20 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
                 <IconTextField<StartJourneyFormInput>
                   name="openingKm"
                   label="Opening KM"
-                  placeholder="e.g. 145200"
+                  placeholder={
+                    vehicleCurrentKm != null
+                      ? `${vehicleCurrentKm} or more`
+                      : "e.g. 145200"
+                  }
+                  hint={
+                    vehicleCurrentKm != null
+                      ? `Vehicle's current KM: ${vehicleCurrentKm.toLocaleString("en-IN")} — opening KM can't be below this.`
+                      : undefined
+                  }
                   type="number"
                   min={1}
                   required
+                  onBlur={() => validateOpeningKm()}
                 />
                 <Controller
                   name="startedAt"

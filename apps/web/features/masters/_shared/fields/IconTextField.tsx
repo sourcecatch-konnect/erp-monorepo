@@ -25,6 +25,8 @@ type Props<TFormValues extends FieldValues> = {
 
   transformValue?: (value: string) => string;
   onChangeTransform?: (value: string) => string;
+  /** Runs after react-hook-form's own blur handling — e.g. cross-field checks. */
+  onBlur?: React.FocusEventHandler<HTMLInputElement>;
 };
 
 export default function IconTextField<TFormValues extends FieldValues>({
@@ -46,6 +48,7 @@ export default function IconTextField<TFormValues extends FieldValues>({
   pattern,
   transformValue,
   onChangeTransform,
+  onBlur,
 valueAsNumber,
 }: Props<TFormValues>) {
   const {
@@ -105,6 +108,7 @@ valueAsNumber,
 
     event.target.value = transformer(event.target.value);
   },
+  onBlur,
 })}
         />
       </div>

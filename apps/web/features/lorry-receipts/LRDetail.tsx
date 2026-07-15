@@ -664,6 +664,7 @@ const finaliseTitle = hasNoLrs
 
             <DeliverySection
               lr={lr}
+              isMarketVehicle={g.isMarketVehicle}
               canDeliver={canDeliver}
               canAcknowledge={canAcknowledge}
               onDeliver={() => setDeliverLr(lr)}
@@ -714,6 +715,7 @@ const finaliseTitle = hasNoLrs
         open={Boolean(deliverLr)}
         onOpenChange={(o) => !o && setDeliverLr(null)}
         lrNumber={deliverLr?.lrNumber ?? ""}
+        isMarketVehicle={g.isMarketVehicle}
         mode="deliver"
         isPending={deliver.isPending}
         onConfirm={(values, podFiles) =>
@@ -725,6 +727,7 @@ const finaliseTitle = hasNoLrs
         open={Boolean(editDeliveryLr)}
         onOpenChange={(o) => !o && setEditDeliveryLr(null)}
         lrNumber={editDeliveryLr?.lrNumber ?? ""}
+        isMarketVehicle={g.isMarketVehicle}
         mode="edit"
         initial={editDeliveryLr?.delivery ?? null}
         isPending={updateDelivery.isPending}
@@ -738,6 +741,7 @@ const finaliseTitle = hasNoLrs
         open={bulkDeliverOpen}
         onOpenChange={setBulkDeliverOpen}
         groupNumber={g.groupNumber}
+        isMarketVehicle={g.isMarketVehicle}
         lrs={pendingLrs}
         isPending={deliverAll.isPending}
         onConfirm={(values) => deliverAll.mutate(values)}

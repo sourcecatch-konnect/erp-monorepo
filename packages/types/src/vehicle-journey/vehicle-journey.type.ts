@@ -15,7 +15,7 @@ import {
   reverseTripExpenseSchema,
   createDriverAdvanceSchema,
   reverseDriverAdvanceSchema,
-  tripExpenseTypeSchema,
+  createTripExpenseTypeSchema,
   tripPaymentModeSchema,
   tripExpenseStatusSchema,
   driverAdvanceStatusSchema,
@@ -31,7 +31,6 @@ export type JourneySettlementStatus = z.infer<
   typeof journeySettlementStatusSchema
 >;
 export type TripLegType = z.infer<typeof tripLegTypeSchema>;
-export type TripExpenseType = z.infer<typeof tripExpenseTypeSchema>;
 export type TripPaymentMode = z.infer<typeof tripPaymentModeSchema>;
 export type TripExpenseStatus = z.infer<typeof tripExpenseStatusSchema>;
 export type DriverAdvanceStatus = z.infer<typeof driverAdvanceStatusSchema>;
@@ -54,6 +53,9 @@ export type TripExpenseFormInput = z.input<typeof createTripExpenseSchema>;
 export type UpdateTripExpenseBody = z.output<typeof updateTripExpenseSchema>;
 export type RejectTripExpenseBody = z.output<typeof rejectTripExpenseSchema>;
 export type ReverseTripExpenseBody = z.output<typeof reverseTripExpenseSchema>;
+export type CreateTripExpenseTypeBody = z.output<
+  typeof createTripExpenseTypeSchema
+>;
 export type CreateDriverAdvanceBody = z.output<
   typeof createDriverAdvanceSchema
 >;
@@ -106,10 +108,21 @@ export type JourneyLeg = {
 };
 
 /** Journey/trip expense as returned by the API. */
+export type TripExpenseType = {
+  id: string;
+  code: string;
+  name: string;
+  requiresDieselDetails: boolean;
+  isSystem: boolean;
+  isActive: boolean;
+  sortOrder: number;
+};
+
 export type TripExpense = {
   id: string;
   journeyId: string;
   tripId: string | null;
+  expenseTypeId: string;
   expenseType: TripExpenseType;
   amountPaise: number;
   paymentMode: TripPaymentMode;
@@ -217,6 +230,8 @@ export type VehicleJourney = {
  */
 export type ActiveJourneyInfo = {
   headOffice: { branchId: string; cityId: string; cityName: string };
+  /** The vehicle's odometer — a new journey's opening KM can't be below it. */
+  vehicleCurrentKm: number | null;
   journey: {
     id: string;
     journeyNumber: string;

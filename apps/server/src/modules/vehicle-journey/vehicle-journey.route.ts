@@ -198,8 +198,12 @@ router.get("/active", can(PERMS.TRIP.VIEW), async (req, res) => {
     typeof req.query.vehicleId === "string" ? req.query.vehicleId : "";
   if (!vehicleId) throw new BadRequestError("vehicleId is required");
 
-  const [headOffice, journey] = await Promise.all([
+  const [headOffice, vehicle, journey] = await Promise.all([
     getHeadOffice(),
+    db.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { currentKM: true },
+    }),
     db.vehicleJourney.findFirst({
       where: { vehicleId, deletedAt: null, status: "ACTIVE" },
       select: {
@@ -235,6 +239,9 @@ router.get("/active", can(PERMS.TRIP.VIEW), async (req, res) => {
 
   return sendOk(res, {
     headOffice,
+    // New journeys must open at or above the odometer — surfaced so the form
+    // can validate opening KM on blur instead of failing at save time.
+    vehicleCurrentKm: vehicle?.currentKM ?? null,
     journey: journey
       ? {
           id: journey.id,

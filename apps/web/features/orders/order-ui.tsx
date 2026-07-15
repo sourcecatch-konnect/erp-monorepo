@@ -1,6 +1,18 @@
 import * as React from "react";
 import type { OrderStatus } from "@skerp/types";
+import {
+  IconBan,
+  IconChecks,
+  IconCircleCheck,
+  IconClock,
+  IconFileText,
+  IconList,
+  IconTruckDelivery,
+  IconX,
+} from "@tabler/icons-react";
+
 import { cn } from "@/lib/utils";
+import type { StatusTabDef } from "@/components/data-table";
 
 // Date formatters — re-exported so existing order imports keep working.
 // Money lives in `@/lib/money` (`formatRupees` / `formatPaise`).
@@ -40,13 +52,13 @@ export function StatusBadge({ status }: { status: OrderStatus }) {
     </span>
   );
 }
-export const STATUS_ORDER: { key: string; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "PendingApproval", label: "Pending Approval" },
-  { key: "Confirmed", label: "Confirmed" },
-  { key: "LRCreated", label: "LR Created" },
-  { key: "Rejected", label: "Rejected" },
-  { key: "Cancelled", label: "Cancelled" },
-  { key: "InProgress", label: "In Progress" },
-  { key: "Completed", label: "Completed" },
+export const STATUS_ORDER: StatusTabDef[] = [
+  { key: "ALL", label: "All", icon: IconList },
+  { key: "PendingApproval", label: "Pending Approval", icon: IconClock },
+  { key: "Confirmed", label: "Confirmed", icon: IconCircleCheck },
+  { key: "LRCreated", label: "LR Created", icon: IconFileText },
+  { key: "Rejected", label: "Rejected", icon: IconX },
+  { key: "Cancelled", label: "Cancelled", icon: IconBan },
+  { key: "InProgress", label: "In Progress", icon: IconTruckDelivery },
+  { key: "Completed", label: "Completed", icon: IconChecks },
 ];

@@ -1,6 +1,16 @@
 import * as React from "react";
 import type { LRStatus, LRSource } from "@skerp/types";
+import {
+  IconBan,
+  IconCircleCheck,
+  IconFileCheck,
+  IconList,
+  IconPencil,
+  IconTruckDelivery,
+} from "@tabler/icons-react";
+
 import { cn } from "@/lib/utils";
+import type { StatusTabDef } from "@/components/data-table";
 
 const STATUS_LABELS: Record<LRStatus, string> = {
   DRAFT: "Draft",
@@ -38,13 +48,13 @@ export const SOURCE_LABELS: Record<LRSource, string> = {
   INSTANT: "Instant",
 };
 
-export const LR_STATUS_ORDER: { key: string; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "DRAFT", label: "Draft" },
-  { key: "FINALISED", label: "Finalised" },
-  { key: "DELIVERED", label: "Delivered" },
-  { key: "ACKNOWLEDGED", label: "POD received" },
-  { key: "CANCELLED", label: "Cancelled" },
+export const LR_STATUS_ORDER: StatusTabDef[] = [
+  { key: "ALL", label: "All", icon: IconList },
+  { key: "DRAFT", label: "Draft", icon: IconPencil },
+  { key: "FINALISED", label: "Finalised", icon: IconCircleCheck },
+  { key: "DELIVERED", label: "Delivered", icon: IconTruckDelivery },
+  { key: "ACKNOWLEDGED", label: "POD received", icon: IconFileCheck },
+  { key: "CANCELLED", label: "Cancelled", icon: IconBan },
 ];
 
 /** Whole days elapsed since an ISO timestamp — worklist aging columns. */

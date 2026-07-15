@@ -9,7 +9,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Trip } from "@skerp/types";
+import type { CloseTripBody, Trip } from "@skerp/types";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import {
@@ -23,6 +23,7 @@ import {
 import { useCan } from "@/features/auth";
 import { useTablePrefs } from "@/features/table-prefs";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import CloseTripDialog from "@/components/feedback/CloseTripDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
@@ -32,7 +33,6 @@ import { tripApi } from "./trip.service";
 import type { TripListQuery } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import TripTable, { DEFAULT_TRIP_COLUMN_ORDER } from "./TripTable";
-import CloseTripDialog from "./CloseTripDialog";
 
 /** Columns whose data is a relation join the server can skip when hidden. */
 const RELATION_COLUMNS = ["journey", "vehicle", "route", "client"] as const;
@@ -171,8 +171,8 @@ export default function TripsListPage() {
   });
 
   const close = useMutation({
-    mutationFn: (vars: { id: string; closingKm: number }) =>
-      tripApi.close(vars.id, { closingKm: vars.closingKm }),
+    mutationFn: (vars: { id: string; body: CloseTripBody }) =>
+      tripApi.close(vars.id, vars.body),
     onSuccess: () => {
       toast.success("Trip closed");
       setCloseTrip(null);
@@ -287,12 +287,13 @@ export default function TripsListPage() {
       <CloseTripDialog
         open={Boolean(closeTrip)}
         onOpenChange={(open) => !open && setCloseTrip(null)}
-        tripNumber={closeTrip?.tripNumber}
+        entity="trip"
+        reference={closeTrip?.tripNumber}
         openingKm={closeTrip?.openingKm}
-        isReturnLeg={closeTrip?.isReturnLeg}
+        isReturnToBase={closeTrip?.isReturnLeg}
         isPending={close.isPending}
-        onConfirm={(closingKm) => {
-          if (closeTrip) close.mutate({ id: closeTrip.id, closingKm });
+        onConfirm={(body) => {
+          if (closeTrip) close.mutate({ id: closeTrip.id, body });
         }}
       />
 

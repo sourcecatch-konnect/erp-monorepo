@@ -45,18 +45,6 @@ const reasonSchema = z
 /* Enums                                                              */
 /* ------------------------------------------------------------------ */
 
-export const tripExpenseTypeSchema = z.enum([
-  "DIESEL",
-  "TOLL",
-  "PARKING",
-  "FOOD",
-  "REPAIR",
-  "FINE",
-  "LOADING",
-  "UNLOADING",
-  "MISC",
-]);
-
 export const tripPaymentModeSchema = z.enum([
   "CASH",
   "BANK",
@@ -86,7 +74,7 @@ export const driverAdvanceStatusSchema = z.enum([
 const expenseBaseShape = {
   journeyId: z.string().min(1, "Journey is required"),
   tripId: optionalString,
-  expenseType: tripExpenseTypeSchema,
+  expenseTypeId: z.string().min(1, "Expense type is required"),
   // Entered in rupees, stored as paise.
   amount: rupeesToPaise("Amount"),
   paymentMode: tripPaymentModeSchema,
@@ -101,26 +89,17 @@ const expenseBaseShape = {
   remarks: optionalString,
 };
 
-const dieselRefinement = (
-  data: { expenseType: string; dieselQty?: number; pumpId?: string },
-  ctx: z.RefinementCtx,
-) => {
-  if (data.expenseType === "DIESEL" && !data.dieselQty) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Diesel quantity is required for a diesel expense",
-      path: ["dieselQty"],
-    });
-  }
-};
+export const createTripExpenseSchema = z.object(expenseBaseShape);
 
-export const createTripExpenseSchema = z
-  .object(expenseBaseShape)
-  .superRefine(dieselRefinement);
+export const updateTripExpenseSchema = z.object(expenseBaseShape);
 
-export const updateTripExpenseSchema = z
-  .object(expenseBaseShape)
-  .superRefine(dieselRefinement);
+export const createTripExpenseTypeSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Expense type name must be at least 2 characters")
+    .max(80, "Expense type name is too long"),
+});
 
 export const rejectTripExpenseSchema = z.object({ reason: reasonSchema });
 export const reverseTripExpenseSchema = z.object({ reason: reasonSchema });
