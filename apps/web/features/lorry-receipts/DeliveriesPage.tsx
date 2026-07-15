@@ -3,6 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import {
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@skerp/ui/components/tabs";
 import {
@@ -14,19 +20,39 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import {
-  IconTruckDelivery,
+  IconBuildingStore,
   IconBuildingWarehouse,
+  IconCalendar,
   IconClipboardCheck,
   IconClockHour4,
+  IconFileDescription,
+  IconHash,
+  IconLocation,
+  IconMapPin,
+  IconTruck,
+  IconTruckDelivery,
+  IconUser,
 } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
+import { useTablePrefs } from "@/features/table-prefs";
+import {
+  ColumnPickerPopover,
+  TableEmptyState,
+  type ColumnMeta,
+} from "@/components/data-table";
 import {
   deliveryWorklistApi,
   deliveryWorklistKeys,
 } from "./lorry-receipt.service";
 import { daysSince } from "./lorry-receipt-ui";
-import type { WorklistGroupRef } from "@skerp/types";
+import type {
+  AtHubRow,
+  PendingDeliveryRow,
+  PendingPodRow,
+  WorklistGroupRef,
+} from "@skerp/types";
 
 const OVERDUE_DELIVERY_DAYS = 7;
 const OVERDUE_POD_DAYS = 7;
@@ -42,18 +68,35 @@ const vehicleOf = (group: WorklistGroupRef) =>
 const routeOf = (group: WorklistGroupRef) =>
   `${group.originBranch?.name ?? "—"} → ${group.destinationBranch?.name ?? "—"}`;
 
-function AgeCell({ iso, overdueDays }: { iso: string | null; overdueDays: number }) {
-  if (!iso) return <TableCell>—</TableCell>;
+function AgeText({
+  iso,
+  overdueDays,
+}: {
+  iso: string | null;
+  overdueDays: number;
+}) {
+  if (!iso) return <>—</>;
   const days = daysSince(iso);
   return (
-    <TableCell
+    <span
       className={cn(
         "tabular-nums",
         days >= overdueDays && "font-semibold text-destructive",
       )}
     >
       {days} day{days === 1 ? "" : "s"}
-    </TableCell>
+    </span>
+  );
+}
+
+function GroupLink({ id, label }: { id: string; label: string }) {
+  return (
+    <Link
+      href={`/lorry-receipts/${id}`}
+      className="font-medium text-primary hover:underline"
+    >
+      {label}
+    </Link>
   );
 }
 
@@ -90,34 +133,296 @@ function StatCard({
   );
 }
 
-function RowSkeletons({ columns }: { columns: number }) {
+/**
+ * One worklist tab: a plain (unpaginated) table with the shared column
+ * picker; layout persists per user under `tableKey`.
+ */
+function WorklistTable<T>({
+  tableKey,
+  defaultOrder,
+  columnMeta,
+  columns,
+  data,
+  isLoading,
+  emptyMessage,
+}: {
+  tableKey: string;
+  defaultOrder: readonly string[];
+  columnMeta: ColumnMeta;
+  columns: ColumnDef<T>[];
+  data: T[];
+  isLoading: boolean;
+  emptyMessage: string;
+}) {
+  const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder } =
+    useTablePrefs(tableKey, defaultOrder);
+
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
+    state: { columnVisibility, columnOrder },
+  });
+
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
+
   return (
-    <>
-      {Array.from({ length: 5 }).map((_, r) => (
-        <TableRow key={r}>
-          {Array.from({ length: columns }).map((_, c) => (
-            <TableCell key={c}>
-              <Skeleton className="h-4 w-24" />
-            </TableCell>
+    <div className="space-y-2">
+      <div className="flex">
+        <ColumnPickerPopover
+          columnOrder={columnOrder}
+          onColumnOrderChange={setColumnOrder}
+          columnVisibility={columnVisibility}
+          onColumnVisibilityChange={setColumnVisibility}
+          columnMeta={columnMeta}
+          defaultOrder={defaultOrder}
+        />
+      </div>
+
+      <Table className="bg-card">
+        <TableHeader>
+          {table.getHeaderGroups().map((hg) => (
+            <TableRow key={hg.id}>
+              {hg.headers.map((h) => (
+                <TableHead
+                  key={h.id}
+                  className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
+                >
+                  {flexRender(h.column.columnDef.header, h.getContext())}
+                </TableHead>
+              ))}
+            </TableRow>
           ))}
-        </TableRow>
-      ))}
-    </>
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, r) => (
+              <TableRow key={r}>
+                {table.getVisibleLeafColumns().map((col) => (
+                  <TableCell key={col.id} className="h-12">
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          ) : data.length === 0 ? (
+            <TableEmptyState
+              colSpan={visibleColumnCount}
+              message={emptyMessage}
+            />
+          ) : (
+            table.getRowModel().rows.map((row) => (
+              <TableRow key={row.id}>
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id} className="h-12 text-sm">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
-function EmptyRow({ columns, message }: { columns: number; message: string }) {
-  return (
-    <TableRow>
-      <TableCell
-        colSpan={columns}
-        className="py-8 text-center text-sm text-muted-foreground"
-      >
-        {message}
-      </TableCell>
-    </TableRow>
-  );
-}
+/* ---------------- Pending delivery ---------------- */
+
+const PENDING_DELIVERY_ORDER = [
+  "lr",
+  "group",
+  "route",
+  "consignee",
+  "vehicle",
+  "unloading",
+  "age",
+] as const;
+
+const PENDING_DELIVERY_META: ColumnMeta = {
+  lr: { label: "LR", icon: IconFileDescription },
+  group: { label: "Group", icon: IconHash },
+  route: { label: "Route", icon: IconMapPin },
+  consignee: { label: "Consignee", icon: IconBuildingStore },
+  vehicle: { label: "Vehicle", icon: IconTruck },
+  unloading: { label: "Unloading point", icon: IconLocation },
+  age: { label: "In transit", icon: IconClockHour4 },
+};
+
+const PENDING_DELIVERY_COLUMNS: ColumnDef<PendingDeliveryRow>[] = [
+  {
+    id: "lr",
+    header: "LR",
+    cell: ({ row }) => (
+      <GroupLink id={row.original.group.id} label={row.original.lrNumber} />
+    ),
+  },
+  {
+    id: "group",
+    header: "Group",
+    cell: ({ row }) => row.original.group.groupNumber,
+  },
+  {
+    id: "route",
+    header: "Route",
+    cell: ({ row }) => routeOf(row.original.group),
+  },
+  {
+    id: "consignee",
+    header: "Consignee",
+    cell: ({ row }) => row.original.group.consignee?.name ?? "—",
+  },
+  {
+    id: "vehicle",
+    header: "Vehicle",
+    cell: ({ row }) => vehicleOf(row.original.group),
+  },
+  {
+    id: "unloading",
+    header: "Unloading point",
+    cell: ({ row }) => row.original.unloadingLocation?.name ?? "—",
+  },
+  {
+    id: "age",
+    header: "In transit",
+    cell: ({ row }) => (
+      <AgeText
+        iso={row.original.group.finalisedAt}
+        overdueDays={OVERDUE_DELIVERY_DAYS}
+      />
+    ),
+  },
+];
+
+/* ---------------- At hub ---------------- */
+
+const AT_HUB_ORDER = [
+  "group",
+  "lrs",
+  "route",
+  "consignee",
+  "hub",
+  "age",
+] as const;
+
+const AT_HUB_META: ColumnMeta = {
+  group: { label: "Group", icon: IconHash },
+  lrs: { label: "LRs", icon: IconFileDescription },
+  route: { label: "Route", icon: IconMapPin },
+  consignee: { label: "Consignee", icon: IconBuildingStore },
+  hub: { label: "Hub", icon: IconBuildingWarehouse },
+  age: { label: "At hub for", icon: IconClockHour4 },
+};
+
+const AT_HUB_COLUMNS: ColumnDef<AtHubRow>[] = [
+  {
+    id: "group",
+    header: "Group",
+    cell: ({ row }) => (
+      <GroupLink id={row.original.id} label={row.original.groupNumber} />
+    ),
+  },
+  {
+    id: "lrs",
+    header: "LRs",
+    cell: ({ row }) =>
+      row.original.lorryReceipts.map((lr) => lr.lrNumber).join(", "),
+  },
+  {
+    id: "route",
+    header: "Route",
+    cell: ({ row }) =>
+      `${row.original.originBranch?.name ?? "—"} → ${row.original.destinationBranch?.name ?? "—"}`,
+  },
+  {
+    id: "consignee",
+    header: "Consignee",
+    cell: ({ row }) => row.original.consignee?.name ?? "—",
+  },
+  {
+    id: "hub",
+    header: "Hub",
+    cell: ({ row }) => row.original.hub?.name ?? "—",
+  },
+  {
+    id: "age",
+    header: "At hub for",
+    cell: ({ row }) => (
+      <AgeText iso={row.original.hubArrivalAt} overdueDays={OVERDUE_HUB_DAYS} />
+    ),
+  },
+];
+
+/* ---------------- Pending POD ---------------- */
+
+const PENDING_POD_ORDER = [
+  "lr",
+  "group",
+  "route",
+  "consignee",
+  "delivered",
+  "receiver",
+  "age",
+] as const;
+
+const PENDING_POD_META: ColumnMeta = {
+  lr: { label: "LR", icon: IconFileDescription },
+  group: { label: "Group", icon: IconHash },
+  route: { label: "Route", icon: IconMapPin },
+  consignee: { label: "Consignee", icon: IconBuildingStore },
+  delivered: { label: "Delivered", icon: IconCalendar },
+  receiver: { label: "Receiver", icon: IconUser },
+  age: { label: "POD pending", icon: IconClockHour4 },
+};
+
+const PENDING_POD_COLUMNS: ColumnDef<PendingPodRow>[] = [
+  {
+    id: "lr",
+    header: "LR",
+    cell: ({ row }) => (
+      <GroupLink id={row.original.group.id} label={row.original.lrNumber} />
+    ),
+  },
+  {
+    id: "group",
+    header: "Group",
+    cell: ({ row }) => row.original.group.groupNumber,
+  },
+  {
+    id: "route",
+    header: "Route",
+    cell: ({ row }) => routeOf(row.original.group),
+  },
+  {
+    id: "consignee",
+    header: "Consignee",
+    cell: ({ row }) => row.original.group.consignee?.name ?? "—",
+  },
+  {
+    id: "delivered",
+    header: "Delivered",
+    cell: ({ row }) =>
+      row.original.delivery
+        ? formatDate(row.original.delivery.deliveredAt)
+        : "—",
+  },
+  {
+    id: "receiver",
+    header: "Receiver",
+    cell: ({ row }) => row.original.delivery?.receiverName ?? "—",
+  },
+  {
+    id: "age",
+    header: "POD pending",
+    cell: ({ row }) => (
+      <AgeText
+        iso={row.original.delivery?.deliveredAt ?? null}
+        overdueDays={OVERDUE_POD_DAYS}
+      />
+    ),
+  },
+];
 
 /**
  * Delivery worklists: pending delivery (fleet + market), lying at hub, and
@@ -191,162 +496,39 @@ export default function DeliveriesPage() {
         </TabsList>
 
         <TabsContent value="pending-delivery">
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>LR</TableHead>
-                  <TableHead>Group</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Consignee</TableHead>
-                  <TableHead>Vehicle</TableHead>
-                  <TableHead>Unloading point</TableHead>
-                  <TableHead>In transit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingDelivery.isLoading ? (
-                  <RowSkeletons columns={7} />
-                ) : (pendingDelivery.data ?? []).length === 0 ? (
-                  <EmptyRow
-                    columns={7}
-                    message="Nothing pending — every dispatched LR is delivered."
-                  />
-                ) : (
-                  (pendingDelivery.data ?? []).map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <Link
-                          href={`/lorry-receipts/${row.group.id}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {row.lrNumber}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{row.group.groupNumber}</TableCell>
-                      <TableCell>{routeOf(row.group)}</TableCell>
-                      <TableCell>{row.group.consignee?.name ?? "—"}</TableCell>
-                      <TableCell>{vehicleOf(row.group)}</TableCell>
-                      <TableCell>{row.unloadingLocation?.name ?? "—"}</TableCell>
-                      <AgeCell
-                        iso={row.group.finalisedAt}
-                        overdueDays={OVERDUE_DELIVERY_DAYS}
-                      />
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <WorklistTable
+            tableKey="deliveries-pending-delivery"
+            defaultOrder={PENDING_DELIVERY_ORDER}
+            columnMeta={PENDING_DELIVERY_META}
+            columns={PENDING_DELIVERY_COLUMNS}
+            data={pendingDelivery.data ?? []}
+            isLoading={pendingDelivery.isLoading}
+            emptyMessage="Nothing pending — every dispatched LR is delivered."
+          />
         </TabsContent>
 
         <TabsContent value="at-hub">
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Group</TableHead>
-                  <TableHead>LRs</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Consignee</TableHead>
-                  <TableHead>Hub</TableHead>
-                  <TableHead>At hub for</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {atHub.isLoading ? (
-                  <RowSkeletons columns={6} />
-                ) : (atHub.data ?? []).length === 0 ? (
-                  <EmptyRow
-                    columns={6}
-                    message="No groups lying at the hub."
-                  />
-                ) : (
-                  (atHub.data ?? []).map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <Link
-                          href={`/lorry-receipts/${row.id}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {row.groupNumber}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        {row.lorryReceipts.map((lr) => lr.lrNumber).join(", ")}
-                      </TableCell>
-                      <TableCell>
-                        {row.originBranch?.name ?? "—"} →{" "}
-                        {row.destinationBranch?.name ?? "—"}
-                      </TableCell>
-                      <TableCell>{row.consignee?.name ?? "—"}</TableCell>
-                      <TableCell>{row.hub?.name ?? "—"}</TableCell>
-                      <AgeCell
-                        iso={row.hubArrivalAt}
-                        overdueDays={OVERDUE_HUB_DAYS}
-                      />
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <WorklistTable
+            tableKey="deliveries-at-hub"
+            defaultOrder={AT_HUB_ORDER}
+            columnMeta={AT_HUB_META}
+            columns={AT_HUB_COLUMNS}
+            data={atHub.data ?? []}
+            isLoading={atHub.isLoading}
+            emptyMessage="No groups lying at the hub."
+          />
         </TabsContent>
 
         <TabsContent value="pending-pod">
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>LR</TableHead>
-                  <TableHead>Group</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Consignee</TableHead>
-                  <TableHead>Delivered</TableHead>
-                  <TableHead>Receiver</TableHead>
-                  <TableHead>POD pending</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingPod.isLoading ? (
-                  <RowSkeletons columns={7} />
-                ) : (pendingPod.data ?? []).length === 0 ? (
-                  <EmptyRow
-                    columns={7}
-                    message="No PODs outstanding — everything delivered is acknowledged."
-                  />
-                ) : (
-                  (pendingPod.data ?? []).map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <Link
-                          href={`/lorry-receipts/${row.group.id}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {row.lrNumber}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{row.group.groupNumber}</TableCell>
-                      <TableCell>{routeOf(row.group)}</TableCell>
-                      <TableCell>{row.group.consignee?.name ?? "—"}</TableCell>
-                      <TableCell>
-                        {row.delivery
-                          ? new Date(
-                              row.delivery.deliveredAt,
-                            ).toLocaleDateString()
-                          : "—"}
-                      </TableCell>
-                      <TableCell>{row.delivery?.receiverName ?? "—"}</TableCell>
-                      <AgeCell
-                        iso={row.delivery?.deliveredAt ?? null}
-                        overdueDays={OVERDUE_POD_DAYS}
-                      />
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <WorklistTable
+            tableKey="deliveries-pending-pod"
+            defaultOrder={PENDING_POD_ORDER}
+            columnMeta={PENDING_POD_META}
+            columns={PENDING_POD_COLUMNS}
+            data={pendingPod.data ?? []}
+            isLoading={pendingPod.isLoading}
+            emptyMessage="No PODs outstanding — everything delivered is acknowledged."
+          />
         </TabsContent>
       </Tabs>
     </div>

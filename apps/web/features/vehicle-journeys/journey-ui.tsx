@@ -7,7 +7,17 @@ import type {
   TripExpenseStatus,
   TripExpenseType,
 } from "@skerp/types";
+import {
+  IconArrowBackUp,
+  IconBan,
+  IconCircleCheck,
+  IconList,
+  IconReceipt,
+  IconRoute,
+} from "@tabler/icons-react";
+
 import { cn } from "@/lib/utils";
+import type { StatusTabDef } from "@/components/data-table";
 
 /* ------------------------------------------------------------------ */
 /* Journey status                                                     */
@@ -52,13 +62,13 @@ export function JourneyStatusBadge({
   );
 }
 
-export const JOURNEY_STATUS_ORDER: { key: string; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "ACTIVE", label: "Active" },
-  { key: "RETURNED", label: "Returned" },
-  { key: "READY_FOR_LOGSLIP", label: "Ready for Log Slip" },
-  { key: "SETTLED", label: "Settled" },
-  { key: "CANCELLED", label: "Cancelled" },
+export const JOURNEY_STATUS_ORDER: StatusTabDef[] = [
+  { key: "ALL", label: "All", icon: IconList },
+  { key: "ACTIVE", label: "Active", icon: IconRoute },
+  { key: "RETURNED", label: "Returned", icon: IconArrowBackUp },
+  { key: "READY_FOR_LOGSLIP", label: "Ready for Log Slip", icon: IconReceipt },
+  { key: "SETTLED", label: "Settled", icon: IconCircleCheck },
+  { key: "CANCELLED", label: "Cancelled", icon: IconBan },
 ];
 
 /* ------------------------------------------------------------------ */
