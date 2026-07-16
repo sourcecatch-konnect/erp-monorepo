@@ -8,7 +8,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import { createTripSchema } from "@skerp/validators";
-import type { CreateTripFormInput, CreateTripBody, Trip } from "@skerp/types";
+import type {
+  CreateTripFormInput,
+  CreateTripBody,
+  Trip,
+  TripDriverChoice,
+} from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -28,6 +33,7 @@ import {
   IconAlertTriangle,
   IconArrowRight,
   IconLock,
+  IconArrowsExchange,
 } from "@tabler/icons-react";
 
 import FormSection from "../masters/_shared/fields/FormSection";
@@ -137,6 +143,31 @@ export default function TripForm({
   const journey = info?.journey ?? null;
   const lastLeg = journey?.lastLeg ?? null;
   const vehicleCurrentKm = info?.vehicleCurrentKm ?? null;
+
+  const selectDriverAssignment = (choice: TripDriverChoice) => {
+    if (
+      choice.selectionState === "ASSIGNED_READY_FOR_NEXT_TRIP" &&
+      choice.vehicleId
+    ) {
+      form.setValue("vehicleId", choice.vehicleId, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  };
+
+  const clearJourneyAssignment = () => {
+    form.setValue("vehicleId", "", {
+      shouldDirty: true,
+      shouldValidate: false,
+    });
+    form.setValue("driverId", "", {
+      shouldDirty: true,
+      shouldValidate: false,
+    });
+    form.clearErrors(["vehicleId", "driverId"]);
+    toast.info("Assignment cleared — choose a different vehicle or driver.");
+  };
 
   // The server rejects a new journey whose opening KM is below the vehicle's
   // odometer — mirror that check on blur so it doesn't surface at save time.
@@ -333,6 +364,7 @@ export default function TripForm({
               <p className="mt-1 text-xs text-muted-foreground">
                 {mode === "edit" && "Update trip details and save changes."}
               </p>
+
               {mode === "create" && vehicleId ? (
                 <div className="col-span-full">
                   {journeyInfo.isLoading ? (
@@ -342,22 +374,36 @@ export default function TripForm({
                     </div>
                   ) : journey ? (
                     <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <IconRoute size={15} className="text-primary" />
-                        <span className="text-sm font-medium">
-                          Journey {journey.journeyNumber}
-                        </span>
-                        <IconArrowRight
-                          size={13}
-                          className="text-muted-foreground"
-                        />
-                        <span className="text-sm">
-                          this trip becomes{" "}
-                          <span className="font-semibold">
-                            leg {(lastLeg?.sequenceNo ?? 0) + 1}
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <IconRoute size={15} className="text-primary" />
+                          <span className="text-sm font-medium">
+                            Journey {journey.journeyNumber}
                           </span>
-                          {isReturnLeg ? " — the return to base" : ""}
-                        </span>
+                          <IconArrowRight
+                            size={13}
+                            className="text-muted-foreground"
+                          />
+                          <span className="text-sm">
+                            This trip becomes{" "}
+                            <span className="font-semibold">
+                              leg {(lastLeg?.sequenceNo ?? 0) + 1}
+                            </span>
+                            {isReturnLeg ? " — the return to base" : ""}
+                          </span>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={clearJourneyAssignment}
+                            title="Clear the current vehicle and driver, then choose another assignment"
+                          >
+                            <IconArrowsExchange data-icon="inline-start" />
+                            Change vehicle &amp; driver
+                          </Button>
+                        </div>
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         {lastLeg ? (
@@ -424,7 +470,8 @@ export default function TripForm({
               label="Vehicle"
               required
               emptyText="No own vehicles found"
-              disabled={isJourneyLegEdit}
+              disabled={Boolean(journey) || isJourneyLegEdit}
+              selectionContext="trip"
             />
             <DriverComboboxField<CreateTripFormInput>
               name="driverId"
@@ -432,6 +479,8 @@ export default function TripForm({
               required
               disabled={Boolean(journey) || isJourneyLegEdit}
               highlightDriverId={journey?.driverId}
+              selectionContext="trip"
+              onTripChoiceSelect={selectDriverAssignment}
             />
 
             {/* Journey context — appears once a vehicle is picked */}

@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  FieldValues,
-  Path,
-  PathValue,
-  useFormContext,
-} from "react-hook-form";
+import { FieldValues, Path, PathValue, useFormContext } from "react-hook-form";
 import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
 
 type Props<TFormValues extends FieldValues> = {
@@ -22,6 +17,7 @@ type Props<TFormValues extends FieldValues> = {
   onScrollEnd?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
+  onValueChange?: (value: string) => void;
   /** Optional inline action rendered next to the label, e.g. "+ New trip". */
   actionLabel?: string;
   onAction?: () => void;
@@ -45,6 +41,7 @@ export default function ComboboxField<TFormValues extends FieldValues>({
   onScrollEnd,
   hasMore,
   isLoadingMore,
+  onValueChange,
   actionLabel,
   onAction,
 }: Props<TFormValues>) {
@@ -77,12 +74,13 @@ export default function ComboboxField<TFormValues extends FieldValues>({
       <Combobox
         options={options}
         value={typeof value === "string" ? value : undefined}
-        onChange={(next) =>
+        onChange={(next) => {
           setValue(name, next as PathValue<TFormValues, Path<TFormValues>>, {
             shouldDirty: true,
             shouldValidate: true,
-          })
-        }
+          });
+          onValueChange?.(next);
+        }}
         placeholder={placeholder ?? `Select ${label.toLowerCase()}`}
         searchPlaceholder={searchPlaceholder}
         emptyText={emptyText}

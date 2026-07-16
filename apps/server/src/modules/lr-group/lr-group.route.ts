@@ -88,18 +88,56 @@ type LRLineCreate = {
 /* ------------------------------------------------------------------ */
 router.get("/", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
   const query = parseListQuery(req);
+  // Search is LR-first: users quote LR numbers far more often than group
+  // numbers, so match child LRs (number/invoice) alongside the group's own
+  // number and market vehicle. Both this and the branch filter produce `OR`
+  // fragments, so they must be AND-ed rather than spread into `where`.
+  const searchFilter = query.search
+    ? {
+        OR: [
+          {
+            groupNumber: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            marketVehicleNumber: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            lorryReceipts: {
+              some: {
+                deletedAt: null,
+                OR: [
+                  {
+                    lrNumber: {
+                      contains: query.search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    invoiceNumber: {
+                      contains: query.search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      }
+    : {};
   const where = {
     deletedAt: null,
-    ...groupBranchFilter(req),
     ...(query.filter.status
       ? { status: query.filter.status as LRGroupStatus }
       : {}),
     ...(query.filter.orderId ? { orderId: query.filter.orderId } : {}),
-    ...(query.search
-      ? {
-          groupNumber: { contains: query.search, mode: "insensitive" as const },
-        }
-      : {}),
+    AND: [groupBranchFilter(req), searchFilter],
   };
 
   const [groups, total] = await Promise.all([
@@ -199,7 +237,20 @@ router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
         { deletedAt: null },
         branchFilter,
         {
-          OR: [{ id: identifier }, { groupNumber: identifier }],
+          // An LR number resolves to its parent group, so LR numbers are
+          // deep-linkable everywhere without a separate LR detail route.
+          OR: [
+            { id: identifier },
+            { groupNumber: identifier },
+            {
+              lorryReceipts: {
+                some: {
+                  deletedAt: null,
+                  lrNumber: { equals: identifier, mode: "insensitive" },
+                },
+              },
+            },
+          ],
         },
       ],
     },

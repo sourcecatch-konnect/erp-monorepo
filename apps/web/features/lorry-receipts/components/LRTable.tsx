@@ -33,7 +33,6 @@ import {
   IconBuilding,
   IconBuildingStore,
   IconCalendar,
-  IconChevronDown,
   IconChevronRight,
   IconCurrencyRupee,
   IconDotsVertical,
@@ -65,6 +64,8 @@ import {
   LRStatusBadge,
   SOURCE_LABELS,
   LR_STATUS_ORDER,
+  lrGroupDisplay,
+  RouteInline,
 } from "../lorry-receipt-ui";
 
 type Props = {
@@ -111,7 +112,7 @@ export const DEFAULT_LR_COLUMN_ORDER = [
 ] as const;
 
 const COLUMN_META: ColumnMeta = {
-  group: { label: "Group #", icon: IconHash },
+  group: { label: "LR / Group #", icon: IconHash },
   consignor: { label: "Consignor", icon: IconBuilding },
   consignee: { label: "Consignee", icon: IconBuildingStore },
   origin: { label: "Origin", icon: IconMapPin },
@@ -143,15 +144,24 @@ const SKELETON_WIDTHS: Record<string, string> = {
 function LRChildRows({ group }: { group: LRGroupListItem }) {
   const childRows = group.lorryReceipts ?? [];
   return (
-    <div className="px-4 py-3">
-      <Table className="min-w-[720px] bg-background">
+    <div className="bg-muted/30 px-5 py-4">
+      <div className="mb-3 flex items-center gap-2">
+        <IconFileDescription size={17} className="text-primary" />
+        <p className="text-sm font-semibold text-foreground">
+          Consignments in this truckload
+        </p>
+        <span className="text-sm text-muted-foreground">
+          {childRows.length} LRs
+        </span>
+      </div>
+      <Table className="min-w-[760px] bg-card">
         <TableHeader>
           <TableRow>
             {["LR #", "Route", "Goods", "Invoice", "E-way bill", "Status"].map(
               (label) => (
                 <TableHead
                   key={label}
-                  className="h-9 text-xs font-semibold uppercase text-muted-foreground"
+                  className="h-11 text-sm font-semibold text-foreground"
                 >
                   {label}
                 </TableHead>
@@ -161,23 +171,24 @@ function LRChildRows({ group }: { group: LRGroupListItem }) {
         </TableHeader>
         <TableBody>
           {childRows.map((lr) => (
-            <TableRow key={lr.id}>
-              <TableCell className="font-medium text-primary">
+            <TableRow key={lr.id} className="h-14">
+              <TableCell className="font-mono text-sm font-semibold text-primary">
                 <Link
-                  href={`/lorry-receipts/${encodeURIComponent(group.groupNumber)}`}
+                  href={`/lorry-receipts/${encodeURIComponent(lr.lrNumber)}`}
                   className="hover:underline"
                 >
                   {lr.lrNumber}
                 </Link>
               </TableCell>
-              <TableCell className="text-muted-foreground">
+              <TableCell>
                 <div className="flex flex-col gap-1">
-                  <span>
-                    {lr.loadingLocation?.name ?? "-"} -&gt;{" "}
-                    {lr.unloadingLocation?.name ?? "-"}
-                  </span>
+                  <RouteInline
+                    from={lr.loadingLocation?.name}
+                    to={lr.unloadingLocation?.name}
+                    className="max-w-64 text-sm"
+                  />
                   {(!lr.loadingLocation || !lr.unloadingLocation) && (
-                    <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-warning/15 px-2 py-1 text-xs font-medium text-warning-foreground">
                       <IconAlertTriangle size={13} />
                       Location pending
                     </span>
@@ -186,12 +197,11 @@ function LRChildRows({ group }: { group: LRGroupListItem }) {
               </TableCell>
               <TableCell>
                 {(lr.goods?.length ?? 0) > 0 ? (
-                  <span className="text-muted-foreground">
-                    {lr.goods?.length} row
-                    {lr.goods?.length === 1 ? "" : "s"}
+                  <span className="inline-flex min-w-7 justify-center rounded-sm bg-muted px-2 py-1 text-sm font-semibold tabular-nums">
+                    {lr.goods?.length}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-warning/15 px-2 py-1 text-xs font-medium text-warning-foreground">
                     <IconAlertTriangle size={13} />
                     Goods not added
                   </span>
@@ -200,27 +210,29 @@ function LRChildRows({ group }: { group: LRGroupListItem }) {
               <TableCell>
                 {lr.invoiceNumber ? (
                   <div>
-                    <p>{lr.invoiceNumber}</p>
+                    <p className="font-mono text-sm">{lr.invoiceNumber}</p>
                     {lr.invoiceAmount != null ? (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground tabular-nums">
                         {formatPaise(lr.invoiceAmount)}
                       </p>
                     ) : null}
                   </div>
                 ) : (
-                  <span className="text-muted-foreground">-</span>
+                  <span className="text-muted-foreground">—</span>
                 )}
               </TableCell>
               <TableCell>
                 {lr.ewayBill ? (
                   <div>
-                    <p>{lr.ewayBill.ewayBillNo}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="font-mono text-sm">
+                      {lr.ewayBill.ewayBillNo}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
                       Expires {formatDate(lr.ewayBill.expiresAt)}
                     </p>
                   </div>
                 ) : (
-                  <span className="text-muted-foreground">-</span>
+                  <span className="text-muted-foreground">—</span>
                 )}
               </TableCell>
               <TableCell>
@@ -269,13 +281,15 @@ export default function LRTable(props: Props) {
         enableHiding: false,
         cell: ({ row }) => {
           const lrs = row.original.lorryReceipts ?? [];
+          // A single LR has nothing extra to reveal — its identity IS the row.
+          // Only true truckloads (2+ LRs) get the expand affordance.
+          if (lrs.length < 2) return null;
           const isExpanded = Boolean(expanded[row.original.id]);
           return (
             <Button
               size="icon-sm"
               variant="ghost"
               aria-label={isExpanded ? "Collapse LRs" : "Expand LRs"}
-              disabled={lrs.length === 0}
               onClick={(e) => {
                 e.stopPropagation();
                 setExpanded((current) => ({
@@ -284,52 +298,125 @@ export default function LRTable(props: Props) {
                 }));
               }}
             >
-              {isExpanded ? (
-                <IconChevronDown size={16} />
-              ) : (
-                <IconChevronRight size={16} />
-              )}
+              <IconChevronRight
+                size={16}
+                className={cn(
+                  "transition-transform duration-200",
+                  isExpanded && "rotate-90",
+                )}
+              />
             </Button>
           );
         },
       },
       {
         id: "group",
-        header: "Group #",
-        cell: ({ row }) => (
-          <Link
-            href={`/lorry-receipts/${encodeURIComponent(row.original.groupNumber)}`}
-            className="block"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span className="block font-medium text-primary hover:underline">
-              {row.original.groupNumber}
-            </span>
-            <span className="block font-mono text-xs text-muted-foreground">
-              {row.original.fyCode}
-            </span>
-          </Link>
-        ),
+        header: "LR / Group #",
+        cell: ({ row }) => {
+          const d = lrGroupDisplay(row.original);
+          // Truckloads preview their LR sequence numbers so a specific LR can
+          // be spotted without expanding the row.
+          const lrPreview =
+            d.lrCount === 0
+              ? "No LRs yet"
+              : `LRs ${d.lrNumbers
+                  .slice(0, 3)
+                  .map((n) => n.slice(n.lastIndexOf("/") + 1))
+                  .join(" · ")}${d.lrCount > 3 ? ` +${d.lrCount - 3}` : ""}`;
+          return (
+            <Link
+              href={`/lorry-receipts/${encodeURIComponent(d.title)}`}
+              className="block"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="flex items-center gap-1.5">
+                {d.isSingleton ? (
+                  <IconFileDescription
+                    size={17}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                ) : (
+                  <IconTruck size={17} className="shrink-0 text-primary" />
+                )}
+                <span className="text-sm font-semibold text-primary hover:underline">
+                  {d.title}
+                </span>
+                {!d.isSingleton && (
+                  <span className="inline-flex shrink-0 items-center rounded-sm border border-primary/25 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                    {d.lrCount > 0 ? `${d.lrCount} LRs` : "Empty"}
+                  </span>
+                )}
+              </span>
+              <span className="mt-1 block pl-6 font-mono text-sm text-muted-foreground">
+                {d.isSingleton ? d.subtitle : lrPreview}
+              </span>
+            </Link>
+          );
+        },
       },
       {
         id: "consignor",
         header: "Consignor",
-        cell: ({ row }) => row.original.consignor?.name ?? "—",
+        cell: ({ row }) => {
+          const c = row.original.consignor;
+          if (!c) return <span className="text-muted-foreground">—</span>;
+          return (
+            <div className="min-w-0 max-w-44">
+              <span className="block truncate font-medium">{c.name}</span>
+              {c.shortName ? (
+                <span className="block truncate text-sm text-muted-foreground">
+                  {c.shortName}
+                </span>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         id: "consignee",
         header: "Consignee",
-        cell: ({ row }) => row.original.consignee?.name ?? "—",
+        cell: ({ row }) => {
+          const c = row.original.consignee;
+          if (!c) return <span className="text-muted-foreground">—</span>;
+          return (
+            <div className="min-w-0 max-w-44">
+              <span className="block truncate font-medium">{c.name}</span>
+              {c.shortName ? (
+                <span className="block truncate text-sm text-muted-foreground">
+                  {c.shortName}
+                </span>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         id: "origin",
         header: "Origin",
-        cell: ({ row }) => row.original.originBranch?.name ?? "—",
+        cell: ({ row }) => {
+          const name = row.original.originBranch?.name;
+          if (!name) return <span className="text-muted-foreground">—</span>;
+          return (
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <span className="size-1.5 shrink-0 rounded-full border-[1.5px] border-muted-foreground" />
+              {name}
+            </span>
+          );
+        },
       },
       {
         id: "destination",
         header: "Destination",
-        cell: ({ row }) => row.original.destinationBranch?.name ?? "—",
+        cell: ({ row }) => {
+          const name = row.original.destinationBranch?.name;
+          if (!name) return <span className="text-muted-foreground">—</span>;
+          return (
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+              {name}
+            </span>
+          );
+        },
       },
       {
         id: "vehicle",
@@ -345,10 +432,17 @@ export default function LRTable(props: Props) {
           if (!number) return <span className="text-muted-foreground">—</span>;
           return (
             <div>
-              <span className="block">{number}</span>
+              <span className="inline-flex items-center rounded-sm border border-border bg-muted/60 px-2 py-1 font-mono text-sm font-semibold uppercase">
+                {number}
+              </span>
               {driver ? (
-                <span className="block text-xs text-muted-foreground">
+                <span className="mt-1 block text-sm text-muted-foreground">
                   {driver}
+                  {g.isMarketVehicle ? " · Market" : ""}
+                </span>
+              ) : g.isMarketVehicle ? (
+                <span className="mt-1 block text-sm text-muted-foreground">
+                  Market
                 </span>
               ) : null}
             </div>
@@ -366,11 +460,13 @@ export default function LRTable(props: Props) {
               (lr.goods?.length ?? 0) === 0,
           );
           return (
-            <div className="flex flex-col gap-1">
-              <span>{row.original.lrCount ?? "—"}</span>
+            <div className="flex flex-col items-start gap-1">
+              <span className="inline-flex min-w-7 justify-center rounded-sm bg-muted px-2 py-1 text-sm font-semibold tabular-nums">
+                {row.original.lrCount ?? "—"}
+              </span>
               {hasIncompleteLr ? (
-                <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
-                  <IconAlertTriangle size={12} /> Details pending
+                <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-warning/15 px-2 py-1 text-xs font-medium text-warning-foreground">
+                  <IconAlertTriangle size={13} /> Details pending
                 </span>
               ) : null}
             </div>
@@ -400,7 +496,16 @@ export default function LRTable(props: Props) {
       {
         id: "source",
         header: "Source",
-        cell: ({ row }) => SOURCE_LABELS[row.original.source],
+        cell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-muted/50 px-2 py-1 text-sm font-medium text-foreground">
+            {row.original.source === "FROM_ORDER" ? (
+              <IconFileDescription size={14} />
+            ) : (
+              <IconTag size={14} />
+            )}
+            {SOURCE_LABELS[row.original.source]}
+          </span>
+        ),
       },
       {
         id: "date",
@@ -412,14 +517,26 @@ export default function LRTable(props: Props) {
             onSortChange={onSortChange}
           />
         ),
-        cell: ({ row }) => formatDate(row.original.createdAt),
+        cell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5 tabular-nums">
+            <IconCalendar
+              size={13}
+              className="shrink-0 text-muted-foreground"
+            />
+            {formatDate(row.original.createdAt)}
+          </span>
+        ),
       },
       {
         id: "status",
         header: "Status",
         size: 128,
         enableHiding: false,
-        cell: ({ row }) => <LRStatusBadge status={row.original.status} />,
+        cell: ({ row }) => (
+          <LRStatusBadge
+            status={lrGroupDisplay(row.original).status ?? row.original.status}
+          />
+        ),
       },
       {
         id: "actions",
@@ -428,6 +545,7 @@ export default function LRTable(props: Props) {
         enableHiding: false,
         cell: ({ row }) => {
           const g = row.original;
+          const d = lrGroupDisplay(g);
           const cancellable = canCancel && g.status === "DRAFT";
           return (
             <div
@@ -436,16 +554,21 @@ export default function LRTable(props: Props) {
             >
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon-sm" variant="ghost" aria-label="Row actions">
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Row actions"
+                  >
                     <IconDotsVertical size={16} />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
                   <DropdownMenuItem asChild>
                     <Link
-                      href={`/lorry-receipts/${encodeURIComponent(g.groupNumber)}`}
+                      href={`/lorry-receipts/${encodeURIComponent(d.title)}`}
                     >
-                      <IconEye size={16} className="mr-2" /> View group
+                      <IconEye size={16} className="mr-2" />{" "}
+                      {d.isSingleton ? "View LR" : "View group"}
                     </Link>
                   </DropdownMenuItem>
                   {cancellable ? (
@@ -499,11 +622,11 @@ export default function LRTable(props: Props) {
         layoutId="lr-status-tab"
       />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
         <TableSearchInput
           value={search}
           onChange={onSearchChange}
-          placeholder="Search group number..."
+          placeholder="Search LR, group, invoice or vehicle..."
         />
 
         <ColumnPickerPopover
@@ -516,7 +639,7 @@ export default function LRTable(props: Props) {
         />
       </div>
 
-      <Table className="bg-card">
+      <Table className="min-w-[1120px] bg-card">
         <TableHeader>
           {table.getHeaderGroups().map((hg) => (
             <TableRow key={hg.id}>
@@ -527,7 +650,7 @@ export default function LRTable(props: Props) {
                     key={h.id}
                     style={pinStyle(h.column)}
                     className={cn(
-                      "h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground",
+                      "h-12 whitespace-nowrap text-sm font-semibold text-foreground",
                       pinned && `sticky z-10 ${PIN_HEAD_BG}`,
                       h.column.id === "status" && "border-l border-border",
                       h.column.id === "freight" && "text-right",
@@ -551,7 +674,7 @@ export default function LRTable(props: Props) {
                       key={col.id}
                       style={pinStyle(col)}
                       className={cn(
-                        "h-12",
+                        "h-16",
                         pinned && `sticky z-10 ${PIN_CELL_BG}`,
                         col.id === "status" && "border-l border-border",
                       )}
@@ -567,7 +690,7 @@ export default function LRTable(props: Props) {
           ) : data.length === 0 ? (
             <TableEmptyState
               colSpan={visibleColumnCount}
-              message="No LR groups found"
+              message="No lorry receipts found"
             />
           ) : (
             table.getRowModel().rows.map((row) => {
@@ -576,7 +699,7 @@ export default function LRTable(props: Props) {
               return (
                 <React.Fragment key={row.id}>
                   <TableRow
-                    className="group/row cursor-pointer"
+                    className="group/row h-16 cursor-pointer"
                     onClick={() => onRowClick(g)}
                   >
                     {row.getVisibleCells().map((cell) => {
@@ -586,7 +709,7 @@ export default function LRTable(props: Props) {
                           key={cell.id}
                           style={pinStyle(cell.column)}
                           className={cn(
-                            "h-12 text-sm",
+                            "py-3 text-sm",
                             pinned &&
                               `sticky z-10 ${PIN_CELL_BG} transition-colors`,
                             cell.column.id === "status" &&
@@ -604,7 +727,9 @@ export default function LRTable(props: Props) {
                   {isExpanded ? (
                     <TableRow className="bg-muted/20 hover:bg-muted/20">
                       <TableCell colSpan={visibleColumnCount} className="p-0">
-                        <LRChildRows group={g} />
+                        <div className="overflow-hidden">
+                          <LRChildRows group={g} />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : null}

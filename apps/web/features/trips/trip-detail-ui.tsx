@@ -34,6 +34,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { lrGroupDisplay } from "@/features/lorry-receipts";
 import { timeAgo, TripStatusBadge } from "./trip-ui";
 
 /* ------------------------------------------------------------------ */
@@ -386,10 +387,11 @@ export function LRGroupCard({
   const heldAtHub =
     leg === "primary" && group.hubId !== null && group.secondaryTripId === null;
   const handedOver = leg === "primary" && group.secondaryTripId !== null;
+  const display = lrGroupDisplay(group);
 
   return (
     <DetailCard
-      title="Cargo — LR group"
+      title={display.isSingleton ? "Cargo — LR" : "Cargo — LR group"}
       icon={IconPackage}
       action={
         <div className="flex items-center gap-1.5">
@@ -410,8 +412,11 @@ export function LRGroupCard({
             href={`/lorry-receipts/${group.id}`}
             className="font-mono text-sm font-medium text-primary hover:underline"
           >
-            {group.groupNumber}
+            {display.title}
           </Link>
+          {!display.isSingleton && (
+            <MetaChip>{display.lrCount} LRs</MetaChip>
+          )}
           <span className="text-sm text-muted-foreground">
             {group.consignor.name}
             <span className="mx-1.5 text-muted-foreground/60">→</span>
@@ -479,7 +484,7 @@ export function LRGroupCard({
         <div className="divide-y rounded-md border">
           {group.lorryReceipts.length === 0 ? (
             <p className="px-3 py-2.5 text-sm text-muted-foreground">
-              No LRs in this group yet.
+              No LRs yet.
             </p>
           ) : (
             group.lorryReceipts.map((lr) => <LRRow key={lr.id} lr={lr} />)

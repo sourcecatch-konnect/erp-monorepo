@@ -134,10 +134,15 @@ const onInvalid = (formErrors: typeof form.formState.errors) => {
         className="h-screen w-full overflow-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-4xl"
       >
         <SheetHeader className="shrink-0 border-b">
-          <SheetTitle>Finalise group {groupNumber}</SheetTitle>
+          <SheetTitle>
+            {lrs.length === 1
+              ? `Finalise LR ${lrs[0]!.lrNumber}`
+              : `Finalise group ${groupNumber} — ${lrs.length} LRs`}
+          </SheetTitle>
           <SheetDescription>
-            Enter truck-level freight once, then complete invoice and e-way bill
-            details for each LR.
+            {lrs.length === 1
+              ? "Confirm the truck-level freight and paperwork for this LR."
+              : "Enter truck-level freight once, then complete invoice and e-way bill details for each LR."}
           </SheetDescription>
         </SheetHeader>
 
@@ -245,7 +250,9 @@ const onInvalid = (formErrors: typeof form.formState.errors) => {
       ? "Finalising..."
       : hasIncompleteLr
         ? "LR details required"
-        : "Finalise group"}
+        : lrs.length === 1
+          ? "Finalise LR"
+          : `Finalise ${lrs.length} LRs`}
   </Button>
 </SheetFooter>
       </SheetContent>
