@@ -51,6 +51,13 @@ export const lorryReceiptApi = {
     return unwrapApiResponse(res);
   },
 
+  downloadPdf: async (id: string): Promise<Blob> => {
+    const res = await api.get(`/lorry-receipts/${id}/pdf`, {
+      responseType: "blob",
+    });
+    return res.data;
+  },
+
   update: async (
     id: string,
     body: UpdateLRBody & { version?: number },

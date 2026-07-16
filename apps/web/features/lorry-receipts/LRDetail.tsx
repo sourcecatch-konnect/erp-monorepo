@@ -18,7 +18,9 @@ import {
   IconTrash,
   IconAlertTriangle,
   IconCircleCheck,
+  IconDownload,
   IconFileDescription,
+  IconLoader2,
   IconPackage,
 } from "@tabler/icons-react";
 
@@ -121,6 +123,28 @@ export default function LRDetail({ id }: { id: string }) {
     React.useState<LorryReceipt | null>(null);
   const [ackLr, setAckLr] = React.useState<LorryReceipt | null>(null);
   const [editAckLr, setEditAckLr] = React.useState<LorryReceipt | null>(null);
+  const [downloadingLrId, setDownloadingLrId] = React.useState<string | null>(
+    null,
+  );
+
+  const downloadLrPdf = async (lr: { id: string; lrNumber: string }) => {
+    try {
+      setDownloadingLrId(lr.id);
+      const blob = await lorryReceiptApi.downloadPdf(lr.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${lr.lrNumber.replaceAll("/", "-")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    } finally {
+      setDownloadingLrId(null);
+    }
+  };
 
   const canApprove = useCan(PERMS.LORRY_RECEIPT.APPROVE);
   const canCancel = useCan(PERMS.LORRY_RECEIPT.CANCEL);
@@ -492,6 +516,21 @@ export default function LRDetail({ id }: { id: string }) {
           </div>
 
           <div className="flex flex-wrap gap-2 lg:justify-end">
+            {display.isSingleton && g.lorryReceipts.length === 1 && (
+              <Button
+                size="lg"
+                variant="outline"
+                disabled={downloadingLrId !== null}
+                onClick={() => downloadLrPdf(g.lorryReceipts[0]!)}
+              >
+                {downloadingLrId ? (
+                  <IconLoader2 size={16} className="animate-spin" />
+                ) : (
+                  <IconDownload size={16} />
+                )}
+                {downloadingLrId ? "Preparing…" : "Download PDF"}
+              </Button>
+            )}
             {g.status === "DRAFT" && canUpdate && (
               <Button
                 size="lg"
@@ -723,8 +762,24 @@ export default function LRDetail({ id }: { id: string }) {
                     </p>
                   ) : null}
                 </div>
-                {g.status === "DRAFT" && canUpdate && (
-                  <div className="flex gap-1">
+                <div className="flex gap-1">
+                  {!display.isSingleton && (
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Download LR PDF"
+                      disabled={downloadingLrId === lr.id}
+                      onClick={() => downloadLrPdf(lr)}
+                    >
+                      {downloadingLrId === lr.id ? (
+                        <IconLoader2 size={15} className="animate-spin" />
+                      ) : (
+                        <IconDownload size={15} />
+                      )}
+                    </Button>
+                  )}
+                  {g.status === "DRAFT" && canUpdate && (
+                    <>
                     <Button
                       size="icon-sm"
                       variant="ghost"
@@ -744,8 +799,9 @@ export default function LRDetail({ id }: { id: string }) {
                         <IconTrash size={15} />
                       </Button>
                     )}
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
