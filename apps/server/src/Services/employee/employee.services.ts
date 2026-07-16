@@ -1,10 +1,11 @@
 import bcrypt from "bcryptjs";
 import { db } from "../../../prisma/prisma.js";
-import { ROLES } from "../../util/auth.util.js";
 import {
+  BadRequestError,
   ConflictError,
   NotFoundError,
 } from "../../lib/error.js";
+import { invalidateUser } from "../../auth/permission-cache.js";
 
 const SALT_ROUNDS = 10;
 
@@ -20,15 +21,6 @@ const toSafeEmployee = <T extends { password: string | null }>(
 ) => {
   const { password: _password, ...safe } = user;
   return safe;
-};
-
-/** Find (or lazily create) the "Employee" role. Role.name is not unique. */
-const ensureEmployeeRole = async () => {
-  const existing = await db.role.findFirst({
-    where: { name: ROLES.EMPLOYEE },
-  });
-  if (existing) return existing;
-  return db.role.create({ data: { name: ROLES.EMPLOYEE } });
 };
 
 /** Derive a unique userName from the email local-part. */
@@ -47,14 +39,14 @@ const deriveUserName = async (email: string): Promise<string> => {
   return candidate;
 };
 
-/** Load an employee by id, asserting it exists and has the Employee role. */
+/** Load a managed user by id. */
 const getEmployeeOrThrow = async (id: string) => {
   const user = await db.user.findUnique({
     where: { id },
     include: employeeInclude,
   });
-  if (!user || user.role?.name !== ROLES.EMPLOYEE) {
-    throw new NotFoundError("Employee not found");
+  if (!user) {
+    throw new NotFoundError("User not found");
   }
   return user;
 };
@@ -67,6 +59,7 @@ export type CreateEmployeeArgs = {
   password: string;
   companyId: string;
   branchId: string;
+  roleId: string;
 };
 
 export const createEmployeeService = async (args: CreateEmployeeArgs) => {
@@ -89,7 +82,13 @@ export const createEmployeeService = async (args: CreateEmployeeArgs) => {
     throw new NotFoundError("Branch not found for the selected company");
   }
 
-  const role = await ensureEmployeeRole();
+  if (!args.roleId) {
+    throw new BadRequestError("Role is required");
+  }
+
+  const role = await db.role.findUnique({ where: { id: args.roleId } });
+  if (!role) throw new NotFoundError("Role not found");
+
   const userName = await deriveUserName(args.email);
   const passwordHash = await bcrypt.hash(args.password, SALT_ROUNDS);
 
@@ -102,7 +101,7 @@ export const createEmployeeService = async (args: CreateEmployeeArgs) => {
       email: args.email,
       companyId: args.companyId,
       branchId: args.branchId,
-      roleId: role.id,
+      roleId: args.roleId,
       status: true,
       password: passwordHash,
     },
@@ -114,7 +113,6 @@ export const createEmployeeService = async (args: CreateEmployeeArgs) => {
 
 export const listEmployeesService = async () => {
   const employees = await db.user.findMany({
-    where: { role: { name: ROLES.EMPLOYEE } },
     include: employeeInclude,
     orderBy: { createdAt: "desc" },
   });
@@ -130,6 +128,7 @@ export type UpdateEmployeeArgs = {
   middleName?: string;
   lastName?: string;
   email?: string;
+  roleId?: string;
   mobile?: string | null;
   companyId?: string;
   branchId?: string;
@@ -171,6 +170,11 @@ export const updateEmployeeService = async (
     }
   }
 
+  if (args.roleId) {
+    const role = await db.role.findUnique({ where: { id: args.roleId } });
+    if (!role) throw new NotFoundError("Role not found");
+  }
+
   const user = await db.user.update({
     where: { id },
     data: {
@@ -178,6 +182,7 @@ export const updateEmployeeService = async (
       middleName: args.middleName,
       lastName: args.lastName,
       email: args.email,
+      roleId: args.roleId,
       mobile: args.mobile,
       companyId: args.companyId,
       branchId: args.branchId,
@@ -200,6 +205,9 @@ export const updateEmployeeService = async (
     },
     include: employeeInclude,
   });
+  if (args.roleId && args.roleId !== existing.roleId) {
+    invalidateUser(id);
+  }
   return toSafeEmployee(user);
 };
 

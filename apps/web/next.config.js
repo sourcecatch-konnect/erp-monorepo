@@ -1,6 +1,10 @@
 /* eslint-disable no-undef */
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Docker builds set NEXT_OUTPUT=standalone (apps/web/Dockerfile) to get the
+  // self-contained .next/standalone server; unset locally so dev/start behave
+  // as before.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   transpilePackages: ["@skerp/types", "@skerp/validators", "@skerp/ui"],
   allowedDevOrigins: [
     "192.168.*.*",

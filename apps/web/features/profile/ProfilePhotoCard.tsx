@@ -152,7 +152,6 @@ export function ProfilePhotoCard({ userId, initials }: Props) {
             {showSkeleton ? (
               <Skeleton className="size-full rounded-full" />
             ) : hasPhoto ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={photo.data}
                 alt="Profile"

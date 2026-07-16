@@ -8,17 +8,11 @@ import {
   IconUser,
   IconMapPin,
   IconCalendar,
-  IconWeight,
 } from "@tabler/icons-react";
 
 const formatDate = (value?: string | Date | null) => {
   if (!value) return "-";
   return new Date(value).toLocaleDateString();
-};
-
-const formatNumber = (value?: number | null) => {
-  if (value == null) return "-";
-  return value.toLocaleString("en-IN");
 };
 
 export const agreementColumns: ColumnDef<AgreementWithRelations>[] = [

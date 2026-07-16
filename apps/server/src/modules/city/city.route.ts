@@ -1,17 +1,19 @@
 import { createCitySchema, updateCitySchema } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
-import { ZodTypeAny } from "zod";
-import { createDuplicateError, normalizeName } from "../_shared/NameNormalized.js";
+import {
+  createDuplicateError,
+  normalizeName,
+} from "../_shared/NameNormalized.js";
 
 const router = createCrudRouter({
   model: db.city,
-  createSchema: createCitySchema as ZodTypeAny,
-  updateSchema: updateCitySchema as ZodTypeAny,
+  createSchema: createCitySchema,
+  updateSchema: updateCitySchema,
   permissionKey: "masters.city",
 
   hooks: {
-    beforeCreate: async (data: any) => {
+    beforeCreate: async (data) => {
       const name = normalizeName(data.name);
 
       const existing = await db.city.findFirst({
@@ -27,7 +29,7 @@ const router = createCrudRouter({
       if (existing) {
         throw createDuplicateError(
           "name",
-          `City "${name}" already exists in selected state`
+          `City "${name}" already exists in selected state`,
         );
       }
 
@@ -35,7 +37,7 @@ const router = createCrudRouter({
       return data;
     },
 
-    beforeUpdate: async (data: any, row: any) => {
+    beforeUpdate: async (data, row) => {
       const currentCity = row as {
         id: string;
         name: string;
@@ -61,7 +63,7 @@ const router = createCrudRouter({
       if (existing) {
         throw createDuplicateError(
           "name",
-          `City "${name}" already exists in selected state`
+          `City "${name}" already exists in selected state`,
         );
       }
 
@@ -80,7 +82,7 @@ const router = createCrudRouter({
 
       if (usedInRailwayFreightMatrix) {
         throw new Error(
-          "Cannot delete this city because it is used in Railway Freight Matrix."
+          "Cannot delete this city because it is used in Railway Freight Matrix.",
         );
       }
     },

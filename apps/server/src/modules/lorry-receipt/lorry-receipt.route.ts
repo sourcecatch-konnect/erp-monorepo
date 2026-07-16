@@ -16,6 +16,8 @@ import {
 } from "../../lib/error.js";
 import type { LRStatus } from "../../../generated/prisma/index.js";
 import { lrListSelect, lrDetailInclude } from "./lorry-receipt.service.js";
+import { buildLrPdfHtml, lrPdfInclude } from "./lorry-receipt.pdf.js";
+import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -89,6 +91,27 @@ router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* PDF (printable consignment note)                                    */
+/* ------------------------------------------------------------------ */
+router.get("/:id/pdf", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
+  const id = getParamId(req);
+  const lr = await db.lorryReceipt.findFirst({
+    where: { id, deletedAt: null, ...lrBranchFilter(req) },
+    include: lrPdfInclude,
+  });
+  if (!lr) throw new NotFoundError("Lorry receipt not found");
+
+  const pdfBuffer = await generatePdfFromHtml(buildLrPdfHtml(lr));
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${lr.lrNumber.replaceAll("/", "-")}.pdf"`,
+  );
+  return res.send(pdfBuffer);
+});
+
+/* ------------------------------------------------------------------ */
 /* Update draft (per-LR: location / goods / invoice)                   */
 /* ------------------------------------------------------------------ */
 router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
@@ -123,6 +146,12 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
         ...(input.unloadingLocationId !== undefined
           ? { unloadingLocationId: input.unloadingLocationId ?? null }
           : {}),
+        ...(input.totalWeight !== undefined
+          ? { totalWeight: input.totalWeight }
+          : {}),
+        ...(input.totalWeightUnit !== undefined
+          ? { unit: input.totalWeightUnit }
+          : {}),
         ...(input.invoiceNumber !== undefined
           ? { invoiceNumber: input.invoiceNumber ?? null }
           : {}),
@@ -136,7 +165,7 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
                   name: g.name,
                   description: g.description ?? null,
                   quantity: g.quantity,
-                  unit: g.unit,
+                  unit: g.unit ?? null,
                   weight: g.weight ?? null,
                   length: g.length ?? null,
                   width: g.width ?? null,

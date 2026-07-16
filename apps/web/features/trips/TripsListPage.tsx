@@ -2,24 +2,84 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Trip } from "@skerp/types";
+import type { CloseTripBody, Trip } from "@skerp/types";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { IconPlus } from "@tabler/icons-react";
+import {
+  IconBan,
+  IconCircleCheck,
+  IconClipboardList,
+  IconPlus,
+  IconTruckDelivery,
+} from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import { useTablePrefs } from "@/features/table-prefs";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import CloseTripDialog from "@/components/feedback/CloseTripDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
-import type { ListQuery } from "../masters/_shared/master-api";
 
 import { tripApi } from "./trip.service";
+import type { TripListQuery } from "./trip.service";
 import { tripKeys } from "./trip.keys";
-import TripTable from "./TripTable";
-import CloseTripDialog from "./CloseTripDialog";
+import TripTable, { DEFAULT_TRIP_COLUMN_ORDER } from "./TripTable";
+
+/** Columns whose data is a relation join the server can skip when hidden. */
+const RELATION_COLUMNS = ["journey", "vehicle", "route", "client"] as const;
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex cursor-pointer items-center gap-3 rounded-lg border bg-card p-4 text-left transition-colors",
+        onClick && "hover:bg-muted/40",
+        active && "border-primary",
+      )}
+    >
+      <Icon size={20} className="shrink-0 text-muted-foreground" />
+      <div>
+        <div className="text-xl font-semibold tabular-nums">{value}</div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+      </div>
+    </button>
+  );
+}
+
+const STAT_CARDS: {
+  status: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}[] = [
+  { status: "Planned", label: "Planned", icon: IconClipboardList },
+  { status: "InTransit", label: "In Transit", icon: IconTruckDelivery },
+  { status: "Closed", label: "Closed", icon: IconCircleCheck },
+  { status: "Cancelled", label: "Cancelled", icon: IconBan },
+];
 
 export default function TripsListPage() {
   const router = useRouter();
@@ -28,12 +88,25 @@ export default function TripsListPage() {
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [statusFilter, setStatusFilter] = React.useState("InTransit");
+  const [typeFilter, setTypeFilter] = React.useState("ALL");
+  const [sort, setSort] = React.useState("createdAt:desc");
   const debouncedSearch = useDebouncedValue(search);
+
+  // Per-user layout, persisted server-side (follows the account, not the
+  // browser). Defaults render until the saved layout loads.
+  const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder } =
+    useTablePrefs("trips", DEFAULT_TRIP_COLUMN_ORDER);
+
+  // Only ask the server to join relations for columns that are shown.
+  const fields = RELATION_COLUMNS.filter(
+    (col) => columnVisibility[col] !== false,
+  ).join(",");
 
   const [closeTrip, setCloseTrip] = React.useState<Trip | null>(null);
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
   const [deleteTrip, setDeleteTrip] = React.useState<Trip | null>(null);
+  const [dispatchTrip, setDispatchTrip] = React.useState<Trip | null>(null);
 
   const canCreate = useCan(PERMS.TRIP.CREATE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
@@ -41,32 +114,40 @@ export default function TripsListPage() {
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
+  const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
 
-  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
+  React.useEffect(
+    () => setPage(0),
+    [debouncedSearch, statusFilter, typeFilter],
+  );
 
   const handleSizeChange = (nextSize: number) => {
     setSize(nextSize);
     setPage(0);
   };
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, statusFilter]);
-
-  const listQuery = React.useMemo<ListQuery>(
+  const listQuery = React.useMemo<TripListQuery>(
     () => ({
       page,
       size,
+      sort,
+      fields,
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
-      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
+      filter: {
+        ...(statusFilter !== "ALL" ? { status: statusFilter } : {}),
+        ...(typeFilter !== "ALL" ? { tripType: typeFilter } : {}),
+      },
     }),
-    [page, size, debouncedSearch, statusFilter],
+    [page, size, sort, fields, debouncedSearch, statusFilter, typeFilter],
   );
 
   const trips = useQuery({
     queryKey: tripKeys.list(listQuery),
     queryFn: () => tripApi.list(listQuery),
     staleTime: 60_000,
+    // Keep the previous rows on screen while a page/filter/column change
+    // refetches — no skeleton flash between transitions.
+    placeholderData: keepPreviousData,
   });
 
   const counts = useQuery({
@@ -79,9 +160,19 @@ export default function TripsListPage() {
     queryClient.invalidateQueries({ queryKey: tripKeys.all });
   };
 
+  const dispatch = useMutation({
+    mutationFn: (id: string) => tripApi.dispatch(id),
+    onSuccess: () => {
+      toast.success("Trip dispatched");
+      setDispatchTrip(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
   const close = useMutation({
-    mutationFn: (vars: { id: string; closingKm: number }) =>
-      tripApi.close(vars.id, { closingKm: vars.closingKm }),
+    mutationFn: (vars: { id: string; body: CloseTripBody }) =>
+      tripApi.close(vars.id, vars.body),
     onSuccess: () => {
       toast.success("Trip closed");
       setCloseTrip(null);
@@ -111,17 +202,9 @@ export default function TripsListPage() {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
-  const canDownloadPdf = useCan(PERMS.TRIP.VIEW);
-
-  const downloadTripPdf = async (id: string) => {
-    const res = await fetch(`/api/trips/${id}/pdf`, { method: "GET" });
-    if (!res.ok) throw new Error("Failed to fetch PDF");
-    return res.blob();
-  };
-
   const handleDownloadPdf = async (trip: Trip) => {
     try {
-      const blob = await downloadTripPdf(trip.id);
+      const blob = await tripApi.downloadPdf(trip.id);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
 
@@ -147,6 +230,23 @@ export default function TripsListPage() {
         ) : null}
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {STAT_CARDS.map((card) => (
+          <StatCard
+            key={card.status}
+            label={card.label}
+            icon={card.icon}
+            value={counts.data?.[card.status] ?? "…"}
+            active={statusFilter === card.status}
+            onClick={() =>
+              setStatusFilter(
+                statusFilter === card.status ? "ALL" : card.status,
+              )
+            }
+          />
+        ))}
+      </div>
+
       <TripTable
         data={trips.data?.data ?? []}
         total={trips.data?.meta?.total ?? 0}
@@ -158,29 +258,55 @@ export default function TripsListPage() {
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        sort={sort}
+        onSortChange={setSort}
+        columnVisibility={columnVisibility}
+        onColumnVisibilityChange={setColumnVisibility}
+        columnOrder={columnOrder}
+        onColumnOrderChange={setColumnOrder}
         counts={counts.data ?? {}}
         isLoading={trips.isLoading}
         canStart={canCreateLR}
+        canDispatch={canUpdate}
         canClose={canClose}
         canUpdate={canUpdate}
         canCancel={canCancel}
         canDelete={canDelete}
         onStart={(t) => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
+        onDispatch={(t) => setDispatchTrip(t)}
         onClose={(t) => setCloseTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
         onDelete={(t) => setDeleteTrip(t)}
         canDownloadPdf={canDownloadPdf}
         onDownloadPdf={handleDownloadPdf}
+        onRowClick={(t) => router.push(`/trips/${t.id}`)}
       />
 
       <CloseTripDialog
         open={Boolean(closeTrip)}
         onOpenChange={(open) => !open && setCloseTrip(null)}
-        tripNumber={closeTrip?.tripNumber}
+        entity="trip"
+        reference={closeTrip?.tripNumber}
         openingKm={closeTrip?.openingKm}
+        isReturnToBase={closeTrip?.isReturnLeg}
         isPending={close.isPending}
-        onConfirm={(closingKm) => {
-          if (closeTrip) close.mutate({ id: closeTrip.id, closingKm });
+        onConfirm={(body) => {
+          if (closeTrip) close.mutate({ id: closeTrip.id, body });
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(dispatchTrip)}
+        onOpenChange={(open) => !open && setDispatchTrip(null)}
+        title={`Dispatch trip ${dispatchTrip?.tripNumber ?? ""}`}
+        description="The trip moves to In Transit without an LR — use this for empty or rake (DC) legs. LR trips are dispatched by attaching an LR."
+        confirmLabel="Dispatch"
+        pendingLabel="Dispatching..."
+        isPending={dispatch.isPending}
+        onConfirm={() => {
+          if (dispatchTrip) dispatch.mutate(dispatchTrip.id);
         }}
       />
 

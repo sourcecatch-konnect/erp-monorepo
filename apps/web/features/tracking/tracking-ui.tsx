@@ -85,7 +85,7 @@ export function formatDateTime(iso: string | null): string {
   });
 }
 
-/** Value for an <input type="datetime-local">, in local time. */
+/** Local date-time value used by the tracking history request. */
 export function toLocalInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return (

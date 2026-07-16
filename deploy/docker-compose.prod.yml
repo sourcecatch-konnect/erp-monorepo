@@ -1,0 +1,196 @@
+name: skerp
+
+# Production stack. Lives on the instance next to a `.env` file (see
+# .env.example) and the Caddyfile. Images are built in CI and streamed over
+# SSH — this file never builds anything.
+#
+# Topology:
+#   caddy  (80/443)  → only container exposed to the world
+#     ├── /api/*      → server:5000 (prefix stripped)
+#     ├── /socket.io/* → server:5000 (websocket upgrade)
+#     └── everything else → web:3001
+#   backend network is `internal: true` — postgres and redis are unreachable
+#   from the host and the internet; only server/migrate can talk to them.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      server:
+        condition: service_started
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - frontend
+
+  web:
+    image: skerp-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - frontend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  server:
+    image: skerp-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-skerp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-skerp}
+      DIRECT_URL: postgresql://${POSTGRES_USER:-skerp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-skerp}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:-}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      WEB_URL: ${WEB_URL:-}
+      COOKIE_CROSS_SITE: ${COOKIE_CROSS_SITE:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_S3_REGION: ${AWS_S3_REGION:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      NOTIFICATION_QUEUE_PREFIX: ${NOTIFICATION_QUEUE_PREFIX:-}
+      ATTACHMENT_MAX_SIZE_BYTES: ${ATTACHMENT_MAX_SIZE_BYTES:-}
+      ATTACHMENT_ALLOWED_MIME: ${ATTACHMENT_ALLOWED_MIME:-}
+      WB_EWAY_BASE_URL: ${WB_EWAY_BASE_URL:-}
+      WB_EWAY_CLIENT_ID: ${WB_EWAY_CLIENT_ID:-}
+      WB_EWAY_CLIENT_SECRET: ${WB_EWAY_CLIENT_SECRET:-}
+      WB_EWAY_USERNAME: ${WB_EWAY_USERNAME:-}
+      WB_EWAY_PASSWORD: ${WB_EWAY_PASSWORD:-}
+      WB_EWAY_GSTIN: ${WB_EWAY_GSTIN:-}
+      WB_EWAY_EMAIL: ${WB_EWAY_EMAIL:-}
+      META_WHATSAPP_API_BASE_URL: ${META_WHATSAPP_API_BASE_URL:-}
+      META_WHATSAPP_PHONE_NUMBER_ID: ${META_WHATSAPP_PHONE_NUMBER_ID:-}
+      META_WHATSAPP_ACCESS_TOKEN: ${META_WHATSAPP_ACCESS_TOKEN:-}
+      META_WHATSAPP_DEFAULT_TEMPLATE_NAME: ${META_WHATSAPP_DEFAULT_TEMPLATE_NAME:-}
+      META_WHATSAPP_BUSINESS_ACCOUNT_ID: ${META_WHATSAPP_BUSINESS_ACCOUNT_ID:-}
+      META_WHATSAPP_DEFAULT_LANGUAGE: ${META_WHATSAPP_DEFAULT_LANGUAGE:-}
+      META_WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${META_WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      META_WHATSAPP_APP_SECRET: ${META_WHATSAPP_APP_SECRET:-}
+      META_WHATSAPP_MANAGEMENT_TOKEN: ${META_WHATSAPP_MANAGEMENT_TOKEN:-}
+      ONELAP_BASE_URL: ${ONELAP_BASE_URL:-}
+      ONELAP_EMAIL: ${ONELAP_EMAIL:-}
+      ONELAP_PASSWORD: ${ONELAP_PASSWORD:-}
+    networks:
+      - backend
+      - frontend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  migrate:
+    image: skerp-migrate:${IMAGE_TAG:-latest}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DIRECT_URL: postgresql://${POSTGRES_USER:-skerp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-skerp}
+    networks:
+      - backend
+
+  # Log viewer. Bound to localhost on the instance only — access it through an
+  # SSH tunnel (ssh -L 9081:127.0.0.1:9081 <instance>, then open
+  # http://localhost:9081). Never exposed publicly, so no auth needed.
+  dozzle:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:9081:8080"
+    networks:
+      - frontend
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-skerp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-skerp}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-skerp} -d ${POSTGRES_DB:-skerp}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:

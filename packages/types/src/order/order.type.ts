@@ -27,11 +27,6 @@ export type CancelOrderBody = z.output<typeof cancelOrderSchema>;
 
 /** A lightweight reference shape (id + name) used in nested includes. */
 type Ref = { id: string; name: string };
-type RouteRef = {
-  id: string;
-  sourceCity?: Ref | null;
-  destinationCity?: Ref | null;
-};
 export type OrderEvent = {
   id: string;
   orderId: string;
@@ -48,8 +43,6 @@ export type OrderItemRow = {
   orderId: string;
   goodsId: string;
   quantity: number;
-  unit: string;
-  weight: string | null;
   goods?: Ref;
 };
 
@@ -58,7 +51,7 @@ export type OrderConsignmentGoodsRow = {
   consignmentId: string;
   goodsId: string;
   quantity: number;
-  unit: string;
+  unit: string | null;
   weight: string | null;
   goods?: Ref;
 };
@@ -68,7 +61,9 @@ export type OrderConsignmentRow = {
   id: string;
   orderId: string;
   truckIndex: number;
+  totalWeight: string | null;
   loadingLocationId: string | null;
+  unit?: string | null;
   unloadingLocationId: string | null;
   loadingLocation?: { id: string; name: string } | null;
   unloadingLocation?: { id: string; name: string } | null;
@@ -137,6 +132,8 @@ export type Order = {
   items?: OrderItemRow[];
   consignments?: OrderConsignmentRow[];
   events?: OrderEvent[];
+  lrGroupCount?: number;
+  hasLRGroup?: boolean;
 };
 /** Freight preview returned by the detail endpoint / freight lookup. */
 export type FreightPreview = {
@@ -165,4 +162,6 @@ export type OrderQuickView = Pick<
   vehicleType: { id: string; name: string } | null;
   customerLocation: { id: string; name: string } | null;
   route?: OrderRouteDetail | null;
+  lrGroupCount: number;
+  hasLRGroup: boolean;
 };

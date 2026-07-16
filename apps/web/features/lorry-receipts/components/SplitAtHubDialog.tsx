@@ -21,27 +21,31 @@ type Props = {
   lrNumber: string;
   /** The leg-1 trip id, excluded from the leg-2 options. */
   primaryTripId?: string | null;
+  /** The LR's consignor — leg-2 trip must carry the same client. */
+  consignorId: string;
   isPending: boolean;
   onConfirm: (secondaryTripId: string) => void;
 };
 
 /**
- * HO action on a FINALISED LR: attach the leg-2 trip (hub → destination). The
- * hub itself is always Jalgaon and is set server-side — never picked here.
+ * HO action on a held-at-hub group: attach the leg-2 trip (hub → destination).
+ * Second half of the decomposed hub split — the hold-at-hub action must have
+ * run first. The hub itself is always the head office — never picked here.
  */
 export default function SplitAtHubDialog({
   open,
   onOpenChange,
   lrNumber,
   primaryTripId,
+  consignorId,
   isPending,
   onConfirm,
 }: Props) {
   const [secondaryTripId, setSecondaryTripId] = React.useState("");
 
   const trips = useQuery({
-    queryKey: lrLookupKeys.attachableTrips,
-    queryFn: lrLookups.attachableTrips,
+    queryKey: lrLookupKeys.attachableTrips(consignorId),
+    queryFn: () => lrLookups.attachableTrips(consignorId),
     enabled: open,
   });
 
@@ -55,10 +59,10 @@ export default function SplitAtHubDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Split LR {lrNumber} at hub</DialogTitle>
+          <DialogTitle>Dispatch {lrNumber} from hub</DialogTitle>
           <DialogDescription>
-            Attach the leg-2 trip (hub → destination). The hub is set to the head
-            office automatically.
+            Attach the leg-2 trip (hub → destination). Once attached, that trip
+            cannot close until every LR on it is delivered.
           </DialogDescription>
         </DialogHeader>
 
@@ -91,7 +95,7 @@ export default function SplitAtHubDialog({
             disabled={isPending || !secondaryTripId}
             onClick={() => onConfirm(secondaryTripId)}
           >
-            {isPending ? "Splitting…" : "Split at hub"}
+            {isPending ? "Dispatching…" : "Dispatch from hub"}
           </Button>
         </DialogFooter>
       </DialogContent>

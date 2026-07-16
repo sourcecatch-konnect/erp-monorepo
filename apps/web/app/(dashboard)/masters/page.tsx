@@ -14,6 +14,7 @@ import {
     IconReceipt,
     IconRoad,
     IconRoute,
+    IconRulerMeasure,
     IconSearch,
     IconSettingsBolt,
     IconTrain,
@@ -46,6 +47,7 @@ const ALL_CARDS: MasterCard[] = [
     { title: "Customers", description: "Profiles, credit limits & GST", href: "/masters/customer", icon: IconUsers, group: "Customers & Logistics", permission: PERMS.MASTERS.CUSTOMER.VIEW },
     { title: "Routes", description: "Source → destination city pairs", href: "/masters/route", icon: IconRoute, group: "Customers & Logistics", permission: PERMS.MASTERS.ROUTE.VIEW },
     { title: "Goods", description: "Goods catalogue & dimensions", href: "/masters/goods", icon: IconPackage, group: "Customers & Logistics", permission: PERMS.MASTERS.GOODS.VIEW },
+    { title: "Units of Measure", description: "Weight, packaging, count and other units", href: "/masters/unit-of-measure", icon: IconRulerMeasure, group: "Customers & Logistics", permission: PERMS.MASTERS.UNIT_OF_MEASURE.VIEW },
     { title: "Transports", description: "Third-party transport parties", href: "/masters/transport", icon: IconRoad, group: "Customers & Logistics", permission: PERMS.MASTERS.TRANSPORT.VIEW },
     { title: "Labours", description: "Supervisors, hamals & mechanics", href: "/masters/labour", icon: IconUser, group: "Customers & Logistics", permission: PERMS.MASTERS.LABOUR.VIEW },
 

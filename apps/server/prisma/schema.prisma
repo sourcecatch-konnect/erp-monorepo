@@ -33,51 +33,103 @@ model Attachment {
 }
 
 model User {
-  id                          String                         @id @default(uuid())
-  userName                    String                         @unique
+  id                          String      @id @default(uuid())
+  userName                    String      @unique
   firstName                   String
   middleName                  String?
   lastName                    String
-  email                       String                         @unique
+  email                       String      @unique
   companyId                   String
   branchId                    String
   roleId                      String
-  createdAt                   DateTime                       @default(now())
-  updatedAt                   DateTime                       @updatedAt
+  createdAt                   DateTime    @default(now())
+  updatedAt                   DateTime    @updatedAt
   password                    String?
   status                      Boolean
-  branchScope                 BranchScope                    @default(ASSIGNED)
+  branchScope                 BranchScope @default(ASSIGNED)
   mobile                      String?
-  whatsappOptIn               Boolean                        @default(false)
-  emailOptIn                  Boolean                        @default(true)
+  whatsappOptIn               Boolean     @default(false)
+  emailOptIn                  Boolean     @default(true)
   notificationQuietHoursStart String?
   notificationQuietHoursEnd   String?
-  attachments                 Attachment[]
-  auditLogs                   AuditLog[]
-  inAppNotifications          InAppNotification[]
-  createdLRGroups             LRGroup[]                      @relation("CreatedLRGroup")
-  finalisedLRGroups           LRGroup[]                      @relation("FinalisedLRGroup")
-  updatedLRGroups             LRGroup[]                      @relation("UpdatedLRGroup")
-  createdLR                   LorryReceipt[]                 @relation("CreatedLR")
-  updatedLR                   LorryReceipt[]                 @relation("UpdatedLR")
-  notificationDeliveries      NotificationDelivery[]
-  approvedOrders              Order[]                        @relation("ApprovedOrders")
-  createdOrders               Order[]                        @relation("CreatedOrders")
-  updatedOrders               Order[]                        @relation("UpdatedOrders")
-  orderEvents                 OrderEvent[]
-  TripStatusHistory           TripStatusHistory[]
-  branch                      Branch                         @relation(fields: [branchId], references: [id])
-  company                     Company                        @relation(fields: [companyId], references: [id])
-  role                        Role                           @relation(fields: [roleId], references: [id])
-  userBranches                UserBranch[]
-  notificationSubscriptions   UserNotificationSubscription[]
-  userPermissions             UserPermission[]
-  createdTrips                VehicleTrip[]                  @relation("CreatedTrips")
-  updatedTrips                VehicleTrip[]                  @relation("UpdatedTrips")
-  createdVPSchedules          VPSchedule[]                   @relation("CreatedVPSchedules")
-  updatedVPSchedules          VPSchedule[]                   @relation("UpdatedVPSchedules")
-  createdMRRRs                MRRR[]                         @relation("CreatedMRRR")
-  updatedMRRRs                MRRR[]                         @relation("UpdatedMRRR")
+
+  attachments               Attachment[]
+  auditLogs                 AuditLog[]
+  inAppNotifications        InAppNotification[]
+  notificationDeliveries    NotificationDelivery[]
+  notificationSubscriptions UserNotificationSubscription[]
+  userPermissions           UserPermission[]
+  userBranches              UserBranch[]
+
+  branch  Branch  @relation(fields: [branchId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+  role    Role    @relation(fields: [roleId], references: [id])
+
+  createdLRGroups   LRGroup[] @relation("CreatedLRGroup")
+  finalisedLRGroups LRGroup[] @relation("FinalisedLRGroup")
+  updatedLRGroups   LRGroup[] @relation("UpdatedLRGroup")
+
+  createdLR LorryReceipt[] @relation("CreatedLR")
+  updatedLR LorryReceipt[] @relation("UpdatedLR")
+
+  createdLRDeliveries LRDelivery[]        @relation("CreatedLRDelivery")
+  updatedLRDeliveries LRDelivery[]        @relation("UpdatedLRDelivery")
+  createdLRAcks       LRAcknowledgement[] @relation("CreatedLRAck")
+  updatedLRAcks       LRAcknowledgement[] @relation("UpdatedLRAck")
+
+  approvedOrders Order[]      @relation("ApprovedOrders")
+  createdOrders  Order[]      @relation("CreatedOrders")
+  updatedOrders  Order[]      @relation("UpdatedOrders")
+  orderEvents    OrderEvent[]
+
+  TripStatusHistory TripStatusHistory[]
+
+  createdTrips VehicleTrip[] @relation("CreatedTrips")
+  updatedTrips VehicleTrip[] @relation("UpdatedTrips")
+
+  createdVPSchedules VPSchedule[] @relation("CreatedVPSchedules")
+  updatedVPSchedules VPSchedule[] @relation("UpdatedVPSchedules")
+
+  createdMRRRs MRRR[] @relation("CreatedMRRR")
+  updatedMRRRs MRRR[] @relation("UpdatedMRRR")
+
+  createdGRNs    GRN[] @relation("CreatedGRN")
+  updatedGRNs    GRN[] @relation("UpdatedGRN")
+  supervisedGRNs GRN[] @relation("GRNUnloadingSupervisor")
+
+  createdVPLoadings   VPLoading[] @relation("CreatedVPLoading")
+  updatedVPLoadings   VPLoading[] @relation("UpdatedVPLoading")
+  cancelledVPLoadings VPLoading[] @relation("CancelledVPLoading")
+
+  supervisedVPWagonLoadings       VPWagonLoading[] @relation("VPWagonLoadingSupervisor")
+  createdVPWagonLoadings          VPWagonLoading[] @relation("CreatedVPWagonLoading")
+  updatedVPWagonLoadings          VPWagonLoading[] @relation("UpdatedVPWagonLoading")
+  verifiedVPWagonLoadings         VPWagonLoading[] @relation("VerifiedVPWagonLoading")
+  cancelledVPWagonLoadings        VPWagonLoading[] @relation("CancelledVPWagonLoading")
+  capacityOverrideVPWagonLoadings VPWagonLoading[] @relation("VPWagonCapacityOverride")
+
+  createdJourneys VehicleJourney[] @relation("CreatedJourneys")
+  updatedJourneys VehicleJourney[] @relation("UpdatedJourneys")
+
+  createdTripExpenses   TripExpense[]   @relation("CreatedTripExpenses")
+  createdDriverAdvances DriverAdvance[] @relation("CreatedDriverAdvances")
+  generatedLogSlips     LogSlip[]       @relation("GeneratedLogSlips")
+
+  tablePrefs UserTablePref[]
+}
+
+/// Per-user UI table layout (column order + visibility), keyed per table.
+model UserTablePref {
+  id        String   @id @default(cuid())
+  userId    String
+  tableKey  String
+  prefs     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tableKey])
 }
 
 model Company {
@@ -128,6 +180,8 @@ model Branch {
   warehouses Warehouse[] @relation("BranchWarehouses")
   agreements Agreement[] @relation("BranchAgreement")
   workers    Labour[]    @relation("WorkerBranch")
+
+  homeJourneys VehicleJourney[] @relation("JourneyHomeBranch")
 
   users             User[]
   userBranches      UserBranch[]
@@ -394,8 +448,13 @@ model Vehicle {
   openingKM          Int
   status             VehicleStatus @default(AVAILABLE)
   vehicleTypeId      String
-  vehicleTypeRef     VehicleType   @relation(fields: [vehicleTypeId], references: [id])
-  VehicleTrip        VehicleTrip[]
+
+  vehicleTypeRef VehicleType @relation(fields: [vehicleTypeId], references: [id])
+
+  VehicleTrip    VehicleTrip[]
+  journeys       VehicleJourney[]
+  driverAdvances DriverAdvance[]
+  logSlips       LogSlip[]
 }
 
 model Customer {
@@ -506,7 +565,7 @@ model RateMatrix {
 }
 
 model Driver {
-  id                     String        @id @default(cuid())
+  id                     String           @id @default(cuid())
   name                   String
   photoPath              String?
   type                   String
@@ -536,12 +595,15 @@ model Driver {
   aadharCardNo           String?
   noTDSApplyAmount       Int?
   tdsRate                Int?
-  onLeave                Boolean       @default(false)
-  blackListed            Boolean       @default(false)
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
-  status                 DriverStatus  @default(AVAILABLE)
+  onLeave                Boolean          @default(false)
+  blackListed            Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  status                 DriverStatus     @default(AVAILABLE)
   VehicleTrip            VehicleTrip[]
+  journeys               VehicleJourney[]
+  advances               DriverAdvance[]
+  logSlips               LogSlip[]
 }
 
 model Goods {
@@ -563,26 +625,28 @@ model Goods {
 }
 
 model Labour {
-  id           String     @id @default(cuid())
-  name         String
-  photoPath    String?
-  address      String?
-  contactName  String?
-  contactPhone String?
-  mobileNo     String?
-  referredBy   String?
-  refContactNo String?
-  startDate    DateTime?
-  pan          String?
-  tdsAmount    BigInt?
-  tdsRate      BigInt?
-  type         WorkerType
-  branchId     String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  cityId       String
-  branch       Branch     @relation("WorkerBranch", fields: [branchId], references: [id])
-  city         City       @relation(fields: [cityId], references: [id])
+  id              String           @id @default(cuid())
+  name            String
+  photoPath       String?
+  address         String?
+  contactName     String?
+  contactPhone    String?
+  mobileNo        String?
+  referredBy      String?
+  refContactNo    String?
+  startDate       DateTime?
+  pan             String?
+  tdsAmount       BigInt?
+  tdsRate         BigInt?
+  type            WorkerType
+  branchId        String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  cityId          String
+  branch          Branch           @relation("WorkerBranch", fields: [branchId], references: [id])
+  city            City             @relation(fields: [cityId], references: [id])
+  grnLabours      GRN[]            @relation("GRNLabour")
+  vpWagonLoadings VPWagonLoading[] @relation("VPWagonLoadingLabour")
 }
 
 model City {
@@ -609,6 +673,12 @@ model City {
   transports          Transport[]
   tripUnloadingPoints TripUnloadingPoint[]
   warehouses          Warehouse[]
+  journeyStarts       VehicleJourney[]       @relation("JourneyStartCity")
+  journeyReturns      VehicleJourney[]       @relation("JourneyReturnCity")
+  journeyCurrent      VehicleJourney[]       @relation("JourneyCurrentCity")
+  tripsFrom           VehicleTrip[]          @relation("TripFromCity")
+  tripsTo             VehicleTrip[]          @relation("TripToCity")
+  tripExpenses        TripExpense[]          @relation("TripExpenseCity")
 }
 
 model Area {
@@ -724,8 +794,11 @@ model Pump {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   stateId           String
-  city              City      @relation("PumpCity", fields: [cityId], references: [id])
-  state             State     @relation(fields: [stateId], references: [id])
+
+  city  City  @relation("PumpCity", fields: [cityId], references: [id])
+  state State @relation(fields: [stateId], references: [id])
+
+  tripExpenses TripExpense[]
 }
 
 model SpareCategory {
@@ -832,14 +905,13 @@ model Order {
 }
 
 model OrderItem {
-  id       String   @id @default(cuid())
+  id       String @id @default(cuid())
   orderId  String
   goodsId  String
   quantity Int
-  unit     String
-  weight   Decimal?
-  goods    Goods    @relation(fields: [goodsId], references: [id])
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  goods Goods @relation(fields: [goodsId], references: [id])
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
@@ -848,6 +920,9 @@ model OrderConsignment {
   id                  String                  @id @default(cuid())
   orderId             String
   truckIndex          Int                     @default(1)
+  totalWeight         Decimal?                @db.Decimal(14, 4)
+  weightUnitId        String?
+  unit                String?
   loadingLocationId   String?
   unloadingLocationId String?
   createdAt           DateTime                @default(now())
@@ -855,22 +930,30 @@ model OrderConsignment {
   loadingLocation     CustomerLocation?       @relation("ConsignmentLoading", fields: [loadingLocationId], references: [id])
   order               Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   unloadingLocation   CustomerLocation?       @relation("ConsignmentUnloading", fields: [unloadingLocationId], references: [id])
+  weightUnit          UnitOfMeasure?          @relation("OrderConsignmentWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
   goods               OrderConsignmentGoods[]
 
   @@index([orderId])
+  @@index([weightUnitId])
 }
 
 model OrderConsignmentGoods {
-  id            String           @id @default(cuid())
-  consignmentId String
-  goodsId       String
-  quantity      Int
-  unit          String
-  weight        Decimal?
-  consignment   OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
-  goods         Goods            @relation(fields: [goodsId], references: [id])
+  id             String           @id @default(cuid())
+  consignmentId  String
+  goodsId        String
+  quantity       Int
+  unit           String?
+  weight         Decimal?         @db.Decimal(14, 4)
+  quantityUnitId String?
+  weightUnitId   String?
+  consignment    OrderConsignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  goods          Goods            @relation(fields: [goodsId], references: [id])
+  quantityUnit   UnitOfMeasure?   @relation("OrderGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit     UnitOfMeasure?   @relation("OrderGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([consignmentId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
 }
 
 model OrderEvent {
@@ -940,51 +1023,59 @@ model DocumentSequence {
 }
 
 model LRGroup {
-  id                  String          @id @default(cuid())
-  groupNumber         String          @unique
-  fyCode              String
-  source              LRSource
-  orderId             String?
-  truckIndex          Int             @default(1)
-  originBranchId      String
-  destinationBranchId String
-  consignorId         String
-  consigneeId         String
-  transportType       LRTransportType @default(Road)
-  priority            LRPriority      @default(Normal)
-  isMarketVehicle     Boolean         @default(false)
-  primaryTripId       String?
-  secondaryTripId     String?
-  marketVehicleNumber String?
-  marketDriverName    String?
-  tripLegType         LRTripLegType   @default(DIRECT)
-  hubId               String?
-  railheadBranchId    String?
-  baseFreightAmount   BigInt?
-  sealNumber          String?
-  status              LRGroupStatus   @default(DRAFT)
-  cancelReason        String?
-  finalisedAt         DateTime?
-  finalisedById       String?
-  createdById         String
-  updatedById         String?
-  version             Int             @default(1)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  deletedAt           DateTime?
-  consignee           Customer        @relation("GroupConsignee", fields: [consigneeId], references: [id])
-  consignor           Customer        @relation("GroupConsignor", fields: [consignorId], references: [id])
-  createdBy           User            @relation("CreatedLRGroup", fields: [createdById], references: [id])
-  destinationBranch   Branch          @relation("GroupDestination", fields: [destinationBranchId], references: [id])
-  finalisedBy         User?           @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
-  hub                 Branch?         @relation("GroupHub", fields: [hubId], references: [id])
-  order               Order?          @relation(fields: [orderId], references: [id])
-  originBranch        Branch          @relation("GroupOrigin", fields: [originBranchId], references: [id])
-  primaryTrip         VehicleTrip?    @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
-  railheadBranch      Branch?         @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
-  secondaryTrip       VehicleTrip?    @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
-  updatedBy           User?           @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
-  lorryReceipts       LorryReceipt[]
+  id                     String          @id @default(cuid())
+  groupNumber            String          @unique
+  fyCode                 String
+  source                 LRSource
+  orderId                String?
+  truckIndex             Int             @default(1)
+  originBranchId         String
+  destinationBranchId    String
+  consignorId            String
+  consigneeId            String
+  transportType          LRTransportType @default(Road)
+  priority               LRPriority      @default(Normal)
+  isMarketVehicle        Boolean         @default(false)
+  primaryTripId          String?
+  secondaryTripId        String?
+  marketVehicleNumber    String?
+  marketDriverName       String?
+  marketFreightAmount    BigInt?
+  marketAdvanceAmount    BigInt?
+  marketCommissionAmount BigInt?
+  marketHamaliAmount     BigInt?
+  marketTdsAmount        BigInt?
+  tripLegType            LRTripLegType   @default(DIRECT)
+  hubId                  String?
+  // Stamped by hold-at-hub. With hubId set and secondaryTripId null the group
+  // is "lying at hub" — exempt from the trip-close delivery gate.
+  hubArrivalAt           DateTime?
+  railheadBranchId       String?
+  baseFreightAmount      BigInt?
+  sealNumber             String?
+  status                 LRGroupStatus   @default(DRAFT)
+  cancelReason           String?
+  finalisedAt            DateTime?
+  finalisedById          String?
+  createdById            String
+  updatedById            String?
+  version                Int             @default(1)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  deletedAt              DateTime?
+  consignee              Customer        @relation("GroupConsignee", fields: [consigneeId], references: [id])
+  consignor              Customer        @relation("GroupConsignor", fields: [consignorId], references: [id])
+  createdBy              User            @relation("CreatedLRGroup", fields: [createdById], references: [id])
+  destinationBranch      Branch          @relation("GroupDestination", fields: [destinationBranchId], references: [id])
+  finalisedBy            User?           @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
+  hub                    Branch?         @relation("GroupHub", fields: [hubId], references: [id])
+  order                  Order?          @relation(fields: [orderId], references: [id])
+  originBranch           Branch          @relation("GroupOrigin", fields: [originBranchId], references: [id])
+  primaryTrip            VehicleTrip?    @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
+  railheadBranch         Branch?         @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
+  secondaryTrip          VehicleTrip?    @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
+  updatedBy              User?           @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
+  lorryReceipts          LorryReceipt[]
 
   @@index([status])
   @@index([orderId])
@@ -994,51 +1085,138 @@ model LRGroup {
 }
 
 model LorryReceipt {
-  id                  String            @id @default(cuid())
+  id                  String             @id @default(cuid())
   cancelReason        String?
   createdById         String
   updatedById         String?
-  createdAt           DateTime          @default(now())
+  createdAt           DateTime           @default(now())
   deletedAt           DateTime?
   fyCode              String
-  lrNumber            String            @unique
-  status              LRStatus          @default(DRAFT)
-  updatedAt           DateTime          @updatedAt
-  version             Int               @default(1)
+  lrNumber            String             @unique
+  status              LRStatus           @default(DRAFT)
+  updatedAt           DateTime           @updatedAt
+  version             Int                @default(1)
   invoiceAmount       BigInt?
   invoiceNumber       String?
   groupId             String
   loadingLocationId   String?
   unloadingLocationId String?
   ewayBill            EwayBill?
+  totalWeight         Decimal?           @db.Decimal(14, 4)
+  weightUnitId        String?
+  unit                String?
   goods               LRGoods[]
-  createdBy           User              @relation("CreatedLR", fields: [createdById], references: [id])
-  group               LRGroup           @relation(fields: [groupId], references: [id])
-  loadingLocation     CustomerLocation? @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
-  unloadingLocation   CustomerLocation? @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
-  updatedBy           User?             @relation("UpdatedLR", fields: [updatedById], references: [id])
+  grn                 GRN?
+  delivery            LRDelivery?
+  acknowledgement     LRAcknowledgement?
+  createdBy           User               @relation("CreatedLR", fields: [createdById], references: [id])
+  group               LRGroup            @relation(fields: [groupId], references: [id])
+  loadingLocation     CustomerLocation?  @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
+  unloadingLocation   CustomerLocation?  @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
+  updatedBy           User?              @relation("UpdatedLR", fields: [updatedById], references: [id])
+  weightUnit          UnitOfMeasure?     @relation("LRWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([status])
   @@index([groupId])
   @@index([fyCode])
+  @@index([weightUnitId])
 }
 
 model LRGoods {
-  id             String       @id @default(cuid())
+  id             String                  @id @default(cuid())
   lorryReceiptId String
   name           String
   description    String?
   quantity       Int
-  unit           String
-  weight         Decimal?
+  quantityUnitId String?
+  weight         Decimal?                @db.Decimal(14, 4)
+  weightUnitId   String?
+  unit           String?
   length         Float?
   width          Float?
   height         Float?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+  grnGoods       GRNGoods[]
+  ackItems       LRAcknowledgementItem[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  lorryReceipt   LorryReceipt            @relation(fields: [lorryReceiptId], references: [id])
+  quantityUnit   UnitOfMeasure?          @relation("LRGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit     UnitOfMeasure?          @relation("LRGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([lorryReceiptId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
+}
+
+/**
+ * Delivery record — goods handed to the consignee. One per LR; creating it
+ * flips the LR to DELIVERED, deleting it (undo) reverts to FINALISED. The
+ * record is the source of truth, the status is the queryable flag. POD photos
+ * attach via the generic Attachment model (entityType "lr-delivery").
+ */
+model LRDelivery {
+  id               String       @id @default(cuid())
+  lrId             String       @unique
+  deliveredAt      DateTime
+  // Truck arrival at the consignee — the deliveredAt-reportedAt gap is the
+  // detention basis charged at acknowledgement time.
+  reportedAt       DateTime?
+  receiverName     String?
+  receiverPhone    String?
+  unloadingCharges BigInt?
+  remark           String?
+  createdById      String
+  updatedById      String?
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  lr               LorryReceipt @relation(fields: [lrId], references: [id])
+  createdBy        User         @relation("CreatedLRDelivery", fields: [createdById], references: [id])
+  updatedBy        User?        @relation("UpdatedLRDelivery", fields: [updatedById], references: [id])
+
+  @@index([deliveredAt])
+}
+
+/**
+ * Acknowledgement — the signed POD paper is back at the booking branch.
+ * Creating it flips the LR to ACKNOWLEDGED; undo reverts to DELIVERED.
+ * Scans attach via Attachment (entityType "lr-acknowledgement"). Designed as
+ * the future billing gate.
+ */
+model LRAcknowledgement {
+  id              String                  @id @default(cuid())
+  lrId            String                  @unique
+  receivedAt      DateTime
+  courierName     String?
+  courierDocketNo String?
+  courierCharge   BigInt?
+  detentionDays   Int?
+  detentionAmount BigInt?
+  damageAmount    BigInt?
+  remark          String?
+  createdById     String
+  updatedById     String?
+  version         Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  items           LRAcknowledgementItem[]
+  lr              LorryReceipt            @relation(fields: [lrId], references: [id])
+  createdBy       User                    @relation("CreatedLRAck", fields: [createdById], references: [id])
+  updatedBy       User?                   @relation("UpdatedLRAck", fields: [updatedById], references: [id])
+
+  @@index([receivedAt])
+}
+
+model LRAcknowledgementItem {
+  id          String            @id @default(cuid())
+  ackId       String
+  lrGoodsId   String
+  receivedQty Decimal?
+  damagedQty  Decimal?
+  ack         LRAcknowledgement @relation(fields: [ackId], references: [id], onDelete: Cascade)
+  goods       LRGoods           @relation(fields: [lrGoodsId], references: [id])
+
+  @@unique([ackId, lrGoodsId])
 }
 
 model EwayBill {
@@ -1057,57 +1235,84 @@ model EwayBill {
 }
 
 model VehicleTrip {
-  vehicleId          String
-  isTripEmpty        Boolean              @default(false)
-  driverId           String
-  rateMatrixId       String?
-  routeId            String
-  status             TripStatus           @default(Planned)
-  cancelReason       String?
-  onwardFreight      BigInt
-  tripType           TripType
-  closingKm          Int?
-  createdAt          DateTime             @default(now())
-  createdById        String
-  deletedAt          DateTime?
-  endDateTime        DateTime?
-  fyCode             String
-  id                 String               @id @default(cuid())
-  openingKm          Int
-  rakeDate           DateTime?
-  startDateTime      DateTime?
-  tripNumber         String               @unique
-  updatedAt          DateTime             @updatedAt
-  updatedById        String?
-  version            Int                  @default(1)
-  consignorId        String?
-  tripName           String
-  primaryGroups      LRGroup[]            @relation("GroupPrimaryTrip")
-  secondaryGroups    LRGroup[]            @relation("GroupSecondaryTrip")
-  TripStatusHistory  TripStatusHistory[]
-  TripUnloadingPoint TripUnloadingPoint[]
-  consignor          Customer?            @relation(fields: [consignorId], references: [id])
-  createdBy          User                 @relation("CreatedTrips", fields: [createdById], references: [id])
-  driver             Driver               @relation(fields: [driverId], references: [id])
-  rateMatrix         RateMatrix?          @relation(fields: [rateMatrixId], references: [id])
-  route              Route                @relation(fields: [routeId], references: [id])
-  updatedBy          User?                @relation("UpdatedTrips", fields: [updatedById], references: [id])
-  vehicle            Vehicle              @relation(fields: [vehicleId], references: [id])
+  vehicleId            String
+  isTripEmpty          Boolean              @default(false)
+  driverId             String
+  rateMatrixId         String?
+  routeId              String
+  status               TripStatus           @default(Planned)
+  cancelReason         String?
+  onwardFreight        BigInt
+  tripType             TripType
+  closingKm            Int?
+  createdAt            DateTime             @default(now())
+  createdById          String
+  deletedAt            DateTime?
+  endDateTime          DateTime?
+  fyCode               String
+  id                   String               @id @default(cuid())
+  openingKm            Int
+  rakeDate             DateTime?
+  startDateTime        DateTime?
+  tripNumber           String               @unique
+  updatedAt            DateTime             @updatedAt
+  updatedById          String?
+  version              Int                  @default(1)
+  consignorId          String?
+  tripName             String
+  // --- Journey leg fields (null for standalone trips created before journeys) ---
+  journeyId            String?
+  sequenceNo           Int?
+  legType              TripLegType?
+  fromCityId           String?
+  toCityId             String?
+  isReturnLeg          Boolean              @default(false)
+  arrivalDateTime      DateTime?
+  unloadingCompletedAt DateTime?
+  closedById           String?
+  closeReason          String?
+  // Reason recorded when the operator breaks city/KM/time continuity.
+  chainExceptionReason String?
+  journey              VehicleJourney?      @relation(fields: [journeyId], references: [id])
+  fromCity             City?                @relation("TripFromCity", fields: [fromCityId], references: [id])
+  toCity               City?                @relation("TripToCity", fields: [toCityId], references: [id])
+  expenses             TripExpense[]
+  advances             DriverAdvance[]
+  primaryGroups        LRGroup[]            @relation("GroupPrimaryTrip")
+  secondaryGroups      LRGroup[]            @relation("GroupSecondaryTrip")
+  TripStatusHistory    TripStatusHistory[]
+  TripUnloadingPoint   TripUnloadingPoint[]
+  consignor            Customer?            @relation(fields: [consignorId], references: [id])
+  createdBy            User                 @relation("CreatedTrips", fields: [createdById], references: [id])
+  driver               Driver               @relation(fields: [driverId], references: [id])
+  rateMatrix           RateMatrix?          @relation(fields: [rateMatrixId], references: [id])
+  route                Route                @relation(fields: [routeId], references: [id])
+  updatedBy            User?                @relation("UpdatedTrips", fields: [updatedById], references: [id])
+  vehicle              Vehicle              @relation(fields: [vehicleId], references: [id])
 
+  @@unique([journeyId, sequenceNo])
   @@index([status])
+  @@index([journeyId])
 }
 
 model TripUnloadingPoint {
-  id            String            @id @default(cuid())
-  sequence      Int
-  vehicleTripId String
-  actualDate    DateTime?
-  cityId        String
-  locationId    String?
-  plannedDate   DateTime?
-  city          City              @relation(fields: [cityId], references: [id])
-  location      CustomerLocation? @relation(fields: [locationId], references: [id])
-  trip          VehicleTrip       @relation(fields: [vehicleTripId], references: [id], onDelete: Cascade)
+  id                String            @id @default(cuid())
+  sequence          Int
+  vehicleTripId     String
+  actualDate        DateTime?
+  cityId            String
+  locationId        String?
+  plannedDate       DateTime?
+  actualArrivalAt   DateTime?
+  actualUnloadingAt DateTime?
+  actualDepartureAt DateTime?
+  receivedQty       Int?
+  damageQty         Int?
+  shortageQty       Int?
+  remarks           String?
+  city              City              @relation(fields: [cityId], references: [id])
+  location          CustomerLocation? @relation(fields: [locationId], references: [id])
+  trip              VehicleTrip       @relation(fields: [vehicleTripId], references: [id], onDelete: Cascade)
 
   @@index([vehicleTripId])
 }
@@ -1147,13 +1352,14 @@ model VPSchedule {
   createdById String
   updatedById String?
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
-  version    Int       @default(1)
-  mrRr       MRRR?
-  fromBranch Branch    @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
-  toBranch   Branch    @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+  mrRr      MRRR?
+
+  fromBranch Branch @relation("VPScheduleFromBranch", fields: [fromBranchId], references: [id])
+  toBranch   Branch @relation("VPScheduleToBranch", fields: [toBranchId], references: [id])
 
   sourceArea      Area @relation("VPScheduleSourceArea", fields: [sourceAreaId], references: [id])
   destinationArea Area @relation("VPScheduleDestinationArea", fields: [destinationAreaId], references: [id])
@@ -1235,8 +1441,9 @@ model CashAccount {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  balances CashAccountBalance[]
-  payments CashPayment[]
+  balances       CashAccountBalance[]
+  payments       CashPayment[]
+  driverAdvances DriverAdvance[]
 }
 
 model CashPlanDay {
@@ -1368,9 +1575,8 @@ model MRRRRow {
   vpScheduleWagonCountId String
   vpScheduleWagonCount   VPScheduleWagonCount @relation(fields: [vpScheduleWagonCountId], references: [id])
 
-  wagonId String
-  wagon   Wagon  @relation(fields: [wagonId], references: [id])
-
+  wagonId        String
+  wagon          Wagon  @relation(fields: [wagonId], references: [id])
   wagonTypeLabel String
   rowNumber      Int
   rowLabel       String
@@ -1380,8 +1586,9 @@ model MRRRRow {
   mrRrNo     String?
   sealNo     String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  vpWagonLoading VPWagonLoading?
 
   @@unique([mrRrId, rowNumber])
   @@index([mrRrId])
@@ -1390,6 +1597,314 @@ model MRRRRow {
   @@index([mrRrNo])
   @@index([vpNo])
   @@index([sealNo])
+}
+
+model GRN {
+  id String @id @default(cuid())
+
+  grnNumber String @unique
+
+  lorryReceiptId String       @unique
+  lorryReceipt   LorryReceipt @relation(fields: [lorryReceiptId], references: [id])
+
+  status GRNStatus @default(DRAFT)
+
+  gateNo String?
+
+  inDateTime       DateTime?
+  outDateTime      DateTime?
+  unloadingMinutes Int?
+
+  totalQty    Int @default(0)
+  receivedQty Int @default(0)
+  damageQty   Int @default(0)
+  shortageQty Int @default(0)
+
+  totalWeightMt Decimal?
+
+  totalFreight   BigInt?
+  balanceFreight BigInt?
+  freightPerMt   BigInt?
+
+  detentionDays   Int     @default(0)
+  detentionRate   BigInt?
+  detentionAmount BigInt  @default(0)
+
+  grossTotal BigInt @default(0)
+
+  advanceAmount            BigInt @default(0)
+  damageAmount             BigInt @default(0)
+  tdsAmount                BigInt @default(0)
+  hamaliAmount             BigInt @default(0)
+  printingStationaryAmount BigInt @default(0)
+
+  netAmount BigInt @default(0)
+
+  labourId     String?
+  labour       Labour? @relation("GRNLabour", fields: [labourId], references: [id])
+  labourName   String?
+  labourCharge BigInt?
+
+  unloadingSupervisorId String?
+  unloadingSupervisor   User?         @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+  damagesBy             GRNDamagesBy?
+
+  lrCopyChecked      Boolean @default(false)
+  invoiceChecked     Boolean @default(false)
+  kataReceiptChecked Boolean @default(false)
+  wayBillChecked     Boolean @default(false)
+  sealNoChecked      Boolean @default(false)
+
+  lrCopyRemark      String?
+  invoiceRemark     String?
+  kataReceiptRemark String?
+  wayBillRemark     String?
+  sealNoRemark      String?
+
+  remarks      String?
+  cancelReason String?
+
+  createdById String
+  updatedById String?
+
+  createdBy User  @relation("CreatedGRN", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedGRN", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  goods      GRNGoods[]
+  vpLoadings VPLoading[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+model GRNGoods {
+  id String @id @default(cuid())
+
+  grnId String
+  grn   GRN    @relation(fields: [grnId], references: [id], onDelete: Cascade)
+
+  lrGoodsId String?
+  lrGoods   LRGoods? @relation(fields: [lrGoodsId], references: [id])
+
+  goodsName   String
+  description String?
+
+  totalQty       Int              @default(0)
+  receivedQty    Int              @default(0)
+  damageQty      Int              @default(0)
+  shortageQty    Int              @default(0)
+  vpLoadingGoods VPLoadingGoods[]
+  quantityUnitId String?
+  weight         Decimal?         @db.Decimal(14, 4)
+  weightUnitId   String?
+  unit           String?
+
+  remarks String?
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  quantityUnit UnitOfMeasure? @relation("GRNGoodsQuantityUnit", fields: [quantityUnitId], references: [id], onDelete: Restrict)
+  weightUnit   UnitOfMeasure? @relation("GRNGoodsWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
+
+  @@index([grnId])
+  @@index([lrGoodsId])
+  @@index([quantityUnitId])
+  @@index([weightUnitId])
+}
+
+model VPLoading {
+  id String @id @default(cuid())
+
+  loadingNumber    String @unique
+  vpWagonLoadingId String
+
+  vpWagonLoading VPWagonLoading @relation(fields: [vpWagonLoadingId], references: [id], onDelete: Restrict)
+
+  grnId String
+  grn   GRN    @relation(fields: [grnId], references: [id], onDelete: Restrict)
+
+  status VPLoadingStatus @default(DRAFT)
+
+  loadedQty      Int      @default(0)
+  loadedCft      Decimal? @db.Decimal(14, 4)
+  loadedWeightMt Decimal? @db.Decimal(14, 4)
+
+  remarks       String?
+  cancelReason  String?
+  cancelledById String?
+
+  cancelledBy User? @relation("CancelledVPLoading", fields: [cancelledById], references: [id])
+
+  cancelledAt DateTime?
+  createdById String
+  updatedById String?
+
+  createdBy User  @relation("CreatedVPLoading", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedVPLoading", fields: [updatedById], references: [id])
+
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  version   Int              @default(1)
+  goods     VPLoadingGoods[]
+
+  @@unique([vpWagonLoadingId, grnId])
+  @@index([vpWagonLoadingId])
+  @@index([grnId])
+  @@index([status])
+}
+
+model VPWagonLoading {
+  id String @id @default(cuid())
+
+  mrRrRowId String  @unique
+  mrRrRow   MRRRRow @relation(fields: [mrRrRowId], references: [id], onDelete: Restrict)
+
+  status VPWagonLoadingStatus @default(DRAFT)
+
+  gateNo String?
+
+  // Hamal / labour handling the wagon loading
+  labourId String?
+  labour   Labour? @relation("VPWagonLoadingLabour", fields: [labourId], references: [id])
+
+  labourCharge BigInt?
+
+  wagonCapacityCftSnapshot Decimal? @db.Decimal(14, 4)
+  wagonCapacityMtSnapshot  Decimal? @db.Decimal(14, 4)
+
+  capacityCheckStatus CapacityCheckStatus @default(NOT_CHECKED)
+
+  capacityExceededCft Decimal? @db.Decimal(14, 4)
+  capacityExceededMt  Decimal? @db.Decimal(14, 4)
+
+  capacityOverrideReason String?
+  capacityOverrideById   String?
+  capacityOverrideBy     User?     @relation("VPWagonCapacityOverride", fields: [capacityOverrideById], references: [id])
+  capacityOverrideAt     DateTime?
+
+  loadingSupervisorId String?
+  loadingSupervisor   User?   @relation("VPWagonLoadingSupervisor", fields: [loadingSupervisorId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("CreatedVPWagonLoading", fields: [createdById], references: [id])
+
+  updatedById String?
+  updatedBy   User?   @relation("UpdatedVPWagonLoading", fields: [updatedById], references: [id])
+
+  verifiedById String?
+  verifiedBy   User?     @relation("VerifiedVPWagonLoading", fields: [verifiedById], references: [id])
+  verifiedAt   DateTime?
+
+  cancelledById      String?
+  cancelledBy        User?     @relation("CancelledVPWagonLoading", fields: [cancelledById], references: [id])
+  cancelledAt        DateTime?
+  cancelReason       String?
+  loadingStartedAt   DateTime?
+  loadingCompletedAt DateTime?
+
+  totalLoadedQty      Int      @default(0)
+  totalLoadedCft      Decimal? @db.Decimal(14, 4)
+  totalLoadedWeightMt Decimal? @db.Decimal(14, 4)
+
+  remarks String?
+
+  version Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations VPLoading[]
+
+  @@index([mrRrRowId])
+  @@index([labourId])
+  @@index([loadingSupervisorId])
+  @@index([status])
+}
+
+model VPLoadingGoods {
+  id String @id @default(cuid())
+
+  vpLoadingId String
+  vpLoading   VPLoading @relation(fields: [vpLoadingId], references: [id], onDelete: Cascade)
+
+  grnGoodsId String
+  grnGoods   GRNGoods @relation(fields: [grnGoodsId], references: [id], onDelete: Restrict)
+
+  loadedQty        Int @default(0)
+  loadingDamageQty Int @default(0)
+
+  unitWeightKgSnapshot Decimal? @db.Decimal(12, 3)
+  unitCftSnapshot      Decimal? @db.Decimal(12, 4)
+
+  loadedWeightMt    Decimal?          @db.Decimal(14, 4)
+  loadedCft         Decimal?          @db.Decimal(14, 4)
+  measurementSource MeasurementSource @default(UNKNOWN)
+  remarks           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([vpLoadingId, grnGoodsId])
+  @@index([vpLoadingId])
+  @@index([grnGoodsId])
+}
+
+enum CapacityCheckStatus {
+  NOT_CHECKED
+  UNKNOWN
+  WITHIN_ESTIMATE
+  EXCEEDED_ESTIMATE
+  OVERRIDDEN
+}
+
+enum MeasurementSource {
+  UNKNOWN
+  GOODS_MASTER_ESTIMATE
+  LR_DECLARED
+  GRN_DECLARED
+  CUSTOMER_DECLARED
+  INVOICE
+  WEIGHBRIDGE
+  MANUAL_OVERRIDE
+}
+
+enum VPWagonLoadingStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  CANCELLED
+}
+
+enum GRNStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+}
+
+enum GRNDamagesBy {
+  NONE
+  TRANSPORTER
+  LABOUR
+  RAILWAY
+  CUSTOMER
+  UNKNOWN
+}
+
+enum VPScheduleStatus {
+  DRAFT
+  PLANNED
+  MRRR_CREATED
+  LOADING
+  LOADED
+  VERIFIED
+  CANCELLED
 }
 
 enum MRRRStatus {
@@ -1410,6 +1925,12 @@ enum CreditorCategory {
   EXPENSE
   REPAIR
   OTHER
+}
+
+enum VPLoadingStatus {
+  DRAFT
+  LOADED
+  CANCELLED
 }
 
 enum CashAccountType {
@@ -1483,10 +2004,11 @@ enum OrderType {
 enum OrderStatus {
   PendingApproval
   Confirmed
-  Rejected
+  LRCreated
   Cancelled
   InProgress
   Completed
+  Rejected
 }
 
 enum BranchScope {
@@ -1574,12 +2096,15 @@ enum DriverStatus {
 enum LRStatus {
   DRAFT
   FINALISED
+  DELIVERED
+  ACKNOWLEDGED
   CANCELLED
 }
 
 enum LRGroupStatus {
   DRAFT
   FINALISED
+  DELIVERED
   CANCELLED
 }
 
@@ -1618,8 +2143,339 @@ enum TripType {
   dc
 }
 
-enum VPScheduleStatus {
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Vehicle journey / log slip (docs/TRIP_JOURNEY_LOGSLIP_PLAN.md)
+ */
+/**
+ * ------------------------------------------------------------------
+ */
+
+/// Full own-vehicle truck cycle: sequential trip legs starting from a base
+/// city and normally closing when the vehicle returns to `returnCityId`.
+/// Settled by exactly one LogSlip. Return base is configured per journey -
+/// never hardcoded.
+model VehicleJourney {
+  id               String                  @id @default(cuid())
+  journeyNumber    String                  @unique
+  fyCode           String
+  vehicleId        String
+  driverId         String
+  homeBranchId     String
+  startCityId      String
+  returnCityId     String
+  currentCityId    String
+  openingKm        Int
+  closingKm        Int?
+  startedAt        DateTime
+  closedAt         DateTime?
+  status           VehicleJourneyStatus    @default(ACTIVE)
+  settlementStatus JourneySettlementStatus @default(NOT_READY)
+  // Reason recorded when the journey is closed away from the return city.
+  closeReason      String?
+  cancelReason     String?
+  remarks          String?
+  createdById      String
+  updatedById      String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  deletedAt        DateTime?
+  version          Int                     @default(1)
+
+  vehicle     Vehicle @relation(fields: [vehicleId], references: [id])
+  driver      Driver  @relation(fields: [driverId], references: [id])
+  homeBranch  Branch  @relation("JourneyHomeBranch", fields: [homeBranchId], references: [id])
+  startCity   City    @relation("JourneyStartCity", fields: [startCityId], references: [id])
+  returnCity  City    @relation("JourneyReturnCity", fields: [returnCityId], references: [id])
+  currentCity City    @relation("JourneyCurrentCity", fields: [currentCityId], references: [id])
+  createdBy   User    @relation("CreatedJourneys", fields: [createdById], references: [id])
+  updatedBy   User?   @relation("UpdatedJourneys", fields: [updatedById], references: [id])
+
+  trips    VehicleTrip[]
+  expenses TripExpense[]
+  advances DriverAdvance[]
+  logSlip  LogSlip?
+
+  @@index([vehicleId, status])
+  @@index([driverId, status])
+  @@index([fyCode])
+  @@index([homeBranchId])
+  @@index([settlementStatus])
+  @@index([status])
+}
+
+model TripExpense {
+  id              String            @id @default(cuid())
+  journeyId       String
+  tripId          String?
+  expenseTypeId   String
+  amountPaise     BigInt
+  paymentMode     TripPaymentMode
+  cityId          String?
+  pumpId          String?
+  dieselQty       Float?
+  dieselRatePaise BigInt?
+  expenseDate     DateTime
+  receiptNo       String?
+  paidByDriver    Boolean           @default(true)
+  remarks         String?
+  status          TripExpenseStatus @default(DRAFT)
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectReason    String?
+  reversedById    String?
+  reversedAt      DateTime?
+  reverseReason   String?
+  journalEntryId  String?
+  createdById     String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  journey     VehicleJourney  @relation(fields: [journeyId], references: [id])
+  trip        VehicleTrip?    @relation(fields: [tripId], references: [id])
+  expenseType TripExpenseType @relation(fields: [expenseTypeId], references: [id])
+  city        City?           @relation("TripExpenseCity", fields: [cityId], references: [id])
+  pump        Pump?           @relation(fields: [pumpId], references: [id])
+  createdBy   User            @relation("CreatedTripExpenses", fields: [createdById], references: [id])
+
+  @@index([journeyId])
+  @@index([tripId])
+  @@index([expenseTypeId])
+  @@index([status])
+}
+
+/// Configurable journey expense category. System categories seed the standard
+/// ERP behaviour; users can add further categories without a code deployment.
+model TripExpenseType {
+  id                    String   @id @default(cuid())
+  code                  String   @unique
+  name                  String   @unique
+  requiresDieselDetails Boolean  @default(false)
+  isSystem              Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  expenses TripExpense[]
+
+  @@index([isActive, sortOrder])
+}
+
+/// Cash/bank/card advance handed to the driver for a journey. Settled against
+/// the driver's cash expenses when the log slip is generated.
+model DriverAdvance {
+  id             String              @id @default(cuid())
+  journeyId      String
+  tripId         String?
+  driverId       String
+  vehicleId      String
+  amountPaise    BigInt
+  paymentMode    TripPaymentMode
+  cashAccountId  String?
+  paidAt         DateTime
+  narration      String?
+  status         DriverAdvanceStatus @default(POSTED)
+  reversedById   String?
+  reversedAt     DateTime?
+  reverseReason  String?
+  // Set by the accounts posting service (Phase 6) — null until posted.
+  journalEntryId String?
+  createdById    String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  journey     VehicleJourney @relation(fields: [journeyId], references: [id])
+  trip        VehicleTrip?   @relation(fields: [tripId], references: [id])
+  driver      Driver         @relation(fields: [driverId], references: [id])
+  vehicle     Vehicle        @relation(fields: [vehicleId], references: [id])
+  cashAccount CashAccount?   @relation(fields: [cashAccountId], references: [id])
+  createdBy   User           @relation("CreatedDriverAdvances", fields: [createdById], references: [id])
+
+  @@index([journeyId])
+  @@index([driverId])
+  @@index([status])
+}
+
+/// Final settlement document for a VehicleJourney. Totals are frozen at
+/// generation time (snapshot lines in LogSlipLine) so the print stays
+/// historically stable even if trip/expense rows change later.
+model LogSlip {
+  id                      String        @id @default(cuid())
+  journeyId               String        @unique
+  logSlipNumber           String?       @unique
+  fyCode                  String
+  logSlipDate             DateTime
+  status                  LogSlipStatus @default(DRAFT)
+  vehicleId               String
+  driverId                String
+  openingKm               Int
+  closingKm               Int
+  totalKm                 Int
+  totalDays               Int
+  totalFreightPaise       BigInt        @default(0)
+  totalAdvancePaise       BigInt        @default(0)
+  totalDieselQty          Float         @default(0)
+  totalDieselAmountPaise  BigInt        @default(0)
+  totalCashExpensePaise   BigInt        @default(0)
+  totalCreditExpensePaise BigInt        @default(0)
+  totalExpensePaise       BigInt        @default(0)
+  netVehicleResultPaise   BigInt        @default(0)
+  driverCashExpensePaise  BigInt        @default(0)
+  driverReceivablePaise   BigInt        @default(0)
+  driverPayablePaise      BigInt        @default(0)
+  // Diesel accounting: fuel left in tank from the previous journey plus this
+  // journey's fills, compared against expected consumption at the standard
+  // average, yields the short/excess diesel figure.
+  previousDieselQty       Float         @default(0)
+  dieselRatePaise         BigInt?
+  standardAverage         Float?
+  actualAverage           Float?
+  expectedDieselQty       Float?
+  shortDieselQty          Float?
+  remarks                 String?
+  generatedById           String?
+  generatedAt             DateTime?
+  postedJournalEntryId    String?
+  postedById              String?
+  postedAt                DateTime?
+  reopenedById            String?
+  reopenedAt              DateTime?
+  reopenReason            String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  version                 Int           @default(1)
+
+  journey     VehicleJourney @relation(fields: [journeyId], references: [id])
+  vehicle     Vehicle        @relation(fields: [vehicleId], references: [id])
+  driver      Driver         @relation(fields: [driverId], references: [id])
+  generatedBy User?          @relation("GeneratedLogSlips", fields: [generatedById], references: [id])
+  lines       LogSlipLine[]
+
+  @@index([status])
+  @@index([fyCode])
+}
+
+/// Snapshot line frozen at log slip generation. `sourceType`/`sourceId` point
+/// back at the origin row (VehicleTrip / DriverAdvance / TripExpense) so
+/// accounts can audit, and reopen can diff old vs new.
+model LogSlipLine {
+  id          String          @id @default(cuid())
+  logSlipId   String
+  lineType    LogSlipLineType
+  sourceType  String?
+  sourceId    String?
+  description String
+  quantity    Float?
+  ratePaise   BigInt?
+  amountPaise BigInt
+  sortOrder   Int             @default(0)
+  metadata    Json?
+
+  logSlip LogSlip @relation(fields: [logSlipId], references: [id], onDelete: Cascade)
+
+  @@index([logSlipId])
+}
+
+model UnitOfMeasure {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  category  UnitCategory
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  orderConsignmentWeightUnits OrderConsignment[]      @relation("OrderConsignmentWeightUnit")
+  orderGoodsQuantityUnits     OrderConsignmentGoods[] @relation("OrderGoodsQuantityUnit")
+  orderGoodsWeightUnits       OrderConsignmentGoods[] @relation("OrderGoodsWeightUnit")
+  lrWeightUnits               LorryReceipt[]          @relation("LRWeightUnit")
+  lrGoodsQuantityUnits        LRGoods[]               @relation("LRGoodsQuantityUnit")
+  lrGoodsWeightUnits          LRGoods[]               @relation("LRGoodsWeightUnit")
+  grnGoodsQuantityUnits       GRNGoods[]              @relation("GRNGoodsQuantityUnit")
+  grnGoodsWeightUnits         GRNGoods[]              @relation("GRNGoodsWeightUnit")
+
+  @@index([category])
+  @@index([isActive])
+  @@index([name])
+}
+
+enum UnitCategory {
+  WEIGHT
+  PACKAGING
+  COUNT
+  LENGTH
+  VOLUME
+}
+
+enum VehicleJourneyStatus {
   DRAFT
-  PLANNED
+  ACTIVE
+  RETURNED
+  READY_FOR_LOGSLIP
+  SETTLED
+  REOPENED
   CANCELLED
+}
+
+enum JourneySettlementStatus {
+  NOT_READY
+  PENDING_REVIEW
+  READY
+  GENERATED
+  POSTED
+  TALLY_SYNCED
+}
+
+enum TripLegType {
+  LR
+  DC
+  EMPTY
+  LOCAL
+  RETURN
+  WORKSHOP
+  OTHER
+}
+
+enum TripPaymentMode {
+  CASH
+  BANK
+  CARD
+  UPI
+  CREDIT
+}
+
+enum TripExpenseStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+  POSTED
+  REVERSED
+}
+
+enum DriverAdvanceStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+enum LogSlipStatus {
+  DRAFT
+  GENERATED
+  POSTED_TO_ACCOUNTS
+  TALLY_SYNCED
+  REOPENED
+  CANCELLED
+}
+
+enum LogSlipLineType {
+  TRIP_FREIGHT
+  ADVANCE
+  DIESEL
+  EXPENSE
+  DRIVER_SETTLEMENT
+  ADJUSTMENT
 }

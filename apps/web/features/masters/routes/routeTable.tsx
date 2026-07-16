@@ -5,24 +5,8 @@ import type { Route } from "@skerp/types";
 import {
   IconArrowRight,
   IconMapPin,
-  IconReceipt,
   IconRoute,
-  IconTruck,
-  IconTableOptions,
 } from "@tabler/icons-react";
-
-const CountBadge = ({
-  value,
-  icon,
-}: {
-  value: number;
-  icon: React.ReactNode;
-}) => (
-  <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-    {icon}
-    {value}
-  </span>
-);
 
 export const routeColumns: ColumnDef<Route>[] = [
   {

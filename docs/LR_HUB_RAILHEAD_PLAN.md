@@ -2,6 +2,12 @@
 
 Status: proposed (pending team sign-off — data-model change + migration)
 
+> **Amended 2026-07-10** by [LR_DELIVERY_ACK_PLAN.md](./LR_DELIVERY_ACK_PLAN.md) §5:
+> the single "split at hub" action is decomposed into **hold-at-hub** +
+> **dispatch-from-hub** so the trip-close delivery gate doesn't block leg-1
+> close. Trip/hub fields live on LRGroup (not LorryReceipt), so the endpoints
+> are group-level.
+
 ## Why this doc
 
 The current LR implementation conflates two unrelated concepts into one `hubId`

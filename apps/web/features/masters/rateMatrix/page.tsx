@@ -25,16 +25,15 @@ import RateMatrixForm from "./rateMatrixForm";
 
 /* ================= CSV TYPE ================= */
 type CreateRateMatrixCsvRow = {
-  agreementId: string;
-  routeId: string;
+  agreementId?: string;
+  routeId?: string;
   vehicleTypeId?: string;
   unitId?: string;
   transportType?: "RAIL_ROAD" | "ROAD";
-  rate: string;
+  rate?: string;
   transitDays?: string;
   remarks?: string;
 };
-
 export default function RateMatrixPage() {
   const queryClient = useQueryClient();
 
@@ -101,27 +100,50 @@ React.useEffect(() => {
     }),
     []
   );
-  const handleImport = async (file: File) => {
-    const text = await file.text();
+ const handleImport = async (file: File) => {
+  const text = await file.text();
 
-    const rows = parseCsvRows<CreateRateMatrixCsvRow>(text);
+  const rows = parseCsvRows<CreateRateMatrixCsvRow>(text);
 
-const parsedRows: CreateRateMatrixBody[] = rows.map((row) => ({
-  agreementId: row.agreementId,
-  routeId: row.routeId,
+  const parsedRows: CreateRateMatrixBody[] = rows.map((row, index) => {
+    const rowNumber = index + 2; // +2 because CSV header is row 1
 
-  vehicleTypeId: row.vehicleTypeId || undefined,
-  unitId: row.unitId || undefined,
+    const agreementId = row.agreementId?.trim();
+    const routeId = row.routeId?.trim();
+    const vehicleTypeId = row.vehicleTypeId?.trim();
+    const unitId = row.unitId?.trim();
+    const rate = row.rate?.trim();
 
-  transportType: row.transportType || "ROAD",
+    if (!agreementId) {
+      throw new Error(`agreementId is required in CSV row ${rowNumber}`);
+    }
 
-  rate: Number(row.rate),
-  transitDays: row.transitDays ? Number(row.transitDays) : undefined,
-  remarks: row.remarks || undefined,
-}));
+    if (!routeId) {
+      throw new Error(`routeId is required in CSV row ${rowNumber}`);
+    }
 
-    await bulkImportMutation.mutateAsync(parsedRows);
-  };
+    if (!vehicleTypeId) {
+      throw new Error(`vehicleTypeId is required in CSV row ${rowNumber}`);
+    }
+
+    if (!rate) {
+      throw new Error(`rate is required in CSV row ${rowNumber}`);
+    }
+
+    return {
+      agreementId,
+      routeId,
+      vehicleTypeId,
+      unitId: unitId || undefined,
+      transportType: row.transportType || "ROAD",
+      rate: Number(rate),
+      transitDays: row.transitDays ? Number(row.transitDays) : undefined,
+      remarks: row.remarks?.trim() || undefined,
+    };
+  });
+
+  await bulkImportMutation.mutateAsync(parsedRows);
+};
 
   /* ================= UI ================= */
   return (

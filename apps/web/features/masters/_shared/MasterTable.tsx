@@ -36,10 +36,7 @@ import { Button } from "@skerp/ui/components/button";
 import { Checkbox } from "@skerp/ui/components/checkbox";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from "@skerp/ui/components/tooltip";
 
 import { IconDatabaseOff, IconEdit, IconEye, IconTrash, IconChevronDown, IconDotsVertical } from "@tabler/icons-react";
@@ -69,7 +66,6 @@ export default function MasterTable<T extends { id: string }>({
   onEdit,
   onDelete,
   onRowClick,
-  onAddNew,
   onView,
   selectedIds = [],
   onSelectedIdsChange,

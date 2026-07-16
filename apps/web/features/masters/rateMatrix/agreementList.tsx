@@ -8,14 +8,12 @@ import {
   IconDownload,
   IconMapPin,
   IconPlus,
-  IconSearch,
   IconUpload,
   IconUser,
 } from "@tabler/icons-react";
 
 import type { AgreementWithRelations } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
 
 import {
   Accordion,
@@ -66,8 +64,6 @@ function formatDate(value?: string | Date | null) {
 export default function AgreementRateMatrixAccordionList({
   agreements,
   isLoading,
-  search,
-  onSearchChange,
   page,
   size,
   total,

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateCompanyBody, Company } from "@skerp/types";
+import type { Company } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import {
@@ -18,10 +18,6 @@ import { companyColumns } from "./CompanyTable";
 import CompanyForm from "./CompanyForm";
 import { createCompanySchema } from "@skerp/validators";
 
-import { stateApi } from "../state/state.service";
-import { cityApi } from "../city/city.service";
-import { stateKeys } from "../state/state.keys";
-import { cityKeys } from "../city/city.keys";
 import getErrorMessage, { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import CompanyDetailDialog from "./CompanyDialog";
 import { toast } from "sonner";

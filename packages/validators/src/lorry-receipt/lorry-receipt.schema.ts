@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalRupeesToPaise } from "../_shared/money.js";
 
 const optionalString = z
   .string()
@@ -15,28 +16,18 @@ const positiveInt = (label: string) =>
       `${label} must be a positive whole number`,
     );
 
-// Money entered in rupees on the UI/wire, stored as paise.
-const optionalRupeesToPaise = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform((value) => {
-      if (value === "" || value === undefined || value === null) {
-        return undefined;
-      }
-      return Math.round(Number(value) * 100);
-    })
-    .refine(
-      (value) => value === undefined || (Number.isInteger(value) && value > 0),
-      `${label} must be a positive amount`,
-    );
-
 const requiredDate = z
   .union([z.string(), z.date()])
   .transform((value) => new Date(value))
   .refine((value) => !Number.isNaN(value.getTime()), "Enter a valid date");
 
-export const lrStatusSchema = z.enum(["DRAFT", "FINALISED", "CANCELLED"]);
+export const lrStatusSchema = z.enum([
+  "DRAFT",
+  "FINALISED",
+  "DELIVERED",
+  "ACKNOWLEDGED",
+  "CANCELLED",
+]);
 export const lrSourceSchema = z.enum(["FROM_ORDER", "INSTANT"]);
 export const lrTransportTypeSchema = z.enum(["Road", "Rail", "RoadAndRail"]);
 export const lrTripLegTypeSchema = z.enum(["DIRECT", "TO_HUB", "FROM_HUB"]);
@@ -62,7 +53,7 @@ export const lrGoodsLineSchema = z.object({
   name: z.string().trim().min(1, "Goods name is required").max(100),
   description: optionalString,
   quantity: positiveInt("Quantity"),
-  unit: z.string().trim().min(1, "Unit is required").max(20),
+  unit: optionalString,
   weight: optionalDimension("Weight"),
   length: optionalDimension("Length"),
   width: optionalDimension("Width"),
@@ -74,6 +65,8 @@ export type LRGoodsLine = z.infer<typeof lrGoodsLineSchema>;
 export const updateLRSchema = z.object({
   loadingLocationId: optionalString,
   unloadingLocationId: optionalString,
+  totalWeight: optionalDimension("Total weight"),
+  totalWeightUnit: optionalString,
   invoiceNumber: optionalString,
   invoiceAmount: optionalRupeesToPaise("Invoice amount"),
   goods: z

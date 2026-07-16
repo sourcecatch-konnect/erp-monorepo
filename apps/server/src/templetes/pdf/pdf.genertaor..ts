@@ -2,9 +2,8 @@ import puppeteer from "puppeteer";
 import type { PdfDocument } from "./pdf.type.js";
 import { basePdfTemplate } from "./template/base-pdf.template.js";
 
-export const generatePdfBuffer = async (doc: PdfDocument) => {
-  const html = basePdfTemplate(doc);
-
+/** Render any ready-made HTML string to an A4 PDF buffer. */
+export const generatePdfFromHtml = async (html: string) => {
   const browser = await puppeteer.launch({
     headless: true,
     args: [
@@ -44,3 +43,6 @@ export const generatePdfBuffer = async (doc: PdfDocument) => {
     await browser.close();
   }
 };
+
+export const generatePdfBuffer = async (doc: PdfDocument) =>
+  generatePdfFromHtml(basePdfTemplate(doc));

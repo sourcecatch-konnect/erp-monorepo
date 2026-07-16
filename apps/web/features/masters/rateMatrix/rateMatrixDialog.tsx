@@ -9,18 +9,14 @@ import {
 
 import {
   Field,
-  PartyCard,
   SectionLabel,
   SkeletonBody,
-  formatDate,
   formatCurrencyFromPaise,
 } from "../_shared/dialog-parts";
 
 import {
-  IconBuilding,
   IconUser,
   IconRoute,
-  IconMapPin,
   IconTruck,
   IconPackage,
   IconCurrencyRupee,
@@ -28,9 +24,6 @@ import {
   IconNotes,
   IconFileInvoice,
   IconCircleCheckFilled,
-  IconClockEdit,
-  IconCirclePlus,
-  IconId,
 } from "@tabler/icons-react";
 import { rateMatrixKeys } from "./rateMatrix.key";
 import { rateMatrixApi } from "./rateMatrix.service";

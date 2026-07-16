@@ -1,54 +1,84 @@
 # syntax=docker/dockerfile:1
 
+# Production image for @skerp/server, built around `turbo prune` so Docker
+# layer caching survives source-only changes:
+#
+#   pruner    → out/json (manifests only) + out/full (source) for the server subtree
+#   builder   → pnpm install (store cache mount) + prisma generate + turbo build (turbo cache mount)
+#   prod-deps → production-only node_modules from the same pruned manifests
+#   runner    → slim runtime with distro Chromium for puppeteer PDF generation
+#   migrator  → tiny standalone image that runs `prisma migrate deploy`
+
 FROM node:22-bookworm-slim AS base
 
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    TURBO_TELEMETRY_DISABLED=1 \
+    CI=true
+
+RUN corepack enable \
+  && corepack prepare pnpm@9.0.0 --activate \
+  && echo "store-dir=/pnpm/store" > /root/.npmrc
 
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates openssl \
-  && rm -rf /var/lib/apt/lists/* \
-  && corepack enable
+# ---------------------------------------------------------------- pruner ----
+FROM base AS pruner
 
-FROM base AS builder
-
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY apps/server/package.json apps/server/package.json
-COPY packages/config/package.json packages/config/package.json
-COPY packages/types/package.json packages/types/package.json
-COPY packages/validators/package.json packages/validators/package.json
-COPY packages/typescript-config/package.json packages/typescript-config/package.json
-COPY packages/eslint-config/package.json packages/eslint-config/package.json
-
-RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN npm install -g "turbo@^2" --no-audit --no-fund
 
 COPY . .
 
-# Prisma generate reads prisma.config.ts. A dummy direct URL is enough for client generation.
+# Older turbo versions emit the pruned lockfile at out/pnpm-lock.yaml instead
+# of inside out/json — normalise so the builder only needs out/json.
+RUN turbo prune @skerp/server --docker \
+  && { [ -f out/pnpm-lock.yaml ] && cp out/pnpm-lock.yaml out/json/pnpm-lock.yaml; true; }
+
+# --------------------------------------------------------------- builder ----
+FROM base AS builder
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+# Manifests only — this layer and the install below stay cached until a
+# package.json or the lockfile actually changes.
+COPY --from=pruner /app/out/json/ .
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --ignore-scripts
+
+COPY --from=pruner /app/out/full/ .
+
+# Prisma generate reads prisma.config.ts; a syntactically valid URL suffices.
 ENV DIRECT_URL=postgresql://postgres:postgres@localhost:5432/postgres
 RUN pnpm --filter @skerp/server db:generate
-RUN pnpm --filter @skerp/server... build
+
+# Turbo's local cache lives on a mount so shared packages (validators, types,
+# config) rebuilt for one image are cache hits for the other.
+ENV TURBO_CACHE_DIR=/turbo-cache
+RUN --mount=type=cache,id=turbo-cache,target=/turbo-cache \
+    pnpm turbo run build --filter=@skerp/server...
+
+# Compiled code resolves ../generated relative to dist/src.
 RUN cp -R apps/server/generated apps/server/dist/generated
 
+# ------------------------------------------------------------- prod-deps ----
 FROM base AS prod-deps
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/server/package.json apps/server/package.json
-COPY packages/config/package.json packages/config/package.json
-COPY packages/types/package.json packages/types/package.json
-COPY packages/validators/package.json packages/validators/package.json
+COPY --from=pruner /app/out/json/ .
 
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile --ignore-scripts
 
+# ---------------------------------------------------------------- runner ----
 FROM node:22-bookworm-slim AS runner
 
-ENV NODE_ENV=production
-ENV PORT=5000
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV NODE_ENV=production \
+    PORT=5000 \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
@@ -81,3 +111,23 @@ WORKDIR /app/apps/server
 EXPOSE 5000
 
 CMD ["dumb-init", "node", "dist/src/index.js"]
+
+# -------------------------------------------------------------- migrator ----
+# Standalone `prisma migrate deploy` image — the runner ships prod deps only
+# (no prisma CLI), so migrations get their own tiny image that shares nothing
+# but the schema. Keep the prisma version in sync with apps/server.
+FROM node:22-bookworm-slim AS migrator
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN npm init -y >/dev/null \
+  && npm install --no-audit --no-fund prisma@7.8.0 dotenv@17
+
+COPY apps/server/prisma.config.ts ./prisma.config.ts
+COPY apps/server/prisma ./prisma
+
+CMD ["npx", "prisma", "migrate", "deploy"]

@@ -7,6 +7,12 @@ import {
   lrPrioritySchema,
   updateLRSchema,
   addEwayBillSchema,
+  deliverLRSchema,
+  updateLRDeliverySchema,
+  deliverGroupSchema,
+  acknowledgeLRSchema,
+  updateLRAcknowledgementSchema,
+  holdGroupAtHubSchema,
 } from "@skerp/validators";
 
 export type LRStatus = z.infer<typeof lrStatusSchema>;
@@ -18,6 +24,67 @@ export type LRPriority = z.infer<typeof lrPrioritySchema>;
 export type UpdateLRBody = z.output<typeof updateLRSchema>;
 export type AddEwayBillBody = z.output<typeof addEwayBillSchema>;
 export type AddEwayBillFormInput = z.input<typeof addEwayBillSchema>;
+
+export type DeliverLRBody = z.output<typeof deliverLRSchema>;
+export type DeliverLRFormInput = z.input<typeof deliverLRSchema>;
+export type UpdateLRDeliveryBody = z.output<typeof updateLRDeliverySchema>;
+export type DeliverGroupBody = z.output<typeof deliverGroupSchema>;
+export type DeliverGroupFormInput = z.input<typeof deliverGroupSchema>;
+export type AcknowledgeLRBody = z.output<typeof acknowledgeLRSchema>;
+export type AcknowledgeLRFormInput = z.input<typeof acknowledgeLRSchema>;
+export type UpdateLRAcknowledgementBody = z.output<
+  typeof updateLRAcknowledgementSchema
+>;
+export type HoldGroupAtHubBody = z.output<typeof holdGroupAtHubSchema>;
+
+export type UserRef = {
+  id: string;
+  firstName: string;
+  lastName: string;
+};
+
+export type LRDelivery = {
+  id: string;
+  lrId: string;
+  deliveredAt: string;
+  reportedAt: string | null;
+  receiverName: string | null;
+  receiverPhone: string | null;
+  unloadingCharges: number | null;
+  remark: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: UserRef | null;
+  updatedBy?: UserRef | null;
+};
+
+export type LRAcknowledgementItem = {
+  id: string;
+  ackId: string;
+  lrGoodsId: string;
+  receivedQty: string | number | null;
+  damagedQty: string | number | null;
+};
+
+export type LRAcknowledgement = {
+  id: string;
+  lrId: string;
+  receivedAt: string;
+  courierName: string | null;
+  courierDocketNo: string | null;
+  courierCharge: number | null;
+  detentionDays: number | null;
+  detentionAmount: number | null;
+  damageAmount: number | null;
+  remark: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  items?: LRAcknowledgementItem[];
+  createdBy?: UserRef | null;
+  updatedBy?: UserRef | null;
+};
 
 export type LocationRef = {
   id: string;
@@ -38,8 +105,8 @@ export type LRGoods = {
   name: string;
   description: string | null;
   quantity: number;
-  unit: string;
-  weight: number | null;
+   unit: string | null;
+  weight: string | number | null;
   length: number | null;
   width: number | null;
   height: number | null;
@@ -71,6 +138,61 @@ export type LRListItem = {
   invoiceNumber: string | null;
   invoiceAmount: number | null;
   group?: LRGroupRef | null;
+  delivery?: { deliveredAt: string } | null;
+  acknowledgement?: { receivedAt: string } | null;
+};
+
+/* ---- delivery worklists (docs/LR_DELIVERY_ACK_PLAN.md §8) ---- */
+
+export type WorklistGroupRef = {
+  id: string;
+  groupNumber: string;
+  finalisedAt: string | null;
+  isMarketVehicle: boolean;
+  marketVehicleNumber: string | null;
+  consignee: { id: string; name: string; shortName: string | null } | null;
+  originBranch: { id: string; name: string; branchCode: string } | null;
+  destinationBranch: { id: string; name: string; branchCode: string } | null;
+  primaryTrip: { id: string; vehicle: { vehicleNumber: string } | null } | null;
+  secondaryTrip: {
+    id: string;
+    vehicle: { vehicleNumber: string } | null;
+  } | null;
+};
+
+export type PendingDeliveryRow = {
+  id: string;
+  lrNumber: string;
+  status: LRStatus;
+  unloadingLocation: { id: string; name: string } | null;
+  group: WorklistGroupRef;
+};
+
+export type PendingPodRow = {
+  id: string;
+  lrNumber: string;
+  status: LRStatus;
+  delivery: { deliveredAt: string; receiverName: string | null } | null;
+  group: WorklistGroupRef;
+};
+
+export type AtHubRow = {
+  id: string;
+  groupNumber: string;
+  hubArrivalAt: string | null;
+  finalisedAt: string | null;
+  consignee: { id: string; name: string; shortName: string | null } | null;
+  originBranch: { id: string; name: string; branchCode: string } | null;
+  destinationBranch: { id: string; name: string; branchCode: string } | null;
+  hub: { id: string; name: string } | null;
+  lorryReceipts: { id: string; lrNumber: string }[];
+};
+
+export type DeliveryStats = {
+  pendingDelivery: number;
+  atHub: number;
+  pendingPod: number;
+  avgDeliveryDays: number | null;
 };
 
 export type LorryReceipt = LRListItem & {
@@ -79,9 +201,13 @@ export type LorryReceipt = LRListItem & {
   cancelReason: string | null;
   createdById: string;
   updatedById: string | null;
+  totalWeight: string | number | null;
+unit: string | null;
   version: number;
   updatedAt: string;
   deletedAt: string | null;
   goods: LRGoods[];
   ewayBill: EwayBill | null;
+  delivery?: LRDelivery | null;
+  acknowledgement?: LRAcknowledgement | null;
 };

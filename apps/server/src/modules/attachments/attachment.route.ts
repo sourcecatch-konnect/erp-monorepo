@@ -49,8 +49,6 @@ router.post(
 
 // List attachments for a host entity.
 router.get("/", can(PERMS.ATTACHMENTS.VIEW), async (req, res) => {
-  console.log("called");
-
   const parsed = listAttachmentsQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 

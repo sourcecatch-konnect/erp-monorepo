@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateWarehouseBody, Warehouse, WarehouseWithRelations } from "@skerp/types";
+import type { WarehouseWithRelations } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
 import {
@@ -19,10 +19,6 @@ import WarehouseForm from "./warehouseForm";
 import { createWarehouseSchema } from "@skerp/validators";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { warehouseColumns } from "./warehouseTable";
-import { stateApi } from "../state/state.service";
-import { cityApi } from "../city/city.service";
-import { branchApi } from "../branch/branch.service";
-import MasterDetailDialog from "../_shared/MasterDetailDialog";
 import WarehouseDetailDialog from "./warehouseDialog";
 /* -----------------------------
    CSV TYPE

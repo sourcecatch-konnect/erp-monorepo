@@ -22,12 +22,7 @@ import {
   IconEdit,
   IconArrowLeft,
   IconDownload,
-  IconCopy,
-  IconMail,
   IconAlertCircle,
-  IconCircleCheck,
-  IconClock,
-  IconCircleDot,
   IconLoader2,
   IconArrowRight,
   IconPackage,
@@ -38,14 +33,8 @@ import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
 import { lrGroupApi } from "@/features/lorry-receipts/lr-group.service";
 import { lrGroupKeys } from "@/features/lorry-receipts/lr-group.keys";
-import {
-  StatusBadge,
-  formatDate,
-  formatMoney,
-  formatMoneyFromPaise,
-  formatDateTime,
-} from "./order-ui";
-import { paiseToRupees } from "@/lib/money";
+import { StatusBadge, formatDate, formatDateTime } from "./order-ui";
+import { formatRupees, formatPaise, paiseToRupees } from "@/lib/money";
 import OrderTimeline from "./OrderTimeline";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
@@ -136,7 +125,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
     enabled: Boolean(
       order?.id &&
       order?.orderType === "Truck" &&
-      order?.status === "Confirmed",
+      (order?.status === "Confirmed" || order?.status === "LRCreated"),
     ),
     select: (res) => res.meta?.total ?? 0,
   });
@@ -236,10 +225,40 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
       : (order.items?.length ?? 0);
 
   const totalWeight =
-    order.items?.reduce((sum, item) => {
-      const weight = Number(item.weight ?? 0);
-      return sum + (Number.isNaN(weight) ? 0 : weight);
-    }, 0) ?? 0;
+    order.orderType === "Truck"
+      ? (order.consignments?.reduce((sum, consignment) => {
+          const lineWeight = Number(consignment.totalWeight ?? 0);
+          if (!Number.isNaN(lineWeight) && lineWeight > 0) {
+            return sum + lineWeight;
+          }
+
+          const goodsWeight =
+            consignment.goods?.reduce((goodsSum, item) => {
+              const weight = Number(item.weight ?? 0);
+              return goodsSum + (Number.isNaN(weight) ? 0 : weight);
+            }, 0) ?? 0;
+
+          return sum + goodsWeight;
+        }, 0) ?? 0)
+      : (order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0);
+
+  const weightUnits =
+    order.orderType === "Truck"
+      ? Array.from(
+          new Set(
+            (order.consignments ?? [])
+              .map((c) => c.unit)
+              .filter((u): u is string => Boolean(u)),
+          ),
+        )
+      : [];
+
+  const totalWeightUnit =
+    weightUnits.length === 1
+      ? weightUnits[0]
+      : weightUnits.length > 1
+        ? "Mixed"
+        : undefined;
   const autoFreight =
     order.freightPreview?.matched && order.freightPreview.amount != null
       ? Number(order.freightPreview.amount)
@@ -250,13 +269,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
       ? paiseToRupees(Number(order.bookingFreightAmount))
       : null;
   const hasApprovedFreight = approvedFreight != null;
-  const displayedFreight =
-    hasApprovedFreight && order.bookingFreightAmount != null
-      ? formatMoneyFromPaise(order.bookingFreightAmount)
-      : autoFreight != null
-        ? formatMoney(autoFreight)
-        : "-";
-
   const freightWasEdited =
     approvedFreight != null &&
     autoFreight != null &&
@@ -398,7 +410,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Field label="Vehicle type" value={order.vehicleType?.name} />
                 <Field label="Truck quantity" value={order.truckQuantity} />
-                {order.status === "Confirmed" &&
+                {(order.status === "Confirmed" ||
+                  order.status === "LRCreated") &&
                   order.truckQuantity != null && (
                     <Field
                       label="LRs created"
@@ -428,31 +441,17 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableHead className="text-xs uppercase">Goods</TableHead>
                       <TableHead className="text-xs uppercase">Qty</TableHead>
-                      <TableHead className="text-xs uppercase">Unit</TableHead>
-                      <TableHead className="text-xs uppercase">
-                        Weight
-                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {order.items?.map(
-                      (i: {
-                        id: string;
-                        goods?: { name: string } | null;
-                        quantity: number;
-                        unit: string;
-                        weight?: string | null;
-                      }) => (
-                        <TableRow key={i.id}>
-                          <TableCell className="font-medium">
-                            {i.goods?.name ?? "—"}
-                          </TableCell>
-                          <TableCell>{i.quantity}</TableCell>
-                          <TableCell>{i.unit}</TableCell>
-                          <TableCell>{i.weight ?? "—"}</TableCell>
-                        </TableRow>
-                      ),
-                    )}
+                    {order.items?.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          {item.goods?.name ?? "—"}
+                        </TableCell>
+                        <TableCell>{item.quantity}</TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -468,7 +467,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                   <p className="mt-1 text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
                     {order.status === "PendingApproval"
                       ? `Order not confirmed yet`
-                      : ` ${formatMoneyFromPaise(order.bookingFreightAmount)} `}
+                      : ` ${formatPaise(order.bookingFreightAmount)} `}
                   </p>
                 </div>
 
@@ -498,13 +497,13 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div>
                       <p className="text-orange-700/70">Auto freight</p>
-                      <p className="font-medium">{formatMoney(autoFreight)}</p>
+                      <p className="font-medium">{formatRupees(autoFreight)}</p>
                     </div>
 
                     <div>
                       <p className="text-orange-700/70">Approved freight</p>
                       <p className="font-medium">
-                        {formatMoney(approvedFreight)}
+                        {formatRupees(approvedFreight)}
                       </p>
                     </div>
 
@@ -512,7 +511,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                       <p className="text-orange-700/70">Difference</p>
                       <p className="font-semibold">
                         {freightDifference > 0 ? "+" : ""}
-                        {formatMoney(freightDifference)}
+                        {formatRupees(freightDifference)}
                       </p>
                     </div>
                   </div>
@@ -551,7 +550,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               <div className="space-y-3">
                 {order.consignments!.map((c, idx) => (
                   <div key={c.id} className="rounded-lg border bg-muted/20 p-4">
-                    <div className="mb-3 flex flex-wrap items-center gap-2.5">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                         LR {idx + 1}
                       </span>
@@ -586,12 +585,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                             <TableHead className="text-xs uppercase">
                               Qty
                             </TableHead>
-                            <TableHead className="text-xs uppercase">
-                              Unit
-                            </TableHead>
-                            <TableHead className="text-xs uppercase">
-                              Weight
-                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -601,8 +594,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                                 {g.goods?.name ?? "—"}
                               </TableCell>
                               <TableCell>{g.quantity}</TableCell>
-                              <TableCell>{g.unit}</TableCell>
-                              <TableCell>{g.weight ?? "—"}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -658,9 +649,11 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
           {/* Summary stats */}
           <div className="grid grid-cols-2 gap-2">
             <StatCard
-              label="Total weight"
+              label={
+                order.orderType === "Truck" ? "Total weight" : "Total quantity"
+              }
               value={totalWeight.toLocaleString()}
-              sub="kg"
+              sub={totalWeightUnit}
             />
             <StatCard label="Items" value={itemCount} />
           </div>

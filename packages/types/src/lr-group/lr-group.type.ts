@@ -19,12 +19,12 @@ import type {
   EwayBill,
 } from "../lorry-receipt/lorry-receipt.type.js";
 
-export type LRGroupStatus = "DRAFT" | "FINALISED" | "CANCELLED";
+export type LRGroupStatus = "DRAFT" | "FINALISED" | "DELIVERED" | "CANCELLED";
 
-export type CreateLRGroupBody = z.output<typeof createLRGroupSchema>;
+export type CreateLRGroupBody = z.input<typeof createLRGroupSchema>;
 export type CreateLRGroupFormInput = z.input<typeof createLRGroupSchema>;
-export type UpdateLRGroupBody = z.output<typeof updateLRGroupSchema>;
-export type FinaliseGroupBody = z.output<typeof finaliseGroupSchema>;
+export type UpdateLRGroupBody = z.input<typeof updateLRGroupSchema>;
+export type FinaliseGroupBody = z.input<typeof finaliseGroupSchema>;
 export type FinaliseGroupFormInput = z.input<typeof finaliseGroupSchema>;
 export type FinaliseGroupLineInput = z.input<typeof finaliseGroupLineSchema>;
 export type SplitGroupAtHubBody = z.output<typeof splitGroupAtHubSchema>;
@@ -51,7 +51,10 @@ export type LRGroupListReceipt = {
   unloadingLocation: LocationRef | null;
   invoiceNumber: string | null;
   invoiceAmount: number | null;
+  goods?: { id: string }[];
   ewayBill: EwayBill | null;
+  delivery?: { deliveredAt: string } | null;
+  acknowledgement?: { receivedAt: string } | null;
 };
 
 export type TripRef = {
@@ -83,6 +86,7 @@ export type LRGroupListItem = {
   isMarketVehicle: boolean;
   marketVehicleNumber: string | null;
   marketDriverName: string | null;
+  hubArrivalAt: string | null;
   baseFreightAmount: number | null;
   sealNumber: string | null;
   primaryTrip: TripRef | null;

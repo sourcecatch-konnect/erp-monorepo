@@ -3,6 +3,7 @@ import { Prisma } from "../../../generated/prisma/index.js";
 import type { PdfDocument } from "../../templetes/pdf/pdf.type.js";
 import path from "node:path";
 import { imageToBase64Src } from "../_shared/pdf.helper.js";
+import { paiseToRupees } from "../../lib/money.js";
 
 const headerImageSrc = imageToBase64Src(
   path.resolve(process.cwd(), "public/skt_logo.svg"),
@@ -66,10 +67,11 @@ export const buildTripPdfDocument = (trip: TripPdfData): PdfDocument => {
   const pdfAmount = (value: unknown): string | undefined => {
     if (value === null || value === undefined || value === "") return undefined;
 
-    const amount = Number(value);
-    if (Number.isNaN(amount)) return undefined;
+    const paise = Number(value);
+    if (Number.isNaN(paise)) return undefined;
 
-    return `${amount.toLocaleString("en-IN")} /-`;
+    // Money is stored as paise; render in rupees.
+    return `${paiseToRupees(paise).toLocaleString("en-IN")} /-`;
   };
   // const clientScheduleFields = [
   //     { label: "Client", value: pdfValue(trip.consignor?.name) },

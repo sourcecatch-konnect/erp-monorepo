@@ -3,6 +3,7 @@ import type {
   ApiResponse,
   Driver,
   CreateDriverBody,
+  TripDriverChoice,
   UpdateDriverBody,
 } from "@skerp/types";
 import {
@@ -34,10 +35,7 @@ export const driverApi = {
     return unwrapApiResponse(res);
   },
 
-  update: async (
-    id: string,
-    body: UpdateDriverBody
-  ): Promise<Driver> => {
+  update: async (id: string, body: UpdateDriverBody): Promise<Driver> => {
     const res = await api.patch<ApiResponse<Driver>>(`/drivers/${id}`, body);
 
     return unwrapApiResponse(res);
@@ -52,18 +50,16 @@ export const driverApi = {
   bulkRemove: async (ids: string[]) => {
     const res = await api.post<ApiResponse<{ count: number }>>(
       "/drivers/bulk-delete",
-      { ids }
+      { ids },
     );
 
     return unwrapApiResponse(res);
   },
 
-  bulkImport: async (
-    rows: CreateDriverBody[]
-  ): Promise<BulkImportResult> => {
+  bulkImport: async (rows: CreateDriverBody[]): Promise<BulkImportResult> => {
     const res = await api.post<ApiResponse<BulkImportResult>>(
       "/drivers/bulk-import",
-      { rows }
+      { rows },
     );
 
     return unwrapApiResponse(res);
@@ -85,28 +81,65 @@ export const driverApi = {
 
     return unwrapApiResponse(res);
   },
-getPhotoUploadUrl: async (body: {
-  fileName: string;
-  contentType: string;
-  fileSize: number;
-}): Promise<{ key: string; uploadUrl: string }> => {
-  const res = await api.post<ApiResponse<{ key: string; uploadUrl: string }>>(
-    "/drivers/_photo/upload-url",
-    body
-  );
 
-  return unwrapApiResponse(res);
-},
+  lookup: async (query?: {
+    search?: string;
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<Driver>> => {
+    const params: Record<string, string | number> = {
+      page: query?.page ?? 0,
+      size: query?.size ?? 20,
+    };
 
-getPhotoViewUrl: async (key: string): Promise<{ viewUrl: string }> => {
-  const res = await api.get<ApiResponse<{ viewUrl: string }>>(
-    "/drivers/_photo/view-url",
-    {
-      params: { key },
-    }
-  );
+    if (query?.search) params.search = query.search;
 
-  return unwrapApiResponse(res);
-},
+    const res = await api.get<ApiResponse<Driver[]>>("/drivers/lookup", {
+      params,
+    });
 
+    return unwrapListResponse(res);
+  },
+  tripOptions: async (query?: {
+    search?: string;
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<TripDriverChoice>> => {
+    const params: Record<string, string | number> = {
+      page: query?.page ?? 0,
+      size: query?.size ?? 20,
+    };
+
+    if (query?.search) params.search = query.search;
+
+    const res = await api.get<ApiResponse<TripDriverChoice[]>>(
+      "/vehicle-journeys/trip-driver-options",
+      { params },
+    );
+
+    return unwrapListResponse(res);
+  },
+  getPhotoUploadUrl: async (body: {
+    fileName: string;
+    contentType: string;
+    fileSize: number;
+  }): Promise<{ key: string; uploadUrl: string }> => {
+    const res = await api.post<ApiResponse<{ key: string; uploadUrl: string }>>(
+      "/drivers/_photo/upload-url",
+      body,
+    );
+
+    return unwrapApiResponse(res);
+  },
+
+  getPhotoViewUrl: async (key: string): Promise<{ viewUrl: string }> => {
+    const res = await api.get<ApiResponse<{ viewUrl: string }>>(
+      "/drivers/_photo/view-url",
+      {
+        params: { key },
+      },
+    );
+
+    return unwrapApiResponse(res);
+  },
 };

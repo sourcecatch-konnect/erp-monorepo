@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { IconSearch, IconArrowRight, IconTruck, IconDatabaseOff } from "@tabler/icons-react";
 
-import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
@@ -112,12 +111,13 @@ export default function LRFromOrderPickerDialog({ open, onOpenChange }: Props) {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {order.customer?.name ?? "—"}
-                    {order.fromBranch && order.toBranch
-                      ? ` · ${order.fromBranch.shortCode} → ${order.toBranch.shortCode}`
-                      : ""}
-                  </p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+  {order.customer?.name ?? "—"}
+  {" · "}
+  {order.route?.sourceCity?.name ?? "—"} → {order.route?.destinationCity?.name ?? "—"}
+  {" · "}
+  {order.fromBranch?.branchCode ?? "—"} → {order.toBranch?.branchCode ?? "—"}
+</p>
                 </div>
                 <IconArrowRight
                   size={15}

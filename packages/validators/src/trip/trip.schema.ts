@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rupeesToPaise } from "../_shared/money.js";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -18,15 +19,6 @@ const optionalDate = z
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? undefined : d;
   });
-
-const moneyField = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .transform((value) => Number(value))
-    .refine(
-      (value) => !Number.isNaN(value) && value >= 0,
-      `${label} must be a non-negative number`
-    );
 
 const positiveIntField = (label: string) =>
   z
@@ -58,7 +50,8 @@ const tripBaseShape = {
   driverId: z.string().min(1, "Driver is required"),
   routeId: z.string().min(1, "Route is required"),
   tripType: tripTypeSchema,
-  onwardFreight: moneyField("Onward freight"),
+  // Entered in rupees, stored as paise (empty trips may carry ₹0 freight).
+  onwardFreight: rupeesToPaise("Onward freight", { allowZero: true }),
   // Opening odometer reading, captured when the trip is planned/created.
   openingKm: positiveIntField("Opening KM"),
   isTripEmpty: z.boolean().optional().default(false),
@@ -66,6 +59,10 @@ const tripBaseShape = {
   consignorId: optionalString,
   // Required only for DC (rake/rail) trips — see refinement below.
   rakeDate: optionalDate,
+  // Every trip lives in a vehicle journey. When this trip breaks continuity
+  // with the journey chain (from-city, opening KM, or a non-HO journey start)
+  // the server requires this reason plus the chain-override permission.
+  chainExceptionReason: optionalString,
 };
 
 // LR trips carry one client; DC trips are identified by their rake date.
@@ -104,6 +101,9 @@ export const updateTripSchema = z
 export const closeTripSchema = z.object({
   closingKm: positiveIntField("Closing KM"),
   endDateTime: optionalDate,
+  arrivalDateTime: optionalDate,
+  unloadingCompletedAt: optionalDate,
+  closeReason: optionalString,
 });
 
 export const cancelTripSchema = z.object({

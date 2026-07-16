@@ -14,13 +14,11 @@ import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
 import { Checkbox } from "@skerp/ui/components/checkbox";
-import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-react";
+import { IconAlertTriangle } from "@tabler/icons-react";
 
-import { useAppSelector } from "@/store/hooks";
 import { orderApi, type OrderDetail } from "./order.service";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
-import { formatMoney, formatMoneyFromPaise } from "./order-ui";
-import { paiseToRupees } from "@/lib/money";
+import { formatRupees, formatPaise, paiseToRupees } from "@/lib/money";
 
 type Props = {
   open: boolean;
@@ -36,12 +34,10 @@ export default function ApproveOrderModal({
   onApproved,
 }: Props) {
   console.log(order, "orders");
-  const currentUserId = useAppSelector((s) => s.auth.user?.id);
   const disallow = Boolean(
     (order.customer as { disallowNewLRBooking?: boolean } | undefined)
       ?.disallowNewLRBooking,
   );
-  const selfApprove = order.createdById === currentUserId;
 
   const prefill =
     order.bookingFreightAmount != null
@@ -98,12 +94,6 @@ export default function ApproveOrderModal({
       : 0;
 
   const rateMatrix = order.freightPreview?.rateMatrix;
-
-  const rateMatrixRoute =
-    rateMatrix?.route?.sourceCity?.name &&
-    rateMatrix?.route?.destinationCity?.name
-      ? `${rateMatrix.route.sourceCity.name} → ${rateMatrix.route.destinationCity.name}`
-      : routeLabel;
 
   const handleApprove = async () => {
     setPending(true);
@@ -167,7 +157,7 @@ export default function ApproveOrderModal({
               <dt className="text-xs text-muted-foreground">Auto freight</dt>
               <dd className="font-medium">
                 {autoFreight != null
-                  ? formatMoney(autoFreight)
+                  ? formatRupees(autoFreight)
                   : "No rate matched"}
               </dd>
             </div>
@@ -181,7 +171,7 @@ export default function ApproveOrderModal({
               <dt className="text-xs text-muted-foreground">Matrix rate</dt>
               <dd>
                 {rateMatrix?.rate != null
-                  ? formatMoneyFromPaise(rateMatrix.rate)
+                  ? formatPaise(rateMatrix.rate)
                   : "—"}
               </dd>
             </div>
@@ -224,15 +214,15 @@ export default function ApproveOrderModal({
               enteredFreight != null ? (
                 <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
                   Edited · {freightDiff > 0 ? "+" : ""}
-                  {formatMoney(freightDiff)}
+                  {formatRupees(freightDiff)}
                 </span>
               ) : null}
             </div>
 
             {freightEdited && autoFreight != null && enteredFreight != null ? (
               <p className="text-[11px] text-orange-700">
-                Auto {formatMoney(autoFreight)} → New{" "}
-                {formatMoney(enteredFreight)}
+                Auto {formatRupees(autoFreight)} → New{" "}
+                {formatRupees(enteredFreight)}
               </p>
             ) : null}
 

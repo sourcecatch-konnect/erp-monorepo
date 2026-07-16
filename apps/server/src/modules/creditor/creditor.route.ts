@@ -1,10 +1,6 @@
 import { Router } from "express";
-import { ZodTypeAny } from "zod";
 
-import {
-  createCreditorSchema,
-  updateCreditorSchema,
-} from "@skerp/validators";
+import { createCreditorSchema, updateCreditorSchema } from "@skerp/validators";
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
@@ -14,15 +10,13 @@ const moneyFields = ["outstandingBalance"];
 
 const router: Router = createCrudRouter({
   model: db.creditor,
-  createSchema: createCreditorSchema as ZodTypeAny,
-  updateSchema: updateCreditorSchema as ZodTypeAny,
+  createSchema: createCreditorSchema,
+  updateSchema: updateCreditorSchema,
   permissionKey: "masters.creditor",
 
   hooks: {
-    beforeCreate: async (data: any) =>
-      convertRupeeFieldsToPaise(data, moneyFields),
-    beforeUpdate: async (data: any) =>
-      convertRupeeFieldsToPaise(data, moneyFields),
+    beforeCreate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
+    beforeUpdate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
   },
 
   listOptions: {

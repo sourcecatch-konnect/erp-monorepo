@@ -4,6 +4,8 @@ import {
   updateTripSchema,
   closeTripSchema,
   cancelTripSchema,
+  closeJourneyLegSchema,
+  dispatchJourneyLegSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -21,19 +23,30 @@ import {
 import {
   BadRequestError,
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
 import {
   buildTripName,
+  summariseTripCargo,
   tripInclude,
-  tripListSelect,
+  tripListBaseSelect,
+  tripListRelationSelects,
   writeTripStatus,
 } from "./trip.service.js";
+import { undeliveredLRNumbersForTrip } from "../lorry-receipt/lr-delivery.service.js";
+import {
+  chainViolations,
+  closeLegAndUpdateJourney,
+  getHeadOffice,
+  TX_BUDGET,
+} from "../vehicle-journey/vehicle-journey.service.js";
 import {
   Prisma,
   TripStatus,
   TripType,
+  type TripLegType,
 } from "../../../generated/prisma/index.js";
 import { buildTripPdfDocument, tripPdfInclude } from "./trip.pdf.js";
 import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
@@ -44,14 +57,60 @@ router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
+/** Journey legs are lifecycle-managed by their journey, not the trips module. */
+const assertNotJourneyLeg = (trip: { journeyId: string | null }) => {
+  if (trip.journeyId) {
+    throw new BadRequestError(
+      "This trip is a journey leg — manage it from its vehicle journey",
+      "TRIP_IS_JOURNEY_LEG",
+    );
+  }
+};
+
 /* Trips are not branch-scoped — a single global per-FY counter. */
 const TRIP_SEQ_KEY = "TRIP";
+/* Journeys share the same global-per-FY numbering style. */
+const JOURNEY_SEQ_KEY = "JRN";
+
+/** Every trip is a journey leg; its leg type derives from the trip fields. */
+const legTypeFor = (data: {
+  isTripEmpty: boolean;
+  tripType: "lr" | "dc";
+}): TripLegType =>
+  data.isTripEmpty ? "EMPTY" : data.tripType === "dc" ? "DC" : "LR";
 
 /**
- * Validate the trip's vehicle/route/client and build its auto name.
+ * Chain breaks are allowed only with an explicit reason and the
+ * chain-override permission. Returns the reason to persist (null when the
+ * chain is intact).
+ */
+const requireOverrideForViolations = (
+  req: { ctx?: { permissions: Set<string> } },
+  violations: string[],
+  reason: string | undefined,
+): string | null => {
+  if (violations.length === 0) return null;
+  if (!reason) {
+    throw new BadRequestError(
+      `Trip breaks journey continuity: ${violations.join("; ")}. Provide an exception reason to override.`,
+      "CHAIN_VIOLATION",
+    );
+  }
+  if (!req.ctx!.permissions.has(PERMS.VEHICLE_JOURNEY.OVERRIDE_CHAIN)) {
+    throw new ForbiddenError(
+      "You need the chain-override permission to break journey continuity",
+    );
+  }
+  return reason;
+};
+
+/**
+ * Validate the trip's vehicle/route/client and build its auto name plus the
+ * journey-leg context (route city ids, vehicle state). Pure reads — run
+ * before any transaction opens.
  * `at` is the timestamp baked into the name (creation time; preserved on edit).
  */
-async function resolveTripName(
+async function resolveTripContext(
   data: {
     vehicleId: string;
     routeId: string;
@@ -60,17 +119,27 @@ async function resolveTripName(
     rakeDate?: Date;
   },
   at: Date,
-): Promise<{ tripName: string; consignorId: string | null }> {
+) {
   const [vehicle, route] = await Promise.all([
     db.vehicle.findUnique({
       where: { id: data.vehicleId },
-      select: { vehicleNumber: true, ownershipType: true },
+      select: {
+        id: true,
+        vehicleNumber: true,
+        ownershipType: true,
+        status: true,
+        currentKM: true,
+        insuranceDueDate: true,
+      },
     }),
     db.route.findUnique({
       where: { id: data.routeId },
       select: {
-        sourceCity: { select: { name: true } },
-        destinationCity: { select: { name: true } },
+        id: true,
+        sourceCityId: true,
+        destinationCityId: true,
+        sourceCity: { select: { id: true, name: true } },
+        destinationCity: { select: { id: true, name: true } },
       },
     }),
   ]);
@@ -106,7 +175,7 @@ async function resolveTripName(
     at,
   });
 
-  return { tripName, consignorId };
+  return { vehicle, route, tripName, consignorId };
 }
 
 /* ------------------------------------------------------------------ */
@@ -171,13 +240,39 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
     ...(query.filter.tripType
       ? { tripType: query.filter.tripType as TripType }
       : {}),
+    ...(query.filter.journeyId ? { journeyId: query.filter.journeyId } : {}),
+    ...(query.filter.consignorId
+      ? { consignorId: query.filter.consignorId }
+      : {}),
   };
+  // Join only the relations whose table columns are visible on the client.
+  // No `fields` param (other consumers, e.g. the LR trip picker) = join all.
+  const fieldsParam =
+    typeof req.query.fields === "string"
+      ? new Set(
+          req.query.fields
+            .split(",")
+            .map((f) => f.trim())
+            .filter(Boolean),
+        )
+      : null;
+  const wants = (key: keyof typeof tripListRelationSelects) =>
+    fieldsParam === null || fieldsParam.has(key);
+
+  const select = {
+    ...tripListBaseSelect,
+    ...(wants("journey") ? tripListRelationSelects.journey : {}),
+    ...(wants("vehicle") ? tripListRelationSelects.vehicle : {}),
+    ...(wants("route") ? tripListRelationSelects.route : {}),
+    ...(wants("client") ? tripListRelationSelects.client : {}),
+  };
+
   const [data, total] = await Promise.all([
     db.vehicleTrip.findMany({
       where,
       skip: query.page * query.size,
       take: query.size,
-      select: tripListSelect,
+      select,
       orderBy: query.sort
         ? { [query.sort.field]: query.sort.direction }
         : { createdAt: "desc" },
@@ -185,7 +280,14 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
     db.vehicleTrip.count({ where }),
   ]);
 
-  return sendOk(res, data, { page: query.page, size: query.size, total });
+  // Flatten the group relations into the Close gate count + the cargo-line
+  // summary (see tripListBaseSelect / summariseTripCargo).
+  const rows = data.map(({ primaryGroups, secondaryGroups, ...trip }) => ({
+    ...trip,
+    ...summariseTripCargo(primaryGroups, secondaryGroups),
+  }));
+
+  return sendOk(res, rows, { page: query.page, size: query.size, total });
 });
 
 /* ------------------------------------------------------------------ */
@@ -217,7 +319,12 @@ router.get("/:id", can(PERMS.TRIP.VIEW), async (req, res) => {
     include: tripInclude,
   });
   if (!trip) throw new NotFoundError("Trip not found");
-  return sendOk(res, trip);
+  // Same cargo fields the list rows carry — the detail page gates Close and
+  // renders the cargo chip off them.
+  return sendOk(res, {
+    ...trip,
+    ...summariseTripCargo(trip.primaryGroups, trip.secondaryGroups),
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -245,8 +352,13 @@ router.get(
     return res.send(buffer);
   },
 );
+
 /* ------------------------------------------------------------------ */
 /* Create -> Planned                                                  */
+/*                                                                    */
+/* Every trip belongs to a vehicle journey (universal rule). Creating */
+/* a trip attaches it as the next leg of the vehicle's ACTIVE journey */
+/* or auto-opens a new journey based at the head-office city.         */
 /* ------------------------------------------------------------------ */
 router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   const parsed = createTripSchema.safeParse(req.body);
@@ -255,39 +367,292 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   }
   const data = parsed.data;
   const me = actorId(req);
-
   const now = new Date();
-  const { tripName, consignorId } = await resolveTripName(data, now);
 
-  const trip = await db.$transaction(async (tx) => {
-    const fyCode = fyCodeFor(now);
-    const seq = await nextSequence(tx, TRIP_SEQ_KEY, fyCode, "TRIP");
-    const tripNumber = formatDocNumber(TRIP_SEQ_KEY, fyCode, seq, "SKV");
+  const { vehicle, route, tripName, consignorId } = await resolveTripContext(
+    data,
+    now,
+  );
+  const legType = legTypeFor(data);
 
-    const created = await tx.vehicleTrip.create({
-      data: {
-        tripNumber,
-        tripName,
-        status: "Planned",
-        tripType: data.tripType,
-        vehicleId: data.vehicleId,
-        driverId: data.driverId,
-        routeId: data.routeId,
-        consignorId,
-        onwardFreight: data.onwardFreight,
-        openingKm: data.openingKm,
-        isTripEmpty: data.isTripEmpty,
-        rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
-        fyCode,
-        createdById: me,
-      },
-      include: tripInclude,
-    });
-
-    await writeTripStatus(tx, created.id, me, "Planned", "Trip created");
-    return created;
+  const activeJourney = await db.vehicleJourney.findFirst({
+    where: { vehicleId: data.vehicleId, deletedAt: null, status: "ACTIVE" },
+    select: {
+      id: true,
+      journeyNumber: true,
+      fyCode: true,
+      driverId: true,
+      returnCityId: true,
+      driver: { select: { name: true } },
+    },
   });
 
+  let tripId: string;
+
+  if (activeJourney) {
+    /* ---- attach as the next leg of the open journey ---- */
+    if (data.driverId !== activeJourney.driverId) {
+      throw new BadRequestError(
+        `This vehicle is on journey ${activeJourney.journeyNumber} with driver ${activeJourney.driver.name} — the trip must use the journey's driver`,
+      );
+    }
+
+    // Cancelled legs keep their sequence slot, so number from the overall max
+    // but validate the chain against the last non-cancelled leg.
+    const [maxSeqLeg, prevLeg] = await Promise.all([
+      db.vehicleTrip.findFirst({
+        where: { journeyId: activeJourney.id, deletedAt: null },
+        orderBy: { sequenceNo: "desc" },
+        select: { sequenceNo: true },
+      }),
+      db.vehicleTrip.findFirst({
+        where: {
+          journeyId: activeJourney.id,
+          deletedAt: null,
+          status: { not: "Cancelled" },
+        },
+        orderBy: { sequenceNo: "desc" },
+        select: {
+          tripNumber: true,
+          sequenceNo: true,
+          status: true,
+          toCityId: true,
+          closingKm: true,
+          endDateTime: true,
+          toCity: { select: { name: true } },
+        },
+      }),
+    ]);
+
+    if (prevLeg && prevLeg.status !== "Closed") {
+      throw new BadRequestError(
+        `Close the current leg (${prevLeg.tripNumber}) before adding the next one`,
+      );
+    }
+
+    const violations = prevLeg
+      ? chainViolations(
+          {
+            sequenceNo: prevLeg.sequenceNo,
+            toCityId: prevLeg.toCityId,
+            toCityName: prevLeg.toCity?.name ?? null,
+            closingKm: prevLeg.closingKm,
+            endDateTime: prevLeg.endDateTime,
+          },
+          {
+            fromCityId: route.sourceCityId,
+            fromCityName: route.sourceCity.name,
+            openingKm: data.openingKm,
+          },
+        )
+      : [];
+    const exceptionReason = requireOverrideForViolations(
+      req,
+      violations,
+      data.chainExceptionReason,
+    );
+
+    const tripSeq = await nextSequence(
+      db,
+      TRIP_SEQ_KEY,
+      activeJourney.fyCode,
+      "TRIP",
+    );
+    const tripNumber = formatDocNumber(
+      TRIP_SEQ_KEY,
+      activeJourney.fyCode,
+      tripSeq,
+      "SKV",
+    );
+    const sequenceNo = (maxSeqLeg?.sequenceNo ?? 0) + 1;
+
+    tripId = await db.$transaction(async (tx) => {
+      const created = await tx.vehicleTrip.create({
+        data: {
+          tripNumber,
+          tripName,
+          status: "Planned",
+          tripType: data.tripType,
+          legType,
+          journeyId: activeJourney.id,
+          sequenceNo,
+          vehicleId: data.vehicleId,
+          driverId: data.driverId,
+          routeId: data.routeId,
+          consignorId,
+          fromCityId: route.sourceCityId,
+          toCityId: route.destinationCityId,
+          isReturnLeg: route.destinationCityId === activeJourney.returnCityId,
+          onwardFreight: data.onwardFreight,
+          openingKm: data.openingKm,
+          isTripEmpty: data.isTripEmpty,
+          rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
+          chainExceptionReason: exceptionReason,
+          fyCode: activeJourney.fyCode,
+          createdById: me,
+        },
+        select: { id: true },
+      });
+      await tx.vehicleJourney.update({
+        where: { id: activeJourney.id },
+        data: { updatedById: me, version: { increment: 1 } },
+      });
+      await writeTripStatus(
+        tx,
+        created.id,
+        me,
+        "Planned",
+        `Journey leg ${sequenceNo} created`,
+      );
+      return created.id;
+    }, TX_BUDGET);
+  } else {
+    /* ---- no open journey: auto-open one based at head office ---- */
+    const [driver, ho] = await Promise.all([
+      db.driver.findUnique({
+        where: { id: data.driverId },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          blackListed: true,
+          onLeave: true,
+        },
+      }),
+      getHeadOffice(),
+    ]);
+
+    if (vehicle.status !== "AVAILABLE") {
+      throw new BadRequestError("Vehicle is not available (already on trip)");
+    }
+    if (vehicle.insuranceDueDate && vehicle.insuranceDueDate < now) {
+      throw new BadRequestError(
+        `Vehicle insurance expired on ${vehicle.insuranceDueDate.toISOString().slice(0, 10)}`,
+      );
+    }
+    if (!driver) throw new BadRequestError("Driver not found");
+    if (driver.blackListed) throw new BadRequestError("Driver is blacklisted");
+    if (driver.onLeave) throw new BadRequestError("Driver is on leave");
+    if (driver.status !== "AVAILABLE") {
+      throw new BadRequestError("Driver is already assigned to a trip");
+    }
+    if (data.openingKm < vehicle.currentKM) {
+      throw new BadRequestError(
+        `Opening KM (${data.openingKm}) is below the vehicle's current KM (${vehicle.currentKM})`,
+      );
+    }
+
+    const driverJourneyClash = await db.vehicleJourney.findFirst({
+      where: { driverId: data.driverId, deletedAt: null, status: "ACTIVE" },
+      select: { journeyNumber: true },
+    });
+    if (driverJourneyClash) {
+      throw new BadRequestError(
+        `Driver already has an open journey (${driverJourneyClash.journeyNumber})`,
+      );
+    }
+
+    // Journeys universally start from the head-office base; starting
+    // elsewhere is the leg-1 chain exception (reason + override permission).
+    const hoViolations =
+      route.sourceCityId === ho.cityId
+        ? []
+        : [
+            `Journey starts from ${route.sourceCity.name} instead of the head-office base (${ho.cityName})`,
+          ];
+    const exceptionReason = requireOverrideForViolations(
+      req,
+      hoViolations,
+      data.chainExceptionReason,
+    );
+
+    /* ---- number reservation (gap-tolerant, outside the transaction) ---- */
+    const fyCode = fyCodeFor(now);
+    const journeySeq = await nextSequence(
+      db,
+      JOURNEY_SEQ_KEY,
+      fyCode,
+      "JOURNEY",
+    );
+    const tripSeq = await nextSequence(db, TRIP_SEQ_KEY, fyCode, "TRIP");
+    const journeyNumber = formatDocNumber(
+      JOURNEY_SEQ_KEY,
+      fyCode,
+      journeySeq,
+      "SKJ",
+    );
+    const tripNumber = formatDocNumber(TRIP_SEQ_KEY, fyCode, tripSeq, "SKV");
+
+    tripId = await db.$transaction(async (tx) => {
+      const journey = await tx.vehicleJourney.create({
+        data: {
+          journeyNumber,
+          fyCode,
+          vehicleId: data.vehicleId,
+          driverId: data.driverId,
+          homeBranchId: ho.branchId,
+          startCityId: route.sourceCityId,
+          returnCityId: ho.cityId,
+          currentCityId: route.sourceCityId,
+          openingKm: data.openingKm,
+          startedAt: now,
+          status: "ACTIVE",
+          settlementStatus: "NOT_READY",
+          createdById: me,
+        },
+        select: { id: true },
+      });
+
+      const created = await tx.vehicleTrip.create({
+        data: {
+          tripNumber,
+          tripName,
+          status: "Planned",
+          tripType: data.tripType,
+          legType,
+          journeyId: journey.id,
+          sequenceNo: 1,
+          vehicleId: data.vehicleId,
+          driverId: data.driverId,
+          routeId: data.routeId,
+          consignorId,
+          fromCityId: route.sourceCityId,
+          toCityId: route.destinationCityId,
+          isReturnLeg: route.destinationCityId === ho.cityId,
+          onwardFreight: data.onwardFreight,
+          openingKm: data.openingKm,
+          isTripEmpty: data.isTripEmpty,
+          rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
+          chainExceptionReason: exceptionReason,
+          fyCode,
+          createdById: me,
+        },
+        select: { id: true },
+      });
+
+      await tx.vehicle.update({
+        where: { id: data.vehicleId },
+        data: { status: "ON_TRIP" },
+      });
+      await tx.driver.update({
+        where: { id: data.driverId },
+        data: { status: "ON_TRIP" },
+      });
+      await writeTripStatus(
+        tx,
+        created.id,
+        me,
+        "Planned",
+        `Journey ${journeyNumber} opened — leg 1 created`,
+      );
+      return created.id;
+    }, TX_BUDGET);
+  }
+
+  const trip = await db.vehicleTrip.findUnique({
+    where: { id: tripId },
+    include: tripInclude,
+  });
   return sendOk(res, trip, undefined, 201);
 });
 
@@ -298,6 +663,11 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const id = getParamId(req);
   const existing = await db.vehicleTrip.findFirst({
     where: { id, deletedAt: null },
+    include: {
+      journey: {
+        select: { id: true, journeyNumber: true, returnCityId: true },
+      },
+    },
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
@@ -308,6 +678,8 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
       "This trip changed in another tab — reload and retry",
     );
   }
+
+  assertNotJourneyLeg(existing);
 
   if (existing.status !== "Planned") {
     throw new BadRequestError("Only a Planned trip can be edited");
@@ -320,32 +692,185 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const data = parsed.data;
   const me = actorId(req);
 
+  // A leg cannot switch vehicle or driver — that would tear it out of its
+  // journey. Cancel the trip and create a new one instead.
+  if (existing.journeyId) {
+    if (data.vehicleId !== existing.vehicleId) {
+      throw new BadRequestError(
+        "A journey leg cannot change vehicle — cancel the trip and create a new one",
+      );
+    }
+    if (data.driverId !== existing.driverId) {
+      throw new BadRequestError(
+        "A journey leg cannot change driver — the journey's driver stays for the whole cycle",
+      );
+    }
+  }
+
   // Keep the original creation timestamp in the regenerated name.
-  const { tripName, consignorId } = await resolveTripName(
+  const { route, tripName, consignorId } = await resolveTripContext(
     data,
     existing.createdAt,
   );
 
-  const updated = await db.vehicleTrip.update({
-    where: { id },
-    data: {
-      tripName,
-      tripType: data.tripType,
-      vehicleId: data.vehicleId,
-      driverId: data.driverId,
-      routeId: data.routeId,
-      consignorId,
-      onwardFreight: data.onwardFreight,
-      openingKm: data.openingKm,
-      isTripEmpty: data.isTripEmpty,
-      rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
-      updatedById: me,
-      version: { increment: 1 },
-    },
+  let exceptionReason: string | null = null;
+  const isFirstLeg = existing.journeyId !== null && existing.sequenceNo === 1;
+
+  if (existing.journeyId) {
+    // Re-run the continuity rules against the leg's position in the chain.
+    const prevLeg = await db.vehicleTrip.findFirst({
+      where: {
+        journeyId: existing.journeyId,
+        deletedAt: null,
+        status: { not: "Cancelled" },
+        sequenceNo: { lt: existing.sequenceNo! },
+      },
+      orderBy: { sequenceNo: "desc" },
+      select: {
+        sequenceNo: true,
+        toCityId: true,
+        closingKm: true,
+        endDateTime: true,
+        toCity: { select: { name: true } },
+      },
+    });
+
+    let violations: string[];
+    if (prevLeg) {
+      violations = chainViolations(
+        {
+          sequenceNo: prevLeg.sequenceNo,
+          toCityId: prevLeg.toCityId,
+          toCityName: prevLeg.toCity?.name ?? null,
+          closingKm: prevLeg.closingKm,
+          endDateTime: prevLeg.endDateTime,
+        },
+        {
+          fromCityId: route.sourceCityId,
+          fromCityName: route.sourceCity.name,
+          openingKm: data.openingKm,
+        },
+      );
+    } else {
+      // First leg — the journey-start rule applies (head-office base).
+      const ho = await getHeadOffice();
+      violations =
+        route.sourceCityId === ho.cityId
+          ? []
+          : [
+              `Journey starts from ${route.sourceCity.name} instead of the head-office base (${ho.cityName})`,
+            ];
+    }
+    exceptionReason = requireOverrideForViolations(
+      req,
+      violations,
+      data.chainExceptionReason,
+    );
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.vehicleTrip.update({
+      where: { id },
+      data: {
+        tripName,
+        tripType: data.tripType,
+        vehicleId: data.vehicleId,
+        driverId: data.driverId,
+        routeId: data.routeId,
+        consignorId,
+        onwardFreight: data.onwardFreight,
+        openingKm: data.openingKm,
+        isTripEmpty: data.isTripEmpty,
+        rakeDate: data.tripType === "dc" ? (data.rakeDate ?? null) : null,
+        ...(existing.journeyId
+          ? {
+              legType: legTypeFor(data),
+              fromCityId: route.sourceCityId,
+              toCityId: route.destinationCityId,
+              isReturnLeg:
+                route.destinationCityId === existing.journey!.returnCityId,
+              chainExceptionReason: exceptionReason,
+            }
+          : {}),
+        updatedById: me,
+        version: { increment: 1 },
+      },
+      select: { id: true },
+    });
+
+    // Editing leg 1 moves the journey's starting point with it.
+    if (isFirstLeg) {
+      await tx.vehicleJourney.update({
+        where: { id: existing.journeyId! },
+        data: {
+          startCityId: route.sourceCityId,
+          currentCityId: route.sourceCityId,
+          openingKm: data.openingKm,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+      });
+    } else if (existing.journeyId) {
+      await tx.vehicleJourney.update({
+        where: { id: existing.journeyId },
+        data: { updatedById: me, version: { increment: 1 } },
+      });
+    }
+    return row;
+  }, TX_BUDGET);
+
+  const trip = await db.vehicleTrip.findUnique({
+    where: { id: updated.id },
     include: tripInclude,
   });
+  return sendOk(res, trip);
+});
 
-  return sendOk(res, updated);
+/* ------------------------------------------------------------------ */
+/* Dispatch -> InTransit                                              */
+/* ------------------------------------------------------------------ */
+router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
+  const id = getParamId(req);
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, status: true, startDateTime: true, vehicleId: true },
+  });
+  if (!existing) throw new NotFoundError("Trip not found");
+  if (existing.status !== "Planned") {
+    throw new BadRequestError("Only a Planned trip can be dispatched");
+  }
+
+  const parsed = dispatchJourneyLegSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+  const me = actorId(req);
+
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.vehicleTrip.update({
+      where: { id },
+      data: {
+        status: "InTransit",
+        startDateTime:
+          parsed.data.startDateTime ?? existing.startDateTime ?? new Date(),
+        updatedById: me,
+        version: { increment: 1 },
+      },
+      select: { id: true },
+    });
+    await tx.vehicle.update({
+      where: { id: existing.vehicleId },
+      data: { status: "ON_TRIP" },
+    });
+    await writeTripStatus(tx, id, me, "InTransit", "Trip dispatched");
+    return row;
+  }, TX_BUDGET);
+
+  const trip = await db.vehicleTrip.findUnique({
+    where: { id: updated.id },
+    include: tripInclude,
+  });
+  return sendOk(res, trip);
 });
 
 /* ------------------------------------------------------------------ */
@@ -362,41 +887,114 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
     throw new BadRequestError("Only an InTransit trip can be closed");
   }
 
-  const parsed = closeTripSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ValidationError(parsed.error.flatten().fieldErrors);
-  }
-  const { closingKm, endDateTime } = parsed.data;
-
-  if (closingKm < existing.openingKm) {
+  // Delivery gate ("Way 1", docs/LR_DELIVERY_ACK_PLAN.md §4): a trip that is
+  // the FINAL leg of an LR group cannot close while its LRs are undelivered.
+  // A leg-1 group already held at hub is exempt — its goods sit at the hub.
+  const blockers = await undeliveredLRNumbersForTrip(id);
+  if (blockers.length > 0) {
     throw new BadRequestError(
-      `Closing KM (${closingKm}) cannot be less than opening KM (${existing.openingKm})`,
+      `Cannot close trip — ${blockers.length} LR(s) not delivered: ${blockers.join(", ")}. ` +
+        "Finalise and deliver them, or hold the group at hub.",
+      "TRIP_CLOSE_UNDELIVERED_LRS",
     );
   }
   const me = actorId(req);
 
-  const updated = await db.$transaction(async (tx) => {
-    const row = await tx.vehicleTrip.update({
-      where: { id },
-      data: {
-        status: "Closed",
-        closingKm,
-        endDateTime: endDateTime ?? new Date(),
-        updatedById: me,
-        version: { increment: 1 },
+  if (existing.journeyId) {
+    /* ---- journey leg: one shared close path ---- */
+    const journey = await db.vehicleJourney.findFirst({
+      where: { id: existing.journeyId, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        returnCityId: true,
+        vehicleId: true,
+        driverId: true,
       },
-      include: tripInclude,
     });
-    // Release the vehicle now the trip is done.
-    await tx.vehicle.update({
-      where: { id: existing.vehicleId },
-      data: { status: "AVAILABLE" },
-    });
-    await writeTripStatus(tx, id, me, "Closed", "Trip closed");
-    return row;
-  });
+    if (!journey) throw new NotFoundError("Journey not found");
+    if (journey.status !== "ACTIVE") {
+      throw new BadRequestError("Legs can only be closed on an active journey");
+    }
 
-  return sendOk(res, updated);
+    const parsed = closeJourneyLegSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const data = parsed.data;
+
+    if (data.closingKm < existing.openingKm) {
+      throw new BadRequestError(
+        `Closing KM (${data.closingKm}) cannot be less than opening KM (${existing.openingKm})`,
+      );
+    }
+    const endDateTime = data.endDateTime ?? new Date();
+    if (existing.startDateTime && endDateTime <= existing.startDateTime) {
+      throw new BadRequestError("End time must be after the trip's start time");
+    }
+
+    await closeLegAndUpdateJourney({
+      journey,
+      trip: { id, toCityId: existing.toCityId },
+      closingKm: data.closingKm,
+      endDateTime,
+      arrivalDateTime: data.arrivalDateTime,
+      unloadingCompletedAt: data.unloadingCompletedAt,
+      closeReason: data.closeReason,
+      actorId: me,
+    });
+  } else {
+    /* ---- legacy trip (pre-journey rows): original behaviour ---- */
+    const parsed = closeTripSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const {
+      closingKm,
+      endDateTime,
+      arrivalDateTime,
+      unloadingCompletedAt,
+      closeReason,
+    } = parsed.data;
+
+    if (closingKm < existing.openingKm) {
+      throw new BadRequestError(
+        `Closing KM (${closingKm}) cannot be less than opening KM (${existing.openingKm})`,
+      );
+    }
+
+    const closedAt = endDateTime ?? new Date();
+
+    await db.$transaction(async (tx) => {
+      await tx.vehicleTrip.update({
+        where: { id },
+        data: {
+          status: "Closed",
+          closingKm,
+          endDateTime: closedAt,
+          arrivalDateTime: arrivalDateTime ?? closedAt,
+          unloadingCompletedAt: unloadingCompletedAt ?? null,
+          closedById: me,
+          closeReason: closeReason ?? null,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        select: { id: true },
+      });
+      // Release the vehicle now the trip is done.
+      await tx.vehicle.update({
+        where: { id: existing.vehicleId },
+        data: { status: "AVAILABLE" },
+      });
+      await writeTripStatus(tx, id, me, "Closed", "Trip closed");
+    });
+  }
+
+  const trip = await db.vehicleTrip.findUnique({
+    where: { id },
+    include: tripInclude,
+  });
+  return sendOk(res, trip);
 });
 
 /* ------------------------------------------------------------------ */
@@ -408,6 +1006,8 @@ router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
     where: { id, deletedAt: null },
   });
   if (!existing) throw new NotFoundError("Trip not found");
+
+  assertNotJourneyLeg(existing);
 
   if (!["Planned", "Cancelled"].includes(existing.status)) {
     throw new BadRequestError(
@@ -450,6 +1050,8 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
+  assertNotJourneyLeg(existing);
+
   if (!["Planned", "InTransit"].includes(existing.status)) {
     throw new BadRequestError(
       "Only a Planned or InTransit trip can be cancelled",
@@ -462,8 +1064,29 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
   }
   const me = actorId(req);
 
-  const updated = await db.$transaction(async (tx) => {
-    const row = await tx.vehicleTrip.update({
+  // Cancelling the journey's only live leg cancels the journey with it and
+  // frees the vehicle/driver; otherwise the journey stays active at the
+  // previous leg's city.
+  const journey = existing.journeyId
+    ? await db.vehicleJourney.findFirst({
+        where: { id: existing.journeyId, deletedAt: null },
+        select: { id: true, status: true, vehicleId: true, driverId: true },
+      })
+    : null;
+
+  const remainingLegs = existing.journeyId
+    ? await db.vehicleTrip.count({
+        where: {
+          journeyId: existing.journeyId,
+          deletedAt: null,
+          status: { not: "Cancelled" },
+          id: { not: id },
+        },
+      })
+    : 0;
+
+  await db.$transaction(async (tx) => {
+    await tx.vehicleTrip.update({
       where: { id },
       data: {
         status: "Cancelled",
@@ -471,20 +1094,50 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
         updatedById: me,
         version: { increment: 1 },
       },
-      include: tripInclude,
+      select: { id: true },
     });
-    // Free the vehicle if the trip had taken it on the road.
-    if (existing.status === "InTransit") {
+
+    if (journey && journey.status === "ACTIVE") {
+      if (remainingLegs === 0) {
+        await tx.vehicleJourney.update({
+          where: { id: journey.id },
+          data: {
+            status: "CANCELLED",
+            cancelReason: `Last leg cancelled: ${parsed.data.reason}`,
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
+        await tx.vehicle.update({
+          where: { id: journey.vehicleId },
+          data: { status: "AVAILABLE" },
+        });
+        await tx.driver.update({
+          where: { id: journey.driverId },
+          data: { status: "AVAILABLE" },
+        });
+      } else {
+        await tx.vehicleJourney.update({
+          where: { id: journey.id },
+          data: { updatedById: me, version: { increment: 1 } },
+        });
+      }
+    } else if (!journey && existing.status === "InTransit") {
+      // Legacy trip — free the vehicle if the trip had taken it on the road.
       await tx.vehicle.update({
         where: { id: existing.vehicleId },
         data: { status: "AVAILABLE" },
       });
     }
-    await writeTripStatus(tx, id, me, "Cancelled", parsed.data.reason);
-    return row;
-  });
 
-  return sendOk(res, updated);
+    await writeTripStatus(tx, id, me, "Cancelled", parsed.data.reason);
+  }, TX_BUDGET);
+
+  const trip = await db.vehicleTrip.findUnique({
+    where: { id },
+    include: tripInclude,
+  });
+  return sendOk(res, trip);
 });
 
 export default router;

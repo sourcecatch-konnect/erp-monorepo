@@ -2,9 +2,10 @@ import { Router } from "express";
 import { createStateSchema, updateStateSchema } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
-import { normalizeName ,  createDuplicateError} from "../_shared/NameNormalized.js";
-
-
+import {
+  normalizeName,
+  createDuplicateError,
+} from "../_shared/NameNormalized.js";
 
 const router: Router = createCrudRouter({
   model: db.state,
@@ -13,9 +14,8 @@ const router: Router = createCrudRouter({
   permissionKey: "masters.state",
 
   hooks: {
-    beforeCreate: async (data: any) => {
+    beforeCreate: async (data) => {
       const name = normalizeName(data.name);
-
 
       const existing = await db.state.findFirst({
         where: {
@@ -27,10 +27,7 @@ const router: Router = createCrudRouter({
       });
 
       if (existing) {
-        throw createDuplicateError(
-  "name",
-  `State "${name}" already exists`
-);
+        throw createDuplicateError("name", `State "${name}" already exists`);
       }
 
       data.name = name;
@@ -38,7 +35,8 @@ const router: Router = createCrudRouter({
       return data;
     },
 
-    beforeUpdate: async (data: any, row: any) => {
+    beforeUpdate: async (data, row) => {
+      const currentState = row as { id: string };
       if (!data.name) return data;
 
       const name = normalizeName(data.name);
@@ -46,7 +44,7 @@ const router: Router = createCrudRouter({
       const existing = await db.state.findFirst({
         where: {
           id: {
-            not: row.id,
+            not: currentState.id,
           },
           name: {
             equals: name,
@@ -55,11 +53,8 @@ const router: Router = createCrudRouter({
         },
       });
 
-       if (existing) {
-        throw createDuplicateError(
-  "name",
-  `State "${name}" already exists`
-);
+      if (existing) {
+        throw createDuplicateError("name", `State "${name}" already exists`);
       }
 
       data.name = name;

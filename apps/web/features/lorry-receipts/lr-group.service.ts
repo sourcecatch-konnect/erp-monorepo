@@ -5,10 +5,12 @@ import type {
   LRGroupListItem,
   CreateLRGroupBody,
   UpdateLRGroupBody,
-  FinaliseGroupBody,
   SplitGroupAtHubBody,
   CancelGroupBody,
   LRGroupLineInput,
+  FinaliseGroupFormInput,
+  DeliverGroupFormInput,
+  HoldGroupAtHubBody,
 } from "@skerp/types";
 import {
   type ListQuery,
@@ -37,11 +39,15 @@ export const lrGroupApi = {
     return unwrapApiResponse(res);
   },
 
-  detail: async (id: string): Promise<LRGroup> => {
-    const res = await api.get<ApiResponse<LRGroup>>(`/lr-groups/${id}`);
-    return unwrapApiResponse(res);
-  },
+detail: async (identifier: string): Promise<LRGroup> => {
+  const cleanIdentifier = decodeURIComponent(identifier);
 
+  const res = await api.get<ApiResponse<LRGroup>>(
+    `/lr-groups/${encodeURIComponent(cleanIdentifier)}`
+  );
+
+  return unwrapApiResponse(res);
+},
   create: async (body: CreateLRGroupBody): Promise<LRGroup> => {
     const res = await api.post<ApiResponse<LRGroup>>("/lr-groups", body);
     return unwrapApiResponse(res);
@@ -55,13 +61,44 @@ export const lrGroupApi = {
     return unwrapApiResponse(res);
   },
 
-  finalise: async (id: string, body: FinaliseGroupBody): Promise<LRGroup> => {
+  finalise: async (
+  id: string,
+  body: FinaliseGroupFormInput,
+): Promise<LRGroup> => {
     const res = await api.post<ApiResponse<LRGroup>>(`/lr-groups/${id}/finalise`, body);
     return unwrapApiResponse(res);
   },
 
-  splitAtHub: async (id: string, body: SplitGroupAtHubBody): Promise<LRGroup> => {
-    const res = await api.post<ApiResponse<LRGroup>>(`/lr-groups/${id}/split-at-hub`, body);
+  /** First half of the hub split: mark the group as lying at the HO hub. */
+  holdAtHub: async (id: string, body?: HoldGroupAtHubBody): Promise<LRGroup> => {
+    const res = await api.post<ApiResponse<LRGroup>>(
+      `/lr-groups/${id}/hold-at-hub`,
+      body ?? {},
+    );
+    return unwrapApiResponse(res);
+  },
+
+  /** Second half: attach the leg-2 trip to a held-at-hub group. */
+  dispatchFromHub: async (
+    id: string,
+    body: SplitGroupAtHubBody,
+  ): Promise<LRGroup> => {
+    const res = await api.post<ApiResponse<LRGroup>>(
+      `/lr-groups/${id}/dispatch-from-hub`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  /** Bulk mark every (selected) LR in the group delivered in one shot. */
+  deliverAll: async (
+    id: string,
+    body: DeliverGroupFormInput,
+  ): Promise<LRGroup> => {
+    const res = await api.post<ApiResponse<LRGroup>>(
+      `/lr-groups/${id}/deliver-all`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 

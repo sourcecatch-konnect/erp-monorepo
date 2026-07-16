@@ -6,6 +6,14 @@ import type {
   UpdateLRBody,
   AddEwayBillBody,
   EwayBill,
+  LRDelivery,
+  LRAcknowledgement,
+  DeliverLRFormInput,
+  AcknowledgeLRFormInput,
+  PendingDeliveryRow,
+  PendingPodRow,
+  AtHubRow,
+  DeliveryStats,
 } from "@skerp/types";
 import {
   type ListQuery,
@@ -43,6 +51,13 @@ export const lorryReceiptApi = {
     return unwrapApiResponse(res);
   },
 
+  downloadPdf: async (id: string): Promise<Blob> => {
+    const res = await api.get(`/lorry-receipts/${id}/pdf`, {
+      responseType: "blob",
+    });
+    return res.data;
+  },
+
   update: async (
     id: string,
     body: UpdateLRBody & { version?: number },
@@ -66,14 +81,120 @@ export const lorryReceiptApi = {
     const res = await api.delete<ApiResponse<{ id: string }>>(`/lorry-receipts/${id}`);
     return unwrapApiResponse(res);
   },
+
+  /* ---- delivery / acknowledgement (docs/LR_DELIVERY_ACK_PLAN.md) ---- */
+
+  deliver: async (id: string, body: DeliverLRFormInput): Promise<LRDelivery> => {
+    const res = await api.post<ApiResponse<LRDelivery>>(
+      `/lorry-receipts/${id}/deliver`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  updateDelivery: async (
+    id: string,
+    body: DeliverLRFormInput,
+  ): Promise<LRDelivery> => {
+    const res = await api.patch<ApiResponse<LRDelivery>>(
+      `/lorry-receipts/${id}/delivery`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  undoDelivery: async (id: string): Promise<{ id: string }> => {
+    const res = await api.post<ApiResponse<{ id: string }>>(
+      `/lorry-receipts/${id}/undo-delivery`,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  acknowledge: async (
+    id: string,
+    body: AcknowledgeLRFormInput,
+  ): Promise<LRAcknowledgement> => {
+    const res = await api.post<ApiResponse<LRAcknowledgement>>(
+      `/lorry-receipts/${id}/acknowledge`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  updateAcknowledgement: async (
+    id: string,
+    body: AcknowledgeLRFormInput,
+  ): Promise<LRAcknowledgement> => {
+    const res = await api.patch<ApiResponse<LRAcknowledgement>>(
+      `/lorry-receipts/${id}/acknowledgement`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  undoAcknowledgement: async (id: string): Promise<{ id: string }> => {
+    const res = await api.post<ApiResponse<{ id: string }>>(
+      `/lorry-receipts/${id}/undo-acknowledgement`,
+    );
+    return unwrapApiResponse(res);
+  },
+};
+
+/** Delivery worklists + dashboard stats. */
+export const deliveryWorklistApi = {
+  pendingDelivery: async (): Promise<PendingDeliveryRow[]> => {
+    const res = await api.get<ApiResponse<PendingDeliveryRow[]>>(
+      "/lorry-receipts/worklists/pending-delivery",
+    );
+    return unwrapApiResponse(res);
+  },
+  pendingPod: async (): Promise<PendingPodRow[]> => {
+    const res = await api.get<ApiResponse<PendingPodRow[]>>(
+      "/lorry-receipts/worklists/pending-pod",
+    );
+    return unwrapApiResponse(res);
+  },
+  atHub: async (): Promise<AtHubRow[]> => {
+    const res = await api.get<ApiResponse<AtHubRow[]>>(
+      "/lr-groups/worklists/at-hub",
+    );
+    return unwrapApiResponse(res);
+  },
+  stats: async (): Promise<DeliveryStats> => {
+    const res = await api.get<ApiResponse<DeliveryStats>>(
+      "/lorry-receipts/worklists/delivery-stats",
+    );
+    return unwrapApiResponse(res);
+  },
+};
+
+export const deliveryWorklistKeys = {
+  all: ["delivery-worklists"] as const,
+  pendingDelivery: ["delivery-worklists", "pending-delivery"] as const,
+  pendingPod: ["delivery-worklists", "pending-pod"] as const,
+  atHub: ["delivery-worklists", "at-hub"] as const,
+  stats: ["delivery-worklists", "stats"] as const,
 };
 
 /* ------------------------------------------------------------------ */
 /* Lookup helpers (reused across LR form)                             */
 /* ------------------------------------------------------------------ */
 
-type VehicleRow = { id: string; vehicleNumber: string; ownershipType?: string };
-type DriverRow = { id: string; name: string; mobile?: string | null };
+type VehicleRow = {
+  id: string;
+  vehicleNumber: string;
+  ownershipType?: string;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
+
+type DriverRow = {
+  id: string;
+  name: string;
+  mobile?: string | null;
+  isAssigned?: boolean;
+  activeGroupNumber?: string | null;
+};
 type CustomerRow = { id: string; name: string; shortName: string | null };
 type GoodsRow = {
   id: string;
@@ -101,6 +222,7 @@ type TripRow = {
     sourceCity?: { id: string; name: string } | null;
     destinationCity?: { id: string; name: string } | null;
   } | null;
+  consignor?: { id: string; name: string } | null;
 };
 type OrderRow = {
   id: string;
@@ -113,9 +235,14 @@ type OrderRow = {
   fromBranchId?: string;
   toBranchId?: string;
   customerId?: string;
+  route?: {
+  id: string;
+  sourceCity?: { id: string; name: string } | null;
+  destinationCity?: { id: string; name: string } | null;
+} | null;
   customer?: { id: string; name: string } | null;
-  fromBranch?: { id: string; name?: string; shortCode: string } | null;
-  toBranch?: { id: string; name?: string; shortCode: string } | null;
+fromBranch?: { id: string; name?: string; branchCode: string } | null;
+toBranch?: { id: string; name?: string; branchCode: string } | null;
 };
 
 /** Slim shape of GET /orders/:id we read for FROM_ORDER LR context. */
@@ -126,14 +253,15 @@ type OrderContextRow = {
   bookingFreightAmount?: string | number | null;
   customer?: { id: string; name: string } | null;
   consignee?: { id: string; name: string } | null;
-  fromBranch?: { id: string; name: string; shortCode: string } | null;
-  toBranch?: { id: string; name: string; shortCode: string } | null;
+fromBranch?: { id: string; name: string; branchCode: string } | null;
+toBranch?: { id: string; name: string; branchCode: string } | null;
   route?: {
     sourceCity?: { id: string; name: string } | null;
     destinationCity?: { id: string; name: string } | null;
   } | null;
   consignments?: {
     truckIndex: number;
+    totalWeight?: string | number | null;
     loadingLocation?: { id: string; name: string } | null;
     unloadingLocation?: { id: string; name: string } | null;
     goods?: {
@@ -147,6 +275,7 @@ type OrderContextRow = {
 /** One consignment line as the LR create summary renders it. */
 export type LROrderContextLine = {
   truckIndex: number;
+  totalWeight: number | null;
   loadingLocation: string | null;
   unloadingLocation: string | null;
   goods: { name: string; quantity: number; unit: string }[];
@@ -159,9 +288,10 @@ export type LROrderContext = {
   truckQuantity: number | null;
   bookingFreightAmount: number | null;
   consignor: string | null;
+  consignorId: string | null;
   consignee: string | null;
-  fromBranch: { name: string; shortCode: string } | null;
-  toBranch: { name: string; shortCode: string } | null;
+  fromBranch: { name: string; branchCode: string } | null;
+toBranch: { name: string; branchCode: string } | null;
   route: { source: string | null; destination: string | null } | null;
   trucks: { truckIndex: number; lineCount: number }[];
   lines: LROrderContextLine[];
@@ -260,10 +390,18 @@ export const lrLookups = {
     }));
   },
 
-  /** Trips an LR can attach to: any non-cancelled trip with no live LR on it. */
-  attachableTrips: async (): Promise<LRTripOption[]> => {
+  /**
+   * Trips an LR can attach to: any non-cancelled trip with no live LR on it.
+   * When `consignorId` is given, only trips for that consignor are returned —
+   * a trip carries one client, so it can only serve an LR for that same client.
+   */
+  attachableTrips: async (consignorId?: string): Promise<LRTripOption[]> => {
     const res = await api.get<ApiResponse<TripRow[]>>("/trips", {
-      params: { ...LOOKUP_SIZE, "filter[unattached]": "true" },
+      params: {
+        ...LOOKUP_SIZE,
+        "filter[unattached]": "true",
+        ...(consignorId ? { "filter[consignorId]": consignorId } : {}),
+      },
     });
     const statusLabel: Record<string, string> = {
       Planned: "Planned",
@@ -319,6 +457,10 @@ export const lrLookups = {
 
     const lines: LROrderContextLine[] = (order.consignments ?? []).map((c) => ({
       truckIndex: c.truckIndex,
+      totalWeight:
+        c.totalWeight != null && !Number.isNaN(Number(c.totalWeight))
+          ? Number(c.totalWeight)
+          : null,
       loadingLocation: c.loadingLocation?.name ?? null,
       unloadingLocation: c.unloadingLocation?.name ?? null,
       goods: (c.goods ?? []).map((g) => ({
@@ -343,13 +485,14 @@ export const lrLookups = {
           ? Number(order.bookingFreightAmount)
           : null,
       consignor: order.customer?.name ?? null,
+      consignorId: order.customer?.id ?? null,
       consignee: order.consignee?.name ?? null,
       fromBranch: order.fromBranch
-        ? { name: order.fromBranch.name, shortCode: order.fromBranch.shortCode }
-        : null,
-      toBranch: order.toBranch
-        ? { name: order.toBranch.name, shortCode: order.toBranch.shortCode }
-        : null,
+  ? { name: order.fromBranch.name, branchCode: order.fromBranch.branchCode }
+  : null,
+toBranch: order.toBranch
+  ? { name: order.toBranch.name, branchCode: order.toBranch.branchCode }
+  : null,
       route: order.route
         ? {
             source: order.route.sourceCity?.name ?? null,
@@ -370,7 +513,8 @@ export const lrLookupKeys = {
   goods: ["lookup", "goods"] as const,
   branches: ["lookup", "branches"] as const,
   railheadBranches: ["lookup", "railhead-branches"] as const,
-  attachableTrips: ["lookup", "attachable-trips"] as const,
+  attachableTrips: (consignorId?: string) =>
+    ["lookup", "attachable-trips", consignorId ?? "all"] as const,
   confirmedTruckOrders: ["lookup", "confirmed-truck-orders"] as const,
   customerLocations: (customerId: string) =>
     ["lookup", "customer-locations", customerId] as const,

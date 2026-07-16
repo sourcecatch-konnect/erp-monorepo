@@ -8,6 +8,62 @@ import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
 import { ZodTypeAny } from "zod";
 
+const normalizeVehicleNumber = (value: string) =>
+  value.toUpperCase().replace(/\s+/g, "");
+
+const withActiveLRGroupAssignment = async (rows: unknown[]) => {
+  const vehicles = rows as Record<string, unknown>[];
+  const vehicleNumbers = vehicles
+    .map((v) =>
+      typeof v.vehicleNumber === "string"
+        ? normalizeVehicleNumber(v.vehicleNumber)
+        : null,
+    )
+    .filter((v): v is string => Boolean(v));
+
+  if (vehicleNumbers.length === 0) return rows;
+
+  const groups = await db.lRGroup.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["DRAFT", "FINALISED"] },
+      isMarketVehicle: true,
+      marketVehicleNumber: { not: null },
+    },
+    select: {
+      groupNumber: true,
+      marketVehicleNumber: true,
+    },
+  });
+
+  const requested = new Set(vehicleNumbers);
+  const groupByVehicle = new Map(
+    groups
+      .filter(
+        (g) =>
+          g.marketVehicleNumber &&
+          requested.has(normalizeVehicleNumber(g.marketVehicleNumber)),
+      )
+      .map((g) => [
+        normalizeVehicleNumber(g.marketVehicleNumber!),
+        g.groupNumber,
+      ]),
+  );
+
+  return vehicles.map((vehicle) => {
+    const key =
+      typeof vehicle.vehicleNumber === "string"
+        ? normalizeVehicleNumber(vehicle.vehicleNumber)
+        : "";
+    const activeGroupNumber = groupByVehicle.get(key) ?? null;
+    return {
+      ...vehicle,
+      isAssigned: Boolean(activeGroupNumber),
+      activeGroupNumber,
+    };
+  });
+};
+
 const router: Router = createCrudRouter({
   model: db.vehicle,
   createSchema: createVehicleSchema as ZodTypeAny,
@@ -26,6 +82,14 @@ const router: Router = createCrudRouter({
       "insuranceNumber",
       "insuranceCompany",
     ],
+    lookupSelect: {
+      id: true,
+      vehicleNumber: true,
+      status: true,
+    },
+    lookupOrderBy: {
+      vehicleNumber: "asc",
+    },
     defaultInclude: {
       vehicleTypeRef: {
         select: {
@@ -38,6 +102,7 @@ const router: Router = createCrudRouter({
     defaultOrderBy: {
       vehicleNumber: "asc",
     },
+    mapRows: withActiveLRGroupAssignment,
   },
 
   hooks: {

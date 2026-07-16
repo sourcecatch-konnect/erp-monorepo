@@ -5,7 +5,6 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
-  Agreement,
   AgreementWithRelations,
   CreateAgreementBody,
   CreateAgreementFormInput,
@@ -22,7 +21,6 @@ import {
   IconBuilding,
   IconMapPin,
   IconCalendar,
-  IconTruck,
   IconX,
   IconFileUpload,
   IconUser,

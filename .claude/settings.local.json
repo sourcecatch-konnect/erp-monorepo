@@ -13,7 +13,10 @@
       "Bash(gh pr *)",
       "Bash(pnpm --filter @skerp/types check-types)",
       "Bash(pnpm --filter @skerp/server check-types)",
-      "Bash(pnpm --filter @skerp/notifications-web check-types)"
+      "Bash(pnpm --filter @skerp/notifications-web check-types)",
+      "Bash(pnpm --filter @skerp/validators build)",
+      "Bash(ls \"/d/Work/SK_Logistics code/SK_Logistics\" | head -50)",
+      "Read(//d/Work/SK_Logistics code/SK_Logistics/**)"
     ]
   }
 }

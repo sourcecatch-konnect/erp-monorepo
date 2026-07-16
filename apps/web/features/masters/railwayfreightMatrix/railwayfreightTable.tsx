@@ -13,15 +13,10 @@ import {
 } from "@tabler/icons-react";
 import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
-const formatNumber = (value?: number | null, suffix = "") => {
-  if (value == null) return "-";
-  return `${value}${suffix}`;
-};
-
 export const railwayFreightColumns:
 ColumnDef<RailwayFreightMatrixWithRelations>[] = [
   {
-    accessorKey: "wagonType",
+    accessorKey: "wagon",
     header: "Wagon Type",
     enableHiding: false,
     cell: ({ row }) => (
@@ -31,7 +26,9 @@ ColumnDef<RailwayFreightMatrixWithRelations>[] = [
         </span>
 
         <div className="flex flex-col">
-          <span className="font-medium">{row.original.wagonType}</span>
+          <span className="font-medium">
+            {row.original.wagon?.name ?? "-"}
+          </span>
           <span className="text-xs text-muted-foreground">
             Railway Freight
           </span>

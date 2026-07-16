@@ -37,6 +37,9 @@ const defaultValues: CreateWagonFormInput = {
   height: "",
   width: "",
   weight: "",
+  totalCft: "",
+  capacityMt: "",
+  isActive: true,
 };
 
 export default function WagonForm({
@@ -68,13 +71,15 @@ const handleSubmit = async (data: CreateWagonBody) => {
 const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
-
-    form.reset({
-      name: row?.name ?? "",
-      height: row?.height != null ? String(row.height) : "",
-      width: row?.width != null ? String(row.width) : "",
-      weight: row?.weight != null ? String(row.weight) : "",
-    });
+form.reset({
+  name: row?.name ?? "",
+  height: row?.height != null ? String(row.height) : "",
+  width: row?.width != null ? String(row.width) : "",
+  weight: row?.weight != null ? String(row.weight) : "",
+  totalCft: row?.totalCft != null ? String(row.totalCft) : "",
+  capacityMt: row?.capacityMt != null ? String(row.capacityMt) : "",
+  isActive: row?.isActive ?? true,
+});
   }, [form, open, row]);
 
   return (
@@ -112,6 +117,7 @@ const isSubmitting = create.isPending || update.isPending;
   placeholder="Enter height"
   icon={<IconRulerMeasure size={16} />}
   type="number"
+  step="0.01"
   suffix="m"
   required
 />
@@ -122,27 +128,46 @@ const isSubmitting = create.isPending || update.isPending;
   placeholder="Enter width"
   icon={<IconRulerMeasure size={16} />}
   type="number"
+   step="0.01"
   suffix="m"
   required
 />
 
       </FormSection>
 
-      <FormSection
-        icon={<IconScale size={18} />}
-        title="Weight Details"
-        description="Wagon weight capacity or actual weight"
-      >
-<IconTextField<CreateWagonFormInput>
-  name="weight"
-  label="Weight"
-  placeholder="Enter weight"
-  icon={<IconScale size={16} />}
-  type="number"
-  suffix="kg"
-  required
-/>
-      </FormSection>
+  <FormSection
+  icon={<IconScale size={18} />}
+  title="Capacity Details"
+  description="Wagon weight and loading capacity details"
+>
+  <IconTextField<CreateWagonFormInput>
+    name="weight"
+    label="Weight"
+    placeholder="Enter weight"
+    icon={<IconScale size={16} />}
+    type="number"
+    suffix="kg"
+    required
+  />
+
+  <IconTextField<CreateWagonFormInput>
+    name="totalCft"
+    label="Total CFT"
+    placeholder="Enter total CFT"
+    icon={<IconRulerMeasure size={16} />}
+    type="number"
+    suffix="CFT"
+  />
+
+  <IconTextField<CreateWagonFormInput>
+    name="capacityMt"
+    label="Capacity MT"
+    placeholder="Enter capacity in MT"
+    icon={<IconScale size={16} />}
+    type="number"
+    suffix="MT"
+  />
+</FormSection>
     </MasterFormDialog>
   );
 }

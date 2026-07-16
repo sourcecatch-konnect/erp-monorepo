@@ -5,10 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@skerp/ui/components/tooltip";
 import type {
   AgreementWithRelations,
-  CreateRateMatrixBody,
   RateMatrixWithRelations,
-  RateUnit,
-  VehicleType,
 } from "@skerp/types";
 import {
   IconClock,
@@ -40,8 +37,6 @@ import { toast } from "sonner";
 import { Button } from "@skerp/ui/components/button";
 import RateMatrixDetailDialog from "../rateMatrixDialog";
 import RateMatrixForm from "../rateMatrixForm";
-import { routeApi } from "../../routes/routes.service";
-import { vehicleTypeApi } from "../../vehicleType/vehicleType.service";
 
 type Props = {
   agreement: AgreementWithRelations;
@@ -93,36 +88,6 @@ const openDetail = (rate: RateMatrixWithRelations) => {
   setSelectedRate(rate);
   setDetailOpen(true);
 };
-const saveMutation = useMutation({
-  mutationFn: async (values: CreateRateMatrixBody) => {
-    const body: CreateRateMatrixBody = {
-      ...values,
-      agreementId: agreement.id,
-    };
-
-    if (selectedRate) {
-      return rateMatrixApi.update(selectedRate.id, body);
-    }
-
-    return rateMatrixApi.create(body);
-  },
-
-  onSuccess: () => {
-    toast.success(
-      selectedRate ? "Rate matrix updated" : "Rate matrix added"
-    );
-
-    refreshRates();
-    setFormOpen(false);
-    setSelectedRate(null);
-  },
-
-  onError: (error) => {
-    toast.error(
-      error instanceof Error ? error.message : "Failed to save rate matrix"
-    );
-  },
-});
 const deleteMutation = useMutation({
   mutationFn: (id: string) => rateMatrixApi.remove(id),
   onSuccess: () => {

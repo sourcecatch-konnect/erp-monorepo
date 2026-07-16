@@ -2,7 +2,7 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 
-import type { Labour, LabourWithRelations } from "@skerp/types";
+import type { LabourWithRelations } from "@skerp/types";
 
 import {
   IconBuilding,

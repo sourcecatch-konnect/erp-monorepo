@@ -10,18 +10,22 @@ import { Button } from "@skerp/ui/components/button";
 import { IconPlus } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import { useTablePrefs } from "@/features/table-prefs";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import type { ListQuery } from "../masters/_shared/master-api";
 
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
-import OrderTable from "./OrderTable";
+import OrderTable, { DEFAULT_ORDER_COLUMN_ORDER } from "./OrderTable";
 import OrderQuickViewModal from "./OrderQuickViewModal";
 import ApproveOrderModal from "./ApproveOrderModal";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
-
+type OrderListRow = Order & {
+  hasLRGroup?: boolean;
+  lrGroupCount?: number;
+};
 export default function OrdersListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -30,8 +34,14 @@ export default function OrdersListPage() {
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [sort, setSort] = React.useState("createdAt:desc");
 
   const debouncedSearch = useDebouncedValue(search);
+
+  // Per-user layout, persisted server-side (follows the account, not the
+  // browser). Defaults render until the saved layout loads.
+  const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder } =
+    useTablePrefs("orders", DEFAULT_ORDER_COLUMN_ORDER);
 
   const [quickViewId, setQuickViewId] = React.useState<string | null>(null);
   const [approveId, setApproveId] = React.useState<string | null>(null);
@@ -46,21 +56,18 @@ export default function OrdersListPage() {
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
   const canDelete = useCan(PERMS.ORDER.DELETE);
 
-  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter]);
+  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter, sort]);
 
   const handleSizeChange = (nextSize: number) => {
     setSize(nextSize);
     setPage(0);
   };
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, statusFilter]);
-
   const listQuery = React.useMemo<ListQuery>(
     () => ({
       page,
       size,
+      sort,
       ...(debouncedSearch.trim()
         ? { search: debouncedSearch.trim() }
         : {}),
@@ -68,7 +75,7 @@ export default function OrdersListPage() {
         ? { filter: { status: statusFilter } }
         : {}),
     }),
-    [page, size, debouncedSearch, statusFilter]
+    [page, size, sort, debouncedSearch, statusFilter]
   );
 
   const orders = useQuery({
@@ -141,7 +148,19 @@ export default function OrdersListPage() {
       toast.error("Could not download order PDF");
     }
   };
+const onCreateLR = (order: OrderListRow) => {
+  const hasLRGroup =
+    Boolean(order.hasLRGroup) || Number(order.lrGroupCount ?? 0) > 0;
 
+  if (hasLRGroup) {
+    toast.error("LR is already created for this order");
+    return;
+  }
+
+  router.push(
+    `/lorry-receipts/new?orderId=${encodeURIComponent(order.id)}`
+  );
+};
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -164,6 +183,12 @@ export default function OrdersListPage() {
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        sort={sort}
+        onSortChange={setSort}
+        columnVisibility={columnVisibility}
+        onColumnVisibilityChange={setColumnVisibility}
+        columnOrder={columnOrder}
+        onColumnOrderChange={setColumnOrder}
         counts={counts.data ?? {}}
         isLoading={orders.isLoading}
         canApprove={canApprove}
@@ -176,7 +201,7 @@ export default function OrdersListPage() {
         onApprove={(o) => setApproveId(o.id)}
         onReject={(o) => setRejectOrder(o)}
         onCancel={(o) => setCancelOrder(o)}
-        onCreateLR={(o) => router.push(`/lorry-receipts/new?orderId=${o.id}`)}
+        onCreateLR={onCreateLR}
         onDelete={(o) => setDeleteOrder(o)}
         onDownloadPdf={handleDownloadPdf}
         canDownloadPdf={true}

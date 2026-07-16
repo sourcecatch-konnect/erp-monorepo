@@ -1,5 +1,5 @@
 import { ComponentType } from "react";
-import { IconBox, IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch,IconGasStation ,IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld, IconTrain, IconBuildingBank, IconCash } from "@tabler/icons-react";
+import { IconBox, IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch,IconGasStation ,IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld, IconTrain, IconBuildingBank, IconCash, IconRulerMeasure } from "@tabler/icons-react";
 
 export type MasterCategory = "Location";
 
@@ -28,6 +28,7 @@ permissionKey:
   | "masters.railway-freight"
   | "masters.agreement"
   | "masters.goods"
+  | "masters.unit-of-measure"
   | "masters.warehouse"
   | "masters.pump"
   | "masters.vehicle-type"
@@ -166,6 +167,13 @@ export const masterRegistry = [
   category: "Location",
   permissionKey: "masters.goods",
   page: () => import("./Goods/page"),
+},{
+  slug: "unit-of-measure",
+  label: "Units of Measure",
+  icon: IconRulerMeasure,
+  category: "Location",
+  permissionKey: "masters.unit-of-measure",
+  page: () => import("./unitOfMeasure/page"),
 },
 {
   slug: "pumps",

@@ -11,7 +11,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "db:generate": "pnpm --filter @skerp/server db:generate",
-    "db:migrate": "pnpm --filter @skerp/server db:migrate"
+    "db:migrate": "pnpm --filter @skerp/server db:migrate",
+    "db:deploy": "pnpm --filter @skerp/server db:deploy"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

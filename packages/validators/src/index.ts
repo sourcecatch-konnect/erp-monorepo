@@ -30,6 +30,7 @@ export const createEmployeeSchema = z.object({
   password: employeePasswordSchema,
   companyId: z.string().min(1, "Company is required"),
   branchId: z.string().min(1, "Branch is required"),
+  roleId: z.string().min(1, "Role is required"),
 });
 
 export const updateEmployeeSchema = z.object({
@@ -37,6 +38,7 @@ export const updateEmployeeSchema = z.object({
   middleName: z.string().optional(),
   lastName: z.string().min(1).optional(),
   email: z.string().email("Invalid email format").optional(),
+  roleId: z.string().min(1, "Role is required").optional(),
   mobile: z
     .string()
     .trim()
@@ -81,6 +83,7 @@ export * from "./master/route.schema.js";
 export * from "./master/warehouse.schema.js"
 export * from "./master/customer.schema.js"
 export * from "./master/goods.schema.js"
+export * from "./master/unit-of-measure.schema.js"
 export * from "./master/labour.schema.js"
 export * from "./master/pump.schema.js"
 export * from "./master/wagon.schema.js"
@@ -93,9 +96,17 @@ export * from "./trip/trip.schema.js"
 export * from "./admin/rbac.schema.js"
 export * from "./attachments/attachment.schema.js"
 export * from "./lorry-receipt/lorry-receipt.schema.js"
+export * from "./lorry-receipt/delivery.schema.js"
 export * from "./lr-group/lr-group.schema.js"
+export * from "./vp-schedule/vp-schedule.schema.js"
 export * from "./cash/creditor.schema.js"
 export * from "./cash/cash-account.schema.js"
 export * from "./cash/cash-payment.schema.js"
 export * from "./cash/cash-day.schema.js"
 export * from "./cash/cash-receivable.schema.js"
+export * from "./mrrr/mrrr.schema.js"
+export * from "./grn/grn.schema.js"
+export * from "./vehicle-journey/vehicle-journey.schema.js"
+export * from "./trip-expense/trip-expense.schema.js"
+export * from "./log-slip/log-slip.schema.js"
+export * from "./user/table-pref.schema.js"

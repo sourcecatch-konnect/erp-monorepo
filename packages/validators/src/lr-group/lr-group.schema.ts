@@ -3,9 +3,8 @@ import {
   lrTransportTypeSchema,
   lrTripLegTypeSchema,
   lrPrioritySchema,
-  lrGoodsLineSchema,
-  ewayBillSchema,
 } from "../lorry-receipt/lorry-receipt.schema.js";
+import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -25,30 +24,56 @@ const optionalId = z
   .optional()
   .transform((v) => v || undefined);
 
-// Money fields are entered in rupees on the wire/UI and stored as paise. These
-// transform rupees -> paise so the input is honest (₹) and the output is paise.
-const rupeesToPaise = (label: string) =>
+// Money fields (rupees → paise) come from the shared `_shared/money` boundary.
+const positiveIntField = (label: string) =>
   z
     .union([z.string(), z.number()])
-    .transform((v) => Math.round(Number(v) * 100))
+    .transform((value) => Number(value))
     .refine(
-      (v) => Number.isInteger(v) && v > 0,
-      `${label} must be a positive amount`,
+      (value) => Number.isInteger(value) && value > 0,
+      `${label} must be a positive whole number`,
     );
 
-const optionalRupeesToPaise = (label: string) =>
+const optionalNumberField = (label: string) =>
   z
     .union([z.string(), z.number()])
     .optional()
-    .transform((v) => {
-      if (v === "" || v === undefined || v === null) return undefined;
-      return Math.round(Number(v) * 100);
+    .transform((value) => {
+      if (value === "" || value === undefined || value === null) {
+        return undefined;
+      }
+      return Number(value);
     })
     .refine(
-      (v) => v === undefined || (Number.isInteger(v) && v > 0),
-      `${label} must be a positive amount`,
+      (value) => value === undefined || !Number.isNaN(value),
+      `${label} must be valid`,
     );
 
+const goodsUnitValues = [
+  "MT",
+  "KG",
+  "QUINTAL",
+  "BAGS",
+  "BOXES",
+  "CARTONS",
+  "BUNDLES",
+  "PIECES",
+  "DRUMS",
+  "PALLETS",
+  "ROLLS",
+  "COILS",
+] as const;
+
+const totalWeightUnitSchema = z
+  .string()
+  .trim()
+  .min(1, "Unit is required")
+  .transform((value) => value.toUpperCase())
+  .pipe(
+    z.enum(goodsUnitValues, {
+      errorMap: () => ({ message: "Select a valid unit" }),
+    }),
+  );
 const truckIndexField = z
   .union([z.string(), z.number()])
   .optional()
@@ -66,12 +91,40 @@ const truckIndexField = z
 /* FROM_ORDER groups read their lines from the order's OrderConsignment.*/
 /* ------------------------------------------------------------------ */
 
-export const lrGroupLineSchema = z.object({
-  loadingLocationId: optionalId,
-  unloadingLocationId: optionalId,
-  goods: z.array(lrGoodsLineSchema).min(1, "Add at least one goods line"),
+const lrGroupGoodsLineSchema = z.object({
+  name: z.string().trim().min(1, "Goods name is required"),
+  description: optionalString,
+  quantity: positiveIntField("Quantity"),
+
+  // keep only if Instant LR still needs dimensions
+  length: optionalNumberField("Length"),
+  width: optionalNumberField("Width"),
+  height: optionalNumberField("Height"),
 });
 
+export const lrGroupLineSchema = z
+  .object({
+    loadingLocationId: optionalId,
+    unloadingLocationId: optionalId,
+
+    totalWeight: optionalNumberField("Total weight").refine(
+      (value) => value === undefined || value >= 0,
+      "Total weight cannot be negative",
+    ),
+
+    totalWeightUnit: totalWeightUnitSchema.optional(),
+
+    goods: z.array(lrGroupGoodsLineSchema).optional().default([]),
+  })
+  .superRefine((line, ctx) => {
+    if (line.totalWeight !== undefined && !line.totalWeightUnit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unit is required when total weight is provided",
+        path: ["totalWeightUnit"],
+      });
+    }
+  });
 export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
 
 /* ------------------------------------------------------------------ */
@@ -80,11 +133,20 @@ export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
 
 const vehicleShape = {
   isMarketVehicle: z.boolean().default(false),
-  // The leg-1 trip the whole group rides. Leg 2 is attached later by the
-  // group "split at hub" action, never at creation.
+
+  // Own vehicle
   primaryTripId: optionalId,
+
+  // Market vehicle
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
+
+  // Entered in rupees, stored as paise
+  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
+  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
+  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
+  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
+  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
 };
 
 export const createGroupFromOrderSchema = z.object({
@@ -118,7 +180,7 @@ export const createInstantGroupSchema = z.object({
   priority: lrPrioritySchema.default("Normal"),
   ...vehicleShape,
   // Instant groups declare their consignments inline (no order to read from).
-  lrs: z.array(lrGroupLineSchema).min(1, "Add at least one consignment"),
+  lrs: z.array(lrGroupLineSchema).optional().default([]),
 });
 
 export type CreateInstantGroupInput = z.infer<typeof createInstantGroupSchema>;
@@ -156,6 +218,33 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["primaryTripId"],
     });
   }
+  if (d.source === "INSTANT") {
+    if (!d.lrs || d.lrs.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add at least one consignment line",
+        path: ["lrs"],
+      });
+    }
+
+    (d.lrs ?? []).forEach((line, index) => {
+      if (!line.loadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Loading point is required",
+          path: ["lrs", index, "loadingLocationId"],
+        });
+      }
+
+      if (!line.unloadingLocationId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unloading point is required",
+          path: ["lrs", index, "unloadingLocationId"],
+        });
+      }
+    });
+  }
 });
 
 export type CreateLRGroupInput = z.infer<typeof createLRGroupSchema>;
@@ -169,12 +258,19 @@ export const updateLRGroupSchema = z.object({
   transportType: lrTransportTypeSchema.optional(),
   railheadBranchId: optionalId,
   priority: lrPrioritySchema.optional(),
+
   isMarketVehicle: z.boolean().optional(),
-  // Only the leg-1 trip is editable here. Leg 2 / hub / tripLegType are owned
-  // by the "split at hub" action, never the edit form.
   primaryTripId: optionalId,
+
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
+
+  // Entered in rupees, stored as paise
+  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
+  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
+  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
+  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
+  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
 });
 
 export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
@@ -187,35 +283,13 @@ export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
 /* DRAFT -> FINALISED together (all-or-nothing).                       */
 /* ------------------------------------------------------------------ */
 
-export const finaliseGroupLineSchema = z
-  .object({
-    lrId: requiredId("Lorry receipt"),
-    invoiceNumber: optionalString,
-    // Entered in rupees, stored as paise.
-    invoiceAmount: optionalRupeesToPaise("Invoice amount"),
-    existingEwayBillId: optionalId,
-    ewayBill: ewayBillSchema.optional(),
-  })
-  .superRefine((line, ctx) => {
-    const hasExisting = Boolean(line.existingEwayBillId);
-    const hasNew = Boolean(line.ewayBill);
-
-    if (hasExisting === hasNew) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["ewayBill"],
-        message: "Provide exactly one e-way bill for this LR",
-      });
-    }
-  });
-
+export const finaliseGroupLineSchema = z.object({
+  lrId: requiredId("Lorry receipt"),
+});
 export const finaliseGroupSchema = z.object({
-  // Entered in rupees, stored as paise.
   baseFreightAmount: rupeesToPaise("Base freight amount"),
   sealNumber: optionalString,
-  lrs: z
-    .array(finaliseGroupLineSchema)
-    .min(1, "At least one lorry receipt is required"),
+  lrs: z.array(finaliseGroupLineSchema).min(1, "At least one LR is required"),
 });
 
 export type FinaliseGroupInput = z.infer<typeof finaliseGroupSchema>;

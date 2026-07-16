@@ -5,11 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateWagonBody, Wagon } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
-import {
-  downloadBlob,
-  ListQuery,
-  parseCsvRows,
-} from "../_shared/master-api";
+import { downloadBlob, ListQuery, parseCsvRows } from "../_shared/master-api";
 import { useDebouncedValue } from "../_shared/hooks/useDebouncedValue";
 
 import getErrorMessage, {
@@ -33,8 +29,8 @@ export default function WagonPage() {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-const [detailOpen, setDetailOpen] = React.useState(false);
-const [detailId, setDetailId] = React.useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const [detailId, setDetailId] = React.useState<string | null>(null);
   const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
 
@@ -43,11 +39,9 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
       page,
       size,
       sort: "name:asc",
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
     }),
-    [debouncedSearch, page, size]
+    [debouncedSearch, page, size],
   );
 
   React.useEffect(() => {
@@ -99,8 +93,6 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
     },
   });
 
-
-
   return (
     <MasterListPage
       title="Wagons"
@@ -114,9 +106,9 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
       page={page}
       size={size}
       onView={(row) => {
-  setDetailId(row.id);
-  setDetailOpen(true);
-}}
+        setDetailId(row.id);
+        setDetailOpen(true);
+      }}
       total={wagons.data?.meta?.total ?? 0}
       onPageChange={setPage}
       selectedIds={selectedIds}
@@ -135,25 +127,27 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
         const text = await file.text();
         const rows = parseCsvRows<WagonCsvRow>(text);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await bulkImport.mutateAsync(rows as any);
+        const payload: CreateWagonBody[] = rows.map((item) => ({
+          name: item.name,
+          height: Number(item.height),
+          width: Number(item.width),
+          weight: Number(item.weight),
+          totalCft: null,
+          capacityMt: null,
+        }));
+        await bulkImport.mutateAsync(payload);
       }}
       onExport={() => exportWagons.mutate(listQuery)}
       isBulkDeleting={bulkRemove.isPending}
       isImporting={bulkImport.isPending}
       isExporting={exportWagons.isPending}
     >
-        <WagonDetailDialog
-  open={detailOpen}
-  onOpenChange={setDetailOpen}
-  id={detailId}
-/>
-      <WagonForm
-        open={open}
-        onOpenChange={setOpen}
-        row={selected}
-    
+      <WagonDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        id={detailId}
       />
+      <WagonForm open={open} onOpenChange={setOpen} row={selected} />
     </MasterListPage>
   );
 }

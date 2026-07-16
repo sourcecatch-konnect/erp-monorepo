@@ -1,19 +1,6 @@
 import { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { paiseToRupees } from "../../lib/money.js";
-import type {
-  ApiResponse,
-  Order,
-  OrderQuickView,
-  CreateOrderBody,
-  UpdateOrderBody,
-  ApproveOrderBody,
-  RejectOrderBody,
-  CancelOrderBody,
-  FreightPreview,
-  CustomerLocation,
-  Route,
-} from "@skerp/types";
 // Shared document-numbering helpers live in _shared so every transactional
 // module (orders, trips, …) reuses one implementation. Re-exported here so
 // existing order imports keep working.
@@ -103,7 +90,8 @@ export const computeFreight = async (args: {
     const [fromBranch, toBranch] = await Promise.all([
       db.branch.findUnique({
         where: { id: args.fromBranchId },
-        select: {branchCode: true,
+        select: {
+          branchCode: true,
           cityId: true,
           city: { select: { id: true, name: true } },
         },
@@ -174,74 +162,74 @@ export const computeFreight = async (args: {
   }
 
   const agreementIds = agreements.map((a) => a.id);
-const match = await db.rateMatrix.findFirst({
-  where: {
-    agreementId: { in: agreementIds },
-    routeId: route.id,
-    OR: [
-      ...(args.vehicleTypeId ? [{ vehicleTypeId: args.vehicleTypeId }] : []),
-      { vehicleTypeId: null },
-    ],
-  },
-  orderBy: {
-    vehicleTypeId: {
-      sort: "desc",
-      nulls: "last",
+  const match = await db.rateMatrix.findFirst({
+    where: {
+      agreementId: { in: agreementIds },
+      routeId: route.id,
+      OR: [
+        ...(args.vehicleTypeId ? [{ vehicleTypeId: args.vehicleTypeId }] : []),
+        { vehicleTypeId: null },
+      ],
     },
-  },
-  include: {
-    agreement: {
-      select: {
-        id: true,
-        company: {
-          select: {
-            id: true,
-            name: true,
+    orderBy: {
+      vehicleTypeId: {
+        sort: "desc",
+        nulls: "last",
+      },
+    },
+    include: {
+      agreement: {
+        select: {
+          id: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
-        },
-        client: {
-          select: {
-            id: true,
-            name: true,
+          client: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
       },
-    },
 
-    route: {
-      select: {
-        id: true,
-        sourceCity: {
-          select: {
-            id: true,
-            name: true,
+      route: {
+        select: {
+          id: true,
+          sourceCity: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          destinationCity: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-        destinationCity: {
-          select: {
-            id: true,
-            name: true,
-          },
+      },
+
+      vehicleType: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+
+      unit: {
+        select: {
+          id: true,
+          unitValue: true,
+          unitType: true,
         },
       },
     },
-
-    vehicleType: {
-      select: {
-        id: true,
-        name: true,
-      },
-    },
-
-    unit: {
-      select: {
-        id: true,
-        unitValue: true,
-        unitType: true,
-      },
-    },
-  },
-});
+  });
 
   if (!match) {
     return {
@@ -321,7 +309,7 @@ export const orderListSelect = {
       lastName: true,
     },
   },
-    route: {
+  route: {
     select: {
       id: true,
       sourceCityId: true,
@@ -340,7 +328,6 @@ export const orderListSelect = {
       },
     },
   },
-
 
   _count: {
     select: {
@@ -361,23 +348,23 @@ export const orderQuickViewSelect = {
   contactEmail: true,
   pickupAddressOverride: true,
   routeId: true,
-route: {
-  select: {
-    id: true,
-    sourceCity: {
-      select: {
-        id: true,
-        name: true,
+  route: {
+    select: {
+      id: true,
+      sourceCity: {
+        select: {
+          id: true,
+          name: true,
+        },
       },
-    },
-    destinationCity: {
-      select: {
-        id: true,
-        name: true,
+      destinationCity: {
+        select: {
+          id: true,
+          name: true,
+        },
       },
     },
   },
-},
   customer: {
     select: { id: true, name: true },
   },

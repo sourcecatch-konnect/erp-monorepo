@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { Driver } from "@skerp/types";
 
 import {
   Dialog,
@@ -22,7 +21,6 @@ import {
   IconPhone,
   IconId,
   IconCalendar,
-  IconShield,
   IconBan,
   IconClock,
   IconMapPin,
@@ -39,7 +37,7 @@ import {
 } from "@tabler/icons-react";
 
 import { driverApi } from "./driver.service";
-import { paiseToRupees } from "@/lib/money";
+import { formatPaise } from "@/lib/money";
 import { useQuery } from "@tanstack/react-query";
 import { driverKeys } from "./driver.key";
 
@@ -106,15 +104,8 @@ const formatBoolean = (value?: boolean | null) => {
   return value ? "Yes" : "No";
 };
 
-const formatCurrency = (value?: number | null) => {
-  if (value === null || value === undefined) return "-";
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(paiseToRupees(value));
-};
+// Values are paise; delegate to the shared formatter.
+const formatCurrency = (value?: number | null) => formatPaise(value);
 
 export default function DriverDetailDialog({
   open,

@@ -38,7 +38,6 @@ import {
 
 import FormSection from "../masters/_shared/fields/FormSection";
 import ComboboxField from "../masters/_shared/fields/ComboboxField";
-import TextField from "../masters/_shared/fields/TextField";
 import TextAreaField from "../masters/_shared/fields/TextAreaField";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
@@ -83,8 +82,6 @@ const FIELD_LABELS: Record<string, string> = {
   goods: "Goods",
   goodsId: "Goods",
   quantity: "Quantity",
-  unit: "Unit",
-  weight: "Weight",
   loadingLocationId: "Loading location",
   unloadingLocationId: "Unloading location",
   truckIndex: "Truck",
@@ -187,30 +184,21 @@ export default function OrderForm({ mode, order }: Props) {
             order.items?.map((i) => ({
               goodsId: i.goodsId,
               quantity: i.quantity,
-              unit: i.unit,
-              weight: i.weight ? Number(i.weight) : undefined,
             })) ?? [],
           consignments:
             order.consignments?.map((c) => ({
               truckIndex: c.truckIndex,
               loadingLocationId: c.loadingLocationId ?? undefined,
               unloadingLocationId: c.unloadingLocationId ?? undefined,
+              totalWeight:
+                c.totalWeight != null ? Number(c.totalWeight) : undefined,
               goods:
                 c.goods && c.goods.length
                   ? c.goods.map((g) => ({
                       goodsId: g.goodsId,
                       quantity: g.quantity,
-                      unit: g.unit,
-                      weight: g.weight ? Number(g.weight) : undefined,
                     }))
-                  : [
-                      {
-                        goodsId: "",
-                        quantity: 1,
-                        unit: "MT",
-                        weight: undefined,
-                      },
-                    ],
+                  : [],
             })) ?? [],
         }
       : {
@@ -263,9 +251,31 @@ export default function OrderForm({ mode, order }: Props) {
   }, [orderType, form]);
 
   const onSubmit = async (values: CreateOrderBody) => {
-    console.log("got trigger");
+    if (values.orderType === "Truck") {
+      const truckQty = Number(values.truckQuantity) || 0;
+      const assignedTrucks = new Set(
+        (values.consignments ?? []).map((line) => Number(line.truckIndex)),
+      );
+      const missingTrucks = Array.from(
+        { length: truckQty },
+        (_, index) => index + 1,
+      ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
+
+      if (missingTrucks.length > 0) {
+        const message = `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}.`;
+        form.setError("consignments", {
+          type: "manual",
+          message,
+        });
+
+        toast.error(message);
+
+        return;
+      }
+    }
 
     setSubmitting(true);
+
     try {
       if (mode === "edit" && order) {
         await orderApi.update(order.id, { ...values, version: order.version });
@@ -315,10 +325,7 @@ export default function OrderForm({ mode, order }: Props) {
   // Flattened validation issues, surfaced above the footer once a save is
   // attempted so the user can see everything they missed at a glance.
   const { errors, submitCount } = form.formState;
-  const validationIssues = React.useMemo(
-    () => collectErrors(errors),
-    [errors, submitCount],
-  );
+  const validationIssues = React.useMemo(() => collectErrors(errors), [errors]);
   const showValidationSummary = submitCount > 0 && validationIssues.length > 0;
 
   return (
@@ -506,7 +513,7 @@ export default function OrderForm({ mode, order }: Props) {
               <p className="mt-2 text-xs text-muted-foreground">
                 {orderType === "Truck"
                   ? "Book one or more trucks by vehicle type, then add consignment lines."
-                  : "Add goods line items with quantity and weight."}
+                  : "Add goods line items with quantity."}
               </p>
             </div>
 

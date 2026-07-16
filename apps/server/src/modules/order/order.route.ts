@@ -58,7 +58,28 @@ const orderWhereByIdentifier = (identifier: string) => ({
 
 const orderLink = (orderNumber: string) =>
   `/orders/${encodeURIComponent(orderNumber)}`;
+const assertEveryBookedTruckHasLRLine = (data: {
+  orderType?: string;
+  truckQuantity?: number | null;
+  consignments?: { truckIndex?: number | null }[] | null;
+}) => {
+  if (data.orderType !== "Truck") return;
 
+  const truckQty = Number(data.truckQuantity) || 0;
+  const assignedTrucks = new Set(
+    (data.consignments ?? []).map((line) => Number(line.truckIndex)),
+  );
+  const missingTrucks = Array.from(
+    { length: truckQty },
+    (_, index) => index + 1,
+  ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
+
+  if (missingTrucks.length > 0) {
+    throw new BadRequestError(
+      `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}.`,
+    );
+  }
+};
 /* ------------------------------------------------------------------ */
 /* List                                                               */
 /* ------------------------------------------------------------------ */
@@ -82,19 +103,47 @@ router.get("/", can(PERMS.ORDER.VIEW), async (req, res) => {
       : {}),
   };
 
-  const [data, total] = await Promise.all([
-    db.order.findMany({
-      where,
-      skip: query.page * query.size,
-      take: query.size,
-      select: orderListSelect,
-      orderBy: query.sort
-        ? { [query.sort.field]: query.sort.direction }
-        : { createdAt: "desc" },
-    }),
-    db.order.count({ where }),
-  ]);
-  return sendOk(res, data, { page: query.page, size: query.size, total });
+ const [orders, total] = await Promise.all([
+  db.order.findMany({
+    where,
+    skip: query.page * query.size,
+    take: query.size,
+    select: orderListSelect,
+    orderBy: query.sort
+      ? { [query.sort.field]: query.sort.direction }
+      : { createdAt: "desc" },
+  }),
+  db.order.count({ where }),
+]);
+
+const lrCounts = await db.lRGroup.groupBy({
+  by: ["orderId"],
+  where: {
+    orderId: {
+      in: orders.map((o) => o.id),
+    },
+    deletedAt: null,
+  },
+  _count: {
+    _all: true,
+  },
+});
+
+const lrCountMap = new Map(
+  lrCounts.map((row) => [row.orderId, row._count._all]),
+);
+
+const data = orders.map((order) => {
+  const lrGroupCount = lrCountMap.get(order.id) ?? 0;
+
+  return {
+    ...order,
+    lrGroupCount,
+    hasLRGroup: lrGroupCount > 0,
+  };
+});
+
+return sendOk(res, data, { page: query.page, size: query.size, total });
 });
 
 /* ------------------------------------------------------------------ */
@@ -131,7 +180,15 @@ router.get("/:id", can(PERMS.ORDER.VIEW), async (req, res) => {
 
     if (!order) throw new NotFoundError("Order not found");
 
-    return sendOk(res, order);
+    const lrGroupCount = await db.lRGroup.count({
+      where: { orderId: order.id, deletedAt: null },
+    });
+
+    return sendOk(res, {
+      ...order,
+      lrGroupCount,
+      hasLRGroup: lrGroupCount > 0,
+    });
   }
 
   const order = await db.order.findFirst({
@@ -162,20 +219,56 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
+
   const data = parsed.data;
+
+  assertEveryBookedTruckHasLRLine(data);
   assertBranchAccess(req, data.fromBranchId);
 
   const me = actorId(req);
 
-  const order = await db.$transaction(async (tx) => {
-    const fromBranch = await tx.branch.findUnique({
-      where: { id: data.fromBranchId },
-      select: { branchCode: true },
-    });
-    if (!fromBranch) throw new BadRequestError("From branch not found");
+  // 1. Do normal read outside transaction
+  const fromBranch = await db.branch.findUnique({
+    where: { id: data.fromBranchId },
+    select: { branchCode: true },
+  });
 
-    const fyCode = fyCodeFor(new Date());
+  if (!fromBranch) {
+    throw new BadRequestError("From branch not found");
+  }
 
+  const fyCode = fyCodeFor(new Date());
+
+  // 2. Prepare nested data outside transaction
+  const itemCreates =
+    data.orderType === "Item" && data.items?.length
+      ? data.items.map((i) => ({
+          goodsId: i.goodsId,
+          quantity: i.quantity,
+        }))
+      : [];
+
+  const consignmentCreates =
+    data.orderType === "Truck" && data.consignments?.length
+      ? data.consignments.map((c) => ({
+          truckIndex: c.truckIndex,
+          totalWeight: c.totalWeight,
+          unit: c.totalWeightUnit,
+          loadingLocationId: c.loadingLocationId ?? null,
+          unloadingLocationId: c.unloadingLocationId ?? null,
+          goods: (c.goods ?? []).length
+            ? {
+                create: (c.goods ?? []).map((g) => ({
+                  goodsId: g.goodsId,
+                  quantity: g.quantity,
+                })),
+              }
+            : undefined,
+        }))
+      : [];
+
+  // 3. Keep transaction small
+  const createdOrder = await db.$transaction(async (tx) => {
     const seq = await nextSequence(tx, fromBranch.branchCode, fyCode, "ORDER");
 
     const orderNumber = formatDocNumber(
@@ -184,6 +277,7 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
       seq,
       "SKO",
     );
+
     const created = await tx.order.create({
       data: {
         orderNumber,
@@ -205,37 +299,27 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
         status: "PendingApproval",
         fyCode,
         createdById: me,
-        items:
-          data.orderType === "Item" && data.items?.length
-            ? {
-                create: data.items.map((i) => ({
-                  goodsId: i.goodsId,
-                  quantity: i.quantity,
-                  unit: i.unit,
-                  weight: i.weight,
-                })),
-              }
-            : undefined,
-        consignments:
-          data.orderType === "Truck" && data.consignments?.length
-            ? {
-                create: data.consignments.map((c) => ({
-                  truckIndex: c.truckIndex,
-                  loadingLocationId: c.loadingLocationId ?? null,
-                  unloadingLocationId: c.unloadingLocationId ?? null,
-                  goods: {
-                    create: c.goods.map((g) => ({
-                      goodsId: g.goodsId,
-                      quantity: g.quantity,
-                      unit: g.unit,
-                      weight: g.weight,
-                    })),
-                  },
-                })),
-              }
-            : undefined,
+
+        items: itemCreates.length
+          ? {
+              create: itemCreates,
+            }
+          : undefined,
+
+        consignments: consignmentCreates.length
+          ? {
+              create: consignmentCreates,
+            }
+          : undefined,
       },
-      include: orderInclude,
+
+      // Important: no orderInclude inside transaction
+      select: {
+        id: true,
+        orderNumber: true,
+        fromBranchId: true,
+        createdById: true,
+      },
     });
 
     await writeOrderEvent(
@@ -249,6 +333,17 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
     return created;
   });
 
+  // 4. Fetch full order after transaction commit
+  const order = await db.order.findUnique({
+    where: { id: createdOrder.id },
+    include: orderInclude,
+  });
+
+  if (!order) {
+    throw new NotFoundError("Order not found after creation");
+  }
+
+  // 5. Notification stays outside transaction
   await publishNotificationEvent({
     eventType: "order.submitted",
     sourceModule: "order",
@@ -292,7 +387,7 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
     );
   }
 
-  const frozen = ["Cancelled", "InProgress", "Completed"];
+  const frozen = ["LRCreated", "Cancelled", "InProgress", "Completed"];
   if (frozen.includes(existing.status)) {
     throw new BadRequestError(`A ${existing.status} order cannot be edited`);
   }
@@ -303,7 +398,9 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
   }
   const data = parsed.data;
   const me = actorId(req);
-
+if (existing.status !== "Confirmed") {
+  assertEveryBookedTruckHasLRLine(data);
+}
   const isResubmit = existing.status === "Rejected";
 
   const updated = await db.$transaction(async (tx) => {
@@ -358,35 +455,37 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
         rejectionReason: isResubmit ? null : existing.rejectionReason,
         updatedById: me,
         version: { increment: 1 },
-        items:
-          data.orderType === "Item" && data.items?.length
+       items:
+  data.orderType === "Item" && data.items?.length
+    ? {
+        create: data.items.map((i) => ({
+          goodsId: i.goodsId,
+          quantity: i.quantity,
+
+        })),
+      }
+    : undefined,
+
+consignments:
+  data.orderType === "Truck" && data.consignments?.length
+    ? {
+        create: data.consignments.map((c) => ({
+          truckIndex: c.truckIndex,
+          totalWeight: c.totalWeight,
+          unit: c.totalWeightUnit,
+          loadingLocationId: c.loadingLocationId ?? null,
+          unloadingLocationId: c.unloadingLocationId ?? null,
+          goods: (c.goods ?? []).length
             ? {
-                create: data.items.map((i) => ({
-                  goodsId: i.goodsId,
-                  quantity: i.quantity,
-                  unit: i.unit,
-                  weight: i.weight,
+                create: (c.goods ?? []).map((g) => ({
+                  goodsId: g.goodsId,
+                  quantity: g.quantity,
                 })),
               }
             : undefined,
-        consignments:
-          data.orderType === "Truck" && data.consignments?.length
-            ? {
-                create: data.consignments.map((c) => ({
-                  truckIndex: c.truckIndex,
-                  loadingLocationId: c.loadingLocationId ?? null,
-                  unloadingLocationId: c.unloadingLocationId ?? null,
-                  goods: {
-                    create: c.goods.map((g) => ({
-                      goodsId: g.goodsId,
-                      quantity: g.quantity,
-                      unit: g.unit,
-                      weight: g.weight,
-                    })),
-                  },
-                })),
-              }
-            : undefined,
+        })),
+      }
+    : undefined,
       },
       include: orderInclude,
     });

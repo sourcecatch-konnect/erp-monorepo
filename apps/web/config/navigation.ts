@@ -5,6 +5,7 @@ import {
   IconFileBarcode,
   IconLayoutDashboard,
   IconReceipt2,
+  IconRoute,
   IconSettings,
   IconTrain,
   IconTruckDelivery,
@@ -69,11 +70,38 @@ export const NAV_SECTIONS: NavSection[] = [
         disabled: false,
       },
       {
-        title: "Operations",
-        href: "/operations",
-        icon: IconActivity,
-        disabled: true,
+        title: "Deliveries",
+        href: "/lorry-receipts/deliveries",
+        icon: IconTruckDelivery,
+        permission: PERMS.LORRY_RECEIPT.VIEW,
       },
+      {
+  title: "VP Management",
+  icon: IconTrain,
+  items: [
+    {
+      title: "VP Schedule",
+      href: "/vp-management/vp-schedule",
+      permission: PERMS.VP_SCHEDULE.VIEW,
+    },
+    {
+      title: "VP Loading",
+      href: "/vp-management/vp-loading",
+      permission: PERMS.VP_SCHEDULE.VIEW,
+      disabled: true,
+    },
+    {
+      title: "MR / RR",
+      href: "/vp-management/mrrr",
+      permission: PERMS.MRRR.VIEW,
+    },
+    {
+      title: "GRN At Rail Head",
+      href: "/vp-management/grn",
+      permission: PERMS.GRN.VIEW,
+    }
+  ],
+},
       {
         title: "E-Way Bills",
         icon: IconFileBarcode,
@@ -100,6 +128,12 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/trips",
         icon: IconTruckDelivery,
         permission: PERMS.TRIP.VIEW,
+      },
+      {
+        title: "Vehicle Journeys",
+        href: "/vehicle-journeys",
+        icon: IconRoute,
+        permission: PERMS.VEHICLE_JOURNEY.VIEW,
       },
       {
         title: "Wagon Tracking",
@@ -201,6 +235,11 @@ export const NAV_SECTIONS: NavSection[] = [
             title: "Goods",
             href: "/masters/goods",
             permission: PERMS.MASTERS.GOODS.VIEW,
+          },
+          {
+            title: "Units of Measure",
+            href: "/masters/unit-of-measure",
+            permission: PERMS.MASTERS.UNIT_OF_MEASURE.VIEW,
           },
           {
             title: "Pumps",

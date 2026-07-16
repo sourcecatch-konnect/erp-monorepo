@@ -1,0 +1,23 @@
+# Reverse proxy in front of web + server — the only container exposed to the
+# world. SITE_ADDRESS comes from .env:
+#   ":80"             → plain HTTP (IP-only access, no domain yet)
+#   "erp.example.com" → automatic HTTPS via Let's Encrypt
+
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# API — strip the /api prefix and hand to Express.
+	handle_path /api/* {
+		reverse_proxy server:5000
+	}
+
+	# socket.io — websocket upgrade + polling fallback.
+	handle /socket.io/* {
+		reverse_proxy server:5000
+	}
+
+	# Everything else — Next.js.
+	handle {
+		reverse_proxy web:3001
+	}
+}

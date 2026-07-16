@@ -54,13 +54,13 @@ export default function EditGroupDialog({ open, onOpenChange, group, isPending, 
     enabled: open,
   });
   const trips = useQuery({
-    queryKey: lrLookupKeys.attachableTrips,
-    queryFn: lrLookups.attachableTrips,
+    queryKey: lrLookupKeys.attachableTrips(group.consignorId),
+    queryFn: () => lrLookups.attachableTrips(group.consignorId),
     enabled: open,
   });
 
   const form = useForm<UpdateLRGroupBody>({
-    resolver: zodResolver(updateLRGroupSchema),
+    resolver: zodResolver(updateLRGroupSchema, undefined, { raw: true }),
     defaultValues: {
       consigneeId: group.consigneeId,
       transportType: group.transportType,
@@ -104,7 +104,11 @@ export default function EditGroupDialog({ open, onOpenChange, group, isPending, 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit group {group.groupNumber}</DialogTitle>
+          <DialogTitle>
+            {group.lorryReceipts?.length === 1
+              ? `Edit LR ${group.lorryReceipts[0]!.lrNumber}`
+              : `Edit group ${group.groupNumber}`}
+          </DialogTitle>
           <DialogDescription>
             Change the truck-level details. Add or remove LRs from the detail page.
           </DialogDescription>

@@ -18,7 +18,6 @@ import {
   IconMapPin,
   IconBuildingStore,
   IconCalendarCheck,
-  IconTruck,
   IconClockEdit,
   IconCirclePlus,
   IconFileDescription,
@@ -32,21 +31,27 @@ type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   id?: string | null;
+  data?: AgreementWithRelations;
+  isLoading?: boolean;
 };
 
 export default function AgreementDetailDialog({
   open,
   onOpenChange,
   id,
+  data: initialData,
+  isLoading: initialLoading = false,
 }: Props) {
   const detailQuery = useQuery({
     queryKey: id ? agreementKeys.detail(id) : ["agreement-detail-empty"],
     queryFn: () => agreementApi.detail(id!),
-    enabled: Boolean(open && id),
+    enabled: Boolean(open && id && !initialData),
   });
 
-  const data = detailQuery.data as AgreementWithRelations | undefined;
-  const isLoading = detailQuery.isLoading;
+  const data =
+    initialData ?? (detailQuery.data as AgreementWithRelations | undefined);
+
+  const isLoading = initialLoading || detailQuery.isLoading;
 
   const daysRemaining = getDaysRemaining(data?.expiryDate);
 

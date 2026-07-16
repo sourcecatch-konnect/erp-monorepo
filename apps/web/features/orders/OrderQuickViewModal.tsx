@@ -18,7 +18,8 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
-import { StatusBadge, formatDate, formatMoneyFromPaise } from "./order-ui";
+import { StatusBadge, formatDate } from "./order-ui";
+import { formatPaise } from "@/lib/money";
 import { IconArrowRight, IconBuildingWarehouse, IconFileText } from "@tabler/icons-react";
 
 function DetailLine({
@@ -52,6 +53,8 @@ const { data: order, isLoading } = useQuery({
   queryFn: () => orderApi.quickView(orderId as string),
   enabled: Boolean(open && orderId),
 });
+  const hasLRGroup =
+    Boolean(order?.hasLRGroup) || Number(order?.lrGroupCount ?? 0) > 0;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
@@ -121,7 +124,7 @@ const { data: order, isLoading } = useQuery({
 
   <DetailLine
     label="Freight"
-    value={formatMoneyFromPaise(order.bookingFreightAmount)}
+    value={formatPaise(order.bookingFreightAmount)}
   />
 
   <DetailLine
@@ -158,7 +161,13 @@ const { data: order, isLoading } = useQuery({
 
            <div className="flex items-center justify-between border-t pt-4">
   <div>
-    {canCreateLR && order.status === "Confirmed" && order.orderType === "Truck" ? (
+    {canCreateLR && order.orderType === "Truck" && hasLRGroup ? (
+      <Button size="sm" variant="outline" disabled>
+        <IconFileText size={14} className="mr-1.5" /> LR Already Created
+      </Button>
+    ) : canCreateLR &&
+      order.status === "Confirmed" &&
+      order.orderType === "Truck" ? (
       <Button
         size="sm"
         variant="outline"

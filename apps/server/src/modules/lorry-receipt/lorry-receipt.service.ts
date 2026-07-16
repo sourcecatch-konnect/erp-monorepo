@@ -12,6 +12,32 @@ type Tx = Prisma.TransactionClient;
  * Reuses the DocumentSequence table with docType "LR". Each LR in a group
  * gets its own number (one per consignment / invoice).
  */
+export const assertOrderLRGroupNotCreated = async (
+  tx: Tx,
+  orderId: string,
+  excludeId?: string,
+): Promise<void> => {
+  const existing = await tx.lRGroup.findFirst({
+    where: {
+      orderId,
+      deletedAt: null,
+      status: { not: "CANCELLED" },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: {
+      id: true,
+      groupNumber: true,
+      status: true,
+    },
+  });
+
+  if (existing) {
+    throw new BadRequestError(
+      `LR group is already created for this order: ${existing.groupNumber}`,
+      "LR_GROUP_ALREADY_CREATED_FOR_ORDER",
+    );
+  }
+};
 export const generateLRNumber = async (
   tx: Tx,
   branchCode: string,
@@ -108,6 +134,8 @@ export const lrListSelect = {
   loadingLocation: { select: locationSelect },
   unloadingLocation: { select: locationSelect },
   group: { select: groupRefSelect },
+  delivery: { select: { deliveredAt: true } },
+  acknowledgement: { select: { receivedAt: true } },
 } satisfies Prisma.LorryReceiptSelect;
 
 export const lrDetailInclude = {
@@ -116,6 +144,19 @@ export const lrDetailInclude = {
   group: { select: groupRefSelect },
   goods: true,
   ewayBill: true,
+  delivery: {
+    include: {
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
+      updatedBy: { select: { id: true, firstName: true, lastName: true } },
+    },
+  },
+  acknowledgement: {
+    include: {
+      items: true,
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
+      updatedBy: { select: { id: true, firstName: true, lastName: true } },
+    },
+  },
   createdBy: { select: { id: true, firstName: true, lastName: true } },
   updatedBy: { select: { id: true, firstName: true, lastName: true } },
 } satisfies Prisma.LorryReceiptInclude;
