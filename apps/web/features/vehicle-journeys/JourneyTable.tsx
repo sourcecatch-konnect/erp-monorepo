@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ColumnDef,
+  VisibilityState,
   flexRender,
   getCoreRowModel,
   useReactTable,
@@ -18,17 +19,30 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@skerp/ui/components/pagination";
-import { IconEye, IconDatabaseOff } from "@tabler/icons-react";
+  IconCoins,
+  IconEye,
+  IconMapPin,
+  IconRoad,
+  IconRoute,
+  IconTruck,
+  IconUser,
+} from "@tabler/icons-react";
 
+import { cn } from "@/lib/utils";
+import {
+  ColumnPickerPopover,
+  PIN_CELL_BG,
+  PIN_HEAD_BG,
+  SortHeader,
+  StatusTabs,
+  TableEmptyState,
+  TablePaginationFooter,
+  TableSearchInput,
+  pinStyle,
+  type ColumnMeta,
+} from "@/components/data-table";
 import {
   JourneyStatusBadge,
   JOURNEY_STATUS_ORDER,
@@ -47,8 +61,53 @@ type Props = {
   onSearchChange: (value: string) => void;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
+  sort: string;
+  onSortChange: (value: string) => void;
+  columnVisibility: VisibilityState;
+  onColumnVisibilityChange: React.Dispatch<
+    React.SetStateAction<VisibilityState>
+  >;
+  columnOrder: string[];
+  onColumnOrderChange: (order: string[]) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
+  onRowClick: (journey: VehicleJourney) => void;
+};
+
+/**
+ * The reorderable columns, in default order. Status/View stay pinned
+ * right — outside the user's control.
+ */
+export const DEFAULT_JOURNEY_COLUMN_ORDER = [
+  "journey",
+  "vehicle",
+  "driver",
+  "route",
+  "currentCity",
+  "km",
+  "settlement",
+] as const;
+
+const COLUMN_META: ColumnMeta = {
+  journey: { label: "Journey", icon: IconRoute },
+  vehicle: { label: "Vehicle", icon: IconTruck },
+  driver: { label: "Driver", icon: IconUser },
+  route: { label: "Route chain", icon: IconMapPin },
+  currentCity: { label: "Current city", icon: IconMapPin },
+  km: { label: "KM", icon: IconRoad },
+  settlement: { label: "Settlement", icon: IconCoins },
+};
+
+const SKELETON_WIDTHS: Record<string, string> = {
+  journey: "w-28",
+  vehicle: "w-24",
+  driver: "w-24",
+  route: "w-36",
+  currentCity: "w-20",
+  km: "w-20",
+  settlement: "w-20",
+  status: "w-24",
+  actions: "ml-auto w-8",
 };
 
 /** "Jalgaon → Pune → Howrah" built from the journey's ordered legs. */
@@ -78,16 +137,35 @@ export default function JourneyTable(props: Props) {
     onSearchChange,
     statusFilter,
     onStatusFilterChange,
+    sort,
+    onSortChange,
+    columnVisibility,
+    onColumnVisibilityChange,
+    columnOrder,
+    onColumnOrderChange,
     counts,
     isLoading,
+    onRowClick,
   } = props;
 
   const columns = React.useMemo<ColumnDef<VehicleJourney>[]>(
     () => [
       {
-        header: "Journey",
+        id: "journey",
+        header: () => (
+          <SortHeader
+            label="Journey"
+            field="startedAt"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
+        ),
         cell: ({ row }) => (
-          <Link href={`/vehicle-journeys/${row.original.id}`} className="block">
+          <Link
+            href={`/vehicle-journeys/${row.original.id}`}
+            className="block"
+            onClick={(e) => e.stopPropagation()}
+          >
             <span className="block font-medium text-primary hover:underline">
               {row.original.journeyNumber}
             </span>
@@ -98,29 +176,34 @@ export default function JourneyTable(props: Props) {
         ),
       },
       {
+        id: "vehicle",
         header: "Vehicle",
         cell: ({ row }) => row.original.vehicle?.vehicleNumber ?? "—",
       },
       {
+        id: "driver",
         header: "Driver",
         cell: ({ row }) => row.original.driver?.name ?? "—",
       },
       {
+        id: "route",
         header: "Route chain",
         cell: ({ row }) => (
           <span className="text-sm">{routeChain(row.original)}</span>
         ),
       },
       {
+        id: "currentCity",
         header: "Current city",
         cell: ({ row }) => row.original.currentCity?.name ?? "—",
       },
       {
+        id: "km",
         header: "KM",
         cell: ({ row }) => {
           const last = lastClosingKm(row.original);
           return (
-            <span className="whitespace-nowrap text-sm">
+            <span className="whitespace-nowrap text-sm tabular-nums">
               {row.original.openingKm}
               {last !== null ? ` → ${last}` : ""}
             </span>
@@ -128,10 +211,7 @@ export default function JourneyTable(props: Props) {
         },
       },
       {
-        header: "Status",
-        cell: ({ row }) => <JourneyStatusBadge status={row.original.status} />,
-      },
-      {
+        id: "settlement",
         header: "Settlement",
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground">
@@ -139,196 +219,180 @@ export default function JourneyTable(props: Props) {
           </span>
         ),
       },
+      {
+        id: "status",
+        header: "Status",
+        size: 140,
+        enableHiding: false,
+        cell: ({ row }) => <JourneyStatusBadge status={row.original.status} />,
+      },
+      {
+        id: "actions",
+        header: () => <span className="block text-right">View</span>,
+        size: 56,
+        enableHiding: false,
+        cell: ({ row }) => (
+          <div
+            className="flex items-center justify-end"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label="View journey"
+              asChild
+            >
+              <Link href={`/vehicle-journeys/${row.original.id}`}>
+                <IconEye size={16} />
+              </Link>
+            </Button>
+          </div>
+        ),
+      },
     ],
-    [],
+    [sort, onSortChange],
+  );
+
+  // Pinned columns keep their slots regardless of the user's order.
+  const tableColumnOrder = React.useMemo(
+    () => [...columnOrder, "status", "actions"],
+    [columnOrder],
   );
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    onColumnVisibilityChange,
+    state: {
+      columnPinning: { right: ["status", "actions"] },
+      columnVisibility,
+      columnOrder: tableColumnOrder,
+    },
   });
 
-  const pageCount = Math.max(1, Math.ceil(total / size));
-  const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
 
   return (
     <div className="w-full space-y-3">
-      {/* Status tabs */}
-      <div className="flex flex-wrap items-center gap-1">
-        {JOURNEY_STATUS_ORDER.map((tab) => {
-          const active = statusFilter === tab.key;
-          const count = counts[tab.key];
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => onStatusFilterChange(tab.key)}
-              className={`rounded-sm px-3 py-1.5 text-sm transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {tab.label}
-              {typeof count === "number" ? (
-                <span
-                  className={`ml-1.5 rounded-sm px-1 text-xs ${
-                    active
-                      ? "bg-primary-foreground/20"
-                      : "bg-muted-foreground/10"
-                  }`}
-                >
-                  {count}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <StatusTabs
+        tabs={JOURNEY_STATUS_ORDER}
+        active={statusFilter}
+        onChange={onStatusFilterChange}
+        counts={counts}
+        layoutId="journeys-status-tab"
+      />
 
-      <div className="relative w-full sm:max-w-sm">
-        <Input
-          placeholder="Search journey no., vehicle or driver..."
+      <div className="flex flex-wrap items-center gap-2">
+        <TableSearchInput
           value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
+          onChange={onSearchChange}
+          placeholder="Search journey no., vehicle or driver..."
+        />
+
+        <ColumnPickerPopover
+          columnOrder={columnOrder}
+          onColumnOrderChange={onColumnOrderChange}
+          columnVisibility={columnVisibility}
+          onColumnVisibilityChange={onColumnVisibilityChange}
+          columnMeta={COLUMN_META}
+          defaultOrder={DEFAULT_JOURNEY_COLUMN_ORDER}
         />
       </div>
 
-      <div className="w-full overflow-x-auto rounded-lg border bg-card">
-        <Table className="w-full">
-          <TableHeader>
-            {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id} className="bg-muted/40">
-                {hg.headers.map((h) => (
+      <Table className="bg-card">
+        <TableHeader>
+          {table.getHeaderGroups().map((hg) => (
+            <TableRow key={hg.id}>
+              {hg.headers.map((h) => {
+                const pinned = h.column.getIsPinned() === "right";
+                return (
                   <TableHead
                     key={h.id}
-                    className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
+                    style={pinStyle(h.column)}
+                    className={cn(
+                      "h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground",
+                      pinned && `sticky z-10 ${PIN_HEAD_BG}`,
+                      h.column.id === "status" && "border-l border-border",
+                    )}
                   >
                     {flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
-                ))}
-                <TableHead className="h-10 w-12 text-right text-xs font-semibold uppercase text-muted-foreground">
-                  View
-                </TableHead>
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 8 }).map((_, r) => (
-                <TableRow key={r}>
-                  {columns.map((_, c) => (
-                    <TableCell key={c} className="h-12">
-                      <Skeleton className="h-4 w-24" />
-                    </TableCell>
-                  ))}
-                  <TableCell className="w-12">
-                    <Skeleton className="ml-auto size-7 rounded-md" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : data.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length + 1}
-                  className="py-14 text-center text-muted-foreground"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-                      <IconDatabaseOff size={18} />
-                    </div>
-                    <span className="text-sm font-medium">
-                      No journeys found
-                    </span>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="hover:bg-muted/30">
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="h-12 text-sm">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                  <TableCell className="w-12 text-right">
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="View journey"
-                      asChild
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, r) => (
+              <TableRow key={r}>
+                {table.getVisibleLeafColumns().map((col) => {
+                  const pinned = col.getIsPinned() === "right";
+                  return (
+                    <TableCell
+                      key={col.id}
+                      style={pinStyle(col)}
+                      className={cn(
+                        "h-12",
+                        pinned && `sticky z-10 ${PIN_CELL_BG}`,
+                        col.id === "status" && "border-l border-border",
+                      )}
                     >
-                      <Link href={`/vehicle-journeys/${row.original.id}`}>
-                        <IconEye size={16} />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                      <Skeleton
+                        className={cn("h-4", SKELETON_WIDTHS[col.id] ?? "w-24")}
+                      />
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))
+          ) : data.length === 0 ? (
+            <TableEmptyState
+              colSpan={visibleColumnCount}
+              message="No journeys found"
+            />
+          ) : (
+            table.getRowModel().rows.map((row) => (
+              <TableRow
+                key={row.id}
+                className="group/row cursor-pointer"
+                onClick={() => onRowClick(row.original)}
+              >
+                {row.getVisibleCells().map((cell) => {
+                  const pinned = cell.column.getIsPinned() === "right";
+                  return (
+                    <TableCell
+                      key={cell.id}
+                      style={pinStyle(cell.column)}
+                      className={cn(
+                        "h-12 text-sm",
+                        pinned &&
+                          `sticky z-10 ${PIN_CELL_BG} transition-colors`,
+                        cell.column.id === "status" &&
+                          "border-l border-border",
+                      )}
+                    >
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
 
-      <div className="flex flex-col gap-3 border-t px-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <span>
-            {total === 0
-              ? "Showing 0"
-              : `Showing ${page * size + 1}-${Math.min((page + 1) * size, total)}`}{" "}
-            of {total}
-          </span>
-
-          <div className="flex items-center gap-2">
-            <span>Rows per page</span>
-            <select
-              value={size}
-              onChange={(e) => onSizeChange(Number(e.target.value))}
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-            >
-              {PAGE_SIZE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <span>
-            Page {page + 1} of {pageCount}
-          </span>
-        </div>
-
-        <Pagination className="mx-0 w-auto">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                href="#"
-                aria-disabled={page === 0}
-                className={page === 0 ? "pointer-events-none opacity-50" : ""}
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (page > 0) onPageChange(page - 1);
-                }}
-              />
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationNext
-                href="#"
-                aria-disabled={page + 1 >= pageCount}
-                className={
-                  page + 1 >= pageCount ? "pointer-events-none opacity-50" : ""
-                }
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (page + 1 < pageCount) onPageChange(page + 1);
-                }}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </div>
+      <TablePaginationFooter
+        total={total}
+        page={page}
+        size={size}
+        onPageChange={onPageChange}
+        onSizeChange={onSizeChange}
+      />
     </div>
   );
 }

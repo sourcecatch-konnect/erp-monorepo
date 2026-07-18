@@ -5,9 +5,18 @@ import type {
   TripLegType,
   TripStatus,
   TripExpenseStatus,
-  TripExpenseType,
 } from "@skerp/types";
+import {
+  IconArrowBackUp,
+  IconBan,
+  IconCircleCheck,
+  IconList,
+  IconReceipt,
+  IconRoute,
+} from "@tabler/icons-react";
+
 import { cn } from "@/lib/utils";
+import type { StatusTabDef } from "@/components/data-table";
 
 /* ------------------------------------------------------------------ */
 /* Journey status                                                     */
@@ -52,13 +61,13 @@ export function JourneyStatusBadge({
   );
 }
 
-export const JOURNEY_STATUS_ORDER: { key: string; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "ACTIVE", label: "Active" },
-  { key: "RETURNED", label: "Returned" },
-  { key: "READY_FOR_LOGSLIP", label: "Ready for Log Slip" },
-  { key: "SETTLED", label: "Settled" },
-  { key: "CANCELLED", label: "Cancelled" },
+export const JOURNEY_STATUS_ORDER: StatusTabDef[] = [
+  { key: "ALL", label: "All", icon: IconList },
+  { key: "ACTIVE", label: "Active", icon: IconRoute },
+  { key: "RETURNED", label: "Returned", icon: IconArrowBackUp },
+  { key: "READY_FOR_LOGSLIP", label: "Ready for Log Slip", icon: IconReceipt },
+  { key: "SETTLED", label: "Settled", icon: IconCircleCheck },
+  { key: "CANCELLED", label: "Cancelled", icon: IconBan },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -118,18 +127,6 @@ export const LEG_TYPE_LABELS: Record<TripLegType, string> = {
 /* ------------------------------------------------------------------ */
 /* Expense                                                            */
 /* ------------------------------------------------------------------ */
-
-export const EXPENSE_TYPE_LABELS: Record<TripExpenseType, string> = {
-  DIESEL: "Diesel",
-  TOLL: "Toll",
-  PARKING: "Parking",
-  FOOD: "Food",
-  REPAIR: "Repair",
-  FINE: "Fine",
-  LOADING: "Loading",
-  UNLOADING: "Unloading",
-  MISC: "Miscellaneous",
-};
 
 const EXPENSE_STATUS_STYLES: Record<TripExpenseStatus, string> = {
   DRAFT: "bg-amber-500/10 text-amber-700 border-amber-500/20",

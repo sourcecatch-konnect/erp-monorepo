@@ -59,6 +59,7 @@ const lrForAction = async (id: string) => {
           destinationBranchId: true,
           primaryTripId: true,
           secondaryTripId: true,
+          isMarketVehicle: true,
         },
       },
     },
@@ -272,7 +273,9 @@ router.post(
           reportedAt: input.reportedAt ?? null,
           receiverName: input.receiverName ?? null,
           receiverPhone: input.receiverPhone ?? null,
-          unloadingCharges: input.unloadingCharges ?? null,
+          unloadingCharges: lr.group.isMarketVehicle
+            ? (input.unloadingCharges ?? null)
+            : null,
           remark: input.remark ?? null,
           createdById: me,
         },
@@ -345,9 +348,11 @@ router.patch(
         ...(input.receiverPhone !== undefined
           ? { receiverPhone: input.receiverPhone ?? null }
           : {}),
-        ...(input.unloadingCharges !== undefined
-          ? { unloadingCharges: input.unloadingCharges ?? null }
-          : {}),
+        ...(lr.group.isMarketVehicle
+          ? input.unloadingCharges !== undefined
+            ? { unloadingCharges: input.unloadingCharges ?? null }
+            : {}
+          : { unloadingCharges: null }),
         ...(input.remark !== undefined ? { remark: input.remark ?? null } : {}),
         updatedById: me,
         version: { increment: 1 },

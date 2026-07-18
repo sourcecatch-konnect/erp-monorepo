@@ -101,6 +101,9 @@ export const updateTripSchema = z
 export const closeTripSchema = z.object({
   closingKm: positiveIntField("Closing KM"),
   endDateTime: optionalDate,
+  arrivalDateTime: optionalDate,
+  unloadingCompletedAt: optionalDate,
+  closeReason: optionalString,
 });
 
 export const cancelTripSchema = z.object({

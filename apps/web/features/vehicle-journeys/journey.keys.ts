@@ -19,4 +19,5 @@ export const journeyLookupKeys = {
   branches: ["lookup", "branches"] as const,
   pumps: ["lookup", "pumps"] as const,
   cashAccounts: ["lookup", "cash-accounts"] as const,
+  expenseTypes: ["lookup", "trip-expense-types"] as const,
 };

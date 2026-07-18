@@ -2206,14 +2206,11 @@ model VehicleJourney {
   @@index([status])
 }
 
-/// A journey/trip expense. Money events - never just a number on the trip.
-/// Cash expenses paid from the driver advance settle at log slip time;
-/// credit/card expenses are payables to the pump/vendor ledger.
 model TripExpense {
   id              String            @id @default(cuid())
   journeyId       String
   tripId          String?
-  expenseType     TripExpenseType
+  expenseTypeId   String
   amountPaise     BigInt
   paymentMode     TripPaymentMode
   cityId          String?
@@ -2222,7 +2219,6 @@ model TripExpense {
   dieselRatePaise BigInt?
   expenseDate     DateTime
   receiptNo       String?
-  // Paid out of the driver's cash advance (settles at log slip).
   paidByDriver    Boolean           @default(true)
   remarks         String?
   status          TripExpenseStatus @default(DRAFT)
@@ -2232,22 +2228,41 @@ model TripExpense {
   reversedById    String?
   reversedAt      DateTime?
   reverseReason   String?
-  // Set by the accounts posting service (Phase 6) — null until posted.
   journalEntryId  String?
   createdById     String
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   deletedAt       DateTime?
 
-  journey   VehicleJourney @relation(fields: [journeyId], references: [id])
-  trip      VehicleTrip?   @relation(fields: [tripId], references: [id])
-  city      City?          @relation("TripExpenseCity", fields: [cityId], references: [id])
-  pump      Pump?          @relation(fields: [pumpId], references: [id])
-  createdBy User           @relation("CreatedTripExpenses", fields: [createdById], references: [id])
+  journey     VehicleJourney  @relation(fields: [journeyId], references: [id])
+  trip        VehicleTrip?    @relation(fields: [tripId], references: [id])
+  expenseType TripExpenseType @relation(fields: [expenseTypeId], references: [id])
+  city        City?           @relation("TripExpenseCity", fields: [cityId], references: [id])
+  pump        Pump?           @relation(fields: [pumpId], references: [id])
+  createdBy   User            @relation("CreatedTripExpenses", fields: [createdById], references: [id])
 
   @@index([journeyId])
   @@index([tripId])
+  @@index([expenseTypeId])
   @@index([status])
+}
+
+/// Configurable journey expense category. System categories seed the standard
+/// ERP behaviour; users can add further categories without a code deployment.
+model TripExpenseType {
+  id                    String   @id @default(cuid())
+  code                  String   @unique
+  name                  String   @unique
+  requiresDieselDetails Boolean  @default(false)
+  isSystem              Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  expenses TripExpense[]
+
+  @@index([isActive, sortOrder])
 }
 
 /// Cash/bank/card advance handed to the driver for a journey. Settled against
@@ -2366,13 +2381,13 @@ model LogSlipLine {
 }
 
 model UnitOfMeasure {
-  id               String       @id @default(cuid())
-  code             String       @unique
-  name             String
-  category         UnitCategory
-  isActive         Boolean      @default(true)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  category  UnitCategory
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   orderConsignmentWeightUnits OrderConsignment[]      @relation("OrderConsignmentWeightUnit")
   orderGoodsQuantityUnits     OrderConsignmentGoods[] @relation("OrderGoodsQuantityUnit")
@@ -2431,18 +2446,6 @@ enum TripPaymentMode {
   CARD
   UPI
   CREDIT
-}
-
-enum TripExpenseType {
-  DIESEL
-  TOLL
-  PARKING
-  FOOD
-  REPAIR
-  FINE
-  LOADING
-  UNLOADING
-  MISC
 }
 
 enum TripExpenseStatus {

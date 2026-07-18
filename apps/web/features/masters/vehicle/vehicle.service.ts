@@ -3,6 +3,7 @@ import type {
   ApiResponse,
   Vehicle,
   CreateVehicleBody,
+  TripVehicleChoice,
   UpdateVehicleBody,
 } from "@skerp/types";
 import {
@@ -34,10 +35,7 @@ export const vehicleApi = {
     return unwrapApiResponse(res);
   },
 
-  update: async (
-    id: string,
-    body: UpdateVehicleBody
-  ): Promise<Vehicle> => {
+  update: async (id: string, body: UpdateVehicleBody): Promise<Vehicle> => {
     const res = await api.patch<ApiResponse<Vehicle>>(`/vehicles/${id}`, body);
 
     return unwrapApiResponse(res);
@@ -52,18 +50,16 @@ export const vehicleApi = {
   bulkRemove: async (ids: string[]) => {
     const res = await api.post<ApiResponse<{ count: number }>>(
       "/vehicles/bulk-delete",
-      { ids }
+      { ids },
     );
 
     return unwrapApiResponse(res);
   },
 
-  bulkImport: async (
-    rows: CreateVehicleBody[]
-  ): Promise<BulkImportResult> => {
+  bulkImport: async (rows: CreateVehicleBody[]): Promise<BulkImportResult> => {
     const res = await api.post<ApiResponse<BulkImportResult>>(
       "/vehicles/bulk-import",
-      { rows }
+      { rows },
     );
 
     return unwrapApiResponse(res);
@@ -98,11 +94,32 @@ export const vehicleApi = {
     };
 
     if (query?.search) params.search = query.search;
-    if (query?.ownershipType) params["filter[ownershipType]"] = query.ownershipType;
+    if (query?.ownershipType)
+      params["filter[ownershipType]"] = query.ownershipType;
 
     const res = await api.get<ApiResponse<Vehicle[]>>("/vehicles/lookup", {
       params,
     });
+
+    return unwrapListResponse(res);
+  },
+
+  tripOptions: async (query?: {
+    search?: string;
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<TripVehicleChoice>> => {
+    const params: Record<string, string | number> = {
+      page: query?.page ?? 0,
+      size: query?.size ?? 20,
+    };
+
+    if (query?.search) params.search = query.search;
+
+    const res = await api.get<ApiResponse<TripVehicleChoice[]>>(
+      "/vehicle-journeys/trip-vehicle-options",
+      { params },
+    );
 
     return unwrapListResponse(res);
   },

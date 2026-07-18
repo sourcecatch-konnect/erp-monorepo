@@ -193,13 +193,199 @@ router.get(
 /* ------------------------------------------------------------------ */
 /* Active journey for a vehicle (trip-form context)                   */
 /* ------------------------------------------------------------------ */
+router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
+  const query = parseListQuery(req);
+  const now = new Date();
+  const where: Prisma.VehicleWhereInput = {
+    ownershipType: "Own_Vehicle",
+    ...(query.search
+      ? {
+          vehicleNumber: {
+            contains: query.search,
+            mode: "insensitive" as const,
+          },
+        }
+      : {}),
+  };
+
+  const [vehicles, total] = await Promise.all([
+    db.vehicle.findMany({
+      where,
+      skip: query.page * query.size,
+      take: query.size,
+      orderBy: { vehicleNumber: "asc" },
+      select: {
+        id: true,
+        vehicleNumber: true,
+        status: true,
+        insuranceDueDate: true,
+        journeys: {
+          where: { deletedAt: null, status: "ACTIVE" },
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          select: {
+            journeyNumber: true,
+            currentCity: { select: { name: true } },
+            trips: {
+              where: { deletedAt: null, status: { not: "Cancelled" } },
+              take: 1,
+              orderBy: { sequenceNo: "desc" },
+              select: {
+                tripNumber: true,
+                sequenceNo: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    db.vehicle.count({ where }),
+  ]);
+
+  const data = vehicles.map((vehicle) => {
+    const journey = vehicle.journeys[0] ?? null;
+    const lastTrip = journey?.trips[0] ?? null;
+
+    const selectionState =
+      journey && lastTrip?.status === "Closed"
+        ? ("READY_FOR_NEXT_TRIP" as const)
+        : journey && lastTrip?.status === "Planned"
+          ? ("TRIP_PLANNED" as const)
+          : journey && lastTrip?.status === "InTransit"
+            ? ("IN_TRANSIT" as const)
+            : !journey &&
+                vehicle.insuranceDueDate &&
+                vehicle.insuranceDueDate < now
+              ? ("INSURANCE_EXPIRED" as const)
+              : !journey && vehicle.status === "AVAILABLE"
+                ? ("AVAILABLE_FOR_NEW_JOURNEY" as const)
+                : ("UNAVAILABLE" as const);
+
+    return {
+      id: vehicle.id,
+      vehicleNumber: vehicle.vehicleNumber,
+      status: vehicle.status,
+      selectionState,
+      selectable:
+        selectionState === "AVAILABLE_FOR_NEW_JOURNEY" ||
+        selectionState === "READY_FOR_NEXT_TRIP",
+      currentCityName: journey?.currentCity.name ?? null,
+      journeyNumber: journey?.journeyNumber ?? null,
+      lastTripNumber: lastTrip?.tripNumber ?? null,
+      lastTripSequenceNo: lastTrip?.sequenceNo ?? null,
+    };
+  });
+
+  return sendOk(res, data, {
+    page: query.page,
+    size: query.size,
+    total,
+  });
+});
+
+router.get("/trip-driver-options", can(PERMS.TRIP.VIEW), async (req, res) => {
+  const query = parseListQuery(req);
+  const where: Prisma.DriverWhereInput = query.search
+    ? {
+        OR: [
+          { name: { contains: query.search, mode: "insensitive" } },
+          { mobile: { contains: query.search, mode: "insensitive" } },
+          { licenseNo: { contains: query.search, mode: "insensitive" } },
+        ],
+      }
+    : {};
+
+  const [drivers, total] = await Promise.all([
+    db.driver.findMany({
+      where,
+      skip: query.page * query.size,
+      take: query.size,
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        onLeave: true,
+        blackListed: true,
+        journeys: {
+          where: { deletedAt: null, status: "ACTIVE" },
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          select: {
+            journeyNumber: true,
+            currentCity: { select: { name: true } },
+            vehicle: { select: { id: true, vehicleNumber: true } },
+            trips: {
+              where: { deletedAt: null, status: { not: "Cancelled" } },
+              take: 1,
+              orderBy: { sequenceNo: "desc" },
+              select: {
+                tripNumber: true,
+                sequenceNo: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    db.driver.count({ where }),
+  ]);
+
+  const data = drivers.map((driver) => {
+    const journey = driver.journeys[0] ?? null;
+    const lastTrip = journey?.trips[0] ?? null;
+
+    const selectionState = driver.blackListed
+      ? ("BLACKLISTED" as const)
+      : driver.onLeave
+        ? ("ON_LEAVE" as const)
+        : journey && lastTrip?.status === "Closed"
+          ? ("ASSIGNED_READY_FOR_NEXT_TRIP" as const)
+          : journey && lastTrip?.status === "Planned"
+            ? ("TRIP_PLANNED" as const)
+            : journey && lastTrip?.status === "InTransit"
+              ? ("IN_TRANSIT" as const)
+              : !journey && driver.status === "AVAILABLE"
+                ? ("AVAILABLE_FOR_NEW_JOURNEY" as const)
+                : ("UNAVAILABLE" as const);
+
+    return {
+      id: driver.id,
+      name: driver.name,
+      status: driver.status,
+      selectionState,
+      selectable:
+        selectionState === "AVAILABLE_FOR_NEW_JOURNEY" ||
+        selectionState === "ASSIGNED_READY_FOR_NEXT_TRIP",
+      vehicleId: journey?.vehicle.id ?? null,
+      currentCityName: journey?.currentCity.name ?? null,
+      journeyNumber: journey?.journeyNumber ?? null,
+      vehicleNumber: journey?.vehicle.vehicleNumber ?? null,
+      lastTripNumber: lastTrip?.tripNumber ?? null,
+      lastTripSequenceNo: lastTrip?.sequenceNo ?? null,
+    };
+  });
+
+  return sendOk(res, data, {
+    page: query.page,
+    size: query.size,
+    total,
+  });
+});
+
 router.get("/active", can(PERMS.TRIP.VIEW), async (req, res) => {
   const vehicleId =
     typeof req.query.vehicleId === "string" ? req.query.vehicleId : "";
   if (!vehicleId) throw new BadRequestError("vehicleId is required");
 
-  const [headOffice, journey] = await Promise.all([
+  const [headOffice, vehicle, journey] = await Promise.all([
     getHeadOffice(),
+    db.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { currentKM: true },
+    }),
     db.vehicleJourney.findFirst({
       where: { vehicleId, deletedAt: null, status: "ACTIVE" },
       select: {
@@ -235,6 +421,9 @@ router.get("/active", can(PERMS.TRIP.VIEW), async (req, res) => {
 
   return sendOk(res, {
     headOffice,
+    // New journeys must open at or above the odometer — surfaced so the form
+    // can validate opening KM on blur instead of failing at save time.
+    vehicleCurrentKm: vehicle?.currentKM ?? null,
     journey: journey
       ? {
           id: journey.id,

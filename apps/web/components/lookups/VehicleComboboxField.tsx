@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { FieldValues, Path, useFormContext } from "react-hook-form";
-import type { Vehicle } from "@skerp/types";
+import type { TripVehicleChoice, Vehicle } from "@skerp/types";
 import type { ComboboxOption } from "@skerp/ui/components/combobox";
 
 import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
@@ -16,7 +16,8 @@ const PAGE_SIZE = 20;
 type VehicleOwnershipFilter = Vehicle["ownershipType"] | "all";
 
 export type VehicleComboboxOption = ComboboxOption & {
-  vehicle: Vehicle;
+  vehicle?: Vehicle;
+  tripChoice?: TripVehicleChoice;
 };
 
 type BadgeTone = NonNullable<ComboboxOption["badgeTone"]>;
@@ -30,6 +31,7 @@ type Props<TFormValues extends FieldValues> = {
   required?: boolean;
   disabled?: boolean;
   ownershipType?: VehicleOwnershipFilter;
+  selectionContext?: "default" | "trip";
   showStatusBadge?: boolean;
   getBadge?: (vehicle: Vehicle) => string | undefined;
   getBadgeTone?: (vehicle: Vehicle) => BadgeTone | undefined;
@@ -54,6 +56,71 @@ const defaultStatusTone = (vehicle: Vehicle): BadgeTone | undefined => {
   return tones[vehicle.status];
 };
 
+const tripChoiceBadge = (choice: TripVehicleChoice) => {
+  const badges: Record<TripVehicleChoice["selectionState"], string> = {
+    AVAILABLE_FOR_NEW_JOURNEY: "Available",
+    READY_FOR_NEXT_TRIP: "Ready for next trip",
+    TRIP_PLANNED: "Trip planned",
+    IN_TRANSIT: "In transit",
+    INSURANCE_EXPIRED: "Insurance expired",
+    UNAVAILABLE: "Unavailable",
+  };
+
+  return badges[choice.selectionState];
+};
+
+const tripChoiceTone = (choice: TripVehicleChoice): BadgeTone => {
+  if (choice.selectionState === "AVAILABLE_FOR_NEW_JOURNEY") return "success";
+  if (choice.selectionState === "READY_FOR_NEXT_TRIP") return "info";
+  if (
+    choice.selectionState === "INSURANCE_EXPIRED" ||
+    choice.selectionState === "UNAVAILABLE"
+  ) {
+    return "danger";
+  }
+  return "warning";
+};
+
+const tripChoiceHint = (choice: TripVehicleChoice) => {
+  const location = choice.currentCityName
+    ? `At ${choice.currentCityName}`
+    : null;
+  const journey = choice.journeyNumber
+    ? `Journey ${choice.journeyNumber}`
+    : null;
+
+  if (choice.selectionState === "AVAILABLE_FOR_NEW_JOURNEY") {
+    return "Starts a new journey";
+  }
+  if (choice.selectionState === "READY_FOR_NEXT_TRIP") {
+    return [
+      location,
+      journey,
+      choice.lastTripNumber
+        ? `${choice.lastTripNumber} closed`
+        : choice.lastTripSequenceNo
+          ? `trip ${choice.lastTripSequenceNo} closed`
+          : "previous trip closed",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (choice.selectionState === "TRIP_PLANNED") {
+    return [location, journey, "dispatch or cancel the planned trip first"]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (choice.selectionState === "IN_TRANSIT") {
+    return [journey, "current trip must be closed first"]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (choice.selectionState === "INSURANCE_EXPIRED") {
+    return "Renew the vehicle insurance before assigning it";
+  }
+  return "Not eligible for another trip";
+};
+
 export default function VehicleComboboxField<TFormValues extends FieldValues>({
   name,
   label = "Vehicle",
@@ -63,6 +130,7 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
   required,
   disabled,
   ownershipType = "Own_Vehicle",
+  selectionContext = "default",
   showStatusBadge = true,
   getBadge,
   getBadgeTone,
@@ -96,7 +164,29 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
 
       return lastPage.data.length === PAGE_SIZE ? allPages.length : undefined;
     },
-    enabled: !disabled,
+    enabled: selectionContext === "default" && !disabled,
+  });
+
+  const tripChoices = useInfiniteQuery({
+    queryKey: [...vehicleKeys.all, "trip-options", { search: debouncedSearch }],
+    queryFn: ({ pageParam = 0 }) =>
+      vehicleApi.tripOptions({
+        page: pageParam,
+        size: PAGE_SIZE,
+        search: debouncedSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+
+      if (typeof total === "number") {
+        return loaded < total ? allPages.length : undefined;
+      }
+
+      return lastPage.data.length === PAGE_SIZE ? allPages.length : undefined;
+    },
+    enabled: selectionContext === "trip" && !disabled,
   });
 
   const selectedVehicle = useQuery({
@@ -106,6 +196,38 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
   });
 
   const options = React.useMemo<VehicleComboboxOption[]>(() => {
+    if (selectionContext === "trip") {
+      const choices =
+        tripChoices.data?.pages.flatMap((page) => page.data) ?? [];
+      const contextualOptions: VehicleComboboxOption[] = choices.map(
+        (choice) => ({
+          value: choice.id,
+          label: choice.vehicleNumber,
+          hint: tripChoiceHint(choice),
+          badge: tripChoiceBadge(choice),
+          badgeTone: tripChoiceTone(choice),
+          disabled: !choice.selectable,
+          tripChoice: choice,
+        }),
+      );
+
+      const selected = selectedVehicle.data ?? null;
+      if (
+        selected &&
+        !contextualOptions.some((option) => option.value === selected.id)
+      ) {
+        contextualOptions.unshift({
+          value: selected.id,
+          label: selected.vehicleNumber,
+          badge: defaultStatusBadge(selected),
+          badgeTone: defaultStatusTone(selected),
+          vehicle: selected,
+        });
+      }
+
+      return contextualOptions;
+    }
+
     const list = vehicles.data?.pages.flatMap((page) => page.data) ?? [];
     const selected = selectedVehicle.data ?? null;
 
@@ -130,10 +252,14 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
     getBadge,
     getBadgeTone,
     getHint,
+    selectionContext,
     selectedVehicle.data,
     showStatusBadge,
+    tripChoices.data,
     vehicles.data,
   ]);
+
+  const activeQuery = selectionContext === "trip" ? tripChoices : vehicles;
 
   return (
     <ComboboxField<TFormValues>
@@ -145,16 +271,16 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
       searchPlaceholder={searchPlaceholder}
       emptyText={
         emptyText ??
-        (vehicles.isLoading ? "Loading vehicles..." : "No vehicles found")
+        (activeQuery.isLoading ? "Loading vehicles..." : "No vehicles found")
       }
       disabled={disabled}
       searchValue={search}
       onSearchChange={setSearch}
-      hasMore={Boolean(vehicles.hasNextPage)}
-      isLoadingMore={vehicles.isFetchingNextPage}
+      hasMore={Boolean(activeQuery.hasNextPage)}
+      isLoadingMore={activeQuery.isFetchingNextPage}
       onScrollEnd={() => {
-        if (vehicles.hasNextPage && !vehicles.isFetchingNextPage) {
-          vehicles.fetchNextPage();
+        if (activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
+          activeQuery.fetchNextPage();
         }
       }}
     />

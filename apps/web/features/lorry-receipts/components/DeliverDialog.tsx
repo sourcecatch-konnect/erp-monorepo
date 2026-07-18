@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
-import { IconPaperclip, IconX } from "@tabler/icons-react";
+import { IconInfoCircle, IconPaperclip, IconX } from "@tabler/icons-react";
 
 import { MoneyField, FieldLabel } from "./moneyField";
 
@@ -25,6 +25,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lrNumber: string;
+  isMarketVehicle: boolean;
   /** "deliver" creates the record; "edit" updates an existing one. */
   mode: "deliver" | "edit";
   initial?: LRDelivery | null;
@@ -73,6 +74,7 @@ export default function DeliverDialog({
   open,
   onOpenChange,
   lrNumber,
+  isMarketVehicle,
   mode,
   initial,
   isPending,
@@ -179,10 +181,27 @@ export default function DeliverDialog({
               </div>
             </div>
 
-            <MoneyField<DeliverLRFormInput>
-              name="unloadingCharges"
-              label="Unloading charges (hamali)"
-            />
+            {isMarketVehicle ? (
+              <section className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+                <div className="flex gap-2 text-amber-900">
+                  <IconInfoCircle size={18} className="mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      Market vehicle settlement
+                    </p>
+                    <p className="text-xs leading-5 text-amber-800">
+                      Record the unloading amount paid on the road for this
+                      market vehicle. Own-fleet deliveries do not ask for this
+                      charge.
+                    </p>
+                  </div>
+                </div>
+                <MoneyField<DeliverLRFormInput>
+                  name="unloadingCharges"
+                  label="Unloading charge paid"
+                />
+              </section>
+            ) : null}
 
             <div>
               <FieldLabel>Remark</FieldLabel>

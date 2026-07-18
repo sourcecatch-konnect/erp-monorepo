@@ -4,11 +4,38 @@ import { BadRequestError, NotFoundError } from "../../lib/error.js";
 
 /** Hydrated expense row for lists and mutation responses. */
 export const tripExpenseInclude = {
+  expenseType: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      requiresDieselDetails: true,
+      isSystem: true,
+      isActive: true,
+      sortOrder: true,
+    },
+  },
   city: { select: { id: true, name: true } },
   pump: { select: { id: true, name: true } },
   trip: { select: { id: true, tripNumber: true, sequenceNo: true } },
   createdBy: { select: { id: true, firstName: true, lastName: true } },
 } satisfies Prisma.TripExpenseInclude;
+
+export const loadActiveExpenseType = async (
+  expenseTypeId: string,
+  dieselQty?: number,
+) => {
+  const expenseType = await db.tripExpenseType.findFirst({
+    where: { id: expenseTypeId, isActive: true },
+  });
+  if (!expenseType) throw new BadRequestError("Expense type is not available");
+  if (expenseType.requiresDieselDetails && !dieselQty) {
+    throw new BadRequestError(
+      "Diesel quantity is required for a diesel expense",
+    );
+  }
+  return expenseType;
+};
 
 /** Hydrated advance row for lists and mutation responses. */
 export const driverAdvanceInclude = {

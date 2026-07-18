@@ -35,17 +35,18 @@ function InfoField({
   value: React.ReactNode;
 }) {
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {label}
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-semibold leading-6 text-foreground">
+        {value ?? "—"}
       </p>
-      <p className="text-sm font-medium">{value ?? "—"}</p>
     </div>
   );
 }
 
 type Props = {
   lr: LorryReceipt;
+  isMarketVehicle: boolean;
   canDeliver: boolean;
   canAcknowledge: boolean;
   onDeliver: () => void;
@@ -62,6 +63,7 @@ type Props = {
  */
 export default function DeliverySection({
   lr,
+  isMarketVehicle,
   canDeliver,
   canAcknowledge,
   onDeliver,
@@ -77,9 +79,9 @@ export default function DeliverySection({
   if (lr.status === "FINALISED") {
     if (!canDeliver) return null;
     return (
-      <div className="mt-3 border-t pt-3">
-        <Button size="sm" variant="outline" onClick={onDeliver}>
-          <IconTruckDelivery size={14} className="mr-1" /> Mark delivered
+      <div className="mt-5 border-t border-border pt-5">
+        <Button variant="outline" onClick={onDeliver}>
+          <IconTruckDelivery size={16} /> Mark delivered
         </Button>
       </div>
     );
@@ -88,12 +90,12 @@ export default function DeliverySection({
   if (!delivery) return null;
 
   return (
-    <div className="mt-3 space-y-3 border-t pt-3">
-      <div className="rounded-md bg-sky-500/5 p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase text-sky-700">
-            <IconTruckDelivery size={13} /> Delivered
-          </p>
+    <div className="mt-5 space-y-4 border-t border-border pt-5">
+      <section className="rounded-md border border-success/30 bg-success/5 p-4">
+        <div className="mb-4 flex items-center justify-between border-b border-success/20 pb-3">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <IconTruckDelivery size={17} className="text-success" /> Delivered
+          </h3>
           <div className="flex gap-1">
             {canDeliver && (
               <Button
@@ -108,9 +110,8 @@ export default function DeliverySection({
             {canDeliver && !ack && (
               <Button
                 size="icon-sm"
-                variant="ghost"
+                variant="destructive"
                 aria-label="Undo delivery"
-                className="text-red-600 hover:bg-red-50"
                 onClick={onUndoDelivery}
               >
                 <IconArrowBackUp size={14} />
@@ -118,7 +119,7 @@ export default function DeliverySection({
             )}
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3">
           <InfoField
             label="Delivered at"
             value={formatDateTime(delivery.deliveredAt)}
@@ -137,14 +138,16 @@ export default function DeliverySection({
                 : "—"
             }
           />
-          <InfoField
-            label="Unloading charges"
-            value={
-              delivery.unloadingCharges != null
-                ? formatPaise(delivery.unloadingCharges)
-                : "—"
-            }
-          />
+          {isMarketVehicle && (
+            <InfoField
+              label="Unloading charge paid"
+              value={
+                delivery.unloadingCharges != null
+                  ? formatPaise(delivery.unloadingCharges)
+                  : "—"
+              }
+            />
+          )}
           <InfoField
             label="Recorded by"
             value={
@@ -156,7 +159,7 @@ export default function DeliverySection({
           <InfoField label="Remark" value={delivery.remark ?? "—"} />
         </div>
         <div className="mt-3">
-          <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
             POD photos
           </p>
           <AttachmentPanel
@@ -165,14 +168,15 @@ export default function DeliverySection({
             entityId={delivery.id}
           />
         </div>
-      </div>
+      </section>
 
       {ack ? (
-        <div className="rounded-md bg-violet-500/5 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase text-violet-700">
-              <IconClipboardCheck size={13} /> POD received
-            </p>
+        <section className="rounded-md border border-primary/25 bg-primary/5 p-4">
+          <div className="mb-4 flex items-center justify-between border-b border-primary/15 pb-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <IconClipboardCheck size={17} className="text-primary" /> POD
+              received
+            </h3>
             {canAcknowledge && (
               <div className="flex gap-1">
                 <Button
@@ -185,9 +189,8 @@ export default function DeliverySection({
                 </Button>
                 <Button
                   size="icon-sm"
-                  variant="ghost"
+                  variant="destructive"
                   aria-label="Undo acknowledgement"
-                  className="text-red-600 hover:bg-red-50"
                   onClick={onUndoAcknowledgement}
                 >
                   <IconArrowBackUp size={14} />
@@ -195,11 +198,8 @@ export default function DeliverySection({
               </div>
             )}
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <InfoField
-              label="Received"
-              value={formatDate(ack.receivedAt)}
-            />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <InfoField label="Received" value={formatDate(ack.receivedAt)} />
             <InfoField
               label="Courier"
               value={
@@ -231,7 +231,7 @@ export default function DeliverySection({
             <InfoField label="Remark" value={ack.remark ?? "—"} />
           </div>
           <div className="mt-3">
-            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
               POD scans
             </p>
             <AttachmentPanel
@@ -240,11 +240,11 @@ export default function DeliverySection({
               entityId={ack.id}
             />
           </div>
-        </div>
+        </section>
       ) : (
         canAcknowledge && (
-          <Button size="sm" variant="outline" onClick={onAcknowledge}>
-            <IconClipboardCheck size={14} className="mr-1" /> Acknowledge POD
+          <Button variant="outline" onClick={onAcknowledge}>
+            <IconClipboardCheck size={16} /> Acknowledge POD
           </Button>
         )
       )}

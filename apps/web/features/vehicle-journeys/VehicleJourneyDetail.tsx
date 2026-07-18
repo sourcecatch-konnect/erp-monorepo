@@ -491,7 +491,7 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                         {formatDateTime(expense.expenseDate)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {expense.expenseType}
+                        {expense.expenseType.name}
                         <span className="block text-xs text-muted-foreground">
                           {expense.pump?.name ?? expense.city?.name ?? ""}
                           {expense.remarks ? ` · ${expense.remarks}` : ""}

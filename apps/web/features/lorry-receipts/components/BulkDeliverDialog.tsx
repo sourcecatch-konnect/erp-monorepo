@@ -10,6 +10,7 @@ import { Input } from "@skerp/ui/components/input";
 import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Textarea } from "@skerp/ui/components/textarea";
 import { Checkbox } from "@skerp/ui/components/checkbox";
+import { IconInfoCircle } from "@tabler/icons-react";
 import {
   Sheet,
   SheetContent,
@@ -31,6 +32,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   groupNumber: string;
+  isMarketVehicle: boolean;
   /** FINALISED (not-yet-delivered) LRs of the group. */
   lrs: PendingLr[];
   isPending: boolean;
@@ -69,6 +71,7 @@ export default function BulkDeliverDialog({
   open,
   onOpenChange,
   groupNumber,
+  isMarketVehicle,
   lrs,
   isPending,
   onConfirm,
@@ -101,10 +104,16 @@ export default function BulkDeliverDialog({
         className="h-screen w-full overflow-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
       >
         <SheetHeader className="shrink-0 border-b">
-          <SheetTitle>Deliver group {groupNumber}</SheetTitle>
+          <SheetTitle>
+            {lrs.length === 1
+              ? `Deliver LR ${lrs[0]!.lrNumber}`
+              : `Deliver group ${groupNumber} — ${lrs.length} LRs`}
+          </SheetTitle>
           <SheetDescription>
-            Shared delivery details apply to every selected LR; unloading
-            charges and remark can be overridden per LR.
+            Shared delivery details apply to every selected LR
+            {isMarketVehicle
+              ? "; market-vehicle unloading charges and remarks can be overridden per LR."
+              : "; remarks can be overridden per LR."}
           </SheetDescription>
         </SheetHeader>
 
@@ -161,10 +170,22 @@ export default function BulkDeliverDialog({
                   className="h-9"
                 />
               </div>
-              <MoneyField<DeliverGroupFormInput>
-                name="unloadingCharges"
-                label="Unloading charges (shared)"
-              />
+              {isMarketVehicle ? (
+                <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-3 sm:col-span-2">
+                  <div className="flex gap-2 text-amber-900">
+                    <IconInfoCircle size={17} className="mt-0.5 shrink-0" />
+                    <p className="text-xs leading-5">
+                      This is a market vehicle. Enter the road unloading amount
+                      once for all selected LRs, or override it below where the
+                      charge differs.
+                    </p>
+                  </div>
+                  <MoneyField<DeliverGroupFormInput>
+                    name="unloadingCharges"
+                    label="Shared unloading charge paid"
+                  />
+                </div>
+              ) : null}
               <div>
                 <FieldLabel>Remark (shared)</FieldLabel>
                 <Textarea {...form.register("remark")} rows={1} />
@@ -205,10 +226,12 @@ export default function BulkDeliverDialog({
                     </div>
                     {checked && (
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <MoneyField<DeliverGroupFormInput>
-                          name={`lrs.${idx}.unloadingCharges`}
-                          label="Unloading charges (override)"
-                        />
+                        {isMarketVehicle ? (
+                          <MoneyField<DeliverGroupFormInput>
+                            name={`lrs.${idx}.unloadingCharges`}
+                            label="Unloading charge override"
+                          />
+                        ) : null}
                         <div>
                           <FieldLabel>Remark (override)</FieldLabel>
                           <Input

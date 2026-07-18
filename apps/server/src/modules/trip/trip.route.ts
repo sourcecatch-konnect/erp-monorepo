@@ -29,6 +29,7 @@ import {
 } from "../../lib/error.js";
 import {
   buildTripName,
+  summariseTripCargo,
   tripInclude,
   tripListBaseSelect,
   tripListRelationSelects,
@@ -279,13 +280,11 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
     db.vehicleTrip.count({ where }),
   ]);
 
-  // Flatten the delivery-gate relations to a single count the web can gate
-  // the Close action on (see tripListBaseSelect).
+  // Flatten the group relations into the Close gate count + the cargo-line
+  // summary (see tripListBaseSelect / summariseTripCargo).
   const rows = data.map(({ primaryGroups, secondaryGroups, ...trip }) => ({
     ...trip,
-    undeliveredLrCount:
-      primaryGroups.reduce((n, g) => n + g._count.lorryReceipts, 0) +
-      secondaryGroups.reduce((n, g) => n + g._count.lorryReceipts, 0),
+    ...summariseTripCargo(primaryGroups, secondaryGroups),
   }));
 
   return sendOk(res, rows, { page: query.page, size: query.size, total });
@@ -320,7 +319,12 @@ router.get("/:id", can(PERMS.TRIP.VIEW), async (req, res) => {
     include: tripInclude,
   });
   if (!trip) throw new NotFoundError("Trip not found");
-  return sendOk(res, trip);
+  // Same cargo fields the list rows carry — the detail page gates Close and
+  // renders the cargo chip off them.
+  return sendOk(res, {
+    ...trip,
+    ...summariseTripCargo(trip.primaryGroups, trip.secondaryGroups),
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -879,8 +883,6 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   });
   if (!existing) throw new NotFoundError("Trip not found");
 
-  assertNotJourneyLeg(existing);
-
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
   }
@@ -892,7 +894,7 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   if (blockers.length > 0) {
     throw new BadRequestError(
       `Cannot close trip — ${blockers.length} LR(s) not delivered: ${blockers.join(", ")}. ` +
-        "Mark them delivered or hold the group at hub.",
+        "Finalise and deliver them, or hold the group at hub.",
       "TRIP_CLOSE_UNDELIVERED_LRS",
     );
   }
@@ -947,7 +949,13 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
     if (!parsed.success) {
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
-    const { closingKm, endDateTime } = parsed.data;
+    const {
+      closingKm,
+      endDateTime,
+      arrivalDateTime,
+      unloadingCompletedAt,
+      closeReason,
+    } = parsed.data;
 
     if (closingKm < existing.openingKm) {
       throw new BadRequestError(
@@ -955,13 +963,19 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
       );
     }
 
+    const closedAt = endDateTime ?? new Date();
+
     await db.$transaction(async (tx) => {
       await tx.vehicleTrip.update({
         where: { id },
         data: {
           status: "Closed",
           closingKm,
-          endDateTime: endDateTime ?? new Date(),
+          endDateTime: closedAt,
+          arrivalDateTime: arrivalDateTime ?? closedAt,
+          unloadingCompletedAt: unloadingCompletedAt ?? null,
+          closedById: me,
+          closeReason: closeReason ?? null,
           updatedById: me,
           version: { increment: 1 },
         },

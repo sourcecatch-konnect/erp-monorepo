@@ -5,10 +5,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconPlus } from "@tabler/icons-react";
+import { IconFileInvoice, IconPlus } from "@tabler/icons-react";
 
 import { addEwayBillSchema } from "@skerp/validators/lorry-receipt";
-import type { AddEwayBillFormInput, AddEwayBillBody, EwayBill } from "@skerp/types";
+import type {
+  AddEwayBillFormInput,
+  AddEwayBillBody,
+  EwayBill,
+} from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
@@ -59,7 +63,12 @@ function addDaysToDate(dateValue: string, days: number) {
 
   return formatDateInput(date);
 }
-export default function EwayBillSection({ lrId, groupId, ewayBill, canAdd }: Props) {
+export default function EwayBillSection({
+  lrId,
+  groupId,
+  ewayBill,
+  canAdd,
+}: Props) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = React.useState(false);
 
@@ -75,7 +84,8 @@ export default function EwayBillSection({ lrId, groupId, ewayBill, canAdd }: Pro
   });
 
   const add = useMutation({
-    mutationFn: (body: AddEwayBillBody) => lorryReceiptApi.addEwayBill(lrId, body),
+    mutationFn: (body: AddEwayBillBody) =>
+      lorryReceiptApi.addEwayBill(lrId, body),
     onSuccess: () => {
       toast.success("E-way bill added");
       setAddOpen(false);
@@ -89,24 +99,26 @@ export default function EwayBillSection({ lrId, groupId, ewayBill, canAdd }: Pro
   });
 
   const onSubmit = (values: AddEwayBillBody) => add.mutate(values);
-const today = React.useMemo(() => formatDateInput(new Date()), []);
+  const today = React.useMemo(() => formatDateInput(new Date()), []);
 
-const tomorrow = React.useMemo(() => {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
+  const tomorrow = React.useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
 
-  return formatDateInput(date);
-}, []);
+    return formatDateInput(date);
+  }, []);
 
-const generatedAt = form.watch("generatedAt") as unknown as string;
+  const generatedAt = form.watch("generatedAt") as unknown as string;
 
-const minimumExpiryDate = generatedAt
-  ? addDaysToDate(generatedAt, 1)
-  : tomorrow;
+  const minimumExpiryDate = generatedAt
+    ? addDaysToDate(generatedAt, 1)
+    : tomorrow;
   return (
-    <div className="space-y-3">
+    <div className="mt-5 space-y-3 border-t border-border pt-5">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase text-muted-foreground">E-Way Bill</p>
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <IconFileInvoice size={17} className="text-primary" /> E-way bill
+        </h3>
         {canAdd && !ewayBill && (
           <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
             <IconPlus size={14} className="mr-1" /> Add
@@ -115,18 +127,22 @@ const minimumExpiryDate = generatedAt
       </div>
 
       {!ewayBill ? (
-        <p className="text-sm text-muted-foreground">No e-way bill.</p>
+        <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          No e-way bill has been added to this LR.
+        </div>
       ) : (
-        <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+        <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm">
           <div className="flex items-center justify-between gap-3">
-            <span className="font-medium">{ewayBill.ewayBillNo}</span>
+            <span className="font-mono text-base font-semibold">
+              {ewayBill.ewayBillNo}
+            </span>
             <span
-              className={`text-xs ${new Date(ewayBill.expiresAt) < new Date() ? "text-red-600" : "text-muted-foreground"}`}
+              className={`rounded-sm px-2 py-1 text-xs font-semibold ${new Date(ewayBill.expiresAt) < new Date() ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}
             >
               Expires {formatDate(ewayBill.expiresAt)}
             </span>
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">
+          <div className="mt-2 text-sm text-muted-foreground">
             Generated {formatDate(ewayBill.generatedAt)}
             {ewayBill.generatedBy ? ` by ${ewayBill.generatedBy}` : ""}
           </div>
@@ -137,95 +153,107 @@ const minimumExpiryDate = generatedAt
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add E-Way Bill</DialogTitle>
-            <DialogDescription>Add a new or extended e-way bill to this LR.</DialogDescription>
+            <DialogDescription>
+              Add a new or extended e-way bill to this LR.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                E-way bill number <span className="text-red-600">*</span>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                E-way bill number <span className="text-destructive">*</span>
               </label>
-              <Input {...form.register("ewayBillNo")} placeholder="12-digit number" className="h-9" />
+              <Input
+                {...form.register("ewayBillNo")}
+                placeholder="12-digit number"
+                className="h-9"
+              />
               {form.formState.errors.ewayBillNo?.message && (
-                <p className="mt-1 text-xs text-red-600">{form.formState.errors.ewayBillNo.message}</p>
+                <p className="mt-1 text-xs text-destructive">
+                  {form.formState.errors.ewayBillNo.message}
+                </p>
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">
-  <div>
-    <label className="mb-1 block text-xs font-medium text-muted-foreground">
-      Generated on <span className="text-red-600">*</span>
-    </label>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-foreground">
+                  Generated on <span className="text-destructive">*</span>
+                </label>
 
-    <Input
-      {...form.register("generatedAt", {
-        onChange: (event) => {
-          const selectedGeneratedDate = event.target.value;
+                <Input
+                  {...form.register("generatedAt", {
+                    onChange: (event) => {
+                      const selectedGeneratedDate = event.target.value;
 
-          const currentExpiryDate = form.getValues(
-            "expiresAt",
-          ) as unknown as string;
+                      const currentExpiryDate = form.getValues(
+                        "expiresAt",
+                      ) as unknown as string;
 
-          if (
-            currentExpiryDate &&
-            currentExpiryDate <= selectedGeneratedDate
-          ) {
-            form.setValue(
-              "expiresAt",
-              "" as unknown as Date,
-              {
-                shouldValidate: true,
-                shouldDirty: true,
-              },
-            );
-          }
-        },
-      })}
-      type="date"
-      max={today}
-      className="h-9"
-    />
+                      if (
+                        currentExpiryDate &&
+                        currentExpiryDate <= selectedGeneratedDate
+                      ) {
+                        form.setValue("expiresAt", "" as unknown as Date, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                      }
+                    },
+                  })}
+                  type="date"
+                  max={today}
+                  className="h-9"
+                />
 
-    {form.formState.errors.generatedAt?.message ? (
-      <p className="mt-1 text-xs text-red-600">
-        {String(form.formState.errors.generatedAt.message)}
-      </p>
-    ) : null}
+                {form.formState.errors.generatedAt?.message ? (
+                  <p className="mt-1 text-xs text-destructive">
+                    {String(form.formState.errors.generatedAt.message)}
+                  </p>
+                ) : null}
 
-    <p className="mt-1 text-[11px] text-muted-foreground">
-      Future dates are not allowed.
-    </p>
-  </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Future dates are not allowed.
+                </p>
+              </div>
 
-  <div>
-    <label className="mb-1 block text-xs font-medium text-muted-foreground">
-      Expires on <span className="text-red-600">*</span>
-    </label>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-foreground">
+                  Expires on <span className="text-destructive">*</span>
+                </label>
 
-    <Input
-      {...form.register("expiresAt")}
-      type="date"
-      min={minimumExpiryDate}
-      className="h-9"
-    />
+                <Input
+                  {...form.register("expiresAt")}
+                  type="date"
+                  min={minimumExpiryDate}
+                  className="h-9"
+                />
 
-    {form.formState.errors.expiresAt?.message ? (
-      <p className="mt-1 text-xs text-red-600">
-        {String(form.formState.errors.expiresAt.message)}
-      </p>
-    ) : null}
+                {form.formState.errors.expiresAt?.message ? (
+                  <p className="mt-1 text-xs text-destructive">
+                    {String(form.formState.errors.expiresAt.message)}
+                  </p>
+                ) : null}
 
-    <p className="mt-1 text-[11px] text-muted-foreground">
-      Select a date after the generated date.
-    </p>
-  </div>
-</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Select a date after the generated date.
+                </p>
+              </div>
+            </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 Generated by
               </label>
-              <Input {...form.register("generatedBy")} placeholder="Name or org" className="h-9" />
+              <Input
+                {...form.register("generatedBy")}
+                placeholder="Name or org"
+                className="h-9"
+              />
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddOpen(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={add.isPending}>
