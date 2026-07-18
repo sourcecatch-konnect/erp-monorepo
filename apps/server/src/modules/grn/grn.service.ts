@@ -241,8 +241,24 @@ export const grnPreviewInclude = {
       name: true,
       description: true,
       quantity: true,
+      quantityUnitId: true,
       unit: true,
       weight: true,
+      weightUnitId: true,
+      quantityUnit: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      weightUnit: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
       length: true,
       width: true,
       height: true,
@@ -311,6 +327,30 @@ export const grnDetailInclude = {
   lorryReceipt: { select: lrDetailSelect },
   goods: {
     orderBy: { createdAt: "asc" },
+    include: {
+      quantityUnit: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      weightUnit: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      vpLoadingGoods: {
+        select: {
+          loadedQty: true,
+          loadingDamageQty: true,
+          loadedWeightMt: true,
+          loadedCft: true,
+        },
+      },
+    },
   },
   labour: { select: labourSelect },
   unloadingSupervisor: { select: userSelect },

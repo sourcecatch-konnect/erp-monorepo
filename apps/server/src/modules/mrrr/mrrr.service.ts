@@ -154,6 +154,15 @@ export const mrrrInclude = {
           totalFreight: true,
         },
       },
+      vpWagonLoading: {
+        select: {
+          id: true,
+          status: true,
+          totalLoadedQty: true,
+          totalLoadedCft: true,
+          totalLoadedWeightMt: true,
+        },
+      },
     },
     orderBy: {
       rowNumber: "asc",

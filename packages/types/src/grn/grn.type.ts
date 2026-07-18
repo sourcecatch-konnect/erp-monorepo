@@ -33,6 +33,12 @@ type Ref = {
   name?: string | null;
 };
 
+type UnitRef = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 type UserLite = {
   id: string;
   firstName?: string | null;
@@ -108,8 +114,15 @@ export type GRNGoodsRow = {
   damageQty: number;
   shortageQty: number;
 
+  quantityUnitId?: string | null;
+  weightUnitId?: string | null;
+  quantityUnit?: UnitRef | null;
+  weightUnit?: UnitRef | null;
   unit: string | null;
   weight: string | null;
+  alreadyLoadedQty?: number;
+  loadingDamageQty?: number;
+  availableQty?: number;
 
   remarks: string | null;
 
@@ -225,8 +238,16 @@ export type GRNPreviewGoods = {
   goodsName: string;
   description: string | null;
   totalQty: number;
+  receivedQty?: number;
+  damageQty?: number;
+  shortageQty?: number;
+  quantityUnitId?: string | null;
+  weightUnitId?: string | null;
+  quantityUnit?: UnitRef | null;
+  weightUnit?: UnitRef | null;
   unit: string | null;
   weight: string | null;
+  remarks?: string | null;
 };
 
 export type GRNPreview = {

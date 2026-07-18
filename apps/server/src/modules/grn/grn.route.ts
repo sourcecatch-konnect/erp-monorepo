@@ -84,8 +84,44 @@ const getDamagePhotos = (grnId: string) =>
     orderBy: { uploadedAt: "desc" },
   });
 
-const withDamagePhotos = async <T extends { id: string }>(grn: T) => ({
+type GRNGoodsLoadingSummary = {
+  receivedQty: number;
+  vpLoadingGoods?: {
+    loadedQty: number;
+    loadingDamageQty: number;
+  }[];
+};
+
+const withLoadingAvailability = <
+  T extends { goods?: GRNGoodsLoadingSummary[] },
+>(
+  grn: T,
+) => ({
   ...grn,
+  goods: grn.goods?.map((goods) => {
+    const alreadyLoadedQty =
+      goods.vpLoadingGoods?.reduce((sum, row) => sum + row.loadedQty, 0) ?? 0;
+    const loadingDamageQty =
+      goods.vpLoadingGoods?.reduce(
+        (sum, row) => sum + row.loadingDamageQty,
+        0,
+      ) ?? 0;
+
+    return {
+      ...goods,
+      alreadyLoadedQty,
+      loadingDamageQty,
+      availableQty: Math.max(goods.receivedQty - alreadyLoadedQty, 0),
+    };
+  }),
+});
+
+const withDamagePhotos = async <
+  T extends { id: string; goods?: GRNGoodsLoadingSummary[] },
+>(
+  grn: T,
+) => ({
+  ...withLoadingAvailability(grn),
   damagePhotos: await getDamagePhotos(grn.id),
 });
 
@@ -157,7 +193,12 @@ const getCreateLR = async (lrId: string, req: Parameters<typeof grnDestinationBr
 };
 
 const buildGoodsCreate = (
-  lrGoods: Array<{ id: string; quantity: number }>,
+  lrGoods: Array<{
+    id: string;
+    quantity: number;
+    quantityUnitId?: string | null;
+    weightUnitId?: string | null;
+  }>,
   goods: Array<{
     lrGoodsId?: string;
     goodsName: string;
@@ -166,6 +207,8 @@ const buildGoodsCreate = (
     receivedQty: number;
     damageQty: number;
     shortageQty: number;
+    quantityUnitId?: string;
+    weightUnitId?: string;
     unit?: string;
     weight?: number;
     remarks?: string;
@@ -174,8 +217,9 @@ const buildGoodsCreate = (
   const lrGoodsById = new Map(lrGoods.map((row) => [row.id, row]));
 
   return goods.map((row) => {
+    const source = row.lrGoodsId ? lrGoodsById.get(row.lrGoodsId) : undefined;
+
     if (row.lrGoodsId) {
-      const source = lrGoodsById.get(row.lrGoodsId);
       if (!source) {
         throw new BadRequestError("GRN goods line does not belong to selected LR");
       }
@@ -194,6 +238,8 @@ const buildGoodsCreate = (
       receivedQty: row.receivedQty,
       damageQty: row.damageQty,
       shortageQty: row.shortageQty,
+      quantityUnitId: row.quantityUnitId ?? source?.quantityUnitId ?? null,
+      weightUnitId: row.weightUnitId ?? source?.weightUnitId ?? null,
       unit: row.unit,
       weight: toDecimalOrNull(row.weight),
       remarks: row.remarks,
@@ -388,7 +434,7 @@ router.get(
 router.get(
   "/eligible-lrs",
   can(PERMS.GRN.CREATE),
-  async (req, res) => {
+  async (req, res) => {            
     const query = parseListQuery(req);
 
     const branchWhere = grnDestinationBranchFilter(req);
@@ -575,6 +621,10 @@ router.get(
       damageQty: 0,
       shortageQty: 0,
 
+      quantityUnitId: g.quantityUnitId,
+      weightUnitId: g.weightUnitId,
+      quantityUnit: g.quantityUnit,
+      weightUnit: g.weightUnit,
       unit: g.unit,
       weight: g.weight,
       remarks: "",
