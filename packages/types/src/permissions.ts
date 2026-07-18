@@ -94,7 +94,10 @@ type GRNPermissionKey = `grn.${CrudAction}` | "grn.submit" | "grn.cancel";
 type VPLoadingPermissionKey =
   | `vp_loading.${CrudAction}`
   | "vp_loading.mark_loaded"
-  | "vp_loading.cancel";
+  | "vp_loading.cancel"
+  | "vp_loading.complete"
+  | "vp_loading.verify"
+  | "vp_loading.capacity_override";
 
 type OrderPermissionKey =
   | `order.${CrudAction}`
@@ -215,6 +218,9 @@ export const PERMS = {
     DELETE: "vp_loading.delete",
     MARK_LOADED: "vp_loading.mark_loaded",
     CANCEL: "vp_loading.cancel",
+    COMPLETE: "vp_loading.complete",
+    VERIFY: "vp_loading.verify",
+    CAPACITY_OVERRIDE: "vp_loading.capacity_override",
   },
   TRIP: {
     VIEW: "trip.view",

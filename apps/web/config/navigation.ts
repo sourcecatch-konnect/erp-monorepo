@@ -88,7 +88,7 @@ export const NAV_SECTIONS: NavSection[] = [
       title: "VP Loading",
       href: "/vp-management/vp-loading",
       permission: PERMS.VP_SCHEDULE.VIEW,
-      disabled: true,
+
     },
     {
       title: "MR / RR",
