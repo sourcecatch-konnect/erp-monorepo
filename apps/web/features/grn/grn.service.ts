@@ -23,6 +23,8 @@ export type GRNGoodsInput = {
   receivedQty: number;
   damageQty: number;
   shortageQty: number;
+  quantityUnitId?: string;
+  weightUnitId?: string;
   unit?: string;
   weight?: number;
   remarks?: string;
@@ -124,6 +126,18 @@ export type GRNPreviewGoods = {
   receivedQty: number;
   damageQty: number;
   shortageQty: number;
+  quantityUnitId?: string | null;
+  weightUnitId?: string | null;
+  quantityUnit?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+  weightUnit?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
   unit?: string | null;
   weight?: number | string | null;
   remarks?: string;

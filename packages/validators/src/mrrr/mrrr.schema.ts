@@ -63,6 +63,20 @@ export const mrrrRowSchema = z.object({
     })
     .optional(),
 
+  vpWagonLoading: z
+    .object({
+      id: z.string(),
+      status: z.string(),
+      totalLoadedQty: z.number(),
+      totalLoadedCft: z.union([z.number(), z.string()]).nullable().optional(),
+      totalLoadedWeightMt: z
+        .union([z.number(), z.string()])
+        .nullable()
+        .optional(),
+    })
+    .nullable()
+    .optional(),
+
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });

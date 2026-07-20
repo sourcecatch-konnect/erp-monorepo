@@ -199,7 +199,9 @@ const grnToFormValues = (grn: GRNDetail): GRNFormValues => ({
       receivedQty: numberValue(item.receivedQty),
       damageQty: numberValue(item.damageQty),
       shortageQty: numberValue(item.shortageQty),
-      unit: item.unit ?? undefined,
+      quantityUnitId: item.quantityUnitId ?? undefined,
+      weightUnitId: item.weightUnitId ?? undefined,
+      unit: item.unit ?? item.quantityUnit?.code ?? undefined,
       weight: toNumberOrUndefined(item.weight),
       remarks: item.remarks ?? undefined,
     })) ?? [],
@@ -326,7 +328,9 @@ export default function GRNForm({ mode, grn }: Props) {
           receivedQty,
           damageQty: numberValue(item.damageQty),
           shortageQty: Math.max(totalQty - receivedQty, 0),
-          unit: item.unit ?? undefined,
+          quantityUnitId: item.quantityUnitId ?? undefined,
+          weightUnitId: item.weightUnitId ?? undefined,
+          unit: item.unit ?? item.quantityUnit?.code ?? undefined,
           weight: toNumberOrUndefined(item.weight),
           remarks: "",
         };
@@ -578,7 +582,9 @@ export default function GRNForm({ mode, grn }: Props) {
         });
         const identifier = grn.grnNumber || grn.id;
         toast.success(`GRN ${grn.grnNumber} updated`);
-        router.push(`/vp-management/grn/${encodeURIComponent(identifier)}`);
+        router.push(
+  `/vp-management/grn/${encodeURIComponent(identifier)}`,
+);
 
         return;
       }
@@ -623,9 +629,16 @@ export default function GRNForm({ mode, grn }: Props) {
         },
       });
 
-      toast.success(`GRN ${submitted.grnNumber} created`);
-      setCreatedDraft(null);
-      router.push(`/vp-management/grn/${submitted.grnNumber}`);
+     // Create GRN
+const identifier = submitted.grnNumber || submitted.id;
+
+toast.success(`GRN ${submitted.grnNumber} created`);
+setCreatedDraft(null);
+
+router.push(
+  `/vp-management/grn/${encodeURIComponent(identifier)}`,
+);
+
     } catch (err) {
       setIsUploadingDamagePhotos(false);
       toast.error(getErrorMessage(err));

@@ -18,7 +18,7 @@ export default function GrnListPage() {
   const [search, setSearch] = React.useState("");
 
   const debouncedSearch = useDebouncedValue(search);
-  const size = 25;
+  const size = 10;
 
   const canCreate = useCan(PERMS.GRN.CREATE);
   const canUpdate = useCan(PERMS.GRN.UPDATE);

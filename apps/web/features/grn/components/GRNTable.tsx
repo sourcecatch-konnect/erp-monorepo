@@ -243,10 +243,10 @@ export default function GRNTable({
             ) : (
               table.getRowModel().rows.map((row) => {
   const grn = row.original;
-  const identifier = grn.grnNumber || grn.id;
 
-  const viewHref = `/vp-management/grn/${encodeURIComponent(identifier)}`;
-  const editHref = `/vp-management/grn/${encodeURIComponent(grn.id)}/edit`;
+
+const viewHref = `/vp-management/grn/${encodeURIComponent(grn.id)}`;
+const editHref = `/vp-management/grn/${grn.id}/edit`;
 
   const editable = grn.status === "DRAFT" || grn.status === "SUBMITTED";
   const cancellable = grn.status !== "CANCELLED";

@@ -8,19 +8,35 @@ export type VPScheduleStatus = VPSchedule["status"];
 const STATUS_LABELS: Record<VPScheduleStatus, string> = {
   DRAFT: "Draft",
   PLANNED: "Open",
+  MRRR_CREATED: "MR/RR Created",
+  LOADING: "Loading",
+  LOADED: "Loaded",
+  VERIFIED: "Verified",
   CANCELLED: "Cancelled",
 };
 
 const STATUS_STYLES: Record<VPScheduleStatus, string> = {
   DRAFT: "bg-slate-500/10 text-slate-600 border-slate-500/20",
   PLANNED: "bg-blue-500/10 text-blue-700 border-blue-500/20",
+  MRRR_CREATED: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
+  LOADING: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  LOADED: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
+  VERIFIED: "bg-green-500/10 text-green-700 border-green-500/20",
   CANCELLED: "bg-red-500/10 text-red-700 border-red-500/20",
 };
 
 const isVPScheduleStatus = (
   status: string | null | undefined,
 ): status is VPScheduleStatus => {
-  return status === "DRAFT" || status === "PLANNED" || status === "CANCELLED";
+  return (
+    status === "DRAFT" ||
+    status === "PLANNED" ||
+    status === "MRRR_CREATED" ||
+    status === "LOADING" ||
+    status === "LOADED" ||
+    status === "VERIFIED" ||
+    status === "CANCELLED"
+  );
 };
 
 export function VPScheduleStatusBadge({
@@ -64,6 +80,10 @@ export const VP_SCHEDULE_STATUS_ORDER: {
   { key: "ALL", label: "All" },
   { key: "DRAFT", label: "Draft" },
   { key: "PLANNED", label: "Open" },
+  { key: "MRRR_CREATED", label: "MR/RR Created" },
+  { key: "LOADING", label: "Loading" },
+  { key: "LOADED", label: "Loaded" },
+  { key: "VERIFIED", label: "Verified" },
   { key: "CANCELLED", label: "Cancelled" },
 ];
 

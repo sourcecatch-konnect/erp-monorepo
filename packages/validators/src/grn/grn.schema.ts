@@ -76,6 +76,8 @@ export const grnGoodsSchema = z
     receivedQty: nonNegativeIntField("Received quantity"),
     damageQty: nonNegativeIntField("Damage quantity"),
     shortageQty: nonNegativeIntField("Shortage quantity"),
+    quantityUnitId: optionalString,
+    weightUnitId: optionalString,
     unit: optionalString,
     weight: optionalNonNegativeNumberField("Weight"),
     remarks: optionalString,
