@@ -213,7 +213,7 @@ export const getMRRRRowForLoading = async (tx: Tx, mrrrRowId: string) => {
   if (row.mrRr.status !== "SUBMITTED") {
     throw new BadRequestError("Only submitted MR/RR rows can be loaded");
   }
-  if (!["MRRR_CREATED", "LOADING"].includes(row.mrRr.vpSchedule.status)) {
+  if (!["MRRR_CREATED", "LOADING", "LOADED"].includes(row.mrRr.vpSchedule.status)) {
     throw new BadRequestError("VP Schedule is not ready for loading");
   }
   if (!row.vpNo?.trim()) {
@@ -687,7 +687,7 @@ export const buildAllocationGoods = (
       loadedQty: input.loadedQty,
       loadingDamageQty:
         input.loadingDamageQty,
-      remarks: input.remarks,
+      remarks: null,
 
       unitWeightKgSnapshot: null,
       unitCftSnapshot: null,
@@ -709,6 +709,114 @@ export const buildAllocationGoods = (
     rows,
     totals,
   };
+};
+export const mergeVPLoadingGoods = (
+  existingGoods: Array<{
+    grnGoodsId: string;
+    loadedQty: number;
+    loadingDamageQty: number;
+  }>,
+  inputGoods: VPLoadingGoodsInput[],
+): VPLoadingGoodsInput[] => {
+  const mergedGoods = new Map<
+    string,
+    VPLoadingGoodsInput
+  >();
+
+  for (const goods of existingGoods) {
+    mergedGoods.set(goods.grnGoodsId, {
+      grnGoodsId: goods.grnGoodsId,
+      loadedQty: Number(
+        goods.loadedQty ?? 0,
+      ),
+      loadingDamageQty: Number(
+        goods.loadingDamageQty ?? 0,
+      ),
+    });
+  }
+
+  for (const goods of inputGoods) {
+    const current =
+      mergedGoods.get(goods.grnGoodsId) ?? {
+        grnGoodsId: goods.grnGoodsId,
+        loadedQty: 0,
+        loadingDamageQty: 0,
+      };
+
+    mergedGoods.set(goods.grnGoodsId, {
+      grnGoodsId: goods.grnGoodsId,
+
+      loadedQty:
+        current.loadedQty +
+        goods.loadedQty,
+
+      loadingDamageQty:
+        current.loadingDamageQty +
+        goods.loadingDamageQty,
+    });
+  }
+
+  return [...mergedGoods.values()];
+};
+export const getCurrentGRNAvailability = async (
+  tx: Tx,
+  grnId: string,
+) => {
+  const grn = await tx.gRN.findUnique({
+    where: {
+      id: grnId,
+    },
+    select: {
+      id: true,
+      status: true,
+      deletedAt: true,
+      gateNo: true,
+
+      lorryReceipt: {
+        select: {
+          status: true,
+
+          group: {
+            select: {
+              transportType: true,
+              originBranchId: true,
+              destinationBranchId: true,
+            },
+          },
+        },
+      },
+
+      goods: {
+        orderBy: {
+          createdAt: "asc",
+        },
+        select: {
+          id: true,
+          receivedQty: true,
+
+          vpLoadingGoods: {
+            where: {
+              vpLoading: {
+                status: {
+                  not: "CANCELLED",
+                },
+              },
+            },
+            select: {
+              vpLoadingId: true,
+              loadedQty: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!grn) {
+    throw new NotFoundError("GRN not found");
+  }
+
+  return grn;
 };
 export const recalculateVPWagonLoadingTotals =
   async (
@@ -788,13 +896,26 @@ export const recalculateVpScheduleLoadingStatus = async (
   actorId?: string,
 ) => {
   const schedule = await tx.vPSchedule.findUnique({
-    where: { id: vpScheduleId },
-    include: {
+    where: {
+      id: vpScheduleId,
+    },
+    select: {
+      id: true,
+      status: true,
+
       mrRr: {
-        include: {
+        select: {
+          status: true,
+
           rows: {
-            include: {
-              vpWagonLoading: true,
+            select: {
+              vpNo: true,
+
+              vpWagonLoading: {
+                select: {
+                  status: true,
+                },
+              },
             },
           },
         },
@@ -802,47 +923,82 @@ export const recalculateVpScheduleLoadingStatus = async (
     },
   });
 
-  if (!schedule?.mrRr || schedule.mrRr.status !== "SUBMITTED") return null;
+  if (
+    !schedule?.mrRr ||
+    schedule.mrRr.status !== "SUBMITTED"
+  ) {
+    return null;
+  }
 
-  const requiredRows = schedule.mrRr.rows.filter((row) => row.vpNo?.trim());
-  const activeLoadings = requiredRows
-    .map((row) => row.vpWagonLoading)
-    .filter(
-      (loading): loading is NonNullable<typeof loading> =>
-        Boolean(loading) && loading!.status !== "CANCELLED",
-    );
+  const requiredRows = schedule.mrRr.rows.filter(
+    (row) => Boolean(row.vpNo?.trim()),
+  );
 
-  let status: "MRRR_CREATED" | "LOADING" | "LOADED" | "VERIFIED" =
-    "MRRR_CREATED";
+const activeLoadings = requiredRows
+  .map((row) => row.vpWagonLoading)
+  .filter(
+    (
+      loading,
+    ): loading is NonNullable<typeof loading> =>
+      loading != null &&
+      loading.status !== "CANCELLED",
+  );
+
+  let nextStatus:
+    | "MRRR_CREATED"
+    | "LOADING"
+    | "LOADED"
+    | "VERIFIED" = "MRRR_CREATED";
 
   if (activeLoadings.length > 0) {
-    status = "LOADING";
+    nextStatus = "LOADING";
   }
-  if (
+
+  const allRequiredRowsHaveLoading =
     requiredRows.length > 0 &&
-    activeLoadings.length === requiredRows.length &&
+    activeLoadings.length === requiredRows.length;
+
+  if (
+    allRequiredRowsHaveLoading &&
     activeLoadings.every((loading) =>
       ["COMPLETED", "VERIFIED"].includes(loading.status),
     )
   ) {
-    status = "LOADED";
-  }
-  if (
-    requiredRows.length > 0 &&
-    activeLoadings.length === requiredRows.length &&
-    activeLoadings.every((loading) => loading.status === "VERIFIED")
-  ) {
-    status = "VERIFIED";
+    nextStatus = "LOADED";
   }
 
-  if (schedule.status === status) return schedule;
+  if (
+    allRequiredRowsHaveLoading &&
+    activeLoadings.every(
+      (loading) => loading.status === "VERIFIED",
+    )
+  ) {
+    nextStatus = "VERIFIED";
+  }
+
+  if (schedule.status === nextStatus) {
+    return schedule;
+  }
 
   return tx.vPSchedule.update({
-    where: { id: vpScheduleId },
+    where: {
+      id: vpScheduleId,
+    },
     data: {
-      status,
-      ...(actorId ? { updatedById: actorId } : {}),
-      version: { increment: 1 },
+      status: nextStatus,
+      ...(actorId
+        ? {
+            updatedById: actorId,
+          }
+        : {}),
+      version: {
+        increment: 1,
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      version: true,
     },
   });
 };

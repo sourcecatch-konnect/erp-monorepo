@@ -10,6 +10,7 @@ import type {
   CancelVPLoadingBody,
   CompleteVPWagonLoadingBody,
   CreateVPLoadingAllocationBody,
+  UpdateVPWagonLoadingLabourBody,
   UpdateVPLoadingAllocationBody,
 } from "@skerp/types";
 
@@ -228,10 +229,6 @@ export const useUpdateVPLoadingAllocation = () => {
   return useMutation({
     mutationFn: ({
       allocationId,
-      vpWagonLoadingId,
-      mrrrRowId,
-      gateNo,
-      grnId,
       body,
     }: {
       allocationId: string;
@@ -261,10 +258,6 @@ export const useCancelVPLoadingAllocation = () => {
   return useMutation({
     mutationFn: ({
       allocationId,
-      vpWagonLoadingId,
-      mrrrRowId,
-      gateNo,
-      grnId,
       body,
     }: {
       allocationId: string;
@@ -298,8 +291,6 @@ export const useCompleteVPWagonLoading = () => {
   return useMutation({
     mutationFn: ({
       vpWagonLoadingId,
-      mrrrRowId,
-      scheduleId,
       body,
     }: {
       vpWagonLoadingId: string;
@@ -322,14 +313,40 @@ export const useCompleteVPWagonLoading = () => {
   });
 };
 
+export const useUpdateVPWagonLoadingLabour = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      vpWagonLoadingId,
+      body,
+    }: {
+      vpWagonLoadingId: string;
+      mrrrRowId: string;
+      scheduleId: string;
+      body: UpdateVPWagonLoadingLabourBody;
+    }) =>
+      vpLoadingApi.updateWagonLabour(
+        vpWagonLoadingId,
+        body,
+      ),
+
+    onSuccess: (_wagon, variables) => {
+      invalidateVPLoading(queryClient, {
+        scheduleId: variables.scheduleId,
+        mrrrRowId: variables.mrrrRowId,
+        wagonId: variables.vpWagonLoadingId,
+      });
+    },
+  });
+};
+
 export const useCancelVPWagonLoading = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
       vpWagonLoadingId,
-      mrrrRowId,
-      scheduleId,
       body,
     }: {
       vpWagonLoadingId: string;

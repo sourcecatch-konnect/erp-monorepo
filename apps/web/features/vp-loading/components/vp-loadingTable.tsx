@@ -8,10 +8,12 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { PERMS } from "@skerp/types";
 import {
   IconArrowRight,
   IconDatabaseOff,
   IconDotsVertical,
+  IconEdit,
   IconEye,
   IconRefresh,
   IconRoute,
@@ -43,6 +45,14 @@ import {
   TableHeader,
   TableRow,
 } from "@skerp/ui/components/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@skerp/ui/components/tooltip";
+
+import { useCan } from "@/features/auth";
 
 import type {
   VPWagonLoadingListRow,
@@ -65,19 +75,6 @@ type Props = {
   isFetching?: boolean;
   isError?: boolean;
   onRetry?: () => void;
-};
-
-const formatDate = (value: string | Date | null | undefined) => {
-  if (!value) return DASH;
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return DASH;
-
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 };
 
 const formatNumber = (value: number | string | null | undefined) => {
@@ -119,44 +116,63 @@ export default function VPLoadingTable({
   isError = false,
   onRetry,
 }: Props) {
+  const canUpdate = useCan(PERMS.VP_LOADING.UPDATE);
   const columns = React.useMemo<
     ColumnDef<VPLoadingTableRow>[]
   >(
   () => [
     {
-      header: "Schedule",
+  header: "Schedule",
 
-      cell: ({ row }) => {
-        const schedule =
-          row.original.schedule;
+  cell: ({ row }) => {
+    const schedule = row.original.schedule;
 
-        const detailHref =
-          `/vp-management/vp-loading/${encodeURIComponent(
-            schedule.id,
-          )}?rowId=${encodeURIComponent(
-            row.original.mrRrRow.id,
-          )}`;
+    const detailHref =
+      `/vp-management/vp-loading/${encodeURIComponent(
+        schedule.id,
+      )}?rowId=${encodeURIComponent(
+        row.original.mrRrRow.id,
+      )}`;
 
-        return (
-          <div className="min-w-50">
-            <Link
-              href={detailHref}
-              className="inline-flex max-w-60 items-center gap-2 font-semibold text-primary hover:underline"
-            >
-              <IconTrain size={15} className="shrink-0" />
-              <span className="truncate">
+    return (
+      <div className="min-w-45">
+        <div className="flex items-center gap-2">
+          <IconTrain
+            size={15}
+            className="shrink-0 text-primary"
+          />
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={detailHref}
+                className="block max-w-60 truncate font-semibold text-primary hover:underline"
+              >
+                {schedule.scheduleNumber}
+              </Link>
+            </TooltipTrigger>
+
+            <TooltipContent side="top">
               {schedule.scheduleNumber}
-              </span>
-            </Link>
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
+        <Tooltip>
+          <TooltipTrigger asChild>
             <p className="mt-1 max-w-72 truncate text-xs text-muted-foreground">
               {schedule.scheduleName || DASH}
             </p>
+          </TooltipTrigger>
 
-          </div>
-        );
-      },
-    },
+          <TooltipContent side="top">
+            {schedule.scheduleName || DASH}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    );
+  },
+},
 
     {
       header: "VP / Wagon",
@@ -179,40 +195,64 @@ export default function VPLoadingTable({
       ),
     },
 
-    {
-      header: "Route",
+   {
+  header: "Route",
 
-      cell: ({ row }) => {
-        const schedule =
-          row.original.schedule;
+  cell: ({ row }) => {
+    const schedule = row.original.schedule;
 
-        return (
-          <div className="min-w-56">
-            <div className="flex items-center gap-2">
-              <IconRoute size={14} className="shrink-0 text-muted-foreground" />
+    const fromBranch = schedule.fromBranch?.name || DASH;
+    const toBranch = schedule.toBranch?.name || DASH;
+
+    const sourceArea = schedule.sourceArea?.name || DASH;
+    const destinationArea =
+      schedule.destinationArea?.name || DASH;
+
+    return (
+      <div className="min-w-56">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex cursor-default items-center gap-2">
+              <IconRoute
+                size={14}
+                className="shrink-0 text-muted-foreground"
+              />
+
               <span className="max-w-24 truncate font-medium">
-              {schedule.fromBranch?.name ||
-                DASH}
-            </span>
+                {fromBranch}
+              </span>
 
-            <IconArrowRight
-              size={14}
-              className="shrink-0 text-muted-foreground"
-            />
+              <IconArrowRight
+                size={14}
+                className="shrink-0 text-muted-foreground"
+              />
 
               <span className="max-w-24 truncate font-medium">
-              {schedule.toBranch?.name ||
-                DASH}
-            </span>
+                {toBranch}
+              </span>
             </div>
-            <p className="mt-1 max-w-56 truncate text-xs text-muted-foreground">
-              {schedule.sourceArea?.name ?? DASH} to{" "}
-              {schedule.destinationArea?.name ?? DASH}
+          </TooltipTrigger>
+
+          <TooltipContent side="top">
+            {fromBranch} to {toBranch}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className="mt-1 max-w-56 cursor-default truncate text-xs text-muted-foreground">
+              {sourceArea} to {destinationArea}
             </p>
-          </div>
-        );
-      },
-    },
+          </TooltipTrigger>
+
+          <TooltipContent side="top">
+            {sourceArea} to {destinationArea}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    );
+  },
+},
 
     {
       header: "LR Count",
@@ -257,6 +297,7 @@ export default function VPLoadingTable({
   const pageCount = Math.max(1, Math.ceil(total / size));
 
   return (
+    <TooltipProvider delayDuration={250}>
     <div className="w-full space-y-3">
       <div className="rounded-lg border bg-card p-3 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -329,7 +370,7 @@ export default function VPLoadingTable({
               Array.from({ length: 6 }).map((_, rowIndex) => (
                 <TableRow key={rowIndex} className="hover:bg-transparent">
                   {columns.map((_, columnIndex) => (
-                    <TableCell key={columnIndex} className="h-20">
+                    <TableCell key={columnIndex} className="h-10">
                       <div className="space-y-2">
                         <Skeleton className="h-4 w-28" />
                         {columnIndex < 4 ? (
@@ -402,46 +443,72 @@ export default function VPLoadingTable({
                   `/vp-management/vp-loading/${encodeURIComponent(
                     item.schedule.id,
                   )}?rowId=${encodeURIComponent(item.mrRrRow.id)}`;
+                const editHref =
+                  `/vp-management/vp-loading/${encodeURIComponent(
+                    item.schedule.id,
+                  )}/edit?rowId=${encodeURIComponent(item.mrRrRow.id)}`;
+                const canEditLoading = canUpdate && item.status === "IN_PROGRESS";
 
                 return (
-                  <TableRow key={row.id} className="group hover:bg-muted/20">
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        className="h-20 whitespace-nowrap text-sm"
-                      >
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </TableCell>
-                    ))}
+                <TableRow
+                  key={row.id}
+                  className="group hover:bg-muted/20"
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell
+                      key={cell.id}
+                      className="h-10 whitespace-nowrap text-sm"
+                    >
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </TableCell>
+                  ))}
 
-                    <TableCell className="w-16 text-right">
-                      <div className="flex items-center justify-end">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              aria-label="VP loading actions"
-                            >
-                              <IconDotsVertical size={16} />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                  <TableCell className="w-16 text-right">
+                    <div className="flex items-center justify-end">
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label="VP loading actions"
+                              >
+                                <IconDotsVertical size={16} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+
+                          <TooltipContent side="left">
+                            VP loading actions
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={workspaceHref}>
+                              <IconEye size={16} className="mr-2" />
+                              View detail
+                            </Link>
+                          </DropdownMenuItem>
+
+                          {canEditLoading ? (
                             <DropdownMenuItem asChild>
-                              <Link href={workspaceHref}>
-                                <IconEye size={16} className="mr-2" />
-                                View wagon detail
+                              <Link href={editHref}>
+                                <IconEdit size={16} className="mr-2" />
+                                Add LR / GRN
                               </Link>
                             </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
               })
             )}
           </TableBody>
@@ -490,5 +557,6 @@ export default function VPLoadingTable({
         </Pagination>
       </div>
     </div>
+    </TooltipProvider>
   );
 }

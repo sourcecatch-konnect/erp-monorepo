@@ -3,16 +3,17 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconAlertCircle,
   IconArrowLeft,
-  IconArrowRight,
   IconBan,
   IconChevronRight,
   IconCircleCheck,
   IconClipboardList,
   IconClock,
+  IconEdit,
   IconMapPin,
   IconPackage,
   IconRefresh,
@@ -24,15 +25,31 @@ import {
 
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
+import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@skerp/ui/components/dialog";
+import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import { Textarea } from "@skerp/ui/components/textarea";
 
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { useCan } from "@/features/auth";
+import { labourApi } from "@/features/masters/labour/labour.service";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
+import { api } from "@/lib/api";
+import { formatPaise } from "@/lib/money";
 
 import {
   useCancelVPWagonLoading,
   useCompleteVPWagonLoading,
+  useUpdateVPLoadingAllocation,
+  useUpdateVPWagonLoadingLabour,
   useVPLoadingSchedulePreview,
   useVPWagonAllocations,
 } from "./hook/useVP-loading";
@@ -45,6 +62,18 @@ import type {
 const DASH = "-";
 
 type AllocationStatus = "DRAFT" | "LOADED" | "CANCELLED";
+
+type SupervisorOption = {
+  id: string;
+  name: string;
+};
+
+type AllocationGoodsEditRow = {
+  grnGoodsId: string;
+  goodsName: string;
+  loadedQty: string;
+  loadingDamageQty: string;
+};
 
 function formatDate(value?: string | Date | null) {
   if (!value) return DASH;
@@ -82,6 +111,24 @@ function formatNumber(value?: number | string | null) {
 
   return number.toLocaleString("en-IN");
 }
+
+const numberValue = (value: number | string | null | undefined) => {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const optionalNumber = (value: string | number | null | undefined) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+};
+
+const paiseToRupeesInput = (value: number | string | null | undefined) => {
+  if (value === undefined || value === null || value === "") return "";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "";
+  return String(number / 100);
+};
 
 const wagonStatusConfig: Record<
   VPWagonLoadingStatus,
@@ -362,15 +409,44 @@ export default function VPLoadingDetail({
 }) {
   const router = useRouter();
   const canCreate = useCan(PERMS.VP_LOADING.CREATE);
+  const canUpdate = useCan(PERMS.VP_LOADING.UPDATE);
   const canComplete = useCan(PERMS.VP_LOADING.COMPLETE);
   const canCancel = useCan(PERMS.VP_LOADING.CANCEL);
 
   const scheduleQuery = useVPLoadingSchedulePreview(scheduleId);
+  const updateAllocation = useUpdateVPLoadingAllocation();
+  const updateWagonLabour = useUpdateVPWagonLoadingLabour();
   const completeWagon = useCompleteVPWagonLoading();
   const cancelWagon = useCancelVPWagonLoading();
 
   const [selectedRowId, setSelectedRowId] = React.useState(initialRowId ?? "");
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [editingAllocation, setEditingAllocation] =
+    React.useState<VPLoadingAllocation | null>(null);
+  const [allocationGoods, setAllocationGoods] = React.useState<
+    AllocationGoodsEditRow[]
+  >([]);
+  const [allocationRemarks, setAllocationRemarks] = React.useState("");
+  const [labourOpen, setLabourOpen] = React.useState(false);
+  const [labourId, setLabourId] = React.useState("");
+  const [labourCharge, setLabourCharge] = React.useState("");
+  const [loadingSupervisorId, setLoadingSupervisorId] = React.useState("");
+  const [wagonRemarks, setWagonRemarks] = React.useState("");
+
+  const laboursQuery = useQuery({
+    queryKey: ["vp-loading", "labours"],
+    queryFn: () => labourApi.list({ page: 0, size: 1000 }),
+  });
+
+  const supervisorsQuery = useQuery({
+    queryKey: ["vp-loading", "supervisors"],
+    queryFn: async () => {
+      const res = await api.get<{ data: SupervisorOption[] }>(
+        "/grn/supervisors",
+      );
+      return res.data.data;
+    },
+  });
 
   const schedule = scheduleQuery.data;
   const rows = React.useMemo(
@@ -403,6 +479,24 @@ export default function VPLoadingDetail({
     (allocation) => allocation.status !== "CANCELLED",
   );
 
+  const labourOptions = React.useMemo<ComboboxOption[]>(
+    () =>
+      (laboursQuery.data?.data ?? []).map((labour) => ({
+        value: labour.id,
+        label: `${labour.name}${labour.mobileNo ? ` - ${labour.mobileNo}` : ""}`,
+      })),
+    [laboursQuery.data],
+  );
+
+  const supervisorOptions = React.useMemo<ComboboxOption[]>(
+    () =>
+      (supervisorsQuery.data ?? []).map((supervisor) => ({
+        value: supervisor.id,
+        label: supervisor.name,
+      })),
+    [supervisorsQuery.data],
+  );
+
   const loadingCount = rows.filter(
     (row) => row.vpWagonLoading?.status === "IN_PROGRESS",
   ).length;
@@ -425,6 +519,103 @@ export default function VPLoadingDetail({
       )}?rowId=${encodeURIComponent(rowId)}`,
       { scroll: false },
     );
+  };
+
+  const openAllocationEdit = (allocation: VPLoadingAllocation) => {
+    setEditingAllocation(allocation);
+    setAllocationRemarks(allocation.remarks ?? "");
+    setAllocationGoods(
+      allocation.goods.map((goods) => ({
+        grnGoodsId: goods.grnGoodsId,
+        goodsName: goods.grnGoods?.goodsName ?? goods.grnGoodsId,
+        loadedQty: String(goods.loadedQty ?? 0),
+        loadingDamageQty: String(goods.loadingDamageQty ?? 0),
+      })),
+    );
+  };
+
+  const openLabourEdit = () => {
+    if (!selectedLoading) return;
+
+    setLabourId(selectedLoading.labourId ?? "");
+    setLabourCharge(paiseToRupeesInput(selectedLoading.labourCharge));
+    setLoadingSupervisorId(selectedLoading.loadingSupervisorId ?? "");
+    setWagonRemarks(selectedLoading.remarks ?? "");
+    setLabourOpen(true);
+  };
+
+  const saveAllocationEdit = async () => {
+    if (!schedule || !selectedRow || !selectedLoading || !editingAllocation) {
+      return;
+    }
+
+    for (const [index, goods] of allocationGoods.entries()) {
+      const loadedQty = numberValue(goods.loadedQty);
+      const damageQty = numberValue(goods.loadingDamageQty);
+
+      if (loadedQty < 0 || damageQty < 0) {
+        toast.error(`Goods row ${index + 1}: quantity cannot be negative`);
+        return;
+      }
+
+      if (damageQty > loadedQty) {
+        toast.error(`Goods row ${index + 1}: damage cannot exceed loaded qty`);
+        return;
+      }
+    }
+
+    if (!allocationGoods.some((goods) => numberValue(goods.loadedQty) > 0)) {
+      toast.error("At least one goods row must have loaded quantity");
+      return;
+    }
+
+    try {
+      await updateAllocation.mutateAsync({
+        allocationId: editingAllocation.id,
+        vpWagonLoadingId: selectedLoading.id,
+        mrrrRowId: selectedRow.id,
+        gateNo: selectedLoading.gateNo ?? editingAllocation.grn.gateNo ?? "",
+        grnId: editingAllocation.grnId,
+        body: {
+          remarks: allocationRemarks.trim() || undefined,
+          version: editingAllocation.version,
+          goods: allocationGoods.map((goods) => ({
+            grnGoodsId: goods.grnGoodsId,
+            loadedQty: numberValue(goods.loadedQty),
+            loadingDamageQty: numberValue(goods.loadingDamageQty),
+          })),
+        },
+      });
+
+      toast.success("VP loading quantity updated");
+      setEditingAllocation(null);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
+  };
+
+  const saveLabourEdit = async () => {
+    if (!schedule || !selectedRow || !selectedLoading) return;
+
+    try {
+      await updateWagonLabour.mutateAsync({
+        vpWagonLoadingId: selectedLoading.id,
+        mrrrRowId: selectedRow.id,
+        scheduleId: schedule.id,
+        body: {
+          labourId: labourId || undefined,
+          labourCharge: optionalNumber(labourCharge),
+          loadingSupervisorId: loadingSupervisorId || undefined,
+          remarks: wagonRemarks.trim() || undefined,
+          version: selectedLoading.version,
+        },
+      });
+
+      toast.success("Wagon labour updated");
+      setLabourOpen(false);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
   };
 
   const runWagonAction = async () => {
@@ -478,7 +669,11 @@ export default function VPLoadingDetail({
     );
   }
 
-  const isActionPending = completeWagon.isPending || cancelWagon.isPending;
+  const isActionPending =
+    completeWagon.isPending ||
+    cancelWagon.isPending ||
+    updateAllocation.isPending ||
+    updateWagonLabour.isPending;
   const canAddLoading =
     canCreate &&
     selectedRow &&
@@ -692,6 +887,10 @@ export default function VPLoadingDetail({
               <div className="space-y-4">
                 {allocations.map((allocation) => {
                   const splitCount = (allocation.otherWagons?.length ?? 0) + 1;
+                  const canEditAllocation =
+                    canUpdate &&
+                    allocation.status === "LOADED" &&
+                    selectedLoading?.status === "IN_PROGRESS";
 
                   return (
                     <article
@@ -712,8 +911,22 @@ export default function VPLoadingDetail({
                           </p>
                         </div>
 
-                        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm font-semibold tabular-nums">
-                          {formatNumber(allocation.loadedQty)}
+                        <div className="flex shrink-0 items-center gap-2">
+                          <div className="rounded-md bg-muted/30 px-3 py-2 text-sm font-semibold tabular-nums">
+                            {formatNumber(allocation.loadedQty)}
+                          </div>
+
+                          {canEditAllocation ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openAllocationEdit(allocation)}
+                            >
+                              <IconEdit size={14} className="mr-1.5" />
+                              Edit Qty
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
 
@@ -993,9 +1206,29 @@ export default function VPLoadingDetail({
             )}
           </Section>
 
-          <Section title="Team" icon={<IconUsers size={15} />}>
+          <Section
+            title="Team"
+            icon={<IconUsers size={15} />}
+            action={
+              canUpdate && selectedLoading?.status === "IN_PROGRESS" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={openLabourEdit}
+                >
+                  <IconEdit size={14} className="mr-1.5" />
+                  Edit Labour
+                </Button>
+              ) : null
+            }
+          >
             <dl className="grid gap-4">
               <Field label="Labour" value={selectedLoading?.labour?.name ?? DASH} />
+              <Field
+                label="Labour charge"
+                value={formatPaise(selectedLoading?.labourCharge)}
+              />
               <Field
                 label="Supervisor"
                 value={userName(selectedLoading?.loadingSupervisor)}
@@ -1019,6 +1252,201 @@ export default function VPLoadingDetail({
         isPending={cancelWagon.isPending}
         onConfirm={handleCancel}
       />
+
+      <Dialog
+        open={Boolean(editingAllocation)}
+        onOpenChange={(open) => {
+          if (!open) setEditingAllocation(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit loaded quantity</DialogTitle>
+            <DialogDescription>
+              Update the already loaded goods for this LR/GRN before completing
+              the wagon.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+              <p className="font-medium">
+                {editingAllocation
+                  ? `LR ${editingAllocation.grn.lorryReceipt.lrNumber}`
+                  : DASH}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {editingAllocation
+                  ? `GRN ${editingAllocation.grn.grnNumber} / ${editingAllocation.loadingNumber}`
+                  : DASH}
+              </p>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border">
+              <div className="grid grid-cols-[minmax(0,1fr)_110px_110px] gap-3 border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+                <span>Goods</span>
+                <span>Loaded</span>
+                <span>Damage</span>
+              </div>
+
+              {allocationGoods.map((goods, index) => (
+                <div
+                  key={goods.grnGoodsId}
+                  className="grid grid-cols-[minmax(0,1fr)_110px_110px] items-center gap-3 border-b px-3 py-3 last:border-b-0"
+                >
+                  <p className="truncate text-sm font-medium">
+                    {goods.goodsName}
+                  </p>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={goods.loadedQty}
+                    onChange={(event) =>
+                      setAllocationGoods((current) =>
+                        current.map((row, rowIndex) =>
+                          rowIndex === index
+                            ? { ...row, loadedQty: event.target.value }
+                            : row,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={goods.loadingDamageQty}
+                    onChange={(event) =>
+                      setAllocationGoods((current) =>
+                        current.map((row, rowIndex) =>
+                          rowIndex === index
+                            ? { ...row, loadingDamageQty: event.target.value }
+                            : row,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium uppercase text-muted-foreground">
+                Remarks
+              </label>
+              <Textarea
+                rows={3}
+                value={allocationRemarks}
+                onChange={(event) => setAllocationRemarks(event.target.value)}
+                placeholder="Any loading notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditingAllocation(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={updateAllocation.isPending}
+              onClick={saveAllocationEdit}
+            >
+              {updateAllocation.isPending ? "Saving..." : "Save quantity"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={labourOpen} onOpenChange={setLabourOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit wagon labour</DialogTitle>
+            <DialogDescription>
+              Labour details apply to the whole wagon and can be changed only
+              while loading is in progress.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium uppercase text-muted-foreground">
+                Labour
+              </label>
+              <Combobox
+                options={labourOptions}
+                value={labourId}
+                onChange={setLabourId}
+                placeholder="Select labour"
+                emptyText="No labour found"
+                disabled={laboursQuery.isLoading}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium uppercase text-muted-foreground">
+                Labour Charge
+              </label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={labourCharge}
+                onChange={(event) => setLabourCharge(event.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium uppercase text-muted-foreground">
+                Loading Supervisor
+              </label>
+              <Combobox
+                options={supervisorOptions}
+                value={loadingSupervisorId}
+                onChange={setLoadingSupervisorId}
+                placeholder="Select supervisor"
+                emptyText="No supervisors found"
+                disabled={supervisorsQuery.isLoading}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium uppercase text-muted-foreground">
+                Remarks
+              </label>
+              <Textarea
+                rows={3}
+                value={wagonRemarks}
+                onChange={(event) => setWagonRemarks(event.target.value)}
+                placeholder="Any wagon labour notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLabourOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={updateWagonLabour.isPending}
+              onClick={saveLabourEdit}
+            >
+              {updateWagonLabour.isPending ? "Saving..." : "Save labour"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

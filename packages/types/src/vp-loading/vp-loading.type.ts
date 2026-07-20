@@ -4,6 +4,7 @@ import {
   cancelVPLoadingSchema,
   completeVPWagonLoadingSchema,
   createVPLoadingAllocationSchema,
+  updateVPWagonLoadingLabourSchema,
   updateVPLoadingAllocationSchema,
   vpLoadingGoodsInputSchema,
   vpLoadingMeasurementSourceSchema,
@@ -23,4 +24,7 @@ export type UpdateVPLoadingAllocationBody = z.output<
 export type CancelVPLoadingBody = z.output<typeof cancelVPLoadingSchema>;
 export type CompleteVPWagonLoadingBody = z.output<
   typeof completeVPWagonLoadingSchema
+>;
+export type UpdateVPWagonLoadingLabourBody = z.output<
+  typeof updateVPWagonLoadingLabourSchema
 >;

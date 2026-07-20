@@ -9,6 +9,7 @@ import type {
   CompleteVPWagonLoadingBody,
   CreateVPLoadingAllocationBody,
 
+  UpdateVPWagonLoadingLabourBody,
   UpdateVPLoadingAllocationBody,
 
 } from "@skerp/types";
@@ -137,8 +138,10 @@ export type VPWagonLoadingSummary = {
   totalLoadedCft?: number | null;
   totalLoadedWeightMt?: number | null;
   capacityCheckStatus?: string | null;
+  labourId?: string | null;
   labour?: LabourOption | null;
   labourCharge?: number | string | null;
+  loadingSupervisorId?: string | null;
   loadingSupervisor?: UserOption | null;
   loadingStartedAt?: string | null;
   loadingCompletedAt?: string | null;
@@ -719,6 +722,22 @@ export const vpLoadingApi = {
       `/vp-loading/wagons/${encodeIdentifier(
         vpWagonLoadingId,
       )}/complete`,
+      body,
+    );
+
+    return unwrapApiResponse(response);
+  },
+
+  updateWagonLabour: async (
+    vpWagonLoadingId: string,
+    body: UpdateVPWagonLoadingLabourBody,
+  ): Promise<VPWagonLoadingDetail> => {
+    const response = await api.patch<
+      ApiResponse<VPWagonLoadingDetail>
+    >(
+      `/vp-loading/wagons/${encodeIdentifier(
+        vpWagonLoadingId,
+      )}/labour`,
       body,
     );
 

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FormProvider, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
+import { formatPaise } from "@/lib/money";
 import { toast } from "sonner";
 import {
   IconAlertTriangle,
@@ -11,7 +12,6 @@ import {
   IconArrowRight,
   IconCircleCheck,
   IconClipboardList,
-  IconMapPin,
   IconPackage,
   IconRoute,
   IconScale,
@@ -75,7 +75,6 @@ type VPLoadingFormValues = {
     quantityUnitLabel: string;
     loadedQty: number | string;
     loadingDamageQty: number | string;
-    remarks?: string;
   }>;
 };
 
@@ -97,18 +96,6 @@ const numberValue = (value: unknown) => {
 const optionalNumber = (value: unknown) => {
   if (value === undefined || value === null || value === "") return undefined;
   return numberValue(value);
-};
-
-const formatDate = (value?: string | null) => {
-  if (!value) return DASH;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return DASH;
-
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 };
 
 const formatNumber = (value: number | string | null | undefined) => {
@@ -163,26 +150,7 @@ function InfoTile({
   );
 }
 
-function SummaryTile({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0 rounded-lg border bg-background px-3 py-3">
-      <p className="text-[11px] font-medium uppercase text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 truncate text-sm font-semibold text-foreground">
-        {value ?? DASH}
-      </p>
-    </div>
-  );
-}
-
-function ProgressStep({
+function SummaryStep({
   label,
   done,
 }: {
@@ -190,24 +158,62 @@ function ProgressStep({
   done: boolean;
 }) {
   return (
-    <div
-      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium ${
         done
-          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700"
-          : "bg-background text-muted-foreground"
+          ? "bg-emerald-500/10 text-emerald-700"
+          : "bg-muted text-muted-foreground"
       }`}
     >
       <span
-        className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
-          done
-            ? "border-emerald-500 bg-emerald-500 text-white"
-            : "border-border bg-muted"
+        className={`size-1.5 rounded-full ${
+          done ? "bg-emerald-500" : "bg-muted-foreground/40"
         }`}
-      >
-        {done ? <IconCircleCheck size={13} /> : null}
-      </span>
-      <span className="truncate font-medium">{label}</span>
+      />
+      {label}
+    </span>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-3 border-b py-2 last:border-b-0">
+      <dt className="text-[11px] font-medium uppercase text-muted-foreground">
+        {label}
+      </dt>
+
+      <dd className="min-w-0 whitespace-normal break-words text-sm font-medium leading-5 text-foreground">
+        {value ?? DASH}
+      </dd>
     </div>
+  );
+}
+
+function SummaryPanel({
+  title,
+  children,
+  description,
+}: {
+  title: string;
+  children: React.ReactNode;
+  description?: string;
+}) {
+  return (
+    <section className="rounded-lg border bg-card p-4 shadow-sm">
+      <div className="mb-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {description ? (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -283,6 +289,15 @@ export default function VPLoadingForm({ mode }: Props) {
   }, [form, scheduleIdFromRoute]);
 
   React.useEffect(() => {
+    if (!scheduleIdFromRoute || !schedulePreview.data?.scheduleDate) return;
+
+    form.setValue(
+      "scheduleDate",
+      new Date(schedulePreview.data.scheduleDate).toISOString().slice(0, 10),
+    );
+  }, [form, scheduleIdFromRoute, schedulePreview.data?.scheduleDate]);
+
+  React.useEffect(() => {
     if (
       rowIdFromRoute &&
       schedulePreview.data?.mrRr?.rows?.some(
@@ -300,11 +315,15 @@ export default function VPLoadingForm({ mode }: Props) {
   }, [form, rowIdFromRoute, schedulePreview.data]);
 
   React.useEffect(() => {
+    if (scheduleIdFromRoute && scheduleId === scheduleIdFromRoute) {
+      return;
+    }
+
     form.setValue("mrrrRowId", "");
     form.setValue("gateNo", "");
     form.setValue("grnId", "");
     replace([]);
-  }, [form, replace, scheduleId]);
+  }, [form, replace, scheduleId, scheduleIdFromRoute]);
 
   React.useEffect(() => {
     form.setValue("gateNo", "");
@@ -335,7 +354,6 @@ export default function VPLoadingForm({ mode }: Props) {
         quantityUnitLabel: unitLabel(row),
         loadedQty: numberValue(row.suggestedLoadQty),
         loadingDamageQty: 0,
-        remarks: "",
       })),
     );
   }, [form, loadingPreview.data, replace]);
@@ -360,11 +378,7 @@ export default function VPLoadingForm({ mode }: Props) {
 
           value: schedule.id,
 
-          label: `${schedule.scheduleNumber} - ${schedule.fromBranch?.name ?? DASH} to ${
-
-            schedule.toBranch?.name ?? DASH
-
-          }`,
+          label: `${schedule.scheduleName}`,
 
         })),
 
@@ -402,7 +416,7 @@ export default function VPLoadingForm({ mode }: Props) {
     () =>
       (grnsQuery.data ?? []).map((grn) => ({
         value: grn.grnId,
-        label: `${grn.grnNumber} / LR ${grn.lrNumber} - ${grn.availableQty} qty`,
+        label: `${grn.grnNumber}- ${grn.availableQty} qty`,
       })),
     [grnsQuery.data],
   );
@@ -508,7 +522,6 @@ export default function VPLoadingForm({ mode }: Props) {
         grnGoodsId: row.grnGoodsId,
         loadedQty: numberValue(row.loadedQty),
         loadingDamageQty: numberValue(row.loadingDamageQty),
-        remarks: row.remarks?.trim() || undefined,
       })),
     };
 
@@ -611,419 +624,406 @@ export default function VPLoadingForm({ mode }: Props) {
           </div>
         ) : null}
 
-        <div className="rounded-lg border bg-card p-4 shadow-sm">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold">Loading checklist</h2>
-              <p className="text-xs text-muted-foreground">
-                Complete each selection from left to right.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            <ProgressStep label="Schedule" done={Boolean(scheduleId)} />
-            <ProgressStep label="VP wagon" done={Boolean(mrrrRowId)} />
-            <ProgressStep label="Gate" done={Boolean(gateNo)} />
-            <ProgressStep label="LR / GRN" done={Boolean(grnId)} />
-            <ProgressStep label="Goods" done={fields.length > 0 && totalLoadedQty > 0} />
-          </div>
-        </div>
-
-        <div className="grid gap-2 rounded-lg border bg-card p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryTile
-            label="Schedule"
-            value={schedulePreview.data?.scheduleNumber ?? DASH}
-          />
-          <SummaryTile
-            label="VP / Wagon"
-            value={
-              selectedRow
-                ? `${selectedRow.vpNo ?? selectedRow.rowLabel ?? DASH} / ${
-                    selectedRow.wagon?.name ?? selectedRow.wagonTypeLabel ?? DASH
-                  }`
-                : DASH
-            }
-          />
-          <SummaryTile label="Gate" value={gateNo || DASH} />
-          <SummaryTile
-            label="LR / GRN"
-            value={
-              selectedGrn
-                ? `${selectedGrn.lrNumber} / ${selectedGrn.grnNumber}`
-                : DASH
-            }
-          />
-          <SummaryTile label="Loaded Qty" value={formatNumber(totalLoadedQty)} />
-        </div>
-
-        <FormSection
-          icon={<IconRoute size={16} />}
-          title="VP Schedule"
-          columns={2}
-        >
-          <div className="grid gap-1.5">
-            <FieldLabel>VP Schedule Date</FieldLabel>
-            <Input
-              type="date"
-              value={scheduleDate}
-              disabled={Boolean(scheduleIdFromRoute)}
-              onChange={(event) =>
-                form.setValue("scheduleDate", event.target.value, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
-              }
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <FieldLabel>Schedule</FieldLabel>
-            <Combobox
-              options={scheduleOptions}
-              value={scheduleId}
-              onChange={(value) => form.setValue("scheduleId", value)}
-              placeholder="Select loading-ready schedule"
-              emptyText="No loading-ready schedules found"
-              disabled={Boolean(scheduleIdFromRoute) || schedulesQuery.isLoading}
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <FieldLabel>VP No</FieldLabel>
-            <Combobox
-              options={rowOptions}
-              value={mrrrRowId}
-              onChange={(value) => form.setValue("mrrrRowId", value)}
-              placeholder="Select VP No"
-              emptyText="No VP rows found"
-              disabled={!scheduleId || schedulePreview.isLoading}
-            />
-          </div>
-
-          <InfoTile
-            label="From Branch"
-            value={schedulePreview.data?.fromBranch?.name ?? DASH}
-            icon={<IconRoute size={15} />}
-          />
-          <InfoTile
-            label="To Branch"
-            value={schedulePreview.data?.toBranch?.name ?? DASH}
-            icon={<IconRoute size={15} />}
-          />
-          <InfoTile
-            label="Source"
-            value={schedulePreview.data?.sourceArea?.name ?? DASH}
-            icon={<IconMapPin size={15} />}
-          />
-          <InfoTile
-            label="Destination"
-            value={schedulePreview.data?.destinationArea?.name ?? DASH}
-            icon={<IconMapPin size={15} />}
-          />
-          <InfoTile
-            label="Route"
-            value={
-              schedulePreview.data
-                ? (
-                    <span className="inline-flex min-w-0 items-center gap-1.5">
-                      <span className="truncate">
-                        {schedulePreview.data.fromBranch?.name ?? DASH}
-                      </span>
-                      <IconArrowRight size={14} className="shrink-0 text-muted-foreground" />
-                      <span className="truncate">
-                        {schedulePreview.data.toBranch?.name ?? DASH}
-                      </span>
-                    </span>
-                  )
-                : DASH
-            }
-            icon={<IconRoute size={15} />}
-          />
-          <InfoTile
-            label="Schedule Date"
-            value={formatDate(schedulePreview.data?.scheduleDate)}
-            icon={<IconClipboardList size={15} />}
-          />
-          <InfoTile
-            label="MR/RR Number"
-            value={schedulePreview.data?.mrRr?.mrRrNumber ?? DASH}
-            icon={<IconClipboardList size={15} />}
-          />
-          <InfoTile
-            label="Selected Wagon"
-            value={selectedRow?.wagon?.name ?? selectedRow?.wagonTypeLabel ?? DASH}
-            icon={<IconTrain size={15} />}
-          />
-        </FormSection>
-
-        <FormSection icon={<IconTrain size={16} />} title="Gate & LR" columns={2}>
-          <div className="grid gap-1.5">
-            <FieldLabel>Gate No</FieldLabel>
-            <Combobox
-              options={gateOptions}
-              value={gateNo}
-              onChange={(value) => form.setValue("gateNo", value)}
-              placeholder="Select GRN gate"
-              emptyText="No eligible gate found"
-              disabled={!mrrrRowId || gatesQuery.isLoading}
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <FieldLabel>LR Number / GRN</FieldLabel>
-            <Combobox
-              options={grnOptions}
-              value={grnId}
-              onChange={(value) => form.setValue("grnId", value)}
-              placeholder="Select LR / GRN"
-              emptyText="No eligible LR / GRN found for gate"
-              disabled={!gateNo || grnsQuery.isLoading}
-            />
-          </div>
-
-          <InfoTile
-            label="Consignor"
-            value={loadingPreview.data?.grn?.lorryReceipt?.group?.consignor?.name ?? DASH}
-            icon={<IconUsers size={15} />}
-          />
-          <InfoTile
-            label="Consignee"
-            value={loadingPreview.data?.grn?.lorryReceipt?.group?.consignee?.name ?? DASH}
-            icon={<IconUsers size={15} />}
-          />
-        </FormSection>
-
-        <FormSection icon={<IconPackage size={16} />} title="Goods Loading" columns={1}>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <InfoTile
-              label="Loaded Quantity"
-              value={formatNumber(totalLoadedQty)}
-              icon={<IconScale size={15} />}
-            />
-            <InfoTile
-              label="Damage Quantity"
-              value={formatNumber(totalDamageQty)}
-              icon={<IconAlertTriangle size={15} />}
-            />
-            <InfoTile
-              label="Current Wagon Qty"
-              value={formatNumber(loadingPreview.data?.currentTotals?.loadedQty ?? 0)}
-              icon={<IconTrain size={15} />}
-            />
-          </div>
-
-          <div className="overflow-hidden rounded-lg border bg-background">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold">Goods quantity</p>
-                <p className="text-xs text-muted-foreground">
-                  Enter loaded and damage quantity for every GRN goods row.
-                </p>
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="space-y-5">
+            <FormSection
+              icon={<IconRoute size={16} />}
+              title="Loading Selection"
+              description="Choose the schedule, VP wagon, gate and LR/GRN."
+              columns={2}
+            >
+              <div className="grid gap-1.5">
+                <FieldLabel>VP Schedule Date</FieldLabel>
+                <Input
+                  type="date"
+                  value={scheduleDate}
+                  disabled={Boolean(scheduleIdFromRoute)}
+                  onChange={(event) =>
+                    form.setValue("scheduleDate", event.target.value, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
               </div>
-              <span className="rounded-md bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                {fields.length} item{fields.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead>Goods</TableHead>
-                  <TableHead className="w-28 text-right">Received</TableHead>
-                  <TableHead className="w-28 text-right">Available</TableHead>
-                  <TableHead className="w-32">Loaded Qty</TableHead>
-                  <TableHead className="w-32">Damage Qty</TableHead>
-                  <TableHead className="min-w-56">Remarks</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingPreview.isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
-                      Loading GRN goods...
-                    </TableCell>
-                  </TableRow>
-                ) : fields.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center">
-                      <div className="mx-auto max-w-sm">
-                        <p className="text-sm font-medium text-foreground">
-                          No goods selected
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Select a gate and LR/GRN to preview goods rows here.
-                        </p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  fields.map((field, index) => {
-                    const row = watchedGoods[index];
-                    const loadedQty = numberValue(row?.loadedQty);
-                    const damageQty = numberValue(row?.loadingDamageQty);
-                    const hasError =
-                      loadedQty > field.availableQty || damageQty > loadedQty;
 
-                    return (
-                      <TableRow key={field.id}>
-                        <TableCell className="min-w-56">
-                          <div className="font-medium">{field.goodsName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Already loaded: {formatNumber(field.alreadyAllocatedQty)} {field.quantityUnitLabel}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatNumber(field.receivedQty)} {field.quantityUnitLabel}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          {formatNumber(field.availableQty)} {field.quantityUnitLabel}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={field.availableQty}
-                            step={1}
-                            className="h-9"
-                            aria-invalid={hasError}
-                            {...form.register(`goods.${index}.loadedQty` as const)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={loadedQty}
-                            step={1}
-                            className="h-9"
-                            aria-invalid={hasError}
-                            {...form.register(`goods.${index}.loadingDamageQty` as const)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Textarea
-                            rows={1}
-                            placeholder="Optional"
-                            {...form.register(`goods.${index}.remarks` as const)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-            </div>
-          </div>
-        </FormSection>
+              <div className="grid gap-1.5">
+                <FieldLabel>Schedule</FieldLabel>
+                <Combobox
+                  options={scheduleOptions}
+                  value={scheduleId}
+                  onChange={(value) => form.setValue("scheduleId", value)}
+                  placeholder="Select loading-ready schedule"
+                  emptyText="No loading-ready schedules found"
+                  disabled={Boolean(scheduleIdFromRoute) || schedulesQuery.isLoading}
+                />
+              </div>
 
-        <FormSection
-          icon={<IconUsers size={16} />}
-          title={isExistingWagonLoading ? "Wagon Labour" : "Labour & Notes"}
-          columns={3}
-        >
-          {isExistingWagonLoading ? (
-            <>
-              <div className="md:col-span-2 xl:col-span-3">
-                <div className="flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-800">
-                  <IconCircleCheck size={18} className="mt-0.5 shrink-0" />
+              <div className="grid gap-1.5">
+                <FieldLabel>VP No</FieldLabel>
+                <Combobox
+                  options={rowOptions}
+                  value={mrrrRowId}
+                  onChange={(value) => form.setValue("mrrrRowId", value)}
+                  placeholder="Select VP No"
+                  emptyText="No VP rows found"
+                  disabled={!scheduleId || schedulePreview.isLoading}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <FieldLabel>Gate No</FieldLabel>
+                <Combobox
+                  options={gateOptions}
+                  value={gateNo}
+                  onChange={(value) => form.setValue("gateNo", value)}
+                  placeholder="Select GRN gate"
+                  emptyText="No eligible gate found"
+                  disabled={!mrrrRowId || gatesQuery.isLoading}
+                />
+              </div>
+
+              <div className="md:col-span-2 grid gap-1.5">
+                <FieldLabel>LR Number / GRN</FieldLabel>
+                <Combobox
+                  options={grnOptions}
+                  value={grnId}
+                  onChange={(value) => form.setValue("grnId", value)}
+                  placeholder="Select LR / GRN"
+                  emptyText="No eligible LR / GRN found for gate"
+                  disabled={!gateNo || grnsQuery.isLoading}
+                />
+              </div>
+            </FormSection>
+
+            <FormSection icon={<IconPackage size={16} />} title="Goods Loading" columns={1}>
+              <div className="overflow-hidden rounded-lg border bg-background">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
                   <div>
-                    <p className="font-semibold">
-                      Labour charge is already locked for this wagon.
-                    </p>
-                    <p className="mt-1 text-xs text-emerald-700">
-                      You can add another LR/GRN to the same wagon, but labour,
-                      labour charge, and supervisor stay from the first loading.
+                    <p className="text-sm font-semibold">Goods quantity</p>
+                    <p className="text-xs text-muted-foreground">
+                      Enter loaded and damage quantity for every GRN goods row.
                     </p>
                   </div>
+                  <span className="rounded-md bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {fields.length} item{fields.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40">
+                        <TableHead>Goods</TableHead>
+                        <TableHead className="w-26 text-right">Received</TableHead>
+                        <TableHead className="w-26 text-right">Available</TableHead>
+                        <TableHead className="w-30">Loaded Qty</TableHead>
+                        <TableHead className="w-30">Damage Qty</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingPreview.isLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                            Loading GRN goods...
+                          </TableCell>
+                        </TableRow>
+                      ) : fields.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-10 text-center">
+                            <div className="mx-auto max-w-sm">
+                              <p className="text-sm font-medium text-foreground">
+                                No goods selected
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Select a gate and LR/GRN to preview goods rows here.
+                              </p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        fields.map((field, index) => {
+                          const row = watchedGoods[index];
+                          const loadedQty = numberValue(row?.loadedQty);
+                          const damageQty = numberValue(row?.loadingDamageQty);
+                          const hasError =
+                            loadedQty > field.availableQty || damageQty > loadedQty;
+
+                          return (
+                            <TableRow key={field.id}>
+                              <TableCell className="min-w-50">
+                                <div className="font-medium">{field.goodsName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  Already loaded: {formatNumber(field.alreadyAllocatedQty)} {field.quantityUnitLabel}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {formatNumber(field.receivedQty)} {field.quantityUnitLabel}
+                              </TableCell>
+                              <TableCell className="text-right font-medium tabular-nums">
+                                {formatNumber(field.availableQty)} {field.quantityUnitLabel}
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={field.availableQty}
+                                  step={1}
+                                  className="h-9"
+                                  aria-invalid={hasError}
+                                  {...form.register(`goods.${index}.loadedQty` as const)}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={loadedQty}
+                                  step={1}
+                                  className="h-9"
+                                  aria-invalid={hasError}
+                                  {...form.register(`goods.${index}.loadingDamageQty` as const)}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
+            </FormSection>
 
-              <InfoTile
-                label="Labour"
-                value={existingWagonLoading?.labour?.name ?? DASH}
-                icon={<IconUsers size={15} />}
-              />
-              <InfoTile
-                label="Labour Charge"
-                value={formatNumber(existingWagonLoading?.labourCharge)}
-                icon={<IconScale size={15} />}
-              />
-              <InfoTile
-                label="Supervisor"
-                value={
-                  existingWagonLoading?.loadingSupervisor
-                    ? `${existingWagonLoading.loadingSupervisor.firstName ?? ""} ${
-                        existingWagonLoading.loadingSupervisor.lastName ?? ""
-                      }`.trim() ||
-                      existingWagonLoading.loadingSupervisor.userName ||
-                      DASH
-                    : DASH
-                }
-                icon={<IconUsers size={15} />}
-              />
-            </>
-          ) : (
-            <>
+            <FormSection
+              icon={<IconUsers size={16} />}
+              title={isExistingWagonLoading ? "Wagon Labour" : "Labour & Notes"}
+              columns={3}
+            >
+              {isExistingWagonLoading ? (
+                <div className="md:col-span-2 xl:col-span-3">
+                  <div className="flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-800">
+                    <IconCircleCheck size={18} className="mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-semibold">
+                        Labour charge is already locked for this wagon.
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-700">
+                        Add another LR/GRN only. Labour, labour charge, and supervisor stay from the first loading.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="md:col-span-2 xl:col-span-3">
+                    <div className="rounded-lg border bg-muted/20 p-4">
+                      <p className="text-sm font-semibold">
+                        First LR for this wagon
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Add labour details once here. Later LRs for this wagon will reuse this same wagon-level labour charge.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-1.5">
+                    <FieldLabel>Labour</FieldLabel>
+                    <Combobox
+                      options={labourOptions}
+                      value={form.watch("labourId") ?? ""}
+                      onChange={(value) => form.setValue("labourId", value)}
+                      placeholder="Select labour"
+                      emptyText="No labour found"
+                      disabled={laboursQuery.isLoading}
+                    />
+                  </div>
+
+                  <div className="grid gap-1.5">
+                    <FieldLabel>Labour Charge</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0.00"
+                      {...form.register("labourCharge")}
+                    />
+                  </div>
+
+                  <div className="grid gap-1.5">
+                    <FieldLabel>Loading Supervisor</FieldLabel>
+                    <Combobox
+                      options={supervisorOptions}
+                      value={form.watch("loadingSupervisorId") ?? ""}
+                      onChange={(value) => form.setValue("loadingSupervisorId", value)}
+                      placeholder="Select supervisor"
+                      emptyText="No supervisors found"
+                      disabled={supervisorsQuery.isLoading}
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="md:col-span-2 xl:col-span-3">
-                <div className="rounded-lg border bg-muted/20 p-4">
-                  <p className="text-sm font-semibold">
-                    First LR for this wagon
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Add labour details once here. Later LRs for this wagon will
-                    reuse this same wagon-level labour charge.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-1.5">
-                <FieldLabel>Labour</FieldLabel>
-                <Combobox
-                  options={labourOptions}
-                  value={form.watch("labourId") ?? ""}
-                  onChange={(value) => form.setValue("labourId", value)}
-                  placeholder="Select labour"
-                  emptyText="No labour found"
-                  disabled={laboursQuery.isLoading}
+                <FieldLabel>Remarks</FieldLabel>
+                <Textarea
+                  rows={3}
+                  placeholder="Any loading notes"
+                  {...form.register("remarks")}
                 />
               </div>
-
-              <div className="grid gap-1.5">
-                <FieldLabel>Labour Charge</FieldLabel>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  {...form.register("labourCharge")}
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <FieldLabel>Loading Supervisor</FieldLabel>
-                <Combobox
-                  options={supervisorOptions}
-                  value={form.watch("loadingSupervisorId") ?? ""}
-                  onChange={(value) => form.setValue("loadingSupervisorId", value)}
-                  placeholder="Select supervisor"
-                  emptyText="No supervisors found"
-                  disabled={supervisorsQuery.isLoading}
-                />
-              </div>
-            </>
-          )}
-
-          <div className="md:col-span-2 xl:col-span-3">
-            <FieldLabel>Remarks</FieldLabel>
-            <Textarea
-              rows={3}
-              placeholder="Any loading notes"
-              {...form.register("remarks")}
-            />
+            </FormSection>
           </div>
-        </FormSection>
+
+          <aside className="space-y-4 xl:sticky xl:top-4">
+            <SummaryPanel
+              title="Read-only summary"
+              description="Selected schedule, wagon and LR."
+            >
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <SummaryStep label="Schedule" done={Boolean(scheduleId)} />
+                <SummaryStep label="VP" done={Boolean(mrrrRowId)} />
+                <SummaryStep label="Gate" done={Boolean(gateNo)} />
+                <SummaryStep label="LR" done={Boolean(grnId)} />
+                <SummaryStep
+                  label="Goods"
+                  done={fields.length > 0 && totalLoadedQty > 0}
+                />
+              </div>
+
+              <dl>
+                <SummaryRow
+                  label="Schedule"
+                  value={schedulePreview.data?.scheduleNumber ?? DASH}
+                />
+                <SummaryRow
+                  label="Route"
+                  value={
+                    schedulePreview.data ? (
+                      <span className="inline-flex min-w-0 items-center gap-1.5">
+                        <span className="truncate">
+                          {schedulePreview.data.fromBranch?.name ?? DASH}
+                        </span>
+                        <IconArrowRight
+                          size={13}
+                          className="shrink-0 text-muted-foreground"
+                        />
+                        <span className="truncate">
+                          {schedulePreview.data.toBranch?.name ?? DASH}
+                        </span>
+                      </span>
+                    ) : (
+                      DASH
+                    )
+                  }
+                />
+                <SummaryRow
+                  label="Area"
+                  value={
+                    schedulePreview.data
+                      ? `${schedulePreview.data.sourceArea?.name ?? DASH} to ${
+                          schedulePreview.data.destinationArea?.name ?? DASH
+                        }`
+                      : DASH
+                  }
+                />
+                <SummaryRow
+                  label="MR/RR"
+                  value={schedulePreview.data?.mrRr?.mrRrNumber ?? DASH}
+                />
+                <SummaryRow
+                  label="VP/Wagon"
+                  value={
+                    selectedRow
+                      ? `${selectedRow.vpNo ?? selectedRow.rowLabel ?? DASH} / ${
+                          selectedRow.wagon?.name ??
+                          selectedRow.wagonTypeLabel ??
+                          DASH
+                        }`
+                      : DASH
+                  }
+                />
+                <SummaryRow label="Gate" value={gateNo || DASH} />
+                <SummaryRow
+                  label="LR/GRN"
+                  value={
+                    selectedGrn
+                      ? `${selectedGrn.grnNumber}`
+                      : DASH
+                  }
+                />
+                <SummaryRow
+                  label="Consignor"
+                  value={
+                    loadingPreview.data?.grn?.lorryReceipt?.group?.consignor
+                      ?.name ?? DASH
+                  }
+                />
+                <SummaryRow
+                  label="Consignee"
+                  value={
+                    loadingPreview.data?.grn?.lorryReceipt?.group?.consignee
+                      ?.name ?? DASH
+                  }
+                />
+              </dl>
+            </SummaryPanel>
+
+            <SummaryPanel title="Quantity">
+              <dl>
+                <SummaryRow
+                  label="Loaded"
+                  value={formatNumber(totalLoadedQty)}
+                />
+                <SummaryRow
+                  label="Damage"
+                  value={formatNumber(totalDamageQty)}
+                />
+                <SummaryRow
+                  label="Wagon qty"
+                  value={formatNumber(
+                    loadingPreview.data?.currentTotals?.loadedQty ?? 0,
+                  )}
+                />
+              </dl>
+            </SummaryPanel>
+
+            <SummaryPanel
+              title="Wagon labour"
+              description="Saved once per wagon."
+            >
+              <div>
+                {isExistingWagonLoading ? (
+                  <dl>
+                    <SummaryRow
+                      label="Labour"
+                      value={existingWagonLoading?.labour?.name ?? DASH}
+                    />
+                    <SummaryRow
+                      label="Charge"
+                      value={formatPaise(existingWagonLoading?.labourCharge)}
+                    />
+                    <SummaryRow
+                      label="Supervisor"
+                      value={
+                        existingWagonLoading?.loadingSupervisor
+                          ? `${existingWagonLoading.loadingSupervisor.firstName ?? ""} ${
+                              existingWagonLoading.loadingSupervisor.lastName ?? ""
+                            }`.trim() ||
+                            existingWagonLoading.loadingSupervisor.userName ||
+                            DASH
+                          : DASH
+                      }
+                    />
+                  </dl>
+                ) : (
+                  <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    Labour details entered on the left will become the wagon-level labour record after the first LR is added.
+                  </div>
+                )}
+              </div>
+            </SummaryPanel>
+          </aside>
+        </div>
 
         <div className="sticky bottom-0 z-20 rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

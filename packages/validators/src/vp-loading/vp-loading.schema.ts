@@ -53,8 +53,6 @@ export const vpLoadingGoodsInputSchema = z
       .int("Damage quantity must be a whole number")
       .min(0, "Damage quantity cannot be negative")
       .default(0),
-
-    remarks: optionalString,
   })
   .superRefine((data, ctx) => {
     if (
@@ -124,6 +122,14 @@ export const completeVPWagonLoadingSchema = z.object({
   version: optionalVersion,
 });
 
+export const updateVPWagonLoadingLabourSchema = z.object({
+  labourId: optionalString,
+  labourCharge: optionalNonNegativeNumber("Labour charge"),
+  loadingSupervisorId: optionalString,
+  remarks: optionalString,
+  version: optionalVersion,
+});
+
 
 
 
@@ -133,4 +139,7 @@ export type CreateVPLoadingAllocationInput = z.infer<
 >;
 export type UpdateVPLoadingAllocationInput = z.infer<
   typeof updateVPLoadingAllocationSchema
+>;
+export type UpdateVPWagonLoadingLabourInput = z.infer<
+  typeof updateVPWagonLoadingLabourSchema
 >;

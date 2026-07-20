@@ -582,7 +582,9 @@ export default function GRNForm({ mode, grn }: Props) {
         });
         const identifier = grn.grnNumber || grn.id;
         toast.success(`GRN ${grn.grnNumber} updated`);
-        router.push(`/vp-management/grn/${encodeURIComponent(identifier)}`);
+        router.push(
+  `/vp-management/grn/${encodeURIComponent(identifier)}`,
+);
 
         return;
       }
@@ -627,9 +629,16 @@ export default function GRNForm({ mode, grn }: Props) {
         },
       });
 
-      toast.success(`GRN ${submitted.grnNumber} created`);
-      setCreatedDraft(null);
-      router.push(`/vp-management/grn/${submitted.grnNumber}`);
+     // Create GRN
+const identifier = submitted.grnNumber || submitted.id;
+
+toast.success(`GRN ${submitted.grnNumber} created`);
+setCreatedDraft(null);
+
+router.push(
+  `/vp-management/grn/${encodeURIComponent(identifier)}`,
+);
+
     } catch (err) {
       setIsUploadingDamagePhotos(false);
       toast.error(getErrorMessage(err));
