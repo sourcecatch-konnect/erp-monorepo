@@ -414,7 +414,12 @@ const isEditable = ["DRAFT", "SUBMITTED"].includes(grn.status);
                             </div>
                           ) : null}
                         </TableCell>
-                        <TableCell>{item.unit || "—"}</TableCell>
+                        <TableCell>
+                          {item.quantityUnit?.code ??
+                            item.quantityUnit?.name ??
+                            item.unit ??
+                            "—"}
+                        </TableCell>
                         <TableCell>{formatNumber(item.totalQty)}</TableCell>
                         <TableCell>{formatNumber(item.receivedQty)}</TableCell>
                         <TableCell>{formatNumber(item.damageQty)}</TableCell>
