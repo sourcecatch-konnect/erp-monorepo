@@ -279,19 +279,29 @@ async function main() {
   let company = await db.company.findFirst({
     where: { name: "SK Translines" },
   });
-  const state = await db.state.findFirst({
+  let state = await db.state.findFirst({
     where: { name: "Maharashtra" },
   });
-  const city = await db.city.findFirst({
-    where: { name: "Mumbai" },
+  if (!state) {
+    state = await db.state.create({ data: { name: "Maharashtra" } });
+    console.log("Created state:", state.name);
+  }
+  let city = await db.city.findFirst({
+    where: { name: "Mumbai", stateId: state.id },
   });
+  if (!city) {
+    city = await db.city.create({
+      data: { name: "Mumbai", stateId: state.id },
+    });
+    console.log("Created city:", city.name);
+  }
   if (!company) {
     company = await db.company.create({
       data: {
         name: "SK Translines",
         country: "India",
-        stateId: state!.id,
-        cityId: city!.id,
+        stateId: state.id,
+        cityId: city.id,
         establishmentYear: new Date("2010-01-01"),
       },
     });
@@ -304,9 +314,8 @@ async function main() {
     branch = await db.branch.create({
       data: {
         branchCode: "HO",
-     
         name: "Head Office",
-        cityId: city!.id,
+        cityId: city.id,
         companyId: company.id,
       },
     });
