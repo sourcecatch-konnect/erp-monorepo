@@ -3,6 +3,7 @@
   "ui": "tui",
   "globalEnv": [
     "DATABASE_URL",
+    "DIRECT_URL",
     "JWT_SECRET",
     "NODE_ENV",
     "PORT",
@@ -16,6 +17,7 @@
     "ATTACHMENT_MAX_SIZE_BYTES",
     "ATTACHMENT_ALLOWED_MIME",
     "API_PROXY_TARGET",
+    "NEXT_OUTPUT",
     "NEXT_PUBLIC_TEST_MODE",
     "ACCESS_TOKEN_SECRET",
     "REFRESH_TOKEN_SECRET",

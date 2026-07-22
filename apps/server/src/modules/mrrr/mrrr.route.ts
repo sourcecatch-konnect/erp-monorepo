@@ -668,7 +668,9 @@ router.post(
       include: {
         vpSchedule: {
           select: {
+            id: true,
             fromBranchId: true,
+            status: true,
           },
         },
         rows: {
@@ -679,6 +681,11 @@ router.post(
             vpNo: true,
             mrRrNo: true,
             sealNo: true,
+            vpWagonLoading: {
+              select: {
+                id: true,
+              },
+            },
           },
           orderBy: {
             rowNumber: "asc",
@@ -697,6 +704,14 @@ router.post(
       throw new BadRequestError("Only DRAFT MR/RR can be submitted");
     }
 
+    if (existing.vpSchedule.status !== "PLANNED") {
+      throw new BadRequestError("Only PLANNED VP Schedule MR/RR can be submitted");
+    }
+
+    if (existing.rows.some((row) => row.vpWagonLoading)) {
+      throw new BadRequestError("MR/RR already has VP Loading rows");
+    }
+
     if (!existing.rows.length) {
       throw new BadRequestError("MR/RR has no rows");
     }
@@ -711,19 +726,34 @@ router.post(
       });
     }
 
-    const updated = await db.mRRR.update({
-      where: {
-        id: existing.id,
-      },
-      data: {
-        status: "SUBMITTED",
-        remarks: body.remarks ?? existing.remarks,
-        updatedById: actorId,
-        version: {
-          increment: 1,
+    const updated = await db.$transaction(async (tx) => {
+      await tx.vPSchedule.update({
+        where: {
+          id: existing.vpSchedule.id,
         },
-      },
-      include: mrrrInclude,
+        data: {
+          status: "MRRR_CREATED",
+          updatedById: actorId,
+          version: {
+            increment: 1,
+          },
+        },
+      });
+
+      return tx.mRRR.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          status: "SUBMITTED",
+          remarks: body.remarks ?? existing.remarks,
+          updatedById: actorId,
+          version: {
+            increment: 1,
+          },
+        },
+        include: mrrrInclude,
+      });
     });
 
     return sendOk(res, updated);
@@ -754,7 +784,18 @@ router.post(
       include: {
         vpSchedule: {
           select: {
+            id: true,
             fromBranchId: true,
+            status: true,
+          },
+        },
+        rows: {
+          select: {
+            vpWagonLoading: {
+              select: {
+                id: true,
+              },
+            },
           },
         },
       },
@@ -770,19 +811,40 @@ router.post(
       throw new BadRequestError("MR/RR is already cancelled");
     }
 
-    const updated = await db.mRRR.update({
-      where: {
-        id: existing.id,
-      },
-      data: {
-        status: "CANCELLED",
-        remarks: body.reason,
-        updatedById: actorId,
-        version: {
-          increment: 1,
+    if (existing.rows.some((row) => row.vpWagonLoading)) {
+      throw new BadRequestError("MR/RR cannot be cancelled after VP Loading is created");
+    }
+
+    const updated = await db.$transaction(async (tx) => {
+      if (existing.status === "SUBMITTED" && existing.vpSchedule.status === "MRRR_CREATED") {
+        await tx.vPSchedule.update({
+          where: {
+            id: existing.vpSchedule.id,
+          },
+          data: {
+            status: "PLANNED",
+            updatedById: actorId,
+            version: {
+              increment: 1,
+            },
+          },
+        });
+      }
+
+      return tx.mRRR.update({
+        where: {
+          id: existing.id,
         },
-      },
-      include: mrrrInclude,
+        data: {
+          status: "CANCELLED",
+          remarks: body.reason,
+          updatedById: actorId,
+          version: {
+            increment: 1,
+          },
+        },
+        include: mrrrInclude,
+      });
     });
 
     return sendOk(res, updated);

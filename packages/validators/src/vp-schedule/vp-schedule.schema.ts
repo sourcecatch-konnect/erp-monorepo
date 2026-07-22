@@ -20,7 +20,15 @@ const dateString = (label: string) =>
 const idString = (label: string) =>
   z.string().trim().min(1, `${label} is required`);
 
-export const vpScheduleStatusSchema = z.enum(["DRAFT", "PLANNED", "CANCELLED"]);
+export const vpScheduleStatusSchema = z.enum([
+  "DRAFT",
+  "PLANNED",
+  "MRRR_CREATED",
+  "LOADING",
+  "LOADED",
+  "VERIFIED",
+  "CANCELLED",
+]);
 
 export const vpScheduleWagonCountSchema = z.object({
   id: z.string().optional(),
