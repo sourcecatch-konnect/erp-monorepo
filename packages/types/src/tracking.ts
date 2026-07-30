@@ -62,4 +62,29 @@ export type FleetVehicle = {
   validity: string | null;
   /** Latest known position, or null if the device has never reported one. */
   position: DevicePosition | null;
+  /** ERP rake journey currently represented by this physical tracker. */
+  assignment?: TrackingAssignment;
+};
+
+export type TrackingAssignment = {
+  id: string;
+  vpScheduleId: string;
+  scheduleNumber: string;
+  scheduleName: string;
+  installedOnMrRrRowId: string;
+  installedOnVpNo: string | null;
+  mrRrNumber: string | null;
+  assignedAt: string;
+  releasedAt: string | null;
+  rake: {
+    id: string;
+    rakeNumber: string;
+    status: string;
+  } | null;
+  route: {
+    fromBranch: { id: string; name: string };
+    toBranch: { id: string; name: string };
+    sourceArea: { id: string; name: string };
+    destinationArea: { id: string; name: string };
+  };
 };

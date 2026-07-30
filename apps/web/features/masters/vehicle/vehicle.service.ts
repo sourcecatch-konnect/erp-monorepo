@@ -87,6 +87,7 @@ export const vehicleApi = {
     page?: number;
     size?: number;
     ownershipType?: string;
+    transportId?: string;
   }): Promise<ListResult<Vehicle>> => {
     const params: Record<string, string | number> = {
       page: query?.page ?? 0,
@@ -96,6 +97,8 @@ export const vehicleApi = {
     if (query?.search) params.search = query.search;
     if (query?.ownershipType)
       params["filter[ownershipType]"] = query.ownershipType;
+    if (query?.transportId)
+      params["filter[transportId]"] = query.transportId;
 
     const res = await api.get<ApiResponse<Vehicle[]>>("/vehicles/lookup", {
       params,

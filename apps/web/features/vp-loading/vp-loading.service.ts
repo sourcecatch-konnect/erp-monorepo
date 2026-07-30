@@ -4,14 +4,17 @@ import { api } from "@/lib/api";
 
 import type {
   ApiResponse,
+  AssignOneLapTrackerBody,
+  AvailableOneLapTracker,
   CancelVPLoadingBody,
-
   CompleteVPWagonLoadingBody,
   CreateVPLoadingAllocationBody,
-
+  FinaliseVPScheduleLoadingBody,
+  OneLapTrackerAssignmentDetail,
+  ReleaseOneLapTrackerBody,
+  ReplaceOneLapTrackerBody,
   UpdateVPWagonLoadingLabourBody,
   UpdateVPLoadingAllocationBody,
-
 } from "@skerp/types";
 
 import { unwrapApiResponse } from "../masters/_shared/master-api";
@@ -21,10 +24,14 @@ import { unwrapApiResponse } from "../masters/_shared/master-api";
 /* ------------------------------------------------------------------ */
 
 export type VPScheduleLoadingStatus =
+  | "DRAFT"
+  | "PLANNED"
   | "MRRR_CREATED"
   | "LOADING"
   | "LOADED"
-  | "VERIFIED";
+  | "VERIFIED"
+  | "FINALISED"
+  | "CANCELLED";
 
 export type VPWagonLoadingStatus =
   | "DRAFT"
@@ -34,8 +41,6 @@ export type VPWagonLoadingStatus =
   | "CANCELLED";
 
 export type VPLoadingStatus = "DRAFT" | "LOADED" | "CANCELLED";
-
-
 
 /* ------------------------------------------------------------------ */
 /* Shared Response Types                                              */
@@ -195,7 +200,12 @@ export type VPLoadingSchedulePreview = {
   toBranch: BranchOption;
   sourceArea: AreaOption;
   destinationArea: AreaOption;
-
+  railRake: {
+    id: string;
+    rakeNumber: string;
+    status: string;
+    generatedAt: string;
+  } | null;
   mrRr: {
     id: string;
     mrRrNumber?: string | null;
@@ -204,6 +214,156 @@ export type VPLoadingSchedulePreview = {
     remarks?: string | null;
     rows: MRRRRowPreview[];
   };
+};
+
+export type VPLoadingFinalReviewIssue = {
+  code: string;
+  message: string;
+  mrrrRowId?: string;
+  vpNo?: string | null;
+};
+
+export type VPLoadingFinalReview = {
+  schedule: {
+    id: string;
+    scheduleNumber: string;
+    scheduleDate: string;
+    scheduleName: string;
+    status: VPScheduleLoadingStatus;
+    remarks?: string | null;
+    version: number;
+    finalisedAt?: string | null;
+    finalisedById?: string | null;
+    finalisedBy?: UserOption | null;
+    fromBranch: BranchOption;
+    toBranch: BranchOption;
+    sourceArea: AreaOption;
+    destinationArea: AreaOption;
+    railRake?: {
+      id: string;
+      rakeNumber: string;
+      status: string;
+      generatedAt: string;
+    } | null;
+    mrRr?: {
+      id: string;
+      mrRrNumber?: string | null;
+      status: string;
+      rakeType?: string | null;
+      remarks?: string | null;
+      version: number;
+      rows: Array<{
+        id: string;
+        rowNumber: number;
+        rowLabel: string;
+        wagonTypeLabel: string;
+        sequenceNo?: string | null;
+        vpNo?: string | null;
+        mrRrNo?: string | null;
+        sealNo?: string | null;
+        wagon: {
+          id: string;
+          name: string;
+          capacityMt?: number | null;
+          totalCft?: number | null;
+        };
+        vpWagonLoading?: {
+          id: string;
+          status: VPWagonLoadingStatus;
+          gateNo?: string | null;
+          totalLoadedQty: number;
+          totalLoadedCft?: number | string | null;
+          totalLoadedWeightMt?: number | string | null;
+          capacityCheckStatus: string;
+          labourCharge?: number | string | null;
+          labour?: LabourOption | null;
+          loadingSupervisor?: UserOption | null;
+          loadingStartedAt?: string | null;
+          loadingCompletedAt?: string | null;
+          verifiedAt?: string | null;
+          verifiedBy?: UserOption | null;
+          remarks?: string | null;
+          version: number;
+          allocations: Array<{
+            id: string;
+            loadingNumber: string;
+            status: "LOADED";
+            loadedQty: number;
+            loadedCft?: number | string | null;
+            loadedWeightMt?: number | string | null;
+            remarks?: string | null;
+            grn: {
+              id: string;
+              grnNumber: string;
+              gateNo?: string | null;
+              lorryReceipt: {
+                id: string;
+                lrNumber: string;
+                group: {
+                  id: string;
+                  groupNumber: string;
+                  consignor: CustomerOption;
+                  consignee: CustomerOption;
+                  originBranch: BranchOption;
+                  destinationBranch: BranchOption;
+                };
+              };
+            };
+            goods: Array<{
+              id: string;
+              grnGoodsId: string;
+              loadedQty: number;
+              loadingDamageQty: number;
+              loadedWeightMt?: number | string | null;
+              loadedCft?: number | string | null;
+              measurementSource: string;
+              remarks?: string | null;
+              grnGoods: {
+                id: string;
+                goodsName: string;
+                description?: string | null;
+                unit?: string | null;
+                quantityUnit?: UnitOption | null;
+                weightUnit?: UnitOption | null;
+              };
+            }>;
+          }>;
+        } | null;
+      }>;
+    } | null;
+  };
+  summary: {
+    totalWagonRows: number;
+    wagonLoadingsCreated: number;
+    verifiedWagonCount: number;
+    activeAllocationCount: number;
+    sourceGoodsLineCount: number;
+    totalLoadedQty: number;
+    totalLoadingDamageQty: number;
+  };
+  canFinalise: boolean;
+  validationIssues: VPLoadingFinalReviewIssue[];
+};
+
+export type FinaliseVPScheduleLoadingResult = {
+  railRake: {
+    id: string;
+    rakeNumber: string;
+    railwayRakeNumber?: string | null;
+    fyCode: string;
+    status: "CREATED" | "DISPATCHED" | "UNLOADING" | "RECEIVED";
+    generatedAt: string;
+    version: number;
+    fromBranch: BranchOption;
+    toBranch: BranchOption;
+  };
+  schedule: {
+    id: string;
+    scheduleNumber: string;
+    status: "FINALISED";
+    version: number;
+  };
+  alreadyFinalised: boolean;
 };
 
 /* ------------------------------------------------------------------ */
@@ -257,7 +417,6 @@ export type VPLoadingPreviewGoods = {
 };
 export type LoadingTotals = {
   loadedQty: number;
-
 };
 
 export type VPLoadingPreview = {
@@ -273,7 +432,12 @@ export type VPLoadingPreview = {
     sourceArea: AreaOption;
     destinationArea: AreaOption;
   };
-
+  railRake: {
+    id: string;
+    rakeNumber: string;
+    status: string;
+    generatedAt: string;
+  } | null;
   mrRrRow: MRRRRowPreview & {
     mrRr?: unknown;
     vpWagonLoading?: VPWagonLoadingDetail | null;
@@ -555,35 +719,31 @@ const encodeIdentifier = (value: string) => encodeURIComponent(value);
 /* ------------------------------------------------------------------ */
 export const vpLoadingApi = {
   allocations: async (): Promise<VPLoadingListRow[]> => {
-    const response = await api.get<
-      ApiResponse<VPLoadingListRow[]>
-    >("/vp-loading/allocations");
+    const response = await api.get<ApiResponse<VPLoadingListRow[]>>(
+      "/vp-loading/allocations",
+    );
 
     return unwrapApiResponse(response);
   },
-  wagons: async (): Promise<
-  VPWagonLoadingListRow[]
-> => {
-  const response = await api.get<
-    ApiResponse<VPWagonLoadingListRow[]>
-  >("/vp-loading/wagons");
+  wagons: async (): Promise<VPWagonLoadingListRow[]> => {
+    const response =
+      await api.get<ApiResponse<VPWagonLoadingListRow[]>>("/vp-loading/wagons");
 
-  return unwrapApiResponse(response);
-},
-  schedules: async (
-    scheduleDate?: string,
-  ): Promise<VPLoadingSchedule[]> => {
+    return unwrapApiResponse(response);
+  },
+  schedules: async (scheduleDate?: string): Promise<VPLoadingSchedule[]> => {
     const params: Record<string, string> = {};
 
     if (scheduleDate) {
       params.scheduleDate = scheduleDate;
     }
 
-    const response = await api.get<
-      ApiResponse<VPLoadingSchedule[]>
-    >("/vp-loading/schedules", {
-      params,
-    });
+    const response = await api.get<ApiResponse<VPLoadingSchedule[]>>(
+      "/vp-loading/schedules",
+      {
+        params,
+      },
+    );
 
     return unwrapApiResponse(response);
   },
@@ -591,26 +751,104 @@ export const vpLoadingApi = {
   schedulePreview: async (
     vpScheduleId: string,
   ): Promise<VPLoadingSchedulePreview> => {
-    const response = await api.get<
-      ApiResponse<VPLoadingSchedulePreview>
-    >(
-      `/vp-loading/schedules/${encodeIdentifier(
-        vpScheduleId,
-      )}/preview`,
+    const response = await api.get<ApiResponse<VPLoadingSchedulePreview>>(
+      `/vp-loading/schedules/${encodeIdentifier(vpScheduleId)}/preview`,
     );
 
     return unwrapApiResponse(response);
   },
 
-  gates: async (
-    mrrrRowId: string,
-  ): Promise<VPLoadingGate[]> => {
+  finalReview: async (vpScheduleId: string): Promise<VPLoadingFinalReview> => {
+    const response = await api.get<ApiResponse<VPLoadingFinalReview>>(
+      `/vp-loading/schedules/${encodeIdentifier(vpScheduleId)}/final-review`,
+    );
+
+    return unwrapApiResponse(response);
+  },
+
+  finaliseSchedule: async (
+    vpScheduleId: string,
+    body: FinaliseVPScheduleLoadingBody,
+  ): Promise<FinaliseVPScheduleLoadingResult> => {
+    const response = await api.post<
+      ApiResponse<FinaliseVPScheduleLoadingResult>
+    >(`/vp-loading/schedules/${encodeIdentifier(vpScheduleId)}/finalise`, body);
+
+    return unwrapApiResponse(response);
+  },
+
+  trackerAssignment: async (
+    vpScheduleId: string,
+  ): Promise<OneLapTrackerAssignmentDetail | null> => {
     const response = await api.get<
-      ApiResponse<VPLoadingGate[]>
+      ApiResponse<OneLapTrackerAssignmentDetail | null>
     >(
-      `/vp-loading/rows/${encodeIdentifier(
-        mrrrRowId,
-      )}/gates`,
+      `/vp-loading/schedules/${encodeIdentifier(
+        vpScheduleId,
+      )}/tracker-assignment`,
+    );
+    return unwrapApiResponse(response);
+  },
+
+  availableTrackers: async (
+    vpScheduleId: string,
+  ): Promise<AvailableOneLapTracker[]> => {
+    const response = await api.get<ApiResponse<AvailableOneLapTracker[]>>(
+      `/vp-loading/schedules/${encodeIdentifier(
+        vpScheduleId,
+      )}/available-trackers`,
+    );
+    return unwrapApiResponse(response);
+  },
+
+  assignTracker: async (
+    vpScheduleId: string,
+    body: AssignOneLapTrackerBody,
+  ): Promise<OneLapTrackerAssignmentDetail> => {
+    const response = await api.post<
+      ApiResponse<OneLapTrackerAssignmentDetail>
+    >(
+      `/vp-loading/schedules/${encodeIdentifier(
+        vpScheduleId,
+      )}/tracker-assignment`,
+      body,
+    );
+    return unwrapApiResponse(response);
+  },
+
+  replaceTracker: async (
+    vpScheduleId: string,
+    body: ReplaceOneLapTrackerBody,
+  ): Promise<OneLapTrackerAssignmentDetail> => {
+    const response = await api.post<
+      ApiResponse<OneLapTrackerAssignmentDetail>
+    >(
+      `/vp-loading/schedules/${encodeIdentifier(
+        vpScheduleId,
+      )}/tracker-assignment/replace`,
+      body,
+    );
+    return unwrapApiResponse(response);
+  },
+
+  releaseTracker: async (
+    vpScheduleId: string,
+    body: ReleaseOneLapTrackerBody,
+  ): Promise<OneLapTrackerAssignmentDetail> => {
+    const response = await api.post<
+      ApiResponse<OneLapTrackerAssignmentDetail>
+    >(
+      `/vp-loading/schedules/${encodeIdentifier(
+        vpScheduleId,
+      )}/tracker-assignment/release`,
+      body,
+    );
+    return unwrapApiResponse(response);
+  },
+
+  gates: async (mrrrRowId: string): Promise<VPLoadingGate[]> => {
+    const response = await api.get<ApiResponse<VPLoadingGate[]>>(
+      `/vp-loading/rows/${encodeIdentifier(mrrrRowId)}/gates`,
     );
 
     return unwrapApiResponse(response);
@@ -620,9 +858,7 @@ export const vpLoadingApi = {
     mrrrRowId: string,
     gateNo: string,
   ): Promise<EligibleVPLoadingGRN[]> => {
-    const response = await api.get<
-      ApiResponse<EligibleVPLoadingGRN[]>
-    >(
+    const response = await api.get<ApiResponse<EligibleVPLoadingGRN[]>>(
       `/vp-loading/rows/${encodeIdentifier(
         mrrrRowId,
       )}/gates/${encodeIdentifier(gateNo)}/grns`,
@@ -635,9 +871,7 @@ export const vpLoadingApi = {
     mrrrRowId: string,
     grnId: string,
   ): Promise<VPLoadingPreview> => {
-    const response = await api.get<
-      ApiResponse<VPLoadingPreview>
-    >(
+    const response = await api.get<ApiResponse<VPLoadingPreview>>(
       `/vp-loading/rows/${encodeIdentifier(
         mrrrRowId,
       )}/grns/${encodeIdentifier(grnId)}/preview`,
@@ -656,12 +890,7 @@ export const vpLoadingApi = {
   ): Promise<CreateVPLoadingAllocationResult> => {
     const response = await api.post<
       ApiResponse<CreateVPLoadingAllocationResult>
-    >(
-      `/vp-loading/rows/${encodeIdentifier(
-        mrrrRowId,
-      )}/allocations`,
-      body,
-    );
+    >(`/vp-loading/rows/${encodeIdentifier(mrrrRowId)}/allocations`, body);
 
     return unwrapApiResponse(response);
   },
@@ -670,12 +899,8 @@ export const vpLoadingApi = {
     allocationId: string,
     body: UpdateVPLoadingAllocationBody,
   ): Promise<VPLoadingAllocation> => {
-    const response = await api.patch<
-      ApiResponse<VPLoadingAllocation>
-    >(
-      `/vp-loading/allocations/${encodeIdentifier(
-        allocationId,
-      )}`,
+    const response = await api.patch<ApiResponse<VPLoadingAllocation>>(
+      `/vp-loading/allocations/${encodeIdentifier(allocationId)}`,
       body,
     );
 
@@ -688,12 +913,7 @@ export const vpLoadingApi = {
   ): Promise<CancelVPLoadingAllocationResult> => {
     const response = await api.post<
       ApiResponse<CancelVPLoadingAllocationResult>
-    >(
-      `/vp-loading/allocations/${encodeIdentifier(
-        allocationId,
-      )}/cancel`,
-      body,
-    );
+    >(`/vp-loading/allocations/${encodeIdentifier(allocationId)}/cancel`, body);
 
     return unwrapApiResponse(response);
   },
@@ -701,12 +921,8 @@ export const vpLoadingApi = {
   wagonAllocations: async (
     vpWagonLoadingId: string,
   ): Promise<VPLoadingAllocation[]> => {
-    const response = await api.get<
-      ApiResponse<VPLoadingAllocation[]>
-    >(
-      `/vp-loading/wagons/${encodeIdentifier(
-        vpWagonLoadingId,
-      )}/allocations`,
+    const response = await api.get<ApiResponse<VPLoadingAllocation[]>>(
+      `/vp-loading/wagons/${encodeIdentifier(vpWagonLoadingId)}/allocations`,
     );
 
     return unwrapApiResponse(response);
@@ -716,12 +932,8 @@ export const vpLoadingApi = {
     vpWagonLoadingId: string,
     body: CompleteVPWagonLoadingBody,
   ): Promise<VPWagonLoadingDetail> => {
-    const response = await api.post<
-      ApiResponse<VPWagonLoadingDetail>
-    >(
-      `/vp-loading/wagons/${encodeIdentifier(
-        vpWagonLoadingId,
-      )}/complete`,
+    const response = await api.post<ApiResponse<VPWagonLoadingDetail>>(
+      `/vp-loading/wagons/${encodeIdentifier(vpWagonLoadingId)}/complete`,
       body,
     );
 
@@ -732,12 +944,8 @@ export const vpLoadingApi = {
     vpWagonLoadingId: string,
     body: UpdateVPWagonLoadingLabourBody,
   ): Promise<VPWagonLoadingDetail> => {
-    const response = await api.patch<
-      ApiResponse<VPWagonLoadingDetail>
-    >(
-      `/vp-loading/wagons/${encodeIdentifier(
-        vpWagonLoadingId,
-      )}/labour`,
+    const response = await api.patch<ApiResponse<VPWagonLoadingDetail>>(
+      `/vp-loading/wagons/${encodeIdentifier(vpWagonLoadingId)}/labour`,
       body,
     );
 
@@ -748,12 +956,8 @@ export const vpLoadingApi = {
     vpWagonLoadingId: string,
     body: CancelVPLoadingBody,
   ): Promise<VPWagonLoadingDetail> => {
-    const response = await api.post<
-      ApiResponse<VPWagonLoadingDetail>
-    >(
-      `/vp-loading/wagons/${encodeIdentifier(
-        vpWagonLoadingId,
-      )}/cancel`,
+    const response = await api.post<ApiResponse<VPWagonLoadingDetail>>(
+      `/vp-loading/wagons/${encodeIdentifier(vpWagonLoadingId)}/cancel`,
       body,
     );
 

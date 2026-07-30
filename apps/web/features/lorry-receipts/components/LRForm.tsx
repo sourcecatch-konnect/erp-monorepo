@@ -65,12 +65,6 @@ const EMPTY_LINE = {
   totalWeightUnit: "MT",
   goods: [],
 };
-type MarketVehicleLookup = {
-  vehicleNumber: string;
-  isAssigned?: boolean;
-  activeGroupNumber?: string | null;
-};
-
 type DriverLookup = {
   name: string;
   mobile?: string | null;
@@ -187,19 +181,19 @@ function InstantLRLineCard({
     name: `${base}.goods`,
   });
   const lineErr = (
-  form.formState.errors as {
-    lrs?: {
-      loadingLocationId?: { message?: string };
-      unloadingLocationId?: { message?: string };
-      totalWeight?: { message?: string };
-      totalWeightUnit?: { message?: string };
-      goods?: {
-        name?: { message?: string };
-        quantity?: { message?: string };
+    form.formState.errors as {
+      lrs?: {
+        loadingLocationId?: { message?: string };
+        unloadingLocationId?: { message?: string };
+        totalWeight?: { message?: string };
+        totalWeightUnit?: { message?: string };
+        goods?: {
+          name?: { message?: string };
+          quantity?: { message?: string };
+        }[];
       }[];
-    }[];
-  }
-).lrs?.[idx];
+    }
+  ).lrs?.[idx];
 
   return (
     <div className="relative rounded-lg border bg-muted/20 p-3">
@@ -252,77 +246,73 @@ function InstantLRLineCard({
         </div>
 
         {goodsFields.length === 0 ? (
-  <div className="rounded-md border border-dashed bg-muted/20 px-3 py-3 text-center text-xs text-muted-foreground">
-    No goods added yet.
-  </div>
-) : (
-  <div className="space-y-2">
-    {goodsFields.map((goodsField, goodsIdx) => {
-      const goodsBase = `${base}.goods.${goodsIdx}` as const;
-      const goodsErr = lineErr?.goods?.[goodsIdx];
-
-      return (
-        <div
-          key={goodsField.id}
-          className="flex items-start gap-2"
-        >
-          <div className="min-w-0 flex-1">
-            <FieldLabel>Goods name</FieldLabel>
-            <Controller
-              name={`${goodsBase}.name`}
-              control={form.control}
-              render={({ field }) => (
-                <SuggestInput
-                  value={(field.value as string) ?? ""}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  suggestions={goodsSuggestions}
-                  placeholder="Select or type goods"
-                  invalid={Boolean(goodsErr?.name?.message)}
-                />
-              )}
-            />
-
-            {goodsErr?.name?.message ? (
-              <p className="mt-1 text-xs text-red-600">
-                {goodsErr.name.message}
-              </p>
-            ) : null}
+          <div className="rounded-md border border-dashed bg-muted/20 px-3 py-3 text-center text-xs text-muted-foreground">
+            No goods added yet.
           </div>
+        ) : (
+          <div className="space-y-2">
+            {goodsFields.map((goodsField, goodsIdx) => {
+              const goodsBase = `${base}.goods.${goodsIdx}` as const;
+              const goodsErr = lineErr?.goods?.[goodsIdx];
 
-          <div className="w-24 shrink-0">
-            <FieldLabel>Qty</FieldLabel>
-            <Input
-              {...form.register(`${goodsBase}.quantity`)}
-              type="number"
-              min={1}
-              className="h-9"
-              aria-invalid={Boolean(goodsErr?.quantity?.message)}
-            />
+              return (
+                <div key={goodsField.id} className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <FieldLabel>Goods name</FieldLabel>
+                    <Controller
+                      name={`${goodsBase}.name`}
+                      control={form.control}
+                      render={({ field }) => (
+                        <SuggestInput
+                          value={(field.value as string) ?? ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          suggestions={goodsSuggestions}
+                          placeholder="Select or type goods"
+                          invalid={Boolean(goodsErr?.name?.message)}
+                        />
+                      )}
+                    />
 
-            {goodsErr?.quantity?.message ? (
-              <p className="mt-1 text-xs text-red-600">
-                {goodsErr.quantity.message}
-              </p>
-            ) : null}
+                    {goodsErr?.name?.message ? (
+                      <p className="mt-1 text-xs text-red-600">
+                        {goodsErr.name.message}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="w-24 shrink-0">
+                    <FieldLabel>Qty</FieldLabel>
+                    <Input
+                      {...form.register(`${goodsBase}.quantity`)}
+                      type="number"
+                      min={1}
+                      className="h-9"
+                      aria-invalid={Boolean(goodsErr?.quantity?.message)}
+                    />
+
+                    {goodsErr?.quantity?.message ? (
+                      <p className="mt-1 text-xs text-red-600">
+                        {goodsErr.quantity.message}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="mt-6 shrink-0 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                    onClick={() => removeGoods(goodsIdx)}
+                    aria-label="Remove goods"
+                  >
+                    <IconTrash size={14} />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
-
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="mt-6 shrink-0 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-            onClick={() => removeGoods(goodsIdx)}
-            aria-label="Remove goods"
-          >
-            <IconTrash size={14} />
-          </Button>
-
-        </div>
-      );
-    })}
-  </div>
-)}
+        )}
 
         <Button
           type="button"
@@ -334,61 +324,61 @@ function InstantLRLineCard({
           <IconPlus size={14} className="mr-1" /> Add goods
         </Button>
       </div>
-         <div className="mt-3 grid gap-1.5">
-  <div className="flex items-center justify-start gap-3">
-    <label className="w-28 shrink-0 text-xs font-medium text-muted-foreground">
-      Total weight
-    </label>
+      <div className="mt-3 grid gap-1.5">
+        <div className="flex items-center justify-start gap-3">
+          <label className="w-28 shrink-0 text-xs font-medium text-muted-foreground">
+            Total weight
+          </label>
 
-    <div className="w-40 shrink-0">
-      <Input
-        {...form.register(`${base}.totalWeight`)}
-        type="number"
-        min={0}
-        step="0.01"
-        placeholder="Weight"
-        className="h-9"
-        aria-invalid={Boolean(lineErr?.totalWeight)}
-      />
-    </div>
+          <div className="w-40 shrink-0">
+            <Input
+              {...form.register(`${base}.totalWeight`)}
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Weight"
+              className="h-9"
+              aria-invalid={Boolean(lineErr?.totalWeight)}
+            />
+          </div>
 
-    <div className="w-28 shrink-0">
-      <Controller
-        name={`${base}.totalWeightUnit`}
-        control={form.control}
-        render={({ field }) => (
-          <Select
-            value={(field.value as string) ?? "MT"}
-            onValueChange={field.onChange}
-          >
-            <SelectTrigger className="h-9 w-full">
-              <SelectValue placeholder="Unit" />
-            </SelectTrigger>
-            <SelectContent>
-              {unitOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      />
-    </div>
-  </div>
+          <div className="w-28 shrink-0">
+            <Controller
+              name={`${base}.totalWeightUnit`}
+              control={form.control}
+              render={({ field }) => (
+                <Select
+                  value={(field.value as string) ?? "MT"}
+                  onValueChange={field.onChange}
+                >
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unitOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+        </div>
 
-  {lineErr?.totalWeight?.message ? (
-    <p className="ml-28 text-xs text-red-600">
-      {lineErr.totalWeight.message}
-    </p>
-  ) : null}
+        {lineErr?.totalWeight?.message ? (
+          <p className="ml-28 text-xs text-red-600">
+            {lineErr.totalWeight.message}
+          </p>
+        ) : null}
 
-  {lineErr?.totalWeightUnit?.message ? (
-    <p className="ml-28 text-xs text-red-600">
-      {lineErr.totalWeightUnit.message}
-    </p>
-  ) : null}
-</div>
+        {lineErr?.totalWeightUnit?.message ? (
+          <p className="ml-28 text-xs text-red-600">
+            {lineErr.totalWeightUnit.message}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -414,9 +404,9 @@ export default function LRForm({ orderId, tripId }: Props) {
     queryFn: lrLookups.railheadBranches,
     enabled: source === "FROM_ORDER",
   });
-  const marketVehicles = useQuery({
-    queryKey: lrLookupKeys.marketVehicles,
-    queryFn: lrLookups.marketVehicles,
+  const transports = useQuery({
+    queryKey: lrLookupKeys.transports,
+    queryFn: lrLookups.transports,
   });
   const drivers = useQuery({
     queryKey: lrLookupKeys.drivers,
@@ -471,16 +461,29 @@ export default function LRForm({ orderId, tripId }: Props) {
   });
   const errors = form.formState.errors;
 
-  const [watchIsMarket, watchTransport, watchConsignor, watchConsignee] =
-    useWatch({
-      control: form.control,
-      name: [
-        "isMarketVehicle",
-        source === "FROM_ORDER" ? "transportType" : "transportType",
-        source === "INSTANT" ? "consignorId" : "orderId",
-        source === "INSTANT" ? "consigneeId" : "orderId",
-      ],
-    });
+  const [
+    watchIsMarket,
+    watchTransport,
+    watchConsignor,
+    watchConsignee,
+    watchMarketTransportId,
+  ] = useWatch({
+    control: form.control,
+    name: [
+      "isMarketVehicle",
+      source === "FROM_ORDER" ? "transportType" : "transportType",
+      source === "INSTANT" ? "consignorId" : "orderId",
+      source === "INSTANT" ? "consigneeId" : "orderId",
+      "marketTransportId",
+    ],
+  });
+  const marketTransportId =
+    (watchMarketTransportId as string | undefined) ?? "";
+  const marketVehicles = useQuery({
+    queryKey: lrLookupKeys.marketVehicles(marketTransportId),
+    queryFn: () => lrLookups.marketVehicles(marketTransportId),
+    enabled: Boolean(watchIsMarket && marketTransportId),
+  });
   const activeConsignorId =
     source === "INSTANT"
       ? ((watchConsignor as string | undefined) ?? undefined)
@@ -553,22 +556,7 @@ export default function LRForm({ orderId, tripId }: Props) {
     value: g.name,
     hint: g.description ?? undefined,
   }));
-  const marketVehicleRows = (marketVehicles.data ??
-    []) as MarketVehicleLookup[];
   const driverRows = (drivers.data ?? []) as DriverLookup[];
-
-  const marketVehicleSuggestions: SuggestOption[] = marketVehicleRows.map(
-    (v) => ({
-      value: v.vehicleNumber,
-      hint: v.isAssigned
-        ? v.activeGroupNumber
-          ? `Assigned in ${v.activeGroupNumber}`
-          : "Assigned in active LR group"
-        : "Market vehicle",
-      badge: v.isAssigned ? "Assigned" : "Available",
-      badgeTone: v.isAssigned ? "warning" : "success",
-    }),
-  );
 
   const driverSuggestions: SuggestOption[] = driverRows.map((d) => ({
     value: d.name,
@@ -914,6 +902,14 @@ export default function LRForm({ orderId, tripId }: Props) {
                       } else {
                         // Own vehicle selected, clear market vehicle data
                         form.setValue(
+                          "marketTransportId" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
+                          "marketVehicleId" as never,
+                          undefined as never,
+                        );
+                        form.setValue(
                           "marketVehicleNumber" as never,
                           undefined as never,
                         );
@@ -969,28 +965,99 @@ export default function LRForm({ orderId, tripId }: Props) {
             {watchIsMarket && (
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <Controller
-                  name="marketVehicleNumber"
+                  name="marketTransportId"
+                  control={form.control}
+                  render={({ field }) => (
+                    <div>
+                      <FieldLabel required>Transporter</FieldLabel>
+                      <Select
+                        value={(field.value as string) ?? ""}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          form.setValue(
+                            "marketVehicleId" as never,
+                            undefined as never,
+                            { shouldValidate: true },
+                          );
+                          form.setValue(
+                            "marketVehicleNumber" as never,
+                            undefined as never,
+                          );
+                        }}
+                      >
+                        <SelectTrigger
+                          className="h-9 w-full"
+                          aria-invalid={Boolean(
+                            errors.marketTransportId?.message,
+                          )}
+                        >
+                          <SelectValue
+                            placeholder={
+                              transports.isLoading
+                                ? "Loading transporters..."
+                                : "Select transporter"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(transports.data ?? []).map((transport) => (
+                            <SelectItem key={transport.id} value={transport.id}>
+                              {transport.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                />
+
+                <Controller
+                  name="marketVehicleId"
                   control={form.control}
                   render={({ field }) => (
                     <div>
                       <FieldLabel required>Vehicle number</FieldLabel>
-                      <SuggestInput
+                      <Select
                         value={(field.value as string) ?? ""}
-                        onChange={(value) =>
-                          field.onChange(
-                            value.toUpperCase().replace(/\s+/g, ""),
-                          )
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          const vehicle = (marketVehicles.data ?? []).find(
+                            (row) => row.id === value,
+                          );
+                          form.setValue(
+                            "marketVehicleNumber" as never,
+                            vehicle?.vehicleNumber as never,
+                          );
+                        }}
+                        disabled={
+                          !marketTransportId || marketVehicles.isLoading
                         }
-                        onBlur={field.onBlur}
-                        suggestions={marketVehicleSuggestions}
-                        placeholder={
-                          marketVehicles.isLoading
-                            ? "Loading market vehicles..."
-                            : "Select or type vehicle"
-                        }
-                        invalid={Boolean(errors.marketVehicleNumber?.message)}
-                        className="[&_input]:h-9 [&_input]:uppercase"
-                      />
+                      >
+                        <SelectTrigger
+                          className="h-9 w-full"
+                          aria-invalid={Boolean(
+                            errors.marketVehicleId?.message,
+                          )}
+                        >
+                          <SelectValue
+                            placeholder={
+                              !marketTransportId
+                                ? "Select transporter first"
+                                : marketVehicles.isLoading
+                                  ? "Loading market vehicles..."
+                                  : "Select vehicle"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(marketVehicles.data ?? []).map((vehicle) => (
+                            <SelectItem key={vehicle.id} value={vehicle.id}>
+                              {vehicle.vehicleNumber} ·{" "}
+                              {vehicle.vehicleTypeRef.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 />

@@ -28,7 +28,31 @@ const STATUS_STYLES: Record<LRStatus, string> = {
   CANCELLED: "border-border bg-muted text-muted-foreground",
 };
 
-export function LRStatusBadge({ status }: { status: LRStatus }) {
+const isLRStatus = (
+  status: string | null | undefined,
+): status is LRStatus =>
+  typeof status === "string" &&
+  Object.prototype.hasOwnProperty.call(STATUS_LABELS, status);
+
+export function LRStatusBadge({
+  status,
+}: {
+  status?: string | null;
+}) {
+  if (!isLRStatus(status)) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-2 rounded-md border px-2.5 py-1",
+          "border-border bg-muted text-sm font-semibold text-muted-foreground",
+        )}
+      >
+        <span className="size-2 rounded-full bg-current opacity-60" />
+        —
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
@@ -42,7 +66,6 @@ export function LRStatusBadge({ status }: { status: LRStatus }) {
     </span>
   );
 }
-
 export const SOURCE_LABELS: Record<LRSource, string> = {
   FROM_ORDER: "From Order",
   INSTANT: "Instant",
@@ -103,8 +126,8 @@ export type LRGroupLike = {
   groupNumber: string;
   status?: LRStatus | null;
   lorryReceipts?:
-    | readonly { lrNumber: string; status?: LRStatus | null }[]
-    | null;
+  | readonly { lrNumber: string; status?: LRStatus | null }[]
+  | null;
 };
 
 export type LRGroupDisplay = {

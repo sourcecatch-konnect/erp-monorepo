@@ -8,6 +8,7 @@ import {
     IconEngine,
     IconFileInvoice,
     IconGauge,
+    IconGps,
     IconMap2,
     IconMapPin,
     IconPackage,
@@ -55,6 +56,7 @@ const ALL_CARDS: MasterCard[] = [
     { title: "Vehicles", description: "Own & market fleet vehicles", href: "/masters/vehicle", icon: IconTruck, group: "Fleet", permission: PERMS.MASTERS.VEHICLE.VIEW },
     { title: "Drivers", description: "Driver profiles & licences", href: "/masters/driver", icon: IconUser, group: "Fleet", permission: PERMS.MASTERS.DRIVER.VIEW },
     { title: "Vehicle Types", description: "Container, open body, 407, etc.", href: "/masters/vehicle-type", icon: IconTruckDelivery, group: "Fleet", permission: PERMS.MASTERS.VEHICLE_TYPE.VIEW },
+    { title: "OneLap Trackers", description: "OneLap GPS tracker devices and availability", href: "/masters/one-lap-trackers", icon: IconGps, group: "Fleet", permission: PERMS.MASTERS.ONE_LAP_TRACKER.VIEW },
 
     // Rates & Finance
     { title: "Agreements", description: "Customer rate agreements", href: "/masters/agreement", icon: IconFileInvoice, group: "Rates & Finance", permission: PERMS.MASTERS.AGREEMENT.VIEW },

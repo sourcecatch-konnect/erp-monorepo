@@ -30,6 +30,7 @@ import {
   vpScheduleInclude,
   vpScheduleListSelect,
 } from "./vp-schedule.service.js";
+import { releaseActiveTrackerInTransaction } from "../one-lap-tracker/one-lap-tracker.assignment.service.js";
 
 const router: Router = Router();
 
@@ -709,19 +710,27 @@ router.post("/:id/cancel", can(PERMS.VP_SCHEDULE.CANCEL), async (req, res) => {
 
   const me = actorId(req);
 
-  const updated = await db.vPSchedule.update({
-    where: {
-      id: existing.id,
-    },
-    data: {
-      status: "CANCELLED",
+  const updated = await db.$transaction(async (tx) => {
+    await releaseActiveTrackerInTransaction(tx, existing.id, {
+      userId: me,
+      reason: "SCHEDULE_CANCELLED",
       remarks: parsed.data.reason,
-      updatedById: me,
-      version: {
-        increment: 1,
+    });
+
+    return tx.vPSchedule.update({
+      where: {
+        id: existing.id,
       },
-    },
-    include: vpScheduleInclude,
+      data: {
+        status: "CANCELLED",
+        remarks: parsed.data.reason,
+        updatedById: me,
+        version: {
+          increment: 1,
+        },
+      },
+      include: vpScheduleInclude,
+    });
   });
 
   return sendOk(res, updated);

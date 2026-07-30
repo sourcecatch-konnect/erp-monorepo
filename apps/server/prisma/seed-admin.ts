@@ -21,14 +21,9 @@ const ADMIN_PASSWORD = "Admin@123";
 
 const RM = PERMS.MASTERS;
 
-const allMasterKeys = (m: typeof RM[keyof typeof RM]): PermissionKey[] => [
-  m.VIEW,
-  m.CREATE,
-  m.UPDATE,
-  m.DELETE,
-  m.BULK_IMPORT,
-  m.EXPORT,
-];
+const allMasterKeys = (
+  m: (typeof RM)[keyof typeof RM],
+): PermissionKey[] => Object.values(m) as PermissionKey[];
 
 const masterViewKeys = (m: typeof RM[keyof typeof RM]): PermissionKey[] => [m.VIEW];
 

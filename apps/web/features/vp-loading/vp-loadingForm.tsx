@@ -50,6 +50,7 @@ import {
   useVPLoadingSchedules,
 } from "./hook/useVP-loading";
 import type { MRRRRowPreview, VPLoadingPreviewGoods } from "./vp-loading.service";
+import { OneLapTrackerAssignmentPanel } from "./components/OneLapTrackerAssignmentPanel";
 
 type Props = {
   mode: "create" | "edit";
@@ -695,6 +696,12 @@ export default function VPLoadingForm({ mode }: Props) {
                 />
               </div>
             </FormSection>
+
+            <OneLapTrackerAssignmentPanel
+              scheduleId={scheduleId}
+              hostRowId={mrrrRowId}
+              hostVpNo={selectedRow?.vpNo}
+            />
 
             <FormSection icon={<IconPackage size={16} />} title="Goods Loading" columns={1}>
               <div className="overflow-hidden rounded-lg border bg-background">

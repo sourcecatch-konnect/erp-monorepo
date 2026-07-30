@@ -62,7 +62,12 @@ import { getRedisConnectionOptions } from "./modules/notifications/redis.js";
 import { ensurePermissionCatalog } from "./auth/permission-catalog.js";
 import grnRoute from "./modules/grn/grn.route.js";
 import vpLoadingRoute from "./modules/vp-loading/vp-loading.route.js";
+import railRakeRoute from "./modules/rail-rake/rail-rake.route.js";
+import railBranchGrnRoute from "./modules/rail-branch-grn/rail-branch-grn.route.js";
+import deliveryChallanRoute from "./modules/delivery-challan/delivery-challan.route.js";
+import railRakeOperationRoute from "./modules/rail-rake-operation/rail-rake-operation.route.js";
 import tablePrefRoute from "./modules/user-pref/table-pref.route.js";
+import oneLapTrackerRoute from "./modules/one-lap-tracker/one-lap-tracker.route.js"
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -132,9 +137,14 @@ app.use("/vp-schedules", vpScheduleRoute);
 app.use("/mrrr", MRRRRoute);
 app.use("/grn", grnRoute);
 app.use("/vp-loading", vpLoadingRoute);
+app.use("/rail-rakes", railRakeRoute);
+app.use("/rail-branch-grns", railBranchGrnRoute);
+app.use("/delivery-challans", deliveryChallanRoute);
+app.use("/rail-rake-operations", railRakeOperationRoute);
 app.use("/me/table-prefs", tablePrefRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
+app.use("/one-lap-trackers", oneLapTrackerRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>

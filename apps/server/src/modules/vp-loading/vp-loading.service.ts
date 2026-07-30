@@ -1,6 +1,10 @@
 import { Prisma } from "../../../generated/prisma/index.js";
 import { rupeesToPaise } from "../../lib/money.js";
-import { BadRequestError, ConflictError, NotFoundError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} from "../../lib/error.js";
 import {
   formatDocNumber,
   fyCodeFor,
@@ -180,16 +184,15 @@ export const allocationInclude = {
 export const toDecimalOrNull = (value: number | null | undefined) =>
   value === undefined || value === null ? null : new Prisma.Decimal(value);
 
-export const decimalToNumber = (value: Prisma.Decimal | number | null | undefined) =>
-  value === null || value === undefined ? 0 : Number(value);
+export const decimalToNumber = (
+  value: Prisma.Decimal | number | null | undefined,
+) => (value === null || value === undefined ? 0 : Number(value));
 
 export const toMoney = (value: number | undefined) =>
   value === undefined ? undefined : BigInt(rupeesToPaise(value));
 
-export const isVPWagonLoadingOpen = (
-  loading?: { status: string } | null,
-) => !loading || ["DRAFT", "IN_PROGRESS"].includes(loading.status);
-
+export const isVPWagonLoadingOpen = (loading?: { status: string } | null) =>
+  !loading || ["DRAFT", "IN_PROGRESS"].includes(loading.status);
 
 export const getMRRRRowForLoading = async (tx: Tx, mrrrRowId: string) => {
   const row = await tx.mRRRRow.findUnique({
@@ -213,7 +216,9 @@ export const getMRRRRowForLoading = async (tx: Tx, mrrrRowId: string) => {
   if (row.mrRr.status !== "SUBMITTED") {
     throw new BadRequestError("Only submitted MR/RR rows can be loaded");
   }
-  if (!["MRRR_CREATED", "LOADING", "LOADED"].includes(row.mrRr.vpSchedule.status)) {
+  if (
+    !["MRRR_CREATED", "LOADING", "LOADED"].includes(row.mrRr.vpSchedule.status)
+  ) {
     throw new BadRequestError("VP Schedule is not ready for loading");
   }
   if (!row.vpNo?.trim()) {
@@ -240,6 +245,7 @@ export const assertGRNCompatibleWithRow = (
         transportType: string;
         originBranchId: string;
         destinationBranchId: string;
+        railheadBranchId: string | null;
       };
     };
   },
@@ -253,17 +259,13 @@ export const assertGRNCompatibleWithRow = (
   }
   const grnGateNo = grn.gateNo.trim();
 
-const lockedGateNo =
-  row.vpWagonLoading?.gateNo?.trim();
+  const lockedGateNo = row.vpWagonLoading?.gateNo?.trim();
 
-if (
-  lockedGateNo &&
-  lockedGateNo !== grnGateNo
-) {
-  throw new BadRequestError(
-    `This wagon is assigned to Gate ${lockedGateNo}. GRN from Gate ${grnGateNo} cannot be loaded`,
-  );
-}
+  if (lockedGateNo && lockedGateNo !== grnGateNo) {
+    throw new BadRequestError(
+      `This wagon is assigned to Gate ${lockedGateNo}. GRN from Gate ${grnGateNo} cannot be loaded`,
+    );
+  }
   if (["CANCELLED", "DRAFT"].includes(grn.lorryReceipt.status)) {
     throw new BadRequestError("LR is not eligible for VP loading");
   }
@@ -274,11 +276,17 @@ if (
   const schedule = row.mrRr.vpSchedule;
   const group = grn.lorryReceipt.group;
 
+  if (group.railheadBranchId !== schedule.fromBranchId) {
+    throw new BadRequestError(
+      "GRN/LR railhead does not match VP Schedule source branch",
+    );
+  }
+
   if (group.destinationBranchId !== schedule.toBranchId) {
-  throw new BadRequestError(
-    "GRN/LR destination does not match VP Schedule destination",
-  );
-}
+    throw new BadRequestError(
+      "GRN/LR destination does not match VP Schedule destination",
+    );
+  }
 };
 
 export const getGRNForLoading = async (tx: Tx, grnId: string) => {
@@ -297,6 +305,7 @@ export const getGRNForLoading = async (tx: Tx, grnId: string) => {
               transportType: true,
               originBranchId: true,
               destinationBranchId: true,
+              railheadBranchId: true,
               consignor: { select: customerSelect },
               consignee: { select: customerSelect },
               originBranch: { select: branchSelect },
@@ -398,9 +407,10 @@ export const getEligibleGRNsForRow = async (
         deletedAt: null,
         status: { not: "CANCELLED" },
         group: {
-  transportType: "RoadAndRail",
-  destinationBranchId: schedule.toBranchId,
-},
+          transportType: "RoadAndRail",
+          railheadBranchId: schedule.fromBranchId,
+          destinationBranchId: schedule.toBranchId,
+        },
       },
     },
     include: {
@@ -414,6 +424,7 @@ export const getEligibleGRNsForRow = async (
               id: true,
               groupNumber: true,
               transportType: true,
+              railheadBranchId: true,
               consignor: { select: customerSelect },
               consignee: { select: customerSelect },
               originBranch: { select: branchSelect },
@@ -461,17 +472,12 @@ export const createOrGetVPWagonLoading = async (
     version?: number;
   },
 ) => {
-  const row = await getMRRRRowForLoading(
-    tx,
-    data.mrrrRowId,
-  );
+  const row = await getMRRRRowForLoading(tx, data.mrrrRowId);
 
   const requestedGateNo = data.gateNo.trim();
 
   if (!requestedGateNo) {
-    throw new BadRequestError(
-      "GRN gate number is required",
-    );
+    throw new BadRequestError("GRN gate number is required");
   }
 
   /*
@@ -485,11 +491,7 @@ export const createOrGetVPWagonLoading = async (
      * Completed, verified or cancelled wagons
      * cannot receive another LR.
      */
-    if (
-      !["DRAFT", "IN_PROGRESS"].includes(
-        existingWagon.status,
-      )
-    ) {
+    if (!["DRAFT", "IN_PROGRESS"].includes(existingWagon.status)) {
       throw new BadRequestError(
         "Only a draft or in-progress wagon can be loaded",
       );
@@ -498,26 +500,17 @@ export const createOrGetVPWagonLoading = async (
     /*
      * Prevent saving stale frontend data.
      */
-    if (
-      data.version !== undefined &&
-      data.version !== existingWagon.version
-    ) {
-      throw new ConflictError(
-        "Wagon loading was updated by someone else",
-      );
+    if (data.version !== undefined && data.version !== existingWagon.version) {
+      throw new ConflictError("Wagon loading was updated by someone else");
     }
 
-    const lockedGateNo =
-      existingWagon.gateNo?.trim();
+    const lockedGateNo = existingWagon.gateNo?.trim();
 
     /*
      * Once the first LR is added, the wagon gate
      * remains locked until every LR is cancelled.
      */
-    if (
-      lockedGateNo &&
-      lockedGateNo !== requestedGateNo
-    ) {
+    if (lockedGateNo && lockedGateNo !== requestedGateNo) {
       throw new BadRequestError(
         `This wagon is assigned to Gate ${lockedGateNo}. LR from Gate ${requestedGateNo} cannot be loaded`,
       );
@@ -536,20 +529,15 @@ export const createOrGetVPWagonLoading = async (
       data: {
         status: "IN_PROGRESS",
 
-        gateNo:
-          lockedGateNo ?? requestedGateNo,
+        gateNo: lockedGateNo ?? requestedGateNo,
 
         labourId: existingWagon.labourId,
         labourCharge: existingWagon.labourCharge,
         loadingSupervisorId: existingWagon.loadingSupervisorId,
 
-        remarks:
-          data.remarks ??
-          existingWagon.remarks,
+        remarks: data.remarks ?? existingWagon.remarks,
 
-        loadingStartedAt:
-          existingWagon.loadingStartedAt ??
-          new Date(),
+        loadingStartedAt: existingWagon.loadingStartedAt ?? new Date(),
 
         updatedById: data.actorId,
 
@@ -592,24 +580,15 @@ export const createOrGetVPWagonLoading = async (
       gateNo: requestedGateNo,
 
       labourId: data.labourId,
-      labourCharge: toMoney(
-        data.labourCharge,
-      ),
-      loadingSupervisorId:
-        data.loadingSupervisorId,
+      labourCharge: toMoney(data.labourCharge),
+      loadingSupervisorId: data.loadingSupervisorId,
       remarks: data.remarks,
 
       loadingStartedAt: new Date(),
 
-      wagonCapacityCftSnapshot:
-        toDecimalOrNull(
-          row.wagon.totalCft,
-        ),
+      wagonCapacityCftSnapshot: toDecimalOrNull(row.wagon.totalCft),
 
-      wagonCapacityMtSnapshot:
-        toDecimalOrNull(
-          row.wagon.capacityMt,
-        ),
+      wagonCapacityMtSnapshot: toDecimalOrNull(row.wagon.capacityMt),
 
       createdById: data.actorId,
     },
@@ -617,10 +596,7 @@ export const createOrGetVPWagonLoading = async (
   });
 };
 
-export const generateVPLoadingNumber = async (
-  tx: Tx,
-  branchCode: string,
-) => {
+export const generateVPLoadingNumber = async (tx: Tx, branchCode: string) => {
   const fyCode = fyCodeFor(new Date());
   const seq = await nextSequence(tx, branchCode, fyCode, "VPL");
 
@@ -637,46 +613,30 @@ export const buildAllocationGoods = (
   },
   goodsInput: VPLoadingGoodsInput[],
 ) => {
-  const grnGoodsById = new Map(
-    grn.goods.map((row) => [row.id, row]),
-  );
+  const grnGoodsById = new Map(grn.goods.map((row) => [row.id, row]));
 
-  const goodsIds = goodsInput.map(
-    (row) => row.grnGoodsId,
-  );
+  const goodsIds = goodsInput.map((row) => row.grnGoodsId);
 
-  if (
-    new Set(goodsIds).size !== goodsIds.length
-  ) {
+  if (new Set(goodsIds).size !== goodsIds.length) {
     throw new BadRequestError(
       "The same GRN goods row cannot be added more than once",
     );
   }
 
   const rows = goodsInput.map((input) => {
-    const grnGoods = grnGoodsById.get(
-      input.grnGoodsId,
-    );
+    const grnGoods = grnGoodsById.get(input.grnGoodsId);
 
     if (!grnGoods) {
-      throw new BadRequestError(
-        "Selected goods row does not belong to GRN",
-      );
+      throw new BadRequestError("Selected goods row does not belong to GRN");
     }
 
-    if (
-      input.loadedQty >
-      grnGoods.availableQty
-    ) {
+    if (input.loadedQty > grnGoods.availableQty) {
       throw new ConflictError(
         `Loaded quantity exceeds available quantity for ${grnGoods.goodsName}`,
       );
     }
 
-    if (
-      input.loadingDamageQty >
-      input.loadedQty
-    ) {
+    if (input.loadingDamageQty > input.loadedQty) {
       throw new BadRequestError(
         `Damage quantity cannot exceed loaded quantity for ${grnGoods.goodsName}`,
       );
@@ -685,8 +645,7 @@ export const buildAllocationGoods = (
     return {
       grnGoodsId: input.grnGoodsId,
       loadedQty: input.loadedQty,
-      loadingDamageQty:
-        input.loadingDamageQty,
+      loadingDamageQty: input.loadingDamageQty,
       remarks: null,
 
       unitWeightKgSnapshot: null,
@@ -698,11 +657,7 @@ export const buildAllocationGoods = (
   });
 
   const totals = {
-    loadedQty: rows.reduce(
-      (sum, row) =>
-        sum + row.loadedQty,
-      0,
-    ),
+    loadedQty: rows.reduce((sum, row) => sum + row.loadedQty, 0),
   };
 
   return {
@@ -718,50 +673,35 @@ export const mergeVPLoadingGoods = (
   }>,
   inputGoods: VPLoadingGoodsInput[],
 ): VPLoadingGoodsInput[] => {
-  const mergedGoods = new Map<
-    string,
-    VPLoadingGoodsInput
-  >();
+  const mergedGoods = new Map<string, VPLoadingGoodsInput>();
 
   for (const goods of existingGoods) {
     mergedGoods.set(goods.grnGoodsId, {
       grnGoodsId: goods.grnGoodsId,
-      loadedQty: Number(
-        goods.loadedQty ?? 0,
-      ),
-      loadingDamageQty: Number(
-        goods.loadingDamageQty ?? 0,
-      ),
+      loadedQty: Number(goods.loadedQty ?? 0),
+      loadingDamageQty: Number(goods.loadingDamageQty ?? 0),
     });
   }
 
   for (const goods of inputGoods) {
-    const current =
-      mergedGoods.get(goods.grnGoodsId) ?? {
-        grnGoodsId: goods.grnGoodsId,
-        loadedQty: 0,
-        loadingDamageQty: 0,
-      };
+    const current = mergedGoods.get(goods.grnGoodsId) ?? {
+      grnGoodsId: goods.grnGoodsId,
+      loadedQty: 0,
+      loadingDamageQty: 0,
+    };
 
     mergedGoods.set(goods.grnGoodsId, {
       grnGoodsId: goods.grnGoodsId,
 
-      loadedQty:
-        current.loadedQty +
-        goods.loadedQty,
+      loadedQty: current.loadedQty + goods.loadedQty,
 
-      loadingDamageQty:
-        current.loadingDamageQty +
-        goods.loadingDamageQty,
+      loadingDamageQty: current.loadingDamageQty + goods.loadingDamageQty,
     });
   }
 
   return [...mergedGoods.values()];
 };
-export const getCurrentGRNAvailability = async (
-  tx: Tx,
-  grnId: string,
-) => {
+export const getCurrentGRNAvailability = async (tx: Tx, grnId: string) => {
   const grn = await tx.gRN.findUnique({
     where: {
       id: grnId,
@@ -781,6 +721,7 @@ export const getCurrentGRNAvailability = async (
               transportType: true,
               originBranchId: true,
               destinationBranchId: true,
+              railheadBranchId: true,
             },
           },
         },
@@ -818,77 +759,69 @@ export const getCurrentGRNAvailability = async (
 
   return grn;
 };
-export const recalculateVPWagonLoadingTotals =
-  async (
-    tx: Tx,
-    vpWagonLoadingId: string,
-    options: {
-      detail?: boolean;
-    } = {},
-  ) => {
-    const wagon =
-      await tx.vPWagonLoading.findUnique({
+export const recalculateVPWagonLoadingTotals = async (
+  tx: Tx,
+  vpWagonLoadingId: string,
+  options: {
+    detail?: boolean;
+  } = {},
+) => {
+  const wagon = await tx.vPWagonLoading.findUnique({
+    where: {
+      id: vpWagonLoadingId,
+    },
+    include: {
+      allocations: {
         where: {
-          id: vpWagonLoadingId,
-        },
-        include: {
-          allocations: {
-            where: {
-              status: {
-                not: "CANCELLED",
-              },
-            },
-            select: {
-              loadedQty: true,
-            },
+          status: {
+            not: "CANCELLED",
           },
         },
-      });
-
-    if (!wagon) {
-      throw new NotFoundError(
-        "VP wagon loading not found",
-      );
-    }
-
-    const totalLoadedQty =
-      wagon.allocations.reduce(
-        (sum, allocation) =>
-          sum + allocation.loadedQty,
-        0,
-      );
-
-    const updateArgs = {
-      where: {
-        id: vpWagonLoadingId,
-      },
-      data: {
-        totalLoadedQty,
-
-        // Paper-based VP Loading does not calculate capacity.
-        totalLoadedCft: null,
-        totalLoadedWeightMt: null,
-        capacityCheckStatus: "NOT_CHECKED",
-        capacityExceededCft: null,
-        capacityExceededMt: null,
-
-        version: {
-          increment: 1,
+        select: {
+          loadedQty: true,
         },
       },
-    } satisfies Prisma.VPWagonLoadingUpdateArgs;
+    },
+  });
 
-    if (options.detail === false) {
-      return tx.vPWagonLoading.update(
-        updateArgs,
-      );
-    }
+  if (!wagon) {
+    throw new NotFoundError("VP wagon loading not found");
+  }
 
-    return tx.vPWagonLoading.update({
-      ...updateArgs,
-      include: vpWagonLoadingInclude,
-    });
-  };
+  const totalLoadedQty = wagon.allocations.reduce(
+    (sum, allocation) => sum + allocation.loadedQty,
+    0,
+  );
+
+  const updateArgs = {
+    where: {
+      id: vpWagonLoadingId,
+    },
+    data: {
+      totalLoadedQty,
+
+      // Paper-based VP Loading does not calculate capacity.
+      totalLoadedCft: null,
+      totalLoadedWeightMt: null,
+      capacityCheckStatus: "NOT_CHECKED",
+      capacityExceededCft: null,
+      capacityExceededMt: null,
+
+      version: {
+        increment: 1,
+      },
+    },
+  } satisfies Prisma.VPWagonLoadingUpdateArgs;
+
+  if (options.detail === false) {
+    return tx.vPWagonLoading.update(updateArgs);
+  }
+
+  return tx.vPWagonLoading.update({
+    ...updateArgs,
+    include: vpWagonLoadingInclude,
+  });
+};
 
 export const recalculateVpScheduleLoadingStatus = async (
   tx: Tx,
@@ -923,40 +856,34 @@ export const recalculateVpScheduleLoadingStatus = async (
     },
   });
 
-  if (
-    !schedule?.mrRr ||
-    schedule.mrRr.status !== "SUBMITTED"
-  ) {
+  if (!schedule?.mrRr || schedule.mrRr.status !== "SUBMITTED") {
     return null;
   }
 
-  const requiredRows = schedule.mrRr.rows.filter(
-    (row) => Boolean(row.vpNo?.trim()),
+  if (schedule.status === "FINALISED") {
+    return schedule;
+  }
+
+  const requiredRows = schedule.mrRr.rows.filter((row) =>
+    Boolean(row.vpNo?.trim()),
   );
 
-const activeLoadings = requiredRows
-  .map((row) => row.vpWagonLoading)
-  .filter(
-    (
-      loading,
-    ): loading is NonNullable<typeof loading> =>
-      loading != null &&
-      loading.status !== "CANCELLED",
-  );
+  const activeLoadings = requiredRows
+    .map((row) => row.vpWagonLoading)
+    .filter(
+      (loading): loading is NonNullable<typeof loading> =>
+        loading != null && loading.status !== "CANCELLED",
+    );
 
-  let nextStatus:
-    | "MRRR_CREATED"
-    | "LOADING"
-    | "LOADED"
-    | "VERIFIED" = "MRRR_CREATED";
+  let nextStatus: "MRRR_CREATED" | "LOADING" | "LOADED" | "VERIFIED" =
+    "MRRR_CREATED";
 
   if (activeLoadings.length > 0) {
     nextStatus = "LOADING";
   }
 
   const allRequiredRowsHaveLoading =
-    requiredRows.length > 0 &&
-    activeLoadings.length === requiredRows.length;
+    requiredRows.length > 0 && activeLoadings.length === requiredRows.length;
 
   if (
     allRequiredRowsHaveLoading &&
@@ -969,9 +896,7 @@ const activeLoadings = requiredRows
 
   if (
     allRequiredRowsHaveLoading &&
-    activeLoadings.every(
-      (loading) => loading.status === "VERIFIED",
-    )
+    activeLoadings.every((loading) => loading.status === "VERIFIED")
   ) {
     nextStatus = "VERIFIED";
   }
@@ -1019,39 +944,25 @@ export const cancelVPLoadingAllocation = async (
   });
 
   if (!existing) {
-    throw new NotFoundError(
-      "VP loading allocation not found",
-    );
+    throw new NotFoundError("VP loading allocation not found");
   }
 
   if (existing.status === "CANCELLED") {
-    throw new BadRequestError(
-      "Allocation is already cancelled",
-    );
+    throw new BadRequestError("Allocation is already cancelled");
   }
 
   if (existing.status !== "LOADED") {
-    throw new BadRequestError(
-      "Only a loaded allocation can be cancelled",
-    );
+    throw new BadRequestError("Only a loaded allocation can be cancelled");
   }
 
-  if (
-    existing.vpWagonLoading.status !==
-    "IN_PROGRESS"
-  ) {
+  if (existing.vpWagonLoading.status !== "IN_PROGRESS") {
     throw new BadRequestError(
       "Only an allocation from an in-progress wagon can be cancelled",
     );
   }
 
-  if (
-    data.version !== undefined &&
-    data.version !== existing.version
-  ) {
-    throw new ConflictError(
-      "Allocation changed. Please refresh.",
-    );
+  if (data.version !== undefined && data.version !== existing.version) {
+    throw new ConflictError("Allocation changed. Please refresh.");
   }
 
   await tx.vPLoading.update({
@@ -1071,25 +982,18 @@ export const cancelVPLoadingAllocation = async (
   });
 
   // Recalculate total loaded quantity only.
-  await recalculateVPWagonLoadingTotals(
-    tx,
-    existing.vpWagonLoadingId,
-    {
-      detail: false,
+  await recalculateVPWagonLoadingTotals(tx, existing.vpWagonLoadingId, {
+    detail: false,
+  });
+
+  const activeAllocationCount = await tx.vPLoading.count({
+    where: {
+      vpWagonLoadingId: existing.vpWagonLoadingId,
+      status: "LOADED",
     },
-  );
+  });
 
-  const activeAllocationCount =
-    await tx.vPLoading.count({
-      where: {
-        vpWagonLoadingId:
-          existing.vpWagonLoadingId,
-        status: "LOADED",
-      },
-    });
-
-  const gateReleased =
-    activeAllocationCount === 0;
+  const gateReleased = activeAllocationCount === 0;
 
   if (gateReleased) {
     await tx.vPWagonLoading.update({
@@ -1108,18 +1012,14 @@ export const cancelVPLoadingAllocation = async (
 
   await recalculateVpScheduleLoadingStatus(
     tx,
-    existing.vpWagonLoading.mrRrRow
-      .mrRr.vpSchedule.id,
+    existing.vpWagonLoading.mrRrRow.mrRr.vpSchedule.id,
     data.actorId,
   );
 
   return {
     allocationId: existing.id,
-    vpWagonLoadingId:
-      existing.vpWagonLoadingId,
-    branchId:
-      existing.vpWagonLoading.mrRrRow.mrRr
-        .vpSchedule.fromBranchId,
+    vpWagonLoadingId: existing.vpWagonLoadingId,
+    branchId: existing.vpWagonLoading.mrRrRow.mrRr.vpSchedule.fromBranchId,
     gateReleased,
   };
 };

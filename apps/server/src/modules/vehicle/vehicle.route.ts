@@ -7,6 +7,46 @@ import {
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
 import { ZodTypeAny } from "zod";
+import { BadRequestError } from "../../lib/error.js";
+
+type VehicleMutation = {
+  ownershipType?: "Own_Vehicle" | "Market_Vehicle";
+  transportId?: string | null;
+};
+
+const validateTransporter = async (
+  data: VehicleMutation,
+  existing?: VehicleMutation,
+) => {
+  const ownershipType = data.ownershipType ?? existing?.ownershipType;
+  const requestedTransportId =
+    data.transportId !== undefined
+      ? data.transportId || null
+      : existing?.transportId || null;
+
+  if (ownershipType === "Market_Vehicle" && !requestedTransportId) {
+    throw new BadRequestError(
+      "Transporter is required for a market vehicle",
+    );
+  }
+
+  if (ownershipType === "Own_Vehicle") {
+    return { ...data, transportId: null };
+  }
+
+  if (requestedTransportId) {
+    const transporter = await db.transport.findUnique({
+      where: { id: requestedTransportId },
+      select: { id: true },
+    });
+
+    if (!transporter) {
+      throw new BadRequestError("Selected transporter was not found");
+    }
+  }
+
+  return { ...data, transportId: requestedTransportId };
+};
 
 const normalizeVehicleNumber = (value: string) =>
   value.toUpperCase().replace(/\s+/g, "");
@@ -86,6 +126,22 @@ const router: Router = createCrudRouter({
       id: true,
       vehicleNumber: true,
       status: true,
+      ownershipType: true,
+      transportId: true,
+      capacityMT: true,
+      vehicleTypeRef: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
+      transport: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
     lookupOrderBy: {
       vehicleNumber: "asc",
@@ -98,6 +154,13 @@ const router: Router = createCrudRouter({
           code: true,
         },
       },
+      transport: {
+        select: {
+          id: true,
+          name: true,
+          phoneNo: true,
+        },
+      },
     },
     defaultOrderBy: {
       vehicleNumber: "asc",
@@ -106,6 +169,15 @@ const router: Router = createCrudRouter({
   },
 
   hooks: {
+    beforeCreate: async (data) =>
+      (await validateTransporter(
+        data as VehicleMutation,
+      )) as typeof data,
+    beforeUpdate: async (data, row) =>
+      (await validateTransporter(
+        data as VehicleMutation,
+        row as VehicleMutation,
+      )) as typeof data,
     beforeDelete: async (id: string) => {
       const usedInTrip = await db.vehicleTrip.findFirst({
         where: {

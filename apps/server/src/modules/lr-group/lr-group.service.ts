@@ -166,29 +166,43 @@ export const groupListSelect = {
   consignee: { select: { id: true, name: true, shortName: true } },
   originBranch: { select: { id: true, name: true, branchCode: true } },
   destinationBranch: { select: { id: true, name: true, branchCode: true } },
+  marketTransport: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+
+  marketVehicle: {
+    select: {
+      id: true,
+      vehicleNumber: true,
+      status: true,
+    },
+  },
   order: {
-  select: {
-    id: true,
-    orderNumber: true,
-    route: {
-      select: {
-        id: true,
-        sourceCity: {
-          select: {
-            id: true,
-            name: true,
+    select: {
+      id: true,
+      orderNumber: true,
+      route: {
+        select: {
+          id: true,
+          sourceCity: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
-        },
-        destinationCity: {
-          select: {
-            id: true,
-            name: true,
+          destinationCity: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
       },
     },
   },
-},
   lorryReceipts: {
     where: { deletedAt: null },
     orderBy: { createdAt: "asc" as const },
@@ -217,31 +231,45 @@ export const groupDetailInclude = {
   consignee: { select: { id: true, name: true, shortName: true } },
   originBranch: { select: { id: true, name: true, branchCode: true } },
   destinationBranch: { select: { id: true, name: true, branchCode: true } },
+  marketTransport: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+
+  marketVehicle: {
+    select: {
+      id: true,
+      vehicleNumber: true,
+      status: true,
+    },
+  },
   order: {
-  select: {
-    id: true,
-    orderNumber: true,
-    truckQuantity: true,
-    bookingFreightAmount: true,
-    route: {
-      select: {
-        id: true,
-        sourceCity: {
-          select: {
-            id: true,
-            name: true,
+    select: {
+      id: true,
+      orderNumber: true,
+      truckQuantity: true,
+      bookingFreightAmount: true,
+      route: {
+        select: {
+          id: true,
+          sourceCity: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
-        },
-        destinationCity: {
-          select: {
-            id: true,
-            name: true,
+          destinationCity: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
       },
     },
   },
-},
   lorryReceipts: {
     where: { deletedAt: null },
     include: {

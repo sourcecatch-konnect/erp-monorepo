@@ -3,9 +3,12 @@ import type { Request } from "express";
 import { PERMS } from "@skerp/types";
 import {
   cancelVPLoadingSchema,
-
   completeVPWagonLoadingSchema,
   createVPLoadingAllocationSchema,
+  finaliseVPScheduleLoadingSchema,
+  assignOneLapTrackerSchema,
+  releaseOneLapTrackerSchema,
+  replaceOneLapTrackerSchema,
   updateVPWagonLoadingLabourSchema,
   updateVPLoadingAllocationSchema,
 } from "@skerp/validators";
@@ -15,14 +18,29 @@ import { Prisma } from "../../../generated/prisma/index.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
-import { BadRequestError, ConflictError, NotFoundError, ValidationError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
+import { fyCodeFor, nextSequence } from "../_shared/doc-number.js";
 import { sendOk } from "../_shared/response.js";
 import { getDateRange } from "../vp-schedule/vp-schedule.route.js";
 import {
+  assignOneLapTracker,
+  getActiveTrackerAssignment,
+  listAvailableOneLapTrackers,
+  releaseOneLapTracker,
+  replaceOneLapTracker,
+} from "../one-lap-tracker/one-lap-tracker.assignment.service.js";
+import {
   allocationInclude,
   assertGRNCompatibleWithRow,
+  branchSelect,
   buildAllocationGoods,
   cancelVPLoadingAllocation,
+  customerSelect,
   generateVPLoadingNumber,
   getEligibleGRNsForRow,
   getGRNForLoading,
@@ -51,7 +69,7 @@ const actorId = (req: { user?: { userId: string } }) => {
 
 const getIdParam = (value: string | string[] | undefined, label: string) => {
   const id = decodeURIComponent(
-    Array.isArray(value) ? value[0] ?? "" : value ?? "",
+    Array.isArray(value) ? (value[0] ?? "") : (value ?? ""),
   ).trim();
 
   if (!id) throw new BadRequestError(`${label} is required`);
@@ -68,7 +86,9 @@ const assertVersion = (
   }
 };
 
-const mapGRNDropdown = (grn: Awaited<ReturnType<typeof getEligibleGRNsForRow>>[number]) => ({
+const mapGRNDropdown = (
+  grn: Awaited<ReturnType<typeof getEligibleGRNsForRow>>[number],
+) => ({
   grnId: grn.id,
   grnNumber: grn.grnNumber,
   gateNo: grn.gateNo,
@@ -86,10 +106,7 @@ const mapGRNDropdown = (grn: Awaited<ReturnType<typeof getEligibleGRNsForRow>>[n
 const toMoney = (value: number | undefined) =>
   value === undefined ? undefined : BigInt(Math.round(value * 100));
 
-const getWagonLoadingForReq = async (
-  req: Request,
-  id: string,
-) => {
+const getWagonLoadingForReq = async (req: Request, id: string) => {
   const wagon = await db.vPWagonLoading.findUnique({
     where: { id },
     include: vpWagonLoadingInclude,
@@ -112,14 +129,137 @@ const getEligibleGRNCountForRow = async (
 
     return grns.length;
   } catch (error) {
-  console.error("Eligible GRN count failed", {
-    mrrrRowId,
-    error,
+    console.error("Eligible GRN count failed", {
+      mrrrRowId,
+      error,
+    });
+
+    return 0;
+  }
+};
+
+const assertTrackerScheduleAccess = async (
+  req: Request,
+  vpScheduleId: string,
+) => {
+  const schedule = await db.vPSchedule.findFirst({
+    where: {
+      id: vpScheduleId,
+      deletedAt: null,
+      ...branchFilter(req, "fromBranchId"),
+    },
+    select: { id: true },
   });
 
-  return 0;
-}
+  if (!schedule) throw new NotFoundError("VP Schedule not found");
 };
+
+router.get(
+  "/schedules/:vpScheduleId/tracker-assignment",
+  can(PERMS.VP_LOADING.VIEW),
+  async (req, res) => {
+    const vpScheduleId = getIdParam(
+      req.params.vpScheduleId,
+      "VP Schedule",
+    );
+    await assertTrackerScheduleAccess(req, vpScheduleId);
+    return sendOk(
+      res,
+      await getActiveTrackerAssignment(vpScheduleId),
+    );
+  },
+);
+
+router.get(
+  "/schedules/:vpScheduleId/available-trackers",
+  can(PERMS.VP_LOADING.VIEW),
+  async (req, res) => {
+    const vpScheduleId = getIdParam(
+      req.params.vpScheduleId,
+      "VP Schedule",
+    );
+    await assertTrackerScheduleAccess(req, vpScheduleId);
+    return sendOk(res, await listAvailableOneLapTrackers());
+  },
+);
+
+router.post(
+  "/schedules/:vpScheduleId/tracker-assignment",
+  can(PERMS.VP_LOADING.ASSIGN_TRACKER),
+  async (req, res) => {
+    const vpScheduleId = getIdParam(
+      req.params.vpScheduleId,
+      "VP Schedule",
+    );
+    await assertTrackerScheduleAccess(req, vpScheduleId);
+
+    const parsed = assignOneLapTrackerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten());
+    }
+
+    return sendOk(
+      res,
+      await assignOneLapTracker(
+        vpScheduleId,
+        parsed.data,
+        actorId(req),
+      ),
+    );
+  },
+);
+
+router.post(
+  "/schedules/:vpScheduleId/tracker-assignment/replace",
+  can(PERMS.VP_LOADING.REPLACE_TRACKER),
+  async (req, res) => {
+    const vpScheduleId = getIdParam(
+      req.params.vpScheduleId,
+      "VP Schedule",
+    );
+    await assertTrackerScheduleAccess(req, vpScheduleId);
+
+    const parsed = replaceOneLapTrackerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten());
+    }
+
+    return sendOk(
+      res,
+      await replaceOneLapTracker(
+        vpScheduleId,
+        parsed.data,
+        actorId(req),
+      ),
+    );
+  },
+);
+
+router.post(
+  "/schedules/:vpScheduleId/tracker-assignment/release",
+  can(PERMS.VP_LOADING.RELEASE_TRACKER),
+  async (req, res) => {
+    const vpScheduleId = getIdParam(
+      req.params.vpScheduleId,
+      "VP Schedule",
+    );
+    await assertTrackerScheduleAccess(req, vpScheduleId);
+
+    const parsed = releaseOneLapTrackerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten());
+    }
+
+    return sendOk(
+      res,
+      await releaseOneLapTracker(
+        vpScheduleId,
+        parsed.data.reason,
+        actorId(req),
+      ),
+    );
+  },
+);
 
 router.get("/schedules", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
   const scheduleDate =
@@ -188,39 +328,37 @@ router.get("/schedules", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
   const rowsBySchedule = await Promise.all(
     schedules.map(async (schedule) => {
       const rows = schedule.mrRr?.rows ?? [];
-      const loadings = rows
-        .map((row) => row.vpWagonLoading)
-        .filter(Boolean);
+      const loadings = rows.map((row) => row.vpWagonLoading).filter(Boolean);
       const vpRows = rows.filter((row) => row.vpNo?.trim());
       const openRows = vpRows.filter((row) =>
-  isVPWagonLoadingOpen(
-    row.vpWagonLoading,
-  ),
-);
+        isVPWagonLoadingOpen(row.vpWagonLoading),
+      );
 
       return {
         ...schedule,
         mrRrSummary: schedule.mrRr
           ? {
-              id: schedule.mrRr.id,
-              mrRrNumber: schedule.mrRr.mrRrNumber,
-              status: schedule.mrRr.status,
-            }
+            id: schedule.mrRr.id,
+            mrRrNumber: schedule.mrRr.mrRrNumber,
+            status: schedule.mrRr.status,
+          }
           : null,
         totalVpRows: vpRows.length,
         loadingRows: openRows.map((row) => ({
-  id: row.id,
-  rowNumber: row.rowNumber,
-  rowLabel: row.rowLabel,
-  vpNo: row.vpNo,
-  mrRrNo: row.mrRrNo,
-  wagon: row.wagon,
-  vpWagonLoading: row.vpWagonLoading,
-})),
-        loadingWagonCount: loadings.filter((row) => row?.status === "IN_PROGRESS")
-          .length,
-        completedWagonCount: loadings.filter((row) => row?.status === "COMPLETED")
-          .length,
+          id: row.id,
+          rowNumber: row.rowNumber,
+          rowLabel: row.rowLabel,
+          vpNo: row.vpNo,
+          mrRrNo: row.mrRrNo,
+          wagon: row.wagon,
+          vpWagonLoading: row.vpWagonLoading,
+        })),
+        loadingWagonCount: loadings.filter(
+          (row) => row?.status === "IN_PROGRESS",
+        ).length,
+        completedWagonCount: loadings.filter(
+          (row) => row?.status === "COMPLETED",
+        ).length,
         verifiedWagonCount: loadings.filter((row) => row?.status === "VERIFIED")
           .length,
       };
@@ -238,18 +376,18 @@ router.get("/allocations", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
     req.ctx?.branchScope === "ALL"
       ? {}
       : {
-          vpWagonLoading: {
-            mrRrRow: {
-              mrRr: {
-                vpSchedule: {
-                  fromBranchId: {
-                    in: req.ctx?.branchIds ?? [],
-                  },
+        vpWagonLoading: {
+          mrRrRow: {
+            mrRr: {
+              vpSchedule: {
+                fromBranchId: {
+                  in: req.ctx?.branchIds ?? [],
                 },
               },
             },
           },
-        };
+        },
+      };
 
   const allocations = await db.vPLoading.findMany({
     where: {
@@ -318,168 +456,146 @@ router.get("/allocations", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
   );
 });
 //wagon based list At VP Loading table
-router.get(
-  "/wagons",
-  can(PERMS.VP_LOADING.VIEW),
-  async (req, res) => {
-    const branchWhere: Prisma.VPWagonLoadingWhereInput =
-      req.ctx?.branchScope === "ALL"
-        ? {}
-        : {
-            mrRrRow: {
-              mrRr: {
-                vpSchedule: {
-                  fromBranchId: {
-                    in: req.ctx?.branchIds ?? [],
-                  },
-                },
+router.get("/wagons", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
+  const branchWhere: Prisma.VPWagonLoadingWhereInput =
+    req.ctx?.branchScope === "ALL"
+      ? {}
+      : {
+        mrRrRow: {
+          mrRr: {
+            vpSchedule: {
+              fromBranchId: {
+                in: req.ctx?.branchIds ?? [],
               },
             },
-          };
-
-    const wagonLoadings =
-      await db.vPWagonLoading.findMany({
-        where: branchWhere,
-
-        orderBy: {
-          createdAt: "desc",
+          },
         },
+      };
 
+  const wagonLoadings = await db.vPWagonLoading.findMany({
+    where: branchWhere,
+
+    orderBy: {
+      createdAt: "desc",
+    },
+
+    select: {
+      id: true,
+      status: true,
+
+      totalLoadedQty: true,
+
+      loadingStartedAt: true,
+      loadingCompletedAt: true,
+      verifiedAt: true,
+      cancelledAt: true,
+
+      remarks: true,
+      cancelReason: true,
+
+      version: true,
+      createdAt: true,
+      updatedAt: true,
+
+      mrRrRow: {
         select: {
           id: true,
-          status: true,
+          rowNumber: true,
+          rowLabel: true,
+          vpNo: true,
 
-          totalLoadedQty: true,
-
-          loadingStartedAt: true,
-          loadingCompletedAt: true,
-          verifiedAt: true,
-          cancelledAt: true,
-
-          remarks: true,
-          cancelReason: true,
-
-          version: true,
-          createdAt: true,
-          updatedAt: true,
-
-          mrRrRow: {
+          wagon: {
             select: {
               id: true,
-              rowNumber: true,
-              rowLabel: true,
-              vpNo: true,
-
-              wagon: {
-                select: {
-                  id: true,
-                  name: true,
-                  totalCft: true,
-                  capacityMt: true,
-                },
-              },
-
-              mrRr: {
-                select: {
-                  vpSchedule: {
-                    select: scheduleHeaderSelect,
-                  },
-                },
-              },
+              name: true,
+              totalCft: true,
+              capacityMt: true,
             },
           },
 
-          // Count only active LR allocations.
-          _count: {
+          mrRr: {
             select: {
-              allocations: {
-                where: {
-                  status: {
-                    not: "CANCELLED",
-                  },
-                },
+              vpSchedule: {
+                select: scheduleHeaderSelect,
               },
             },
           },
         },
-      });
+      },
 
-    return sendOk(
-      res,
-      wagonLoadings.map((wagonLoading) => {
-        const mrRrRow =
-          wagonLoading.mrRrRow;
-
-        const mrRr = mrRrRow.mrRr;
-        const schedule = mrRr.vpSchedule;
-
-        return {
-          // VPWagonLoading ID
-          id: wagonLoading.id,
-
-          status: wagonLoading.status,
-
-          totalLoadedQty:
-            wagonLoading.totalLoadedQty,
-
-          // Number of active LRs in this wagon
-          allocationCount:
-            wagonLoading._count.allocations,
-
-          loadingStartedAt:
-            wagonLoading.loadingStartedAt,
-
-          loadingCompletedAt:
-            wagonLoading.loadingCompletedAt,
-
-          verifiedAt:
-            wagonLoading.verifiedAt,
-
-          cancelledAt:
-            wagonLoading.cancelledAt,
-
-          remarks: wagonLoading.remarks,
-          cancelReason:
-            wagonLoading.cancelReason,
-
-          version: wagonLoading.version,
-          createdAt: wagonLoading.createdAt,
-          updatedAt: wagonLoading.updatedAt,
-
-          schedule: {
-            id: schedule.id,
-            scheduleNumber:
-              schedule.scheduleNumber,
-            scheduleDate:
-              schedule.scheduleDate,
-            scheduleName:
-              schedule.scheduleName,
-            status: schedule.status,
-
-            fromBranch:
-              schedule.fromBranch,
-            toBranch:
-              schedule.toBranch,
-            sourceArea:
-              schedule.sourceArea,
-            destinationArea:
-              schedule.destinationArea,
+      // Count only active LR allocations.
+      _count: {
+        select: {
+          allocations: {
+            where: {
+              status: {
+                not: "CANCELLED",
+              },
+            },
           },
+        },
+      },
+    },
+  });
 
-          mrRrRow: {
-            id: mrRrRow.id,
-            rowNumber:
-              mrRrRow.rowNumber,
-            rowLabel:
-              mrRrRow.rowLabel,
-            vpNo: mrRrRow.vpNo,
-            wagon: mrRrRow.wagon,
-          },
-        };
-      }),
-    );
-  },
-);
+  return sendOk(
+    res,
+    wagonLoadings.map((wagonLoading) => {
+      const mrRrRow = wagonLoading.mrRrRow;
+
+      const mrRr = mrRrRow.mrRr;
+      const schedule = mrRr.vpSchedule;
+
+      return {
+        // VPWagonLoading ID
+        id: wagonLoading.id,
+
+        status: wagonLoading.status,
+
+        totalLoadedQty: wagonLoading.totalLoadedQty,
+
+        // Number of active LRs in this wagon
+        allocationCount: wagonLoading._count.allocations,
+
+        loadingStartedAt: wagonLoading.loadingStartedAt,
+
+        loadingCompletedAt: wagonLoading.loadingCompletedAt,
+
+        verifiedAt: wagonLoading.verifiedAt,
+
+        cancelledAt: wagonLoading.cancelledAt,
+
+        remarks: wagonLoading.remarks,
+        cancelReason: wagonLoading.cancelReason,
+
+        version: wagonLoading.version,
+        createdAt: wagonLoading.createdAt,
+        updatedAt: wagonLoading.updatedAt,
+
+        schedule: {
+          id: schedule.id,
+          scheduleNumber: schedule.scheduleNumber,
+          scheduleDate: schedule.scheduleDate,
+          scheduleName: schedule.scheduleName,
+          status: schedule.status,
+
+          fromBranch: schedule.fromBranch,
+          toBranch: schedule.toBranch,
+          sourceArea: schedule.sourceArea,
+          destinationArea: schedule.destinationArea,
+        },
+
+        mrRrRow: {
+          id: mrRrRow.id,
+          rowNumber: mrRrRow.rowNumber,
+          rowLabel: mrRrRow.rowLabel,
+          vpNo: mrRrRow.vpNo,
+          wagon: mrRrRow.wagon,
+        },
+      };
+    }),
+  );
+});
 // after select the vp MR RR Number of VP scheudle it show after select teh vp schedule date
 router.get(
   "/schedules/:vpScheduleId/preview",
@@ -491,11 +607,40 @@ router.get(
       where: {
         id: vpScheduleId,
         deletedAt: null,
-        status: { in: ["MRRR_CREATED", "LOADING", "LOADED", "VERIFIED"] },
+        status: {
+          in: ["MRRR_CREATED", "LOADING", "LOADED", "VERIFIED", "FINALISED"],
+        },
         ...branchFilter(req, "fromBranchId"),
       },
       select: {
         ...scheduleHeaderSelect,
+        railRake: {
+          select: {
+            id: true,
+            rakeNumber: true,
+            status: true,
+            generatedAt: true,
+          },
+        },
+        trackerAssignments: {
+          where: { releasedAt: null },
+          take: 1,
+          select: {
+            id: true,
+            tracker: {
+              select: {
+                id: true,
+                name: true,
+                isEnabled: true,
+                isPresentOnProvider: true,
+                validityAt: true,
+              },
+            },
+            installedOnMrRrRow: {
+              select: { id: true, vpNo: true },
+            },
+          },
+        },
         mrRr: {
           include: {
             rows: {
@@ -556,6 +701,547 @@ router.get(
     });
   },
 );
+
+router.get(
+  "/schedules/:vpScheduleId/final-review",
+  can(PERMS.VP_LOADING.VIEW),
+  async (req, res) => {
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
+
+    const schedule = await db.vPSchedule.findFirst({
+      where: {
+        id: vpScheduleId,
+        deletedAt: null,
+        ...branchFilter(req, "fromBranchId"),
+      },
+      select: {
+        ...scheduleHeaderSelect,
+        remarks: true,
+        version: true,
+        finalisedAt: true,
+        finalisedById: true,
+        finalisedBy: { select: userSelect },
+        railRake: {
+          select: {
+            id: true,
+            rakeNumber: true,
+            status: true,
+            generatedAt: true,
+          },
+        },
+        trackerAssignments: {
+          where: { releasedAt: null },
+          take: 1,
+          select: {
+            id: true,
+            tracker: {
+              select: {
+                id: true,
+                name: true,
+                isEnabled: true,
+                isPresentOnProvider: true,
+                validityAt: true,
+              },
+            },
+            installedOnMrRrRow: {
+              select: { id: true, vpNo: true },
+            },
+          },
+        },
+        mrRr: {
+          select: {
+            id: true,
+            mrRrNumber: true,
+            status: true,
+            rakeType: true,
+            remarks: true,
+            version: true,
+            rows: {
+              orderBy: { rowNumber: "asc" },
+              select: {
+                id: true,
+                rowNumber: true,
+                rowLabel: true,
+                wagonTypeLabel: true,
+                sequenceNo: true,
+                vpNo: true,
+                mrRrNo: true,
+                sealNo: true,
+                wagon: {
+                  select: {
+                    id: true,
+                    name: true,
+                    capacityMt: true,
+                    totalCft: true,
+                  },
+                },
+                vpWagonLoading: {
+                  select: {
+                    id: true,
+                    status: true,
+                    gateNo: true,
+                    totalLoadedQty: true,
+                    totalLoadedCft: true,
+                    totalLoadedWeightMt: true,
+                    capacityCheckStatus: true,
+                    labourCharge: true,
+                    labour: { select: labourSelect },
+                    loadingSupervisor: { select: userSelect },
+                    loadingStartedAt: true,
+                    loadingCompletedAt: true,
+                    verifiedAt: true,
+                    verifiedBy: { select: userSelect },
+                    remarks: true,
+                    version: true,
+                    allocations: {
+                      where: { status: "LOADED" },
+                      orderBy: { createdAt: "asc" },
+                      select: {
+                        id: true,
+                        loadingNumber: true,
+                        status: true,
+                        loadedQty: true,
+                        loadedCft: true,
+                        loadedWeightMt: true,
+                        remarks: true,
+                        grn: {
+                          select: {
+                            id: true,
+                            grnNumber: true,
+                            gateNo: true,
+                            lorryReceipt: {
+                              select: {
+                                id: true,
+                                lrNumber: true,
+                                group: {
+                                  select: {
+                                    id: true,
+                                    groupNumber: true,
+                                    consignor: { select: customerSelect },
+                                    consignee: { select: customerSelect },
+                                    originBranch: { select: branchSelect },
+                                    destinationBranch: { select: branchSelect },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        goods: {
+                          orderBy: { createdAt: "asc" },
+                          select: {
+                            id: true,
+                            grnGoodsId: true,
+                            loadedQty: true,
+                            loadingDamageQty: true,
+                            loadedWeightMt: true,
+                            loadedCft: true,
+                            measurementSource: true,
+                            remarks: true,
+                            grnGoods: {
+                              select: {
+                                id: true,
+                                goodsName: true,
+                                description: true,
+                                unit: true,
+                                quantityUnit: {
+                                  select: {
+                                    id: true,
+                                    code: true,
+                                    name: true,
+                                  },
+                                },
+                                weightUnit: {
+                                  select: {
+                                    id: true,
+                                    code: true,
+                                    name: true,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!schedule) throw new NotFoundError("VP Schedule not found");
+
+    const validationIssues: Array<{
+      code: string;
+      message: string;
+      mrrrRowId?: string;
+      vpNo?: string | null;
+    }> = [];
+
+    if (schedule.status === "FINALISED" || schedule.railRake) {
+      validationIssues.push({
+        code: "SCHEDULE_ALREADY_FINALISED",
+        message: "VP Schedule is already finalised and has a Rail Rake",
+      });
+    } else if (schedule.status !== "VERIFIED") {
+      validationIssues.push({
+        code: "SCHEDULE_NOT_VERIFIED",
+        message: "VP Schedule must be verified before finalisation",
+      });
+    }
+
+    const activeTrackerAssignment = schedule.trackerAssignments[0];
+    if (!activeTrackerAssignment) {
+      validationIssues.push({
+        code: "RAKE_TRACKER_MISSING",
+        message:
+          "Assign one OneLap tracker to the VP Schedule before finalisation",
+      });
+    } else if (!activeTrackerAssignment.tracker.isEnabled) {
+      validationIssues.push({
+        code: "RAKE_TRACKER_DISABLED",
+        message: "The assigned OneLap tracker is disabled",
+      });
+    } else if (!activeTrackerAssignment.tracker.isPresentOnProvider) {
+      validationIssues.push({
+        code: "RAKE_TRACKER_MISSING_ON_PROVIDER",
+        message: "The assigned tracker is no longer present in OneLap",
+      });
+    } else if (
+      activeTrackerAssignment.tracker.validityAt &&
+      activeTrackerAssignment.tracker.validityAt.getTime() < Date.now()
+    ) {
+      validationIssues.push({
+        code: "RAKE_TRACKER_EXPIRED",
+        message: "The assigned OneLap tracker has expired",
+      });
+    }
+
+    if (!schedule.mrRr) {
+      validationIssues.push({
+        code: "MRRR_MISSING",
+        message: "VP Schedule does not have an MR/RR",
+      });
+    } else {
+      if (schedule.mrRr.status !== "SUBMITTED") {
+        validationIssues.push({
+          code: "MRRR_NOT_SUBMITTED",
+          message: "MR/RR must be submitted before finalisation",
+        });
+      }
+
+      if (schedule.mrRr.rows.length === 0) {
+        validationIssues.push({
+          code: "MRRR_ROWS_MISSING",
+          message: "MR/RR does not contain any wagon rows",
+        });
+      }
+
+      for (const row of schedule.mrRr.rows) {
+        if (!row.vpNo?.trim()) {
+          validationIssues.push({
+            code: "VP_NUMBER_MISSING",
+            message: `${row.rowLabel} does not have a VP number`,
+            mrrrRowId: row.id,
+            vpNo: row.vpNo,
+          });
+        }
+
+        if (!row.vpWagonLoading) {
+          validationIssues.push({
+            code: "WAGON_LOADING_MISSING",
+            message: `${row.rowLabel} does not have a VP wagon loading`,
+            mrrrRowId: row.id,
+            vpNo: row.vpNo,
+          });
+        } else if (row.vpWagonLoading.status !== "VERIFIED") {
+          validationIssues.push({
+            code: "WAGON_LOADING_NOT_VERIFIED",
+            message: `${row.rowLabel} VP wagon loading is not verified`,
+            mrrrRowId: row.id,
+            vpNo: row.vpNo,
+          });
+        }
+      }
+    }
+
+    const rows = schedule.mrRr?.rows ?? [];
+    const loadings = rows
+      .map((row) => row.vpWagonLoading)
+      .filter(
+        (loading): loading is NonNullable<typeof loading> => loading !== null,
+      );
+    const allocations = loadings.flatMap((loading) => loading.allocations);
+    const goods = allocations.flatMap((allocation) => allocation.goods);
+
+    return sendOk(res, {
+      schedule,
+      summary: {
+        totalWagonRows: rows.length,
+        wagonLoadingsCreated: loadings.length,
+        verifiedWagonCount: loadings.filter(
+          (loading) => loading.status === "VERIFIED",
+        ).length,
+        activeAllocationCount: allocations.length,
+        sourceGoodsLineCount: goods.length,
+        totalLoadedQty: loadings.reduce(
+          (total, loading) => total + loading.totalLoadedQty,
+          0,
+        ),
+        totalLoadingDamageQty: goods.reduce(
+          (total, item) => total + item.loadingDamageQty,
+          0,
+        ),
+      },
+      canFinalise: validationIssues.length === 0,
+      validationIssues,
+    });
+  },
+);
+
+router.post(
+  "/schedules/:vpScheduleId/finalise",
+  can(PERMS.VP_LOADING.COMPLETE),
+  async (req, res) => {
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
+    const parsed = finaliseVPScheduleLoadingSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten());
+    }
+
+    const accessibleSchedule = await db.vPSchedule.findFirst({
+      where: {
+        id: vpScheduleId,
+        deletedAt: null,
+        ...branchFilter(req, "fromBranchId"),
+      },
+      select: { id: true },
+    });
+
+    if (!accessibleSchedule) {
+      throw new NotFoundError("VP Schedule not found");
+    }
+
+    const userId = actorId(req);
+    const input = parsed.data;
+
+    const result = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id"
+        FROM "VPSchedule"
+        WHERE "id" = ${vpScheduleId}
+        FOR UPDATE
+      `;
+
+      const schedule = await tx.vPSchedule.findUnique({
+        where: { id: vpScheduleId },
+        select: {
+          id: true,
+          scheduleNumber: true,
+          status: true,
+          version: true,
+          deletedAt: true,
+          fromBranchId: true,
+          toBranchId: true,
+          fromBranch: { select: branchSelect },
+          toBranch: { select: branchSelect },
+          railRake: {
+            include: {
+              fromBranch: { select: branchSelect },
+              toBranch: { select: branchSelect },
+            },
+          },
+          trackerAssignments: {
+            where: { releasedAt: null },
+            take: 1,
+            select: {
+              id: true,
+              tracker: {
+                select: {
+                  isEnabled: true,
+                  isPresentOnProvider: true,
+                  validityAt: true,
+                },
+              },
+            },
+          },
+          mrRr: {
+            select: {
+              status: true,
+              rows: {
+                orderBy: { rowNumber: "asc" },
+                select: {
+                  id: true,
+                  rowLabel: true,
+                  vpNo: true,
+                  vpWagonLoading: {
+                    select: {
+                      id: true,
+                      status: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!schedule || schedule.deletedAt) {
+        throw new NotFoundError("VP Schedule not found");
+      }
+
+      if (schedule.status === "FINALISED" && schedule.railRake) {
+        return {
+          railRake: schedule.railRake,
+          schedule: {
+            id: schedule.id,
+            scheduleNumber: schedule.scheduleNumber,
+            status: schedule.status,
+            version: schedule.version,
+          },
+          alreadyFinalised: true,
+        };
+      }
+
+      if (schedule.railRake || schedule.status === "FINALISED") {
+        throw new ConflictError(
+          "VP Schedule finalisation data is inconsistent. Please contact support.",
+        );
+      }
+
+      assertVersion(
+        input.version,
+        schedule.version,
+        "VP Schedule changed. Please refresh the final review.",
+      );
+
+      if (schedule.status !== "VERIFIED") {
+        throw new BadRequestError(
+          "Only a VERIFIED VP Schedule can be finalised",
+        );
+      }
+
+      if (!schedule.mrRr || schedule.mrRr.status !== "SUBMITTED") {
+        throw new BadRequestError(
+          "Submitted MR/RR is required before finalisation",
+        );
+      }
+
+      if (!schedule.mrRr.rows.length) {
+        throw new BadRequestError("MR/RR does not contain any wagon rows");
+      }
+
+      if (schedule.trackerAssignments.length === 0) {
+        throw new BadRequestError(
+          "Assign one OneLap tracker before finalising the VP Schedule",
+        );
+      }
+
+      const assignedTracker = schedule.trackerAssignments[0]!.tracker;
+      if (!assignedTracker.isEnabled) {
+        throw new BadRequestError("The assigned OneLap tracker is disabled");
+      }
+      if (!assignedTracker.isPresentOnProvider) {
+        throw new BadRequestError(
+          "The assigned tracker is no longer present in OneLap",
+        );
+      }
+      if (
+        assignedTracker.validityAt &&
+        assignedTracker.validityAt.getTime() < Date.now()
+      ) {
+        throw new BadRequestError("The assigned OneLap tracker has expired");
+      }
+
+      for (const row of schedule.mrRr.rows) {
+        if (!row.vpNo?.trim()) {
+          throw new BadRequestError(
+            `${row.rowLabel} does not have a VP number`,
+          );
+        }
+
+        if (!row.vpWagonLoading) {
+          throw new BadRequestError(
+            `${row.rowLabel} does not have a VP wagon loading`,
+          );
+        }
+
+        if (row.vpWagonLoading.status !== "VERIFIED") {
+          throw new BadRequestError(
+            `${row.rowLabel} VP wagon loading is not verified`,
+          );
+        }
+      }
+
+      const finalisedAt = new Date();
+      const fyCode = fyCodeFor(finalisedAt);
+      const sequence = await nextSequence(
+        tx,
+        schedule.fromBranch.branchCode,
+        fyCode,
+        "RAIL_RAKE",
+      );
+      const rakeNumber = [
+        "RK",
+        schedule.fromBranch.branchCode,
+        schedule.toBranch.branchCode,
+        fyCode,
+        String(sequence).padStart(5, "0"),
+      ].join("/");
+
+      const railRake = await tx.railRake.create({
+        data: {
+          rakeNumber,
+          fyCode,
+          vpScheduleId: schedule.id,
+          fromBranchId: schedule.fromBranchId,
+          toBranchId: schedule.toBranchId,
+          generatedAt: finalisedAt,
+          generatedById: userId,
+          remarks: input.remarks ?? null,
+        },
+        include: {
+          fromBranch: { select: branchSelect },
+          toBranch: { select: branchSelect },
+        },
+      });
+
+      const finalisedSchedule = await tx.vPSchedule.update({
+        where: {
+          id: schedule.id,
+          version: schedule.version,
+        },
+        data: {
+          status: "FINALISED",
+          finalisedAt,
+          finalisedById: userId,
+          updatedById: userId,
+          version: { increment: 1 },
+        },
+        select: {
+          id: true,
+          scheduleNumber: true,
+          status: true,
+          version: true,
+        },
+      });
+
+      return {
+        railRake,
+        schedule: finalisedSchedule,
+        alreadyFinalised: false,
+      };
+    });
+
+    return sendOk(res, result);
+  },
+);
 // after select VP no In form then hit this APIs aand Show Gate if has in GRN create
 router.get(
   "/rows/:mrrrRowId/gates",
@@ -566,44 +1252,42 @@ router.get(
     assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
 
     const grns = await getEligibleGRNsForRow(readClient, row);
-    const eligibleGrns =
-  row.vpWagonLoading?.gateNo
-    ? grns.filter(
-        (grn) =>
-          grn.gateNo ===
-          row.vpWagonLoading?.gateNo,
-      )
-    : grns;
+    const eligibleGrns = row.vpWagonLoading?.gateNo
+      ? grns.filter((grn) => grn.gateNo === row.vpWagonLoading?.gateNo)
+      : grns;
     const gates = new Map<
       string,
-      { gateNo: string; eligibleGrnCount: number; eligibleLrCount: number; totalAvailableQty: number }
+      {
+        gateNo: string;
+        eligibleGrnCount: number;
+        eligibleLrCount: number;
+        totalAvailableQty: number;
+      }
     >();
 
-  for (const grn of eligibleGrns) {
-  const gateNo = grn.gateNo?.trim();
+    for (const grn of eligibleGrns) {
+      const gateNo = grn.gateNo?.trim();
 
-  if (!gateNo) continue;
+      if (!gateNo) continue;
 
-  const current =
-    gates.get(gateNo) ?? {
-      gateNo,
-      eligibleGrnCount: 0,
-      eligibleLrCount: 0,
-      totalAvailableQty: 0,
-    };
+      const current = gates.get(gateNo) ?? {
+        gateNo,
+        eligibleGrnCount: 0,
+        eligibleLrCount: 0,
+        totalAvailableQty: 0,
+      };
 
-  current.eligibleGrnCount += 1;
-  current.eligibleLrCount += 1;
-  current.totalAvailableQty +=
-    grn.availableQty;
+      current.eligibleGrnCount += 1;
+      current.eligibleLrCount += 1;
+      current.totalAvailableQty += grn.availableQty;
 
-  gates.set(gateNo, current);
-}
+      gates.set(gateNo, current);
+    }
 
     return sendOk(res, [...gates.values()]);
   },
 );
-// it run after the select the Gate No and show the GRN(LR) in the Dropdown 
+// it run after the select the Gate No and show the GRN(LR) in the Dropdown
 router.get(
   "/rows/:mrrrRowId/gates/:gateNo/grns",
   can(PERMS.VP_LOADING.VIEW),
@@ -612,17 +1296,13 @@ router.get(
     const gateNo = getIdParam(req.params.gateNo, "Gate No");
     const row = await getMRRRRowForLoading(readClient, mrrrRowId);
     assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
-    const lockedGateNo =
-  row.vpWagonLoading?.gateNo?.trim();
+    const lockedGateNo = row.vpWagonLoading?.gateNo?.trim();
 
-if (
-  lockedGateNo &&
-  lockedGateNo !== gateNo
-) {
-  throw new BadRequestError(
-    `This wagon is assigned to Gate ${lockedGateNo}`,
-  );
-}
+    if (lockedGateNo && lockedGateNo !== gateNo) {
+      throw new BadRequestError(
+        `This wagon is assigned to Gate ${lockedGateNo}`,
+      );
+    }
     const grns = (await getEligibleGRNsForRow(readClient, row)).filter(
       (grn) => grn.gateNo === gateNo,
     );
@@ -630,37 +1310,22 @@ if (
     return sendOk(res, grns.map(mapGRNDropdown));
   },
 );
-// shwo the Preview AFter selecte GRN(LR) from Dropdown 
+// shwo the Preview AFter selecte GRN(LR) from Dropdown
 router.get(
   "/rows/:mrrrRowId/grns/:grnId/preview",
   can(PERMS.VP_LOADING.VIEW),
   async (req, res) => {
-    const mrrrRowId = getIdParam(
-      req.params.mrrrRowId,
-      "MR/RR row",
-    );
+    const mrrrRowId = getIdParam(req.params.mrrrRowId, "MR/RR row");
 
-    const grnId = getIdParam(
-      req.params.grnId,
-      "GRN",
-    );
+    const grnId = getIdParam(req.params.grnId, "GRN");
 
     // 1. Get and validate selected MR/RR wagon row
-    const row = await getMRRRRowForLoading(
-      readClient,
-      mrrrRowId,
-    );
+    const row = await getMRRRRowForLoading(readClient, mrrrRowId);
 
-    assertBranchAccess(
-      req,
-      row.mrRr.vpSchedule.fromBranchId,
-    );
+    assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
 
     // 2. Get and validate selected GRN/LR
-    const grn = await getGRNForLoading(
-      readClient,
-      grnId,
-    );
+    const grn = await getGRNForLoading(readClient, grnId);
 
     assertGRNCompatibleWithRow(row, grn);
 
@@ -668,9 +1333,7 @@ router.get(
     const availableGrn = withAvailability(grn);
 
     if (availableGrn.availableQty <= 0) {
-      throw new BadRequestError(
-        "GRN has no available quantity for VP loading",
-      );
+      throw new BadRequestError("GRN has no available quantity for VP loading");
     }
 
     // 4. Return paperwork and quantity information
@@ -682,8 +1345,7 @@ router.get(
       vpWagonLoading: row.vpWagonLoading,
 
       currentTotals: {
-        loadedQty:
-          row.vpWagonLoading?.totalLoadedQty ?? 0,
+        loadedQty: row.vpWagonLoading?.totalLoadedQty ?? 0,
       },
 
       grn: availableGrn,
@@ -718,20 +1380,12 @@ router.post(
   "/rows/:mrrrRowId/allocations",
   can(PERMS.VP_LOADING.CREATE),
   async (req, res) => {
-    const mrrrRowId = getIdParam(
-      req.params.mrrrRowId,
-      "MR/RR row",
-    );
+    const mrrrRowId = getIdParam(req.params.mrrrRowId, "MR/RR row");
 
-    const parsed =
-      createVPLoadingAllocationSchema.safeParse(
-        req.body,
-      );
+    const parsed = createVPLoadingAllocationSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      throw new ValidationError(
-        parsed.error.flatten(),
-      );
+      throw new ValidationError(parsed.error.flatten());
     }
 
     const input = parsed.data;
@@ -742,363 +1396,286 @@ router.post(
      * Run them before opening the transaction.
      */
     const [row, grn] = await Promise.all([
-      getMRRRRowForLoading(
-        db,
-        mrrrRowId,
-      ),
+      getMRRRRowForLoading(db, mrrrRowId),
 
-      getGRNForLoading(
-        db,
-        input.grnId,
-      ),
+      getGRNForLoading(db, input.grnId),
     ]);
 
-    assertBranchAccess(
-      req,
-      row.mrRr.vpSchedule.fromBranchId,
-    );
+    assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
 
     assertGRNCompatibleWithRow(row, grn);
 
     const grnGateNo = grn.gateNo?.trim();
 
     if (!grnGateNo) {
-      throw new BadRequestError(
-        "Selected GRN does not have a gate number",
-      );
+      throw new BadRequestError("Selected GRN does not have a gate number");
     }
 
-    const result = await db.$transaction(
-      async (tx) => {
-        const existingWagon =
-          await tx.vPWagonLoading.findUnique({
-            where: {
-              mrRrRowId: mrrrRowId,
-            },
-            select: {
-              id: true,
-              status: true,
-              gateNo: true,
-              version: true,
-              labourId: true,
-              labourCharge: true,
-              loadingSupervisorId: true,
-              remarks: true,
-              loadingStartedAt: true,
-            },
-          });
+    const result = await db.$transaction(async (tx) => {
+      const existingWagon = await tx.vPWagonLoading.findUnique({
+        where: {
+          mrRrRowId: mrrrRowId,
+        },
+        select: {
+          id: true,
+          status: true,
+          gateNo: true,
+          version: true,
+          labourId: true,
+          labourCharge: true,
+          loadingSupervisorId: true,
+          remarks: true,
+          loadingStartedAt: true,
+        },
+      });
 
-        let wagon: {
-          id: string;
-          version: number;
-        };
+      let wagon: {
+        id: string;
+        version: number;
+      };
 
-        if (existingWagon) {
-          if (
-            !["DRAFT", "IN_PROGRESS"].includes(
-              existingWagon.status,
-            )
-          ) {
-            throw new BadRequestError(
-              "Only a draft or in-progress wagon can be loaded",
-            );
-          }
-
-          assertVersion(
-            input.wagonVersion,
-            existingWagon.version,
-            "Wagon loading was updated by someone else",
+      if (existingWagon) {
+        if (!["DRAFT", "IN_PROGRESS"].includes(existingWagon.status)) {
+          throw new BadRequestError(
+            "Only a draft or in-progress wagon can be loaded",
           );
+        }
 
-          const lockedGateNo =
-            existingWagon.gateNo?.trim();
+        assertVersion(
+          input.wagonVersion,
+          existingWagon.version,
+          "Wagon loading was updated by someone else",
+        );
 
-          if (
-            lockedGateNo &&
-            lockedGateNo !== grnGateNo
-          ) {
-            throw new BadRequestError(
-              `This wagon is assigned to Gate ${lockedGateNo}. LR from Gate ${grnGateNo} cannot be loaded`,
-            );
-          }
+        const lockedGateNo = existingWagon.gateNo?.trim();
 
-          wagon = await tx.vPWagonLoading.update({
-            where: {
-              id: existingWagon.id,
-            },
-            data: {
-              status: "IN_PROGRESS",
-              gateNo: lockedGateNo ?? grnGateNo,
-              labourId: existingWagon.labourId,
-              labourCharge: existingWagon.labourCharge,
-              loadingSupervisorId:
-                existingWagon.loadingSupervisorId,
-              remarks:
-                input.remarks ??
-                existingWagon.remarks,
-              loadingStartedAt:
-                existingWagon.loadingStartedAt ??
-                new Date(),
-              updatedById: userId,
-              version: {
-                increment: 1,
-              },
-            },
-            select: {
-              id: true,
-              version: true,
-            },
-          });
-        } else {
-          await tx.vPSchedule.update({
-            where: {
-              id: row.mrRr.vpSchedule.id,
-            },
-            data: {
-              status: "LOADING",
-              updatedById: userId,
-              version: {
-                increment: 1,
-              },
-            },
-          });
+        if (lockedGateNo && lockedGateNo !== grnGateNo) {
+          throw new BadRequestError(
+            `This wagon is assigned to Gate ${lockedGateNo}. LR from Gate ${grnGateNo} cannot be loaded`,
+          );
+        }
 
-          wagon = await tx.vPWagonLoading.create({
-            data: {
-              mrRrRowId: row.id,
-              status: "IN_PROGRESS",
-              gateNo: grnGateNo,
-              labourId: input.labourId,
-              labourCharge: toMoney(
-                input.labourCharge,
-              ),
-              loadingSupervisorId:
-                input.loadingSupervisorId,
-              remarks: input.remarks,
-              loadingStartedAt: new Date(),
-              wagonCapacityCftSnapshot:
-                row.wagon.totalCft === null ||
-                row.wagon.totalCft === undefined
-                  ? null
-                  : new Prisma.Decimal(
-                      row.wagon.totalCft,
-                    ),
-              wagonCapacityMtSnapshot:
-                row.wagon.capacityMt === null ||
+        wagon = await tx.vPWagonLoading.update({
+          where: {
+            id: existingWagon.id,
+          },
+          data: {
+            status: "IN_PROGRESS",
+            gateNo: lockedGateNo ?? grnGateNo,
+            labourId: existingWagon.labourId,
+            labourCharge: existingWagon.labourCharge,
+            loadingSupervisorId: existingWagon.loadingSupervisorId,
+            remarks: input.remarks ?? existingWagon.remarks,
+            loadingStartedAt: existingWagon.loadingStartedAt ?? new Date(),
+            updatedById: userId,
+            version: {
+              increment: 1,
+            },
+          },
+          select: {
+            id: true,
+            version: true,
+          },
+        });
+      } else {
+        await tx.vPSchedule.update({
+          where: {
+            id: row.mrRr.vpSchedule.id,
+          },
+          data: {
+            status: "LOADING",
+            updatedById: userId,
+            version: {
+              increment: 1,
+            },
+          },
+        });
+
+        wagon = await tx.vPWagonLoading.create({
+          data: {
+            mrRrRowId: row.id,
+            status: "IN_PROGRESS",
+            gateNo: grnGateNo,
+            labourId: input.labourId,
+            labourCharge: toMoney(input.labourCharge),
+            loadingSupervisorId: input.loadingSupervisorId,
+            remarks: input.remarks,
+            loadingStartedAt: new Date(),
+            wagonCapacityCftSnapshot:
+              row.wagon.totalCft === null || row.wagon.totalCft === undefined
+                ? null
+                : new Prisma.Decimal(row.wagon.totalCft),
+            wagonCapacityMtSnapshot:
+              row.wagon.capacityMt === null ||
                 row.wagon.capacityMt === undefined
-                  ? null
-                  : new Prisma.Decimal(
-                      row.wagon.capacityMt,
-                    ),
-              createdById: userId,
-            },
+                ? null
+                : new Prisma.Decimal(row.wagon.capacityMt),
+            createdById: userId,
+          },
+          select: {
+            id: true,
+            version: true,
+          },
+        });
+      }
+
+      /*
+       * Check whether this GRN already has an
+       * allocation in the selected wagon.
+       */
+      const existing = await tx.vPLoading.findUnique({
+        where: {
+          vpWagonLoadingId_grnId: {
+            vpWagonLoadingId: wagon.id,
+            grnId: input.grnId,
+          },
+        },
+        select: {
+          id: true,
+          status: true,
+
+          goods: {
             select: {
-              id: true,
-              version: true,
+              grnGoodsId: true,
+              loadedQty: true,
+              loadingDamageQty: true,
             },
-          });
-        }
+          },
+        },
+      });
 
+      const availableGrn = withAvailability(grn, existing?.id);
+
+      /*
+       * If the allocation is active, add the new
+       * quantities to its existing quantities.
+       *
+       * If it is cancelled or doesn't exist,
+       * use only the submitted quantities.
+       */
+      const goodsInput =
+        existing && existing.status !== "CANCELLED"
+          ? mergeVPLoadingGoods(
+            existing.goods.map((goods) => ({
+              grnGoodsId: goods.grnGoodsId,
+              loadedQty: Number(goods.loadedQty ?? 0),
+              loadingDamageQty: Number(goods.loadingDamageQty ?? 0),
+            })),
+            input.goods,
+          )
+          : input.goods;
+
+      const allocationGoods = buildAllocationGoods(availableGrn, goodsInput);
+
+      let allocation: {
+        id: string;
+      };
+
+      if (existing) {
         /*
-         * Check whether this GRN already has an
-         * allocation in the selected wagon.
+         * Remove the previous goods rows before
+         * replacing them with recalculated rows.
          */
-        const existing =
-          await tx.vPLoading.findUnique({
-            where: {
-              vpWagonLoadingId_grnId: {
-                vpWagonLoadingId:
-                  wagon.id,
-                grnId: input.grnId,
-              },
+        await tx.vPLoadingGoods.deleteMany({
+          where: {
+            vpLoadingId: existing.id,
+          },
+        });
+
+        allocation = await tx.vPLoading.update({
+          where: {
+            id: existing.id,
+          },
+          data: {
+            status: "LOADED",
+
+            loadedQty: allocationGoods.totals.loadedQty,
+
+            remarks: input.remarks,
+
+            // Clear cancellation information
+            cancelReason: null,
+            cancelledById: null,
+            cancelledAt: null,
+
+            updatedById: userId,
+
+            version: {
+              increment: 1,
             },
-            select: {
-              id: true,
-              status: true,
 
-              goods: {
-                select: {
-                  grnGoodsId: true,
-                  loadedQty: true,
-                  loadingDamageQty: true,
-                },
-              },
+            goods: {
+              create: allocationGoods.rows,
             },
-          });
+          },
+          select: {
+            id: true,
+          },
+        });
+      } else {
+        const loadingNumber = await generateVPLoadingNumber(
+          tx,
+          row.mrRr.vpSchedule.fromBranch.branchCode,
+        );
 
-        const availableGrn =
-          withAvailability(
-            grn,
-            existing?.id,
-          );
+        allocation = await tx.vPLoading.create({
+          data: {
+            loadingNumber,
+            vpWagonLoadingId: wagon.id,
+            grnId: input.grnId,
+            status: "LOADED",
 
-        /*
-         * If the allocation is active, add the new
-         * quantities to its existing quantities.
-         *
-         * If it is cancelled or doesn't exist,
-         * use only the submitted quantities.
-         */
-        const goodsInput =
-          existing &&
-          existing.status !== "CANCELLED"
-            ? mergeVPLoadingGoods(
-                existing.goods.map(
-                  (goods) => ({
-                    grnGoodsId:
-                      goods.grnGoodsId,
-                    loadedQty: Number(
-                      goods.loadedQty ?? 0,
-                    ),
-                    loadingDamageQty:
-                      Number(
-                        goods.loadingDamageQty ??
-                          0,
-                      ),
-                  }),
-                ),
-                input.goods,
-              )
-            : input.goods;
+            loadedQty: allocationGoods.totals.loadedQty,
 
-        const allocationGoods =
-          buildAllocationGoods(
-            availableGrn,
-            goodsInput,
-          );
+            remarks: input.remarks,
+            createdById: userId,
 
-        let allocation: {
-          id: string;
-        };
-
-        if (existing) {
-          /*
-           * Remove the previous goods rows before
-           * replacing them with recalculated rows.
-           */
-          await tx.vPLoadingGoods.deleteMany({
-            where: {
-              vpLoadingId: existing.id,
+            goods: {
+              create: allocationGoods.rows,
             },
-          });
+          },
+          select: {
+            id: true,
+          },
+        });
+      }
 
-          allocation =
-            await tx.vPLoading.update({
-              where: {
-                id: existing.id,
-              },
-              data: {
-                status: "LOADED",
+      /*
+       * Use the optimized aggregate-based helper.
+       * Do not load full wagon details here.
+       */
+      const updatedWagon = await recalculateVPWagonLoadingTotals(tx, wagon.id, {
+        detail: false,
+      });
 
-                loadedQty:
-                  allocationGoods.totals
-                    .loadedQty,
-
-                remarks: input.remarks,
-
-                // Clear cancellation information
-                cancelReason: null,
-                cancelledById: null,
-                cancelledAt: null,
-
-                updatedById: userId,
-
-                version: {
-                  increment: 1,
-                },
-
-                goods: {
-                  create:
-                    allocationGoods.rows,
-                },
-              },
-              select: {
-                id: true,
-              },
-            });
-        } else {
-          const loadingNumber =
-            await generateVPLoadingNumber(
-              tx,
-              row.mrRr.vpSchedule
-                .fromBranch.branchCode,
-            );
-
-          allocation =
-            await tx.vPLoading.create({
-              data: {
-                loadingNumber,
-                vpWagonLoadingId:
-                  wagon.id,
-                grnId: input.grnId,
-                status: "LOADED",
-
-                loadedQty:
-                  allocationGoods.totals
-                    .loadedQty,
-
-                remarks: input.remarks,
-                createdById: userId,
-
-                goods: {
-                  create:
-                    allocationGoods.rows,
-                },
-              },
-              select: {
-                id: true,
-              },
-            });
-        }
-
-        /*
-         * Use the optimized aggregate-based helper.
-         * Do not load full wagon details here.
-         */
-        const updatedWagon =
-          await recalculateVPWagonLoadingTotals(
-            tx,
-            wagon.id,
-            {
-              detail: false,
-            },
-          );
-
-        return {
-          allocationId: allocation.id,
-          vpWagonLoadingId: wagon.id,
-          wagonVersion:
-            updatedWagon.version,
-        };
-      },
-    );
+      return {
+        allocationId: allocation.id,
+        vpWagonLoadingId: wagon.id,
+        wagonVersion: updatedWagon.version,
+      };
+    });
 
     /*
      * Fetch the complete response only after
      * the transaction has committed.
      */
-    const created =
-      await db.vPLoading.findUnique({
-        where: {
-          id: result.allocationId,
-        },
-        include: allocationInclude,
-      });
+    const created = await db.vPLoading.findUnique({
+      where: {
+        id: result.allocationId,
+      },
+      include: allocationInclude,
+    });
 
     if (!created) {
-      throw new NotFoundError(
-        "VP loading allocation not found",
-      );
+      throw new NotFoundError("VP loading allocation not found");
     }
 
     return sendOk(
       res,
       {
         allocation: created,
-        vpWagonLoadingId:
-          result.vpWagonLoadingId,
-        wagonVersion:
-          result.wagonVersion,
+        vpWagonLoadingId: result.vpWagonLoadingId,
+        wagonVersion: result.wagonVersion,
       },
       undefined,
       201,
@@ -1109,20 +1686,12 @@ router.patch(
   "/allocations/:allocationId",
   can(PERMS.VP_LOADING.UPDATE),
   async (req, res) => {
-    const allocationId = getIdParam(
-      req.params.allocationId,
-      "VP loading",
-    );
+    const allocationId = getIdParam(req.params.allocationId, "VP loading");
 
-    const parsed =
-      updateVPLoadingAllocationSchema.safeParse(
-        req.body,
-      );
+    const parsed = updateVPLoadingAllocationSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      throw new ValidationError(
-        parsed.error.flatten(),
-      );
+      throw new ValidationError(parsed.error.flatten());
     }
 
     const input = parsed.data;
@@ -1130,187 +1699,23 @@ router.patch(
 
     await db.$transaction(async (tx) => {
       // Only select fields required for validation/update
-      const existing =
-        await tx.vPLoading.findUnique({
-          where: {
-            id: allocationId,
-          },
-          select: {
-            id: true,
-            status: true,
-            version: true,
-            grnId: true,
-            vpWagonLoadingId: true,
-
-            vpWagonLoading: {
-              select: {
-                id: true,
-                status: true,
-                mrRrRowId: true,
-
-                mrRrRow: {
-                  select: {
-                    mrRr: {
-                      select: {
-                        vpSchedule: {
-                          select: {
-                            fromBranchId: true,
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        });
-
-      if (!existing) {
-        throw new NotFoundError(
-          "VP loading allocation not found",
-        );
-      }
-
-      assertBranchAccess(
-        req,
-        existing.vpWagonLoading.mrRrRow.mrRr
-          .vpSchedule.fromBranchId,
-      );
-
-      if (existing.status !== "LOADED") {
-        throw new BadRequestError(
-          "Only an active loaded allocation can be updated",
-        );
-      }
-
-      if (
-        existing.vpWagonLoading.status !==
-        "IN_PROGRESS"
-      ) {
-        throw new BadRequestError(
-          "Only an in-progress wagon can be updated",
-        );
-      }
-
-      assertVersion(
-        input.version,
-        existing.version,
-        "Allocation changed. Please refresh.",
-      );
-
-      const row = await getMRRRRowForLoading(
-        tx,
-        existing.vpWagonLoading.mrRrRowId,
-      );
-
-      const grn = await getGRNForLoading(
-        tx,
-        existing.grnId,
-      );
-
-      assertGRNCompatibleWithRow(row, grn);
-
-      // Exclude this allocation's current quantities
-      const availableGrn = withAvailability(
-        grn,
-        existing.id,
-      );
-
-      const allocationGoods =
-        buildAllocationGoods(
-          availableGrn,
-          input.goods,
-        );
-
-      await tx.vPLoadingGoods.deleteMany({
-        where: {
-          vpLoadingId: existing.id,
-        },
-      });
-
-      await tx.vPLoading.update({
-        where: {
-          id: existing.id,
-          version: existing.version,
-        },
-        data: {
-          loadedQty:
-            allocationGoods.totals.loadedQty,
-          remarks: input.remarks,
-          updatedById: userId,
-
-          version: {
-            increment: 1,
-          },
-
-          goods: {
-            create: allocationGoods.rows,
-          },
-        },
-      });
-
-      await recalculateVPWagonLoadingTotals(
-        tx,
-        existing.vpWagonLoadingId,
-        {
-          detail: false,
-        },
-      );
-    });
-
-    // Large response query runs after transaction commits
-    const updated =
-      await db.vPLoading.findUnique({
-        where: {
-          id: allocationId,
-        },
-        include: allocationInclude,
-      });
-
-    if (!updated) {
-      throw new NotFoundError(
-        "Updated VP loading allocation not found",
-      );
-    }
-
-    return sendOk(res, updated);
-  },
-);
-router.post(
-  "/allocations/:allocationId/cancel",
-  can(PERMS.VP_LOADING.CANCEL),
-  async (req, res) => {
-    const allocationId = getIdParam(
-      req.params.allocationId,
-      "VP loading allocation",
-    );
-
-    const parsed =
-      cancelVPLoadingSchema.safeParse(
-        req.body,
-      );
-
-    if (!parsed.success) {
-      throw new ValidationError(
-        parsed.error.flatten(),
-      );
-    }
-
-    const userId = actorId(req);
-
-    /*
-     * Read branch before mutation if branch validation
-     * is not performed inside the transaction service.
-     */
-    const allocation =
-      await db.vPLoading.findUnique({
+      const existing = await tx.vPLoading.findUnique({
         where: {
           id: allocationId,
         },
         select: {
+          id: true,
+          status: true,
+          version: true,
+          grnId: true,
+          vpWagonLoadingId: true,
+
           vpWagonLoading: {
             select: {
+              id: true,
+              status: true,
+              mrRrRowId: true,
+
               mrRrRow: {
                 select: {
                   mrRr: {
@@ -1329,46 +1734,169 @@ router.post(
         },
       });
 
-    if (!allocation) {
-      throw new NotFoundError(
-        "VP loading allocation not found",
+      if (!existing) {
+        throw new NotFoundError("VP loading allocation not found");
+      }
+
+      assertBranchAccess(
+        req,
+        existing.vpWagonLoading.mrRrRow.mrRr.vpSchedule.fromBranchId,
       );
+
+      if (existing.status !== "LOADED") {
+        throw new BadRequestError(
+          "Only an active loaded allocation can be updated",
+        );
+      }
+
+      if (existing.vpWagonLoading.status !== "IN_PROGRESS") {
+        throw new BadRequestError("Only an in-progress wagon can be updated");
+      }
+
+      assertVersion(
+        input.version,
+        existing.version,
+        "Allocation changed. Please refresh.",
+      );
+
+      const row = await getMRRRRowForLoading(
+        tx,
+        existing.vpWagonLoading.mrRrRowId,
+      );
+
+      const grn = await getGRNForLoading(tx, existing.grnId);
+
+      assertGRNCompatibleWithRow(row, grn);
+
+      // Exclude this allocation's current quantities
+      const availableGrn = withAvailability(grn, existing.id);
+
+      const allocationGoods = buildAllocationGoods(availableGrn, input.goods);
+
+      await tx.vPLoadingGoods.deleteMany({
+        where: {
+          vpLoadingId: existing.id,
+        },
+      });
+
+      await tx.vPLoading.update({
+        where: {
+          id: existing.id,
+          version: existing.version,
+        },
+        data: {
+          loadedQty: allocationGoods.totals.loadedQty,
+          remarks: input.remarks,
+          updatedById: userId,
+
+          version: {
+            increment: 1,
+          },
+
+          goods: {
+            create: allocationGoods.rows,
+          },
+        },
+      });
+
+      await recalculateVPWagonLoadingTotals(tx, existing.vpWagonLoadingId, {
+        detail: false,
+      });
+    });
+
+    // Large response query runs after transaction commits
+    const updated = await db.vPLoading.findUnique({
+      where: {
+        id: allocationId,
+      },
+      include: allocationInclude,
+    });
+
+    if (!updated) {
+      throw new NotFoundError("Updated VP loading allocation not found");
+    }
+
+    return sendOk(res, updated);
+  },
+);
+router.post(
+  "/allocations/:allocationId/cancel",
+  can(PERMS.VP_LOADING.CANCEL),
+  async (req, res) => {
+    const allocationId = getIdParam(
+      req.params.allocationId,
+      "VP loading allocation",
+    );
+
+    const parsed = cancelVPLoadingSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten());
+    }
+
+    const userId = actorId(req);
+
+    /*
+     * Read branch before mutation if branch validation
+     * is not performed inside the transaction service.
+     */
+    const allocation = await db.vPLoading.findUnique({
+      where: {
+        id: allocationId,
+      },
+      select: {
+        vpWagonLoading: {
+          select: {
+            mrRrRow: {
+              select: {
+                mrRr: {
+                  select: {
+                    vpSchedule: {
+                      select: {
+                        fromBranchId: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!allocation) {
+      throw new NotFoundError("VP loading allocation not found");
     }
 
     assertBranchAccess(
       req,
-      allocation.vpWagonLoading.mrRrRow.mrRr
-        .vpSchedule.fromBranchId,
+      allocation.vpWagonLoading.mrRrRow.mrRr.vpSchedule.fromBranchId,
     );
 
-    const result = await db.$transaction(
-      (tx) =>
-        cancelVPLoadingAllocation(tx, {
-          allocationId,
-          actorId: userId,
-          version: parsed.data.version,
-          reason: parsed.data.reason,
-        }),
+    const result = await db.$transaction((tx) =>
+      cancelVPLoadingAllocation(tx, {
+        allocationId,
+        actorId: userId,
+        version: parsed.data.version,
+        reason: parsed.data.reason,
+      }),
     );
 
-    const cancelled =
-      await db.vPLoading.findUnique({
-        where: {
-          id: result.allocationId,
-        },
-        include: allocationInclude,
-      });
+    const cancelled = await db.vPLoading.findUnique({
+      where: {
+        id: result.allocationId,
+      },
+      include: allocationInclude,
+    });
 
     if (!cancelled) {
-      throw new NotFoundError(
-        "Cancelled allocation not found",
-      );
+      throw new NotFoundError("Cancelled allocation not found");
     }
 
     return sendOk(res, {
       allocation: cancelled,
-      vpWagonLoadingId:
-        result.vpWagonLoadingId,
+      vpWagonLoadingId: result.vpWagonLoadingId,
       gateReleased: result.gateReleased,
     });
   },
@@ -1385,10 +1913,7 @@ router.get(
     /*
      * Validate selected wagon and branch access.
      */
-    await getWagonLoadingForReq(
-      req,
-      vpWagonLoadingId,
-    );
+    await getWagonLoadingForReq(req, vpWagonLoadingId);
 
     /*
      * 1. Get allocations belonging to the
@@ -1397,16 +1922,15 @@ router.get(
      * Cancelled allocations are also returned
      * because they are part of loading history.
      */
-    const allocations =
-      await db.vPLoading.findMany({
-        where: {
-          vpWagonLoadingId,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        include: allocationInclude,
-      });
+    const allocations = await db.vPLoading.findMany({
+      where: {
+        vpWagonLoadingId,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: allocationInclude,
+    });
 
     if (!allocations.length) {
       return sendOk(res, []);
@@ -1416,12 +1940,7 @@ router.get(
      * Unique GRNs used by this wagon.
      */
     const grnIds = [
-      ...new Set(
-        allocations.map(
-          (allocation) =>
-            allocation.grnId,
-        ),
-      ),
+      ...new Set(allocations.map((allocation) => allocation.grnId)),
     ];
 
     /*
@@ -1445,21 +1964,16 @@ router.get(
       },
     });
 
-    const totalReceivedByGrn =
-      new Map(
-        grns.map((grn) => [
-          grn.id,
+    const totalReceivedByGrn = new Map(
+      grns.map((grn) => [
+        grn.id,
 
-          grn.goods.reduce(
-            (sum, goods) =>
-              sum +
-              Number(
-                goods.receivedQty ?? 0,
-              ),
-            0,
-          ),
-        ]),
-      );
+        grn.goods.reduce(
+          (sum, goods) => sum + Number(goods.receivedQty ?? 0),
+          0,
+        ),
+      ]),
+    );
 
     /*
      * 3. Calculate total active loaded
@@ -1470,114 +1984,101 @@ router.get(
      * allocation. It only returns totals and
      * does not expose another branch's details.
      */
-    const activeTotals =
-      await db.vPLoading.groupBy({
-        by: ["grnId"],
+    const activeTotals = await db.vPLoading.groupBy({
+      by: ["grnId"],
 
-        where: {
-          grnId: {
-            in: grnIds,
-          },
-
-          status: {
-            not: "CANCELLED",
-          },
+      where: {
+        grnId: {
+          in: grnIds,
         },
 
-        _sum: {
-          loadedQty: true,
+        status: {
+          not: "CANCELLED",
         },
-      });
+      },
 
-    const totalLoadedByGrn =
-      new Map(
-        activeTotals.map((row) => [
-          row.grnId,
-          Number(
-            row._sum.loadedQty ?? 0,
-          ),
-        ]),
-      );
+      _sum: {
+        loadedQty: true,
+      },
+    });
+
+    const totalLoadedByGrn = new Map(
+      activeTotals.map((row) => [row.grnId, Number(row._sum.loadedQty ?? 0)]),
+    );
 
     /*
      * Apply branch access while returning
      * other-wagon identifying information.
      */
-    const relatedBranchWhere:
-      Prisma.VPLoadingWhereInput =
+    const relatedBranchWhere: Prisma.VPLoadingWhereInput =
       req.ctx?.branchScope === "ALL"
         ? {}
         : {
-            vpWagonLoading: {
-              mrRrRow: {
-                mrRr: {
-                  vpSchedule: {
-                    fromBranchId: {
-                      in:
-                        req.ctx
-                          ?.branchIds ?? [],
-                    },
+          vpWagonLoading: {
+            mrRrRow: {
+              mrRr: {
+                vpSchedule: {
+                  fromBranchId: {
+                    in: req.ctx?.branchIds ?? [],
                   },
                 },
               },
             },
-          };
+          },
+        };
 
     /*
      * 4. Find active allocations for the
      * same GRNs in other accessible wagons.
      */
-    const otherAllocations =
-      await db.vPLoading.findMany({
-        where: {
-          grnId: {
-            in: grnIds,
-          },
-
-          status: {
-            not: "CANCELLED",
-          },
-
-          vpWagonLoadingId: {
-            not: vpWagonLoadingId,
-          },
-
-          ...relatedBranchWhere,
+    const otherAllocations = await db.vPLoading.findMany({
+      where: {
+        grnId: {
+          in: grnIds,
         },
 
-        select: {
-          id: true,
-          grnId: true,
-          loadedQty: true,
-          status: true,
+        status: {
+          not: "CANCELLED",
+        },
 
-          vpWagonLoading: {
-            select: {
-              id: true,
-              status: true,
-              gateNo: true,
+        vpWagonLoadingId: {
+          not: vpWagonLoadingId,
+        },
 
-              mrRrRow: {
-                select: {
-                  id: true,
-                  vpNo: true,
-                  rowLabel: true,
+        ...relatedBranchWhere,
+      },
 
-                  wagon: {
-                    select: {
-                      id: true,
-                      name: true,
-                    },
+      select: {
+        id: true,
+        grnId: true,
+        loadedQty: true,
+        status: true,
+
+        vpWagonLoading: {
+          select: {
+            id: true,
+            status: true,
+            gateNo: true,
+
+            mrRrRow: {
+              select: {
+                id: true,
+                vpNo: true,
+                rowLabel: true,
+
+                wagon: {
+                  select: {
+                    id: true,
+                    name: true,
                   },
+                },
 
-                  mrRr: {
-                    select: {
-                      vpSchedule: {
-                        select: {
-                          id: true,
-                          scheduleNumber:
-                            true,
-                        },
+                mrRr: {
+                  select: {
+                    vpSchedule: {
+                      select: {
+                        id: true,
+                        scheduleNumber: true,
                       },
                     },
                   },
@@ -1586,151 +2087,105 @@ router.get(
             },
           },
         },
-      });
+      },
+    });
 
     /*
      * Group other-wagon records by GRN.
      */
-    const otherWagonsByGrn =
-      new Map<
-        string,
-        Array<{
-          allocationId: string;
-          vpWagonLoadingId: string;
-          scheduleId: string;
-          scheduleNumber: string;
-          mrrrRowId: string;
-          vpNo: string | null;
-          wagonId: string | null;
-          wagonName: string | null;
-          gateNo: string | null;
-          loadedQty: number;
-          status: string;
-        }>
-      >();
+    const otherWagonsByGrn = new Map<
+      string,
+      Array<{
+        allocationId: string;
+        vpWagonLoadingId: string;
+        scheduleId: string;
+        scheduleNumber: string;
+        mrrrRowId: string;
+        vpNo: string | null;
+        wagonId: string | null;
+        wagonName: string | null;
+        gateNo: string | null;
+        loadedQty: number;
+        status: string;
+      }>
+    >();
 
-    for (
-      const allocation of otherAllocations
-    ) {
-      const loading =
-        allocation.vpWagonLoading;
+    for (const allocation of otherAllocations) {
+      const loading = allocation.vpWagonLoading;
 
       const row = loading.mrRrRow;
-      const schedule =
-        row.mrRr.vpSchedule;
+      const schedule = row.mrRr.vpSchedule;
 
-      const current =
-        otherWagonsByGrn.get(
-          allocation.grnId,
-        ) ?? [];
+      const current = otherWagonsByGrn.get(allocation.grnId) ?? [];
 
       current.push({
         allocationId: allocation.id,
 
-        vpWagonLoadingId:
-          loading.id,
+        vpWagonLoadingId: loading.id,
 
-        scheduleId:
-          schedule.id,
+        scheduleId: schedule.id,
 
-        scheduleNumber:
-          schedule.scheduleNumber,
+        scheduleNumber: schedule.scheduleNumber,
 
         mrrrRowId: row.id,
 
-        vpNo:
-          row.vpNo ??
-          row.rowLabel ??
-          null,
+        vpNo: row.vpNo ?? row.rowLabel ?? null,
 
-        wagonId:
-          row.wagon?.id ?? null,
+        wagonId: row.wagon?.id ?? null,
 
-        wagonName:
-          row.wagon?.name ?? null,
+        wagonName: row.wagon?.name ?? null,
 
-        gateNo:
-          loading.gateNo ?? null,
+        gateNo: loading.gateNo ?? null,
 
-        loadedQty:
-          Number(
-            allocation.loadedQty,
-          ),
+        loadedQty: Number(allocation.loadedQty),
 
-        status:
-          loading.status,
+        status: loading.status,
       });
 
-      otherWagonsByGrn.set(
-        allocation.grnId,
-        current,
-      );
+      otherWagonsByGrn.set(allocation.grnId, current);
     }
 
     /*
      * 5. Return current allocations with
      * quantity and split-wagon information.
      */
-    const response = allocations.map(
-      (allocation) => {
-        const totalReceivedQty =
-          totalReceivedByGrn.get(
-            allocation.grnId,
-          ) ?? 0;
+    const response = allocations.map((allocation) => {
+      const totalReceivedQty = totalReceivedByGrn.get(allocation.grnId) ?? 0;
 
-        const totalLoadedQty =
-          totalLoadedByGrn.get(
-            allocation.grnId,
-          ) ?? 0;
+      const totalLoadedQty = totalLoadedByGrn.get(allocation.grnId) ?? 0;
 
-        /*
-         * A cancelled allocation does not
-         * contribute to current loading.
-         */
-        const loadedInCurrentWagon =
-          allocation.status ===
-          "CANCELLED"
-            ? 0
-            : Number(
-                allocation.loadedQty,
-              );
+      /*
+       * A cancelled allocation does not
+       * contribute to current loading.
+       */
+      const loadedInCurrentWagon =
+        allocation.status === "CANCELLED" ? 0 : Number(allocation.loadedQty);
 
-        const loadedInOtherWagons =
-          Math.max(
-            totalLoadedQty -
-              loadedInCurrentWagon,
-            0,
-          );
+      const loadedInOtherWagons = Math.max(
+        totalLoadedQty - loadedInCurrentWagon,
+        0,
+      );
 
-        const availableQty =
-          Math.max(
-            totalReceivedQty -
-              totalLoadedQty,
-            0,
-          );
+      const availableQty = Math.max(totalReceivedQty - totalLoadedQty, 0);
 
-        return {
-          ...allocation,
+      return {
+        ...allocation,
 
-          quantitySummary: {
-            totalReceivedQty,
+        quantitySummary: {
+          totalReceivedQty,
 
-            loadedInCurrentWagon,
+          loadedInCurrentWagon,
 
-            loadedInOtherWagons,
+          loadedInOtherWagons,
 
-            totalLoadedQty,
+          totalLoadedQty,
 
-            availableQty,
-          },
+          availableQty,
+        },
 
-          otherWagons:
-            otherWagonsByGrn.get(
-              allocation.grnId,
-            ) ?? [],
-        };
-      },
-    );
+        otherWagons: otherWagonsByGrn.get(allocation.grnId) ?? [],
+      };
+    });
 
     return sendOk(res, response);
   },
@@ -1745,58 +2200,46 @@ router.patch(
       "VP wagon loading",
     );
 
-    const parsed =
-      updateVPWagonLoadingLabourSchema.safeParse(
-        req.body,
-      );
+    const parsed = updateVPWagonLoadingLabourSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      throw new ValidationError(
-        parsed.error.flatten(),
-      );
+      throw new ValidationError(parsed.error.flatten());
     }
 
     const userId = actorId(req);
 
     await db.$transaction(async (tx) => {
       // Fetch only fields required for validation
-      const current =
-        await tx.vPWagonLoading.findUnique({
-          where: {
-            id: vpWagonLoadingId,
-          },
-          select: {
-            id: true,
-            status: true,
-            version: true,
+      const current = await tx.vPWagonLoading.findUnique({
+        where: {
+          id: vpWagonLoadingId,
+        },
+        select: {
+          id: true,
+          status: true,
+          version: true,
 
-            mrRrRow: {
-              select: {
-                mrRr: {
-                  select: {
-                    vpSchedule: {
-                      select: {
-                        fromBranchId: true,
-                      },
+          mrRrRow: {
+            select: {
+              mrRr: {
+                select: {
+                  vpSchedule: {
+                    select: {
+                      fromBranchId: true,
                     },
                   },
                 },
               },
             },
           },
-        });
+        },
+      });
 
       if (!current) {
-        throw new NotFoundError(
-          "VP wagon loading not found",
-        );
+        throw new NotFoundError("VP wagon loading not found");
       }
 
-      assertBranchAccess(
-        req,
-        current.mrRrRow.mrRr.vpSchedule
-          .fromBranchId,
-      );
+      assertBranchAccess(req, current.mrRrRow.mrRr.vpSchedule.fromBranchId);
 
       if (current.status !== "IN_PROGRESS") {
         throw new BadRequestError(
@@ -1816,21 +2259,14 @@ router.patch(
           version: current.version,
         },
         data: {
-          labourId:
-            parsed.data.labourId ?? null,
+          labourId: parsed.data.labourId ?? null,
 
           labourCharge:
             parsed.data.labourCharge === undefined
               ? null
-              : BigInt(
-                  Math.round(
-                    parsed.data.labourCharge * 100,
-                  ),
-                ),
+              : BigInt(Math.round(parsed.data.labourCharge * 100)),
 
-          loadingSupervisorId:
-            parsed.data.loadingSupervisorId ??
-            null,
+          loadingSupervisorId: parsed.data.loadingSupervisorId ?? null,
 
           remarks: parsed.data.remarks,
           updatedById: userId,
@@ -1843,18 +2279,15 @@ router.patch(
     });
 
     // Load the complete updated data outside the transaction
-    const updated =
-      await db.vPWagonLoading.findUnique({
-        where: {
-          id: vpWagonLoadingId,
-        },
-        include: vpWagonLoadingInclude,
-      });
+    const updated = await db.vPWagonLoading.findUnique({
+      where: {
+        id: vpWagonLoadingId,
+      },
+      include: vpWagonLoadingInclude,
+    });
 
     if (!updated) {
-      throw new NotFoundError(
-        "VP wagon loading not found",
-      );
+      throw new NotFoundError("VP wagon loading not found");
     }
 
     return sendOk(res, updated);
@@ -1915,21 +2348,12 @@ router.post(
       });
 
       if (!current) {
-        throw new NotFoundError(
-          "VP wagon loading not found",
-        );
+        throw new NotFoundError("VP wagon loading not found");
       }
 
-      assertBranchAccess(
-        req,
-        current.mrRrRow.mrRr.vpSchedule.fromBranchId,
-      );
+      assertBranchAccess(req, current.mrRrRow.mrRr.vpSchedule.fromBranchId);
 
-      if (
-        !["IN_PROGRESS", "COMPLETED"].includes(
-          current.status,
-        )
-      ) {
+      if (!["IN_PROGRESS", "COMPLETED"].includes(current.status)) {
         throw new BadRequestError(
           "Only in-progress or completed wagon can be finished",
         );
@@ -1941,28 +2365,20 @@ router.post(
         "Wagon loading changed. Please refresh.",
       );
 
-      const activeAllocations =
-        current.allocations.filter(
-          (allocation) =>
-            allocation.status !== "CANCELLED",
-        );
+      const activeAllocations = current.allocations.filter(
+        (allocation) => allocation.status !== "CANCELLED",
+      );
 
       if (!activeAllocations.length) {
-        throw new BadRequestError(
-          "At least one loaded allocation is required",
-        );
+        throw new BadRequestError("At least one loaded allocation is required");
       }
 
-      const hasIncompleteAllocation =
-        activeAllocations.some(
-          (allocation) =>
-            allocation.status !== "LOADED",
-        );
+      const hasIncompleteAllocation = activeAllocations.some(
+        (allocation) => allocation.status !== "LOADED",
+      );
 
       if (hasIncompleteAllocation) {
-        throw new BadRequestError(
-          "All active allocations must be loaded",
-        );
+        throw new BadRequestError("All active allocations must be loaded");
       }
 
       const finishedAt = new Date();
@@ -1973,8 +2389,7 @@ router.post(
         },
         data: {
           status: "VERIFIED",
-          loadingCompletedAt:
-            current.loadingCompletedAt ?? finishedAt,
+          loadingCompletedAt: current.loadingCompletedAt ?? finishedAt,
           verifiedById: userId,
           verifiedAt: finishedAt,
           updatedById: userId,
@@ -1993,18 +2408,15 @@ router.post(
     });
 
     // Fetch complete response after the transaction finishes
-    const completed =
-      await db.vPWagonLoading.findUnique({
-        where: {
-          id: vpWagonLoadingId,
-        },
-        include: vpWagonLoadingInclude,
-      });
+    const completed = await db.vPWagonLoading.findUnique({
+      where: {
+        id: vpWagonLoadingId,
+      },
+      include: vpWagonLoadingInclude,
+    });
 
     if (!completed) {
-      throw new NotFoundError(
-        "VP wagon loading not found",
-      );
+      throw new NotFoundError("VP wagon loading not found");
     }
 
     return sendOk(res, completed);
@@ -2067,21 +2479,14 @@ router.post(
         throw new NotFoundError("VP wagon loading not found");
       }
 
-      assertBranchAccess(
-        req,
-        current.mrRrRow.mrRr.vpSchedule.fromBranchId,
-      );
+      assertBranchAccess(req, current.mrRrRow.mrRr.vpSchedule.fromBranchId);
 
       if (current.status === "VERIFIED") {
-        throw new BadRequestError(
-          "Verified wagon cannot be cancelled",
-        );
+        throw new BadRequestError("Verified wagon cannot be cancelled");
       }
 
       if (current.status === "CANCELLED") {
-        throw new BadRequestError(
-          "Wagon is already cancelled",
-        );
+        throw new BadRequestError("Wagon is already cancelled");
       }
 
       const hasActiveAllocations = current.allocations.some(

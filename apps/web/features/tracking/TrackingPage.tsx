@@ -104,7 +104,10 @@ export default function TrackingPage() {
       return (
         v.name.toLowerCase().includes(q) ||
         (v.vehicleNumber ?? "").toLowerCase().includes(q) ||
-        v.uniqueId.includes(q)
+        v.uniqueId.includes(q) ||
+        (v.assignment?.scheduleNumber ?? "").toLowerCase().includes(q) ||
+        (v.assignment?.rake?.rakeNumber ?? "").toLowerCase().includes(q) ||
+        (v.assignment?.installedOnVpNo ?? "").toLowerCase().includes(q)
       );
     });
   }, [vehicles, search, statusFilter]);
@@ -113,11 +116,19 @@ export default function TrackingPage() {
 
   // History trail
   const historyQuery = useQuery({
-    queryKey: range
-      ? trackingKeys.history(selectedId ?? 0, range.from, range.to)
+    queryKey: range && selected?.assignment
+      ? trackingKeys.history(selected.assignment.id, range.from, range.to)
       : ["tracking", "history", "idle"],
-    queryFn: () => trackingApi.history(selectedId!, range!.from, range!.to),
-    enabled: mode === "history" && !!range && selectedId != null,
+    queryFn: () =>
+      trackingApi.history(
+        selected!.assignment!.id,
+        range!.from,
+        range!.to,
+      ),
+    enabled:
+      mode === "history" &&
+      !!range &&
+      Boolean(selected?.assignment),
   });
   const trail = range ? (historyQuery.data ?? null) : null;
 
@@ -154,6 +165,10 @@ export default function TrackingPage() {
     const now = new Date();
     const start = new Date(now);
     start.setHours(0, 0, 0, 0);
+    if (selected?.assignment) {
+      const assignedAt = new Date(selected.assignment.assignedAt);
+      if (assignedAt > start) start.setTime(assignedAt.getTime());
+    }
     setFrom(toLocalInputValue(start));
     setTo(toLocalInputValue(now));
     setRange(null);
@@ -189,7 +204,8 @@ export default function TrackingPage() {
             <LiveBadge connected={connected} />
           </div>
           <p className="text-sm text-muted-foreground">
-            {counts.all} wagon{counts.all === 1 ? "" : "s"} · {counts.online}{" "}
+            {counts.all} active rake{counts.all === 1 ? "" : "s"} ·{" "}
+            {counts.online}{" "}
             online
           </p>
         </div>

@@ -1,7 +1,11 @@
 import * as React from "react";
 import type { VPSchedule } from "@skerp/types";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@skerp/ui/components/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@skerp/ui/components/tooltip";
 
 export type VPScheduleStatus = VPSchedule["status"];
 
@@ -12,6 +16,7 @@ const STATUS_LABELS: Record<VPScheduleStatus, string> = {
   LOADING: "Loading",
   LOADED: "Loaded",
   VERIFIED: "Verified",
+  FINALISED: "Finalised",
   CANCELLED: "Cancelled",
 };
 
@@ -22,6 +27,7 @@ const STATUS_STYLES: Record<VPScheduleStatus, string> = {
   LOADING: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   LOADED: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
   VERIFIED: "bg-green-500/10 text-green-700 border-green-500/20",
+  FINALISED: "bg-violet-500/10 text-violet-700 border-violet-500/20",
   CANCELLED: "bg-red-500/10 text-red-700 border-red-500/20",
 };
 
@@ -35,15 +41,12 @@ const isVPScheduleStatus = (
     status === "LOADING" ||
     status === "LOADED" ||
     status === "VERIFIED" ||
+    status === "FINALISED" ||
     status === "CANCELLED"
   );
 };
 
-export function VPScheduleStatusBadge({
-  status,
-}: {
-  status?: string | null;
-}) {
+export function VPScheduleStatusBadge({ status }: { status?: string | null }) {
   if (!isVPScheduleStatus(status)) {
     return (
       <span
@@ -84,6 +87,7 @@ export const VP_SCHEDULE_STATUS_ORDER: {
   { key: "LOADING", label: "Loading" },
   { key: "LOADED", label: "Loaded" },
   { key: "VERIFIED", label: "Verified" },
+  { key: "FINALISED", label: "Finalised" },
   { key: "CANCELLED", label: "Cancelled" },
 ];
 

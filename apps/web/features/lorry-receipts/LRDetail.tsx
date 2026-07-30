@@ -430,7 +430,7 @@ export default function LRDetail({ id }: { id: string }) {
   // truckload holds several.
   const focusedLrNumber =
     !display.isSingleton &&
-    g.lorryReceipts.some((lr) => lr.lrNumber === requestedIdentifier)
+      g.lorryReceipts.some((lr) => lr.lrNumber === requestedIdentifier)
       ? requestedIdentifier
       : null;
 
@@ -448,8 +448,8 @@ export default function LRDetail({ id }: { id: string }) {
   const finaliseTitle = hasNoLrs
     ? "Add at least one consignment LR before finalising."
     : incompleteLrs
-        .map((lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`)
-        .join(" | ");
+      .map((lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`)
+      .join(" | ");
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicleNumber ?? "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
@@ -496,8 +496,8 @@ export default function LRDetail({ id }: { id: string }) {
                 <span aria-hidden>·</span>
                 <span>{display.subtitle}</span>
                 {!display.isSingleton &&
-                deliveredCount > 0 &&
-                deliveredCount < display.lrCount ? (
+                  deliveredCount > 0 &&
+                  deliveredCount < display.lrCount ? (
                   <>
                     <span aria-hidden>·</span>
                     <span>
@@ -725,7 +725,7 @@ export default function LRDetail({ id }: { id: string }) {
             className={cn(
               "rounded-lg border border-border bg-card p-5 transition-colors",
               focusedLrNumber === lr.lrNumber &&
-                "border-primary ring-2 ring-primary/15",
+              "border-primary ring-2 ring-primary/15",
             )}
           >
             <div className="mb-5 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -780,25 +780,25 @@ export default function LRDetail({ id }: { id: string }) {
                   )}
                   {g.status === "DRAFT" && canUpdate && (
                     <>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="Edit LR"
-                      onClick={() => setEditLine(lr)}
-                    >
-                      <IconPencil size={15} />
-                    </Button>
-                    {g.lorryReceipts.length > 1 && (
                       <Button
                         size="icon-sm"
-                        variant="destructive"
-                        aria-label="Remove LR"
-                        disabled={removeLine.isPending}
-                        onClick={() => removeLine.mutate(lr.id)}
+                        variant="ghost"
+                        aria-label="Edit LR"
+                        onClick={() => setEditLine(lr)}
                       >
-                        <IconTrash size={15} />
+                        <IconPencil size={15} />
                       </Button>
-                    )}
+                      {g.lorryReceipts.length > 1 && (
+                        <Button
+                          size="icon-sm"
+                          variant="destructive"
+                          aria-label="Remove LR"
+                          disabled={removeLine.isPending}
+                          onClick={() => removeLine.mutate(lr.id)}
+                        >
+                          <IconTrash size={15} />
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -824,22 +824,22 @@ export default function LRDetail({ id }: { id: string }) {
               lr.goods.length === 0 ||
               lr.totalWeight == null ||
               !lr.unit) && (
-              <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-sm border border-warning/30 bg-warning/10 px-3 py-2 text-sm font-medium text-warning-foreground">
-                <IconAlertTriangle size={16} />
-                Complete before finalise:
-                {!lr.loadingLocationId ? " loading point" : ""}
-                {!lr.unloadingLocationId ? " unloading point" : ""}
-                {lr.goods.length === 0 ? " goods" : ""}
-                {lr.totalWeight == null ? " total weight" : ""}
-                {!lr.unit ? " unit" : ""}
-              </div>
-            )}
+                <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-sm border border-warning/30 bg-warning/10 px-3 py-2 text-sm font-medium text-warning-foreground">
+                  <IconAlertTriangle size={16} />
+                  Complete before finalise:
+                  {!lr.loadingLocationId ? " loading point" : ""}
+                  {!lr.unloadingLocationId ? " unloading point" : ""}
+                  {lr.goods.length === 0 ? " goods" : ""}
+                  {lr.totalWeight == null ? " total weight" : ""}
+                  {!lr.unit ? " unit" : ""}
+                </div>
+              )}
 
             <EwayBillSection
               lrId={lr.id}
               groupId={g.id}
               ewayBill={lr.ewayBill}
-              canAdd={canUpdate && g.status !== "CANCELLED"}
+              canEdit={canUpdate && g.status !== "CANCELLED"}
             />
 
             <DeliverySection
@@ -999,24 +999,24 @@ export default function LRDetail({ id }: { id: string }) {
         initial={
           editLine
             ? {
-                loadingLocationId: editLine.loadingLocationId ?? undefined,
-                unloadingLocationId: editLine.unloadingLocationId ?? undefined,
-                totalWeight:
-                  editLine.totalWeight != null
-                    ? String(editLine.totalWeight)
-                    : "",
-                totalWeightUnit: editLine.unit ?? "MT",
-                goods: editLine.goods.map((goods) => ({
-                  name: goods.name,
-                  quantity:
-                    goods.quantity != null ? String(goods.quantity) : "",
-                })),
-                invoiceNumber: editLine.invoiceNumber ?? "",
-                invoiceAmount:
-                  editLine.invoiceAmount != null
-                    ? String(paiseToRupees(editLine.invoiceAmount))
-                    : "",
-              }
+              loadingLocationId: editLine.loadingLocationId ?? undefined,
+              unloadingLocationId: editLine.unloadingLocationId ?? undefined,
+              totalWeight:
+                editLine.totalWeight != null
+                  ? String(editLine.totalWeight)
+                  : "",
+              totalWeightUnit: editLine.unit ?? "MT",
+              goods: editLine.goods.map((goods) => ({
+                name: goods.name,
+                quantity:
+                  goods.quantity != null ? String(goods.quantity) : "",
+              })),
+              invoiceNumber: editLine.invoiceNumber ?? "",
+              invoiceAmount:
+                editLine.invoiceAmount != null
+                  ? String(paiseToRupees(editLine.invoiceAmount))
+                  : "",
+            }
             : undefined
         }
         isPending={updateLine.isPending}

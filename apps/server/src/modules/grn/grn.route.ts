@@ -20,7 +20,7 @@ import {
   formatDocNumber,
   fyCodeFor,
   grnDetailInclude,
-  grnDestinationBranchFilter,
+  grnRailheadBranchFilter,
   grnListSelect,
   grnPreviewInclude,
   nextSequence,
@@ -49,7 +49,7 @@ const actorId = (req: { user?: { userId: string } }) => {
 
 const getIdParam = (value: string | string[] | undefined, label: string) => {
   const id = decodeURIComponent(
-    Array.isArray(value) ? value[0] ?? "" : value ?? "",
+    Array.isArray(value) ? (value[0] ?? "") : (value ?? ""),
   ).trim();
 
   if (!id) throw new BadRequestError(`${label} is required`);
@@ -57,9 +57,9 @@ const getIdParam = (value: string | string[] | undefined, label: string) => {
 };
 
 const grnBranchFilter = (
-  req: Parameters<typeof grnDestinationBranchFilter>[0],
+  req: Parameters<typeof grnRailheadBranchFilter>[0],
 ): Prisma.GRNWhereInput => {
-  const lrFilter = grnDestinationBranchFilter(req);
+  const lrFilter = grnRailheadBranchFilter(req);
   return Object.keys(lrFilter).length
     ? { lorryReceipt: lrFilter as Prisma.LorryReceiptWhereInput }
     : {};
@@ -67,7 +67,7 @@ const grnBranchFilter = (
 
 const grnWhereByIdentifier = (
   identifier: string,
-  req: Parameters<typeof grnDestinationBranchFilter>[0],
+  req: Parameters<typeof grnRailheadBranchFilter>[0],
 ): Prisma.GRNWhereInput => ({
   deletedAt: null,
   OR: [{ id: identifier }, { grnNumber: identifier }],
@@ -160,12 +160,23 @@ const validateDamagePhotoAttachments = async (
   }
 };
 
-const getCreateLR = async (lrId: string, req: Parameters<typeof grnDestinationBranchFilter>[0]) => {
+const getCreateLR = async (
+  lrId: string,
+  req: Parameters<typeof grnRailheadBranchFilter>[0],
+) => {
   const lr = await db.lorryReceipt.findFirst({
     where: {
       id: lrId,
       deletedAt: null,
-      ...grnDestinationBranchFilter(req),
+      ...grnRailheadBranchFilter(req),
+      AND: [
+        {
+          group: {
+            transportType: "RoadAndRail",
+            railheadBranchId: { not: null },
+          },
+        },
+      ],
     },
     include: {
       grn: { select: { id: true, grnNumber: true } },
@@ -173,7 +184,7 @@ const getCreateLR = async (lrId: string, req: Parameters<typeof grnDestinationBr
       group: {
         select: {
           id: true,
-          destinationBranch: {
+          railheadBranch: {
             select: { id: true, branchCode: true },
           },
         },
@@ -186,7 +197,9 @@ const getCreateLR = async (lrId: string, req: Parameters<typeof grnDestinationBr
     throw new BadRequestError("Only a FINALISED LR can be used to create GRN");
   }
   if (lr.grn) {
-    throw new ConflictError(`GRN already exists for this LR: ${lr.grn.grnNumber}`);
+    throw new ConflictError(
+      `GRN already exists for this LR: ${lr.grn.grnNumber}`,
+    );
   }
 
   return lr;
@@ -221,7 +234,9 @@ const buildGoodsCreate = (
 
     if (row.lrGoodsId) {
       if (!source) {
-        throw new BadRequestError("GRN goods line does not belong to selected LR");
+        throw new BadRequestError(
+          "GRN goods line does not belong to selected LR",
+        );
       }
       if (row.totalQty > source.quantity) {
         throw new BadRequestError(
@@ -260,7 +275,7 @@ const buildGRNWriteData = (
     inDateTime: data.inDateTime,
     outDateTime: data.outDateTime,
     unloadingMinutes: data.unloadingMinutes,
-    
+
     totalWeightMt: toDecimalOrNull(data.totalWeightMt),
     ...money,
     detentionDays: data.detentionDays,
@@ -292,7 +307,7 @@ router.get("/", can(PERMS.GRN.VIEW), async (req, res) => {
 
   const status =
     typeof query.filter.status === "string" &&
-    Object.values(GRNStatus).includes(query.filter.status as GRNStatus)
+      Object.values(GRNStatus).includes(query.filter.status as GRNStatus)
       ? (query.filter.status as GRNStatus)
       : undefined;
 
@@ -302,29 +317,29 @@ router.get("/", can(PERMS.GRN.VIEW), async (req, res) => {
     ...(status ? { status } : {}),
     ...(query.search
       ? {
-          OR: [
-            {
-              grnNumber: {
+        OR: [
+          {
+            grnNumber: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            gateNo: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            lorryReceipt: {
+              lrNumber: {
                 contains: query.search,
                 mode: "insensitive" as const,
               },
             },
-            {
-              gateNo: {
-                contains: query.search,
-                mode: "insensitive" as const,
-              },
-            },
-            {
-              lorryReceipt: {
-                lrNumber: {
-                  contains: query.search,
-                  mode: "insensitive" as const,
-                },
-              },
-            },
-          ],
-        }
+          },
+        ],
+      }
       : {}),
   };
 
@@ -372,122 +387,114 @@ router.get("/status-counts", can(PERMS.GRN.VIEW), async (req, res) => {
   return sendOk(res, { all, ...counts });
 });
 // "/grn/supervisors"
-router.get(
-  "/supervisors",
-  can(PERMS.GRN.CREATE),
-  async (req, res) => {
-    const supervisorRole = await db.role.findFirst({
-      where: {
-        name: "SuperVisor",
-      },
-      select: {
-        id: true,
-      },
+router.get("/supervisors", can(PERMS.GRN.CREATE), async (req, res) => {
+  const supervisorRole = await db.role.findFirst({
+    where: {
+      name: "SuperVisor",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!supervisorRole) {
+    return res.json({
+      data: [],
     });
+  }
 
-    if (!supervisorRole) {
-      return res.json({
-        data: [],
-      });
-    }
+  const supervisors = await db.user.findMany({
+    where: {
+      status: true,
+      roleId: supervisorRole.id,
 
-    const supervisors = await db.user.findMany({
-      where: {
-        status: true,
-        roleId: supervisorRole.id,
+      ...(req.ctx?.branchScope === "ALL"
+        ? {}
+        : {
+          branchId: {
+            in: req.ctx?.branchIds ?? [],
+          },
+        }),
+    },
+    select: {
+      id: true,
+      firstName: true,
+      middleName: true,
+      lastName: true,
+      email: true,
+    },
+    orderBy: {
+      firstName: "asc",
+    },
+  });
 
-        ...(req.ctx?.branchScope === "ALL"
-          ? {}
-          : {
-              branchId: {
-                in: req.ctx?.branchIds ?? [],
-              },
-            }),
-      },
-      select: {
-        id: true,
-        firstName: true,
-        middleName: true,
-        lastName: true,
-        email: true,
-      },
-      orderBy: {
-        firstName: "asc",
-      },
-    });
-
-    res.json({
-      data: supervisors.map((user) => ({
-        id: user.id,
-        name:
-          [user.firstName, user.middleName, user.lastName]
-            .filter(Boolean)
-            .join(" ") || user.email,
-        email: user.email,
-      })),
-    });
-  },
-);
+  res.json({
+    data: supervisors.map((user) => ({
+      id: user.id,
+      name:
+        [user.firstName, user.middleName, user.lastName]
+          .filter(Boolean)
+          .join(" ") || user.email,
+      email: user.email,
+    })),
+  });
+});
 /* ------------------------------------------------------------------ */
 /* Eligible LR dropdown                                                */
 /* ------------------------------------------------------------------ */
-router.get(
-  "/eligible-lrs",
-  can(PERMS.GRN.CREATE),
-  async (req, res) => {            
-    const query = parseListQuery(req);
+router.get("/eligible-lrs", can(PERMS.GRN.CREATE), async (req, res) => {
+  const query = parseListQuery(req);
 
-    const branchWhere = grnDestinationBranchFilter(req);
+  const branchWhere = grnRailheadBranchFilter(req);
 
-    const where = {
-      deletedAt: null,
-      status: "FINALISED" as const,
-
-      // LR should not already have GRN
-      grn: { is: null },
-
-      AND: [
-        branchWhere,
-
-        // GRN should allow only finalised LR group also
-        {
-  group: {
+  const where = {
+    deletedAt: null,
     status: "FINALISED" as const,
-    transportType: "RoadAndRail",
-  },
-},
 
-        ...(query.search
-          ? [
-              {
-                lrNumber: {
-                  contains: query.search,
-                  mode: "insensitive" as const,
-                },
-              },
-            ]
-          : []),
-      ],
-    } satisfies Prisma.LorryReceiptWhereInput;
+    // LR should not already have GRN
+    grn: { is: null },
 
-    const [data, total] = await Promise.all([
-      db.lorryReceipt.findMany({
-        where,
-        skip: query.page * query.size,
-        take: query.size,
-        select: eligibleLRSelect,
-        orderBy: { createdAt: "desc" },
-      }),
-      db.lorryReceipt.count({ where }),
-    ]);
+    AND: [
+      branchWhere,
 
-    return sendOk(res, data, {
-      page: query.page,
-      size: query.size,
-      total,
-    });
-  },
-);
+      // GRN should allow only finalised LR group also
+      {
+        group: {
+          status: "FINALISED" as const,
+          transportType: "RoadAndRail",
+        },
+      },
+
+      ...(query.search
+        ? [
+          {
+            lrNumber: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+        ]
+        : []),
+    ],
+  } satisfies Prisma.LorryReceiptWhereInput;
+
+  const [data, total] = await Promise.all([
+    db.lorryReceipt.findMany({
+      where,
+      skip: query.page * query.size,
+      take: query.size,
+      select: eligibleLRSelect,
+      orderBy: { createdAt: "desc" },
+    }),
+    db.lorryReceipt.count({ where }),
+  ]);
+
+  return sendOk(res, data, {
+    page: query.page,
+    size: query.size,
+    total,
+  });
+});
 
 router.get(
   "/:grnId/damage-photos/:photoId/view-url",
@@ -542,119 +549,129 @@ router.get(
 /* ------------------------------------------------------------------ */
 /* GRN preview from selected LR                                        */
 /* ------------------------------------------------------------------ */
-router.get(
-  "/preview/:lrId",
-  can(PERMS.GRN.CREATE),
-  async (req, res) => {
-    const lrId = getIdParam(req.params.lrId, "LR id");
+router.get("/preview/:lrId", can(PERMS.GRN.CREATE), async (req, res) => {
+  const lrId = getIdParam(req.params.lrId, "LR id");
 
-    const lr = await db.lorryReceipt.findFirst({
-      where: {
-        id: lrId,
-        deletedAt: null,
+  const lr = await db.lorryReceipt.findFirst({
+    where: {
+      id: lrId,
+      deletedAt: null,
 
-        // Receiving branch scope
-        ...grnDestinationBranchFilter(req),
-      },
-      include: grnPreviewInclude,
-    });
+      // Source railhead branch scope
+      ...grnRailheadBranchFilter(req),
+      AND: [
+        {
+          group: {
+            transportType: "RoadAndRail",
+            railheadBranchId: { not: null },
+          },
+        },
+      ],
+    },
+    include: grnPreviewInclude,
+  });
 
-    if (!lr) {
-      throw new NotFoundError("Lorry receipt not found");
+  if (!lr) {
+    throw new NotFoundError("Lorry receipt not found");
+  }
+
+  if (lr.status !== "FINALISED") {
+    throw new BadRequestError("Only a FINALISED LR can be used to create GRN");
+  }
+
+  if (lr.grn) {
+    throw new BadRequestError("GRN already exists for this LR");
+  }
+
+  const group = lr.group;
+
+  const ownTrip = group.primaryTrip ?? group.secondaryTrip ?? null;
+
+  const vehicleInfo = group.isMarketVehicle
+    ? {
+      type: "MARKET" as const,
+      vehicleNumber: group.marketVehicleNumber,
+      driverName: group.marketDriverName,
+      driverMobile: null,
+      tripNumber: null,
+      tripName: null,
     }
+    : {
+      type: "OWN" as const,
+      vehicleNumber: ownTrip?.vehicle?.vehicleNumber ?? null,
+      driverName: ownTrip?.driver?.name ?? null,
+      driverMobile: ownTrip?.driver?.mobile ?? null,
+      tripNumber: ownTrip?.tripNumber ?? null,
+      tripName: ownTrip?.tripName ?? null,
+    };
 
-    if (lr.status !== "FINALISED") {
-      throw new BadRequestError("Only a FINALISED LR can be used to create GRN");
+  const chargeDefaults = group.isMarketVehicle
+    ? {
+      totalFreight: group.marketFreightAmount,
+      advanceAmount: group.marketAdvanceAmount,
+      hamaliAmount: group.marketHamaliAmount,
+      tdsAmount: group.marketTdsAmount,
+      commissionAmount: group.marketCommissionAmount,
     }
+    : {
+      totalFreight: group.baseFreightAmount ?? ownTrip?.onwardFreight ?? null,
+      advanceAmount: 0,
+      hamaliAmount: 0,
+      tdsAmount: 0,
+      commissionAmount: 0,
+    };
 
-    if (lr.grn) {
-      throw new BadRequestError("GRN already exists for this LR");
-    }
+  const goods = lr.goods.map((g) => ({
+    lrGoodsId: g.id,
+    goodsName: g.name,
+    description: g.description,
+    totalQty: g.quantity,
 
-    const group = lr.group;
+    // Default full received.
+    // User can change this and enter damage / shortage.
+    receivedQty: g.quantity,
+    damageQty: 0,
+    shortageQty: 0,
 
-    const ownTrip = group.primaryTrip ?? group.secondaryTrip ?? null;
+    quantityUnitId: g.quantityUnitId,
+    weightUnitId: g.weightUnitId,
+    quantityUnit: g.quantityUnit,
+    weightUnit: g.weightUnit,
+    unit: g.unit,
+    weight: g.weight,
+    remarks: "",
+  }));
 
-    const vehicleInfo = group.isMarketVehicle
-      ? {
-          type: "MARKET" as const,
-          vehicleNumber: group.marketVehicleNumber,
-          driverName: group.marketDriverName,
-          driverMobile: null,
-          tripNumber: null,
-          tripName: null,
-        }
-      : {
-          type: "OWN" as const,
-          vehicleNumber: ownTrip?.vehicle?.vehicleNumber ?? null,
-          driverName: ownTrip?.driver?.name ?? null,
-          driverMobile: ownTrip?.driver?.mobile ?? null,
-          tripNumber: ownTrip?.tripNumber ?? null,
-          tripName: ownTrip?.tripName ?? null,
-        };
+  const totalQty = goods.reduce((sum, g) => sum + g.totalQty, 0);
 
-    const chargeDefaults = group.isMarketVehicle
-      ? {
-          totalFreight: group.marketFreightAmount,
-          advanceAmount: group.marketAdvanceAmount,
-          hamaliAmount: group.marketHamaliAmount,
-          tdsAmount: group.marketTdsAmount,
-          commissionAmount: group.marketCommissionAmount,
-        }
-      : {
-          totalFreight: group.baseFreightAmount ?? ownTrip?.onwardFreight ?? null,
-          advanceAmount: 0,
-          hamaliAmount: 0,
-          tdsAmount: 0,
-          commissionAmount: 0,
-        };
+  return sendOk(res, {
+    lorryReceipt: {
+      id: lr.id,
+      lrNumber: lr.lrNumber,
+      status: lr.status,
+      fyCode: lr.fyCode,
+      createdAt: lr.createdAt,
+      invoiceNumber: lr.invoiceNumber,
+      invoiceAmount: lr.invoiceAmount,
 
-    const goods = lr.goods.map((g) => ({
-      lrGoodsId: g.id,
-      goodsName: g.name,
-      description: g.description,
-      totalQty: g.quantity,
+      totalWeight:
+        lr.totalWeight == null ? null : Number(lr.totalWeight),
+      unit: lr.unit,
+      sealNumber: group.sealNumber,
 
-      // Default full received.
-      // User can change this and enter damage / shortage.
-      receivedQty: g.quantity,
-      damageQty: 0,
-      shortageQty: 0,
-
-      quantityUnitId: g.quantityUnitId,
-      weightUnitId: g.weightUnitId,
-      quantityUnit: g.quantityUnit,
-      weightUnit: g.weightUnit,
-      unit: g.unit,
-      weight: g.weight,
-      remarks: "",
-    }));
-
-    const totalQty = goods.reduce((sum, g) => sum + g.totalQty, 0);
-
-    return sendOk(res, {
-      lorryReceipt: {
-        id: lr.id,
-        lrNumber: lr.lrNumber,
-        status: lr.status,
-        fyCode: lr.fyCode,
-        createdAt: lr.createdAt,
-        invoiceNumber: lr.invoiceNumber,
-        invoiceAmount: lr.invoiceAmount,
-        loadingLocation: lr.loadingLocation,
-        unloadingLocation: lr.unloadingLocation,
-        ewayBill: lr.ewayBill,
-        group: lr.group,
-      },
-      vehicleInfo,
-      chargeDefaults,
-      goods,
-      totals: {
-        totalQty,
-      },
-    });
-  },
-);
+      loadingLocation: lr.loadingLocation,
+      unloadingLocation: lr.unloadingLocation,
+      ewayBill: lr.ewayBill,
+      group: lr.group,
+    },
+    vehicleInfo,
+    chargeDefaults,
+    goods,
+    totals: {
+      totalQty,
+    },
+  });
+});
 
 /* ------------------------------------------------------------------ */
 /* Detail                                                             */
@@ -684,7 +701,13 @@ router.post("/", can(PERMS.GRN.CREATE), async (req, res) => {
   const writeData = buildGRNWriteData(input, lr.goods);
   const userId = actorId(req);
   const fyCode = lr.fyCode || fyCodeFor(new Date());
-  const branchCode = lr.group.destinationBranch.branchCode;
+  const railheadBranch = lr.group.railheadBranch;
+  if (!railheadBranch) {
+    throw new BadRequestError(
+      "The Road & Rail LR does not have a railhead branch",
+    );
+  }
+  const branchCode = railheadBranch.branchCode;
 
   const grn = await db.$transaction(async (tx) => {
     const seq = await nextSequence(tx, branchCode, fyCode, "GRN");
@@ -739,7 +762,6 @@ router.post("/", can(PERMS.GRN.CREATE), async (req, res) => {
     });
   });
 
-
   return sendOk(res, await withDamagePhotos(grn), undefined, 201);
 });
 
@@ -764,9 +786,9 @@ router.put("/:id", can(PERMS.GRN.UPDATE), async (req, res) => {
   });
 
   if (!existing) throw new NotFoundError("GRN not found");
-if (!["DRAFT", "SUBMITTED"].includes(existing.status)) {
-  throw new BadRequestError("Only a DRAFT or SUBMITTED GRN can be updated");
-}
+  if (!["DRAFT", "SUBMITTED"].includes(existing.status)) {
+    throw new BadRequestError("Only a DRAFT or SUBMITTED GRN can be updated");
+  }
   if (input.version !== undefined && input.version !== existing.version) {
     throw new ConflictError("GRN was updated by someone else. Please refresh.");
   }
@@ -850,7 +872,10 @@ router.post("/:id/submit", can(PERMS.GRN.SUBMIT), async (req, res) => {
   if (existing.status !== "DRAFT") {
     throw new BadRequestError("Only a DRAFT GRN can be submitted");
   }
-  if (parsed.data.version !== undefined && parsed.data.version !== existing.version) {
+  if (
+    parsed.data.version !== undefined &&
+    parsed.data.version !== existing.version
+  ) {
     throw new ConflictError("GRN was updated by someone else. Please refresh.");
   }
   if (existing.goods.length === 0 || existing.receivedQty <= 0) {
@@ -900,11 +925,16 @@ router.post("/:id/cancel", can(PERMS.GRN.CANCEL), async (req, res) => {
   if (existing.status === "CANCELLED") {
     throw new BadRequestError("GRN is already cancelled");
   }
-  if (parsed.data.version !== undefined && parsed.data.version !== existing.version) {
+  if (
+    parsed.data.version !== undefined &&
+    parsed.data.version !== existing.version
+  ) {
     throw new ConflictError("GRN was updated by someone else. Please refresh.");
   }
   if (existing.vpLoadings.length > 0) {
-    throw new BadRequestError("GRN cannot be cancelled after VP Loading is created");
+    throw new BadRequestError(
+      "GRN cannot be cancelled after VP Loading is created",
+    );
   }
 
   const grn = await db.gRN.update({

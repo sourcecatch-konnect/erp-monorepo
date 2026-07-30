@@ -35,14 +35,14 @@ type Props<T extends { id: string }> = {
   total: number;
   onView?: (row: T) => void;
   onPageChange: (page: number) => void;
-  selectedIds: string[];
-  onSelectedIdsChange: (ids: string[]) => void;
-  onAdd: () => void;
+  selectedIds?: string[];
+  onSelectedIdsChange?: (ids: string[]) => void;
+  onAdd?: () => void;
   onEdit?: (row: T) => void;
   onDelete?: (id: string) => void;
   onBulkDelete?: () => void;
-  onImport: (file: File) => Promise<void>;
-  onExport: () => void;
+  onImport?: (file: File) => Promise<void>;
+  onExport?: () => void;
   isBulkDeleting?: boolean;
   isImporting?: boolean;
   isExporting?: boolean;
@@ -50,8 +50,10 @@ type Props<T extends { id: string }> = {
   defaultHiddenColumns?: string[];
   renderExpandedRow?: (row: T) => React.ReactNode;
   extraRowActions?: (row: T) => React.ReactNode;
-expandOnRowClick?: boolean;
-onSizeChange?: (size: number) => void;
+  expandOnRowClick?: boolean;
+  onSizeChange?: (size: number) => void;
+  headerActions?: React.ReactNode;
+  summary?: React.ReactNode;
 };
 
 export default function MasterListPage<T extends { id: string }>({
@@ -69,12 +71,14 @@ export default function MasterListPage<T extends { id: string }>({
   onRowClick,
   total,
   onPageChange,
+  summary,
   defaultHiddenColumns,
-  selectedIds,
+  selectedIds = [],
   onSelectedIdsChange,
   onAdd,
   onEdit,
   onDelete,
+  headerActions,
   onBulkDelete,
   onImport,
   onExport,
@@ -102,7 +106,7 @@ export default function MasterListPage<T extends { id: string }>({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {selectedIds.length > 0 ? (
+          {selectedIds.length > 0 && onBulkDelete ? (
             <Button
               variant="destructive"
               onClick={onBulkDelete}
@@ -110,31 +114,44 @@ export default function MasterListPage<T extends { id: string }>({
               className="gap-2"
             >
               <IconTrash size={16} />
-              {isBulkDeleting ? "Deleting..." : `Delete ${selectedIds.length}`}
+              {isBulkDeleting
+                ? "Deleting..."
+                : `Delete ${selectedIds.length}`}
             </Button>
           ) : null}
-          <Button
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="gap-2"
-          >
-            <IconUpload size={16} />
-            {isImporting ? "Importing..." : "Import"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={onExport}
-            disabled={isExporting}
-            className="gap-2"
-          >
-            <IconDownload size={16} />
-            {isExporting ? "Exporting..." : "Export"}
-          </Button>
-          <Button onClick={onAdd} className="gap-2">
-            <IconPlus size={16} />
-            Add
-          </Button>
+
+          {headerActions}
+
+          {onImport ? (
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="gap-2"
+            >
+              <IconUpload size={16} />
+              {isImporting ? "Importing..." : "Import"}
+            </Button>
+          ) : null}
+
+          {onExport ? (
+            <Button
+              variant="outline"
+              onClick={onExport}
+              disabled={isExporting}
+              className="gap-2"
+            >
+              <IconDownload size={16} />
+              {isExporting ? "Exporting..." : "Export"}
+            </Button>
+          ) : null}
+
+          {onAdd ? (
+            <Button onClick={onAdd} className="gap-2">
+              <IconPlus size={16} />
+              Add
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -152,89 +169,91 @@ export default function MasterListPage<T extends { id: string }>({
           />
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-  {onSizeChange ? (
-    <div className="flex items-center gap-2">
-      <span>Rows</span>
+          {onSizeChange ? (
+            <div className="flex items-center gap-2">
+              <span>Rows</span>
 
-      <Select
-        value={String(size)}
-        onValueChange={(value) => {
-          onSizeChange(Number(value));
-          onPageChange(0);
-        }}
-      >
-        <SelectTrigger className="h-8 w-[76px]">
-          <SelectValue />
-        </SelectTrigger>
+              <Select
+                value={String(size)}
+                onValueChange={(value) => {
+                  onSizeChange(Number(value));
+                  onPageChange(0);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[76px]">
+                  <SelectValue />
+                </SelectTrigger>
 
-        <SelectContent>
-          <SelectItem value="10">10</SelectItem>
-          <SelectItem value="25">25</SelectItem>
-          <SelectItem value="30">30</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  ) : null}
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="30">30</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
-  <span>
-    Page {page + 1} of {pageCount}
-  </span>
+          <span>
+            Page {page + 1} of {pageCount}
+          </span>
 
-  <Button
-    size="icon-sm"
-    variant="outline"
-    onClick={() => onPageChange(page - 1)}
-    disabled={isFirstPage || isLoading}
-    aria-label="Previous page"
-  >
-    <IconChevronLeft size={16} />
-  </Button>
+          <Button
+            size="icon-sm"
+            variant="outline"
+            onClick={() => onPageChange(page - 1)}
+            disabled={isFirstPage || isLoading}
+            aria-label="Previous page"
+          >
+            <IconChevronLeft size={16} />
+          </Button>
 
-  <Button
-    size="icon-sm"
-    variant="outline"
-    onClick={() => onPageChange(page + 1)}
-    disabled={isLastPage || isLoading}
-    aria-label="Next page"
-  >
-    <IconChevronRight size={16} />
-  </Button>
-</div>
+          <Button
+            size="icon-sm"
+            variant="outline"
+            onClick={() => onPageChange(page + 1)}
+            disabled={isLastPage || isLoading}
+            aria-label="Next page"
+          >
+            <IconChevronRight size={16} />
+          </Button>
+        </div>
       </div>
 
-    <MasterTable
-  title={title}
-  data={data}
-  columns={columns}
-  onEdit={onEdit}
-  onDelete={onDelete}
-  onAddNew={onAdd}
-  onView={onView}
-  onRowClick={onRowClick}
-  
-  selectedIds={selectedIds}
-  onSelectedIdsChange={onSelectedIdsChange}
-  isLoading={isLoading}
-  defaultHiddenColumns={defaultHiddenColumns}
-  renderExpandedRow={renderExpandedRow}
-  expandOnRowClick={expandOnRowClick}
-  extraRowActions={extraRowActions}
-/>
+      <MasterTable
+        title={title}
+        data={data}
+        columns={columns}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onAddNew={onAdd}
+        onView={onView}
+        onRowClick={onRowClick}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-
-          if (file) {
-            await onImport(file);
-            event.target.value = "";
-          }
-        }}
+        selectedIds={selectedIds}
+        onSelectedIdsChange={onSelectedIdsChange}
+        isLoading={isLoading}
+        defaultHiddenColumns={defaultHiddenColumns}
+        renderExpandedRow={renderExpandedRow}
+        expandOnRowClick={expandOnRowClick}
+        extraRowActions={extraRowActions}
       />
+
+      {onImport ? (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+
+            if (file) {
+              await onImport(file);
+              event.target.value = "";
+            }
+          }}
+        />
+      ) : null}
 
       {children}
     </div>

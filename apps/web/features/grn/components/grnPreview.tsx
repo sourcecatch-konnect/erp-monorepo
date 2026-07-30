@@ -6,6 +6,7 @@ import * as React from "react";
 import { IconFileText, IconTruck } from "@tabler/icons-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@skerp/ui/components/tooltip";
 import { formatPaise } from "@/lib/money";
+import { LRStatusBadge } from "@/features/lorry-receipts/lorry-receipt-ui";
 type MoneyLike = number | string | null | undefined;
 
 export type LRPreviewPanelData = {
@@ -14,6 +15,10 @@ export type LRPreviewPanelData = {
     status?: string | null;
     invoiceNumber?: string | null;
     invoiceAmount?: MoneyLike;
+
+    totalWeight?: number | string | null;
+    unit?: string | null;
+    sealNumber?: string | null;
   };
 
   vehicleInfo: {
@@ -43,43 +48,40 @@ function PreviewRow({
   strong?: boolean;
 }) {
   const displayValue =
-  typeof value === "string" && value.length > 25
-    ? `${value.slice(0, 25)}...`
-    : value;
+    typeof value === "string" && value.length > 25
+      ? `${value.slice(0, 25)}...`
+      : value;
   return (
-  <div
-  className={`flex items-center gap-2 text-sm ${
-    strong ? "rounded bg-muted px-2 py-1.5" : ""
-  }`}
->
- <span
-  className={`w-20 shrink-0 ${
-    strong
-      ? "font-medium text-foreground"
-      : "text-muted-foreground"
-  }`}
->
-  {label}
-</span>
-
-<div className="min-w-0 flex-1 overflow-hidden">
-<Tooltip>
-  <TooltipTrigger asChild>
-    <span
-      className={`block truncate text-right ${
-        strong ? "font-semibold" : ""
-      }`}
+    <div
+      className={`flex items-center gap-2 text-sm ${strong ? "rounded bg-muted px-2 py-1.5" : ""
+        }`}
     >
-      {displayValue ?? DASH}
-    </span>
-  </TooltipTrigger>
+      <span
+        className={`w-20 shrink-0 ${strong
+          ? "font-medium text-foreground"
+          : "text-muted-foreground"
+          }`}
+      >
+        {label}
+      </span>
 
-  <TooltipContent className="max-w-sm break-all">
-    {value}
-  </TooltipContent>
-</Tooltip>
-</div>
-</div>
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={`block truncate text-right ${strong ? "font-semibold" : ""
+                }`}
+            >
+              {displayValue ?? DASH}
+            </span>
+          </TooltipTrigger>
+
+          <TooltipContent className="max-w-sm break-all">
+            {value}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
   );
 }
 function PreviewSection({
@@ -150,7 +152,12 @@ export default function LRPreviewPanel({
         <PreviewSection icon={<IconFileText size={14} />} title="LR Details">
           <div className="space-y-2">
             <PreviewRow label="LR No" value={preview.lorryReceipt.lrNumber} />
-            <PreviewRow label="Status" value={preview.lorryReceipt.status} />
+            <PreviewRow
+              label="Status"
+              value={
+                <LRStatusBadge status={preview.lorryReceipt.status} />
+              }
+            />
             <PreviewRow
               label="Invoice No"
               value={preview.lorryReceipt.invoiceNumber}
@@ -158,6 +165,20 @@ export default function LRPreviewPanel({
             <PreviewRow
               label="Invoice Amt"
               value={formatPaise(preview.lorryReceipt.invoiceAmount)}
+            />
+            <PreviewRow
+              label="Total Weight"
+              value={
+                preview.lorryReceipt.totalWeight != null
+                  ? `${preview.lorryReceipt.totalWeight} ${preview.lorryReceipt.unit ?? ""
+                    }`.trim()
+                  : undefined
+              }
+            />
+
+            <PreviewRow
+              label="Seal No"
+              value={preview.lorryReceipt.sealNumber}
             />
           </div>
         </PreviewSection>

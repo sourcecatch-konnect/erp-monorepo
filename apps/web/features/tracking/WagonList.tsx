@@ -54,7 +54,7 @@ export function WagonList({
       <div className="relative">
         <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search wagon…"
+          placeholder="Search tracker, schedule, rake or VP…"
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           className="pl-8"
@@ -100,7 +100,7 @@ export function WagonList({
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-1 py-10 text-center text-sm text-muted-foreground">
             <IconTrain className="size-6 opacity-50" />
-            No wagons found.
+            No active tracked rakes found.
           </div>
         ) : (
           filtered.map((v) => (
@@ -136,6 +136,17 @@ export function WagonList({
                   {v.vehicleNumber}
                 </p>
               )}
+              {v.assignment ? (
+                <p className="mt-1 truncate text-xs font-medium text-foreground">
+                  {v.assignment.scheduleNumber}
+                  {v.assignment.rake
+                    ? ` · ${v.assignment.rake.rakeNumber}`
+                    : ""}
+                  {v.assignment.installedOnVpNo
+                    ? ` · ${v.assignment.installedOnVpNo}`
+                    : ""}
+                </p>
+              ) : null}
             </button>
           ))
         )}

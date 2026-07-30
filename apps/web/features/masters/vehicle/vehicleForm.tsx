@@ -42,6 +42,8 @@ import { vehicleApi } from "./vehicle.service";
 import { vehicleKeys } from "./vehicle.key";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { usePrefillVehicle } from "@/features/dev-tools/usePrefillVehicle";
+import { transportApi } from "../transport/transport.service";
+import { transportKeys } from "../transport/transport.key";
 
 
 type Props = {
@@ -67,6 +69,7 @@ const defaultValues: CreateVehicleFormInput = {
   chasisNumber: "",
   engineNumber: "",
   ownershipType: "Own_Vehicle",
+  transportId: "",
   vehicleTypeId: "",
   capacityMT: "",
   wheels: "",
@@ -118,11 +121,23 @@ const handleSubmit = async (data: CreateVehicleBody) => {
     queryFn: () => vehicleTypeApi.list({ size: 1000, sort: "name:asc" }),
     enabled: open,
   });
+  const transporters = useQuery({
+    queryKey: transportKeys.list({ size: 1000, sort: "name:asc" }),
+    queryFn: () => transportApi.list({ size: 1000, sort: "name:asc" }),
+    enabled: open,
+  });
 
   const vehicleTypeOptions = (vehicleTypes.data?.data ?? []).map((vt) => ({
     label: vt.name,
     value: vt.id,
   }));
+  const transporterOptions = (transporters.data?.data ?? []).map(
+    (transporter) => ({
+      label: transporter.name,
+      value: transporter.id,
+    }),
+  );
+  const ownershipType = form.watch("ownershipType");
   const prefillVehicle = usePrefillVehicle({
     vehicleTypes: vehicleTypes.data?.data ?? [],
   });
@@ -135,6 +150,7 @@ const isSubmitting = create.isPending || update.isPending;
       chasisNumber: row?.chasisNumber ?? "",
       engineNumber: row?.engineNumber ?? "",
       ownershipType: row?.ownershipType ?? "Own_Vehicle",
+      transportId: row?.transportId ?? "",
       vehicleTypeId: row?.vehicleTypeId ?? "",
       capacityMT: row?.capacityMT != null ? String(row.capacityMT) : "",
       wheels: row?.wheels != null ? String(row.wheels) : "",
@@ -150,6 +166,15 @@ const isSubmitting = create.isPending || update.isPending;
       status: row?.status ?? "AVAILABLE",
     });
   }, [form, open, row]);
+
+  React.useEffect(() => {
+    if (ownershipType === "Own_Vehicle") {
+      form.setValue("transportId", "", {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+    }
+  }, [form, ownershipType]);
 
   return (
     <MasterFormDialog<CreateVehicleFormInput, CreateVehicleBody>
@@ -232,6 +257,15 @@ const isSubmitting = create.isPending || update.isPending;
   icon={<IconTruck size={16} />}
   required
 />
+
+        {ownershipType === "Market_Vehicle" ? (
+          <ComboboxField<CreateVehicleFormInput>
+            name="transportId"
+            label="Transporter"
+            options={transporterOptions}
+            required
+          />
+        ) : null}
 
         <ComboboxField<CreateVehicleFormInput>
           name="vehicleTypeId"

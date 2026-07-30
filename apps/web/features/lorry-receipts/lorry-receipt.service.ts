@@ -76,15 +76,30 @@ export const lorryReceiptApi = {
     );
     return unwrapApiResponse(res);
   },
+  updateEwayBill: async (
+    id: string,
+    body: AddEwayBillBody,
+  ): Promise<EwayBill> => {
+    const res = await api.patch<ApiResponse<EwayBill>>(
+      `/lorry-receipts/${id}/eway-bills`,
+      body,
+    );
 
+    return unwrapApiResponse(res);
+  },
   remove: async (id: string): Promise<{ id: string }> => {
-    const res = await api.delete<ApiResponse<{ id: string }>>(`/lorry-receipts/${id}`);
+    const res = await api.delete<ApiResponse<{ id: string }>>(
+      `/lorry-receipts/${id}`,
+    );
     return unwrapApiResponse(res);
   },
 
   /* ---- delivery / acknowledgement (docs/LR_DELIVERY_ACK_PLAN.md) ---- */
 
-  deliver: async (id: string, body: DeliverLRFormInput): Promise<LRDelivery> => {
+  deliver: async (
+    id: string,
+    body: DeliverLRFormInput,
+  ): Promise<LRDelivery> => {
     const res = await api.post<ApiResponse<LRDelivery>>(
       `/lorry-receipts/${id}/deliver`,
       body,
@@ -236,13 +251,13 @@ type OrderRow = {
   toBranchId?: string;
   customerId?: string;
   route?: {
-  id: string;
-  sourceCity?: { id: string; name: string } | null;
-  destinationCity?: { id: string; name: string } | null;
-} | null;
+    id: string;
+    sourceCity?: { id: string; name: string } | null;
+    destinationCity?: { id: string; name: string } | null;
+  } | null;
   customer?: { id: string; name: string } | null;
-fromBranch?: { id: string; name?: string; branchCode: string } | null;
-toBranch?: { id: string; name?: string; branchCode: string } | null;
+  fromBranch?: { id: string; name?: string; branchCode: string } | null;
+  toBranch?: { id: string; name?: string; branchCode: string } | null;
 };
 
 /** Slim shape of GET /orders/:id we read for FROM_ORDER LR context. */
@@ -253,8 +268,8 @@ type OrderContextRow = {
   bookingFreightAmount?: string | number | null;
   customer?: { id: string; name: string } | null;
   consignee?: { id: string; name: string } | null;
-fromBranch?: { id: string; name: string; branchCode: string } | null;
-toBranch?: { id: string; name: string; branchCode: string } | null;
+  fromBranch?: { id: string; name: string; branchCode: string } | null;
+  toBranch?: { id: string; name: string; branchCode: string } | null;
   route?: {
     sourceCity?: { id: string; name: string } | null;
     destinationCity?: { id: string; name: string } | null;
@@ -291,7 +306,7 @@ export type LROrderContext = {
   consignorId: string | null;
   consignee: string | null;
   fromBranch: { name: string; branchCode: string } | null;
-toBranch: { name: string; branchCode: string } | null;
+  toBranch: { name: string; branchCode: string } | null;
   route: { source: string | null; destination: string | null } | null;
   trucks: { truckIndex: number; lineCount: number }[];
   lines: LROrderContextLine[];
@@ -307,6 +322,22 @@ export type LRBranchOption = LROption & {
   isRailHead: boolean;
   isHeadOffice: boolean;
 };
+export type LRTransportOption = {
+  id: string;
+  name: string;
+  phoneNo?: string | null;
+};
+export type LRMarketVehicleOption = {
+  id: string;
+  vehicleNumber: string;
+  status: string;
+  capacityMT?: number | string | null;
+  vehicleTypeRef: {
+    id: string;
+    name: string;
+    code: string;
+  };
+};
 
 export const lrLookups = {
   vehicles: async (): Promise<(LROption & VehicleRow)[]> => {
@@ -320,15 +351,21 @@ export const lrLookups = {
     }));
   },
 
-  marketVehicles: async (): Promise<(LROption & VehicleRow)[]> => {
-    const res = await api.get<ApiResponse<VehicleRow[]>>("/vehicles", {
-      params: { ...LOOKUP_SIZE, "filter[ownershipType]": "Market_Vehicle" },
-    });
-    return unwrapListResponse(res).data.map((v) => ({
-      ...v,
-      value: v.id,
-      label: v.vehicleNumber,
-    }));
+  transports: async (): Promise<LRTransportOption[]> => {
+    const res = await api.get<ApiResponse<LRTransportOption[]>>(
+      "/lr-groups/options/transports",
+    );
+    return unwrapApiResponse(res);
+  },
+
+  marketVehicles: async (
+    transportId: string,
+  ): Promise<LRMarketVehicleOption[]> => {
+    const res = await api.get<ApiResponse<LRMarketVehicleOption[]>>(
+      "/lr-groups/options/market-vehicles",
+      { params: { transportId } },
+    );
+    return unwrapApiResponse(res);
   },
 
   drivers: async (): Promise<(LROption & DriverRow)[]> => {
@@ -471,7 +508,8 @@ export const lrLookups = {
     }));
 
     const counts = new Map<number, number>();
-    for (const l of lines) counts.set(l.truckIndex, (counts.get(l.truckIndex) ?? 0) + 1);
+    for (const l of lines)
+      counts.set(l.truckIndex, (counts.get(l.truckIndex) ?? 0) + 1);
     const trucks = [...counts.entries()]
       .map(([truckIndex, lineCount]) => ({ truckIndex, lineCount }))
       .sort((a, b) => a.truckIndex - b.truckIndex);
@@ -488,16 +526,19 @@ export const lrLookups = {
       consignorId: order.customer?.id ?? null,
       consignee: order.consignee?.name ?? null,
       fromBranch: order.fromBranch
-  ? { name: order.fromBranch.name, branchCode: order.fromBranch.branchCode }
-  : null,
-toBranch: order.toBranch
-  ? { name: order.toBranch.name, branchCode: order.toBranch.branchCode }
-  : null,
+        ? {
+          name: order.fromBranch.name,
+          branchCode: order.fromBranch.branchCode,
+        }
+        : null,
+      toBranch: order.toBranch
+        ? { name: order.toBranch.name, branchCode: order.toBranch.branchCode }
+        : null,
       route: order.route
         ? {
-            source: order.route.sourceCity?.name ?? null,
-            destination: order.route.destinationCity?.name ?? null,
-          }
+          source: order.route.sourceCity?.name ?? null,
+          destination: order.route.destinationCity?.name ?? null,
+        }
         : null,
       trucks,
       lines,
@@ -507,7 +548,9 @@ toBranch: order.toBranch
 
 export const lrLookupKeys = {
   vehicles: ["lookup", "vehicles"] as const,
-  marketVehicles: ["lookup", "market-vehicles"] as const,
+  transports: ["lookup", "lr-transports"] as const,
+  marketVehicles: (transportId: string) =>
+    ["lookup", "lr-market-vehicles", transportId] as const,
   drivers: ["lookup", "drivers"] as const,
   customers: ["lookup", "customers"] as const,
   goods: ["lookup", "goods"] as const,

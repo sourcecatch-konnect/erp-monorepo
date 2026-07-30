@@ -27,6 +27,7 @@ export const vpScheduleStatusSchema = z.enum([
   "LOADING",
   "LOADED",
   "VERIFIED",
+  "FINALISED",
   "CANCELLED",
 ]);
 

@@ -51,7 +51,7 @@ const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Group list: user can view if they have origin OR destination branch. */
+/** Group list: user can view if they have origin, railhead, or destination branch. */
 const groupBranchFilter = (req: Parameters<typeof assertBranchAccess>[0]) => {
   if (!req.ctx) return {};
   if (req.ctx.branchScope === "ALL") return {};
@@ -61,6 +61,7 @@ const groupBranchFilter = (req: Parameters<typeof assertBranchAccess>[0]) => {
   return {
     OR: [
       { originBranchId: { in: req.ctx.branchIds } },
+      { railheadBranchId: { in: req.ctx.branchIds } },
       { destinationBranchId: { in: req.ctx.branchIds } },
     ],
   };
@@ -222,6 +223,50 @@ router.get(
   },
 );
 
+router.get(
+  "/options/transports",
+  can(PERMS.LORRY_RECEIPT.CREATE),
+  async (_req, res) => {
+    const transports = await db.transport.findMany({
+      select: { id: true, name: true, phoneNo: true },
+      orderBy: { name: "asc" },
+      take: 1000,
+    });
+    return sendOk(res, transports);
+  },
+);
+
+router.get(
+  "/options/market-vehicles",
+  can(PERMS.LORRY_RECEIPT.CREATE),
+  async (req, res) => {
+    const transportId =
+      typeof req.query.transportId === "string"
+        ? req.query.transportId.trim()
+        : "";
+    if (!transportId) {
+      throw new BadRequestError("Transporter is required for market vehicles");
+    }
+
+    const vehicles = await db.vehicle.findMany({
+      where: {
+        ownershipType: "Market_Vehicle",
+        transportId,
+      },
+      select: {
+        id: true,
+        vehicleNumber: true,
+        status: true,
+        capacityMT: true,
+        vehicleTypeRef: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: { vehicleNumber: "asc" },
+      take: 1000,
+    });
+    return sendOk(res, vehicles);
+  },
+);
+
 /* ------------------------------------------------------------------ */
 /* Detail                                                              */
 /* ------------------------------------------------------------------ */
@@ -271,7 +316,35 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   }
   const input = parsed.data;
   const me = actorId(req);
+  const isMarketVehicle = input.isMarketVehicle ?? false;
+  const marketVehicle = isMarketVehicle
+    ? await db.vehicle.findUnique({
+        where: { id: input.marketVehicleId },
+        select: {
+          id: true,
+          vehicleNumber: true,
+          ownershipType: true,
+          transportId: true,
+          status: true,
+        },
+      })
+    : null;
 
+  if (isMarketVehicle) {
+    if (!marketVehicle) {
+      throw new BadRequestError("Market vehicle not found");
+    }
+
+    if (marketVehicle.ownershipType !== "Market_Vehicle") {
+      throw new BadRequestError("Selected vehicle is not a market vehicle");
+    }
+
+    if (marketVehicle.transportId !== input.marketTransportId) {
+      throw new BadRequestError(
+        "Selected vehicle does not belong to the selected transporter",
+      );
+    }
+  }
   // ---- Resolve everything read-only BEFORE opening a transaction. Reads,
   // branch checks and sequence generation all run outside the write transaction
   // so the interactive transaction stays tiny and well under Prisma's 5s budget
@@ -395,12 +468,8 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   const lrNumbers = lines.length
     ? await generateLRNumbers(db, originBranch.branchCode, fyCode, lines.length)
     : [];
-  const isMarketVehicle = input.isMarketVehicle ?? false;
   const activeStatuses: LRGroupStatus[] = ["DRAFT", "FINALISED"];
-  const marketVehicleNumber =
-    isMarketVehicle && input.marketVehicleNumber
-      ? input.marketVehicleNumber.toUpperCase().replace(/\s+/g, "")
-      : null;
+  const marketVehicleNumber = marketVehicle?.vehicleNumber ?? null;
   const marketDriverName =
     isMarketVehicle && input.marketDriverName
       ? input.marketDriverName.trim()
@@ -412,7 +481,7 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
         deletedAt: null,
         status: { in: activeStatuses },
         isMarketVehicle: true,
-        marketVehicleNumber,
+        OR: [{ marketVehicleId: marketVehicle!.id }, { marketVehicleNumber }],
       },
       select: {
         id: true,
@@ -528,6 +597,10 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
           railheadBranchId,
           isMarketVehicle,
           primaryTripId,
+          marketTransportId: isMarketVehicle
+            ? (input.marketTransportId ?? null)
+            : null,
+          marketVehicleId: isMarketVehicle ? (marketVehicle?.id ?? null) : null,
           marketVehicleNumber,
           marketDriverName,
 
@@ -724,48 +797,48 @@ router.post(
   async (req, res) => {
     const id = getParamId(req);
 
-   const existing = await db.lRGroup.findFirst({
-  where: {
-    id,
-    deletedAt: null,
-  },
-  select: {
-    id: true,
-    status: true,
-    originBranchId: true,
-
-    lorryReceipts: {
+    const existing = await db.lRGroup.findFirst({
       where: {
+        id,
         deletedAt: null,
       },
       select: {
         id: true,
-        lrNumber: true,
         status: true,
+        originBranchId: true,
 
-        loadingLocationId: true,
-        unloadingLocationId: true,
-        totalWeight: true,
-        unit: true,
-
-        invoiceNumber: true,
-        invoiceAmount: true,
-
-        ewayBill: {
-          select: {
-            id: true,
+        lorryReceipts: {
+          where: {
+            deletedAt: null,
           },
-        },
-
-        goods: {
           select: {
             id: true,
+            lrNumber: true,
+            status: true,
+
+            loadingLocationId: true,
+            unloadingLocationId: true,
+            totalWeight: true,
+            unit: true,
+
+            invoiceNumber: true,
+            invoiceAmount: true,
+
+            ewayBill: {
+              select: {
+                id: true,
+              },
+            },
+
+            goods: {
+              select: {
+                id: true,
+              },
+            },
           },
         },
       },
-    },
-  },
-});
+    });
 
     if (!existing) throw new NotFoundError("Lorry receipt group not found");
 
@@ -796,88 +869,88 @@ router.post(
       );
     }
 
- const existingLrsById = new Map(
-  existing.lorryReceipts.map((lr) => [lr.id, lr]),
-);
-
-for (const line of lrs) {
-  const lr = existingLrsById.get(line.lrId);
-
-  if (!lr) {
-    throw new BadRequestError(
-      "Lorry receipt does not belong to this group",
+    const existingLrsById = new Map(
+      existing.lorryReceipts.map((lr) => [lr.id, lr]),
     );
-  }
 
-  const missingFields: string[] = [];
+    for (const line of lrs) {
+      const lr = existingLrsById.get(line.lrId);
 
-  if (!lr.loadingLocationId) {
-    missingFields.push("loading point");
-  }
+      if (!lr) {
+        throw new BadRequestError(
+          "Lorry receipt does not belong to this group",
+        );
+      }
 
-  if (!lr.unloadingLocationId) {
-    missingFields.push("unloading point");
-  }
+      const missingFields: string[] = [];
 
-  if (lr.goods.length === 0) {
-    missingFields.push("goods");
-  }
+      if (!lr.loadingLocationId) {
+        missingFields.push("loading point");
+      }
 
-  if (lr.totalWeight == null) {
-    missingFields.push("total weight");
-  }
+      if (!lr.unloadingLocationId) {
+        missingFields.push("unloading point");
+      }
 
-  if (!lr.unit) {
-    missingFields.push("weight unit");
-  }
+      if (lr.goods.length === 0) {
+        missingFields.push("goods");
+      }
 
-  if (!lr.invoiceNumber?.trim()) {
-    missingFields.push("invoice number");
-  }
+      if (lr.totalWeight == null) {
+        missingFields.push("total weight");
+      }
 
-  if (lr.invoiceAmount == null) {
-    missingFields.push("invoice amount");
-  }
+      if (!lr.unit) {
+        missingFields.push("weight unit");
+      }
 
-  if (!lr.ewayBill) {
-    missingFields.push("e-way bill");
-  }
+      if (!lr.invoiceNumber?.trim()) {
+        missingFields.push("invoice number");
+      }
 
-  if (missingFields.length > 0) {
-    throw new BadRequestError(
-      `LR ${lr.lrNumber} is incomplete. Add: ${missingFields.join(", ")}`,
-    );
-  }
-}
+      if (lr.invoiceAmount == null) {
+        missingFields.push("invoice amount");
+      }
 
-   await db.$transaction(async (tx) => {
-  for (const line of lrs) {
-    await tx.lorryReceipt.update({
-      where: { id: line.lrId },
-      data: {
-        status: "FINALISED",
-        updatedById: me,
-        version: { increment: 1 },
-      },
+      if (!lr.ewayBill) {
+        missingFields.push("e-way bill");
+      }
+
+      if (missingFields.length > 0) {
+        throw new BadRequestError(
+          `LR ${lr.lrNumber} is incomplete. Add: ${missingFields.join(", ")}`,
+        );
+      }
+    }
+
+    await db.$transaction(async (tx) => {
+      for (const line of lrs) {
+        await tx.lorryReceipt.update({
+          where: { id: line.lrId },
+          data: {
+            status: "FINALISED",
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
+      }
+
+      await tx.lRGroup.update({
+        where: { id },
+        data: {
+          status: "FINALISED",
+          baseFreightAmount,
+          sealNumber: sealNumber ?? null,
+          finalisedAt: new Date(),
+          finalisedById: me,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        select: {
+          id: true,
+        },
+      });
     });
-  }
-
-  await tx.lRGroup.update({
-    where: { id },
-    data: {
-      status: "FINALISED",
-      baseFreightAmount,
-      sealNumber: sealNumber ?? null,
-      finalisedAt: new Date(),
-      finalisedById: me,
-      updatedById: me,
-      version: { increment: 1 },
-    },
-    select: {
-      id: true,
-    },
-  });
-});
 
     // Fetch heavy detail AFTER transaction commit.
     const updated = await db.lRGroup.findUniqueOrThrow({

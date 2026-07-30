@@ -18,9 +18,11 @@ type BranchScopedReq = {
 };
 
 /**
- * GRN is created at receiving / destination branch.
+ * This module records GRN at the source railhead. Access is owned by the
+ * railhead branch selected on the Road & Rail LR group, not by the LR's final
+ * destination branch.
  */
-export const grnDestinationBranchFilter = (req: BranchScopedReq) => {
+export const grnRailheadBranchFilter = (req: BranchScopedReq) => {
   if (!req.ctx) return {};
   if (req.ctx.branchScope === "ALL") return {};
 
@@ -30,7 +32,7 @@ export const grnDestinationBranchFilter = (req: BranchScopedReq) => {
 
   return {
     group: {
-      destinationBranchId: {
+      railheadBranchId: {
         in: req.ctx.branchIds,
       },
     },
@@ -208,10 +210,12 @@ export const eligibleLRSelect = {
       id: true,
       groupNumber: true,
       destinationBranchId: true,
+      railheadBranchId: true,
       consignor: { select: customerSelect },
       consignee: { select: customerSelect },
       originBranch: { select: branchSelect },
       destinationBranch: { select: branchSelect },
+      railheadBranch: { select: branchSelect },
     },
   },
 } satisfies Prisma.LorryReceiptSelect;
@@ -313,8 +317,6 @@ export const grnListSelect = {
   id: true,
   grnNumber: true,
   status: true,
-
-
 
   netAmount: true,
   createdAt: true,
