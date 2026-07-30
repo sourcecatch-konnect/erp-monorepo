@@ -76,32 +76,51 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.LORRY_RECEIPT.VIEW,
       },
       {
-  title: "VP Management",
-  icon: IconTrain,
-  items: [
-    {
-      title: "VP Schedule",
-      href: "/vp-management/vp-schedule",
-      permission: PERMS.VP_SCHEDULE.VIEW,
-    },
-    {
-      title: "VP Loading",
-      href: "/vp-management/vp-loading",
-      permission: PERMS.VP_SCHEDULE.VIEW,
-
-    },
-    {
-      title: "MR / RR",
-      href: "/vp-management/mrrr",
-      permission: PERMS.MRRR.VIEW,
-    },
-    {
-      title: "GRN At Rail Head",
-      href: "/vp-management/grn",
-      permission: PERMS.GRN.VIEW,
-    }
-  ],
-},
+        title: "VP Management",
+        icon: IconTrain,
+        items: [
+          {
+            title: "VP Schedule",
+            href: "/vp-management/vp-schedule",
+            permission: PERMS.VP_SCHEDULE.VIEW,
+          },
+          {
+            title: "VP Loading",
+            href: "/vp-management/vp-loading",
+            permission: PERMS.VP_LOADING.VIEW,
+          },
+          {
+            title: "MR / RR",
+            href: "/vp-management/mrrr",
+            permission: PERMS.MRRR.VIEW,
+          },
+          {
+            title: "GRN At Rail Head",
+            href: "/vp-management/grn",
+            permission: PERMS.GRN.VIEW,
+          },
+          {
+            title: "GRN At Branch",
+            href: "/vp-management/branch-grn",
+            permission: PERMS.RAIL_BRANCH_GRN.VIEW,
+          },
+          {
+            title: "Rake & DC/WC At Rail Head",
+            href: "/vp-management/rake-at-rail-head",
+            permission: PERMS.RAKE_AT_RAIL_HEAD.VIEW,
+          },
+          {
+            title: "Rake & DC/WC At Branch",
+            href: "/vp-management/rake-at-branch",
+            permission: PERMS.RAKE_AT_BRANCH.VIEW,
+          },
+          {
+            title: "Delivery Challans",
+            href: "/vp-management/delivery-challans",
+            permission: PERMS.DELIVERY_CHALLAN.VIEW,
+          },
+        ],
+      },
       {
         title: "E-Way Bills",
         icon: IconFileBarcode,
@@ -180,6 +199,11 @@ export const NAV_SECTIONS: NavSection[] = [
             title: "Vehicles",
             href: "/masters/vehicle",
             permission: PERMS.MASTERS.VEHICLE.VIEW,
+          },
+          {
+            title: "OneLap Trackers",
+            href: "/masters/one-lap-trackers",
+            permission: PERMS.MASTERS.ONE_LAP_TRACKER.VIEW,
           },
           {
             title: "Vehicle Types",

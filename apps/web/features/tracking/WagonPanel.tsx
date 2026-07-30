@@ -9,6 +9,8 @@ import {
   IconHistory,
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
+  IconRoute,
+  IconTrain,
   IconX,
 } from "@tabler/icons-react";
 import type { FleetVehicle, TrailPoint } from "@skerp/types";
@@ -98,6 +100,32 @@ export function WagonPanel(props: WagonPanelProps) {
       {mode === "live" ? (
         <>
           <div className="mt-3 grid grid-cols-2 gap-3">
+            {vehicle.assignment ? (
+              <>
+                <Fact
+                  icon={<IconTrain className="size-4" />}
+                  label="Schedule"
+                  value={vehicle.assignment.scheduleNumber}
+                />
+                <Fact
+                  icon={<IconTrain className="size-4" />}
+                  label="Rake"
+                  value={
+                    vehicle.assignment.rake?.rakeNumber ?? "Not generated"
+                  }
+                />
+                <Fact
+                  icon={<IconRoute className="size-4" />}
+                  label="Route"
+                  value={`${vehicle.assignment.route.fromBranch.name} → ${vehicle.assignment.route.toBranch.name}`}
+                />
+                <Fact
+                  icon={<IconTrain className="size-4" />}
+                  label="Installed on"
+                  value={vehicle.assignment.installedOnVpNo ?? "—"}
+                />
+              </>
+            ) : null}
             <Fact
               icon={<IconGauge className="size-4" />}
               label="Speed"

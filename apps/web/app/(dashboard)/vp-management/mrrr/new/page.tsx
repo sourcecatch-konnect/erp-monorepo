@@ -4,7 +4,7 @@ import { PERMS } from "@skerp/types";
 
 export default function Page() {
   return (
-    <ProtectedRoute permission={PERMS.ORDER.CREATE}>
+    <ProtectedRoute permission={PERMS.MRRR.CREATE}>
       <MRRRForm mode="create" />
     </ProtectedRoute>
   );

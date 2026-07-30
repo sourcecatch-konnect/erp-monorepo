@@ -38,7 +38,6 @@ export const vpLoadingMeasurementSourceSchema = z.enum([
   "MANUAL_OVERRIDE",
 ]);
 
-
 export const vpLoadingGoodsInputSchema = z
   .object({
     grnGoodsId: idString("GRN goods"),
@@ -55,14 +54,10 @@ export const vpLoadingGoodsInputSchema = z
       .default(0),
   })
   .superRefine((data, ctx) => {
-    if (
-      data.loadingDamageQty >
-      data.loadedQty
-    ) {
+    if (data.loadingDamageQty > data.loadedQty) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          "Damage quantity cannot be greater than loaded quantity",
+        message: "Damage quantity cannot be greater than loaded quantity",
         path: ["loadingDamageQty"],
       });
     }
@@ -108,7 +103,6 @@ export const updateVPLoadingAllocationSchema = z
     }
   });
 
-
 export const cancelVPLoadingSchema = z.object({
   reason: z
     .string()
@@ -122,6 +116,11 @@ export const completeVPWagonLoadingSchema = z.object({
   version: optionalVersion,
 });
 
+export const finaliseVPScheduleLoadingSchema = z.object({
+  version: z.coerce.number().int().min(1),
+  remarks: z.string().trim().max(500, "Remarks are too long").optional(),
+});
+
 export const updateVPWagonLoadingLabourSchema = z.object({
   labourId: optionalString,
   labourCharge: optionalNonNegativeNumber("Labour charge"),
@@ -129,9 +128,6 @@ export const updateVPWagonLoadingLabourSchema = z.object({
   remarks: optionalString,
   version: optionalVersion,
 });
-
-
-
 
 export type VPLoadingGoodsInput = z.infer<typeof vpLoadingGoodsInputSchema>;
 export type CreateVPLoadingAllocationInput = z.infer<
@@ -142,4 +138,7 @@ export type UpdateVPLoadingAllocationInput = z.infer<
 >;
 export type UpdateVPWagonLoadingLabourInput = z.infer<
   typeof updateVPWagonLoadingLabourSchema
+>;
+export type FinaliseVPScheduleLoadingInput = z.infer<
+  typeof finaliseVPScheduleLoadingSchema
 >;

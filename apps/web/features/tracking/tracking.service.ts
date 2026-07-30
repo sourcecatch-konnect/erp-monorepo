@@ -12,12 +12,12 @@ export const trackingApi = {
 
   /** Breadcrumb trail for one wagon between two ISO timestamps. */
   history: async (
-    deviceId: number,
+    assignmentId: string,
     from: string,
     to: string,
   ): Promise<TrailPoint[]> => {
     const res = await api.get<ApiResponse<TrailPoint[]>>("/tracking/history", {
-      params: { deviceId, from, to },
+      params: { assignmentId, from, to },
     });
     return unwrapApiResponse(res);
   },

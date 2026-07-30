@@ -46,6 +46,14 @@ export const vehicleSchema = z.object({
   chasisNumber: z.string(),
   engineNumber: z.string(),
   ownershipType: ownershipTypeSchema,
+  transportId: z.string().nullable().optional(),
+  transport: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable()
+    .optional(),
   vehicleTypeId: z.string(),
   capacityMT: z.number(),
   bodyType: bodyTypeSchema.nullable().optional(),
@@ -63,7 +71,7 @@ export const vehicleSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 
-export const createVehicleSchema = z.object({
+const vehicleInputSchema = z.object({
   vehicleNumber: z
     .string()
     .trim()
@@ -101,6 +109,7 @@ export const createVehicleSchema = z.object({
     ),
 
   ownershipType: ownershipTypeSchema,
+  transportId: optionalString,
   vehicleTypeId: z.string().min(1, "Vehicle type is required"),
 bodyType: optionalBodyType,
 
@@ -157,4 +166,27 @@ currentKM: intField("Current KM is required")
   status: vehicleStatusSchema,
 });
 
-export const updateVehicleSchema = createVehicleSchema.partial();
+export const createVehicleSchema = vehicleInputSchema.superRefine(
+  (vehicle, ctx) => {
+    if (
+      vehicle.ownershipType === "Market_Vehicle" &&
+      !vehicle.transportId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["transportId"],
+        message: "Transporter is required for a market vehicle",
+      });
+    }
+
+    if (vehicle.ownershipType === "Own_Vehicle" && vehicle.transportId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["transportId"],
+        message: "Own vehicles cannot be attached to a transporter",
+      });
+    }
+  },
+);
+
+export const updateVehicleSchema = vehicleInputSchema.partial();

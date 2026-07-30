@@ -30,7 +30,7 @@ const toKmph = (knots: number | null | undefined) =>
 export const ONELAP_SOCKET_URL = `${BASE_URL.replace(/^http/, "ws")}/api/socket`;
 
 /** Row from `/api/devices/v2` — device metadata + flattened latest position. */
-type DeviceV2 = {
+export type OneLapDevice = {
   id: number;
   name: string;
   uniqueId: string;
@@ -45,7 +45,6 @@ type DeviceV2 = {
   speed?: number | null;
   course?: number | null;
 };
-
 /** Stateless Basic auth header: base64(phoneNumber:password). */
 function authHeader(): string {
   if (!EMAIL || !PASSWORD) {
@@ -69,7 +68,9 @@ async function authedGet<T>(path: string): Promise<T> {
 
   return (await res.json()) as T;
 }
-
+export async function getOneLapDevices(): Promise<OneLapDevice[]> {
+  return authedGet<OneLapDevice[]>("/devices/v2");
+}
 function toStatus(raw: string): DeviceStatus {
   return raw === "online" || raw === "offline" ? raw : "unknown";
 }
@@ -94,7 +95,7 @@ function stringAttr(
 
 /** Fetch every device with its latest known position, flattened for the web. */
 export async function getFleet(): Promise<FleetVehicle[]> {
-  const devices = await authedGet<DeviceV2[]>("/devices/v2");
+  const devices = await getOneLapDevices();
 
   return devices.map((device) => {
     const lat = typeof device.latitude === "number" ? device.latitude : null;
@@ -104,14 +105,14 @@ export async function getFleet(): Promise<FleetVehicle[]> {
 
     const position: DevicePosition | null = hasFix
       ? {
-          positionId: device.positionId,
-          latitude: lat,
-          longitude: lng,
-          speedKmph: toKmph(device.speed),
-          course: device.course ?? 0,
-          address: null,
-          fixTime: device.lastUpdate ?? null,
-        }
+        positionId: device.positionId,
+        latitude: lat,
+        longitude: lng,
+        speedKmph: toKmph(device.speed),
+        course: device.course ?? 0,
+        address: null,
+        fixTime: device.lastUpdate ?? null,
+      }
       : null;
 
     return {

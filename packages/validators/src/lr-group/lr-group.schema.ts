@@ -134,14 +134,13 @@ export type LRGroupLineInput = z.infer<typeof lrGroupLineSchema>;
 const vehicleShape = {
   isMarketVehicle: z.boolean().default(false),
 
-  // Own vehicle
   primaryTripId: optionalId,
 
-  // Market vehicle
+  marketTransportId: optionalId,
+  marketVehicleId: optionalId,
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
 
-  // Entered in rupees, stored as paise
   marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
   marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
   marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
@@ -202,11 +201,19 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["railheadBranchId"],
     });
   }
-  if (d.isMarketVehicle && !d.marketVehicleNumber) {
+  if (d.isMarketVehicle && !d.marketTransportId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Vehicle number is required for market vehicle",
-      path: ["marketVehicleNumber"],
+      message: "Transporter is required for market vehicle",
+      path: ["marketTransportId"],
+    });
+  }
+
+  if (d.isMarketVehicle && !d.marketVehicleId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select a market vehicle",
+      path: ["marketVehicleId"],
     });
   }
   // Own-vehicle groups must carry a trip — the trip is how the vehicle/driver
@@ -261,7 +268,8 @@ export const updateLRGroupSchema = z.object({
 
   isMarketVehicle: z.boolean().optional(),
   primaryTripId: optionalId,
-
+  marketTransportId: optionalId,
+  marketVehicleId: optionalId,
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
 

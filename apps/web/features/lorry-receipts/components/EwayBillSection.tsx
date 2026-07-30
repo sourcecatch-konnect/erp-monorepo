@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconFileInvoice, IconPlus } from "@tabler/icons-react";
+import { IconFileInvoice, IconPencil, IconPlus } from "@tabler/icons-react";
 
 import { addEwayBillSchema } from "@skerp/validators/lorry-receipt";
 import type {
@@ -34,7 +34,7 @@ type Props = {
   lrId: string;
   groupId: string;
   ewayBill: EwayBill | null;
-  canAdd: boolean;
+  canEdit: boolean;
 };
 function formatDateInput(date: Date) {
   const year = date.getFullYear();
@@ -67,7 +67,7 @@ export default function EwayBillSection({
   lrId,
   groupId,
   ewayBill,
-  canAdd,
+  canEdit,
 }: Props) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = React.useState(false);
@@ -83,22 +83,49 @@ export default function EwayBillSection({
     },
   });
 
-  const add = useMutation({
+  const isEditing = Boolean(ewayBill);
+
+  const save = useMutation({
     mutationFn: (body: AddEwayBillBody) =>
-      lorryReceiptApi.addEwayBill(lrId, body),
+      isEditing
+        ? lorryReceiptApi.updateEwayBill(lrId, body)
+        : lorryReceiptApi.addEwayBill(lrId, body),
+
     onSuccess: () => {
-      toast.success("E-way bill added");
+      toast.success(
+        isEditing
+          ? "E-way bill updated"
+          : "E-way bill added",
+      );
+
       setAddOpen(false);
       form.reset();
-      queryClient.invalidateQueries({ queryKey: lrKeys.detail(lrId) });
-      queryClient.invalidateQueries({ queryKey: lrKeys.all });
-      queryClient.invalidateQueries({ queryKey: lrGroupKeys.detail(groupId) });
-      queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
+
+      queryClient.invalidateQueries({
+        queryKey: lrKeys.detail(lrId),
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: lrKeys.all,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: lrGroupKeys.detail(groupId),
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: lrGroupKeys.all,
+      });
     },
-    onError: (e) => toast.error(getErrorMessage(e)),
+
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
   });
 
-  const onSubmit = (values: AddEwayBillBody) => add.mutate(values);
+  const onSubmit = (values: AddEwayBillBody) => {
+    save.mutate(values);
+  };
   const today = React.useMemo(() => formatDateInput(new Date()), []);
 
   const tomorrow = React.useMemo(() => {
@@ -113,15 +140,46 @@ export default function EwayBillSection({
   const minimumExpiryDate = generatedAt
     ? addDaysToDate(generatedAt, 1)
     : tomorrow;
+  const openEwayBillForm = () => {
+    if (ewayBill) {
+      form.reset({
+        ewayBillNo: ewayBill.ewayBillNo,
+        generatedAt: ewayBill.generatedAt.slice(0, 10),
+        expiresAt: ewayBill.expiresAt.slice(0, 10),
+        generatedBy: ewayBill.generatedBy ?? "",
+        documentUrl: ewayBill.documentUrl ?? "",
+      });
+    } else {
+      form.reset({
+        ewayBillNo: "",
+        generatedAt: "",
+        expiresAt: "",
+        generatedBy: "",
+        documentUrl: "",
+      });
+    }
+
+    setAddOpen(true);
+  };
   return (
     <div className="mt-5 space-y-3 border-t border-border pt-5">
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <IconFileInvoice size={17} className="text-primary" /> E-way bill
         </h3>
-        {canAdd && !ewayBill && (
-          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
-            <IconPlus size={14} className="mr-1" /> Add
+        {canEdit && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openEwayBillForm}
+          >
+            {ewayBill ? (
+              <IconPencil size={14} className="mr-1" />
+            ) : (
+              <IconPlus size={14} className="mr-1" />
+            )}
+
+            {ewayBill ? "Edit" : "Add"}
           </Button>
         )}
       </div>
@@ -152,9 +210,13 @@ export default function EwayBillSection({
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add E-Way Bill</DialogTitle>
+            <DialogTitle>
+              {isEditing ? "Edit E-Way Bill" : "Add E-Way Bill"}
+            </DialogTitle>
             <DialogDescription>
-              Add a new or extended e-way bill to this LR.
+              {isEditing
+                ? "Update the e-way bill details before finalising the LR."
+                : "Add the e-way bill details before finalising the LR."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
@@ -256,8 +318,12 @@ export default function EwayBillSection({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={add.isPending}>
-                {add.isPending ? "Adding…" : "Add"}
+              <Button type="submit" disabled={save.isPending}>
+                {save.isPending
+                  ? "Saving…"
+                  : isEditing
+                    ? "Save changes"
+                    : "Add"}
               </Button>
             </DialogFooter>
           </form>

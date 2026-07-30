@@ -27,6 +27,7 @@ import {
   mrrrInclude,
   mrrrListSelect,
 } from "./mrrr.service.js";
+import { releaseActiveTrackerInTransaction } from "../one-lap-tracker/one-lap-tracker.assignment.service.js";
 import { getDateRange } from "../vp-schedule/vp-schedule.route.js";
 
 const router: Router = Router();
@@ -816,6 +817,16 @@ router.post(
     }
 
     const updated = await db.$transaction(async (tx) => {
+      await releaseActiveTrackerInTransaction(
+        tx,
+        existing.vpSchedule.id,
+        {
+          userId: actorId,
+          reason: "SCHEDULE_CANCELLED",
+          remarks: body.reason,
+        },
+      );
+
       if (existing.status === "SUBMITTED" && existing.vpSchedule.status === "MRRR_CREATED") {
         await tx.vPSchedule.update({
           where: {

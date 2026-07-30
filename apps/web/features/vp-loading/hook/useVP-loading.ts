@@ -1,24 +1,22 @@
 // apps/web/src/features/vp-loading/hooks/use-vp-loading.ts
 
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
   CancelVPLoadingBody,
+  AssignOneLapTrackerBody,
   CompleteVPWagonLoadingBody,
   CreateVPLoadingAllocationBody,
+  FinaliseVPScheduleLoadingBody,
+  ReleaseOneLapTrackerBody,
+  ReplaceOneLapTrackerBody,
   UpdateVPWagonLoadingLabourBody,
   UpdateVPLoadingAllocationBody,
 } from "@skerp/types";
 
 import { vpLoadingApi } from "../vp-loading.service";
-import {
-  vpLoadingKeys,
-  vpLoadingLookupKeys,
-} from "../vp-loading.key";
+import { vpLoadingKeys, vpLoadingLookupKeys } from "../vp-loading.key";
+import { vpScheduleKeys } from "@/features/VP-Schedule/vp-schedule.key";
 
 /* ------------------------------------------------------------------ */
 /* Queries                                                            */
@@ -33,10 +31,7 @@ export const useVPLoadingSchedules = (scheduleDate?: string) => {
 };
 export const useVPWagonLoadings = () => {
   return useQuery({
-    queryKey: [
-      ...vpLoadingKeys.all,
-      "wagons",
-    ],
+    queryKey: [...vpLoadingKeys.all, "wagons"],
     queryFn: () => vpLoadingApi.wagons(),
   });
 };
@@ -47,14 +42,132 @@ export const useVPLoadingAllocations = () => {
   });
 };
 
-export const useVPLoadingSchedulePreview = (
-  vpScheduleId?: string,
-) => {
+export const useVPLoadingSchedulePreview = (vpScheduleId?: string) => {
   return useQuery({
     queryKey: vpLoadingKeys.schedulePreview(vpScheduleId ?? ""),
-    queryFn: () =>
-      vpLoadingApi.schedulePreview(vpScheduleId as string),
+    queryFn: () => vpLoadingApi.schedulePreview(vpScheduleId as string),
     enabled: Boolean(vpScheduleId),
+  });
+};
+
+export const useVPLoadingFinalReview = (vpScheduleId?: string) => {
+  return useQuery({
+    queryKey: vpLoadingKeys.finalReview(vpScheduleId ?? ""),
+    queryFn: () => vpLoadingApi.finalReview(vpScheduleId as string),
+    enabled: Boolean(vpScheduleId),
+  });
+};
+
+export const useVPLoadingTrackerAssignment = (vpScheduleId?: string) =>
+  useQuery({
+    queryKey: vpLoadingKeys.trackerAssignment(vpScheduleId ?? ""),
+    queryFn: () => vpLoadingApi.trackerAssignment(vpScheduleId as string),
+    enabled: Boolean(vpScheduleId),
+  });
+
+export const useAvailableOneLapTrackers = (
+  vpScheduleId?: string,
+  enabled = true,
+) =>
+  useQuery({
+    queryKey: vpLoadingKeys.availableTrackers(vpScheduleId ?? ""),
+    queryFn: () => vpLoadingApi.availableTrackers(vpScheduleId as string),
+    enabled: Boolean(vpScheduleId) && enabled,
+  });
+
+const invalidateTrackerQueries = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  scheduleId: string,
+) => {
+  queryClient.invalidateQueries({
+    queryKey: vpLoadingKeys.trackerAssignment(scheduleId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: vpLoadingKeys.availableTrackers(scheduleId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: vpLoadingKeys.finalReview(scheduleId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: vpLoadingKeys.schedulePreview(scheduleId),
+  });
+  queryClient.invalidateQueries({ queryKey: ["one-lap-trackers"] });
+  queryClient.invalidateQueries({ queryKey: ["tracking"] });
+};
+
+export const useAssignOneLapTracker = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      scheduleId,
+      body,
+    }: {
+      scheduleId: string;
+      body: AssignOneLapTrackerBody;
+    }) => vpLoadingApi.assignTracker(scheduleId, body),
+    onSuccess: (_result, variables) =>
+      invalidateTrackerQueries(queryClient, variables.scheduleId),
+  });
+};
+
+export const useReplaceOneLapTracker = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      scheduleId,
+      body,
+    }: {
+      scheduleId: string;
+      body: ReplaceOneLapTrackerBody;
+    }) => vpLoadingApi.replaceTracker(scheduleId, body),
+    onSuccess: (_result, variables) =>
+      invalidateTrackerQueries(queryClient, variables.scheduleId),
+  });
+};
+
+export const useReleaseOneLapTracker = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      scheduleId,
+      body,
+    }: {
+      scheduleId: string;
+      body: ReleaseOneLapTrackerBody;
+    }) => vpLoadingApi.releaseTracker(scheduleId, body),
+    onSuccess: (_result, variables) =>
+      invalidateTrackerQueries(queryClient, variables.scheduleId),
+  });
+};
+
+export const useFinaliseVPScheduleLoading = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      scheduleId,
+      body,
+    }: {
+      scheduleId: string;
+      body: FinaliseVPScheduleLoadingBody;
+    }) => vpLoadingApi.finaliseSchedule(scheduleId, body),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: vpLoadingKeys.finalReview(variables.scheduleId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: vpLoadingKeys.schedulePreview(variables.scheduleId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: vpLoadingKeys.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: vpLoadingLookupKeys.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: vpScheduleKeys.all,
+      });
+    },
   });
 };
 
@@ -71,48 +184,26 @@ export const useEligibleVPLoadingGRNs = (
   gateNo?: string,
 ) => {
   return useQuery({
-    queryKey: vpLoadingLookupKeys.eligibleGRNs(
-      mrrrRowId ?? "",
-      gateNo ?? "",
-    ),
+    queryKey: vpLoadingLookupKeys.eligibleGRNs(mrrrRowId ?? "", gateNo ?? ""),
     queryFn: () =>
-      vpLoadingApi.eligibleGRNs(
-        mrrrRowId as string,
-        gateNo as string,
-      ),
+      vpLoadingApi.eligibleGRNs(mrrrRowId as string, gateNo as string),
     enabled: Boolean(mrrrRowId && gateNo),
   });
 };
 
-export const useVPLoadingPreview = (
-  mrrrRowId?: string,
-  grnId?: string,
-) => {
+export const useVPLoadingPreview = (mrrrRowId?: string, grnId?: string) => {
   return useQuery({
-    queryKey: vpLoadingKeys.loadingPreview(
-      mrrrRowId ?? "",
-      grnId ?? "",
-    ),
+    queryKey: vpLoadingKeys.loadingPreview(mrrrRowId ?? "", grnId ?? ""),
     queryFn: () =>
-      vpLoadingApi.loadingPreview(
-        mrrrRowId as string,
-        grnId as string,
-      ),
+      vpLoadingApi.loadingPreview(mrrrRowId as string, grnId as string),
     enabled: Boolean(mrrrRowId && grnId),
   });
 };
 
-export const useVPWagonAllocations = (
-  vpWagonLoadingId?: string,
-) => {
+export const useVPWagonAllocations = (vpWagonLoadingId?: string) => {
   return useQuery({
-    queryKey: vpLoadingKeys.wagonAllocations(
-      vpWagonLoadingId ?? "",
-    ),
-    queryFn: () =>
-      vpLoadingApi.wagonAllocations(
-        vpWagonLoadingId as string,
-      ),
+    queryKey: vpLoadingKeys.wagonAllocations(vpWagonLoadingId ?? ""),
+    queryFn: () => vpLoadingApi.wagonAllocations(vpWagonLoadingId as string),
     enabled: Boolean(vpWagonLoadingId),
   });
 };
@@ -165,10 +256,7 @@ const invalidateVPLoading = (
 
   if (values.mrrrRowId && values.grnId) {
     queryClient.invalidateQueries({
-      queryKey: vpLoadingKeys.loadingPreview(
-        values.mrrrRowId,
-        values.grnId,
-      ),
+      queryKey: vpLoadingKeys.loadingPreview(values.mrrrRowId, values.grnId),
     });
   }
 
@@ -205,11 +293,7 @@ export const useCreateVPLoadingAllocation = () => {
       gateNo: string;
       grnId: string;
       body: CreateVPLoadingAllocationBody;
-    }) =>
-      vpLoadingApi.createAllocation(
-        mrrrRowId,
-        body,
-      ),
+    }) => vpLoadingApi.createAllocation(mrrrRowId, body),
 
     onSuccess: (result, variables) => {
       invalidateVPLoading(queryClient, {
@@ -237,8 +321,7 @@ export const useUpdateVPLoadingAllocation = () => {
       gateNo: string;
       grnId: string;
       body: UpdateVPLoadingAllocationBody;
-    }) =>
-      vpLoadingApi.updateAllocation(allocationId, body),
+    }) => vpLoadingApi.updateAllocation(allocationId, body),
 
     onSuccess: (_allocation, variables) => {
       invalidateVPLoading(queryClient, {
@@ -266,8 +349,7 @@ export const useCancelVPLoadingAllocation = () => {
       gateNo: string;
       grnId: string;
       body: CancelVPLoadingBody;
-    }) =>
-      vpLoadingApi.cancelAllocation(allocationId, body),
+    }) => vpLoadingApi.cancelAllocation(allocationId, body),
 
     onSuccess: (_allocation, variables) => {
       invalidateVPLoading(queryClient, {
@@ -297,11 +379,7 @@ export const useCompleteVPWagonLoading = () => {
       mrrrRowId: string;
       scheduleId: string;
       body: CompleteVPWagonLoadingBody;
-    }) =>
-      vpLoadingApi.completeWagon(
-        vpWagonLoadingId,
-        body,
-      ),
+    }) => vpLoadingApi.completeWagon(vpWagonLoadingId, body),
 
     onSuccess: (_wagon, variables) => {
       invalidateVPLoading(queryClient, {
@@ -325,11 +403,7 @@ export const useUpdateVPWagonLoadingLabour = () => {
       mrrrRowId: string;
       scheduleId: string;
       body: UpdateVPWagonLoadingLabourBody;
-    }) =>
-      vpLoadingApi.updateWagonLabour(
-        vpWagonLoadingId,
-        body,
-      ),
+    }) => vpLoadingApi.updateWagonLabour(vpWagonLoadingId, body),
 
     onSuccess: (_wagon, variables) => {
       invalidateVPLoading(queryClient, {
@@ -353,11 +427,7 @@ export const useCancelVPWagonLoading = () => {
       mrrrRowId: string;
       scheduleId: string;
       body: CancelVPLoadingBody;
-    }) =>
-      vpLoadingApi.cancelWagon(
-        vpWagonLoadingId,
-        body,
-      ),
+    }) => vpLoadingApi.cancelWagon(vpWagonLoadingId, body),
 
     onSuccess: (_wagon, variables) => {
       invalidateVPLoading(queryClient, {

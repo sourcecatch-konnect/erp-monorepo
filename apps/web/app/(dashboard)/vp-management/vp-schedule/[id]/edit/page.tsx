@@ -13,7 +13,7 @@ export default async function Page({ params }: Props) {
   const { id } = await params;
 
   return (
-    <ProtectedRoute permission={PERMS.ORDER.UPDATE}>
+    <ProtectedRoute permission={PERMS.VP_SCHEDULE.UPDATE}>
       <VPScheduleEditPage scheduleId={id} />
     </ProtectedRoute>
   );

@@ -58,6 +58,8 @@ import type {
   VPLoadingAllocation,
   VPWagonLoadingStatus,
 } from "./vp-loading.service";
+import { VPScheduleStatusBadge } from "../VP-Schedule/vp-schedule-ui";
+import { OneLapTrackerAssignmentPanel } from "./components/OneLapTrackerAssignmentPanel";
 
 const DASH = "-";
 
@@ -159,13 +161,16 @@ const wagonStatusConfig: Record<
   },
   CANCELLED: {
     label: "Cancelled",
-    className:
-      "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400",
+    className: "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400",
     dotClassName: "bg-red-500",
   },
 };
 
-function WagonStatusBadge({ status }: { status?: VPWagonLoadingStatus | null }) {
+function WagonStatusBadge({
+  status,
+}: {
+  status?: VPWagonLoadingStatus | null;
+}) {
   const config = wagonStatusConfig[status ?? "DRAFT"];
 
   return (
@@ -193,8 +198,7 @@ const allocationStatusConfig: Record<
   },
   CANCELLED: {
     label: "Cancelled",
-    className:
-      "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400",
+    className: "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400",
   },
 };
 
@@ -212,28 +216,7 @@ function AllocationStatusBadge({ status }: { status: string }) {
   );
 }
 
-function ScheduleStatusBadge({ status }: { status?: string | null }) {
-  const label =
-    status === "MRRR_CREATED"
-      ? "Ready for loading"
-      : status === "LOADING"
-        ? "Loading"
-        : status === "LOADED"
-          ? "Loaded"
-          : status === "VERIFIED"
-            ? "Verified"
-            : status === "CANCELLED"
-              ? "Cancelled"
-              : status === "DRAFT"
-                ? "Draft"
-                : status ?? "Not started";
 
-  return (
-    <span className="inline-flex whitespace-nowrap rounded-md border bg-muted/30 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-      {label}
-    </span>
-  );
-}
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -331,6 +314,7 @@ function ScheduleProgress({ status }: { status?: string | null }) {
     { key: "LOADING", label: "Loading" },
     { key: "LOADED", label: "Loaded" },
     { key: "VERIFIED", label: "Completed" },
+    { key: "FINALISED", label: "Finalised" },
   ];
   const currentIndex = Math.max(
     steps.findIndex((step) => step.key === status),
@@ -339,7 +323,7 @@ function ScheduleProgress({ status }: { status?: string | null }) {
 
   return (
     <div className="rounded-lg border bg-card p-4 shadow-sm">
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
         {steps.map((step, index) => {
           const done = currentIndex >= index;
           const active = currentIndex === index;
@@ -347,26 +331,23 @@ function ScheduleProgress({ status }: { status?: string | null }) {
           return (
             <div key={step.key} className="flex items-center gap-3">
               <span
-                className={`flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                  done
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground"
-                }`}
+                className={`flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${done
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground"
+                  }`}
               >
                 {index + 1}
               </span>
               <div className="min-w-0">
                 <p
-                  className={`truncate text-sm font-medium ${
-                    active ? "text-foreground" : "text-muted-foreground"
-                  }`}
+                  className={`truncate text-sm font-medium ${active ? "text-foreground" : "text-muted-foreground"
+                    }`}
                 >
                   {step.label}
                 </p>
                 <div
-                  className={`mt-1 h-1.5 rounded-full ${
-                    done ? "bg-primary" : "bg-muted"
-                  }`}
+                  className={`mt-1 h-1.5 rounded-full ${done ? "bg-primary" : "bg-muted"
+                    }`}
                 />
               </div>
             </div>
@@ -702,7 +683,8 @@ export default function VPLoadingDetail({
               <h1 className="truncate text-xl font-semibold tracking-tight">
                 {schedule.scheduleNumber}
               </h1>
-              <ScheduleStatusBadge status={schedule.status} />
+              <VPScheduleStatusBadge status={schedule.status} />
+
             </div>
 
             <p className="mt-1 text-sm text-muted-foreground">
@@ -711,21 +693,30 @@ export default function VPLoadingDetail({
 
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
               <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
-                <IconRoute size={16} className="shrink-0 text-muted-foreground" />
+                <IconRoute
+                  size={16}
+                  className="shrink-0 text-muted-foreground"
+                />
                 <span className="truncate">
                   {schedule.fromBranch?.name ?? DASH} to{" "}
                   {schedule.toBranch?.name ?? DASH}
                 </span>
               </div>
               <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
-                <IconMapPin size={16} className="shrink-0 text-muted-foreground" />
+                <IconMapPin
+                  size={16}
+                  className="shrink-0 text-muted-foreground"
+                />
                 <span className="truncate">
                   {schedule.sourceArea?.name ?? DASH} to{" "}
                   {schedule.destinationArea?.name ?? DASH}
                 </span>
               </div>
               <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
-                <IconClock size={16} className="shrink-0 text-muted-foreground" />
+                <IconClock
+                  size={16}
+                  className="shrink-0 text-muted-foreground"
+                />
                 <span className="truncate">
                   {formatDate(schedule.scheduleDate)}
                   {schedule.mrRr?.mrRrNumber
@@ -748,6 +739,21 @@ export default function VPLoadingDetail({
               Refresh
             </Button>
 
+            {schedule.status === "VERIFIED" ? (
+              <Button asChild size="sm">
+                <Link
+                  href={`/vp-management/vp-loading/${encodeURIComponent(
+                    schedule.id,
+                  )}/final-review`}
+                >
+                  <IconClipboardList size={14} className="mr-1.5" />
+                  Final Review
+                </Link>
+              </Button>
+            ) : null}
+
+
+
             {canAddLoading ? (
               <Button asChild size="sm">
                 <Link
@@ -762,9 +768,40 @@ export default function VPLoadingDetail({
             ) : null}
           </div>
         </div>
+        {schedule.railRake ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <p className="text-xs font-medium text-emerald-700">
+              Rail Rake Number
+            </p>
+
+            <div className="mt-1 flex items-center gap-2">
+              <span className="font-semibold text-emerald-800">
+                {schedule.railRake.rakeNumber}
+              </span>
+
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+              >
+                <Link href={`/vp-management/rail-rakes/${schedule.railRake.id}`}>
+                  <IconTrain className="mr-1.5" />
+                  View Rake
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </header>
 
       <ScheduleProgress status={schedule.status} />
+
+      <OneLapTrackerAssignmentPanel
+        scheduleId={schedule.id}
+        hostRowId={selectedRow?.id ?? ""}
+        hostVpNo={selectedRow?.vpNo}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard
@@ -811,11 +848,10 @@ export default function VPLoadingDetail({
                       key={row.id}
                       type="button"
                       onClick={() => showWagon(row.id)}
-                      className={`group rounded-lg border bg-background p-4 text-left shadow-sm transition hover:border-primary/50 hover:bg-muted/20 ${
-                        isSelected
-                          ? "border-primary ring-2 ring-primary/15"
-                          : "border-border"
-                      }`}
+                      className={`group rounded-lg border bg-background p-4 text-left shadow-sm transition hover:border-primary/50 hover:bg-muted/20 ${isSelected
+                        ? "border-primary ring-2 ring-primary/15"
+                        : "border-border"
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -831,9 +867,8 @@ export default function VPLoadingDetail({
                         </div>
                         <IconChevronRight
                           size={18}
-                          className={`mt-0.5 shrink-0 text-muted-foreground transition group-hover:text-primary ${
-                            isSelected ? "text-primary" : ""
-                          }`}
+                          className={`mt-0.5 shrink-0 text-muted-foreground transition group-hover:text-primary ${isSelected ? "text-primary" : ""
+                            }`}
                         />
                       </div>
 
@@ -989,12 +1024,12 @@ export default function VPLoadingDetail({
                               This LR is split across {splitCount} wagons.
                               {allocation.quantitySummary
                                 ? ` ${formatNumber(
-                                    allocation.quantitySummary
-                                      .loadedInCurrentWagon,
-                                  )} is loaded here and ${formatNumber(
-                                    allocation.quantitySummary
-                                      .loadedInOtherWagons,
-                                  )} is loaded in other wagons.`
+                                  allocation.quantitySummary
+                                    .loadedInCurrentWagon,
+                                )} is loaded here and ${formatNumber(
+                                  allocation.quantitySummary
+                                    .loadedInOtherWagons,
+                                )} is loaded in other wagons.`
                                 : " Part of this LR is loaded in other wagons."}
                             </p>
                           </div>
@@ -1019,7 +1054,7 @@ export default function VPLoadingDetail({
                                   {formatNumber(
                                     allocation.quantitySummary
                                       ?.loadedInCurrentWagon ??
-                                      allocation.loadedQty,
+                                    allocation.loadedQty,
                                   )}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
@@ -1058,7 +1093,10 @@ export default function VPLoadingDetail({
                                     className="inline-flex items-center text-xs font-medium text-primary hover:underline"
                                   >
                                     View
-                                    <IconChevronRight size={14} className="ml-1" />
+                                    <IconChevronRight
+                                      size={14}
+                                      className="ml-1"
+                                    />
                                   </Link>
                                 </div>
                               </div>
@@ -1083,8 +1121,8 @@ export default function VPLoadingDetail({
                                 {formatNumber(goods.loadedQty)}
                                 {goods.loadingDamageQty
                                   ? ` / ${formatNumber(
-                                      goods.loadingDamageQty,
-                                    )} damaged`
+                                    goods.loadingDamageQty,
+                                  )} damaged`
                                   : ""}
                               </span>
                             ))}
@@ -1113,7 +1151,9 @@ export default function VPLoadingDetail({
             {selectedRow ? (
               <div className="space-y-4">
                 <div className="rounded-lg bg-muted/30 p-4">
-                  <p className="text-lg font-semibold">{rowTitle(selectedRow)}</p>
+                  <p className="text-lg font-semibold">
+                    {rowTitle(selectedRow)}
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {selectedRow.wagon?.name ||
                       selectedRow.wagonTypeLabel ||
@@ -1148,15 +1188,17 @@ export default function VPLoadingDetail({
                     label="Finished"
                     value={formatDateTime(
                       selectedLoading?.verifiedAt ??
-                        selectedLoading?.loadingCompletedAt,
+                      selectedLoading?.loadingCompletedAt,
                     )}
                   />
                 </dl>
 
                 <div className="grid gap-3 border-t pt-4">
                   {canComplete &&
-                  selectedLoading &&
-                  ["IN_PROGRESS", "COMPLETED"].includes(selectedLoading.status) ? (
+                    selectedLoading &&
+                    ["IN_PROGRESS", "COMPLETED"].includes(
+                      selectedLoading.status,
+                    ) ? (
                     <Button
                       type="button"
                       disabled={isActionPending}
@@ -1183,8 +1225,10 @@ export default function VPLoadingDetail({
                   ) : null}
 
                   {canCancel &&
-                  selectedLoading &&
-                  !["VERIFIED", "CANCELLED"].includes(selectedLoading.status) ? (
+                    selectedLoading &&
+                    !["VERIFIED", "CANCELLED"].includes(
+                      selectedLoading.status,
+                    ) ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -1224,7 +1268,10 @@ export default function VPLoadingDetail({
             }
           >
             <dl className="grid gap-4">
-              <Field label="Labour" value={selectedLoading?.labour?.name ?? DASH} />
+              <Field
+                label="Labour"
+                value={selectedLoading?.labour?.name ?? DASH}
+              />
               <Field
                 label="Labour charge"
                 value={formatPaise(selectedLoading?.labourCharge)}

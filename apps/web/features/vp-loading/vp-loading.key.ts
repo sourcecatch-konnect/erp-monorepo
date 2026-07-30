@@ -9,8 +9,16 @@ export const vpLoadingKeys = {
   schedulePreview: (vpScheduleId: string) =>
     ["vp-loading", "schedule-preview", vpScheduleId] as const,
 
-  gates: (mrrrRowId: string) =>
-    ["vp-loading", "gates", mrrrRowId] as const,
+  finalReview: (vpScheduleId: string) =>
+    ["vp-loading", "final-review", vpScheduleId] as const,
+
+  trackerAssignment: (vpScheduleId: string) =>
+    ["vp-loading", "tracker-assignment", vpScheduleId] as const,
+
+  availableTrackers: (vpScheduleId: string) =>
+    ["vp-loading", "available-trackers", vpScheduleId] as const,
+
+  gates: (mrrrRowId: string) => ["vp-loading", "gates", mrrrRowId] as const,
 
   eligibleGRNs: (mrrrRowId: string, gateNo: string) =>
     ["vp-loading", "eligible-grns", mrrrRowId, gateNo] as const,
@@ -22,12 +30,7 @@ export const vpLoadingKeys = {
     ["vp-loading", "wagon", vpWagonLoadingId] as const,
 
   wagonAllocations: (vpWagonLoadingId: string) =>
-    [
-      "vp-loading",
-      "wagon",
-      vpWagonLoadingId,
-      "allocations",
-    ] as const,
+    ["vp-loading", "wagon", vpWagonLoadingId, "allocations"] as const,
 
   allocation: (allocationId: string) =>
     ["vp-loading", "allocation", allocationId] as const,
@@ -37,20 +40,11 @@ export const vpLoadingLookupKeys = {
   all: ["vp-loading-lookups"] as const,
 
   schedules: (scheduleDate?: string) =>
-    [
-      "vp-loading-lookups",
-      "schedules",
-      scheduleDate ?? "all",
-    ] as const,
+    ["vp-loading-lookups", "schedules", scheduleDate ?? "all"] as const,
 
   gates: (mrrrRowId: string) =>
     ["vp-loading-lookups", "gates", mrrrRowId] as const,
 
   eligibleGRNs: (mrrrRowId: string, gateNo: string) =>
-    [
-      "vp-loading-lookups",
-      "eligible-grns",
-      mrrrRowId,
-      gateNo,
-    ] as const,
+    ["vp-loading-lookups", "eligible-grns", mrrrRowId, gateNo] as const,
 };
