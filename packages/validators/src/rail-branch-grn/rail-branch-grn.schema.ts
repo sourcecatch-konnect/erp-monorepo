@@ -1,22 +1,6 @@
 import { z } from "zod";
 
-const optionalTrimmedString = z
-  .string()
-  .trim()
-  .optional()
-  .transform((value) => value || undefined);
 
-const optionalDateTime = z
-  .string()
-  .datetime({ offset: true })
-  .optional()
-  .transform((value) => (value ? new Date(value) : undefined));
-
-const nonNegativeInt = (label: string) =>
-  z
-    .number()
-    .int(`${label} must be a whole number`)
-    .min(0, `${label} cannot be negative`);
 
 const requiredLabourCount = z.preprocess(
   (value) => (value === "" || value == null ? undefined : value),
