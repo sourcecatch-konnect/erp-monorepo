@@ -71,7 +71,6 @@ export default function MasterListPage<T extends { id: string }>({
   onRowClick,
   total,
   onPageChange,
-  summary,
   defaultHiddenColumns,
   selectedIds = [],
   onSelectedIdsChange,

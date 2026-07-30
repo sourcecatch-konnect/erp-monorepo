@@ -216,30 +216,7 @@ function AllocationStatusBadge({ status }: { status: string }) {
   );
 }
 
-function ScheduleStatusBadge({ status }: { status?: string | null }) {
-  const label =
-    status === "MRRR_CREATED"
-      ? "Ready for loading"
-      : status === "LOADING"
-        ? "Loading"
-        : status === "LOADED"
-          ? "Loaded"
-          : status === "VERIFIED"
-            ? "Verified"
-            : status === "FINALISED"
-              ? "Finalised"
-              : status === "CANCELLED"
-                ? "Cancelled"
-                : status === "DRAFT"
-                  ? "Draft"
-                  : (status ?? "Not started");
 
-  return (
-    <span className="inline-flex whitespace-nowrap rounded-md border bg-muted/30 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-      {label}
-    </span>
-  );
-}
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (

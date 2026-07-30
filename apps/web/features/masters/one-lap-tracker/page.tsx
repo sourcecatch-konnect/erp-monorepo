@@ -7,7 +7,6 @@ import {
     useQueryClient,
 } from "@tanstack/react-query";
 import type {
-    OneLapTracker,
     OneLapTrackerStatusCounts,
 } from "@skerp/types";
 import { PERMS } from "@skerp/types";

@@ -13,7 +13,6 @@ import {
   IconTrain,
   IconTruckDelivery,
 } from "@tabler/icons-react";
-import IconTextField from "../masters/_shared/fields/IconTextField";
 import type {
   CreateDeliveryChallanBody,
   DeliveryChallanPreviewItem,
@@ -167,7 +166,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   const [supervisorId, setSupervisorId] = React.useState(
     initialData?.supervisorId ?? "",
   );
-  const [remarks, setRemarks] = React.useState(initialData?.remarks ?? "");
+  const [remarks] = React.useState(initialData?.remarks ?? "");
   const [quantities, setQuantities] = React.useState<Quantities>(() =>
     Object.fromEntries(
       (initialData?.items ?? []).map((item) => [

@@ -3,7 +3,6 @@ import {
   IconClipboardList,
   IconDatabase,
   IconFileBarcode,
-  IconGps,
   IconLayoutDashboard,
   IconReceipt2,
   IconRoute,
