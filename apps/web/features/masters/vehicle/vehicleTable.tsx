@@ -59,6 +59,15 @@ export const vehicleColumns: ColumnDef<Vehicle>[] = [
   },
 
   {
+    id: "transporter",
+    header: "Transporter",
+    cell: ({ row }) =>
+      row.original.ownershipType === "Market_Vehicle"
+        ? row.original.transport?.name ?? "-"
+        : "-",
+  },
+
+  {
     accessorKey: "capacityMT",
     header: "Capacity",
     cell: ({ row }) => (

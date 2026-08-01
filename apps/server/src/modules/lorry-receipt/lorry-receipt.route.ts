@@ -40,6 +40,7 @@ const lrBranchFilter = (req: Parameters<typeof assertBranchAccess>[0]) => {
     group: {
       OR: [
         { originBranchId: { in: req.ctx.branchIds } },
+        { railheadBranchId: { in: req.ctx.branchIds } },
         { destinationBranchId: { in: req.ctx.branchIds } },
       ],
     },
@@ -160,19 +161,19 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
           : {}),
         ...(input.goods
           ? {
-              goods: {
-                create: input.goods.map((g) => ({
-                  name: g.name,
-                  description: g.description ?? null,
-                  quantity: g.quantity,
-                  unit: g.unit ?? null,
-                  weight: g.weight ?? null,
-                  length: g.length ?? null,
-                  width: g.width ?? null,
-                  height: g.height ?? null,
-                })),
-              },
-            }
+            goods: {
+              create: input.goods.map((g) => ({
+                name: g.name,
+                description: g.description ?? null,
+                quantity: g.quantity,
+                unit: g.unit ?? null,
+                weight: g.weight ?? null,
+                length: g.length ?? null,
+                width: g.width ?? null,
+                height: g.height ?? null,
+              })),
+            },
+          }
           : {}),
         updatedById: me,
         version: { increment: 1 },
@@ -258,5 +259,78 @@ router.post(
     return sendOk(res, ewayBill, undefined, 201);
   },
 );
+/* ------------------------------------------------------------------ */
+/* Update e-way bill — allowed before finalisation only                */
+/* ------------------------------------------------------------------ */
+router.patch(
+  "/:id/eway-bills",
+  can(PERMS.LORRY_RECEIPT.UPDATE),
+  async (req, res) => {
+    const id = getParamId(req);
 
+    const existing = await db.lorryReceipt.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+      },
+      include: {
+        group: {
+          select: {
+            status: true,
+            originBranchId: true,
+          },
+        },
+        ewayBill: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundError("Lorry receipt not found");
+    }
+
+    if (
+      existing.status !== "DRAFT" ||
+      existing.group.status !== "DRAFT"
+    ) {
+      throw new BadRequestError(
+        "E-way bill can only be edited before LR finalisation",
+      );
+    }
+
+    if (!existing.ewayBill) {
+      throw new NotFoundError("E-way bill not found");
+    }
+
+    assertBranchAccess(req, existing.group.originBranchId);
+
+    const parsed = addEwayBillSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      throw new ValidationError(
+        parsed.error.flatten().fieldErrors,
+      );
+    }
+
+    const input = parsed.data;
+
+    const updatedEwayBill = await db.ewayBill.update({
+      where: {
+        id: existing.ewayBill.id,
+      },
+      data: {
+        ewayBillNo: input.ewayBillNo,
+        generatedAt: input.generatedAt,
+        expiresAt: input.expiresAt,
+        generatedBy: input.generatedBy ?? null,
+        documentUrl: input.documentUrl ?? null,
+      },
+    });
+
+    return sendOk(res, updatedEwayBill);
+  },
+);
 export default router;

@@ -118,6 +118,14 @@ const isLoading = vehicleDetail.isLoading;
                   icon={<IconTruck size={12} />}
                 />
 
+                {data?.ownershipType === "Market_Vehicle" && (
+                  <Field
+                    label="Transporter"
+                    value={data.transport?.name}
+                    icon={<IconTruck size={12} />}
+                  />
+                )}
+
                 <Field
                   label="Vehicle Type"
                   value={

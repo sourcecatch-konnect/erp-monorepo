@@ -5,7 +5,7 @@ import { PERMS } from "@skerp/types";
 
 export default function Page() {
   return (
-    <ProtectedRoute permission={PERMS.ORDER.CREATE}>
+    <ProtectedRoute permission={PERMS.VP_SCHEDULE.CREATE}>
       <VPScheduleForm mode="create" />
     </ProtectedRoute>
   );

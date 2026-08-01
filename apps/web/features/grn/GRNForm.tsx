@@ -91,13 +91,13 @@ type EditPreviewGroup = {
 
 type EditGRNForPreview = GRNDetail & {
   lorryReceipt?:
-    | (NonNullable<GRNDetail["lorryReceipt"]> & {
-        group?:
-          | (NonNullable<NonNullable<GRNDetail["lorryReceipt"]>["group"]> &
-              EditPreviewGroup)
-          | null;
-      })
+  | (NonNullable<GRNDetail["lorryReceipt"]> & {
+    group?:
+    | (NonNullable<NonNullable<GRNDetail["lorryReceipt"]>["group"]> &
+      EditPreviewGroup)
     | null;
+  })
+  | null;
 };
 type GRNFormValues = Omit<CreateGRNBody, "inDateTime" | "outDateTime"> & {
   inDateTime?: Date;
@@ -261,16 +261,16 @@ export default function GRNForm({ mode, grn }: Props) {
       mode === "edit" && grn
         ? grnToFormValues(grn)
         : {
-            lorryReceiptId: "",
-            goods: [],
-            damagePhotoAttachmentIds: [],
-            detentionDays: 0,
-            damagesBy: "NONE",
-            detentionAmount: "0",
-            balanceFreight: 0,
-            freightPerMT: "0",
-            grossTotal: "0",
-          },
+          lorryReceiptId: "",
+          goods: [],
+          damagePhotoAttachmentIds: [],
+          detentionDays: 0,
+          damagesBy: "NONE",
+          detentionAmount: "0",
+          balanceFreight: 0,
+          freightPerMT: "0",
+          grossTotal: "0",
+        },
   });
   const eligibleLRs = useEligibleGRNLrs({
     page: 0,
@@ -583,8 +583,8 @@ export default function GRNForm({ mode, grn }: Props) {
         const identifier = grn.grnNumber || grn.id;
         toast.success(`GRN ${grn.grnNumber} updated`);
         router.push(
-  `/vp-management/grn/${encodeURIComponent(identifier)}`,
-);
+          `/vp-management/grn/${encodeURIComponent(identifier)}`,
+        );
 
         return;
       }
@@ -593,12 +593,12 @@ export default function GRNForm({ mode, grn }: Props) {
         createdDraft?.lorryReceiptId === values.lorryReceiptId
           ? createdDraft
           : await createGRN.mutateAsync({
-              ...apiBody,
-              labourId: undefined,
-              unloadingSupervisorId: values.unloadingSupervisorId,
-              goods,
-              damagePhotoAttachmentIds: [],
-            });
+            ...apiBody,
+            labourId: undefined,
+            unloadingSupervisorId: values.unloadingSupervisorId,
+            goods,
+            damagePhotoAttachmentIds: [],
+          });
 
       setCreatedDraft(created);
 
@@ -629,15 +629,15 @@ export default function GRNForm({ mode, grn }: Props) {
         },
       });
 
-     // Create GRN
-const identifier = submitted.grnNumber || submitted.id;
+      // Create GRN
+      const identifier = submitted.grnNumber || submitted.id;
 
-toast.success(`GRN ${submitted.grnNumber} created`);
-setCreatedDraft(null);
+      toast.success(`GRN ${submitted.grnNumber} created`);
+      setCreatedDraft(null);
 
-router.push(
-  `/vp-management/grn/${encodeURIComponent(identifier)}`,
-);
+      router.push(
+        `/vp-management/grn/${encodeURIComponent(identifier)}`,
+      );
 
     } catch (err) {
       setIsUploadingDamagePhotos(false);
@@ -650,16 +650,10 @@ router.push(
     submitGRN.isPending ||
     updateGRN.isPending ||
     isUploadingDamagePhotos;
-  const hasDamageOrShortage = React.useMemo(() => {
-    return watchedGoods?.some((row) => {
-      const damageQty = numberValue(row?.damageQty);
-      const totalQty = numberValue(row?.totalQty);
-      const receivedQty = numberValue(row?.receivedQty);
-      const shortageQty = Math.max(totalQty - receivedQty, 0);
-
-      return damageQty > 0 || shortageQty > 0;
-    });
-  }, [watchedGoods]);
+  const hasDamage = React.useMemo(
+    () => watchedGoods?.some((row) => numberValue(row?.damageQty) > 0),
+    [watchedGoods],
+  );
   const damageByValue = useWatch({
     control: form.control,
     name: "damagesBy",
@@ -667,14 +661,14 @@ router.push(
   const { data: supervisors = [], isLoading: supervisorsLoading } =
     useGrnSupervisors();
   React.useEffect(() => {
-    if (!hasDamageOrShortage) {
+    if (!hasDamage) {
       setDamagePhotoFiles([]);
       form.setValue("damagesBy", "NONE" as GRNFormValues["damagesBy"], {
         shouldDirty: true,
         shouldValidate: true,
       });
     }
-  }, [form, hasDamageOrShortage]);
+  }, [form, hasDamage]);
   const canShowFormBody = mode === "edit" || Boolean(preview.data);
   const editPreview = React.useMemo<LRPreviewPanelData | undefined>(() => {
     if (mode !== "edit" || !grn?.lorryReceipt) return undefined;
@@ -697,19 +691,19 @@ router.push(
 
       vehicleInfo: isMarketVehicle
         ? {
-            type: "MARKET",
-            vehicleNumber: group?.marketVehicleNumber ?? null,
-            driverName: group?.marketDriverName ?? null,
-            tripNumber: null,
-            tripName: null,
-          }
+          type: "MARKET",
+          vehicleNumber: group?.marketVehicleNumber ?? null,
+          driverName: group?.marketDriverName ?? null,
+          tripNumber: null,
+          tripName: null,
+        }
         : {
-            type: "OWN",
-            vehicleNumber: ownTrip?.vehicle?.vehicleNumber ?? null,
-            driverName: ownTrip?.driver?.name ?? null,
-            tripNumber: ownTrip?.tripNumber ?? null,
-            tripName: ownTrip?.tripName ?? null,
-          },
+          type: "OWN",
+          vehicleNumber: ownTrip?.vehicle?.vehicleNumber ?? null,
+          driverName: ownTrip?.driver?.name ?? null,
+          tripNumber: ownTrip?.tripNumber ?? null,
+          tripName: ownTrip?.tripName ?? null,
+        },
 
       chargeDefaults: {
         totalFreight: grn.totalFreight ?? 0,
@@ -738,11 +732,11 @@ router.push(
                 options={
                   mode === "edit" && grn?.lorryReceipt
                     ? [
-                        {
-                          value: grn.lorryReceipt.id,
-                          label: grn.lorryReceipt.lrNumber,
-                        },
-                      ]
+                      {
+                        value: grn.lorryReceipt.id,
+                        label: grn.lorryReceipt.lrNumber,
+                      },
+                    ]
                     : lrOptions
                 }
                 disabled={mode === "edit"}
@@ -768,7 +762,7 @@ router.push(
                           <TableRow className="bg-muted/40">
                             <TableHead className="w-12">SN</TableHead>
                             <TableHead className="w-24">Goods Name</TableHead>
-                            <TableHead className="w-20">Unit</TableHead>
+
                             <TableHead className="w-32">Total</TableHead>
                             <TableHead className="w-32">Received</TableHead>
                             <TableHead className="w-32">Damage</TableHead>
@@ -808,7 +802,7 @@ router.push(
                                     ) : null}
                                   </TableCell>
 
-                                  <TableCell>{row?.unit || "—"}</TableCell>
+
 
                                   {/* Total is now manually editable */}
                                   <TableCell>
@@ -983,7 +977,7 @@ router.push(
 
                   <Select
                     value={String(damageByValue ?? "NONE")}
-                    disabled={!hasDamageOrShortage || isSaving}
+                    disabled={!hasDamage || isSaving}
                     onValueChange={(value) => {
                       form.setValue(
                         "damagesBy",
@@ -1018,7 +1012,7 @@ router.push(
                     type="file"
                     accept="image/*"
                     multiple
-                    disabled={!hasDamageOrShortage || isSaving}
+                    disabled={!hasDamage || isSaving}
                     onChange={handleDamagePhotosChange}
                     className="h-9"
                   />

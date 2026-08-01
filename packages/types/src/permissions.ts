@@ -90,14 +90,32 @@ type VPSchedulePermissionKey =
 type MRRRPermissionKey = `mrrr.${CrudAction}` | "mrrr.submit" | "mrrr.cancel";
 
 type GRNPermissionKey = `grn.${CrudAction}` | "grn.submit" | "grn.cancel";
-
+type RailBranchGRNPermissionKey =
+  | `rail_branch_grn.${CrudAction}`
+  | "rail_branch_grn.submit";
+type DeliveryChallanPermissionKey =
+  | `delivery_challan.${CrudAction}`
+  | "delivery_challan.issue"
+  | "delivery_challan.cancel";
+type RailRakeOperationPermissionKey =
+  | `rail_rake_operation.${CrudAction}`
+  | "rail_rake_operation.submit";
+type RakeAtRailHeadPermissionKey =
+  | `rake_at_rail_head.${CrudAction}`
+  | "rake_at_rail_head.submit";
+type RakeAtBranchPermissionKey =
+  | `rake_at_branch.${CrudAction}`
+  | "rake_at_branch.submit";
 type VPLoadingPermissionKey =
   | `vp_loading.${CrudAction}`
   | "vp_loading.mark_loaded"
   | "vp_loading.cancel"
   | "vp_loading.complete"
   | "vp_loading.verify"
-  | "vp_loading.capacity_override";
+  | "vp_loading.capacity_override"
+  | "vp_loading.assign_tracker"
+  | "vp_loading.replace_tracker"
+  | "vp_loading.release_tracker";
 
 type OrderPermissionKey =
   | `order.${CrudAction}`
@@ -125,7 +143,10 @@ type NotificationPermissionKey =
   | "notifications.manage_rules"
   | "notifications.manage_templates"
   | "notifications.test_send";
-
+type OneLapTrackerPermissionKey =
+  | "masters.one-lap-tracker.view"
+  | "masters.one-lap-tracker.update"
+  | "masters.one-lap-tracker.sync";
 type AttachmentPermissionKey =
   | "attachments.view"
   | "attachments.create"
@@ -147,7 +168,13 @@ export type PermissionKey =
   | VPSchedulePermissionKey
   | CashPlanningPermissionKey
   | GRNPermissionKey
+  | RailBranchGRNPermissionKey
+  | DeliveryChallanPermissionKey
+  | RailRakeOperationPermissionKey
+  | RakeAtRailHeadPermissionKey
+  | RakeAtBranchPermissionKey
   | AdminPermissionKey
+  | OneLapTrackerPermissionKey
   | MRRRPermissionKey
   | NotificationPermissionKey
   | AttachmentPermissionKey;
@@ -183,6 +210,11 @@ export const PERMS = {
     SPARE_PART: masterPerms("spare-part"),
     SPARE_PART_SUPPLIER: masterPerms("spare-part-supplier"),
     CUSTOMER: masterPerms("customer"),
+    ONE_LAP_TRACKER: {
+      VIEW: "masters.one-lap-tracker.view",
+      UPDATE: "masters.one-lap-tracker.update",
+      SYNC: "masters.one-lap-tracker.sync",
+    },
     COMPANY: masterPerms("company"),
     BRANCH: masterPerms("branch"),
     ROUTE: masterPerms("route"),
@@ -221,6 +253,9 @@ export const PERMS = {
     COMPLETE: "vp_loading.complete",
     VERIFY: "vp_loading.verify",
     CAPACITY_OVERRIDE: "vp_loading.capacity_override",
+    ASSIGN_TRACKER: "vp_loading.assign_tracker",
+    REPLACE_TRACKER: "vp_loading.replace_tracker",
+    RELEASE_TRACKER: "vp_loading.release_tracker",
   },
   TRIP: {
     VIEW: "trip.view",
@@ -280,6 +315,43 @@ export const PERMS = {
     DELETE: "grn.delete",
     SUBMIT: "grn.submit",
     CANCEL: "grn.cancel",
+  },
+  RAIL_BRANCH_GRN: {
+    VIEW: "rail_branch_grn.view",
+    CREATE: "rail_branch_grn.create",
+    UPDATE: "rail_branch_grn.update",
+    DELETE: "rail_branch_grn.delete",
+    SUBMIT: "rail_branch_grn.submit",
+    CANCEL: "rail_branch_grn.cancel",
+  },
+  DELIVERY_CHALLAN: {
+    VIEW: "delivery_challan.view",
+    CREATE: "delivery_challan.create",
+    UPDATE: "delivery_challan.update",
+    DELETE: "delivery_challan.delete",
+    ISSUE: "delivery_challan.issue",
+    CANCEL: "delivery_challan.cancel",
+  },
+  RAIL_RAKE_OPERATION: {
+    VIEW: "rail_rake_operation.view",
+    CREATE: "rail_rake_operation.create",
+    UPDATE: "rail_rake_operation.update",
+    DELETE: "rail_rake_operation.delete",
+    SUBMIT: "rail_rake_operation.submit",
+  },
+  RAKE_AT_RAIL_HEAD: {
+    VIEW: "rake_at_rail_head.view",
+    CREATE: "rake_at_rail_head.create",
+    UPDATE: "rake_at_rail_head.update",
+    DELETE: "rake_at_rail_head.delete",
+    SUBMIT: "rake_at_rail_head.submit",
+  },
+  RAKE_AT_BRANCH: {
+    VIEW: "rake_at_branch.view",
+    CREATE: "rake_at_branch.create",
+    UPDATE: "rake_at_branch.update",
+    DELETE: "rake_at_branch.delete",
+    SUBMIT: "rake_at_branch.submit",
   },
   ORDER: {
     VIEW: "order.view",
