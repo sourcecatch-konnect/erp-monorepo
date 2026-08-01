@@ -18,7 +18,12 @@ import { Button } from "@skerp/ui/components/button";
 import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 
-import { StatusBadge, formatDateTime, formatLastUpdate } from "./tracking-ui";
+import {
+  AssignmentBadge,
+  StatusBadge,
+  formatDateTime,
+  formatLastUpdate,
+} from "./tracking-ui";
 import { toLocalInputValue } from "./tracking-ui";
 import { toValidDate } from "@/lib/date";
 
@@ -80,6 +85,7 @@ export function WagonPanel(props: WagonPanelProps) {
               {vehicle.name}
             </h2>
             <StatusBadge status={vehicle.status} />
+            <AssignmentBadge assigned={Boolean(vehicle.assignment)} />
           </div>
           {vehicle.vehicleNumber && (
             <p className="truncate text-xs text-muted-foreground">
@@ -110,9 +116,7 @@ export function WagonPanel(props: WagonPanelProps) {
                 <Fact
                   icon={<IconTrain className="size-4" />}
                   label="Rake"
-                  value={
-                    vehicle.assignment.rake?.rakeNumber ?? "Not generated"
-                  }
+                  value={vehicle.assignment.rake?.rakeNumber ?? "Not generated"}
                 />
                 <Fact
                   icon={<IconRoute className="size-4" />}
@@ -154,16 +158,25 @@ export function WagonPanel(props: WagonPanelProps) {
             </p>
           )}
 
+          {!vehicle.assignment && (
+            <p className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-800">
+              This is the tracker&apos;s physical location only. It is not
+              currently connected to a VP wagon or rake.
+            </p>
+          )}
+
           <div className="mt-4 flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              onClick={props.onOpenHistory}
-            >
-              <IconHistory className="size-4" />
-              View history
-            </Button>
+            {vehicle.assignment && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={props.onOpenHistory}
+              >
+                <IconHistory className="size-4" />
+                View journey history
+              </Button>
+            )}
             {pos && (
               <Button asChild size="sm" variant="outline">
                 <a
