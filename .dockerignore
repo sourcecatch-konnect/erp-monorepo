@@ -1,3 +1,11 @@
+# Not needed inside any image — keeps the pruner COPY layer stable so
+# docs/compose edits don't invalidate Docker build caches.
+deploy
+docker-compose*.yml
+docs
+llm-guideline
+**/*.md
+
 .git
 .github
 .agents
