@@ -260,7 +260,7 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
               </Button>
             ) : null}
             {(canClose && journey.status === "ACTIVE") ||
-            (canCancel && journey.status === "ACTIVE") ? (
+              (canCancel && journey.status === "ACTIVE") ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="outline" aria-label="More">
@@ -491,7 +491,7 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                         {formatDateTime(expense.expenseDate)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {expense.expenseType.name}
+                        {expense.expenseType?.name ?? "Unknown expense type"}
                         <span className="block text-xs text-muted-foreground">
                           {expense.pump?.name ?? expense.city?.name ?? ""}
                           {expense.remarks ? ` · ${expense.remarks}` : ""}
@@ -543,8 +543,8 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                             </>
                           ) : null}
                           {canExpense &&
-                          expense.status === "DRAFT" &&
-                          moneyEntryAllowed ? (
+                            expense.status === "DRAFT" &&
+                            moneyEntryAllowed ? (
                             <>
                               <Button
                                 size="icon-sm"
@@ -568,7 +568,7 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                             </>
                           ) : null}
                           {canReverseExpense &&
-                          ["APPROVED", "POSTED"].includes(expense.status) ? (
+                            ["APPROVED", "POSTED"].includes(expense.status) ? (
                             <Button
                               size="sm"
                               variant="ghost"
