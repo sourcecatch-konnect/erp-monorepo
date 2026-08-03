@@ -130,6 +130,17 @@ export const journeyInclude = {
     where: { deletedAt: null },
     orderBy: { expenseDate: "asc" as const },
     include: {
+      expenseType: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          requiresDieselDetails: true,
+          isSystem: true,
+          isActive: true,
+          sortOrder: true,
+        },
+      },
       city: cityRef,
       pump: { select: { id: true, name: true } },
       trip: { select: { id: true, tripNumber: true, sequenceNo: true } },
@@ -388,11 +399,11 @@ export const closeLegAndUpdateJourney = async (
         version: { increment: 1 },
         ...(isReturnToBase
           ? {
-              status: "RETURNED" as const,
-              settlementStatus: "PENDING_REVIEW" as const,
-              closingKm: args.closingKm,
-              closedAt: args.endDateTime,
-            }
+            status: "RETURNED" as const,
+            settlementStatus: "PENDING_REVIEW" as const,
+            closingKm: args.closingKm,
+            closedAt: args.endDateTime,
+          }
           : {}),
       },
     });
