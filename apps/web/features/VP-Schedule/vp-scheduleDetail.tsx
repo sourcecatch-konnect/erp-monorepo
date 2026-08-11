@@ -32,7 +32,6 @@ import {
   formatVPScheduleDateTime,
   VPScheduleStatusBadge,
 } from "./vp-schedule-ui";
-import { formatPaise } from "@/lib/money";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -168,7 +167,7 @@ export default function VPScheduleDetail({
   const canConfirm = isDraft;
   const canCancel = isDraft || isPlanned;
 
-  const wagonCounts = schedule.wagonCounts ?? [];
+
 
   const handleConfirm = () => {
     confirm.mutate(
