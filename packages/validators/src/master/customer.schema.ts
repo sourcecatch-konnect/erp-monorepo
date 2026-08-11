@@ -29,6 +29,28 @@ const optionalUppercaseRegex = (regex: RegExp, message: string) =>
     .or(z.literal(""))
     .transform((value) => (value ? value.toUpperCase() : undefined))
     .refine((value) => !value || regex.test(value), message);
+const clearableUppercaseRegex = (
+  regex: RegExp,
+  message: string,
+) =>
+  z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .transform((value) => {
+      if (value === undefined) return undefined;
+      if (value === null || value === "") return null;
+
+      return value.toUpperCase();
+    })
+    .refine(
+      (value) =>
+        value === undefined ||
+        value === null ||
+        regex.test(value),
+      message,
+    );
 export const customerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -79,9 +101,9 @@ export const createCustomerSchema = z.object({
   shortName: optionalString,
 
   customerPAN: optionalUppercaseRegex(
-  /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
-  "Enter valid PAN number"
-),
+    /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+    "Enter valid PAN number"
+  ),
 
   disallowNewLRBooking: z.boolean().default(false),
 
@@ -91,11 +113,10 @@ export const createCustomerSchema = z.object({
       "Interest rate cannot be negative"
     ),
 
-  gstNo: optionalUppercaseRegex(
-  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
-  "Enter valid GST number"
-),
-
+  gstNo: clearableUppercaseRegex(
+    /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+    "Enter valid GST number",
+  ),
   creditLimit: optionalNumberField("Enter valid credit limit")
     .refine(
       (value) => value === undefined || value >= 0,
@@ -128,17 +149,17 @@ export const createCustomerSchema = z.object({
     .min(1, "City is required"),
 
 
-     contactPhone: indianPhone,
-    
-      mobileNo: z
-        .string()
-        .trim()
-        .optional()
-        .or(z.literal(""))
-        .refine(
-          (value) => !value || /^(\+91)?[6-9]\d{9}$/.test(value),
-          "Enter valid Indian mobile number"
-        ),
+  contactPhone: indianPhone,
+
+  mobileNo: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (value) => !value || /^(\+91)?[6-9]\d{9}$/.test(value),
+      "Enter valid Indian mobile number"
+    ),
   primaryEmail: z
     .string()
     .trim()
@@ -176,7 +197,7 @@ export const customerLocationSchema = z.object({
   city: z
     .object({ id: z.string(), name: z.string() })
     .optional(),
-    area: z
+  area: z
     .object({
       id: z.string(),
       name: z.string(),
@@ -208,18 +229,18 @@ export const createCustomerLocationSchema = z.object({
       "Enter valid Indian mobile number"
     )
     .transform((value) => (value ? value : undefined)),
-gstNo: z
-  .string()
-  .trim()
-  .optional()
-  .or(z.literal(""))
-  .transform((value) => (value ? value.toUpperCase() : undefined))
-  .refine(
-    (value) =>
-      !value ||
-      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value),
-    "Enter valid GST number"
-  ),
+  gstNo: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value ? value.toUpperCase() : undefined))
+    .refine(
+      (value) =>
+        !value ||
+        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value),
+      "Enter valid GST number"
+    ),
 });
 
 export const updateCustomerLocationSchema =

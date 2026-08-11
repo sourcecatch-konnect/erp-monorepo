@@ -58,11 +58,11 @@ export const MRRR_STATUS_ORDER: {
   key: "ALL" | MRRRStatus;
   label: string;
 }[] = [
-  { key: "ALL", label: "All" },
-  { key: "DRAFT", label: "Draft" },
-  { key: "SUBMITTED", label: "Submitted" },
-  { key: "CANCELLED", label: "Cancelled" },
-];
+    { key: "ALL", label: "All" },
+    { key: "DRAFT", label: "Draft" },
+    { key: "SUBMITTED", label: "Submitted" },
+    { key: "CANCELLED", label: "Cancelled" },
+  ];
 
 export const formatMRRRDate = (date?: string | Date | null) => {
   if (!date) return "—";

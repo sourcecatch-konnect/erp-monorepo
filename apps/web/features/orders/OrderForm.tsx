@@ -425,7 +425,6 @@ export default function OrderForm({ mode, order }: Props) {
             <ComboboxField
               name="routeId"
               label="Route"
-              required
               options={(routes.data ?? []).map((route) => ({
                 label: `${route.sourceCity?.name ?? "-"} → ${route.destinationCity?.name ?? "-"}`,
                 value: route.id,

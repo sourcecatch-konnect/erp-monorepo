@@ -22,7 +22,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
-import { formatFreight, MRRRStatusBadge } from "./mrrr-ui";
+import { MRRRStatusBadge } from "./mrrr-ui";
 
 import { useCancelMRRR, useMRRRDetail, useSubmitMRRR } from "./hook/useMrrr";
 
@@ -166,19 +166,13 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
     vpSchedule?.toBranch?.name || vpSchedule?.toBranch?.branchCode || "—";
 
   const createdBy = mrrr.createdBy
-    ? `${mrrr.createdBy.firstName ?? ""} ${
-        mrrr.createdBy.lastName ?? ""
+    ? `${mrrr.createdBy.firstName ?? ""} ${mrrr.createdBy.lastName ?? ""
       }`.trim()
     : "—";
 
   const totalRows = rows.length;
 
-  const totalFreight = rows.reduce((sum: number, row) => {
-    const freight =
-      row.vpScheduleWagonCount?.freightAmount ?? row.freightAmount ?? 0;
 
-    return sum + Number(freight);
-  }, 0);
 
   const handleSubmit = () => {
     submit.mutate(
@@ -359,8 +353,8 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                 value={
                   vpSchedule?.totalCapacityCft != null
                     ? Number(vpSchedule.totalCapacityCft).toLocaleString(
-                        "en-IN",
-                      )
+                      "en-IN",
+                    )
                     : "—"
                 }
               />
@@ -402,14 +396,7 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Total Freight
-                  </span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {formatFreight(totalFreight)}
-                  </span>
-                </div>
+
               </div>
             }
           >
@@ -419,58 +406,47 @@ export default function MRRRDetail({ mrrrId }: { mrrrId: string }) {
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr className="border-b">
+
                         <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
                           Row
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
-                          Wagon
+                          Sequence No
                         </th>
+
                         <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
                           MR/RR NO
                         </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
-                          Sequence No
-                        </th>
+
                         <th className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground">
                           VP No
                         </th>
 
-                        <th className="px-3 py-2 text-right text-xs font-medium uppercase text-muted-foreground">
-                          Freight
-                        </th>
                       </tr>
                     </thead>
 
                     <tbody>
                       {rows.map((row, index: number) => {
-                        const wagonName =
-                          row.wagon?.name ?? row.wagonTypeLabel ?? "—";
 
                         return (
                           <tr
                             key={row.id ?? index}
                             className="border-b last:border-b-0"
                           >
+
                             <td className="px-3 py-2">
                               {row.rowLabel ?? row.rowNumber ?? index + 1}
                             </td>
-
-                            <td className="px-3 py-2 font-medium">
-                              {wagonName}
-                            </td>
-                            <td className="px-3 py-2">{row.mrRrNo || "—"}</td>
                             <td className="px-3 py-2">
                               {row.sequenceNo || "—"}
                             </td>
 
+                            <td className="px-3 py-2">{row.mrRrNo || "—"}</td>
+
+
                             <td className="px-3 py-2">{row.vpNo || "—"}</td>
 
-                            <td className="px-3 py-2 text-right font-medium">
-                              {formatFreight(
-                                row.vpScheduleWagonCount?.freightAmount ??
-                                  row.freightAmount,
-                              )}
-                            </td>
+
                           </tr>
                         );
                       })}

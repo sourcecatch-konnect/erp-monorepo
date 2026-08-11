@@ -21,6 +21,34 @@ export type LRTransportType = z.infer<typeof lrTransportTypeSchema>;
 export type LRTripLegType = z.infer<typeof lrTripLegTypeSchema>;
 export type LRPriority = z.infer<typeof lrPrioritySchema>;
 
+export type LRDeliveryEligibilityStage =
+  | "LR_NOT_FINALISED"
+  | "AWAITING_ROAD_DISPATCH"
+  | "AWAITING_BRANCH_GRN"
+  | "AWAITING_DELIVERY_CHALLAN"
+  | "PARTIALLY_CHALLANED"
+  | "READY_FOR_DELIVERY"
+  | "ALREADY_DELIVERED";
+
+export type LRDeliveryEligibility = {
+  eligible: boolean;
+  stage: LRDeliveryEligibilityStage;
+  reasons: string[];
+  requiredQuantity?: number;
+  issuedQuantity?: number;
+  railwayDetails?: {
+    rakeNumbers: string[];
+    vpNumbers: string[];
+    branchGrnIds: string[];
+    receivedQuantity: number;
+    damageQuantity: number;
+    shortageQuantity: number;
+    dcNumbers: string[];
+    issuedQuantity: number;
+    balanceQuantity: number;
+  };
+};
+
 export type UpdateLRBody = z.output<typeof updateLRSchema>;
 export type AddEwayBillBody = z.output<typeof addEwayBillSchema>;
 export type AddEwayBillFormInput = z.input<typeof addEwayBillSchema>;
@@ -48,6 +76,7 @@ export type LRDelivery = {
   lrId: string;
   deliveredAt: string;
   reportedAt: string | null;
+  unloadingAt: string | null;
   receiverName: string | null;
   receiverPhone: string | null;
   unloadingCharges: number | null;
@@ -105,7 +134,7 @@ export type LRGoods = {
   name: string;
   description: string | null;
   quantity: number;
-   unit: string | null;
+  unit: string | null;
   weight: string | number | null;
   length: number | null;
   width: number | null;
@@ -166,6 +195,7 @@ export type PendingDeliveryRow = {
   status: LRStatus;
   unloadingLocation: { id: string; name: string } | null;
   group: WorklistGroupRef;
+  deliveryEligibility: LRDeliveryEligibility;
 };
 
 export type PendingPodRow = {
@@ -195,6 +225,92 @@ export type DeliveryStats = {
   avgDeliveryDays: number | null;
 };
 
+export type LRUnloadingReportRow = {
+  id: string;
+  lrNumber: string;
+  lrDate: string;
+  status: LRStatus;
+  consignorName: string | null;
+  consigneeName: string | null;
+  originBranchName: string | null;
+  destinationBranchName: string | null;
+  challanNumbers: string[];
+  reportedAt: string | null;
+  unloadingAt: string | null;
+  deliveredAt: string;
+  receiverName: string | null;
+  podReceivedAt: string | null;
+  courierName: string | null;
+  courierDocketNo: string | null;
+  detentionDays: number | null;
+  detentionAmount: number | string | null;
+};
+
+export type LRUnloadingReportDetail = LRUnloadingReportRow & {
+  groupId: string;
+  groupNumber: string;
+  transportType: string;
+  invoiceNumber: string | null;
+  invoiceAmount: number | string | null;
+  totalWeight: number | string | null;
+  weightUnit: string | null;
+  loadingLocation: {
+    name: string;
+    address: string | null;
+    cityName: string;
+  } | null;
+  unloadingLocation: {
+    name: string;
+    address: string | null;
+    cityName: string;
+  } | null;
+  sourceRailhead: { name: string; cityName: string } | null;
+  destinationRailhead: { name: string; cityName: string } | null;
+  delivery: {
+    reportedAt: string | null;
+    unloadingAt: string | null;
+    deliveredAt: string;
+    receiverName: string | null;
+    receiverPhone: string | null;
+    unloadingCharges: number | string | null;
+    remark: string | null;
+    recordedBy: string | null;
+  };
+  acknowledgement: {
+    receivedAt: string;
+    courierName: string | null;
+    courierDocketNo: string | null;
+    courierCharge: number | string | null;
+    detentionDays: number | null;
+    detentionAmount: number | string | null;
+    damageAmount: number | string | null;
+    remark: string | null;
+    recordedBy: string | null;
+    items: {
+      lrGoodsId: string;
+      receivedQty: number | string | null;
+      damagedQty: number | string | null;
+    }[];
+  } | null;
+  goods: {
+    id: string;
+    name: string;
+    description: string | null;
+    quantity: number;
+    unit: string | null;
+  }[];
+  deliveryChallans: {
+    id: string;
+    challanNumber: string;
+    status: string;
+    loadingAt: string;
+    issuedAt: string | null;
+    vehicleNumber: string | null;
+    driverName: string | null;
+    quantity: number;
+  }[];
+};
+
 export type LorryReceipt = LRListItem & {
   loadingLocationId: string | null;
   unloadingLocationId: string | null;
@@ -202,7 +318,7 @@ export type LorryReceipt = LRListItem & {
   createdById: string;
   updatedById: string | null;
   totalWeight: string | number | null;
-unit: string | null;
+  unit: string | null;
   version: number;
   updatedAt: string;
   deletedAt: string | null;
@@ -210,4 +326,5 @@ unit: string | null;
   ewayBill: EwayBill | null;
   delivery?: LRDelivery | null;
   acknowledgement?: LRAcknowledgement | null;
+  deliveryEligibility?: LRDeliveryEligibility;
 };

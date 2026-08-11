@@ -26,7 +26,7 @@ const positiveIntField = (label: string) =>
     .transform((value) => Number(value))
     .refine(
       (value) => Number.isInteger(value) && value > 0,
-      `${label} must be a positive whole number`
+      `${label} must be a positive whole number`,
     );
 
 /* ------------------------------------------------------------------ */
@@ -68,7 +68,7 @@ const tripBaseShape = {
 // LR trips carry one client; DC trips are identified by their rake date.
 const tripTypeRefinement = (
   data: { tripType: "lr" | "dc"; consignorId?: string; rakeDate?: Date },
-  ctx: z.RefinementCtx
+  ctx: z.RefinementCtx,
 ) => {
   if (data.tripType === "lr" && !data.consignorId) {
     ctx.addIssue({
@@ -104,6 +104,29 @@ export const closeTripSchema = z.object({
   arrivalDateTime: optionalDate,
   unloadingCompletedAt: optionalDate,
   closeReason: optionalString,
+});
+
+/** Limited, audited correction of operational fields on a Closed trip. */
+export const correctClosedTripSchema = z.object({
+  // Entered in rupees, stored as paise. Empty/return trips may legitimately be zero.
+  onwardFreight: rupeesToPaise("Onward freight", { allowZero: true }),
+  closingKm: positiveIntField("Closing KM"),
+  endDateTime: z
+    .union([z.string(), z.date()])
+    .transform((value) => new Date(value))
+    .refine(
+      (value) => !Number.isNaN(value.getTime()),
+      "Enter a valid trip closing date and time",
+    ),
+  arrivalDateTime: optionalDate,
+  unloadingCompletedAt: optionalDate,
+  closeReason: optionalString,
+  correctionReason: z
+    .string()
+    .trim()
+    .min(3, "Please give a correction reason (min 3 characters)")
+    .max(500, "Correction reason is too long"),
+  version: z.number().int().positive().optional(),
 });
 
 export const cancelTripSchema = z.object({

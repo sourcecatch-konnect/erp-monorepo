@@ -430,7 +430,7 @@ export default function LRDetail({ id }: { id: string }) {
   // truckload holds several.
   const focusedLrNumber =
     !display.isSingleton &&
-      g.lorryReceipts.some((lr) => lr.lrNumber === requestedIdentifier)
+    g.lorryReceipts.some((lr) => lr.lrNumber === requestedIdentifier)
       ? requestedIdentifier
       : null;
 
@@ -448,13 +448,25 @@ export default function LRDetail({ id }: { id: string }) {
   const finaliseTitle = hasNoLrs
     ? "Add at least one consignment LR before finalising."
     : incompleteLrs
-      .map((lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`)
-      .join(" | ");
+        .map((lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`)
+        .join(" | ");
   const vehicle = g.isMarketVehicle
-    ? (g.marketVehicleNumber ?? "Market vehicle")
+    ? (g.marketVehicle?.vehicleNumber ??
+      g.marketVehicleNumber ??
+      "Market vehicle")
     : (g.primaryTrip?.vehicle?.vehicleNumber ?? "—");
+  const marketAdvanceTotal =
+    Number(g.marketAdvanceAmount ?? 0) +
+    Number(g.marketCommissionAmount ?? 0) +
+    Number(g.marketHamaliAmount ?? 0) +
+    Number(g.marketTdsAmount ?? 0);
+  const marketNetBalance =
+    Number(g.marketFreightAmount ?? 0) - marketAdvanceTotal;
 
   const pendingLrs = g.lorryReceipts.filter((lr) => lr.status === "FINALISED");
+  const eligiblePendingLrs = pendingLrs.filter(
+    (lr) => lr.deliveryEligibility?.eligible !== false,
+  );
   const heldAtHub =
     g.status === "FINALISED" &&
     Boolean(g.hubId) &&
@@ -496,8 +508,8 @@ export default function LRDetail({ id }: { id: string }) {
                 <span aria-hidden>·</span>
                 <span>{display.subtitle}</span>
                 {!display.isSingleton &&
-                  deliveredCount > 0 &&
-                  deliveredCount < display.lrCount ? (
+                deliveredCount > 0 &&
+                deliveredCount < display.lrCount ? (
                   <>
                     <span aria-hidden>·</span>
                     <span>
@@ -553,11 +565,11 @@ export default function LRDetail({ id }: { id: string }) {
             )}
             {g.status === "FINALISED" &&
               canDeliver &&
-              pendingLrs.length > 0 && (
+              eligiblePendingLrs.length > 0 && (
                 <Button size="lg" onClick={() => setBulkDeliverOpen(true)}>
                   {display.isSingleton
                     ? "Deliver LR"
-                    : `Deliver all (${pendingLrs.length})`}
+                    : `Deliver ready (${eligiblePendingLrs.length})`}
                 </Button>
               )}
             {g.status === "FINALISED" && canApprove && canHoldAtHub && (
@@ -671,30 +683,139 @@ export default function LRDetail({ id }: { id: string }) {
         </SummaryCard>
 
         <SummaryCard title="Vehicle & transport" icon={IconTruck}>
-          <Field
-            label="Vehicle"
-            value={
-              <span className="font-mono text-base uppercase">{vehicle}</span>
-            }
-          />
-          <Field label="Transport type" value={g.transportType} />
-          <Field label="Primary trip" value={g.primaryTrip?.tripName} />
-          {g.secondaryTrip && (
-            <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />
+          {g.isMarketVehicle ? (
+            <div className="space-y-3">
+              <Field
+                label="Vehicle"
+                value={
+                  <span className="font-mono text-base uppercase">
+                    {vehicle}
+                  </span>
+                }
+              />
+              <div className="grid grid-cols-2 gap-3 border-t pt-3">
+                <Field label="Transporter" value={g.marketTransport?.name} />
+                <Field label="Driver" value={g.marketDriverName} />
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">
+                  Market Vehicle
+                </span>
+                <span className="rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground">
+                  {g.transportType}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Field
+                label="Vehicle"
+                value={
+                  <span className="font-mono text-base uppercase">
+                    {vehicle}
+                  </span>
+                }
+              />
+              <Field label="Transport type" value={g.transportType} />
+              <Field label="Transport by" value="Own Vehicle" />
+              <Field label="Primary trip" value={g.primaryTrip?.tripName} />
+              <Field label="Driver" value={g.primaryTrip?.driver?.name} />
+              {g.secondaryTrip && (
+                <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />
+              )}
+            </>
           )}
+          {g.transportType === "RoadAndRail" ? (
+            <div className="col-span-full grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-3">
+              <Field
+                label="Source railway branch"
+                value={g.railheadBranch?.name}
+              />
+              <Field
+                label="Source railhead"
+                value={g.sourceRailheadArea?.name}
+              />
+              <Field
+                label="Destination railhead"
+                value={g.destinationRailheadArea?.name}
+              />
+            </div>
+          ) : null}
         </SummaryCard>
 
         <SummaryCard title="Freight & handling" icon={IconCoin}>
-          <Field
-            label="Base freight"
-            value={
-              g.baseFreightAmount != null
-                ? formatPaise(g.baseFreightAmount)
-                : "—"
-            }
-          />
-          <Field label="Seal number" value={g.sealNumber} />
-          <Field label="Priority" value={g.priority} />
+          {g.isMarketVehicle ? (
+            <div className="space-y-4">
+              {/* Freight breakdown */}
+              <div className="space-y-2.5 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Freight amount</span>
+                  <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums">
+                    {formatPaise(g.marketFreightAmount ?? 0)}
+                  </span>
+                </div>
+
+                {[
+                  ["Advance", g.marketAdvanceAmount],
+                  ["Commission", g.marketCommissionAmount],
+                  ["Hamali", g.marketHamaliAmount],
+                  ["TDS", g.marketTdsAmount],
+                ].map(([label, amount]) => (
+                  <div
+                    key={String(label)}
+                    className="flex items-center justify-between gap-4"
+                  >
+                    <span className="text-muted-foreground">{label}</span>
+
+                    <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">
+                      {formatPaise(amount ?? 0)}
+                    </span>
+                  </div>
+                ))}
+
+                <div className="flex items-center justify-between gap-4 border-t pt-2.5">
+                  <span className="font-medium text-muted-foreground">
+                    Total deductions
+                  </span>
+
+                  <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums">
+                    {formatPaise(marketAdvanceTotal)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 border-t pt-3">
+                  <span className="font-semibold">Balance payable</span>
+
+                  <span className="shrink-0 whitespace-nowrap text-base font-bold tabular-nums text-emerald-700">
+                    {formatPaise(marketNetBalance)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Other details */}
+              <div className="grid grid-cols-2 gap-x-6 border-t pt-3">
+                <Field label="Seal number" value={g.sealNumber} />
+                <Field label="Priority" value={g.priority} />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4 text-sm">
+                <span className="text-muted-foreground">Base freight</span>
+
+                <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums">
+                  {g.baseFreightAmount != null
+                    ? formatPaise(g.baseFreightAmount)
+                    : "—"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-6 border-t pt-3">
+                <Field label="Seal number" value={g.sealNumber} />
+                <Field label="Priority" value={g.priority} />
+              </div>
+            </div>
+          )}
         </SummaryCard>
       </div>
 
@@ -725,7 +846,7 @@ export default function LRDetail({ id }: { id: string }) {
             className={cn(
               "rounded-lg border border-border bg-card p-5 transition-colors",
               focusedLrNumber === lr.lrNumber &&
-              "border-primary ring-2 ring-primary/15",
+                "border-primary ring-2 ring-primary/15",
             )}
           >
             <div className="mb-5 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -824,16 +945,16 @@ export default function LRDetail({ id }: { id: string }) {
               lr.goods.length === 0 ||
               lr.totalWeight == null ||
               !lr.unit) && (
-                <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-sm border border-warning/30 bg-warning/10 px-3 py-2 text-sm font-medium text-warning-foreground">
-                  <IconAlertTriangle size={16} />
-                  Complete before finalise:
-                  {!lr.loadingLocationId ? " loading point" : ""}
-                  {!lr.unloadingLocationId ? " unloading point" : ""}
-                  {lr.goods.length === 0 ? " goods" : ""}
-                  {lr.totalWeight == null ? " total weight" : ""}
-                  {!lr.unit ? " unit" : ""}
-                </div>
-              )}
+              <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-sm border border-warning/30 bg-warning/10 px-3 py-2 text-sm font-medium text-warning-foreground">
+                <IconAlertTriangle size={16} />
+                Complete before finalise:
+                {!lr.loadingLocationId ? " loading point" : ""}
+                {!lr.unloadingLocationId ? " unloading point" : ""}
+                {lr.goods.length === 0 ? " goods" : ""}
+                {lr.totalWeight == null ? " total weight" : ""}
+                {!lr.unit ? " unit" : ""}
+              </div>
+            )}
 
             <EwayBillSection
               lrId={lr.id}
@@ -922,7 +1043,7 @@ export default function LRDetail({ id }: { id: string }) {
         onOpenChange={setBulkDeliverOpen}
         groupNumber={g.groupNumber}
         isMarketVehicle={g.isMarketVehicle}
-        lrs={pendingLrs}
+        lrs={eligiblePendingLrs}
         isPending={deliverAll.isPending}
         onConfirm={(values) => deliverAll.mutate(values)}
       />
@@ -999,24 +1120,24 @@ export default function LRDetail({ id }: { id: string }) {
         initial={
           editLine
             ? {
-              loadingLocationId: editLine.loadingLocationId ?? undefined,
-              unloadingLocationId: editLine.unloadingLocationId ?? undefined,
-              totalWeight:
-                editLine.totalWeight != null
-                  ? String(editLine.totalWeight)
-                  : "",
-              totalWeightUnit: editLine.unit ?? "MT",
-              goods: editLine.goods.map((goods) => ({
-                name: goods.name,
-                quantity:
-                  goods.quantity != null ? String(goods.quantity) : "",
-              })),
-              invoiceNumber: editLine.invoiceNumber ?? "",
-              invoiceAmount:
-                editLine.invoiceAmount != null
-                  ? String(paiseToRupees(editLine.invoiceAmount))
-                  : "",
-            }
+                loadingLocationId: editLine.loadingLocationId ?? undefined,
+                unloadingLocationId: editLine.unloadingLocationId ?? undefined,
+                totalWeight:
+                  editLine.totalWeight != null
+                    ? String(editLine.totalWeight)
+                    : "",
+                totalWeightUnit: editLine.unit ?? "MT",
+                goods: editLine.goods.map((goods) => ({
+                  name: goods.name,
+                  quantity:
+                    goods.quantity != null ? String(goods.quantity) : "",
+                })),
+                invoiceNumber: editLine.invoiceNumber ?? "",
+                invoiceAmount:
+                  editLine.invoiceAmount != null
+                    ? String(paiseToRupees(editLine.invoiceAmount))
+                    : "",
+              }
             : undefined
         }
         isPending={updateLine.isPending}

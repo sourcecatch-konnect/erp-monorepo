@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { FieldValues, Path, PathValue, useFormContext } from "react-hook-form";
 
 import { Combobox } from "@skerp/ui/components/combobox";
@@ -83,28 +83,54 @@ export default function CitySelectField<T extends FieldValues>({
     enabled: !disabled,
   });
 
+  const listedCities = React.useMemo(
+    () => cities.data?.pages.flatMap((page) => page.data) ?? [],
+    [cities.data],
+  );
+
+  const initialCityMatchesValue = Boolean(
+    initialCity &&
+      (valueMode === "name"
+        ? initialCity.name === value
+        : initialCity.id === value),
+  );
+
+  const listContainsValue = listedCities.some((city) =>
+    valueMode === "name" ? city.name === value : city.id === value,
+  );
+
+  // A paginated city list does not guarantee that the saved city is on the
+  // first page. Resolve the current id directly so edit forms work on their
+  // first open even when the parent row omitted its city relation.
+  const selectedCityQuery = useQuery({
+    queryKey: cityKeys.detail(value ?? ""),
+    queryFn: () => cityApi.detail(value!),
+    enabled:
+      valueMode === "id" &&
+      Boolean(value) &&
+      !initialCityMatchesValue &&
+      !listContainsValue,
+  });
+
   const cityOptions = React.useMemo(() => {
-    const list = cities.data?.pages.flatMap((page) => page.data) ?? [];
+    const selectedFallback = initialCityMatchesValue
+      ? initialCity
+      : selectedCityQuery.data;
 
-    if (!initialCity) return list;
-
-    const hasInitialCity = list.some((city) =>
-      valueMode === "name"
-        ? city.name.toLowerCase() === initialCity.name.toLowerCase()
-        : city.id === initialCity.id,
-    );
-
-    const isCurrentValue =
-      valueMode === "name"
-        ? value === initialCity.name
-        : value === initialCity.id;
-
-    if (isCurrentValue && !hasInitialCity) {
-      return [initialCity, ...list];
+    if (
+      selectedFallback &&
+      !listedCities.some((city) => city.id === selectedFallback.id)
+    ) {
+      return [selectedFallback, ...listedCities];
     }
 
-    return list;
-  }, [cities.data, initialCity, value, valueMode]);
+    return listedCities;
+  }, [
+    initialCity,
+    initialCityMatchesValue,
+    listedCities,
+    selectedCityQuery.data,
+  ]);
 
   const options = cityOptions.map((city) => ({
     label: city.name,
@@ -136,7 +162,11 @@ export default function CitySelectField<T extends FieldValues>({
         options={options}
         placeholder={placeholder}
         searchPlaceholder={searchPlaceholder}
-        emptyText={cities.isLoading ? "Loading cities..." : emptyText}
+        emptyText={
+          cities.isLoading || selectedCityQuery.isLoading
+            ? "Loading cities..."
+            : emptyText
+        }
         disabled={disabled}
         invalid={!!errorMessage}
         searchValue={search}

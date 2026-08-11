@@ -43,7 +43,12 @@ import {
 } from "@skerp/ui/components/table";
 
 import { formatPaise } from "@/lib/money";
-import { GRNStatus, GRNStatusBadge } from "./grn-ui";
+import {
+  GRNStatus,
+  GRNStatusBadge,
+  GRNVPLoadingStatusBadge,
+  type GRNVPLoadingStatus,
+} from "./grn-ui";
 
 const DASH = "—";
 
@@ -60,6 +65,13 @@ export type GRNListItem = {
   netAmount?: MoneyValue | null;
   netAmountPaise?: MoneyValue | null;
   createdAt?: string | Date | null;
+  vpLoadingSummary?: {
+    status: GRNVPLoadingStatus;
+    loadedQty: number;
+    remainingQty: number;
+    progressPercent: number;
+    activeLoadingCount: number;
+  };
   lorryReceipt?: {
     lrNumber?: string | null;
   } | null;
@@ -98,8 +110,6 @@ const formatMoney = (value: MoneyValue | null | undefined) => {
   return formatPaise(value);
 };
 
-
-
 export default function GRNTable({
   data,
   total,
@@ -116,34 +126,50 @@ export default function GRNTable({
 }: Props) {
   const columns = React.useMemo<ColumnDef<GRNListItem>[]>(
     () => [
-     {
-  header: "GRN No",
-  cell: ({ row }) => {
-    const identifier = row.original.grnNumber || row.original.id;
+      {
+        header: "GRN No",
+        cell: ({ row }) => {
+          const identifier = row.original.grnNumber || row.original.id;
 
-    return (
-      <Link
-        href={`/vp-management/grn/${encodeURIComponent(identifier)}`}
-        className="font-medium text-primary hover:underline"
-      >
-        {row.original.grnNumber || DASH}
-      </Link>
-    );
-  },
-},
+          return (
+            <Link
+              href={`/vp-management/grn/${encodeURIComponent(identifier)}`}
+              className="font-medium text-primary hover:underline"
+            >
+              {row.original.grnNumber || DASH}
+            </Link>
+          );
+        },
+      },
       {
         header: "LR No",
         cell: ({ row }) => row.original.lorryReceipt?.lrNumber || DASH,
       },
-     {
-  header: "Status",
-  cell: ({ row }) =>
-    row.original.status ? (
-      <GRNStatusBadge status={row.original.status} />
-    ) : (
-      DASH
-    ),
-},
+      {
+        header: "Status",
+        cell: ({ row }) =>
+          row.original.status ? (
+            <GRNStatusBadge status={row.original.status} />
+          ) : (
+            DASH
+          ),
+      },
+      {
+        header: "VP Loading",
+        cell: ({ row }) => {
+          const summary = row.original.vpLoadingSummary;
+          if (!summary) return DASH;
+
+          return (
+            <div className="space-y-1">
+              <GRNVPLoadingStatusBadge status={summary.status} />
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {summary.loadedQty} / {row.original.receivedQty ?? 0} loaded
+              </p>
+            </div>
+          );
+        },
+      },
 
       {
         header: "Net Amount",
@@ -154,7 +180,6 @@ export default function GRNTable({
         header: "Created",
         cell: ({ row }) => formatDate(row.original.createdAt),
       },
-
     ],
     [],
   );
@@ -180,41 +205,41 @@ export default function GRNTable({
 
       <div className="w-full overflow-x-auto rounded-lg border bg-card">
         <Table className="w-full">
-        <TableHeader>
-  {table.getHeaderGroups().map((headerGroup) => (
-    <TableRow key={headerGroup.id} className="bg-muted/40">
-      {headerGroup.headers.map((header) => (
-        <TableHead
-          key={header.id}
-          className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
-        >
-          {flexRender(
-            header.column.columnDef.header,
-            header.getContext(),
-          )}
-        </TableHead>
-      ))}
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id} className="bg-muted/40">
+                {headerGroup.headers.map((header) => (
+                  <TableHead
+                    key={header.id}
+                    className="h-10 whitespace-nowrap text-xs font-semibold uppercase text-muted-foreground"
+                  >
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )}
+                  </TableHead>
+                ))}
 
-      <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
-        Actions
-      </TableHead>
-    </TableRow>
-  ))}
-</TableHeader>
+                <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
+                  Actions
+                </TableHead>
+              </TableRow>
+            ))}
+          </TableHeader>
 
           <TableBody>
             {isLoading ? (
               Array.from({ length: 8 }).map((_, rowIndex) => (
                 <TableRow key={rowIndex}>
                   {columns.map((_, columnIndex) => (
-  <TableCell key={columnIndex} className="h-12">
-    <Skeleton className="h-4 w-24" />
-  </TableCell>
-))}
+                    <TableCell key={columnIndex} className="h-12">
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                  ))}
 
-<TableCell className="w-16">
-  <Skeleton className="ml-auto size-7 rounded-md" />
-</TableCell>
+                  <TableCell className="w-16">
+                    <Skeleton className="ml-auto size-7 rounded-md" />
+                  </TableCell>
                 </TableRow>
               ))
             ) : isError ? (
@@ -242,77 +267,79 @@ export default function GRNTable({
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => {
-  const grn = row.original;
+                const grn = row.original;
+                const identifier = row.original.grnNumber || row.original.id;
+                const viewHref = `/vp-management/grn/${encodeURIComponent(identifier)}`;
 
+                const editHref = `/vp-management/grn/${grn.id}/edit`;
 
-const viewHref = `/vp-management/grn/${encodeURIComponent(grn.id)}`;
-const editHref = `/vp-management/grn/${grn.id}/edit`;
+                const editable =
+                  grn.status === "DRAFT" || grn.status === "SUBMITTED";
+                const cancellable = grn.status !== "CANCELLED";
 
-  const editable = grn.status === "DRAFT" || grn.status === "SUBMITTED";
-  const cancellable = grn.status !== "CANCELLED";
+                return (
+                  <TableRow key={row.id} className="hover:bg-muted/30">
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell
+                        key={cell.id}
+                        className="h-12 whitespace-nowrap text-sm"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
+                    ))}
 
-  return (
-    <TableRow key={row.id} className="hover:bg-muted/30">
-      {row.getVisibleCells().map((cell) => (
-        <TableCell
-          key={cell.id}
-          className="h-12 whitespace-nowrap text-sm"
-        >
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </TableCell>
-      ))}
+                    <TableCell className="w-16 text-right">
+                      <div className="flex justify-end gap-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label="GRN actions"
+                            >
+                              <IconDotsVertical size={16} />
+                            </Button>
+                          </DropdownMenuTrigger>
 
-      <TableCell className="w-16 text-right">
-        <div className="flex justify-end gap-1">
-      
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={viewHref}>
+                                <IconListDetails size={16} className="mr-2" />
+                                View details
+                              </Link>
+                            </DropdownMenuItem>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label="GRN actions"
-              >
-                <IconDotsVertical size={16} />
-              </Button>
-            </DropdownMenuTrigger>
+                            {canUpdate && editable ? (
+                              <DropdownMenuItem asChild>
+                                <Link href={editHref}>
+                                  <IconEdit size={16} className="mr-2" />
+                                  Edit
+                                </Link>
+                              </DropdownMenuItem>
+                            ) : null}
 
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={viewHref}>
-                  <IconListDetails size={16} className="mr-2" />
-                  View details
-                </Link>
-              </DropdownMenuItem>
-
-              {canUpdate && editable ? (
-                <DropdownMenuItem asChild>
-                  <Link href={editHref}>
-                    <IconEdit size={16} className="mr-2" />
-                    Edit
-                  </Link>
-                </DropdownMenuItem>
-              ) : null}
-
-              {canCancel && onCancel && cancellable ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-red-600"
-                    onClick={() => onCancel(grn)}
-                  >
-                    <IconBan size={16} className="mr-2" />
-                    Cancel
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </TableCell>
-    </TableRow>
-  );
-})
+                            {canCancel && onCancel && cancellable ? (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={() => onCancel(grn)}
+                                >
+                                  <IconBan size={16} className="mr-2" />
+                                  Cancel
+                                </DropdownMenuItem>
+                              </>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

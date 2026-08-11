@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Prisma } from "../../../generated/prisma/index.js";
 import {
   createVPScheduleSchema,
+  vpScheduleFreightPreviewSchema,
   updateVPScheduleSchema,
   confirmVPScheduleSchema,
   cancelVPScheduleSchema,
@@ -10,7 +11,7 @@ import {
 import { PERMS } from "@skerp/types";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
-import { can } from "../../auth/can.middleware.js";
+import { can, canAny } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
@@ -27,6 +28,7 @@ import {
   assertVPScheduleReferences,
   calculateVPScheduleTotals,
   generateVPScheduleNumber,
+  resolveVPScheduleFreightMatrices,
   vpScheduleInclude,
   vpScheduleListSelect,
 } from "./vp-schedule.service.js";
@@ -75,142 +77,52 @@ const buildWagonCountRows = async (
     }[];
   },
 ) => {
-  const sourceArea = await tx.area.findUnique({
-    where: { id: data.sourceAreaId },
-    select: {
-      id: true,
-      cityId: true,
-    },
-  });
+  const preview = await resolveVPScheduleFreightMatrices(tx, data);
 
-  const destinationArea = await tx.area.findUnique({
-    where: { id: data.destinationAreaId },
-    select: {
-      id: true,
-      cityId: true,
-    },
-  });
-
-  if (!sourceArea) {
-    throw new BadRequestError("Source area not found");
-  }
-
-  if (!destinationArea) {
-    throw new BadRequestError("Destination area not found");
-  }
-
-  const wagonIds = data.wagonCounts.map((item) => item.wagonId);
-
-  const wagons = await tx.wagon.findMany({
-    where: {
-      id: {
-        in: wagonIds,
-      },
-    },
-    select: {
-      id: true,
-      totalCft: true,
-      capacityMt: true,
-    },
-  });
-
-  const freightMatrices = await tx.railwayFreightMatrix.findMany({
-    where: {
-      wagonId: {
-        in: wagonIds,
-      },
-      sourceCityId: sourceArea.cityId,
-      destinationCityId: destinationArea.cityId,
-      OR: [
-        {
-          sourceAreaId: sourceArea.id,
-          destinationAreaId: destinationArea.id,
-        },
-        {
-          sourceAreaId: sourceArea.id,
-          destinationAreaId: null,
-        },
-        {
-          sourceAreaId: null,
-          destinationAreaId: destinationArea.id,
-        },
-        {
-          sourceAreaId: null,
-          destinationAreaId: null,
-        },
-      ],
-    },
-    select: {
-      id: true,
-      wagonId: true,
-      sourceAreaId: true,
-      destinationAreaId: true,
-      freightAmount: true,
-    },
-  });
-
-  const wagonMap = new Map(wagons.map((wagon) => [wagon.id, wagon]));
-
-  const findBestFreightMatrix = (wagonId: string) => {
-    const matches = freightMatrices.filter(
-      (matrix) => matrix.wagonId === wagonId,
-    );
-
-    return (
-      matches.find(
-        (matrix) =>
-          matrix.sourceAreaId === sourceArea.id &&
-          matrix.destinationAreaId === destinationArea.id,
-      ) ??
-      matches.find(
-        (matrix) =>
-          matrix.sourceAreaId === sourceArea.id &&
-          matrix.destinationAreaId === null,
-      ) ??
-      matches.find(
-        (matrix) =>
-          matrix.sourceAreaId === null &&
-          matrix.destinationAreaId === destinationArea.id,
-      ) ??
-      matches.find(
-        (matrix) =>
-          matrix.sourceAreaId === null && matrix.destinationAreaId === null,
-      ) ??
-      null
-    );
-  };
-
-  return data.wagonCounts.map((item) => {
-    const wagon = wagonMap.get(item.wagonId);
-
-    if (!wagon) {
-      throw new BadRequestError("Selected wagon not found");
+  return preview.wagons.map((wagon) => {
+    if (
+      !wagon.freightMatrixId ||
+      wagon.freightAmount === null ||
+      wagon.totalFreight === null
+    ) {
+      throw new BadRequestError(
+        `Railway freight not found for selected wagon: ${wagon.wagonName}`,
+        "RAILWAY_FREIGHT_MISSING",
+      );
     }
-
-    const freightMatrix = findBestFreightMatrix(item.wagonId);
-
-    if (!freightMatrix) {
-      throw new BadRequestError("Railway freight not found for selected wagon");
-    }
-
-    const capacityCft = Number(wagon.totalCft ?? 0);
-    const capacityMt = Number(wagon.capacityMt ?? 0);
 
     return {
-      wagonId: item.wagonId,
-      count: item.count,
-
-      capacityCft,
-      capacityMt,
-      totalCft: capacityCft * item.count,
-      totalMt: capacityMt * item.count,
-
-      freightMatrixId: freightMatrix.id,
-      freightAmount: freightMatrix.freightAmount,
-      totalFreight: freightMatrix.freightAmount * BigInt(item.count),
+      wagonId: wagon.wagonId,
+      count: wagon.count,
+      capacityCft: wagon.capacityCft,
+      capacityMt: wagon.capacityMt,
+      totalCft: wagon.capacityCft * wagon.count,
+      totalMt: wagon.capacityMt * wagon.count,
+      freightMatrixId: wagon.freightMatrixId,
+      freightAmount: wagon.freightAmount,
+      totalFreight: wagon.totalFreight,
     };
   });
 };
+
+router.post(
+  "/freight-preview",
+  canAny(PERMS.VP_SCHEDULE.CREATE, PERMS.VP_SCHEDULE.UPDATE),
+  async (req, res) => {
+    const parsed = vpScheduleFreightPreviewSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+
+    const preview = await resolveVPScheduleFreightMatrices(
+      readClient,
+      parsed.data,
+    );
+
+    return sendOk(res, preview);
+  },
+);
 /* ------------------------------------------------------------------ */
 /* List                                                               */
 /* ------------------------------------------------------------------ */
@@ -527,13 +439,20 @@ router.patch("/:id", can(PERMS.VP_SCHEDULE.UPDATE), async (req, res) => {
     wagonCounts: data.wagonCounts ?? existing.wagonCounts,
   });
 
-  const wagonUpdate = data.wagonCounts
+  const effectiveWagonCounts = data.wagonCounts ?? existing.wagonCounts;
+  const shouldRefreshFreight = Boolean(
+    data.wagonCounts || data.sourceAreaId || data.destinationAreaId,
+  );
+  const wagonUpdate = shouldRefreshFreight
     ? {
-        totals: await calculateVPScheduleTotals(readClient, data.wagonCounts),
+        totals: await calculateVPScheduleTotals(
+          readClient,
+          effectiveWagonCounts,
+        ),
         rows: await buildWagonCountRows(readClient, {
           sourceAreaId: effectiveRoute.sourceAreaId,
           destinationAreaId: effectiveRoute.destinationAreaId,
-          wagonCounts: data.wagonCounts,
+          wagonCounts: effectiveWagonCounts,
         }),
       }
     : null;

@@ -141,11 +141,21 @@ const vehicleShape = {
   marketVehicleNumber: optionalId,
   marketDriverName: optionalId,
 
-  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
-  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
-  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
-  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
-  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
+  marketFreightAmount: optionalRupeesToPaise("Market freight amount", {
+    allowZero: true,
+  }),
+  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount", {
+    allowZero: true,
+  }),
+  marketCommissionAmount: optionalRupeesToPaise("Market commission amount", {
+    allowZero: true,
+  }),
+  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount", {
+    allowZero: true,
+  }),
+  marketTdsAmount: optionalRupeesToPaise("Market TDS amount", {
+    allowZero: true,
+  }),
 };
 
 export const createGroupFromOrderSchema = z.object({
@@ -157,6 +167,8 @@ export const createGroupFromOrderSchema = z.object({
   tripLegType: lrTripLegTypeSchema.default("DIRECT"),
   // Railhead branch (order + RoadAndRail only). Unrelated to the Jalgaon hub.
   railheadBranchId: optionalId,
+  sourceRailheadAreaId: optionalId,
+  destinationRailheadAreaId: optionalId,
   priority: lrPrioritySchema.default("Normal"),
   ...vehicleShape,
 });
@@ -201,6 +213,28 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["railheadBranchId"],
     });
   }
+  if (
+    d.source === "FROM_ORDER" &&
+    d.transportType === "RoadAndRail" &&
+    !d.sourceRailheadAreaId
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select the railway source railhead",
+      path: ["sourceRailheadAreaId"],
+    });
+  }
+  if (
+    d.source === "FROM_ORDER" &&
+    d.transportType === "RoadAndRail" &&
+    !d.destinationRailheadAreaId
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select the railway destination railhead",
+      path: ["destinationRailheadAreaId"],
+    });
+  }
   if (d.isMarketVehicle && !d.marketTransportId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -209,11 +243,11 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
     });
   }
 
-  if (d.isMarketVehicle && !d.marketVehicleId) {
+  if (d.isMarketVehicle && !d.marketVehicleNumber) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Select a market vehicle",
-      path: ["marketVehicleId"],
+      message: "Select or enter a vehicle number",
+      path: ["marketVehicleNumber"],
     });
   }
   // Own-vehicle groups must carry a trip — the trip is how the vehicle/driver
@@ -260,26 +294,56 @@ export type CreateLRGroupInput = z.infer<typeof createLRGroupSchema>;
 /* Update (DRAFT group only — group-level fields)                      */
 /* ------------------------------------------------------------------ */
 
-export const updateLRGroupSchema = z.object({
-  consigneeId: optionalId,
-  transportType: lrTransportTypeSchema.optional(),
-  railheadBranchId: optionalId,
-  priority: lrPrioritySchema.optional(),
+export const updateLRGroupSchema = z
+  .object({
+    consigneeId: optionalId,
+    transportType: lrTransportTypeSchema.optional(),
+    railheadBranchId: optionalId,
+    sourceRailheadAreaId: optionalId,
+    destinationRailheadAreaId: optionalId,
+    priority: lrPrioritySchema.optional(),
 
-  isMarketVehicle: z.boolean().optional(),
-  primaryTripId: optionalId,
-  marketTransportId: optionalId,
-  marketVehicleId: optionalId,
-  marketVehicleNumber: optionalId,
-  marketDriverName: optionalId,
+    isMarketVehicle: z.boolean().optional(),
+    primaryTripId: optionalId,
+    marketTransportId: optionalId,
+    marketVehicleId: optionalId,
+    marketVehicleNumber: optionalId,
+    marketDriverName: optionalId,
 
-  // Entered in rupees, stored as paise
-  marketFreightAmount: optionalRupeesToPaise("Market freight amount"),
-  marketAdvanceAmount: optionalRupeesToPaise("Market advance amount"),
-  marketCommissionAmount: optionalRupeesToPaise("Market commission amount"),
-  marketHamaliAmount: optionalRupeesToPaise("Market hamali amount"),
-  marketTdsAmount: optionalRupeesToPaise("Market TDS amount"),
-});
+    // Entered in rupees, stored as paise
+    marketFreightAmount: optionalRupeesToPaise("Market freight amount", {
+      allowZero: true,
+    }),
+    marketAdvanceAmount: optionalRupeesToPaise("Market advance amount", {
+      allowZero: true,
+    }),
+    marketCommissionAmount: optionalRupeesToPaise("Market commission amount", {
+      allowZero: true,
+    }),
+    marketHamaliAmount: optionalRupeesToPaise("Market hamali amount", {
+      allowZero: true,
+    }),
+    marketTdsAmount: optionalRupeesToPaise("Market TDS amount", {
+      allowZero: true,
+    }),
+  })
+  .superRefine((data, ctx) => {
+    if (data.isMarketVehicle && !data.marketTransportId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Transporter is required for market vehicle",
+        path: ["marketTransportId"],
+      });
+    }
+
+    if (data.isMarketVehicle && !data.marketVehicleNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Select or enter a vehicle number",
+        path: ["marketVehicleNumber"],
+      });
+    }
+  });
 
 export type UpdateLRGroupInput = z.infer<typeof updateLRGroupSchema>;
 

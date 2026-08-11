@@ -5,7 +5,24 @@ const optionalString = z
   .trim()
   .optional()
   .transform((value) => (value ? value : undefined));
-
+const requiredIntRangeField = (
+  label: string,
+  minimum: number,
+  maximum: number,
+) =>
+  z
+    .union([z.string(), z.number()])
+    .transform((value) => {
+      if (value === "") return Number.NaN;
+      return Number(value);
+    })
+    .refine(
+      (value) =>
+        Number.isInteger(value) &&
+        value >= minimum &&
+        value <= maximum,
+      `${label} must be between ${minimum} and ${maximum}`,
+    );
 const optionalDate = z
   .union([z.string(), z.date()])
   .optional()
@@ -84,25 +101,33 @@ export const grnGoodsSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.receivedQty + data.shortageQty > data.totalQty) {
-  ctx.addIssue({
-    code: z.ZodIssueCode.custom,
-    message: "Received and shortage quantity cannot exceed total quantity",
-    path: ["receivedQty"],
-  });
-}
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Received and shortage quantity cannot exceed total quantity",
+        path: ["receivedQty"],
+      });
+    }
 
-if (data.damageQty > data.receivedQty) {
-  ctx.addIssue({
-    code: z.ZodIssueCode.custom,
-    message: "Damage quantity cannot be greater than received quantity",
-    path: ["damageQty"],
-  });
-}
+    if (data.damageQty > data.receivedQty) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Damage quantity cannot be greater than received quantity",
+        path: ["damageQty"],
+      });
+    }
   });
 
 const grnBaseShape = {
   lorryReceiptId: z.string().trim().min(1, "LR is required"),
-  gateNo: optionalString,
+  gateNo: z.enum(["1", "2", "3", "4", "5"], {
+    message: "Please select gate number",
+  }),
+
+  labourCount: requiredIntRangeField(
+    "Number of labour",
+    1,
+    10,
+  ),
 
   inDateTime: optionalDate,
   outDateTime: optionalDate,

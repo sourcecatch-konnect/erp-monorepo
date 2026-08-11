@@ -64,6 +64,11 @@ export const tripListBaseSelect = {
   openingKm: true,
   closingKm: true,
   startDateTime: true,
+  endDateTime: true,
+  arrivalDateTime: true,
+  unloadingCompletedAt: true,
+  closeReason: true,
+  version: true,
   createdAt: true,
   journeyId: true,
   sequenceNo: true,
@@ -122,7 +127,13 @@ export const summariseTripCargo = (
   primaryGroups: CargoPrimaryGroup[],
   secondaryGroups: CargoGroup[],
 ) => {
-  const summary = { total: 0, draft: 0, undelivered: 0, atHub: 0, delivered: 0 };
+  const summary = {
+    total: 0,
+    draft: 0,
+    undelivered: 0,
+    atHub: 0,
+    delivered: 0,
+  };
   let gate = 0;
 
   const tally = (

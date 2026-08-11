@@ -3,6 +3,7 @@ import {
   createTripSchema,
   updateTripSchema,
   closeTripSchema,
+  correctClosedTripSchema,
   cancelTripSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
@@ -996,6 +997,205 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
   });
   return sendOk(res, trip);
 });
+
+/* ------------------------------------------------------------------ */
+/* Correct closure details (Closed only, audited)                     */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/:id/correct-closed",
+  can(PERMS.TRIP.CORRECT_CLOSED),
+  async (req, res) => {
+    const id = getParamId(req);
+    const me = actorId(req);
+    const parsed = correctClosedTripSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const data = parsed.data;
+
+    const existing = await db.vehicleTrip.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        tripNumber: true,
+        status: true,
+        onwardFreight: true,
+        openingKm: true,
+        closingKm: true,
+        startDateTime: true,
+        endDateTime: true,
+        arrivalDateTime: true,
+        unloadingCompletedAt: true,
+        closeReason: true,
+        journeyId: true,
+        sequenceNo: true,
+        isReturnLeg: true,
+        vehicleId: true,
+        version: true,
+        journey: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+    });
+    if (!existing) throw new NotFoundError("Trip not found");
+    if (existing.status !== "Closed") {
+      throw new BadRequestError("Only a Closed trip can be corrected");
+    }
+    if (data.version !== undefined && data.version !== existing.version) {
+      throw new ConflictError(
+        "This trip changed in another tab — reload and retry",
+      );
+    }
+    if (
+      existing.journey &&
+      !["ACTIVE", "RETURNED"].includes(existing.journey.status)
+    ) {
+      throw new BadRequestError(
+        "Trip corrections are locked after settlement is marked ready — reopen settlement review first",
+      );
+    }
+    if (data.closingKm < existing.openingKm) {
+      throw new BadRequestError(
+        `Closing KM (${data.closingKm}) cannot be less than opening KM (${existing.openingKm})`,
+      );
+    }
+    if (existing.startDateTime && data.endDateTime <= existing.startDateTime) {
+      throw new BadRequestError(
+        "Trip closing time must be after its start time",
+      );
+    }
+
+    const arrivalDateTime = data.arrivalDateTime ?? data.endDateTime;
+    if (existing.startDateTime && arrivalDateTime < existing.startDateTime) {
+      throw new BadRequestError("Arrival time cannot be before the trip start");
+    }
+    if (arrivalDateTime > data.endDateTime) {
+      throw new BadRequestError(
+        "Arrival time cannot be after the trip closing time",
+      );
+    }
+    if (
+      data.unloadingCompletedAt &&
+      data.unloadingCompletedAt < arrivalDateTime
+    ) {
+      throw new BadRequestError(
+        "Unloading completion cannot be before the arrival time",
+      );
+    }
+
+    const nextLeg =
+      existing.journeyId && existing.sequenceNo !== null
+        ? await db.vehicleTrip.findFirst({
+            where: {
+              journeyId: existing.journeyId,
+              sequenceNo: { gt: existing.sequenceNo },
+              status: { not: "Cancelled" },
+              deletedAt: null,
+            },
+            orderBy: { sequenceNo: "asc" },
+            select: {
+              tripNumber: true,
+              openingKm: true,
+              startDateTime: true,
+            },
+          })
+        : null;
+
+    if (nextLeg && data.closingKm !== nextLeg.openingKm) {
+      throw new BadRequestError(
+        `Closing KM must remain ${nextLeg.openingKm} because the next leg (${nextLeg.tripNumber}) starts at that reading`,
+      );
+    }
+    if (nextLeg?.startDateTime && data.endDateTime > nextLeg.startDateTime) {
+      throw new BadRequestError(
+        `Trip closing time cannot be after the next leg (${nextLeg.tripNumber}) starts`,
+      );
+    }
+
+    const snapshot = (values: {
+      onwardFreight: bigint | number;
+      closingKm: number | null;
+      endDateTime: Date | null;
+      arrivalDateTime: Date | null;
+      unloadingCompletedAt: Date | null;
+      closeReason: string | null;
+    }) => ({
+      onwardFreight: Number(values.onwardFreight),
+      closingKm: values.closingKm,
+      endDateTime: values.endDateTime?.toISOString() ?? null,
+      arrivalDateTime: values.arrivalDateTime?.toISOString() ?? null,
+      unloadingCompletedAt: values.unloadingCompletedAt?.toISOString() ?? null,
+      closeReason: values.closeReason,
+    });
+
+    const before = snapshot(existing);
+    const afterValues = {
+      onwardFreight: data.onwardFreight,
+      closingKm: data.closingKm,
+      endDateTime: data.endDateTime,
+      arrivalDateTime,
+      unloadingCompletedAt: data.unloadingCompletedAt ?? null,
+      closeReason: data.closeReason ?? null,
+    };
+    const after = snapshot(afterValues);
+    const isCurrentLeg = !nextLeg;
+
+    await db.$transaction(async (tx) => {
+      await tx.vehicleTrip.update({
+        where: { id },
+        data: {
+          ...afterValues,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        select: { id: true },
+      });
+
+      if (existing.journey && isCurrentLeg) {
+        await tx.vehicle.update({
+          where: { id: existing.vehicleId },
+          data: { currentKM: data.closingKm },
+        });
+        await tx.vehicleJourney.update({
+          where: { id: existing.journey.id },
+          data: {
+            ...(existing.isReturnLeg
+              ? {
+                  closingKm: data.closingKm,
+                  closedAt: data.endDateTime,
+                }
+              : {}),
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorId: me,
+          action: "trip.correct_closed",
+          entity: "VehicleTrip",
+          entityId: id,
+          before,
+          after: {
+            ...after,
+            correctionReason: data.correctionReason,
+          },
+        },
+      });
+    }, TX_BUDGET);
+
+    const trip = await db.vehicleTrip.findUnique({
+      where: { id },
+      include: tripInclude,
+    });
+    return sendOk(res, trip);
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Delete (Planned / Cancelled only)                                  */

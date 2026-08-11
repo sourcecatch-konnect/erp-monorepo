@@ -35,6 +35,7 @@ import { companyKeys } from "../Company/company.key";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { branchApi } from "./branch.service";
 import { branchKeys } from "./branch.key";
+import BranchRailheadsEditor from "./BranchRailheadsEditor";
 
 type Props = {
   open: boolean;
@@ -115,6 +116,11 @@ export default function BranchForm({ open, onOpenChange, row }: Props) {
 
   const isSubmitting = create.isPending || update.isPending;
 
+  const handleRailheadStatusChange = React.useCallback(
+    (hasRailheads: boolean) => form.setValue("isRailHead", hasRailheads),
+    [form],
+  );
+
   React.useEffect(() => {
     if (!open) return;
 
@@ -166,7 +172,6 @@ export default function BranchForm({ open, onOpenChange, row }: Props) {
           onChangeTransform={(value) => value.toUpperCase()}
           required
         />
-
 
         <IconTextField<CreateBranchFormInput>
           name="name"
@@ -292,19 +297,25 @@ export default function BranchForm({ open, onOpenChange, row }: Props) {
         />
 
         <SwitchField<CreateBranchFormInput>
-          name="isRailHead"
-          label="Rail Head"
-          description="Mark this branch as rail head"
-          icon={<IconTrain size={14} />}
-        />
-
-        <SwitchField<CreateBranchFormInput>
           name="isHeadOffice"
           label="Head Office"
           description="Mark this branch as HO / hub branch"
           icon={<IconBuilding size={14} />}
         />
       </FormSection>
+
+      {row?.id ? (
+        <FormSection
+          icon={<IconTrain size={18} />}
+          title="Railhead Coverage"
+          description="Physical railway Areas managed by this branch"
+        >
+          <BranchRailheadsEditor
+            branchId={row.id}
+            onHasRailheadsChange={handleRailheadStatusChange}
+          />
+        </FormSection>
+      ) : null}
     </MasterFormDialog>
   );
 }

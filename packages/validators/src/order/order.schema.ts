@@ -142,7 +142,7 @@ const orderBaseShape = {
   fromBranchId: z.string().min(1, "From branch is required"),
   toBranchId: z.string().min(1, "To branch is required"),
   pickupDate: requiredDate,
-  routeId: z.string().trim().min(1, "Route is required"),
+  routeId: optionalString,
   customerLocationId: optionalString,
   pickupAddressOverride: optionalString,
   specialInstructions: optionalString,
@@ -239,13 +239,7 @@ const typeRefinement = (
           path: ["consignments", index, "loadingLocationId"],
         });
       }
-      if (!c.unloadingLocationId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Unloading point is required",
-          path: ["consignments", index, "unloadingLocationId"],
-        });
-      }
+
       if (!c.loadingLocationId || !c.unloadingLocationId) return;
       const key = `${c.truckIndex}|${c.loadingLocationId}|${c.unloadingLocationId}`;
       if (seen.has(key)) {

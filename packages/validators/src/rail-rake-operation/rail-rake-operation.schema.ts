@@ -87,7 +87,7 @@ const operationFields = z
     remarks: optionalText(1000),
     placements: z
       .array(placementSchema)
-      .length(2, "The 1st and 2nd Rake timings are required"),
+      .length(1, "The 1st and 2nd Rake timings are required"),
     charges: z
       .array(chargeSchema)
       .length(2, "Demurrage and Wharfage are required"),
@@ -104,14 +104,7 @@ const operationFields = z
         message: "Departure time cannot be before arrival time",
       });
     }
-    const sequences = value.placements.map((item) => item.sequence);
-    if (new Set(sequences).size !== sequences.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["placements"],
-        message: "Placement sequence must be unique",
-      });
-    }
+
     const types = value.charges.map((item) => item.type);
     if (new Set(types).size !== 2) {
       ctx.addIssue({

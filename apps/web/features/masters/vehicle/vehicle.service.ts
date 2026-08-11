@@ -97,8 +97,7 @@ export const vehicleApi = {
     if (query?.search) params.search = query.search;
     if (query?.ownershipType)
       params["filter[ownershipType]"] = query.ownershipType;
-    if (query?.transportId)
-      params["filter[transportId]"] = query.transportId;
+    if (query?.transportId) params["filter[transportId]"] = query.transportId;
 
     const res = await api.get<ApiResponse<Vehicle[]>>("/vehicles/lookup", {
       params,
@@ -111,6 +110,7 @@ export const vehicleApi = {
     search?: string;
     page?: number;
     size?: number;
+    context?: "journey";
   }): Promise<ListResult<TripVehicleChoice>> => {
     const params: Record<string, string | number> = {
       page: query?.page ?? 0,
@@ -118,6 +118,7 @@ export const vehicleApi = {
     };
 
     if (query?.search) params.search = query.search;
+    if (query?.context) params.context = query.context;
 
     const res = await api.get<ApiResponse<TripVehicleChoice[]>>(
       "/vehicle-journeys/trip-vehicle-options",

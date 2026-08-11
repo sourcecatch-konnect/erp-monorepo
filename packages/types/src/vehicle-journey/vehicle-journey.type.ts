@@ -9,6 +9,7 @@ import {
   dispatchJourneyLegSchema,
   cancelJourneySchema,
   closeJourneySchema,
+  reopenSettlementReviewSchema,
   createTripExpenseSchema,
   updateTripExpenseSchema,
   rejectTripExpenseSchema,
@@ -47,6 +48,9 @@ export type CloseJourneyLegBody = z.output<typeof closeJourneyLegSchema>;
 export type DispatchJourneyLegBody = z.output<typeof dispatchJourneyLegSchema>;
 export type CancelJourneyBody = z.output<typeof cancelJourneySchema>;
 export type CloseJourneyBody = z.output<typeof closeJourneySchema>;
+export type ReopenSettlementReviewBody = z.output<
+  typeof reopenSettlementReviewSchema
+>;
 
 export type CreateTripExpenseBody = z.output<typeof createTripExpenseSchema>;
 export type TripExpenseFormInput = z.input<typeof createTripExpenseSchema>;

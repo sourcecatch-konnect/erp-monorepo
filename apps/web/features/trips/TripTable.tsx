@@ -91,11 +91,14 @@ export type TripRowActions = {
   onDispatch: (trip: Trip) => void;
   /** InTransit trip — opens the closing-KM dialog. */
   onClose: (trip: Trip) => void;
+  /** Closed trip — opens the limited, audited correction dialog. */
+  onCorrect: (trip: Trip) => void;
   onCancel: (trip: Trip) => void;
   onDelete: (trip: Trip) => void;
   canStart: boolean;
   canDispatch: boolean;
   canClose: boolean;
+  canCorrect: boolean;
   canUpdate: boolean;
   canCancel: boolean;
   canDelete: boolean;
@@ -195,11 +198,13 @@ export default function TripTable(props: Props) {
     onStart,
     onDispatch,
     onClose,
+    onCorrect,
     onCancel,
     onDelete,
     canStart,
     canDispatch,
     canClose,
+    canCorrect,
     canUpdate,
     canCancel,
     canDelete,
@@ -373,15 +378,18 @@ export default function TripTable(props: Props) {
           const lrPending = (t.undeliveredLrCount ?? 0) > 0;
           const lrDraft = (t.lrSummary?.draft ?? 0) > 0;
           const editable = t.status === "Planned";
+          const correctable = t.status === "Closed";
           // Journey legs keep their chain slot — cancel, never delete.
           const deletable =
             !t.journeyId &&
             DELETE_ALLOWED_STATUSES.includes(
               t.status as (typeof DELETE_ALLOWED_STATUSES)[number],
             );
-          const cancellable = t.status === "Planned" || t.status === "InTransit";
+          const cancellable =
+            t.status === "Planned" || t.status === "InTransit";
           const hasMenuAction =
             (canUpdate && editable) ||
+            (canCorrect && correctable) ||
             canDownloadPdf ||
             (canCancel && cancellable) ||
             (canDelete && deletable);
@@ -447,6 +455,11 @@ export default function TripTable(props: Props) {
                       </Link>
                     </DropdownMenuItem>
                   ) : null}
+                  {canCorrect && correctable ? (
+                    <DropdownMenuItem onClick={() => onCorrect(t)}>
+                      <IconEdit size={16} className="mr-2" /> Correct trip
+                    </DropdownMenuItem>
+                  ) : null}
                   {canDownloadPdf ? (
                     <DropdownMenuItem onClick={() => onDownloadPdf(t)}>
                       <IconDownload size={16} className="mr-2" /> Download PDF
@@ -487,6 +500,7 @@ export default function TripTable(props: Props) {
       canStart,
       canDispatch,
       canClose,
+      canCorrect,
       canUpdate,
       canCancel,
       canDelete,
@@ -494,6 +508,7 @@ export default function TripTable(props: Props) {
       onStart,
       onDispatch,
       onClose,
+      onCorrect,
       onCancel,
       onDelete,
       onDownloadPdf,
@@ -599,10 +614,7 @@ export default function TripTable(props: Props) {
                       )}
                     >
                       <Skeleton
-                        className={cn(
-                          "h-4",
-                          SKELETON_WIDTHS[col.id] ?? "w-24",
-                        )}
+                        className={cn("h-4", SKELETON_WIDTHS[col.id] ?? "w-24")}
                       />
                     </TableCell>
                   );
@@ -629,9 +641,9 @@ export default function TripTable(props: Props) {
                       style={pinStyle(cell.column)}
                       className={cn(
                         "h-12 text-sm",
-                        pinned && `sticky z-10 ${PIN_CELL_BG} transition-colors`,
-                        cell.column.id === "status" &&
-                          "border-l border-border",
+                        pinned &&
+                          `sticky z-10 ${PIN_CELL_BG} transition-colors`,
+                        cell.column.id === "status" && "border-l border-border",
                       )}
                     >
                       {flexRender(

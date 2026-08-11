@@ -16,7 +16,7 @@ import {
 import { db } from "../../../prisma/prisma.js";
 import { Prisma } from "../../../generated/prisma/index.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
-import { can } from "../../auth/can.middleware.js";
+import { can, canAny } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
@@ -42,6 +42,7 @@ import {
   cancelVPLoadingAllocation,
   customerSelect,
   generateVPLoadingNumber,
+  getCurrentGRNAvailability,
   getEligibleGRNsForRow,
   getGRNForLoading,
   getMRRRRowForLoading,
@@ -58,6 +59,7 @@ import {
 
 const router: Router = Router();
 const readClient = db as unknown as Prisma.TransactionClient;
+const VP_LOADING_TX_BUDGET = { timeout: 15_000, maxWait: 10_000 } as const;
 
 router.use(authMiddleware);
 
@@ -65,6 +67,29 @@ const actorId = (req: { user?: { userId: string } }) => {
   const userId = req.user?.userId;
   if (!userId) throw new BadRequestError("User context is missing");
   return userId;
+};
+
+const assertLoadingSupervisor = async (
+  tx: Prisma.TransactionClient,
+  supervisorId: string | undefined,
+  branchId: string,
+) => {
+  if (!supervisorId) return;
+
+  const supervisor = await tx.labour.findFirst({
+    where: {
+      id: supervisorId,
+      branchId,
+      type: "Supervisor",
+    },
+    select: { id: true },
+  });
+
+  if (!supervisor) {
+    throw new BadRequestError(
+      "Select a Supervisor from the Labour master for the VP Schedule branch",
+    );
+  }
 };
 
 const getIdParam = (value: string | string[] | undefined, label: string) => {
@@ -154,19 +179,45 @@ const assertTrackerScheduleAccess = async (
   if (!schedule) throw new NotFoundError("VP Schedule not found");
 };
 
+router.get("/supervisors", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
+  const vpScheduleId = getIdParam(
+    req.query.vpScheduleId as string | string[] | undefined,
+    "VP Schedule",
+  );
+  const schedule = await db.vPSchedule.findFirst({
+    where: {
+      id: vpScheduleId,
+      deletedAt: null,
+      ...branchFilter(req, "fromBranchId"),
+    },
+    select: { fromBranchId: true },
+  });
+
+  if (!schedule) throw new NotFoundError("VP Schedule not found");
+
+  const supervisors = await db.labour.findMany({
+    where: {
+      branchId: schedule.fromBranchId,
+      type: "Supervisor",
+    },
+    select: {
+      id: true,
+      name: true,
+      mobileNo: true,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return sendOk(res, supervisors);
+});
+
 router.get(
   "/schedules/:vpScheduleId/tracker-assignment",
   can(PERMS.VP_LOADING.VIEW),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
-    return sendOk(
-      res,
-      await getActiveTrackerAssignment(vpScheduleId),
-    );
+    return sendOk(res, await getActiveTrackerAssignment(vpScheduleId));
   },
 );
 
@@ -174,10 +225,7 @@ router.get(
   "/schedules/:vpScheduleId/available-trackers",
   can(PERMS.VP_LOADING.VIEW),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
     return sendOk(res, await listAvailableOneLapTrackers());
   },
@@ -187,10 +235,7 @@ router.post(
   "/schedules/:vpScheduleId/tracker-assignment",
   can(PERMS.VP_LOADING.ASSIGN_TRACKER),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
 
     const parsed = assignOneLapTrackerSchema.safeParse(req.body);
@@ -200,11 +245,7 @@ router.post(
 
     return sendOk(
       res,
-      await assignOneLapTracker(
-        vpScheduleId,
-        parsed.data,
-        actorId(req),
-      ),
+      await assignOneLapTracker(vpScheduleId, parsed.data, actorId(req)),
     );
   },
 );
@@ -213,10 +254,7 @@ router.post(
   "/schedules/:vpScheduleId/tracker-assignment/replace",
   can(PERMS.VP_LOADING.REPLACE_TRACKER),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
 
     const parsed = replaceOneLapTrackerSchema.safeParse(req.body);
@@ -226,11 +264,7 @@ router.post(
 
     return sendOk(
       res,
-      await replaceOneLapTracker(
-        vpScheduleId,
-        parsed.data,
-        actorId(req),
-      ),
+      await replaceOneLapTracker(vpScheduleId, parsed.data, actorId(req)),
     );
   },
 );
@@ -239,10 +273,7 @@ router.post(
   "/schedules/:vpScheduleId/tracker-assignment/release",
   can(PERMS.VP_LOADING.RELEASE_TRACKER),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
 
     const parsed = releaseOneLapTrackerSchema.safeParse(req.body);
@@ -660,7 +691,7 @@ router.get(
                     labour: { select: labourSelect },
                     labourCharge: true,
                     loadingSupervisorId: true,
-                    loadingSupervisor: { select: userSelect },
+                    loadingSupervisor: { select: labourSelect },
                     loadingStartedAt: true,
                     loadingCompletedAt: true,
                     verifiedAt: true,
@@ -668,6 +699,13 @@ router.get(
                     remarks: true,
                     cancelReason: true,
                     version: true,
+                    _count: {
+                      select: {
+                        allocations: {
+                          where: { status: { not: "CANCELLED" } },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -685,6 +723,12 @@ router.get(
     const rowsWithEligibility = await Promise.all(
       schedule.mrRr.rows.map(async (row) => ({
         ...row,
+        vpWagonLoading: row.vpWagonLoading
+          ? {
+            ...row.vpWagonLoading,
+            activeLrCount: row.vpWagonLoading._count.allocations,
+          }
+          : null,
         eligibleGrnCount: await getEligibleGRNCountForRow(
           row.id,
           row.vpWagonLoading,
@@ -786,7 +830,7 @@ router.get(
                     capacityCheckStatus: true,
                     labourCharge: true,
                     labour: { select: labourSelect },
-                    loadingSupervisor: { select: userSelect },
+                    loadingSupervisor: { select: labourSelect },
                     loadingStartedAt: true,
                     loadingCompletedAt: true,
                     verifiedAt: true,
@@ -887,37 +931,10 @@ router.get(
         code: "SCHEDULE_ALREADY_FINALISED",
         message: "VP Schedule is already finalised and has a Rail Rake",
       });
-    } else if (schedule.status !== "VERIFIED") {
+    } else if (!["LOADED", "VERIFIED"].includes(schedule.status)) {
       validationIssues.push({
-        code: "SCHEDULE_NOT_VERIFIED",
-        message: "VP Schedule must be verified before finalisation",
-      });
-    }
-
-    const activeTrackerAssignment = schedule.trackerAssignments[0];
-    if (!activeTrackerAssignment) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_MISSING",
-        message:
-          "Assign one OneLap tracker to the VP Schedule before finalisation",
-      });
-    } else if (!activeTrackerAssignment.tracker.isEnabled) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_DISABLED",
-        message: "The assigned OneLap tracker is disabled",
-      });
-    } else if (!activeTrackerAssignment.tracker.isPresentOnProvider) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_MISSING_ON_PROVIDER",
-        message: "The assigned tracker is no longer present in OneLap",
-      });
-    } else if (
-      activeTrackerAssignment.tracker.validityAt &&
-      activeTrackerAssignment.tracker.validityAt.getTime() < Date.now()
-    ) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_EXPIRED",
-        message: "The assigned OneLap tracker has expired",
+        code: "SCHEDULE_NOT_LOADED",
+        message: "Every VP wagon must be marked Loaded before finalisation",
       });
     }
 
@@ -958,10 +975,12 @@ router.get(
             mrrrRowId: row.id,
             vpNo: row.vpNo,
           });
-        } else if (row.vpWagonLoading.status !== "VERIFIED") {
+        } else if (
+          !["COMPLETED", "VERIFIED"].includes(row.vpWagonLoading.status)
+        ) {
           validationIssues.push({
-            code: "WAGON_LOADING_NOT_VERIFIED",
-            message: `${row.rowLabel} VP wagon loading is not verified`,
+            code: "WAGON_LOADING_NOT_LOADED",
+            message: `${row.rowLabel} VP wagon is not marked Loaded`,
             mrrrRowId: row.id,
             vpNo: row.vpNo,
           });
@@ -983,8 +1002,8 @@ router.get(
       summary: {
         totalWagonRows: rows.length,
         wagonLoadingsCreated: loadings.length,
-        verifiedWagonCount: loadings.filter(
-          (loading) => loading.status === "VERIFIED",
+        verifiedWagonCount: loadings.filter((loading) =>
+          ["COMPLETED", "VERIFIED"].includes(loading.status),
         ).length,
         activeAllocationCount: allocations.length,
         sourceGoodsLineCount: goods.length,
@@ -1121,9 +1140,9 @@ router.post(
         "VP Schedule changed. Please refresh the final review.",
       );
 
-      if (schedule.status !== "VERIFIED") {
+      if (!["LOADED", "VERIFIED"].includes(schedule.status)) {
         throw new BadRequestError(
-          "Only a VERIFIED VP Schedule can be finalised",
+          "Every VP wagon must be marked Loaded before finalisation",
         );
       }
 
@@ -1135,28 +1154,6 @@ router.post(
 
       if (!schedule.mrRr.rows.length) {
         throw new BadRequestError("MR/RR does not contain any wagon rows");
-      }
-
-      if (schedule.trackerAssignments.length === 0) {
-        throw new BadRequestError(
-          "Assign one OneLap tracker before finalising the VP Schedule",
-        );
-      }
-
-      const assignedTracker = schedule.trackerAssignments[0]!.tracker;
-      if (!assignedTracker.isEnabled) {
-        throw new BadRequestError("The assigned OneLap tracker is disabled");
-      }
-      if (!assignedTracker.isPresentOnProvider) {
-        throw new BadRequestError(
-          "The assigned tracker is no longer present in OneLap",
-        );
-      }
-      if (
-        assignedTracker.validityAt &&
-        assignedTracker.validityAt.getTime() < Date.now()
-      ) {
-        throw new BadRequestError("The assigned OneLap tracker has expired");
       }
 
       for (const row of schedule.mrRr.rows) {
@@ -1172,9 +1169,9 @@ router.post(
           );
         }
 
-        if (row.vpWagonLoading.status !== "VERIFIED") {
+        if (!["COMPLETED", "VERIFIED"].includes(row.vpWagonLoading.status)) {
           throw new BadRequestError(
-            `${row.rowLabel} VP wagon loading is not verified`,
+            `${row.rowLabel} VP wagon is not marked Loaded`,
           );
         }
       }
@@ -1402,6 +1399,12 @@ router.post(
     ]);
 
     assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
+
+    await assertLoadingSupervisor(
+      readClient,
+      input.loadingSupervisorId,
+      row.mrRr.vpSchedule.fromBranchId,
+    );
 
     assertGRNCompatibleWithRow(row, grn);
 
@@ -1749,8 +1752,12 @@ router.patch(
         );
       }
 
-      if (existing.vpWagonLoading.status !== "IN_PROGRESS") {
-        throw new BadRequestError("Only an in-progress wagon can be updated");
+      if (
+        !["IN_PROGRESS", "COMPLETED"].includes(existing.vpWagonLoading.status)
+      ) {
+        throw new BadRequestError(
+          "Only an in-progress or loaded wagon can be updated",
+        );
       }
 
       assertVersion(
@@ -1762,9 +1769,13 @@ router.patch(
       const row = await getMRRRRowForLoading(
         tx,
         existing.vpWagonLoading.mrRrRowId,
+        { allowCompleted: true },
       );
 
-      const grn = await getGRNForLoading(tx, existing.grnId);
+      const grn = await getCurrentGRNAvailability(
+        tx,
+        existing.grnId,
+      );
 
       assertGRNCompatibleWithRow(row, grn);
 
@@ -1802,7 +1813,7 @@ router.patch(
       await recalculateVPWagonLoadingTotals(tx, existing.vpWagonLoadingId, {
         detail: false,
       });
-    });
+    }, VP_LOADING_TX_BUDGET);
 
     // Large response query runs after transaction commits
     const updated = await db.vPLoading.findUnique({
@@ -2226,6 +2237,7 @@ router.patch(
                   vpSchedule: {
                     select: {
                       fromBranchId: true,
+                      status: true,
                     },
                   },
                 },
@@ -2241,9 +2253,19 @@ router.patch(
 
       assertBranchAccess(req, current.mrRrRow.mrRr.vpSchedule.fromBranchId);
 
-      if (current.status !== "IN_PROGRESS") {
+      if (current.mrRrRow.mrRr.vpSchedule.status === "FINALISED") {
+        throw new BadRequestError("A finalised VP Schedule cannot be changed");
+      }
+
+      await assertLoadingSupervisor(
+        tx,
+        parsed.data.loadingSupervisorId,
+        current.mrRrRow.mrRr.vpSchedule.fromBranchId,
+      );
+
+      if (!["IN_PROGRESS", "COMPLETED"].includes(current.status)) {
         throw new BadRequestError(
-          "Only an in-progress wagon labour can be updated",
+          "Only an in-progress or loaded wagon labour can be updated",
         );
       }
 
@@ -2296,7 +2318,7 @@ router.patch(
 
 router.post(
   "/wagons/:vpWagonLoadingId/complete",
-  can(PERMS.VP_LOADING.COMPLETE),
+  canAny(PERMS.VP_LOADING.MARK_LOADED, PERMS.VP_LOADING.COMPLETE),
   async (req, res) => {
     const vpWagonLoadingId = getIdParam(
       req.params.vpWagonLoadingId,
@@ -2338,6 +2360,7 @@ router.post(
                   vpSchedule: {
                     select: {
                       fromBranchId: true,
+                      status: true,
                     },
                   },
                 },
@@ -2353,10 +2376,19 @@ router.post(
 
       assertBranchAccess(req, current.mrRrRow.mrRr.vpSchedule.fromBranchId);
 
-      if (!["IN_PROGRESS", "COMPLETED"].includes(current.status)) {
+      if (current.mrRrRow.mrRr.vpSchedule.status === "FINALISED") {
+        throw new BadRequestError("A finalised VP Schedule cannot be changed");
+      }
+
+      const markLoaded = parsed.data.loaded;
+
+      if (markLoaded && current.status !== "IN_PROGRESS") {
         throw new BadRequestError(
-          "Only in-progress or completed wagon can be finished",
+          "Only an in-progress wagon can be marked loaded",
         );
+      }
+      if (!markLoaded && current.status !== "COMPLETED") {
+        throw new BadRequestError("Only a loaded wagon can be reopened");
       }
 
       assertVersion(
@@ -2365,33 +2397,33 @@ router.post(
         "Wagon loading changed. Please refresh.",
       );
 
-      const activeAllocations = current.allocations.filter(
-        (allocation) => allocation.status !== "CANCELLED",
-      );
+      if (markLoaded) {
+        const activeAllocations = current.allocations.filter(
+          (allocation) => allocation.status !== "CANCELLED",
+        );
 
-      if (!activeAllocations.length) {
-        throw new BadRequestError("At least one loaded allocation is required");
+        if (!activeAllocations.length) {
+          throw new BadRequestError(
+            "At least one loaded allocation is required",
+          );
+        }
+
+        if (
+          activeAllocations.some((allocation) => allocation.status !== "LOADED")
+        ) {
+          throw new BadRequestError("All active allocations must be loaded");
+        }
       }
-
-      const hasIncompleteAllocation = activeAllocations.some(
-        (allocation) => allocation.status !== "LOADED",
-      );
-
-      if (hasIncompleteAllocation) {
-        throw new BadRequestError("All active allocations must be loaded");
-      }
-
-      const finishedAt = new Date();
 
       await tx.vPWagonLoading.update({
         where: {
           id: current.id,
         },
         data: {
-          status: "VERIFIED",
-          loadingCompletedAt: current.loadingCompletedAt ?? finishedAt,
-          verifiedById: userId,
-          verifiedAt: finishedAt,
+          status: markLoaded ? "COMPLETED" : "IN_PROGRESS",
+          loadingCompletedAt: markLoaded
+            ? (current.loadingCompletedAt ?? new Date())
+            : null,
           updatedById: userId,
           version: {
             increment: 1,

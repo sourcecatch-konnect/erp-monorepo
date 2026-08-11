@@ -19,15 +19,18 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import { Button } from "@skerp/ui/components/button";
+import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   IconCoins,
+  IconCalendar,
   IconEye,
   IconMapPin,
   IconRoad,
   IconRoute,
   IconTruck,
   IconUser,
+  IconX,
 } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
@@ -61,6 +64,10 @@ type Props = {
   onSearchChange: (value: string) => void;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
+  startedFrom: string;
+  onStartedFromChange: (value: string) => void;
+  startedTo: string;
+  onStartedToChange: (value: string) => void;
   sort: string;
   onSortChange: (value: string) => void;
   columnVisibility: VisibilityState;
@@ -80,6 +87,8 @@ type Props = {
  */
 export const DEFAULT_JOURNEY_COLUMN_ORDER = [
   "journey",
+  "startDate",
+  "endDate",
   "vehicle",
   "driver",
   "route",
@@ -90,6 +99,8 @@ export const DEFAULT_JOURNEY_COLUMN_ORDER = [
 
 const COLUMN_META: ColumnMeta = {
   journey: { label: "Journey", icon: IconRoute },
+  startDate: { label: "Start date", icon: IconCalendar },
+  endDate: { label: "End date", icon: IconCalendar },
   vehicle: { label: "Vehicle", icon: IconTruck },
   driver: { label: "Driver", icon: IconUser },
   route: { label: "Route chain", icon: IconMapPin },
@@ -100,6 +111,8 @@ const COLUMN_META: ColumnMeta = {
 
 const SKELETON_WIDTHS: Record<string, string> = {
   journey: "w-28",
+  startDate: "w-28",
+  endDate: "w-28",
   vehicle: "w-24",
   driver: "w-24",
   route: "w-36",
@@ -137,6 +150,10 @@ export default function JourneyTable(props: Props) {
     onSearchChange,
     statusFilter,
     onStatusFilterChange,
+    startedFrom,
+    onStartedFromChange,
+    startedTo,
+    onStartedToChange,
     sort,
     onSortChange,
     columnVisibility,
@@ -169,10 +186,41 @@ export default function JourneyTable(props: Props) {
             <span className="block font-medium text-primary hover:underline">
               {row.original.journeyNumber}
             </span>
-            <span className="block text-xs text-muted-foreground">
-              {formatDateTime(row.original.startedAt)}
-            </span>
           </Link>
+        ),
+      },
+      {
+        id: "startDate",
+        header: () => (
+          <SortHeader
+            label="Start date"
+            field="startedAt"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
+        ),
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm">
+            {formatDateTime(row.original.startedAt)}
+          </span>
+        ),
+      },
+      {
+        id: "endDate",
+        header: () => (
+          <SortHeader
+            label="End date"
+            field="closedAt"
+            sort={sort}
+            onSortChange={onSortChange}
+          />
+        ),
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm">
+            {row.original.closedAt
+              ? formatDateTime(row.original.closedAt)
+              : "—"}
+          </span>
         ),
       },
       {
@@ -290,6 +338,44 @@ export default function JourneyTable(props: Props) {
           placeholder="Search journey no., vehicle or driver..."
         />
 
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="whitespace-nowrap">Started from</span>
+          <Input
+            type="date"
+            value={startedFrom}
+            max={startedTo || undefined}
+            onChange={(event) => onStartedFromChange(event.target.value)}
+            className="h-9 w-36"
+            aria-label="Journey started from date"
+          />
+        </label>
+
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="whitespace-nowrap">Started to</span>
+          <Input
+            type="date"
+            value={startedTo}
+            min={startedFrom || undefined}
+            onChange={(event) => onStartedToChange(event.target.value)}
+            className="h-9 w-36"
+            aria-label="Journey started to date"
+          />
+        </label>
+
+        {startedFrom || startedTo ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onStartedFromChange("");
+              onStartedToChange("");
+            }}
+          >
+            <IconX size={14} className="mr-1" /> Clear dates
+          </Button>
+        ) : null}
+
         <ColumnPickerPopover
           columnOrder={columnOrder}
           onColumnOrderChange={onColumnOrderChange}
@@ -369,8 +455,7 @@ export default function JourneyTable(props: Props) {
                         "h-12 text-sm",
                         pinned &&
                           `sticky z-10 ${PIN_CELL_BG} transition-colors`,
-                        cell.column.id === "status" &&
-                          "border-l border-border",
+                        cell.column.id === "status" && "border-l border-border",
                       )}
                     >
                       {flexRender(

@@ -14,6 +14,9 @@ import type {
   PendingPodRow,
   AtHubRow,
   DeliveryStats,
+  LRUnloadingReportRow,
+  LRUnloadingReportDetail,
+  LRDeliveryEligibility,
 } from "@skerp/types";
 import {
   type ListQuery,
@@ -181,6 +184,33 @@ export const deliveryWorklistApi = {
     );
     return unwrapApiResponse(res);
   },
+
+  deliveryEligibility: async (id: string): Promise<LRDeliveryEligibility> => {
+    const res = await api.get<ApiResponse<LRDeliveryEligibility>>(
+      `/lorry-receipts/${id}/delivery-eligibility`,
+    );
+    return unwrapApiResponse(res);
+  },
+  unloadingReport: async (params?: {
+    search?: string;
+    status?: "DELIVERED" | "ACKNOWLEDGED";
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<LRUnloadingReportRow[]> => {
+    const res = await api.get<ApiResponse<LRUnloadingReportRow[]>>(
+      "/lorry-receipts/reports/unloading",
+      { params },
+    );
+    return unwrapApiResponse(res);
+  },
+  unloadingReportDetail: async (
+    id: string,
+  ): Promise<LRUnloadingReportDetail> => {
+    const res = await api.get<ApiResponse<LRUnloadingReportDetail>>(
+      `/lorry-receipts/reports/unloading/${id}`,
+    );
+    return unwrapApiResponse(res);
+  },
 };
 
 export const deliveryWorklistKeys = {
@@ -189,6 +219,10 @@ export const deliveryWorklistKeys = {
   pendingPod: ["delivery-worklists", "pending-pod"] as const,
   atHub: ["delivery-worklists", "at-hub"] as const,
   stats: ["delivery-worklists", "stats"] as const,
+  unloadingReport: (params: Record<string, string | undefined>) =>
+    ["delivery-worklists", "unloading-report", params] as const,
+  unloadingReportDetail: (id: string) =>
+    ["delivery-worklists", "unloading-report", "detail", id] as const,
 };
 
 /* ------------------------------------------------------------------ */
@@ -305,8 +339,8 @@ export type LROrderContext = {
   consignor: string | null;
   consignorId: string | null;
   consignee: string | null;
-  fromBranch: { name: string; branchCode: string } | null;
-  toBranch: { name: string; branchCode: string } | null;
+  fromBranch: { id: string; name: string; branchCode: string } | null;
+  toBranch: { id: string; name: string; branchCode: string } | null;
   route: { source: string | null; destination: string | null } | null;
   trucks: { truckIndex: number; lineCount: number }[];
   lines: LROrderContextLine[];
@@ -527,18 +561,23 @@ export const lrLookups = {
       consignee: order.consignee?.name ?? null,
       fromBranch: order.fromBranch
         ? {
-          name: order.fromBranch.name,
-          branchCode: order.fromBranch.branchCode,
-        }
+            id: order.fromBranch.id,
+            name: order.fromBranch.name,
+            branchCode: order.fromBranch.branchCode,
+          }
         : null,
       toBranch: order.toBranch
-        ? { name: order.toBranch.name, branchCode: order.toBranch.branchCode }
+        ? {
+            id: order.toBranch.id,
+            name: order.toBranch.name,
+            branchCode: order.toBranch.branchCode,
+          }
         : null,
       route: order.route
         ? {
-          source: order.route.sourceCity?.name ?? null,
-          destination: order.route.destinationCity?.name ?? null,
-        }
+            source: order.route.sourceCity?.name ?? null,
+            destination: order.route.destinationCity?.name ?? null,
+          }
         : null,
       trucks,
       lines,

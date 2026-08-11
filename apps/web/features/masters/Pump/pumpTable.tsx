@@ -6,13 +6,9 @@ import type { Pump } from "@skerp/types";
 import {
   IconGasStation,
   IconMapPin,
-  IconPhone,
-  IconUser,
   IconCash,
-  IconBuildingBank,
   IconCircleCheck,
   IconCircleX,
-  IconFileDescription,
 } from "@tabler/icons-react";
 import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
@@ -69,28 +65,6 @@ export const pumpColumns: ColumnDef<Pump>[] = [
 },
 
   {
-    accessorKey: "contactName",
-    header: "Contact",
-    cell: ({ row }) => (
-      <span className="inline-flex items-center gap-1 text-sm">
-        <IconUser size={13} />
-        {row.original.contactName ?? "-"}
-      </span>
-    ),
-  },
-
-  {
-    accessorKey: "contactPhone",
-    header: "Phone",
-    cell: ({ row }) => (
-      <span className="inline-flex items-center gap-1 text-sm">
-        <IconPhone size={13} />
-        {row.original.contactPhone ?? "-"}
-      </span>
-    ),
-  },
-
-  {
     accessorKey: "currentDieselRate",
     header: "Diesel Rate",
     cell: ({ row }) => (
@@ -113,31 +87,9 @@ export const pumpColumns: ColumnDef<Pump>[] = [
   },
 
   {
-    accessorKey: "gstIn",
-    header: "GSTIN",
-    cell: ({ row }) => (
-      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs">
-        <IconFileDescription size={12} />
-        {row.original.gstIn ?? "-"}
-      </span>
-    ),
-  },
-
-  {
     accessorKey: "pan",
     header: "PAN",
     cell: ({ row }) => row.original.pan ?? "-",
-  },
-
-  {
-    accessorKey: "bank",
-    header: "Bank",
-    cell: ({ row }) => (
-      <span className="inline-flex items-center gap-1 text-sm">
-        <IconBuildingBank size={13} />
-        {row.original.bankName ?? "-"}
-      </span>
-    ),
   },
 
   {

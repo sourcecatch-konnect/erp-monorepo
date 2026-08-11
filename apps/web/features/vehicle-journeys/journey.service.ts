@@ -16,6 +16,7 @@ import type {
   DispatchJourneyLegBody,
   CancelJourneyBody,
   CloseJourneyBody,
+  ReopenSettlementReviewBody,
   TripExpenseFormInput,
   CreateDriverAdvanceBody,
   GenerateLogSlipBody,
@@ -48,6 +49,10 @@ export const journeyApi = {
       params["filter[settlementStatus]"] = String(
         query.filter.settlementStatus,
       );
+    if (query?.filter?.startedFrom)
+      params["filter[startedFrom]"] = String(query.filter.startedFrom);
+    if (query?.filter?.startedTo)
+      params["filter[startedTo]"] = String(query.filter.startedTo);
 
     const res = await api.get<ApiResponse<VehicleJourney[]>>(
       "/vehicle-journeys",
@@ -68,6 +73,14 @@ export const journeyApi = {
       `/vehicle-journeys/${id}`,
     );
     return unwrapApiResponse(res);
+  },
+
+  downloadReportPdf: async (id: string): Promise<Blob> => {
+    const res = await api.get<Blob>(
+      `/vehicle-journeys/${encodeURIComponent(id)}/report-pdf`,
+      { responseType: "blob" },
+    );
+    return res.data;
   },
 
   start: async (body: StartJourneyBody): Promise<VehicleJourney> => {
@@ -114,6 +127,17 @@ export const journeyApi = {
     const res = await api.post<ApiResponse<VehicleJourney>>(
       `/vehicle-journeys/${id}/mark-ready-for-log-slip`,
       {},
+    );
+    return unwrapApiResponse(res);
+  },
+
+  reopenSettlementReview: async (
+    id: string,
+    body: ReopenSettlementReviewBody,
+  ): Promise<VehicleJourney> => {
+    const res = await api.post<ApiResponse<VehicleJourney>>(
+      `/vehicle-journeys/${id}/reopen-settlement-review`,
+      body,
     );
     return unwrapApiResponse(res);
   },

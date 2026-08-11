@@ -126,7 +126,7 @@ export type AvailableRailRakeVP = {
   value: string;
   vpWagonLoadingId: string;
   vpNo: string;
-  status: "VERIFIED";
+  status: "COMPLETED" | "VERIFIED";
   totalLoadedQty: number;
   allocationCount: number;
   row: {

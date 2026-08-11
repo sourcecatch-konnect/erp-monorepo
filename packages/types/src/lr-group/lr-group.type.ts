@@ -33,6 +33,12 @@ export type LRGroupLineInput = z.input<typeof lrGroupLineSchema>;
 
 type CustomerRef = { id: string; name: string; shortName: string | null };
 type BranchRef = { id: string; name: string; branchCode: string };
+type RailheadAreaRef = {
+  id: string;
+  name: string;
+  cityId: string;
+  city?: { id: string; name: string } | null;
+};
 type UserRef = { id: string; firstName: string; lastName: string };
 type OrderRef = {
   id: string;
@@ -41,6 +47,8 @@ type OrderRef = {
   bookingFreightAmount?: number | null;
 };
 type VehicleRef = { id: string; vehicleNumber: string };
+type MarketVehicleRef = VehicleRef & { status: string };
+type TransportRef = { id: string; name: string };
 type DriverRef = { id: string; name: string };
 
 export type LRGroupListReceipt = {
@@ -86,6 +94,8 @@ export type LRGroupListItem = {
   isMarketVehicle: boolean;
   marketVehicleNumber: string | null;
   marketDriverName: string | null;
+  marketTransport?: TransportRef | null;
+  marketVehicle?: MarketVehicleRef | null;
   hubArrivalAt: string | null;
   baseFreightAmount: number | null;
   sealNumber: string | null;
@@ -93,6 +103,8 @@ export type LRGroupListItem = {
   secondaryTrip: TripRef | null;
   hub: BranchRef | null;
   railheadBranch: BranchRef | null;
+  sourceRailheadArea: RailheadAreaRef | null;
+  destinationRailheadArea: RailheadAreaRef | null;
   consignor: CustomerRef | null;
   consignee: CustomerRef | null;
   originBranch: BranchRef | null;
@@ -109,6 +121,15 @@ export type LRGroup = Omit<LRGroupListItem, "lorryReceipts"> & {
   secondaryTripId: string | null;
   hubId: string | null;
   railheadBranchId: string | null;
+  sourceRailheadAreaId: string | null;
+  destinationRailheadAreaId: string | null;
+  marketTransportId: string | null;
+  marketVehicleId: string | null;
+  marketFreightAmount: number | null;
+  marketAdvanceAmount: number | null;
+  marketCommissionAmount: number | null;
+  marketHamaliAmount: number | null;
+  marketTdsAmount: number | null;
   consignorId: string;
   consigneeId: string;
   originBranchId: string;

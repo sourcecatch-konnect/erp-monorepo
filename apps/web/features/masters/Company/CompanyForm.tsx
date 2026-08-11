@@ -118,15 +118,16 @@ React.useEffect(() => {
   if (!open) return;
 
   const previousStateId = previousStateIdRef.current;
+  const currentStateId = form.getValues("stateId") ?? "";
 
-  if (previousStateId && previousStateId !== selectedStateId) {
+  if (previousStateId && previousStateId !== currentStateId) {
     form.setValue("cityId", "", {
       shouldDirty: true,
       shouldValidate: true,
     });
   }
 
-  previousStateIdRef.current = selectedStateId;
+  previousStateIdRef.current = currentStateId;
 }, [form, open, selectedStateId]);
   const stateOptions = (states.data?.data ?? []).map((state) => ({
   label: state.name,

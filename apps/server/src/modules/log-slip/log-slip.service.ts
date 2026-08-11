@@ -123,9 +123,33 @@ export const loadJourneyForSettlement = (journeyId: string) =>
           onwardFreight: true,
           openingKm: true,
           closingKm: true,
+          startDateTime: true,
+          endDateTime: true,
+          arrivalDateTime: true,
           isTripEmpty: true,
           fromCity: { select: { name: true } },
           toCity: { select: { name: true } },
+          consignor: { select: { name: true } },
+          primaryGroups: {
+            where: { deletedAt: null },
+            select: {
+              consignor: { select: { name: true } },
+              lorryReceipts: {
+                where: { deletedAt: null },
+                select: { lrNumber: true },
+              },
+            },
+          },
+          secondaryGroups: {
+            where: { deletedAt: null },
+            select: {
+              consignor: { select: { name: true } },
+              lorryReceipts: {
+                where: { deletedAt: null },
+                select: { lrNumber: true },
+              },
+            },
+          },
         },
       },
       advances: {
@@ -236,6 +260,20 @@ export const computeLogSlip = async (
   let sortOrder = 0;
 
   for (const leg of journey.trips) {
+    const groups = [...leg.primaryGroups, ...leg.secondaryGroups];
+    const lrNumbers = [
+      ...new Set(
+        groups.flatMap((group) => group.lorryReceipts.map((lr) => lr.lrNumber)),
+      ),
+    ];
+    const consignors = [
+      ...new Set(
+        [
+          leg.consignor?.name,
+          ...groups.map((group) => group.consignor?.name),
+        ].filter((name): name is string => Boolean(name)),
+      ),
+    ];
     lines.push({
       lineType: "TRIP_FREIGHT",
       sourceType: "VehicleTrip",
@@ -250,6 +288,18 @@ export const computeLogSlip = async (
         legType: leg.legType,
         openingKm: leg.openingKm,
         closingKm: leg.closingKm,
+        distanceKm:
+          leg.closingKm === null
+            ? null
+            : Math.max(leg.closingKm - leg.openingKm, 0),
+        source: leg.fromCity?.name ?? null,
+        destination: leg.toCity?.name ?? null,
+        startedAt: leg.startDateTime?.toISOString() ?? null,
+        endedAt:
+          (leg.endDateTime ?? leg.arrivalDateTime)?.toISOString() ?? null,
+        lrNumbers,
+        consignors,
+        isEmpty: leg.isTripEmpty,
       },
     });
   }
@@ -286,6 +336,7 @@ export const computeLogSlip = async (
         paymentMode: expense.paymentMode,
         paidByDriver: expense.paidByDriver,
         expenseDate: expense.expenseDate.toISOString(),
+        expenseType: expense.expenseType.name,
         receiptNo: expense.receiptNo,
       },
     });

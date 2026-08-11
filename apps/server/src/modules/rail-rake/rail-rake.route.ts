@@ -204,7 +204,7 @@ router.get(
 
     const loadings = await db.vPWagonLoading.findMany({
       where: {
-        status: "VERIFIED",
+        status: { in: ["COMPLETED", "VERIFIED"] },
         branchGrn: null,
         mrRrRow: {
           mrRr: {
@@ -282,7 +282,7 @@ router.get(
     const loading = await db.vPWagonLoading.findFirst({
       where: {
         id: vpWagonLoadingId,
-        status: "VERIFIED",
+        status: { in: ["COMPLETED", "VERIFIED"] },
         branchGrn: null,
         mrRrRow: { mrRr: { vpScheduleId: rake.vpScheduleId } },
       },
@@ -358,7 +358,7 @@ router.get(
 
     if (!loading) {
       throw new NotFoundError(
-        "Verified VP wagon is unavailable or already has a Branch GRN",
+        "Loaded VP wagon is unavailable or already has a Branch GRN",
       );
     }
 

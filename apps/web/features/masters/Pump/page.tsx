@@ -24,16 +24,12 @@ import { pumpKeys } from "./pump.key";
 
 type PumpCsvRow = Record<
   | "name"
-  | "type"
   | "address"
   | "country"
   | "cityId"
   | "stateId"
-  | "contactPerson"
-  | "contactPhone"
   | "currentDieselRate"
   | "rateLastUpdated"
-  | "gstIn"
   | "pan"
   | "creditLimit"
   | "isBlackListed",
@@ -122,8 +118,6 @@ export default function PumpPage() {
       isLoading={pumps.isLoading}
       defaultHiddenColumns={[
         "address",
-        "contactPhone",
-        "gstIn",
         "pan",
         "createdAt",
         "updatedAt",
@@ -161,15 +155,12 @@ export default function PumpPage() {
           cityId: item.cityId,
           stateId: item.stateId,
           country: item.country,
-          contactName: item.contactPerson || undefined,
-          contactPhone: item.contactPhone || undefined,
           currentDieselRate: item.currentDieselRate
             ? Number(item.currentDieselRate)
             : undefined,
           rateLastUpdated: item.rateLastUpdated
             ? new Date(item.rateLastUpdated)
             : undefined,
-          gstIn: item.gstIn || undefined,
           pan: item.pan || undefined,
           creditLimit: item.creditLimit ? Number(item.creditLimit) : undefined,
           isBlackListed: item.isBlackListed.trim().toLowerCase() === "true",

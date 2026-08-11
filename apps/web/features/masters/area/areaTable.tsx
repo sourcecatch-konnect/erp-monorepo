@@ -5,6 +5,7 @@ import type { Area } from "@skerp/types";
 import {
   IconMapPin,
   IconBuildingCommunity,
+  IconTrain,
 } from "@tabler/icons-react";
 
 export const areaColumns: ColumnDef<Area>[] = [
@@ -20,9 +21,7 @@ export const areaColumns: ColumnDef<Area>[] = [
 
         <div className="flex flex-col">
           <span className="font-medium">{row.original.name}</span>
-          <span className="text-xs text-muted-foreground">
-            Area Name
-          </span>
+          <span className="text-xs text-muted-foreground">Area Name</span>
         </div>
       </div>
     ),
@@ -37,5 +36,18 @@ export const areaColumns: ColumnDef<Area>[] = [
         {row.original.city?.name ?? "-"}
       </span>
     ),
+  },
+  {
+    accessorKey: "isRailHead",
+    header: "Rail Head",
+    cell: ({ row }) =>
+      row.original.isRailHead ? (
+        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          <IconTrain size={12} />
+          Yes
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">No</span>
+      ),
   },
 ];

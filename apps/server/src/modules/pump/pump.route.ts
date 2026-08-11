@@ -20,32 +20,29 @@ const router: Router = createCrudRouter({
 
   hooks: {
     beforeCreate: async (data) => {
-      convertRupeeFieldsToPaise(data, moneyFields);
+      const convertedData = convertRupeeFieldsToPaise(data, moneyFields);
 
-      if (data.currentDieselRate != null) {
-        data.rateLastUpdated = new Date();
+      if (convertedData.currentDieselRate != null) {
+        convertedData.rateLastUpdated = new Date();
       }
 
-      return data;
+      return convertedData;
     },
 
     beforeUpdate: async (data) => {
-      convertRupeeFieldsToPaise(data, moneyFields);
+      const convertedData = convertRupeeFieldsToPaise(data, moneyFields);
 
-      if (data.currentDieselRate != null) {
-        data.rateLastUpdated = new Date();
+      if (convertedData.currentDieselRate != null) {
+        convertedData.rateLastUpdated = new Date();
       }
 
-      return data;
+      return convertedData;
     },
   },
 
   listOptions: {
     searchableFields: [
       "name",
-      "contactName",
-      "contactPhone",
-      "gstIn",
       "pan",
       "country",
     ],

@@ -56,13 +56,12 @@ export const VP_LOADING_STATUS_ORDER: {
   key: "ALL" | VPScheduleLoadingStatus;
   label: string;
 }[] = [
-  { key: "ALL", label: "All" },
-  { key: "MRRR_CREATED", label: "Ready for loading" },
-  { key: "LOADING", label: "Loading" },
-  { key: "LOADED", label: "Loaded" },
-  { key: "VERIFIED", label: "Verified" },
-];
-
+    { key: "ALL", label: "All" },
+    { key: "MRRR_CREATED", label: "Ready for loading" },
+    { key: "LOADING", label: "Loading" },
+    { key: "LOADED", label: "Loaded" },
+    { key: "VERIFIED", label: "Verified" },
+  ];
 
 export type VPWagonLoadingStatus =
   | "DRAFT"
@@ -80,8 +79,7 @@ const STATUS_CONFIG: Record<
 > = {
   DRAFT: {
     label: "Not started",
-    className:
-      "border-muted bg-muted/30 text-muted-foreground",
+    className: "border-muted bg-muted/30 text-muted-foreground",
   },
 
   IN_PROGRESS: {
@@ -91,21 +89,20 @@ const STATUS_CONFIG: Record<
   },
 
   COMPLETED: {
-    label: "Ready to finish",
+    label: "Loaded",
     className:
       "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-400",
   },
 
   VERIFIED: {
-    label: "Completed",
+    label: "Loaded",
     className:
-      "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+      "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-400",
   },
 
   CANCELLED: {
     label: "Cancelled",
-    className:
-      "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400",
+    className: "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400",
   },
 };
 

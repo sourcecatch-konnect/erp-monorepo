@@ -13,7 +13,16 @@ const optionalLimitedString = (max: number, message: string) =>
     .max(max, message)
     .optional()
     .transform((value) => (value ? value : undefined));
-
+const wagonNumberSchema = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .transform((value) => (value ? value.toUpperCase() : undefined))
+  .refine(
+    (value) => !value || /^[A-Z]{2,3}-\d{6}$/.test(value),
+    "Enter valid number, e.g. CE-236744",
+  );
 const idString = (label: string) =>
   z.string().trim().min(1, `${label} is required`);
 
@@ -80,7 +89,30 @@ export const mrrrRowSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
-
+export const mrrrFormSchema = z.object({
+  scheduleDate: z.string(),
+  vpScheduleId: z.string(),
+  rakeType: rakeTypeFormSchema,
+  mrRrNumber: z.string().optional(),
+  remarks: optionalLimitedString(
+    250,
+    "Remarks cannot exceed 250 characters",
+  ),
+  rows: z.array(
+    z.object({
+      id: z.string().optional(),
+      vpScheduleWagonCountId: z.string().optional(),
+      wagonId: z.string().optional(),
+      wagonTypeLabel: z.string().optional(),
+      rowNumber: z.number().optional(),
+      rowLabel: z.string().optional(),
+      sequenceNo: optionalString,
+      vpNo: wagonNumberSchema,
+      mrRrNo: wagonNumberSchema,
+      sealNo: optionalString,
+    }),
+  ),
+});
 export const mrrrSchema = z.object({
   id: z.string(),
 
@@ -146,8 +178,8 @@ export const createMRRRSchema = z.object({
         rowNumber: z.coerce.number().int().min(1),
 
         sequenceNo: optionalString,
-        vpNo: optionalString,
-        mrRrNo: optionalString,
+        vpNo: wagonNumberSchema,
+        mrRrNo: wagonNumberSchema,
         sealNo: optionalString,
       }),
     )
@@ -170,8 +202,8 @@ export const updateMRRRRowsSchema = z.object({
         id: idString("MR/RR row"),
 
         sequenceNo: optionalString,
-        vpNo: optionalString,
-        mrRrNo: optionalString,
+        vpNo: wagonNumberSchema,
+        mrRrNo: wagonNumberSchema,
         sealNo: optionalString,
       }),
     )

@@ -26,7 +26,6 @@ export const useVPLoadingSchedules = (scheduleDate?: string) => {
   return useQuery({
     queryKey: vpLoadingLookupKeys.schedules(scheduleDate),
     queryFn: () => vpLoadingApi.schedules(scheduleDate),
-    enabled: Boolean(scheduleDate),
   });
 };
 export const useVPWagonLoadings = () => {

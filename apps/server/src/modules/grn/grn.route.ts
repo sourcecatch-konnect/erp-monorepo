@@ -74,6 +74,30 @@ const grnWhereByIdentifier = (
   ...grnBranchFilter(req),
 });
 
+const assertUnloadingSupervisor = async (
+  supervisorId: string | undefined,
+  req: Parameters<typeof grnRailheadBranchFilter>[0],
+) => {
+  if (!supervisorId) return;
+
+  const supervisor = await db.labour.findFirst({
+    where: {
+      id: supervisorId,
+      type: "Supervisor",
+      ...(req.ctx?.branchScope === "ALL"
+        ? {}
+        : { branchId: { in: req.ctx?.branchIds ?? [] } }),
+    },
+    select: { id: true },
+  });
+
+  if (!supervisor) {
+    throw new BadRequestError(
+      "Select a Supervisor from the Labour master for an allowed branch",
+    );
+  }
+};
+
 const getDamagePhotos = (grnId: string) =>
   db.attachment.findMany({
     where: {
@@ -90,6 +114,52 @@ type GRNGoodsLoadingSummary = {
     loadedQty: number;
     loadingDamageQty: number;
   }[];
+};
+
+type GRNVPLoadingSummaryRow = {
+  status: string;
+  loadedQty: number;
+};
+
+const withVPLoadingSummary = <
+  T extends {
+    receivedQty: number;
+    vpLoadings?: GRNVPLoadingSummaryRow[];
+  },
+>(
+  grn: T,
+) => {
+  const loadings = grn.vpLoadings ?? [];
+  const activeLoadings = loadings.filter((row) => row.status !== "CANCELLED");
+  const loadedQty = activeLoadings.reduce(
+    (total, row) => total + row.loadedQty,
+    0,
+  );
+  const remainingQty = Math.max(grn.receivedQty - loadedQty, 0);
+  const progressPercent =
+    grn.receivedQty > 0
+      ? Math.min(Math.round((loadedQty / grn.receivedQty) * 100), 100)
+      : 0;
+
+  const status =
+    activeLoadings.length === 0
+      ? loadings.some((row) => row.status === "CANCELLED")
+        ? "CANCELLED"
+        : "PENDING"
+      : grn.receivedQty > 0 && loadedQty >= grn.receivedQty
+        ? "FULLY_LOADED"
+        : "PARTIALLY_LOADED";
+
+  return {
+    ...grn,
+    vpLoadingSummary: {
+      status,
+      loadedQty,
+      remainingQty,
+      progressPercent,
+      activeLoadingCount: activeLoadings.length,
+    },
+  };
 };
 
 const withLoadingAvailability = <
@@ -117,11 +187,16 @@ const withLoadingAvailability = <
 });
 
 const withDamagePhotos = async <
-  T extends { id: string; goods?: GRNGoodsLoadingSummary[] },
+  T extends {
+    id: string;
+    receivedQty: number;
+    goods?: GRNGoodsLoadingSummary[];
+    vpLoadings?: GRNVPLoadingSummaryRow[];
+  },
 >(
   grn: T,
 ) => ({
-  ...withLoadingAvailability(grn),
+  ...withVPLoadingSummary(withLoadingAvailability(grn)),
   damagePhotos: await getDamagePhotos(grn.id),
 });
 
@@ -238,9 +313,9 @@ const buildGoodsCreate = (
           "GRN goods line does not belong to selected LR",
         );
       }
-      if (row.totalQty > source.quantity) {
+      if (row.totalQty !== source.quantity) {
         throw new BadRequestError(
-          `Total quantity cannot exceed LR goods quantity (${source.quantity})`,
+          `Total quantity must match LR goods quantity (${source.quantity})`,
         );
       }
     }
@@ -272,6 +347,7 @@ const buildGRNWriteData = (
 
   return {
     gateNo: data.gateNo,
+    labourCount: data.labourCount,
     inDateTime: data.inDateTime,
     outDateTime: data.outDateTime,
     unloadingMinutes: data.unloadingMinutes,
@@ -356,7 +432,7 @@ router.get("/", can(PERMS.GRN.VIEW), async (req, res) => {
     db.gRN.count({ where }),
   ]);
 
-  return sendOk(res, data, {
+  return sendOk(res, data.map(withVPLoadingSummary), {
     page: query.page,
     size: query.size,
     total,
@@ -386,28 +462,11 @@ router.get("/status-counts", can(PERMS.GRN.VIEW), async (req, res) => {
 
   return sendOk(res, { all, ...counts });
 });
-// "/grn/supervisors"
+// Labour-master supervisors available to the current user's branch scope.
 router.get("/supervisors", can(PERMS.GRN.CREATE), async (req, res) => {
-  const supervisorRole = await db.role.findFirst({
+  const supervisors = await db.labour.findMany({
     where: {
-      name: "SuperVisor",
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!supervisorRole) {
-    return res.json({
-      data: [],
-    });
-  }
-
-  const supervisors = await db.user.findMany({
-    where: {
-      status: true,
-      roleId: supervisorRole.id,
-
+      type: "Supervisor",
       ...(req.ctx?.branchScope === "ALL"
         ? {}
         : {
@@ -418,25 +477,16 @@ router.get("/supervisors", can(PERMS.GRN.CREATE), async (req, res) => {
     },
     select: {
       id: true,
-      firstName: true,
-      middleName: true,
-      lastName: true,
-      email: true,
+      name: true,
+      mobileNo: true,
     },
     orderBy: {
-      firstName: "asc",
+      name: "asc",
     },
   });
 
   res.json({
-    data: supervisors.map((user) => ({
-      id: user.id,
-      name:
-        [user.firstName, user.middleName, user.lastName]
-          .filter(Boolean)
-          .join(" ") || user.email,
-      email: user.email,
-    })),
+    data: supervisors,
   });
 });
 /* ------------------------------------------------------------------ */
@@ -627,9 +677,8 @@ router.get("/preview/:lrId", can(PERMS.GRN.CREATE), async (req, res) => {
     description: g.description,
     totalQty: g.quantity,
 
-    // Default full received.
-    // User can change this and enter damage / shortage.
-    receivedQty: g.quantity,
+    // Receiving quantities must be entered by the user in the GRN form.
+    receivedQty: 0,
     damageQty: 0,
     shortageQty: 0,
 
@@ -654,8 +703,7 @@ router.get("/preview/:lrId", can(PERMS.GRN.CREATE), async (req, res) => {
       invoiceNumber: lr.invoiceNumber,
       invoiceAmount: lr.invoiceAmount,
 
-      totalWeight:
-        lr.totalWeight == null ? null : Number(lr.totalWeight),
+      totalWeight: lr.totalWeight == null ? null : Number(lr.totalWeight),
       unit: lr.unit,
       sealNumber: group.sealNumber,
 
@@ -697,6 +745,7 @@ router.post("/", can(PERMS.GRN.CREATE), async (req, res) => {
   if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
   const input = parsed.data;
+  await assertUnloadingSupervisor(input.unloadingSupervisorId, req);
   const lr = await getCreateLR(input.lorryReceiptId, req);
   const writeData = buildGRNWriteData(input, lr.goods);
   const userId = actorId(req);
@@ -719,6 +768,7 @@ router.post("/", can(PERMS.GRN.CREATE), async (req, res) => {
         lorryReceiptId: input.lorryReceiptId,
         createdById: userId,
         gateNo: writeData.gateNo,
+        labourCount: writeData.labourCount,
         inDateTime: writeData.inDateTime,
         outDateTime: writeData.outDateTime,
         unloadingMinutes: writeData.unloadingMinutes,
@@ -795,64 +845,116 @@ router.put("/:id", can(PERMS.GRN.UPDATE), async (req, res) => {
   if (input.lorryReceiptId !== existing.lorryReceiptId) {
     throw new BadRequestError("LR cannot be changed after GRN is created");
   }
+  await assertUnloadingSupervisor(input.unloadingSupervisorId, req);
 
-  const writeData = buildGRNWriteData(input, existing.lorryReceipt.goods);
+  const writeData = buildGRNWriteData(
+    input,
+    existing.lorryReceipt.goods,
+  );
 
-  const grn = await db.$transaction(async (tx) => {
-    await tx.gRNGoods.deleteMany({ where: { grnId: existing.id } });
+  const grn = await db.$transaction(
+    async (tx) => {
+      await tx.gRNGoods.deleteMany({
+        where: {
+          grnId: existing.id,
+        },
+      });
 
-    return tx.gRN.update({
-      where: { id: existing.id },
-      data: {
-        updatedById: actorId(req),
-        version: { increment: 1 },
-        gateNo: writeData.gateNo,
-        inDateTime: writeData.inDateTime,
-        outDateTime: writeData.outDateTime,
-        unloadingMinutes: writeData.unloadingMinutes,
-        totalQty: writeData.totalQty,
-        receivedQty: writeData.receivedQty,
-        damageQty: writeData.damageQty,
-        shortageQty: writeData.shortageQty,
-        totalWeightMt: writeData.totalWeightMt,
-        totalFreight: writeData.totalFreight,
-        balanceFreight: writeData.balanceFreight,
-        freightPerMt: writeData.freightPerMt,
-        detentionDays: writeData.detentionDays,
-        detentionRate: writeData.detentionRate,
-        detentionAmount: writeData.detentionAmount,
-        grossTotal: writeData.grossTotal,
-        advanceAmount: writeData.advanceAmount,
-        damageAmount: writeData.damageAmount,
-        tdsAmount: writeData.tdsAmount,
-        hamaliAmount: writeData.hamaliAmount,
-        printingStationaryAmount: writeData.printingStationaryAmount,
-        netAmount: writeData.netAmount,
-        labourId: writeData.labourId,
-        labourName: writeData.labourName,
-        labourCharge: writeData.labourCharge,
-        unloadingSupervisorId: writeData.unloadingSupervisorId,
-        damagesBy: writeData.damagesBy,
-        lrCopyChecked: writeData.lrCopyChecked,
-        invoiceChecked: writeData.invoiceChecked,
-        kataReceiptChecked: writeData.kataReceiptChecked,
-        wayBillChecked: writeData.wayBillChecked,
-        sealNoChecked: writeData.sealNoChecked,
-        lrCopyRemark: writeData.lrCopyRemark,
-        invoiceRemark: writeData.invoiceRemark,
-        kataReceiptRemark: writeData.kataReceiptRemark,
-        wayBillRemark: writeData.wayBillRemark,
-        sealNoRemark: writeData.sealNoRemark,
-        remarks: writeData.remarks,
-        goods: { create: writeData.goods },
-      },
-      include: grnDetailInclude,
-    });
+      return tx.gRN.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          updatedById: actorId(req),
+          version: {
+            increment: 1,
+          },
+
+          gateNo: writeData.gateNo,
+          labourCount: writeData.labourCount,
+          inDateTime: writeData.inDateTime,
+          outDateTime: writeData.outDateTime,
+          unloadingMinutes: writeData.unloadingMinutes,
+
+          totalQty: writeData.totalQty,
+          receivedQty: writeData.receivedQty,
+          damageQty: writeData.damageQty,
+          shortageQty: writeData.shortageQty,
+
+          totalWeightMt: writeData.totalWeightMt,
+          totalFreight: writeData.totalFreight,
+          balanceFreight: writeData.balanceFreight,
+          freightPerMt: writeData.freightPerMt,
+
+          detentionDays: writeData.detentionDays,
+          detentionRate: writeData.detentionRate,
+          detentionAmount: writeData.detentionAmount,
+
+          grossTotal: writeData.grossTotal,
+          advanceAmount: writeData.advanceAmount,
+          damageAmount: writeData.damageAmount,
+          tdsAmount: writeData.tdsAmount,
+          hamaliAmount: writeData.hamaliAmount,
+          printingStationaryAmount:
+            writeData.printingStationaryAmount,
+          netAmount: writeData.netAmount,
+
+          labourId: writeData.labourId,
+          labourName: writeData.labourName,
+          labourCharge: writeData.labourCharge,
+
+          unloadingSupervisorId:
+            writeData.unloadingSupervisorId,
+
+          damagesBy: writeData.damagesBy,
+
+          lrCopyChecked: writeData.lrCopyChecked,
+          invoiceChecked: writeData.invoiceChecked,
+          kataReceiptChecked:
+            writeData.kataReceiptChecked,
+          wayBillChecked: writeData.wayBillChecked,
+          sealNoChecked: writeData.sealNoChecked,
+
+          lrCopyRemark: writeData.lrCopyRemark,
+          invoiceRemark: writeData.invoiceRemark,
+          kataReceiptRemark:
+            writeData.kataReceiptRemark,
+          wayBillRemark: writeData.wayBillRemark,
+          sealNoRemark: writeData.sealNoRemark,
+
+          remarks: writeData.remarks,
+
+          goods: {
+            create: writeData.goods,
+          },
+        },
+      });
+    },
+    {
+      timeout: 15000,
+    },
+  );
+
+  await validateDamagePhotoAttachments(
+    grn.id,
+    input.damagePhotoAttachmentIds,
+  );
+
+  const updatedGrn = await db.gRN.findUnique({
+    where: {
+      id: grn.id,
+    },
+    include: grnDetailInclude,
   });
 
-  await validateDamagePhotoAttachments(grn.id, input.damagePhotoAttachmentIds);
+  if (!updatedGrn) {
+    throw new NotFoundError("GRN not found after update");
+  }
 
-  return sendOk(res, await withDamagePhotos(grn));
+  return sendOk(
+    res,
+    await withDamagePhotos(updatedGrn),
+  );
 });
 
 /* ------------------------------------------------------------------ */

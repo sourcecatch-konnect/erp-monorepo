@@ -17,4 +17,5 @@ export type Area = z.infer<typeof areaSchema> & {
 };
 
 export type CreateAreaBody = z.infer<typeof createAreaSchema>;
+export type CreateAreaFormInput = z.input<typeof createAreaSchema>;
 export type UpdateAreaBody = z.infer<typeof updateAreaSchema>;
