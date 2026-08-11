@@ -7,7 +7,7 @@ import {
   FormProvider,
   useFieldArray,
   useForm,
-  type Resolver,
+
   type SubmitHandler,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,7 +27,7 @@ import type {
   UpdateMRRRRowsBody,
   UpdateMRRRBody,
 } from "@skerp/types";
-import { createMRRRSchema, mrrrFormSchema, updateMRRRSchema } from "@skerp/validators";
+import { mrrrFormSchema } from "@skerp/validators";
 
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";

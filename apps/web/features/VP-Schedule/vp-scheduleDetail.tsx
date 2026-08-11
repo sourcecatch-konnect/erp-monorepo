@@ -14,7 +14,6 @@ import {
   IconEdit,
   IconInfoCircle,
   IconMapPin,
-  IconPackage,
   IconTrain,
 } from "@tabler/icons-react";
 
@@ -96,16 +95,6 @@ function StatCard({
   );
 }
 
-const formatFreight = (value: string | number | null | undefined) => {
-  if (value === null || value === undefined || value === "") return "â€”";
-
-  const amount = Number(value);
-
-  if (Number.isNaN(amount)) return "-";
-
-  return formatPaise(amount);
-};
-
 export default function VPScheduleDetail({
   scheduleId,
 }: {
@@ -180,9 +169,7 @@ export default function VPScheduleDetail({
   const canCancel = isDraft || isPlanned;
 
   const wagonCounts = schedule.wagonCounts ?? [];
-  const totalFreight = wagonCounts.reduce((sum: number, wagon) => {
-    return sum + Number(wagon.totalFreight ?? 0);
-  }, 0);
+
   const handleConfirm = () => {
     confirm.mutate(
       {

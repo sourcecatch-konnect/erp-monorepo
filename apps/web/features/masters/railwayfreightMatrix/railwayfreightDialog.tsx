@@ -16,7 +16,6 @@ import {
   IconMapPin,
   IconArrowRight,
   IconCash,
-  IconId,
   IconCalendar,
 } from "@tabler/icons-react";
 import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
