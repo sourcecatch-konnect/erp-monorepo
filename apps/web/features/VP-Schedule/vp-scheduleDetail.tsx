@@ -14,7 +14,6 @@ import {
   IconEdit,
   IconInfoCircle,
   IconMapPin,
-  IconPackage,
   IconTrain,
 } from "@tabler/icons-react";
 
@@ -33,7 +32,6 @@ import {
   formatVPScheduleDateTime,
   VPScheduleStatusBadge,
 } from "./vp-schedule-ui";
-import { formatPaise } from "@/lib/money";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -96,16 +94,6 @@ function StatCard({
   );
 }
 
-const formatFreight = (value: string | number | null | undefined) => {
-  if (value === null || value === undefined || value === "") return "â€”";
-
-  const amount = Number(value);
-
-  if (Number.isNaN(amount)) return "-";
-
-  return formatPaise(amount);
-};
-
 export default function VPScheduleDetail({
   scheduleId,
 }: {
@@ -167,8 +155,7 @@ export default function VPScheduleDetail({
     schedule.toBranch?.name || schedule.toBranch?.branchCode || "—";
 
   const createdBy = schedule.createdBy
-    ? `${schedule.createdBy.firstName ?? ""} ${
-        schedule.createdBy.lastName ?? ""
+    ? `${schedule.createdBy.firstName ?? ""} ${schedule.createdBy.lastName ?? ""
       }`.trim()
     : "—";
 
@@ -180,10 +167,8 @@ export default function VPScheduleDetail({
   const canConfirm = isDraft;
   const canCancel = isDraft || isPlanned;
 
-  const wagonCounts = schedule.wagonCounts ?? [];
-  const totalFreight = wagonCounts.reduce((sum: number, wagon) => {
-    return sum + Number(wagon.totalFreight ?? 0);
-  }, 0);
+
+
   const handleConfirm = () => {
     confirm.mutate(
       {
@@ -304,17 +289,41 @@ export default function VPScheduleDetail({
           <CardSection title="Schedule Overview" icon={<IconTrain size={14} />}>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Schedule no" value={schedule.scheduleNumber} />
+
               <Field
                 label="Schedule date"
                 value={formatVPScheduleDate(schedule.scheduleDate)}
               />
+
               <Field
                 label="Status"
                 value={<VPScheduleStatusBadge status={schedule.status} />}
               />
+
               <Field label="From branch" value={fromBranch} />
+
               <Field label="To branch" value={toBranch} />
+
               <Field label="Created by" value={createdBy} />
+
+              <Field
+                label="Total wagons"
+                value={schedule.totalWagonCount ?? 0}
+              />
+
+              <Field
+                label="Wagon type"
+                value={
+                  schedule.wagonCounts?.length
+                    ? schedule.wagonCounts
+                      .map(
+                        (item) =>
+                          `${item.wagon?.name ?? "—"} (${item.count})`,
+                      )
+                      .join(", ")
+                    : "—"
+                }
+              />
             </dl>
           </CardSection>
 
@@ -337,130 +346,6 @@ export default function VPScheduleDetail({
                 }
               />
             </dl>
-          </CardSection>
-          <CardSection
-            title="Wagon Details"
-            icon={<IconPackage size={14} />}
-            action={
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Total Wagons
-                  </span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {schedule.totalWagonCount ?? 0}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 shadow-sm">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Total Freight
-                  </span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {formatFreight(totalFreight)}
-                  </span>
-                </div>
-              </div>
-            }
-          >
-            {wagonCounts.length ? (
-              <div className="grid gap-3">
-                {wagonCounts.map((wagon) => (
-                  <div
-                    key={wagon.id}
-                    className="rounded-xl border bg-background p-4 shadow-sm"
-                  >
-                    <div className="flex items-center justify-between gap-3 border-b pb-3">
-                      <p className="text-sm font-semibold text-foreground">
-                        {wagon.wagon?.name ?? "—"}
-                      </p>
-
-                      <p className="text-xs text-muted-foreground">
-                        Wagon Count:{" "}
-                        <span className="font-medium text-foreground">
-                          {wagon.count}
-                        </span>
-                      </p>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-8">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Height</p>
-                        <p className="font-medium">
-                          {wagon.wagon?.height != null
-                            ? wagon.wagon.height
-                            : "—"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">Width</p>
-                        <p className="font-medium">
-                          {wagon.wagon?.width != null ? wagon.wagon.width : "—"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">Weight</p>
-                        <p className="font-medium">
-                          {wagon.wagon?.weight != null
-                            ? wagon.wagon.weight
-                            : "—"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Capacity MT
-                        </p>
-                        <p className="font-medium">
-                          {wagon.capacityMt ?? wagon.wagon?.capacityMt ?? "—"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Capacity CFT
-                        </p>
-                        <p className="font-medium">
-                          {wagon.capacityCft ?? wagon.wagon?.totalCft ?? "—"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Total MT
-                        </p>
-                        <p className="font-medium">{wagon.totalMt ?? "—"}</p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Total CFT
-                        </p>
-                        <p className="font-medium">
-                          {wagon.totalCft != null
-                            ? Number(wagon.totalCft).toLocaleString("en-IN")
-                            : "—"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Freight Amount
-                        </p>
-                        <p className="font-medium">
-                          {formatFreight(wagon.freightAmount)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-                No wagon rows added.
-              </div>
-            )}
           </CardSection>
 
           <CardSection title="Remarks" icon={<IconInfoCircle size={14} />}>

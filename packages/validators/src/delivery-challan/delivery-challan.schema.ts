@@ -16,10 +16,7 @@ const optionalText = (max: number) =>
 
 const optionalMoney = z.coerce.number().finite().min(0).optional();
 
-export const deliveryVehicleModeSchema = z.enum([
-  "OWN",
-  "MARKET",
-]);
+export const deliveryVehicleModeSchema = z.enum(["OWN", "MARKET"]);
 
 export const deliveryChallanStatusSchema = z.enum([
   "DRAFT",
@@ -42,10 +39,8 @@ const dispatchFields = z.object({
 
   vehicleMode: deliveryVehicleModeSchema,
   transportId: optionalId,
-  vehicleId: z
-    .string()
-    .trim()
-    .min(1, "Vehicle is required"),
+  vehicleId: optionalId,
+  vehicleNumber: optionalText(30),
 
   driverName: optionalText(150),
   driverMobile: optionalText(20),
@@ -74,11 +69,11 @@ const withVehicleRules = <T extends z.infer<typeof dispatchFields>>(
         message: "Transporter is required for a market vehicle",
       });
     }
-    if (!value.vehicleId) {
+    if (!value.vehicleNumber) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["vehicleId"],
-        message: "Vehicle is required for market delivery",
+        path: ["vehicleNumber"],
+        message: "Vehicle number is required for market delivery",
       });
     }
   }

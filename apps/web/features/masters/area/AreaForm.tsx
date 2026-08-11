@@ -4,14 +4,20 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import type { Area, CreateAreaBody, City } from "@skerp/types";
+import type {
+  Area,
+  CreateAreaBody,
+  CreateAreaFormInput,
+  City,
+} from "@skerp/types";
 import { createAreaSchema } from "@skerp/validators";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import TextField from "../_shared/fields/TextField";
+import SwitchField from "../_shared/fields/SwitchField";
 
-import { IconMapPin } from "@tabler/icons-react";
+import { IconMapPin, IconTrain } from "@tabler/icons-react";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { areaApi } from "./area.service";
 import { areaKeys } from "./area.key";
@@ -29,9 +35,10 @@ type Props = {
   row?: Area | null;
 };
 
-const defaultValues: CreateAreaBody = {
+const defaultValues: CreateAreaFormInput = {
   name: "",
   cityId: "",
+  isRailHead: false,
   googlePlaceId: null,
   formattedAddress: null,
   latitude: null,
@@ -47,7 +54,7 @@ const getAreaNameFromAddress = (address: string, cityName?: string) => {
 };
 
 export default function AreaForm({ open, onOpenChange, row }: Props) {
-  const form = useForm<CreateAreaBody>({
+  const form = useForm<CreateAreaFormInput, unknown, CreateAreaBody>({
     resolver: zodResolver(createAreaSchema),
     defaultValues,
   });
@@ -89,6 +96,7 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
     form.reset({
       name: row?.name ?? "",
       cityId: row?.cityId ?? "",
+      isRailHead: row?.isRailHead ?? false,
       googlePlaceId: row?.googlePlaceId ?? null,
       formattedAddress: row?.formattedAddress ?? null,
       latitude: row?.latitude ?? null,
@@ -262,7 +270,7 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
   }, [open, selectedCity?.name]);
 
   return (
-    <MasterFormDialog
+    <MasterFormDialog<CreateAreaFormInput, CreateAreaBody>
       open={open}
       onOpenChange={onOpenChange}
       title={row ? "Edit Area" : "Add Area"}
@@ -276,7 +284,7 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
         title="Area Information"
         description="Search and select the area from Google Places"
       >
-        <CitySelectField<CreateAreaBody>
+        <CitySelectField<CreateAreaFormInput>
           name="cityId"
           label="City"
           required
@@ -290,7 +298,7 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
           }
           onCityChange={handleCityChange}
         />
-        <TextField<CreateAreaBody>
+        <TextField<CreateAreaFormInput>
           name="name"
           label="Area"
           placeholder={
@@ -301,6 +309,12 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
           required
           inputRef={areaInputRef}
           disabled={!selectedCity}
+        />
+        <SwitchField<CreateAreaFormInput>
+          name="isRailHead"
+          label="Rail Head"
+          description="Mark this area as a railway loading or unloading point"
+          icon={<IconTrain size={14} />}
         />
         {hasMapLocation ? (
           <div className="col-span-2 overflow-hidden rounded-lg border bg-muted/20">

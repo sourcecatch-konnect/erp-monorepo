@@ -101,6 +101,8 @@ const lrLiteSelect = {
   status: true,
   invoiceNumber: true,
   invoiceAmount: true,
+  totalWeight: true,
+  unit: true,
 
   ewayBill: {
     select: {
@@ -135,7 +137,8 @@ const lrDetailSelect = {
   createdAt: true,
   invoiceNumber: true,
   invoiceAmount: true,
-
+  totalWeight: true,
+  unit: true,
   loadingLocation: { select: locationSelect },
   unloadingLocation: { select: locationSelect },
 
@@ -317,12 +320,23 @@ export const grnListSelect = {
   id: true,
   grnNumber: true,
   status: true,
-
+  gateNo: true,
+  totalQty: true,
+  receivedQty: true,
+  damageQty: true,
+  shortageQty: true,
   netAmount: true,
   createdAt: true,
   updatedAt: true,
   version: true,
   lorryReceipt: { select: lrLiteSelect },
+  vpLoadings: {
+    select: {
+      id: true,
+      status: true,
+      loadedQty: true,
+    },
+  },
 } satisfies Prisma.GRNSelect;
 
 export const grnDetailInclude = {
@@ -345,6 +359,11 @@ export const grnDetailInclude = {
         },
       },
       vpLoadingGoods: {
+        where: {
+          vpLoading: {
+            status: { not: "CANCELLED" },
+          },
+        },
         select: {
           loadedQty: true,
           loadingDamageQty: true,
@@ -355,9 +374,55 @@ export const grnDetailInclude = {
     },
   },
   labour: { select: labourSelect },
-  unloadingSupervisor: { select: userSelect },
+  unloadingSupervisor: { select: labourSelect },
   createdBy: { select: userSelect },
   updatedBy: { select: userSelect },
+  vpLoadings: {
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      loadingNumber: true,
+      status: true,
+      loadedQty: true,
+      loadedWeightMt: true,
+      remarks: true,
+      cancelReason: true,
+      createdAt: true,
+      vpWagonLoading: {
+        select: {
+          id: true,
+          status: true,
+          gateNo: true,
+          loadingStartedAt: true,
+          loadingCompletedAt: true,
+          mrRrRow: {
+            select: {
+              rowNumber: true,
+              rowLabel: true,
+              vpNo: true,
+              mrRrNo: true,
+              mrRr: {
+                select: {
+                  vpSchedule: {
+                    select: {
+                      id: true,
+                      scheduleNumber: true,
+                    },
+                  },
+                },
+              },
+              wagon: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 } satisfies Prisma.GRNInclude;
 
 type GRNMoneyInput = Pick<

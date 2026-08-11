@@ -20,12 +20,9 @@ import {
   logSlipInclude,
   logSlipListSelect,
 } from "./log-slip.service.js";
-import { buildLogSlipPdfDocument } from "./log-slip.pdf.js";
-import { generatePdfBuffer } from "../../templetes/pdf/pdf.genertaor..js";
-import {
-  Prisma,
-  type LogSlipStatus,
-} from "../../../generated/prisma/index.js";
+import { buildLogSlipPdfHtml } from "./log-slip.pdf.js";
+import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
+import { Prisma, type LogSlipStatus } from "../../../generated/prisma/index.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -91,27 +88,23 @@ router.get("/", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Preview — live settlement computed from the journey                */
 /* ------------------------------------------------------------------ */
-router.get(
-  "/:journeyId/preview",
-  can(PERMS.LOGSLIP.VIEW),
-  async (req, res) => {
-    const journeyId = String(req.params.journeyId);
-    const computation = await computeLogSlip(journeyId);
-    if (!computation) throw new NotFoundError("Journey not found");
+router.get("/:journeyId/preview", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const journeyId = String(req.params.journeyId);
+  const computation = await computeLogSlip(journeyId);
+  if (!computation) throw new NotFoundError("Journey not found");
 
-    const { journey, lines, ...totals } = computation;
-    return sendOk(res, {
-      journeyId,
-      openingKm: journey.openingKm,
-      closingKm: journey.closingKm,
-      journeyStatus: journey.status,
-      settlementStatus: journey.settlementStatus,
-      logSlip: journey.logSlip,
-      ...totals,
-      lines,
-    });
-  },
-);
+  const { journey, lines, ...totals } = computation;
+  return sendOk(res, {
+    journeyId,
+    openingKm: journey.openingKm,
+    closingKm: journey.closingKm,
+    journeyStatus: journey.status,
+    settlementStatus: journey.settlementStatus,
+    logSlip: journey.logSlip,
+    ...totals,
+    lines,
+  });
+});
 
 /* ------------------------------------------------------------------ */
 /* Detail                                                             */
@@ -140,8 +133,8 @@ router.get(
     });
     if (!slip) return res.status(404).json({ message: "Log slip not found" });
 
-    const pdfDoc = buildLogSlipPdfDocument(slip);
-    const buffer = await generatePdfBuffer(pdfDoc);
+    const html = buildLogSlipPdfHtml(slip);
+    const buffer = await generatePdfFromHtml(html);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -179,7 +172,9 @@ router.post(
     }
     // Non-negotiable: no log slip while open legs exist.
     if (computation.warnings.some((w) => w.includes("still open"))) {
-      throw new BadRequestError("Cannot generate a log slip while legs are open");
+      throw new BadRequestError(
+        "Cannot generate a log slip while legs are open",
+      );
     }
     if (
       journey.closingKm === null ||

@@ -99,7 +99,7 @@ export default function RailBranchGRNList() {
             Goods Receipt Notes at Branch
           </h1>
           <p className="text-sm text-muted-foreground">
-            Receive verified VP goods from incoming rail rakes.
+            Receive loaded VP goods from incoming rail rakes.
           </p>
         </div>
         {canCreate ? (

@@ -223,31 +223,31 @@ const validateDispatchResources = async (
   input: DispatchFields,
   grn: DispatchBranchGrn,
 ) => {
-  const supervisor = await client.user.findFirst({
+  const supervisor = await client.labour.findFirst({
     where: {
       id: input.supervisorId,
       branchId,
-      status: true,
+      type: "Supervisor",
     },
     select: { id: true },
   });
   if (!supervisor) {
     throw new BadRequestError(
-      "Supervisor must be an active user at the dispatch branch",
+      "Select an unloading Supervisor from the dispatch branch Labour master",
     );
   }
 
   const destinationLocation = input.destinationLocationId
     ? await client.customerLocation.findUnique({
-      where: { id: input.destinationLocationId },
-      select: {
-        id: true,
-        customerId: true,
-        address: true,
-        areaId: true,
-        area: { select: { name: true, formattedAddress: true } },
-      },
-    })
+        where: { id: input.destinationLocationId },
+        select: {
+          id: true,
+          customerId: true,
+          address: true,
+          areaId: true,
+          area: { select: { name: true, formattedAddress: true } },
+        },
+      })
     : null;
   if (input.destinationLocationId && !destinationLocation) {
     throw new BadRequestError("Selected delivery location was not found");
@@ -286,17 +286,23 @@ const validateDispatchResources = async (
     if (!area) throw new BadRequestError("Selected destination was not found");
   }
 
-  const vehicle = await client.vehicle.findUnique({
-    where: { id: input.vehicleId },
-    include: {
-      transport: { select: { id: true, name: true } },
-      vehicleTypeRef: { select: { name: true } },
-    },
-  });
-  if (!vehicle) throw new BadRequestError("Selected vehicle was not found");
+  const vehicleInclude = {
+    transport: { select: { id: true, name: true } },
+    vehicleTypeRef: { select: { name: true } },
+  } satisfies Prisma.VehicleInclude;
+
+  const vehicle = input.vehicleId
+    ? await client.vehicle.findUnique({
+        where: { id: input.vehicleId },
+        include: vehicleInclude,
+      })
+    : null;
+  if (input.vehicleId && !vehicle) {
+    throw new BadRequestError("Selected vehicle was not found");
+  }
 
   if (input.vehicleMode === "OWN") {
-    if (vehicle.ownershipType !== "Own_Vehicle") {
+    if (!vehicle || vehicle.ownershipType !== "Own_Vehicle") {
       throw new BadRequestError("Select an own vehicle for own delivery");
     }
 
@@ -310,10 +316,38 @@ const validateDispatchResources = async (
     };
   }
 
+  if (!input.transportId) {
+    throw new BadRequestError("Transporter is required for market delivery");
+  }
+
+  const transport = await client.transport.findUnique({
+    where: { id: input.transportId },
+    select: { id: true, name: true },
+  });
+  if (!transport) {
+    throw new BadRequestError("Selected transporter was not found");
+  }
+
+  const manualVehicleNumber = input.vehicleNumber?.trim().toUpperCase();
+  if (!vehicle && !manualVehicleNumber) {
+    throw new BadRequestError("Vehicle number is required for market delivery");
+  }
+
+  const matchedVehicle =
+    vehicle ??
+    (manualVehicleNumber
+      ? await client.vehicle.findFirst({
+          where: {
+            vehicleNumber: { equals: manualVehicleNumber, mode: "insensitive" },
+          },
+          include: vehicleInclude,
+        })
+      : null);
+
   if (
-    vehicle.ownershipType !== "Market_Vehicle" ||
-    !input.transportId ||
-    vehicle.transportId !== input.transportId
+    matchedVehicle &&
+    (matchedVehicle.ownershipType !== "Market_Vehicle" ||
+      matchedVehicle.transportId !== input.transportId)
   ) {
     throw new BadRequestError(
       "Selected market vehicle does not belong to the transporter",
@@ -321,11 +355,11 @@ const validateDispatchResources = async (
   }
 
   return {
-    transportId: vehicle.transportId,
-    transporterName: vehicle.transport?.name ?? null,
-    vehicleId: vehicle.id,
-    vehicleNumber: vehicle.vehicleNumber,
-    vehicleType: vehicle.vehicleTypeRef.name,
+    transportId: transport.id,
+    transporterName: transport.name,
+    vehicleId: matchedVehicle?.id ?? null,
+    vehicleNumber: matchedVehicle?.vehicleNumber ?? manualVehicleNumber,
+    vehicleType: matchedVehicle?.vehicleTypeRef.name ?? null,
     destinationLocation,
   };
 };
@@ -396,9 +430,8 @@ const challanInclude = {
   supervisor: {
     select: {
       id: true,
-      firstName: true,
-      middleName: true,
-      lastName: true,
+      name: true,
+      mobileNo: true,
     },
   },
   items: {
@@ -437,10 +470,10 @@ router.get(
           : { toBranchId: { in: req.ctx?.branchIds ?? [] } }),
         ...(start && end
           ? {
-            vpSchedule: {
-              scheduleDate: { gte: start, lt: end },
-            },
-          }
+              vpSchedule: {
+                scheduleDate: { gte: start, lt: end },
+              },
+            }
           : {}),
         branchGrns: { some: { status: "SUBMITTED" } },
       },
@@ -558,31 +591,26 @@ router.get(
     if (!grn) throw new NotFoundError("Branch GRN not found");
     assertBranchAccess(req, grn.railRake.toBranchId);
 
-    const supervisors = await db.user.findMany({
+    const supervisors = await db.labour.findMany({
       where: {
         branchId: grn.railRake.toBranchId,
-        status: true,
+        type: "Supervisor",
       },
       select: {
         id: true,
-        firstName: true,
-        middleName: true,
-        lastName: true,
-        email: true,
+        name: true,
+        mobileNo: true,
       },
-      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+      orderBy: { name: "asc" },
       take: 500,
     });
 
     return sendOk(
       res,
-      supervisors.map((user) => ({
-        id: user.id,
-        name:
-          [user.firstName, user.middleName, user.lastName]
-            .filter(Boolean)
-            .join(" ") || user.email,
-        email: user.email,
+      supervisors.map((labour) => ({
+        id: labour.id,
+        name: labour.name,
+        mobileNo: labour.mobileNo,
       })),
     );
   },
@@ -708,32 +736,32 @@ router.get("/", can(PERMS.DELIVERY_CHALLAN.VIEW), async (req, res) => {
       : { sourceBranchId: { in: req.ctx?.branchIds ?? [] } }),
     ...(status
       ? {
-        status: status as Prisma.EnumDeliveryChallanStatusFilter["equals"],
-      }
+          status: status as Prisma.EnumDeliveryChallanStatusFilter["equals"],
+        }
       : {}),
     ...(query.search
       ? {
-        OR: [
-          {
-            challanNumber: {
-              contains: query.search,
-              mode: "insensitive",
+          OR: [
+            {
+              challanNumber: {
+                contains: query.search,
+                mode: "insensitive",
+              },
             },
-          },
-          {
-            vehicleNumberSnapshot: {
-              contains: query.search,
-              mode: "insensitive",
+            {
+              vehicleNumberSnapshot: {
+                contains: query.search,
+                mode: "insensitive",
+              },
             },
-          },
-          {
-            transporterNameSnapshot: {
-              contains: query.search,
-              mode: "insensitive",
+            {
+              transporterNameSnapshot: {
+                contains: query.search,
+                mode: "insensitive",
+              },
             },
-          },
-        ],
-      }
+          ],
+        }
       : {}),
   };
 
@@ -925,314 +953,253 @@ router.get("/:id", can(PERMS.DELIVERY_CHALLAN.VIEW), async (req, res) => {
   assertBranchAccess(req, row.sourceBranchId);
   return sendOk(res, withBalancePayable(row));
 });
-router.patch(
-  "/:id",
-  can(PERMS.DELIVERY_CHALLAN.UPDATE),
-  async (req, res) => {
-    const parsed = updateDeliveryChallanSchema.safeParse(
-      req.body,
+router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
+  const parsed = updateDeliveryChallanSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+
+  const input = parsed.data;
+  const id = getParamId(req);
+  const userId = actorId(req);
+
+  /*
+   * STEP 1:
+   * Load and validate normal data outside the transaction.
+   */
+  const existing = await db.deliveryChallan.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      branchGrnId: true,
+      sourceBranchId: true,
+    },
+  });
+
+  if (!existing) {
+    throw new NotFoundError("Delivery Challan not found");
+  }
+
+  assertBranchAccess(req, existing.sourceBranchId);
+
+  if (existing.status !== "DRAFT") {
+    throw new BadRequestError("Only a draft Delivery Challan can be edited");
+  }
+
+  if (existing.version !== input.version) {
+    throw new ConflictError(
+      "Delivery Challan changed. Please refresh before saving.",
     );
+  }
 
-    if (!parsed.success) {
-      throw new ValidationError(
-        parsed.error.flatten().fieldErrors,
-      );
-    }
+  const accessible = await getDispatchBranchGrn(db, existing.branchGrnId);
 
-    const input = parsed.data;
-    const id = getParamId(req);
-    const userId = actorId(req);
+  if (!accessible) {
+    throw new NotFoundError("Branch GRN not found");
+  }
 
+  validateBranchGrnAccess(req, accessible);
+
+  /*
+   * Validate destination, supervisor, transporter and vehicle
+   * outside the interactive transaction.
+   */
+  const resources = await validateDispatchResources(
+    db,
+    accessible.railRake.toBranchId,
+    input,
+    accessible,
+  );
+
+  /*
+   * Initial allocation validation for an early error response.
+   * Existing challan quantities are excluded.
+   */
+  buildAllocations(accessible, input, existing.id);
+
+  const charges = calculateTransportCharges(
+    input.freightAmount,
+    input.advanceAmount,
+  );
+
+  /*
+   * STEP 2:
+   * Keep the transaction short.
+   */
+  const updatedId = await db.$transaction(async (tx) => {
     /*
-     * STEP 1:
-     * Load and validate normal data outside the transaction.
+     * Use the same lock order as the Issue API:
+     * 1. RailBranchGRN
+     * 2. DeliveryChallan
      */
-    const existing = await db.deliveryChallan.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        status: true,
-        version: true,
-        branchGrnId: true,
-        sourceBranchId: true,
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError(
-        "Delivery Challan not found",
-      );
-    }
-
-    assertBranchAccess(req, existing.sourceBranchId);
-
-    if (existing.status !== "DRAFT") {
-      throw new BadRequestError(
-        "Only a draft Delivery Challan can be edited",
-      );
-    }
-
-    if (existing.version !== input.version) {
-      throw new ConflictError(
-        "Delivery Challan changed. Please refresh before saving.",
-      );
-    }
-
-    const accessible = await getDispatchBranchGrn(
-      db,
-      existing.branchGrnId,
-    );
-
-    if (!accessible) {
-      throw new NotFoundError("Branch GRN not found");
-    }
-
-    validateBranchGrnAccess(req, accessible);
-
-    /*
-     * Validate destination, supervisor, transporter and vehicle
-     * outside the interactive transaction.
-     */
-    const resources = await validateDispatchResources(
-      db,
-      accessible.railRake.toBranchId,
-      input,
-      accessible,
-    );
-
-    /*
-     * Initial allocation validation for an early error response.
-     * Existing challan quantities are excluded.
-     */
-    buildAllocations(
-      accessible,
-      input,
-      existing.id,
-    );
-
-    const charges = calculateTransportCharges(
-      input.freightAmount,
-      input.advanceAmount,
-    );
-
-    /*
-     * STEP 2:
-     * Keep the transaction short.
-     */
-    const updatedId = await db.$transaction(
-      async (tx) => {
-        /*
-         * Use the same lock order as the Issue API:
-         * 1. RailBranchGRN
-         * 2. DeliveryChallan
-         */
-        await tx.$queryRaw`
+    await tx.$queryRaw`
           SELECT "id"
           FROM "RailBranchGRN"
           WHERE "id" = ${existing.branchGrnId}
           FOR UPDATE
         `;
 
-        await tx.$queryRaw`
+    await tx.$queryRaw`
           SELECT "id"
           FROM "DeliveryChallan"
           WHERE "id" = ${existing.id}
           FOR UPDATE
         `;
 
-        /*
-         * Recheck the challan after obtaining the lock.
-         */
-        const current = await tx.deliveryChallan.findUnique({
-          where: {
-            id: existing.id,
-          },
-          select: {
-            id: true,
-            status: true,
-            version: true,
-            branchGrnId: true,
-          },
-        });
-
-        if (!current) {
-          throw new NotFoundError(
-            "Delivery Challan not found",
-          );
-        }
-
-        if (current.status !== "DRAFT") {
-          throw new BadRequestError(
-            "Only a draft Delivery Challan can be edited",
-          );
-        }
-
-        if (current.version !== input.version) {
-          throw new ConflictError(
-            "Delivery Challan changed. Please refresh before saving.",
-          );
-        }
-
-        if (
-          current.branchGrnId !== existing.branchGrnId
-        ) {
-          throw new ConflictError(
-            "Delivery Challan Branch GRN has changed",
-          );
-        }
-
-        /*
-         * Reload after locking so pending quantities are current.
-         */
-        const grn = await getDispatchBranchGrn(
-          tx,
-          current.branchGrnId,
-        );
-
-        if (!grn) {
-          throw new NotFoundError(
-            "Branch GRN not found",
-          );
-        }
-
-        if (grn.status !== "SUBMITTED") {
-          throw new BadRequestError(
-            "Branch GRN is not submitted",
-          );
-        }
-
-        /*
-         * Recalculate allocations after acquiring the lock.
-         * Exclude this challan's existing allocations.
-         */
-        const items = buildAllocations(
-          grn,
-          input,
-          current.id,
-        );
-
-        /*
-         * Delete existing allocations explicitly.
-         * This prevents the composite unique constraint error.
-         */
-        await tx.deliveryChallanItem.deleteMany({
-          where: {
-            deliveryChallanId: current.id,
-          },
-        });
-
-        const updated =
-          await tx.deliveryChallan.update({
-            where: {
-              id: current.id,
-              version: current.version,
-            },
-            data: {
-              destinationAreaId:
-                input.destinationAreaId ??
-                resources.destinationLocation?.areaId ??
-                null,
-
-              destinationLocationId:
-                input.destinationLocationId ?? null,
-
-              deliveryAddressSnapshot:
-                input.deliveryAddress ??
-                resources.destinationLocation?.address ??
-                resources.destinationLocation?.area
-                  ?.formattedAddress ??
-                resources.destinationLocation?.area
-                  ?.name ??
-                null,
-
-              vehicleMode: input.vehicleMode,
-
-              transportId: resources.transportId,
-              vehicleId: resources.vehicleId,
-
-              transporterNameSnapshot:
-                resources.transporterName,
-
-              vehicleNumberSnapshot:
-                resources.vehicleNumber,
-
-              vehicleTypeSnapshot:
-                resources.vehicleType,
-
-              driverName:
-                input.driverName ?? null,
-
-              driverMobile:
-                input.driverMobile ?? null,
-
-              totalQuantity: items.reduce(
-                (total, item) =>
-                  total + item.quantity,
-                0,
-              ),
-
-              totalWeight:
-                input.totalWeight ?? null,
-
-              freightAmount:
-                charges.freightPaise,
-
-              advanceAmount:
-                charges.advancePaise,
-
-              paymentBy:
-                input.paymentBy ?? null,
-
-              loadingAt: input.loadingAt,
-              supervisorId: input.supervisorId,
-              remarks: input.remarks ?? null,
-
-              updatedById: userId,
-              version: {
-                increment: 1,
-              },
-
-              items: {
-                create: items,
-              },
-            },
-
-            /*
-             * Don't load challanInclude here.
-             */
-            select: {
-              id: true,
-            },
-          });
-
-        return updated.id;
-      },
-    );
-
     /*
-     * STEP 3:
-     * Load the complete response after transaction commit.
+     * Recheck the challan after obtaining the lock.
      */
-    const updated =
-      await db.deliveryChallan.findUnique({
-        where: {
-          id: updatedId,
-        },
-        include: challanInclude,
-      });
+    const current = await tx.deliveryChallan.findUnique({
+      where: {
+        id: existing.id,
+      },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        branchGrnId: true,
+      },
+    });
 
-    if (!updated) {
-      throw new NotFoundError(
-        "Delivery Challan was updated but could not be loaded",
+    if (!current) {
+      throw new NotFoundError("Delivery Challan not found");
+    }
+
+    if (current.status !== "DRAFT") {
+      throw new BadRequestError("Only a draft Delivery Challan can be edited");
+    }
+
+    if (current.version !== input.version) {
+      throw new ConflictError(
+        "Delivery Challan changed. Please refresh before saving.",
       );
     }
 
-    return sendOk(
-      res,
-      withBalancePayable(updated),
+    if (current.branchGrnId !== existing.branchGrnId) {
+      throw new ConflictError("Delivery Challan Branch GRN has changed");
+    }
+
+    /*
+     * Reload after locking so pending quantities are current.
+     */
+    const grn = await getDispatchBranchGrn(tx, current.branchGrnId);
+
+    if (!grn) {
+      throw new NotFoundError("Branch GRN not found");
+    }
+
+    if (grn.status !== "SUBMITTED") {
+      throw new BadRequestError("Branch GRN is not submitted");
+    }
+
+    /*
+     * Recalculate allocations after acquiring the lock.
+     * Exclude this challan's existing allocations.
+     */
+    const items = buildAllocations(grn, input, current.id);
+
+    /*
+     * Delete existing allocations explicitly.
+     * This prevents the composite unique constraint error.
+     */
+    await tx.deliveryChallanItem.deleteMany({
+      where: {
+        deliveryChallanId: current.id,
+      },
+    });
+
+    const updated = await tx.deliveryChallan.update({
+      where: {
+        id: current.id,
+        version: current.version,
+      },
+      data: {
+        destinationAreaId:
+          input.destinationAreaId ??
+          resources.destinationLocation?.areaId ??
+          null,
+
+        destinationLocationId: input.destinationLocationId ?? null,
+
+        deliveryAddressSnapshot:
+          input.deliveryAddress ??
+          resources.destinationLocation?.address ??
+          resources.destinationLocation?.area?.formattedAddress ??
+          resources.destinationLocation?.area?.name ??
+          null,
+
+        vehicleMode: input.vehicleMode,
+
+        transportId: resources.transportId,
+        vehicleId: resources.vehicleId,
+
+        transporterNameSnapshot: resources.transporterName,
+
+        vehicleNumberSnapshot: resources.vehicleNumber,
+
+        vehicleTypeSnapshot: resources.vehicleType,
+
+        driverName: input.driverName ?? null,
+
+        driverMobile: input.driverMobile ?? null,
+
+        totalQuantity: items.reduce((total, item) => total + item.quantity, 0),
+
+        totalWeight: input.totalWeight ?? null,
+
+        freightAmount: charges.freightPaise,
+
+        advanceAmount: charges.advancePaise,
+
+        paymentBy: input.paymentBy ?? null,
+
+        loadingAt: input.loadingAt,
+        supervisorId: input.supervisorId,
+        remarks: input.remarks ?? null,
+
+        updatedById: userId,
+        version: {
+          increment: 1,
+        },
+
+        items: {
+          create: items,
+        },
+      },
+
+      /*
+       * Don't load challanInclude here.
+       */
+      select: {
+        id: true,
+      },
+    });
+
+    return updated.id;
+  });
+
+  /*
+   * STEP 3:
+   * Load the complete response after transaction commit.
+   */
+  const updated = await db.deliveryChallan.findUnique({
+    where: {
+      id: updatedId,
+    },
+    include: challanInclude,
+  });
+
+  if (!updated) {
+    throw new NotFoundError(
+      "Delivery Challan was updated but could not be loaded",
     );
-  },
-);
+  }
+
+  return sendOk(res, withBalancePayable(updated));
+});
 router.post(
   "/:id/issue",
   can(PERMS.DELIVERY_CHALLAN.ISSUE),

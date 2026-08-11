@@ -1,13 +1,10 @@
 import { Router } from "express";
-import { PERMS } from "@skerp/types";
+import { PERMS, type FleetVehicle } from "@skerp/types";
 
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { sendOk } from "../_shared/response.js";
-import {
-  BadRequestError,
-  NotFoundError,
-} from "../../lib/error.js";
+import { BadRequestError, NotFoundError } from "../../lib/error.js";
 import { getFleet, getHistory } from "./onelap.client.js";
 import { db } from "../../../prisma/prisma.js";
 
@@ -53,50 +50,71 @@ router.get("/fleet", can(PERMS.TRACKING.VIEW), async (_req, res) => {
     }),
   ]);
 
-  const liveByDeviceId = new Map(
-    oneLapFleet.map((device) => [device.id, device]),
-  );
-
-  const fleet = assignments.map((assignment) => {
-    const live = liveByDeviceId.get(assignment.tracker.oneLapDeviceId);
-    return {
-      id: assignment.tracker.oneLapDeviceId,
-      name: assignment.tracker.name,
-      uniqueId: assignment.tracker.uniqueId,
-      status: live?.status ?? "unknown",
-      lastUpdate:
-        live?.lastUpdate ??
-        assignment.tracker.lastProviderUpdateAt?.toISOString() ??
-        null,
-      battery: live?.battery ?? null,
-      vehicleNumber:
-        assignment.tracker.vehicleNumber ?? live?.vehicleNumber ?? null,
-      phone: assignment.tracker.phone,
-      validity:
-        live?.validity ??
-        assignment.tracker.validityAt?.toISOString() ??
-        null,
-      position: live?.position ?? null,
-      assignment: {
-        id: assignment.id,
-        vpScheduleId: assignment.vpScheduleId,
-        scheduleNumber: assignment.vpSchedule.scheduleNumber,
-        scheduleName: assignment.vpSchedule.scheduleName,
-        installedOnMrRrRowId: assignment.installedOnMrRrRowId,
-        installedOnVpNo: assignment.installedOnMrRrRow.vpNo,
-        mrRrNumber: assignment.vpSchedule.mrRr?.mrRrNumber ?? null,
-        assignedAt: assignment.assignedAt.toISOString(),
-        releasedAt: null,
-        rake: assignment.vpSchedule.railRake,
-        route: {
-          fromBranch: assignment.vpSchedule.fromBranch,
-          toBranch: assignment.vpSchedule.toBranch,
-          sourceArea: assignment.vpSchedule.sourceArea,
-          destinationArea: assignment.vpSchedule.destinationArea,
+  const assignmentByDeviceId = new Map(
+    assignments.map((assignment) => [
+      assignment.tracker.oneLapDeviceId,
+      {
+        tracker: assignment.tracker,
+        assignment: {
+          id: assignment.id,
+          vpScheduleId: assignment.vpScheduleId,
+          scheduleNumber: assignment.vpSchedule.scheduleNumber,
+          scheduleName: assignment.vpSchedule.scheduleName,
+          installedOnMrRrRowId: assignment.installedOnMrRrRowId,
+          installedOnVpNo: assignment.installedOnMrRrRow.vpNo,
+          mrRrNumber: assignment.vpSchedule.mrRr?.mrRrNumber ?? null,
+          assignedAt: assignment.assignedAt.toISOString(),
+          releasedAt: null,
+          rake: assignment.vpSchedule.railRake,
+          route: {
+            fromBranch: assignment.vpSchedule.fromBranch,
+            toBranch: assignment.vpSchedule.toBranch,
+            sourceArea: assignment.vpSchedule.sourceArea,
+            destinationArea: assignment.vpSchedule.destinationArea,
+          },
         },
       },
+    ]),
+  );
+
+  // Begin with every OneLap device so an unassigned tracker's physical
+  // location remains visible. Add ERP journey data only for active assignments.
+  const fleet: FleetVehicle[] = oneLapFleet.map((live) => {
+    const active = assignmentByDeviceId.get(live.id);
+    if (!active) return live;
+
+    return {
+      ...live,
+      name: active.tracker.name,
+      uniqueId: active.tracker.uniqueId,
+      vehicleNumber: active.tracker.vehicleNumber ?? live.vehicleNumber ?? null,
+      phone: active.tracker.phone ?? live.phone,
+      validity:
+        live.validity ?? active.tracker.validityAt?.toISOString() ?? null,
+      assignment: active.assignment,
     };
   });
+
+  // Keep active ERP assignments visible even if OneLap temporarily omits a
+  // device. Such a tracker stays in the list without a map position.
+  const liveDeviceIds = new Set(oneLapFleet.map((device) => device.id));
+  for (const [deviceId, active] of assignmentByDeviceId) {
+    if (liveDeviceIds.has(deviceId)) continue;
+
+    fleet.push({
+      id: deviceId,
+      name: active.tracker.name,
+      uniqueId: active.tracker.uniqueId,
+      status: "unknown",
+      lastUpdate: active.tracker.lastProviderUpdateAt?.toISOString() ?? null,
+      battery: null,
+      vehicleNumber: active.tracker.vehicleNumber,
+      phone: active.tracker.phone,
+      validity: active.tracker.validityAt?.toISOString() ?? null,
+      position: null,
+      assignment: active.assignment,
+    });
+  }
 
   return sendOk(res, fleet);
 });

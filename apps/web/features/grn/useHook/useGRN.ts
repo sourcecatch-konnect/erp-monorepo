@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 export type SupervisorOption = {
   id: string;
   name: string;
-  email: string;
+  mobileNo?: string | null;
 };
 /* ------------------------------------------------------------------ */
 /* Queries                                                            */
@@ -81,13 +81,8 @@ export const useUpdateGRN = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: UpdateGRNBody;
-    }) => grnApi.update(id, body),
+    mutationFn: ({ id, body }: { id: string; body: UpdateGRNBody }) =>
+      grnApi.update(id, body),
 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: grnKeys.all });
@@ -102,13 +97,8 @@ export const useSubmitGRN = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: SubmitGRNBody;
-    }) => grnApi.submit(id, body),
+    mutationFn: ({ id, body }: { id: string; body: SubmitGRNBody }) =>
+      grnApi.submit(id, body),
 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: grnKeys.all });
@@ -123,13 +113,8 @@ export const useCancelGRN = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: CancelGRNBody;
-    }) => grnApi.cancel(id, body),
+    mutationFn: ({ id, body }: { id: string; body: CancelGRNBody }) =>
+      grnApi.cancel(id, body),
 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: grnKeys.all });

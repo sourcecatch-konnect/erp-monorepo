@@ -98,10 +98,17 @@ export default function CustomerAdvancedForm({
     queryKey: customerKeys.all,
     entityName: "Customer",
   });
-
   const handleSubmit = async (data: CreateCustomerBody) => {
     if (row) {
-      await update.mutateAsync({ id: row.id, data });
+      const gstNo = form.getValues("gstNo")?.trim();
+
+      await update.mutateAsync({
+        id: row.id,
+        data: {
+          ...data,
+          gstNo: gstNo ? data.gstNo : null,
+        },
+      });
     } else {
       await create.mutateAsync(data);
     }
@@ -158,15 +165,16 @@ export default function CustomerAdvancedForm({
     if (!open) return;
 
     const previousStateId = previousStateIdRef.current;
+    const currentStateId = form.getValues("stateId") ?? "";
 
-    if (previousStateId && previousStateId !== selectedStateId) {
+    if (previousStateId && previousStateId !== currentStateId) {
       form.setValue("cityId", "", {
         shouldDirty: true,
         shouldValidate: true,
       });
     }
 
-    previousStateIdRef.current = selectedStateId;
+    previousStateIdRef.current = currentStateId;
   }, [form, open, selectedStateId]);
 
   return (
@@ -244,7 +252,7 @@ export default function CustomerAdvancedForm({
           icon={<IconFileDescription size={16} />}
           maxLength={15}
           onChangeTransform={(value) => value.toUpperCase()}
-          required
+
         />
         <IconTextField<CreateCustomerFormInput>
           name="website"
@@ -329,9 +337,9 @@ export default function CustomerAdvancedForm({
           initialCity={
             row?.city
               ? {
-                  id: row.city.id,
-                  name: row.city.name,
-                }
+                id: row.city.id,
+                name: row.city.name,
+              }
               : null
           }
         />

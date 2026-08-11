@@ -66,7 +66,7 @@ export type DeliveryChallanDetail = {
   advanceAmount?: string | number | null;
   paymentBy?: string | null;
   loadingAt: string;
-  supervisorId: string;
+  supervisorId?: string | null;
   status: DeliveryChallanStatus;
   remarks?: string | null;
   issuedAt?: string | null;
@@ -107,12 +107,11 @@ export type DeliveryChallanDetail = {
     vehicleNumber: string;
     vehicleTypeRef?: { id: string; name: string };
   } | null;
-  supervisor: {
+  supervisor?: {
     id: string;
-    firstName?: string | null;
-    middleName?: string | null;
-    lastName?: string | null;
-  };
+    name: string;
+    mobileNo?: string | null;
+  } | null;
   items: DeliveryChallanItem[];
 };
 
@@ -121,7 +120,7 @@ export type DeliveryChallanListItem = DeliveryChallanDetail;
 export type DeliveryChallanSupervisorOption = {
   id: string;
   name: string;
-  email: string;
+  mobileNo?: string | null;
 };
 
 export type DeliveryChallanTransportOption = {

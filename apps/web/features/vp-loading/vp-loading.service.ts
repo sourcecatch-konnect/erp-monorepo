@@ -140,6 +140,7 @@ export type VPWagonLoadingSummary = {
   status: VPWagonLoadingStatus;
   gateNo?: string | null;
   totalLoadedQty: number;
+  activeLrCount: number;
   totalLoadedCft?: number | null;
   totalLoadedWeightMt?: number | null;
   capacityCheckStatus?: string | null;
@@ -147,7 +148,7 @@ export type VPWagonLoadingSummary = {
   labour?: LabourOption | null;
   labourCharge?: number | string | null;
   loadingSupervisorId?: string | null;
-  loadingSupervisor?: UserOption | null;
+  loadingSupervisor?: LabourOption | null;
   loadingStartedAt?: string | null;
   loadingCompletedAt?: string | null;
   verifiedAt?: string | null;
@@ -277,7 +278,7 @@ export type VPLoadingFinalReview = {
           capacityCheckStatus: string;
           labourCharge?: number | string | null;
           labour?: LabourOption | null;
-          loadingSupervisor?: UserOption | null;
+          loadingSupervisor?: LabourOption | null;
           loadingStartedAt?: string | null;
           loadingCompletedAt?: string | null;
           verifiedAt?: string | null;
@@ -492,6 +493,7 @@ export type VPLoadingGoods = {
 
   loadedQty: number;
   loadingDamageQty: number;
+  loadedWeightMt?: number | string | null;
 
   remarks?: string | null;
 
@@ -555,11 +557,24 @@ export type VPLoadingAllocation = {
     id: string;
     grnNumber: string;
     gateNo?: string | null;
+    totalWeightMt?: number | string | null;
 
     lorryReceipt: {
       id: string;
       lrNumber: string;
       status: string;
+      createdAt: string;
+      invoiceNumber?: string | null;
+      invoiceAmount?: number | string | null;
+      totalWeight?: number | string | null;
+      unit?: string | null;
+      weightUnit?: UnitOption | null;
+      unloadingLocation?: {
+        id: string;
+        name: string;
+        address?: string | null;
+        city?: { id: string; name: string } | null;
+      } | null;
 
       group?: {
         id: string;
@@ -592,7 +607,7 @@ export type VPWagonLoadingDetail = {
   labourCharge?: number | string | null;
 
   loadingSupervisorId?: string | null;
-  loadingSupervisor?: UserOption | null;
+  loadingSupervisor?: LabourOption | null;
 
   totalLoadedQty: number;
 
@@ -805,9 +820,7 @@ export const vpLoadingApi = {
     vpScheduleId: string,
     body: AssignOneLapTrackerBody,
   ): Promise<OneLapTrackerAssignmentDetail> => {
-    const response = await api.post<
-      ApiResponse<OneLapTrackerAssignmentDetail>
-    >(
+    const response = await api.post<ApiResponse<OneLapTrackerAssignmentDetail>>(
       `/vp-loading/schedules/${encodeIdentifier(
         vpScheduleId,
       )}/tracker-assignment`,
@@ -820,9 +833,7 @@ export const vpLoadingApi = {
     vpScheduleId: string,
     body: ReplaceOneLapTrackerBody,
   ): Promise<OneLapTrackerAssignmentDetail> => {
-    const response = await api.post<
-      ApiResponse<OneLapTrackerAssignmentDetail>
-    >(
+    const response = await api.post<ApiResponse<OneLapTrackerAssignmentDetail>>(
       `/vp-loading/schedules/${encodeIdentifier(
         vpScheduleId,
       )}/tracker-assignment/replace`,
@@ -835,9 +846,7 @@ export const vpLoadingApi = {
     vpScheduleId: string,
     body: ReleaseOneLapTrackerBody,
   ): Promise<OneLapTrackerAssignmentDetail> => {
-    const response = await api.post<
-      ApiResponse<OneLapTrackerAssignmentDetail>
-    >(
+    const response = await api.post<ApiResponse<OneLapTrackerAssignmentDetail>>(
       `/vp-loading/schedules/${encodeIdentifier(
         vpScheduleId,
       )}/tracker-assignment/release`,

@@ -20,6 +20,7 @@ import MasterFormDialog from "../_shared/MasterFormDialog";
 import FormSection from "../_shared/fields/FormSection";
 import IconTextField from "../_shared/fields/IconTextField";
 import SelectField from "../_shared/fields/SelectField";
+import { Button } from "@skerp/ui/components/button";
 
 import {
   IconFileInvoice,
@@ -37,6 +38,7 @@ import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
 import { routeApi } from "../routes/routes.service";
 import { agreementApi } from "../Agreements/agreements.service";
 import { agreementKeys } from "../Agreements/agreements.key";
+import RouteForm from "../routes/routeForm";
 
 type Props = {
   open: boolean;
@@ -91,12 +93,18 @@ export default function RateMatrixForm({
   const queryClient = useQueryClient();
 
   const [showUnitFields, setShowUnitFields] = React.useState(false);
+  const [routeFormOpen, setRouteFormOpen] = React.useState(false);
   const [unitValue, setUnitValue] = React.useState("");
   const [unitType, setUnitType] = React.useState<UnitType>("HQ");
   const [unitError, setUnitError] = React.useState<string | null>(null);
   const routesQuery = useQuery({
-    queryKey: ["routes"],
-    queryFn: () => routeApi.list(),
+    queryKey: ["routes", "rate-matrix-options"],
+    queryFn: () =>
+      routeApi.list({
+        page: 0,
+        size: 100,
+        sort: "sourceCityId:asc",
+      }),
     enabled: open,
   });
 
@@ -302,234 +310,262 @@ export default function RateMatrixForm({
   };
 
   return (
-    <MasterFormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={row ? "Edit Rate Matrix" : "Add Rate Matrix"}
-      form={form}
-      onSubmit={handleFormSubmit}
-      isSubmitting={isSubmitting}
-      columns={2}
-    >
-      <FormSection
-        icon={<IconFileInvoice size={18} />}
-        title="Agreement & Route"
-        description="Link rate to agreement and route"
-      >
-        <SelectField
-          name="agreementId"
-          label="Agreement"
-          required
-          options={agreements.map((a) => ({
-            label: a.name ?? a.id,
-            value: a.id,
-          }))}
-        />
-
-        <SelectField
-          name="routeId"
-          label="Route"
-          options={routeOptions.map((r) => ({
-            label: r.name,
-            value: r.id,
-          }))}
-          required
-        />
-      </FormSection>
-
-      <FormSection
-        icon={<IconTruck size={18} />}
-        title="Vehicle & Transport"
-        description="Vehicle type and transport mode"
-      >
-        <SelectField
-          name="vehicleTypeId"
-          label="Vehicle Type"
-          required
-          options={vehicleTypeOptions.map((v) => ({
-            label: v.name,
-            value: v.id,
-          }))}
-        />
-
-        <SelectField
-          name="transportType"
-          label="Transport Type"
-          options={[
-            {
-              label: "Rail/Road",
-              value: "RAIL_ROAD",
-            },
-            {
-              label: "Road",
-              value: "ROAD",
-            },
-          ]}
-        />
-      </FormSection>
-
-      {isContainerVehicle ? (
-        <div className="col-span-1 md:col-span-2">
-          <FormSection
-            icon={<IconPackage size={18} />}
-            title="Unit"
-            description="Select or add HQ/LQ unit for this rate"
-            columns={2}
-          >
-            <div className="col-span-full">
-              <SelectField
-                name="unitId"
-                label="Unit"
-                options={rateUnitOptions.map((unit) => ({
-                  label: `${unit.unitValue} ${unit.unitType}`,
-                  value: unit.id,
-                }))}
-              />
-            </div>
-
-            {!showUnitFields ? (
-              <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      Additional unit setup
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Add a new HQ/LQ unit if it is not available in the
-                      dropdown.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowUnitFields(true)}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
-                  >
-                    <IconPlus size={14} />
-                    Add Unit
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      Add New Unit
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Create a new HQ/LQ unit without leaving this form.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUnitFields(false);
-                      setUnitValue("");
-                      setUnitType("HQ");
-                      setUnitError(null);
-                    }}
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                  >
-                    <IconX size={14} />
-                    Remove
-                  </button>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600">
-                      Unit Value
-                    </label>
-
-                    <input
-                      value={unitValue}
-                      onChange={(event) => {
-                        setUnitValue(event.target.value);
-                        setUnitError(null);
-                      }}
-                      placeholder="Enter unit value"
-                      type="number"
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600">
-                      Unit Type
-                    </label>
-
-                    <select
-                      value={unitType}
-                      onChange={(event) => {
-                        setUnitType(event.target.value as UnitType);
-                        setUnitError(null);
-                      }}
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                    >
-                      <option value="HQ">HQ</option>
-                      <option value="LQ">LQ</option>
-                    </select>
-                  </div>
-                </div>
-
-                {unitError ? (
-                  <p className="mt-2 text-xs font-medium text-red-600">
-                    {unitError}
-                  </p>
-                ) : null}
-
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleAddUnit}
-                    disabled={createUnitMutation.isPending}
-                    className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {createUnitMutation.isPending ? "Adding..." : "Save Unit"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </FormSection>
-        </div>
-      ) : null}
-      <FormSection
-        icon={<IconCurrencyRupee size={18} />}
-        title="Pricing & Transit"
-        description="Rate and delivery timing details"
+    <>
+      <MasterFormDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={row ? "Edit Rate Matrix" : "Add Rate Matrix"}
+        form={form}
+        onSubmit={handleFormSubmit}
+        isSubmitting={isSubmitting}
         columns={2}
       >
-        <IconTextField
-          name="rate"
-          label="Rate"
-          type="number"
-          placeholder="Enter freight rate"
-          icon={<IconCurrencyRupee size={16} />}
-          required
-        />
+        <FormSection
+          icon={<IconFileInvoice size={18} />}
+          title="Agreement & Route"
+          description="Link rate to agreement and route"
+        >
+          <SelectField
+            name="agreementId"
+            label="Agreement"
+            required
+            options={agreements.map((a) => ({
+              label: a.name ?? a.id,
+              value: a.id,
+            }))}
+          />
 
-        <IconTextField
-          name="transitDays"
-          label="Transit Days"
-          type="number"
-          placeholder="e.g. 2 or 5 days"
-          icon={<IconClock size={16} />}
-        />
-      </FormSection>
-      <FormSection
-        icon={<IconNote size={18} />}
-        title="Remarks"
-        description="Optional additional information"
-      >
-        <IconTextField
-          name="remarks"
-          label="Remarks"
-          placeholder="Any notes about this rate"
-          icon={<IconNote size={16} />}
-        />
-      </FormSection>
-    </MasterFormDialog>
+          <SelectField
+            name="routeId"
+            label="Route"
+            options={routeOptions.map((r) => ({
+              label: r.name,
+              value: r.id,
+            }))}
+            required
+            labelAction={
+              <Button
+                type="button"
+                variant="link"
+                size="xs"
+                className="h-auto px-0"
+                onClick={() => setRouteFormOpen(true)}
+              >
+                <IconPlus size={13} /> Add route
+              </Button>
+            }
+          />
+        </FormSection>
+
+        <FormSection
+          icon={<IconTruck size={18} />}
+          title="Vehicle & Transport"
+          description="Vehicle type and transport mode"
+        >
+          <SelectField
+            name="vehicleTypeId"
+            label="Vehicle Type"
+            required
+            options={vehicleTypeOptions.map((v) => ({
+              label: v.name,
+              value: v.id,
+            }))}
+          />
+
+          <SelectField
+            name="transportType"
+            label="Transport Type"
+            options={[
+              {
+                label: "Rail/Road",
+                value: "RAIL_ROAD",
+              },
+              {
+                label: "Road",
+                value: "ROAD",
+              },
+            ]}
+          />
+        </FormSection>
+
+        {isContainerVehicle ? (
+          <div className="col-span-1 md:col-span-2">
+            <FormSection
+              icon={<IconPackage size={18} />}
+              title="Unit"
+              description="Select or add HQ/LQ unit for this rate"
+              columns={2}
+            >
+              <div className="col-span-full">
+                <SelectField
+                  name="unitId"
+                  label="Unit"
+                  options={rateUnitOptions.map((unit) => ({
+                    label: `${unit.unitValue} ${unit.unitType}`,
+                    value: unit.id,
+                  }))}
+                />
+              </div>
+
+              {!showUnitFields ? (
+                <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        Additional unit setup
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Add a new HQ/LQ unit if it is not available in the
+                        dropdown.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowUnitFields(true)}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
+                    >
+                      <IconPlus size={14} />
+                      Add Unit
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        Add New Unit
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Create a new HQ/LQ unit without leaving this form.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUnitFields(false);
+                        setUnitValue("");
+                        setUnitType("HQ");
+                        setUnitError(null);
+                      }}
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                    >
+                      <IconX size={14} />
+                      Remove
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-600">
+                        Unit Value
+                      </label>
+
+                      <input
+                        value={unitValue}
+                        onChange={(event) => {
+                          setUnitValue(event.target.value);
+                          setUnitError(null);
+                        }}
+                        placeholder="Enter unit value"
+                        type="number"
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-600">
+                        Unit Type
+                      </label>
+
+                      <select
+                        value={unitType}
+                        onChange={(event) => {
+                          setUnitType(event.target.value as UnitType);
+                          setUnitError(null);
+                        }}
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                      >
+                        <option value="HQ">HQ</option>
+                        <option value="LQ">LQ</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {unitError ? (
+                    <p className="mt-2 text-xs font-medium text-red-600">
+                      {unitError}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAddUnit}
+                      disabled={createUnitMutation.isPending}
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {createUnitMutation.isPending ? "Adding..." : "Save Unit"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </FormSection>
+          </div>
+        ) : null}
+        <FormSection
+          icon={<IconCurrencyRupee size={18} />}
+          title="Pricing & Transit"
+          description="Rate and delivery timing details"
+          columns={2}
+        >
+          <IconTextField
+            name="rate"
+            label="Rate"
+            type="number"
+            placeholder="Enter freight rate"
+            icon={<IconCurrencyRupee size={16} />}
+            required
+          />
+
+          <IconTextField
+            name="transitDays"
+            label="Transit Days"
+            type="number"
+            placeholder="e.g. 2 or 5 days"
+            icon={<IconClock size={16} />}
+          />
+        </FormSection>
+        <FormSection
+          icon={<IconNote size={18} />}
+          title="Remarks"
+          description="Optional additional information"
+        >
+          <IconTextField
+            name="remarks"
+            label="Remarks"
+            placeholder="Any notes about this rate"
+            icon={<IconNote size={16} />}
+          />
+        </FormSection>
+      </MasterFormDialog>
+
+      <RouteForm
+        open={routeFormOpen}
+        onOpenChange={setRouteFormOpen}
+        onSaved={async (route) => {
+          await queryClient.invalidateQueries({
+            queryKey: ["routes", "rate-matrix-options"],
+          });
+          form.setValue("routeId", route.id, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+          });
+        }}
+      />
+    </>
   );
 }

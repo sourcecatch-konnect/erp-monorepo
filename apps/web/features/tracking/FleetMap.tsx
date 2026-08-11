@@ -9,7 +9,7 @@ import {
   useMap,
   useMapsLibrary,
 } from "@vis.gl/react-google-maps";
-import { IconTrain } from "@tabler/icons-react";
+import { IconMapPin, IconTrain } from "@tabler/icons-react";
 import type { FleetVehicle, TrailPoint } from "@skerp/types";
 import { cn } from "@/lib/utils";
 
@@ -124,19 +124,33 @@ function TrailLine({ trail }: { trail: TrailPoint[] }) {
   return null;
 }
 
-/** Train glyph marker, coloured by online/offline status. */
-function WagonGlyph({ online }: { online: boolean }) {
+/** Assigned rakes use a train; unassigned devices use a tracker pin. */
+function TrackerGlyph({
+  online,
+  assigned,
+}: {
+  online: boolean;
+  assigned: boolean;
+}) {
   return (
     <div
       className={cn(
         "flex size-8 translate-y-1/2 items-center justify-center rounded-full",
         "border-2 bg-card shadow-md",
-        online
-          ? "border-green-600 text-green-700"
-          : "border-primary text-primary",
+        assigned
+          ? online
+            ? "border-green-600 text-green-700"
+            : "border-slate-500 text-slate-600"
+          : online
+            ? "border-amber-500 text-amber-700"
+            : "border-slate-400 text-slate-500",
       )}
     >
-      <IconTrain className="size-5" />
+      {assigned ? (
+        <IconTrain className="size-5" />
+      ) : (
+        <IconMapPin className="size-5" />
+      )}
     </div>
   );
 }
@@ -185,7 +199,7 @@ export function FleetMap({
                 position={{ lat: playPoint.latitude, lng: playPoint.longitude }}
                 title="Wagon"
               >
-                <WagonGlyph online />
+                <TrackerGlyph online assigned />
               </AdvancedMarker>
             )}
           </>
@@ -198,10 +212,17 @@ export function FleetMap({
                   lat: v.position!.latitude,
                   lng: v.position!.longitude,
                 }}
-                title={v.name}
+                title={
+                  v.assignment
+                    ? `${v.name} · ${v.assignment.installedOnVpNo ?? v.assignment.scheduleNumber}`
+                    : `${v.name} · Unassigned tracker`
+                }
                 onClick={() => onSelect(v.id)}
               >
-                <WagonGlyph online={v.status === "online"} />
+                <TrackerGlyph
+                  online={v.status === "online"}
+                  assigned={Boolean(v.assignment)}
+                />
               </AdvancedMarker>
             ))}
 
@@ -217,6 +238,11 @@ export function FleetMap({
                 <div className="space-y-0.5 p-1">
                   <p className="text-sm font-semibold text-foreground">
                     {selected.name}
+                  </p>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {selected.assignment
+                      ? `${selected.assignment.scheduleNumber} · ${selected.assignment.installedOnVpNo ?? "VP not available"}`
+                      : "Unassigned tracker · location only"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {selected.position.speedKmph} km/h

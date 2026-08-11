@@ -23,19 +23,11 @@ type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Route | null;
+  onSaved?: (route: Route) => void | Promise<void>;
 };
 
-export default function RouteForm({
-  open,
-  onOpenChange,
-  row,
- 
-}: Props) {
-  const form = useForm<
-    CreateRouteFormInput,
-    unknown,
-    CreateRouteBody
-  >({
+export default function RouteForm({ open, onOpenChange, row, onSaved }: Props) {
+  const form = useForm<CreateRouteFormInput, unknown, CreateRouteBody>({
     resolver: zodResolver(createRouteSchema),
     mode: "onChange",
     reValidateMode: "onChange",
@@ -45,23 +37,25 @@ export default function RouteForm({
     },
   });
 
+  const { create, update } = useMasterMutations({
+    api: routeApi,
+    queryKey: routeKeys.all,
+  });
 
-const { create, update } = useMasterMutations({
-  api: routeApi,
-  queryKey: routeKeys.all,
-});
+  const handleSubmit = async (data: CreateRouteBody) => {
+    let savedRoute: Route;
 
-const handleSubmit = async (data: CreateRouteBody) => {
-  if (row) {
-    await update.mutateAsync({ id: row.id, data });
-  } else {
-    await create.mutateAsync(data);
-  }
+    if (row) {
+      savedRoute = await update.mutateAsync({ id: row.id, data });
+    } else {
+      savedRoute = await create.mutateAsync(data);
+    }
 
-  onOpenChange(false);
-};
+    await onSaved?.(savedRoute);
+    onOpenChange(false);
+  };
 
-const isSubmitting = create.isPending || update.isPending;
+  const isSubmitting = create.isPending || update.isPending;
   React.useEffect(() => {
     if (!open) return;
 
@@ -70,7 +64,6 @@ const isSubmitting = create.isPending || update.isPending;
       destinationCityId: row?.destinationCityId ?? "",
     });
   }, [form, open, row]);
-
 
   return (
     <MasterFormDialog<CreateRouteFormInput, CreateRouteBody>
@@ -82,33 +75,33 @@ const isSubmitting = create.isPending || update.isPending;
       isSubmitting={isSubmitting}
       columns={2}
     >
-  <CitySelectField<CreateRouteFormInput>
-  name="sourceCityId"
-  label="From City"
-  required
-  initialCity={
-    row?.sourceCity
-      ? {
-          id: row.sourceCity.id,
-          name: row.sourceCity.name,
+      <CitySelectField<CreateRouteFormInput>
+        name="sourceCityId"
+        label="From City"
+        required
+        initialCity={
+          row?.sourceCity
+            ? {
+                id: row.sourceCity.id,
+                name: row.sourceCity.name,
+              }
+            : null
         }
-      : null
-  }
-/>
+      />
 
-<CitySelectField<CreateRouteFormInput>
-  name="destinationCityId"
-  label="To City"
-  required
-  initialCity={
-    row?.destinationCity
-      ? {
-          id: row.destinationCity.id,
-          name: row.destinationCity.name,
+      <CitySelectField<CreateRouteFormInput>
+        name="destinationCityId"
+        label="To City"
+        required
+        initialCity={
+          row?.destinationCity
+            ? {
+                id: row.destinationCity.id,
+                name: row.destinationCity.name,
+              }
+            : null
         }
-      : null
-  }
-/>
+      />
     </MasterFormDialog>
   );
 }

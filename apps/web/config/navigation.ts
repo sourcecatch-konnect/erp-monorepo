@@ -76,6 +76,12 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.LORRY_RECEIPT.VIEW,
       },
       {
+        title: "LR Unloading Report",
+        href: "/lorry-receipts/unloading-report",
+        icon: IconFileBarcode,
+        permission: PERMS.LORRY_RECEIPT.VIEW,
+      },
+      {
         title: "VP Management",
         icon: IconTrain,
         items: [

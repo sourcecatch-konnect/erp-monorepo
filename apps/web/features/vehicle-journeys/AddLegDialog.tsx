@@ -34,6 +34,7 @@ import SelectField from "../masters/_shared/fields/SelectField";
 import CheckboxField from "../masters/_shared/fields/CheckBoxField";
 import TextAreaField from "../masters/_shared/fields/TextAreaField";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
+import RouteForm from "../masters/routes/routeForm";
 
 import { journeyApi, journeyLookups } from "./journey.service";
 import { journeyKeys, journeyLookupKeys } from "./journey.keys";
@@ -58,7 +59,9 @@ const previousLeg = (journey: VehicleJourney): JourneyLeg | null => {
 export default function AddLegDialog({ open, onOpenChange, journey }: Props) {
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = React.useState(false);
+  const [routeFormOpen, setRouteFormOpen] = React.useState(false);
   const canOverride = useCan(PERMS.VEHICLE_JOURNEY.OVERRIDE_CHAIN);
+  const canCreateRoute = useCan(PERMS.MASTERS.ROUTE.CREATE);
 
   const prev = previousLeg(journey);
   const suggestedOpeningKm =
@@ -123,161 +126,185 @@ export default function AddLegDialog({ open, onOpenChange, journey }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Add Leg — {journey.journeyNumber}</DialogTitle>
-          <DialogDescription>
-            The next leg continues from where the previous leg ended.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Leg — {journey.journeyNumber}</DialogTitle>
+            <DialogDescription>
+              The next leg continues from where the previous leg ended.
+            </DialogDescription>
+          </DialogHeader>
 
-        {prev ? (
-          <div className="rounded-md border bg-muted/40 p-3 text-xs">
-            <p>
-              <span className="font-medium">Previous leg ended at:</span>{" "}
-              {prev.toCity?.name ?? "—"}
-              {prev.closingKm !== null ? ` · KM ${prev.closingKm}` : ""}
-              {prev.endDateTime ? ` · ${formatDateTime(prev.endDateTime)}` : ""}
-            </p>
-            {suggestedOpeningKm !== undefined ? (
-              <p className="mt-1 text-muted-foreground">
-                Suggested opening KM: {suggestedOpeningKm}
+          {prev ? (
+            <div className="rounded-md border bg-muted/40 p-3 text-xs">
+              <p>
+                <span className="font-medium">Previous leg ended at:</span>{" "}
+                {prev.toCity?.name ?? "—"}
+                {prev.closingKm !== null ? ` · KM ${prev.closingKm}` : ""}
+                {prev.endDateTime
+                  ? ` · ${formatDateTime(prev.endDateTime)}`
+                  : ""}
               </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        <FormProvider {...form}>
-          <form
-            id="add-leg-form"
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-4"
-          >
-            <div className="grid gap-3 md:grid-cols-2">
-              <SelectField
-                name="legType"
-                label="Leg type"
-                required
-                options={LEG_TYPE_OPTIONS}
-              />
-              <ComboboxField
-                name="routeId"
-                label="Route"
-                required
-                options={routes.data ?? []}
-              />
-              {legType === "LR" ? (
-                <ComboboxField
-                  name="consignorId"
-                  label="Client"
-                  required
-                  options={customers.data ?? []}
-                />
+              {suggestedOpeningKm !== undefined ? (
+                <p className="mt-1 text-muted-foreground">
+                  Suggested opening KM: {suggestedOpeningKm}
+                </p>
               ) : null}
-              {legType === "DC" ? (
-                <div className="grid gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Rake date <span className="text-red-600">*</span>
-                  </label>
-                  <Input type="date" {...form.register("rakeDate")} />
+            </div>
+          ) : null}
+
+          <FormProvider {...form}>
+            <form
+              id="add-leg-form"
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="space-y-4"
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <SelectField
+                  name="legType"
+                  label="Leg type"
+                  required
+                  options={LEG_TYPE_OPTIONS}
+                />
+                <ComboboxField
+                  name="routeId"
+                  label="Route"
+                  required
+                  options={routes.data ?? []}
+                  actionLabel="+ Add route"
+                  onAction={
+                    canCreateRoute ? () => setRouteFormOpen(true) : undefined
+                  }
+                />
+                {legType === "LR" ? (
+                  <ComboboxField
+                    name="consignorId"
+                    label="Client"
+                    required
+                    options={customers.data ?? []}
+                  />
+                ) : null}
+                {legType === "DC" ? (
+                  <div className="grid gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Rake date <span className="text-red-600">*</span>
+                    </label>
+                    <Input type="date" {...form.register("rakeDate")} />
+                  </div>
+                ) : null}
+                <IconTextField<AddJourneyLegFormInput>
+                  name="onwardFreight"
+                  label="Onward freight"
+                  placeholder="0"
+                  type="number"
+                  min={0}
+                  prefix="₹"
+                  required
+                />
+                <IconTextField<AddJourneyLegFormInput>
+                  name="openingKm"
+                  label="Opening KM"
+                  type="number"
+                  min={1}
+                  required
+                  hint={
+                    suggestedOpeningKm !== undefined
+                      ? `Suggested: ${suggestedOpeningKm}`
+                      : undefined
+                  }
+                />
+                <Controller
+                  name="startDateTime"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      label="Planned start"
+                      selected={toValidDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="Select planned start date and time"
+                    />
+                  )}
+                />
+                <div className="md:col-span-2">
+                  <CheckboxField<AddJourneyLegFormInput>
+                    control={form.control}
+                    name="isTripEmpty"
+                    label="This leg runs empty (no goods)"
+                  />
+                </div>
+              </div>
+
+              {breaksChain ? (
+                <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+                  <p className="text-xs font-medium text-amber-700">
+                    This leg breaks journey continuity:
+                  </p>
+                  <ul className="list-inside list-disc text-xs text-amber-700">
+                    {breaksCity ? (
+                      <li>
+                        Route starts from {selectedRoute?.label.split(" → ")[0]}{" "}
+                        but the previous leg ended at {prev?.toCity?.name}.
+                      </li>
+                    ) : null}
+                    {breaksKm ? (
+                      <li>
+                        Opening KM differs from the expected{" "}
+                        {suggestedOpeningKm}.
+                      </li>
+                    ) : null}
+                  </ul>
+                  {canOverride ? (
+                    <TextAreaField<AddJourneyLegFormInput>
+                      name="chainExceptionReason"
+                      label="Exception reason"
+                      required
+                      placeholder="Why is continuity broken? (required to override)"
+                    />
+                  ) : (
+                    <p className="text-xs text-destructive">
+                      You don&apos;t have permission to override chain rules —
+                      correct the route/KM or ask a supervisor.
+                    </p>
+                  )}
                 </div>
               ) : null}
-              <IconTextField<AddJourneyLegFormInput>
-                name="onwardFreight"
-                label="Onward freight"
-                placeholder="0"
-                type="number"
-                min={0}
-                prefix="₹"
-                required
-              />
-              <IconTextField<AddJourneyLegFormInput>
-                name="openingKm"
-                label="Opening KM"
-                type="number"
-                min={1}
-                required
-                hint={
-                  suggestedOpeningKm !== undefined
-                    ? `Suggested: ${suggestedOpeningKm}`
-                    : undefined
-                }
-              />
-              <Controller
-                name="startDateTime"
-                control={form.control}
-                render={({ field }) => (
-                  <DateTimePicker
-                    label="Planned start"
-                    selected={toValidDate(field.value)}
-                    onSelect={field.onChange}
-                    placeholder="Select planned start date and time"
-                  />
-                )}
-              />
-              <div className="md:col-span-2">
-                <CheckboxField<AddJourneyLegFormInput>
-                  control={form.control}
-                  name="isTripEmpty"
-                  label="This leg runs empty (no goods)"
-                />
-              </div>
-            </div>
+            </form>
+          </FormProvider>
 
-            {breaksChain ? (
-              <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-                <p className="text-xs font-medium text-amber-700">
-                  This leg breaks journey continuity:
-                </p>
-                <ul className="list-inside list-disc text-xs text-amber-700">
-                  {breaksCity ? (
-                    <li>
-                      Route starts from {selectedRoute?.label.split(" → ")[0]}{" "}
-                      but the previous leg ended at {prev?.toCity?.name}.
-                    </li>
-                  ) : null}
-                  {breaksKm ? (
-                    <li>
-                      Opening KM differs from the expected {suggestedOpeningKm}.
-                    </li>
-                  ) : null}
-                </ul>
-                {canOverride ? (
-                  <TextAreaField<AddJourneyLegFormInput>
-                    name="chainExceptionReason"
-                    label="Exception reason"
-                    required
-                    placeholder="Why is continuity broken? (required to override)"
-                  />
-                ) : (
-                  <p className="text-xs text-destructive">
-                    You don&apos;t have permission to override chain rules —
-                    correct the route/KM or ask a supervisor.
-                  </p>
-                )}
-              </div>
-            ) : null}
-          </form>
-        </FormProvider>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="add-leg-form"
+              disabled={submitting || (breaksChain && !canOverride)}
+            >
+              {submitting ? "Adding…" : "Add Leg"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form="add-leg-form"
-            disabled={submitting || (breaksChain && !canOverride)}
-          >
-            {submitting ? "Adding…" : "Add Leg"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <RouteForm
+        open={routeFormOpen}
+        onOpenChange={setRouteFormOpen}
+        onSaved={async (route) => {
+          await queryClient.invalidateQueries({
+            queryKey: journeyLookupKeys.routes,
+          });
+          form.setValue("routeId", route.id, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+          });
+        }}
+      />
+    </>
   );
 }

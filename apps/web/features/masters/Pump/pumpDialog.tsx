@@ -13,8 +13,6 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   IconGasStation,
   IconMapPin,
-  IconPhone,
-  IconUser,
   IconCash,
   IconBan,
   IconId,
@@ -115,18 +113,6 @@ const isLoading = pumpDetail.isLoading;
               />
 
            
-            <DetailItem
-  icon={<IconUser size={15} />}
-  label="Contact Person"
-  value={data?.contactName ?? "-"}
-/>
-
-              <DetailItem
-                icon={<IconPhone size={15} />}
-                label="Contact Phone"
-                value={data?.contactPhone ?? "-"}
-              />
-
               <DetailItem
                 icon={<IconMapPin size={15} />}
                 label="Address"
@@ -166,12 +152,6 @@ const isLoading = pumpDetail.isLoading;
       : "-"
   }
 />
-
-              <DetailItem
-                icon={<IconId size={15} />}
-                label="GSTIN"
-                value={data?.gstIn ?? "-"}
-              />
 
               <DetailItem
                 icon={<IconId size={15} />}

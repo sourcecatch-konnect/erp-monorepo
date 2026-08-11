@@ -75,6 +75,7 @@ const optionalQty = (label: string) =>
 const deliveryFields = {
   deliveredAt: requiredDate("delivery date"),
   reportedAt: optionalDate("reporting date"),
+  unloadingAt: optionalDate("unloading completion date"),
   receiverName: optionalString,
   receiverPhone: optionalString,
   unloadingCharges: optionalRupeesToPaise("Unloading charges", {
@@ -92,6 +93,20 @@ export const deliverLRSchema = z.object(deliveryFields).superRefine(
         message: "Reporting time cannot be after the delivery time",
       });
     }
+    if (value.unloadingAt && value.reportedAt && value.unloadingAt < value.reportedAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["unloadingAt"],
+        message: "Unloading completion cannot be before reporting time",
+      });
+    }
+    if (value.unloadingAt && value.unloadingAt > value.deliveredAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["unloadingAt"],
+        message: "Unloading completion cannot be after receiver handover",
+      });
+    }
   },
 );
 
@@ -105,20 +120,32 @@ export const updateLRDeliverySchema = z.object({
 export type UpdateLRDeliveryInput = z.infer<typeof updateLRDeliverySchema>;
 
 /** Bulk deliver a whole group: shared fields + one row per LR. */
-export const deliverGroupSchema = z.object({
-  ...deliveryFields,
-  lrs: z
-    .array(
-      z.object({
-        lrId: z.string().min(1),
-        unloadingCharges: optionalRupeesToPaise("Unloading charges", {
-          allowZero: true,
+export const deliverGroupSchema = z
+  .object({
+    ...deliveryFields,
+    lrs: z
+      .array(
+        z.object({
+          lrId: z.string().min(1),
+          unloadingCharges: optionalRupeesToPaise("Unloading charges", {
+            allowZero: true,
+          }),
+          remark: optionalString,
         }),
-        remark: optionalString,
-      }),
-    )
-    .min(1, "Select at least one lorry receipt"),
-});
+      )
+      .min(1, "Select at least one lorry receipt"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.reportedAt && value.reportedAt > value.deliveredAt) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["reportedAt"], message: "Reporting time cannot be after the delivery time" });
+    }
+    if (value.unloadingAt && value.reportedAt && value.unloadingAt < value.reportedAt) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["unloadingAt"], message: "Unloading completion cannot be before reporting time" });
+    }
+    if (value.unloadingAt && value.unloadingAt > value.deliveredAt) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["unloadingAt"], message: "Unloading completion cannot be after receiver handover" });
+    }
+  });
 
 export type DeliverGroupInput = z.infer<typeof deliverGroupSchema>;
 

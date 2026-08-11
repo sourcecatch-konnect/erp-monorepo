@@ -53,11 +53,6 @@ export const branchColumns: ColumnDef<Branch>[] = [
     enableHiding: false,
   },
   {
-    accessorKey: "shortCode",
-    header: "Short Code",
-    enableHiding: false,
-  },
-  {
     id: "company",
     header: "Company",
     cell: ({ row }) => (
@@ -114,7 +109,7 @@ export const branchColumns: ColumnDef<Branch>[] = [
   },
   {
     accessorKey: "isRailHead",
-    header: "Rail Head",
+    header: "Railway Operations",
     cell: ({ row }) => <BooleanBadge value={row.original.isRailHead} />,
   },
   {

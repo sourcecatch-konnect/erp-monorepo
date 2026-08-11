@@ -104,6 +104,7 @@ export const driverApi = {
     search?: string;
     page?: number;
     size?: number;
+    context?: "journey";
   }): Promise<ListResult<TripDriverChoice>> => {
     const params: Record<string, string | number> = {
       page: query?.page ?? 0,
@@ -111,6 +112,7 @@ export const driverApi = {
     };
 
     if (query?.search) params.search = query.search;
+    if (query?.context) params.context = query.context;
 
     const res = await api.get<ApiResponse<TripDriverChoice[]>>(
       "/vehicle-journeys/trip-driver-options",

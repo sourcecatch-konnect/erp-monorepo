@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ColumnDef,
   flexRender,
@@ -10,6 +10,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import { Button } from "@skerp/ui/components/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@skerp/ui/components/tabs";
 import {
   Table,
@@ -20,6 +21,7 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import {
+  IconAlertTriangle,
   IconBuildingStore,
   IconBuildingWarehouse,
   IconCalendar,
@@ -33,6 +35,7 @@ import {
   IconTruckDelivery,
   IconUser,
 } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
@@ -45,14 +48,23 @@ import {
 import {
   deliveryWorklistApi,
   deliveryWorklistKeys,
+  lorryReceiptApi,
 } from "./lorry-receipt.service";
+import { attachmentApi } from "@/features/attachments/attachment.client";
+import { useCan } from "@/features/auth";
+import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { daysSince, lrGroupDisplay } from "./lorry-receipt-ui";
+import AcknowledgeDialog from "./components/AcknowledgeDialog";
+import { ACK_SCAN_ENTITY } from "./components/DeliverySection";
 import type {
+  AcknowledgeLRFormInput,
   AtHubRow,
+  LorryReceipt,
   PendingDeliveryRow,
   PendingPodRow,
   WorklistGroupRef,
 } from "@skerp/types";
+import { PERMS } from "@skerp/types";
 
 const OVERDUE_DELIVERY_DAYS = 7;
 const OVERDUE_POD_DAYS = 7;
@@ -232,6 +244,14 @@ function WorklistTable<T>({
 
 const PENDING_DELIVERY_ORDER = [
   "lr",
+  "rake",
+  "vp",
+  "branchGrn",
+  "received",
+  "loss",
+  "dc",
+  "issued",
+  "balance",
   "group",
   "route",
   "consignee",
@@ -242,6 +262,14 @@ const PENDING_DELIVERY_ORDER = [
 
 const PENDING_DELIVERY_META: ColumnMeta = {
   lr: { label: "LR", icon: IconFileDescription },
+  rake: { label: "Rake ID", icon: IconTruck },
+  vp: { label: "VP number", icon: IconFileDescription },
+  branchGrn: { label: "Branch GRN", icon: IconHash },
+  received: { label: "Received qty", icon: IconClipboardCheck },
+  loss: { label: "Damage / shortage", icon: IconAlertTriangle },
+  dc: { label: "DC numbers", icon: IconFileDescription },
+  issued: { label: "Issued DC qty", icon: IconTruckDelivery },
+  balance: { label: "Balance qty", icon: IconClockHour4 },
   group: { label: "Group", icon: IconHash },
   route: { label: "Route", icon: IconMapPin },
   consignee: { label: "Consignee", icon: IconBuildingStore },
@@ -292,6 +320,64 @@ const PENDING_DELIVERY_COLUMNS: ColumnDef<PendingDeliveryRow>[] = [
         overdueDays={OVERDUE_DELIVERY_DAYS}
       />
     ),
+  },
+  {
+    id: "rake",
+    header: "Rake ID",
+    cell: ({ row }) =>
+      row.original.deliveryEligibility.railwayDetails?.rakeNumbers.join(", ") ??
+      "—",
+  },
+  {
+    id: "vp",
+    header: "VP number",
+    cell: ({ row }) =>
+      row.original.deliveryEligibility.railwayDetails?.vpNumbers.join(", ") ??
+      "—",
+  },
+  {
+    id: "branchGrn",
+    header: "Branch GRN",
+    cell: ({ row }) => {
+      const ids =
+        row.original.deliveryEligibility.railwayDetails?.branchGrnIds ?? [];
+      return ids.length
+        ? ids.map((id) => `BR-GRN-${id.slice(-8).toUpperCase()}`).join(", ")
+        : "—";
+    },
+  },
+  {
+    id: "received",
+    header: "Received qty",
+    cell: ({ row }) =>
+      row.original.deliveryEligibility.railwayDetails?.receivedQuantity ?? "—",
+  },
+  {
+    id: "loss",
+    header: "Damage / shortage",
+    cell: ({ row }) => {
+      const rail = row.original.deliveryEligibility.railwayDetails;
+      return rail ? `${rail.damageQuantity} / ${rail.shortageQuantity}` : "—";
+    },
+  },
+  {
+    id: "dc",
+    header: "DC numbers",
+    cell: ({ row }) =>
+      row.original.deliveryEligibility.railwayDetails?.dcNumbers.join(", ") ??
+      "—",
+  },
+  {
+    id: "issued",
+    header: "Issued DC qty",
+    cell: ({ row }) =>
+      row.original.deliveryEligibility.railwayDetails?.issuedQuantity ?? "—",
+  },
+  {
+    id: "balance",
+    header: "Balance qty",
+    cell: ({ row }) =>
+      row.original.deliveryEligibility.railwayDetails?.balanceQuantity ?? "—",
   },
 ];
 
@@ -372,6 +458,7 @@ const PENDING_POD_ORDER = [
   "delivered",
   "receiver",
   "age",
+  "action",
 ] as const;
 
 const PENDING_POD_META: ColumnMeta = {
@@ -382,9 +469,13 @@ const PENDING_POD_META: ColumnMeta = {
   delivered: { label: "Delivered", icon: IconCalendar },
   receiver: { label: "Receiver", icon: IconUser },
   age: { label: "POD pending", icon: IconClockHour4 },
+  action: { label: "Action", icon: IconClipboardCheck },
 };
 
-const PENDING_POD_COLUMNS: ColumnDef<PendingPodRow>[] = [
+const pendingPodColumns = (
+  canAcknowledge: boolean,
+  onAcknowledge: (row: PendingPodRow) => void,
+): ColumnDef<PendingPodRow>[] => [
   {
     id: "lr",
     header: "LR",
@@ -430,6 +521,19 @@ const PENDING_POD_COLUMNS: ColumnDef<PendingPodRow>[] = [
       />
     ),
   },
+  {
+    id: "action",
+    header: "Action",
+    enableHiding: false,
+    cell: ({ row }) =>
+      canAcknowledge ? (
+        <Button size="sm" onClick={() => onAcknowledge(row.original)}>
+          Acknowledge
+        </Button>
+      ) : (
+        "—"
+      ),
+  },
 ];
 
 /**
@@ -438,7 +542,63 @@ const PENDING_POD_COLUMNS: ColumnDef<PendingPodRow>[] = [
  * docs/LR_DELIVERY_ACK_PLAN.md §8.
  */
 export default function DeliveriesPage() {
-  const [tab, setTab] = React.useState("pending-delivery");
+  const queryClient = useQueryClient();
+  const canAcknowledge = useCan(PERMS.LORRY_RECEIPT.ACKNOWLEDGE);
+  const [ackLr, setAckLr] = React.useState<LorryReceipt | null>(null);
+
+  const openAcknowledgement = useMutation({
+    mutationFn: (row: PendingPodRow) => lorryReceiptApi.detail(row.id),
+    onSuccess: setAckLr,
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const acknowledge = useMutation({
+    mutationFn: async (vars: {
+      values: AcknowledgeLRFormInput;
+      scanFiles: File[];
+    }) => {
+      if (!ackLr) throw new Error("No LR selected");
+      const ack = await lorryReceiptApi.acknowledge(ackLr.id, vars.values);
+      try {
+        await Promise.all(
+          vars.scanFiles.map((file) =>
+            attachmentApi.upload(
+              {
+                entityType: ACK_SCAN_ENTITY,
+                entityId: ack.id,
+                originalName: file.name,
+                mime: file.type || "application/octet-stream",
+                sizeBytes: file.size,
+              },
+              file,
+            ),
+          ),
+        );
+      } catch (error) {
+        toast.error(
+          `Acknowledgement saved, but a scan upload failed: ${getErrorMessage(error)}`,
+        );
+      }
+      return ack;
+    },
+    onSuccess: async () => {
+      toast.success("POD acknowledged");
+      setAckLr(null);
+      await queryClient.invalidateQueries({ queryKey: deliveryWorklistKeys.all });
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const podColumns = React.useMemo(
+    () =>
+      pendingPodColumns(canAcknowledge, (row) =>
+        openAcknowledgement.mutate(row),
+      ),
+    [canAcknowledge, openAcknowledgement],
+  );
+  const [tab, setTab] = React.useState<
+    "pending-delivery" | "at-hub" | "pending-pod"
+  >("pending-delivery");
 
   const stats = useQuery({
     queryKey: deliveryWorklistKeys.stats,
@@ -496,7 +656,12 @@ export default function DeliveriesPage() {
         />
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs
+        value={tab}
+        onValueChange={(value) =>
+          setTab(value as "pending-delivery" | "at-hub" | "pending-pod")
+        }
+      >
         <TabsList>
           <TabsTrigger value="pending-delivery">Pending delivery</TabsTrigger>
           <TabsTrigger value="at-hub">At hub</TabsTrigger>
@@ -532,13 +697,25 @@ export default function DeliveriesPage() {
             tableKey="deliveries-pending-pod"
             defaultOrder={PENDING_POD_ORDER}
             columnMeta={PENDING_POD_META}
-            columns={PENDING_POD_COLUMNS}
+            columns={podColumns}
             data={pendingPod.data ?? []}
             isLoading={pendingPod.isLoading}
             emptyMessage="No PODs outstanding — everything delivered is acknowledged."
           />
         </TabsContent>
       </Tabs>
+
+      <AcknowledgeDialog
+        open={Boolean(ackLr)}
+        onOpenChange={(open) => !open && setAckLr(null)}
+        lrNumber={ackLr?.lrNumber ?? ""}
+        goods={ackLr?.goods ?? []}
+        mode="acknowledge"
+        isPending={acknowledge.isPending}
+        onConfirm={(values, scanFiles) =>
+          acknowledge.mutate({ values, scanFiles })
+        }
+      />
     </div>
   );
 }

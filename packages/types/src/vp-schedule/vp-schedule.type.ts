@@ -5,6 +5,9 @@ import {
   updateVPScheduleSchema,
   confirmVPScheduleSchema,
   cancelVPScheduleSchema,
+  vpScheduleFreightPreviewSchema,
+  vpScheduleFreightMatchTypeSchema,
+  vpScheduleFreightPreviewResponseSchema,
 } from "@skerp/validators";
 
 export type VPSchedule = z.infer<typeof vpScheduleSchema>;
@@ -17,3 +20,15 @@ export type UpdateVPScheduleFormInput = z.input<typeof updateVPScheduleSchema>;
 
 export type ConfirmVPScheduleBody = z.output<typeof confirmVPScheduleSchema>;
 export type CancelVPScheduleBody = z.output<typeof cancelVPScheduleSchema>;
+
+export type VPScheduleFreightPreviewBody = z.output<
+  typeof vpScheduleFreightPreviewSchema
+>;
+
+export type VPScheduleFreightMatchType = z.infer<
+  typeof vpScheduleFreightMatchTypeSchema
+>;
+
+export type VPScheduleFreightPreview = z.infer<
+  typeof vpScheduleFreightPreviewResponseSchema
+>;

@@ -5,6 +5,7 @@ import type {
   CreateTripBody,
   UpdateTripBody,
   CloseTripBody,
+  CorrectClosedTripBody,
   CancelTripBody,
   ActiveJourneyInfo,
 } from "@skerp/types";
@@ -71,6 +72,17 @@ export const tripApi = {
 
   close: async (id: string, body: CloseTripBody): Promise<Trip> => {
     const res = await api.post<ApiResponse<Trip>>(`/trips/${id}/close`, body);
+    return unwrapApiResponse(res);
+  },
+
+  correctClosed: async (
+    id: string,
+    body: CorrectClosedTripBody,
+  ): Promise<Trip> => {
+    const res = await api.post<ApiResponse<Trip>>(
+      `/trips/${id}/correct-closed`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 

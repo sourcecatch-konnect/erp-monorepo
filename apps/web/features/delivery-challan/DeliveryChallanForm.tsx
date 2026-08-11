@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconArrowLeft,
@@ -29,6 +30,10 @@ import {
 } from "@skerp/ui/components/select";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
+  SuggestInput,
+  type SuggestOption,
+} from "@skerp/ui/components/suggest-input";
+import {
   Table,
   TableBody,
   TableCell,
@@ -39,6 +44,7 @@ import {
 import { Textarea } from "@skerp/ui/components/textarea";
 
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
+import { driverApi } from "@/features/masters/driver/driver.service";
 
 import {
   type DeliveryChallanDetail,
@@ -131,6 +137,9 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   const [vehicleId, setVehicleId] = React.useState(
     initialData?.vehicleId ?? "",
   );
+  const [vehicleNumber, setVehicleNumber] = React.useState(
+    initialData?.vehicleNumberSnapshot ?? "",
+  );
   const [destinationAreaId, setDestinationAreaId] = React.useState(
     initialData?.destinationAreaId ?? "",
   );
@@ -184,6 +193,10 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
     vehicleMode === "MARKET",
   );
   const vehiclesQuery = useDeliveryChallanVehicles(vehicleMode, transportId);
+  const driversQuery = useQuery({
+    queryKey: ["delivery-challans", "options", "drivers"],
+    queryFn: () => driverApi.list({ page: 0, size: 1000, sort: "name:asc" }),
+  });
   const createMutation = useCreateDeliveryChallan();
   const updateMutation = useUpdateDeliveryChallan();
   const preview = previewQuery.data;
@@ -194,12 +207,12 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   );
   const railRoute = isEdit
     ? {
-      sourceBranch: initialData.branchGrn.railRake.fromBranch,
-      receivingBranch: initialData.branchGrn.railRake.toBranch,
-      sourceArea: initialData.branchGrn.railRake.vpSchedule.sourceArea,
-      destinationArea:
-        initialData.branchGrn.railRake.vpSchedule.destinationArea,
-    }
+        sourceBranch: initialData.branchGrn.railRake.fromBranch,
+        receivingBranch: initialData.branchGrn.railRake.toBranch,
+        sourceArea: initialData.branchGrn.railRake.vpSchedule.sourceArea,
+        destinationArea:
+          initialData.branchGrn.railRake.vpSchedule.destinationArea,
+      }
     : selectedRake;
 
   const currentByItem = React.useMemo(
@@ -278,6 +291,21 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
       ),
     [transportId, transportsQuery.data],
   );
+  const vehicleSuggestions: SuggestOption[] = (vehiclesQuery.data ?? []).map(
+    (vehicle) => ({
+      value: vehicle.vehicleNumber,
+      hint: vehicle.vehicleTypeRef.name,
+      badge: vehicle.status === "ON_TRIP" ? "On trip" : "Registered",
+      badgeTone: vehicle.status === "ON_TRIP" ? "warning" : "muted",
+    }),
+  );
+  const drivers = driversQuery.data?.data ?? [];
+  const driverSuggestions: SuggestOption[] = drivers.map((driver) => ({
+    value: driver.name,
+    hint: driver.mobile,
+    badge: "Registered",
+    badgeTone: "muted",
+  }));
 
   const freightValue = Math.max(Number(freightAmount) || 0, 0);
   const advanceValue = Math.max(Number(advanceAmount) || 0, 0);
@@ -290,9 +318,9 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
     setDestinationAreaId(destination?.areaId ?? "");
     setDeliveryAddress(
       destination?.address ??
-      destination?.area?.formattedAddress ??
-      destination?.area?.name ??
-      "",
+        destination?.area?.formattedAddress ??
+        destination?.area?.name ??
+        "",
     );
   };
 
@@ -304,12 +332,15 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
       return "Selected goods belong to different consignees. Create a separate challan for each consignee.";
     }
     if (!destinationLocationId) return "Select a delivery destination";
-    if (!supervisorId) return "Loading supervisor is required";
+    if (!supervisorId) return "Unloading supervisor is required";
     if (vehicleMode === "MARKET" && !transportId) {
       return "Transporter is required";
     }
-    if (!vehicleId) {
-      return "Vehicle is required";
+    if (vehicleMode === "OWN" && !vehicleId) {
+      return "Select an own vehicle";
+    }
+    if (vehicleMode === "MARKET" && !vehicleNumber.trim()) {
+      return "Vehicle number is required";
     }
     if (advanceValue > 0 && !freightAmount.trim()) {
       return "Enter the freight amount before entering an advance";
@@ -335,7 +366,11 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
       deliveryAddress: deliveryAddress || undefined,
       vehicleMode,
       transportId: vehicleMode === "MARKET" ? transportId : undefined,
-      vehicleId,
+      vehicleId: vehicleId || undefined,
+      vehicleNumber:
+        vehicleMode === "MARKET"
+          ? vehicleNumber.trim().toUpperCase()
+          : undefined,
       driverName: driverName || undefined,
       driverMobile: driverMobile || undefined,
       totalWeight: totalWeight ? Number(totalWeight) : undefined,
@@ -354,16 +389,16 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
     try {
       const row = isEdit
         ? await updateMutation.mutateAsync({
-          id: initialData.id,
-          body: {
-            ...fields,
-            version: initialData.version,
-          } satisfies UpdateDeliveryChallanBody,
-        })
+            id: initialData.id,
+            body: {
+              ...fields,
+              version: initialData.version,
+            } satisfies UpdateDeliveryChallanBody,
+          })
         : await createMutation.mutateAsync({
-          ...fields,
-          branchGrnId,
-        } satisfies CreateDeliveryChallanBody);
+            ...fields,
+            branchGrnId,
+          } satisfies CreateDeliveryChallanBody);
       toast.success(
         isEdit ? "Delivery Challan updated" : "Delivery Challan draft created",
       );
@@ -689,7 +724,6 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                 <SelectContent>
                   {destinationOptions.map((destination) => (
                     <SelectItem key={destination.id} value={destination.id}>
-
                       {destination.area?.name ?? destination.city.name}
                     </SelectItem>
                   ))}
@@ -726,6 +760,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                 onValueChange={(value) => {
                   setVehicleMode(value as DeliveryVehicleMode);
                   setVehicleId("");
+                  setVehicleNumber("");
                   if (value !== "MARKET") setTransportId("");
                 }}
               >
@@ -735,7 +770,6 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                 <SelectContent>
                   <SelectItem value="MARKET">Market vehicle</SelectItem>
                   <SelectItem value="OWN">Own vehicle</SelectItem>
-
                 </SelectContent>
               </Select>
             </div>
@@ -748,6 +782,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                   onValueChange={(value) => {
                     setTransportId(value);
                     setVehicleId("");
+                    setVehicleNumber("");
                     setDriverName("");
                     setDriverMobile("");
                   }}
@@ -770,51 +805,81 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                   </SelectContent>
                 </Select>
               </div>
-
             ) : null}
             <div>
-              <FieldLabel required>Vehicle</FieldLabel>
-
-              <Select
-                value={vehicleId}
-                onValueChange={(value) => {
-                  setVehicleId(value);
-                }}
-                disabled={
-                  vehiclesQuery.isLoading ||
-                  (vehicleMode === "MARKET" && !transportId)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      vehicleMode === "MARKET" && !transportId
-                        ? "Select transporter first"
-                        : vehiclesQuery.isLoading
+              <FieldLabel required>Vehicle number</FieldLabel>
+              {vehicleMode === "MARKET" ? (
+                <SuggestInput
+                  value={vehicleNumber}
+                  onChange={(value) => {
+                    setVehicleNumber(value.toUpperCase());
+                    const matched = (vehiclesQuery.data ?? []).find(
+                      (vehicle) =>
+                        vehicle.vehicleNumber.trim().toLowerCase() ===
+                        value.trim().toLowerCase(),
+                    );
+                    setVehicleId(matched?.id ?? "");
+                  }}
+                  suggestions={vehicleSuggestions}
+                  disabled={!transportId}
+                  placeholder={
+                    !transportId
+                      ? "Select transporter first"
+                      : vehiclesQuery.isLoading
+                        ? "Loading vehicles or type vehicle number"
+                        : "Select or type vehicle number"
+                  }
+                  className="[&_input]:uppercase"
+                />
+              ) : (
+                <Select
+                  value={vehicleId}
+                  onValueChange={(value) => {
+                    setVehicleId(value);
+                  }}
+                  disabled={vehiclesQuery.isLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        vehiclesQuery.isLoading
                           ? "Loading vehicles..."
-                          : "Select vehicle"
-                    }
-                  />
-                </SelectTrigger>
+                          : "Select own vehicle"
+                      }
+                    />
+                  </SelectTrigger>
 
-                <SelectContent>
-                  {(vehiclesQuery.data ?? []).map((vehicle) => (
-                    <SelectItem key={vehicle.id} value={vehicle.id}>
-                      {vehicle.vehicleNumber} · {vehicle.vehicleTypeRef.name}
-                      {vehicle.status === "ON_TRIP" ? " · On trip" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectContent>
+                    {(vehiclesQuery.data ?? []).map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.vehicleNumber} · {vehicle.vehicleTypeRef.name}
+                        {vehicle.status === "ON_TRIP" ? " · On trip" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div>
-
               <FieldLabel>Driver name</FieldLabel>
-              <Input
-                placeholder="Driver name"
+              <SuggestInput
                 value={driverName}
-                onChange={(event) => setDriverName(event.target.value)}
+                onChange={(value) => {
+                  setDriverName(value);
+                  const matched = drivers.find(
+                    (driver) =>
+                      driver.name.trim().toLowerCase() ===
+                      value.trim().toLowerCase(),
+                  );
+                  setDriverMobile(matched?.mobile ?? "");
+                }}
+                suggestions={driverSuggestions}
+                placeholder={
+                  driversQuery.isLoading
+                    ? "Loading drivers..."
+                    : "Select or type driver"
+                }
               />
             </div>
             <div>
@@ -844,7 +909,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
             />
           </div>
           <div>
-            <FieldLabel required>Loading supervisor</FieldLabel>
+            <FieldLabel required>Unloading supervisor</FieldLabel>
             <Select value={supervisorId} onValueChange={setSupervisorId}>
               <SelectTrigger>
                 <SelectValue

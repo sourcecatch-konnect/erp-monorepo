@@ -7,7 +7,8 @@ const requiredLabourCount = z.preprocess(
   z.coerce
     .number()
     .int("Number of labour must be a whole number")
-    .min(1, "Number of labour must be at least 1"),
+    .min(1, "Number of labour must be at least 1")
+    .max(10, "Number of labour cannot exceed 10"),
 );
 
 const requiredLabourCharge = z.preprocess(

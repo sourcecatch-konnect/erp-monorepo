@@ -23,30 +23,30 @@ export const mrrrListSelect = {
       fromBranchId: true,
       toBranchId: true,
       sourceArea: {
-  select: {
-    id: true,
-    name: true,
-    city: {
-      select: {
-        id: true,
-        name: true,
+        select: {
+          id: true,
+          name: true,
+          city: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
       },
-    },
-  },
-},
 
-destinationArea: {
-  select: {
-    id: true,
-    name: true,
-    city: {
-      select: {
-        id: true,
-        name: true,
+      destinationArea: {
+        select: {
+          id: true,
+          name: true,
+          city: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
       },
-    },
-  },
-},
       fromBranch: {
         select: {
           id: true,
@@ -150,8 +150,7 @@ export const mrrrInclude = {
           capacityMt: true,
           totalCft: true,
           totalMt: true,
-          freightAmount: true,
-          totalFreight: true,
+
         },
       },
       vpWagonLoading: {

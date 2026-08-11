@@ -160,3 +160,12 @@ export const closeJourneySchema = z.object({
     .min(3, "Please give a reason (min 3 characters)")
     .max(500, "Reason is too long"),
 });
+
+/** Reopen a signed-off settlement so money entries can be corrected. */
+export const reopenSettlementReviewSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Please give a reason (min 3 characters)")
+    .max(500, "Reason is too long"),
+});

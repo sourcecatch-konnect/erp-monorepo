@@ -33,12 +33,15 @@ const validateAreaCity = async ({
       where: {
         id: sourceAreaId,
         cityId: sourceCityId,
+        isRailHead: true,
       },
       select: { id: true },
     });
 
     if (!sourceArea) {
-      throw new Error("Source area does not belong to selected source city.");
+      throw new BadRequestError(
+        "Source Area must be a railhead in the selected source City.",
+      );
     }
   }
 
@@ -47,13 +50,14 @@ const validateAreaCity = async ({
       where: {
         id: destinationAreaId,
         cityId: destinationCityId,
+        isRailHead: true,
       },
       select: { id: true },
     });
 
     if (!destinationArea) {
-      throw new Error(
-        "Destination area does not belong to selected destination city.",
+      throw new BadRequestError(
+        "Destination Area must be a railhead in the selected destination City.",
       );
     }
   }
@@ -98,8 +102,8 @@ const railwayFreightCrudRouter: Router = createCrudRouter({
     },
 
     beforeUpdate: async (data, row) => {
-        const current = row as {
-          id: string;
+      const current = row as {
+        id: string;
         wagonId: string;
         sourceCityId: string;
         sourceAreaId: string | null;

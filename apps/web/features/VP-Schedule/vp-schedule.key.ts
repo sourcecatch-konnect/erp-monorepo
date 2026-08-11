@@ -10,6 +10,19 @@ export const vpScheduleKeys = {
 
   detail: (id: string) =>
     ["vp-schedules", "detail", id] as const,
+
+  freightPreview: (
+    sourceAreaId: string,
+    destinationAreaId: string,
+    wagons: string,
+  ) =>
+    [
+      "vp-schedules",
+      "freight-preview",
+      sourceAreaId,
+      destinationAreaId,
+      wagons,
+    ] as const,
 };
 
 export const vpScheduleLookupKeys = {

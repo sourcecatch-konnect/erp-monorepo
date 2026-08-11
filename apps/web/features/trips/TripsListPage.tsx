@@ -9,7 +9,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { CloseTripBody, Trip } from "@skerp/types";
+import type { CloseTripBody, CorrectClosedTripBody, Trip } from "@skerp/types";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import {
@@ -33,6 +33,7 @@ import { tripApi } from "./trip.service";
 import type { TripListQuery } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import TripTable, { DEFAULT_TRIP_COLUMN_ORDER } from "./TripTable";
+import CorrectClosedTripDialog from "./CorrectClosedTripDialog";
 
 /** Columns whose data is a relation join the server can skip when hidden. */
 const RELATION_COLUMNS = ["journey", "vehicle", "route", "client"] as const;
@@ -107,10 +108,12 @@ export default function TripsListPage() {
   const [cancelTrip, setCancelTrip] = React.useState<Trip | null>(null);
   const [deleteTrip, setDeleteTrip] = React.useState<Trip | null>(null);
   const [dispatchTrip, setDispatchTrip] = React.useState<Trip | null>(null);
+  const [correctTrip, setCorrectTrip] = React.useState<Trip | null>(null);
 
   const canCreate = useCan(PERMS.TRIP.CREATE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
   const canClose = useCan(PERMS.TRIP.CLOSE);
+  const canCorrect = useCan(PERMS.TRIP.CORRECT_CLOSED);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
@@ -176,6 +179,17 @@ export default function TripsListPage() {
     onSuccess: () => {
       toast.success("Trip closed");
       setCloseTrip(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const correctClosed = useMutation({
+    mutationFn: (vars: { id: string; body: CorrectClosedTripBody }) =>
+      tripApi.correctClosed(vars.id, vars.body),
+    onSuccess: () => {
+      toast.success("Closed trip corrected");
+      setCorrectTrip(null);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -271,12 +285,14 @@ export default function TripsListPage() {
         canStart={canCreateLR}
         canDispatch={canUpdate}
         canClose={canClose}
+        canCorrect={canCorrect}
         canUpdate={canUpdate}
         canCancel={canCancel}
         canDelete={canDelete}
         onStart={(t) => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
         onDispatch={(t) => setDispatchTrip(t)}
         onClose={(t) => setCloseTrip(t)}
+        onCorrect={(t) => setCorrectTrip(t)}
         onCancel={(t) => setCancelTrip(t)}
         onDelete={(t) => setDeleteTrip(t)}
         canDownloadPdf={canDownloadPdf}
@@ -294,6 +310,18 @@ export default function TripsListPage() {
         isPending={close.isPending}
         onConfirm={(body) => {
           if (closeTrip) close.mutate({ id: closeTrip.id, body });
+        }}
+      />
+
+      <CorrectClosedTripDialog
+        open={Boolean(correctTrip)}
+        onOpenChange={(open) => !open && setCorrectTrip(null)}
+        trip={correctTrip}
+        isPending={correctClosed.isPending}
+        onConfirm={(body) => {
+          if (correctTrip) {
+            correctClosed.mutate({ id: correctTrip.id, body });
+          }
         }}
       />
 

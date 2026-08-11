@@ -5,7 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PERMS, type CloseTripBody, type Trip } from "@skerp/types";
+import {
+  PERMS,
+  type CloseTripBody,
+  type CorrectClosedTripBody,
+  type Trip,
+} from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
@@ -45,6 +50,7 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
+import CorrectClosedTripDialog from "./CorrectClosedTripDialog";
 import {
   LegChip,
   timeAgo,
@@ -81,11 +87,13 @@ export default function TripDetail({ id }: { id: string }) {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [dispatchOpen, setDispatchOpen] = React.useState(false);
+  const [correctOpen, setCorrectOpen] = React.useState(false);
 
   const canClose = useCan(PERMS.TRIP.CLOSE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
+  const canCorrectClosed = useCan(PERMS.TRIP.CORRECT_CLOSED);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
   const canDispatch = canUpdate;
 
@@ -120,6 +128,17 @@ export default function TripDetail({ id }: { id: string }) {
     onSuccess: () => {
       toast.success("Trip closed");
       setCloseOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const correctClosed = useMutation({
+    mutationFn: (body: CorrectClosedTripBody) =>
+      tripApi.correctClosed(id, body),
+    onSuccess: () => {
+      toast.success("Closed trip corrected");
+      setCorrectOpen(false);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -178,7 +197,11 @@ export default function TripDetail({ id }: { id: string }) {
             It may have been deleted, or the link is wrong.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => router.push("/trips")}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push("/trips")}
+        >
           <IconArrowLeft size={15} className="mr-1" /> Back to trips
         </Button>
       </div>
@@ -194,6 +217,10 @@ export default function TripDetail({ id }: { id: string }) {
   const dispatchableDirect = tripDispatchesDirect(t);
   const closeable = t.status === "InTransit";
   const editable = t.status === "Planned";
+  const isClosed = t.status === "Closed";
+  const correctable =
+    isClosed &&
+    (!t.journey || ["ACTIVE", "RETURNED"].includes(t.journey.status));
   const deletable = t.status === "Planned" || t.status === "Cancelled";
   const cancellable = t.status === "Planned" || t.status === "InTransit";
 
@@ -202,7 +229,10 @@ export default function TripDetail({ id }: { id: string }) {
   const closeBlocked = blockingLrs.length > 0;
 
   const groups = [
-    ...(t.primaryGroups ?? []).map((g) => ({ group: g, leg: "primary" as const })),
+    ...(t.primaryGroups ?? []).map((g) => ({
+      group: g,
+      leg: "primary" as const,
+    })),
     ...(t.secondaryGroups ?? []).map((g) => ({
       group: g,
       leg: "secondary" as const,
@@ -249,7 +279,7 @@ export default function TripDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {canCreateLR && attachableLR ? (
             <Button
               onClick={() => router.push(`/lorry-receipts/new?tripId=${t.id}`)}
@@ -273,6 +303,22 @@ export default function TripDetail({ id }: { id: string }) {
               onClick={() => setCloseOpen(true)}
             >
               <IconCircleCheck size={16} className="mr-1" /> Close trip
+            </Button>
+          ) : null}
+          {canCorrectClosed && isClosed ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (correctable) {
+                  setCorrectOpen(true);
+                  return;
+                }
+                toast.error(
+                  "This trip's settlement is locked. Reopen Settlement Review or Reopen Log Slip from the vehicle journey first.",
+                );
+              }}
+            >
+              <IconEdit size={16} className="mr-1" /> Correct Trip
             </Button>
           ) : null}
           <DropdownMenu>
@@ -387,7 +433,10 @@ export default function TripDetail({ id }: { id: string }) {
               {t.tripType === "dc" ? (
                 <Field label="Rake date" value={formatDate(t.rakeDate)} />
               ) : null}
-              <Field label="Started at" value={formatDateTime(t.startDateTime)} />
+              <Field
+                label="Started at"
+                value={formatDateTime(t.startDateTime)}
+              />
               <Field label="Ended at" value={formatDateTime(t.endDateTime)} />
               <Field
                 label="Opening KM"
@@ -419,7 +468,10 @@ export default function TripDetail({ id }: { id: string }) {
                 >
                   {t.journey.journeyNumber}
                 </Link>
-                <LegChip sequenceNo={t.sequenceNo} isReturnLeg={t.isReturnLeg} />
+                <LegChip
+                  sequenceNo={t.sequenceNo}
+                  isReturnLeg={t.isReturnLeg}
+                />
               </div>
               <p className="mt-1 text-xs text-muted-foreground capitalize">
                 Journey status: {t.journey.status.toLowerCase()}
@@ -435,7 +487,9 @@ export default function TripDetail({ id }: { id: string }) {
       {/* ---- Meta footer ---- */}
       <p className="border-t pt-3 text-xs text-muted-foreground">
         Created
-        {t.createdBy ? ` by ${t.createdBy.firstName} ${t.createdBy.lastName}` : ""}
+        {t.createdBy
+          ? ` by ${t.createdBy.firstName} ${t.createdBy.lastName}`
+          : ""}
         {" · "}
         {formatDateTime(t.createdAt)}
         {t.updatedAt && t.updatedAt !== t.createdAt
@@ -464,6 +518,14 @@ export default function TripDetail({ id }: { id: string }) {
         isReturnToBase={t.isReturnLeg}
         isPending={close.isPending}
         onConfirm={(body) => close.mutate(body)}
+      />
+
+      <CorrectClosedTripDialog
+        open={correctOpen}
+        onOpenChange={setCorrectOpen}
+        trip={t}
+        isPending={correctClosed.isPending}
+        onConfirm={(body) => correctClosed.mutate(body)}
       />
 
       <ReasonDialog

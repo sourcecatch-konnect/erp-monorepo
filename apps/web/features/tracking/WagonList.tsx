@@ -11,20 +11,28 @@ import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { cn } from "@/lib/utils";
 
-import { StatusBadge, formatLastUpdate } from "./tracking-ui";
+import { AssignmentBadge, StatusBadge, formatLastUpdate } from "./tracking-ui";
 
 export type StatusFilter = "all" | "online" | "offline";
+export type AssignmentFilter = "all" | "assigned" | "unassigned";
 
-const FILTERS: { key: StatusFilter; label: string }[] = [
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "online", label: "Online" },
   { key: "offline", label: "Offline" },
 ];
 
+const ASSIGNMENT_FILTERS: { key: AssignmentFilter; label: string }[] = [
+  { key: "all", label: "All trackers" },
+  { key: "assigned", label: "Assigned" },
+  { key: "unassigned", label: "Unassigned" },
+];
+
 type WagonListProps = {
-  /** Already filtered by search + status (filtering is centralised in the page). */
+  /** Already filtered by search + status + assignment. */
   vehicles: FleetVehicle[];
-  counts: Record<StatusFilter, number>;
+  statusCounts: Record<StatusFilter, number>;
+  assignmentCounts: Record<AssignmentFilter, number>;
   isLoading: boolean;
   isError: boolean;
   errorMessage?: string;
@@ -34,11 +42,14 @@ type WagonListProps = {
   onSearch: (value: string) => void;
   statusFilter: StatusFilter;
   onStatusFilter: (value: StatusFilter) => void;
+  assignmentFilter: AssignmentFilter;
+  onAssignmentFilter: (value: AssignmentFilter) => void;
 };
 
 export function WagonList({
   vehicles: filtered,
-  counts,
+  statusCounts,
+  assignmentCounts,
   isLoading,
   isError,
   errorMessage,
@@ -48,6 +59,8 @@ export function WagonList({
   onSearch,
   statusFilter,
   onStatusFilter,
+  assignmentFilter,
+  onAssignmentFilter,
 }: WagonListProps) {
   return (
     <div className="flex min-h-0 flex-col gap-3">
@@ -62,7 +75,7 @@ export function WagonList({
       </div>
 
       <div className="flex gap-1.5">
-        {FILTERS.map((f) => (
+        {STATUS_FILTERS.map((f) => (
           <button
             key={f.key}
             type="button"
@@ -76,7 +89,28 @@ export function WagonList({
           >
             {f.label}
             <span className="ml-1 tabular-nums opacity-70">
-              {counts[f.key]}
+              {statusCounts[f.key]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-1.5">
+        {ASSIGNMENT_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => onAssignmentFilter(f.key)}
+            className={cn(
+              "flex-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+              assignmentFilter === f.key
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >
+            {f.label}
+            <span className="ml-1 tabular-nums opacity-70">
+              {assignmentCounts[f.key]}
             </span>
           </button>
         ))}
@@ -100,7 +134,7 @@ export function WagonList({
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-1 py-10 text-center text-sm text-muted-foreground">
             <IconTrain className="size-6 opacity-50" />
-            No active tracked rakes found.
+            No trackers match the selected filters.
           </div>
         ) : (
           filtered.map((v) => (
@@ -119,7 +153,10 @@ export function WagonList({
                 <span className="truncate text-sm font-medium text-foreground">
                   {v.name}
                 </span>
-                <StatusBadge status={v.status} />
+                <div className="flex items-center gap-1.5">
+                  <AssignmentBadge assigned={Boolean(v.assignment)} compact />
+                  <StatusBadge status={v.status} />
+                </div>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
@@ -146,7 +183,11 @@ export function WagonList({
                     ? ` · ${v.assignment.installedOnVpNo}`
                     : ""}
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-1 truncate text-xs font-medium text-amber-700">
+                  Tracker location only · No VP schedule assigned
+                </p>
+              )}
             </button>
           ))
         )}

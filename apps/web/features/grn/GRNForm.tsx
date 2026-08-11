@@ -37,7 +37,11 @@ import {
   useSubmitGRN,
   useUpdateGRN,
 } from "./useHook/useGRN";
-import type { CreateGRNBody, GRN as GRNMutation } from "./grn.service";
+import type {
+  CreateGRNBody,
+  GRN as GRNMutation,
+  GRNGoodsInput,
+} from "./grn.service";
 import type { GRN as GRNDetail } from "@skerp/types";
 import {
   Table,
@@ -99,9 +103,18 @@ type EditGRNForPreview = GRNDetail & {
   })
   | null;
 };
-type GRNFormValues = Omit<CreateGRNBody, "inDateTime" | "outDateTime"> & {
+type GRNFormGoods = Omit<GRNGoodsInput, "receivedQty"> & {
+  receivedQty?: number | string;
+};
+
+type GRNFormValues = Omit<
+  CreateGRNBody,
+  "inDateTime" | "outDateTime" | "goods" | "labourCount"
+> & {
   inDateTime?: Date;
   outDateTime?: Date;
+  labourCount?: number;
+  goods: GRNFormGoods[];
   balanceFreight?: number | string;
   freightPerMT?: number | string;
   detentionDays?: number;
@@ -173,6 +186,19 @@ const paiseToRupeeInput = (value: unknown) => {
   return num === undefined ? undefined : num / 100;
 };
 
+const toMetricTonnes = (value: unknown, unit?: string | null) => {
+  const weight = toNumberOrUndefined(value);
+  if (weight === undefined) return undefined;
+
+  const normalizedUnit = unit?.trim().toUpperCase();
+
+  if (normalizedUnit === "KG" || normalizedUnit === "KGS") {
+    return weight / 1000;
+  }
+
+  return weight;
+};
+
 const toApiDateTime = (value?: Date) =>
   value instanceof Date && !Number.isNaN(value.getTime())
     ? value.toISOString()
@@ -185,7 +211,8 @@ type Props = {
 const grnToFormValues = (grn: GRNDetail): GRNFormValues => ({
   lorryReceiptId: grn.lorryReceiptId,
 
-  gateNo: grn.gateNo ?? undefined,
+  gateNo: grn.gateNo,
+  labourCount: grn.labourCount,
   inDateTime: grn.inDateTime ? new Date(grn.inDateTime) : undefined,
   outDateTime: grn.outDateTime ? new Date(grn.outDateTime) : undefined,
   unloadingMinutes: grn.unloadingMinutes ?? undefined,
@@ -262,6 +289,7 @@ export default function GRNForm({ mode, grn }: Props) {
         ? grnToFormValues(grn)
         : {
           lorryReceiptId: "",
+          gateNo: "",
           goods: [],
           damagePhotoAttachmentIds: [],
           detentionDays: 0,
@@ -318,16 +346,14 @@ export default function GRNForm({ mode, grn }: Props) {
     replace(
       preview.data.goods.map((item) => {
         const totalQty = numberValue(item.totalQty);
-        const receivedQty = numberValue(item.receivedQty);
-
         return {
           lrGoodsId: item.lrGoodsId,
           goodsName: item.goodsName,
           description: item.description ?? undefined,
           totalQty,
-          receivedQty,
+          receivedQty: undefined,
           damageQty: numberValue(item.damageQty),
-          shortageQty: Math.max(totalQty - receivedQty, 0),
+          shortageQty: 0,
           quantityUnitId: item.quantityUnitId ?? undefined,
           weightUnitId: item.weightUnitId ?? undefined,
           unit: item.unit ?? item.quantityUnit?.code ?? undefined,
@@ -355,6 +381,14 @@ export default function GRNForm({ mode, grn }: Props) {
     form.setValue(
       "tdsAmount",
       paiseToRupeeInput(preview.data.chargeDefaults.tdsAmount),
+    );
+
+    form.setValue(
+      "totalWeightMt",
+      toMetricTonnes(
+        preview.data.lorryReceipt.totalWeight,
+        preview.data.lorryReceipt.unit,
+      ),
     );
   }, [mode, selectedLRId, preview.data, replace, form]);
 
@@ -400,6 +434,15 @@ export default function GRNForm({ mode, grn }: Props) {
 
   const validateGoods = (goods: GRNFormValues["goods"]) => {
     for (const [index, row] of goods.entries()) {
+      if (
+        row.receivedQty === undefined ||
+        row.receivedQty === null ||
+        row.receivedQty === ""
+      ) {
+        toast.error(`Row ${index + 1}: Enter received quantity`);
+        return false;
+      }
+
       const totalQty = numberValue(row.totalQty);
       const receivedQty = numberValue(row.receivedQty);
       const damageQty = numberValue(row.damageQty);
@@ -503,6 +546,23 @@ export default function GRNForm({ mode, grn }: Props) {
       return;
     }
 
+    if (!values.gateNo) {
+      toast.error("Please select gate number");
+      return;
+    }
+
+    const labourCount = values.labourCount;
+
+    if (
+      !Number.isInteger(labourCount) ||
+      labourCount === undefined ||
+      labourCount < 1 ||
+      labourCount > 10
+    ) {
+      toast.error("Number of labour must be between 1 and 10");
+      return;
+    }
+
     if (!values.goods.length) {
       toast.error("No goods found for selected LR");
       return;
@@ -549,6 +609,7 @@ export default function GRNForm({ mode, grn }: Props) {
 
       const apiBody = {
         ...apiValues,
+        labourCount,
         inDateTime: toApiDateTime(inDateTime),
         outDateTime: toApiDateTime(outDateTime),
         freightPerMt: toNumberOrUndefined(freightPerMT),
@@ -582,9 +643,7 @@ export default function GRNForm({ mode, grn }: Props) {
         });
         const identifier = grn.grnNumber || grn.id;
         toast.success(`GRN ${grn.grnNumber} updated`);
-        router.push(
-          `/vp-management/grn/${encodeURIComponent(identifier)}`,
-        );
+        router.push(`/vp-management/grn/${encodeURIComponent(identifier)}`);
 
         return;
       }
@@ -635,10 +694,7 @@ export default function GRNForm({ mode, grn }: Props) {
       toast.success(`GRN ${submitted.grnNumber} created`);
       setCreatedDraft(null);
 
-      router.push(
-        `/vp-management/grn/${encodeURIComponent(identifier)}`,
-      );
-
+      router.push(`/vp-management/grn/${encodeURIComponent(identifier)}`);
     } catch (err) {
       setIsUploadingDamagePhotos(false);
       toast.error(getErrorMessage(err));
@@ -775,12 +831,15 @@ export default function GRNForm({ mode, grn }: Props) {
                             const row = watchedGoods?.[index];
 
                             const totalQty = numberValue(row?.totalQty);
+                            const hasReceivedQty =
+                              row?.receivedQty !== undefined &&
+                              row?.receivedQty !== null &&
+                              row?.receivedQty !== "";
                             const receivedQty = numberValue(row?.receivedQty);
                             const damageQty = numberValue(row?.damageQty);
-                            const shortageQty = Math.max(
-                              totalQty - receivedQty,
-                              0,
-                            );
+                            const shortageQty = hasReceivedQty
+                              ? Math.max(totalQty - receivedQty, 0)
+                              : 0;
                             const showReason = damageQty > 0 || shortageQty > 0;
 
                             return (
@@ -802,26 +861,10 @@ export default function GRNForm({ mode, grn }: Props) {
                                     ) : null}
                                   </TableCell>
 
-
-
-                                  {/* Total is now manually editable */}
                                   <TableCell>
-                                    <Controller
-                                      name={`goods.${index}.totalQty` as const}
-                                      control={form.control}
-                                      render={({ field }) => (
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          className="h-9"
-                                          value={field.value ?? ""}
-                                          onChange={(event) => {
-                                            field.onChange(event.target.value);
-                                          }}
-                                          onBlur={field.onBlur}
-                                        />
-                                      )}
-                                    />
+                                    <span className="inline-flex min-w-12 rounded-md bg-muted px-3 py-2 font-medium">
+                                      {totalQty}
+                                    </span>
                                   </TableCell>
 
                                   <TableCell>
@@ -919,14 +962,34 @@ export default function GRNForm({ mode, grn }: Props) {
                   control={form.control}
                   render={({ field }) => (
                     <div>
-                      <FieldLabel>Gate No</FieldLabel>
-                      <Input
-                        className="h-9"
-                        placeholder="Enter gate no"
+                      <FieldLabel>Gate No *</FieldLabel>
+                      <Select
                         value={field.value ?? ""}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                      />
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select gate number" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["1", "2", "3", "4", "5"].map((gate) => (
+                            <SelectItem key={gate} value={gate}>
+                              Gate {gate}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                />
+                <Controller
+                  name="totalWeightMt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <div>
+                      <FieldLabel>Total Weight (MT)</FieldLabel>
+                      <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
+                        {field.value ?? "—"}
+                      </div>
                     </div>
                   )}
                 />
@@ -972,6 +1035,33 @@ export default function GRNForm({ mode, grn }: Props) {
                 title="Labour & Damage Details"
                 columns={3}
               >
+                <Controller
+                  name="labourCount"
+                  control={form.control}
+                  render={({ field }) => (
+                    <div>
+                      <FieldLabel>No. of Labour *</FieldLabel>
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select labour count" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from(
+                            { length: 10 },
+                            (_, index) => index + 1,
+                          ).map((count) => (
+                            <SelectItem key={count} value={String(count)}>
+                              {count}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                />
                 <div>
                   <FieldLabel>Damage By</FieldLabel>
 
@@ -1154,7 +1244,9 @@ export default function GRNForm({ mode, grn }: Props) {
                   control={form.control}
                   render={({ field }) => (
                     <div>
-                      <FieldLabel>Unloading Supervisor</FieldLabel>
+                      <FieldLabel>
+                        Unloading Supervisor
+                      </FieldLabel>
 
                       <Select
                         value={field.value ?? ""}
@@ -1178,8 +1270,14 @@ export default function GRNForm({ mode, grn }: Props) {
                               value={supervisor.id}
                             >
                               {supervisor.name}
+
                             </SelectItem>
                           ))}
+                          {!supervisorsLoading && supervisors.length === 0 ? (
+                            <div className="px-2 py-5 text-center text-xs text-muted-foreground">
+                              No Supervisor found in Labour Master
+                            </div>
+                          ) : null}
                         </SelectContent>
                       </Select>
                     </div>

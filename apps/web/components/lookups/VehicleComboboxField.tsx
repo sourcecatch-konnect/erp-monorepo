@@ -31,7 +31,7 @@ type Props<TFormValues extends FieldValues> = {
   required?: boolean;
   disabled?: boolean;
   ownershipType?: VehicleOwnershipFilter;
-  selectionContext?: "default" | "trip";
+  selectionContext?: "default" | "trip" | "journey";
   showStatusBadge?: boolean;
   getBadge?: (vehicle: Vehicle) => string | undefined;
   getBadgeTone?: (vehicle: Vehicle) => BadgeTone | undefined;
@@ -67,6 +67,17 @@ const tripChoiceBadge = (choice: TripVehicleChoice) => {
   };
 
   return badges[choice.selectionState];
+};
+
+const journeyChoiceBadge = (choice: TripVehicleChoice) => {
+  if (choice.selectionState === "AVAILABLE_FOR_NEW_JOURNEY") {
+    return "Available";
+  }
+  if (choice.selectionState === "INSURANCE_EXPIRED") {
+    return "Insurance expired";
+  }
+  if (choice.selectionState === "UNAVAILABLE") return "Unavailable";
+  return "Assigned";
 };
 
 const tripChoiceTone = (choice: TripVehicleChoice): BadgeTone => {
@@ -168,12 +179,17 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
   });
 
   const tripChoices = useInfiniteQuery({
-    queryKey: [...vehicleKeys.all, "trip-options", { search: debouncedSearch }],
+    queryKey: [
+      ...vehicleKeys.all,
+      "trip-options",
+      { search: debouncedSearch, selectionContext },
+    ],
     queryFn: ({ pageParam = 0 }) =>
       vehicleApi.tripOptions({
         page: pageParam,
         size: PAGE_SIZE,
         search: debouncedSearch,
+        context: selectionContext === "journey" ? "journey" : undefined,
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
@@ -186,7 +202,7 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
 
       return lastPage.data.length === PAGE_SIZE ? allPages.length : undefined;
     },
-    enabled: selectionContext === "trip" && !disabled,
+    enabled: selectionContext !== "default" && !disabled,
   });
 
   const selectedVehicle = useQuery({
@@ -196,7 +212,7 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
   });
 
   const options = React.useMemo<VehicleComboboxOption[]>(() => {
-    if (selectionContext === "trip") {
+    if (selectionContext !== "default") {
       const choices =
         tripChoices.data?.pages.flatMap((page) => page.data) ?? [];
       const contextualOptions: VehicleComboboxOption[] = choices.map(
@@ -204,9 +220,15 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
           value: choice.id,
           label: choice.vehicleNumber,
           hint: tripChoiceHint(choice),
-          badge: tripChoiceBadge(choice),
+          badge:
+            selectionContext === "journey"
+              ? journeyChoiceBadge(choice)
+              : tripChoiceBadge(choice),
           badgeTone: tripChoiceTone(choice),
-          disabled: !choice.selectable,
+          disabled:
+            selectionContext === "journey"
+              ? choice.selectionState !== "AVAILABLE_FOR_NEW_JOURNEY"
+              : !choice.selectable,
           tripChoice: choice,
         }),
       );
@@ -259,7 +281,7 @@ export default function VehicleComboboxField<TFormValues extends FieldValues>({
     vehicles.data,
   ]);
 
-  const activeQuery = selectionContext === "trip" ? tripChoices : vehicles;
+  const activeQuery = selectionContext === "default" ? vehicles : tripChoices;
 
   return (
     <ComboboxField<TFormValues>

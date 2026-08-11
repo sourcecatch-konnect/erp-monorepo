@@ -113,6 +113,7 @@ export const cancelVPLoadingSchema = z.object({
 });
 
 export const completeVPWagonLoadingSchema = z.object({
+  loaded: z.boolean().default(true),
   version: optionalVersion,
 });
 

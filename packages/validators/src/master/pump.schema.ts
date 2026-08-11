@@ -60,20 +60,12 @@ export const pumpSchema = z.object({
   stateId: z.string(),
   country: z.string(),
 
-  contactName: z.string().optional(),
-  contactPhone: z.string().optional(),
-
   rateLastUpdated: z.date().optional(),
   currentDieselRate: z.number().optional(),
 
-  gstIn: z.string().optional(),
   pan: z.string().optional(),
 
   creditLimit: z.number().optional(),
-
-  accountName: z.string().optional(),
-  bankName: z.string().optional(),
-  branchIfscCode: z.string().optional(),
 
   isBlackListed: z.boolean(),
 
@@ -104,33 +96,15 @@ export const createPumpSchema =
       .trim()
       .min(1, "Country is required"),
 
-    contactName: optionalString,
-
-    contactPhone: optionalString.refine(
-      (v) =>
-        !v ||
-        /^[0-9]{10,15}$/.test(v),
-      "Enter valid phone number"
-    ),
-
     rateLastUpdated: optionalDate,
 
     currentDieselRate:
       optionalNumber("Diesel rate"),
 
-    gstIn: optionalString,
-
     pan: optionalString,
 
     creditLimit:
       optionalNumber("Credit limit"),
-
-    accountName: optionalString,
-
-    bankName: optionalString,
-
-    branchIfscCode:
-      optionalString,
 
     isBlackListed:
       z.boolean().default(false),

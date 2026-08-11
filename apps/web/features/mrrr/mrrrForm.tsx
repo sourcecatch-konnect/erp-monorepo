@@ -7,7 +7,7 @@ import {
   FormProvider,
   useFieldArray,
   useForm,
-  type Resolver,
+
   type SubmitHandler,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,7 +27,7 @@ import type {
   UpdateMRRRRowsBody,
   UpdateMRRRBody,
 } from "@skerp/types";
-import { createMRRRSchema, updateMRRRSchema } from "@skerp/validators";
+import { mrrrFormSchema } from "@skerp/validators";
 
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
@@ -77,8 +77,8 @@ type MRRRFormRow = {
 };
 
 type MRRRFormInput = MRRRFormValues & {
-  mrRrNumber?: string | null;
-  scheduleDate?: string;
+  mrRrNumber?: string;
+  scheduleDate: string;
   rows: MRRRFormRow[];
 };
 
@@ -174,10 +174,8 @@ export function MRRRForm({ mode, mrrrId }: Props) {
   const detailQuery = useMRRRDetail(mrrrId ?? "");
 
   const form = useForm<MRRRFormInput>({
-    resolver: zodResolver(
-      isEdit ? updateMRRRSchema : createMRRRSchema,
-    ) as unknown as Resolver<MRRRFormInput>,
-    mode: "onTouched",
+    resolver: zodResolver(mrrrFormSchema),
+    mode: "onChange",
     defaultValues: {
       scheduleDate: "",
       vpScheduleId: "",
@@ -324,7 +322,7 @@ export function MRRRForm({ mode, mrrrId }: Props) {
           body,
         });
 
-        if (values.rows.some((row) => row.id)) {
+        if (values.rows?.some((row) => row.id)) {
           await updateRowsMutation.mutateAsync({
             id: mrrrId,
             body: buildRowsBody(values.rows),
@@ -487,12 +485,12 @@ export function MRRRForm({ mode, mrrrId }: Props) {
                       <p className="text-sm font-medium">
                         {previewSchedule.scheduleDate
                           ? new Date(
-                              previewSchedule.scheduleDate,
-                            ).toLocaleDateString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
+                            previewSchedule.scheduleDate,
+                          ).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })
                           : "—"}
                       </p>
                     </div>
@@ -540,8 +538,8 @@ export function MRRRForm({ mode, mrrrId }: Props) {
                       <p className="text-sm font-medium">
                         {previewSchedule.totalCapacityCft != null
                           ? Number(
-                              previewSchedule.totalCapacityCft,
-                            ).toLocaleString("en-IN")
+                            previewSchedule.totalCapacityCft,
+                          ).toLocaleString("en-IN")
                           : "—"}
                       </p>
                     </div>
@@ -660,9 +658,9 @@ export function MRRRForm({ mode, mrrrId }: Props) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Wagon</TableHead>
-                      <TableHead className="w-32">Sequence No</TableHead>
-                      <TableHead className="w-36">VP No</TableHead>
-                      <TableHead className="w-36">MR/RR No</TableHead>
+                      <TableHead className="w-45">Sequence No</TableHead>
+                      <TableHead className="w-45">VP No</TableHead>
+                      <TableHead className="w-45">MR/RR No</TableHead>
                       <TableHead>Seal No</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -689,22 +687,47 @@ export function MRRRForm({ mode, mrrrId }: Props) {
                           <TableCell className="align-top">
                             <Input
                               placeholder="VP no"
-                              {...form.register(`rows.${index}.vpNo`)}
+                              maxLength={10}
+                              {...form.register(`rows.${index}.vpNo`, {
+                                onChange: (e) => {
+                                  e.target.value = e.target.value.toUpperCase();
+                                },
+                              })}
                             />
+
+                            {errors.rows?.[index]?.vpNo?.message ? (
+                              <p className="mt-1 text-xs text-red-600">
+                                {errors.rows[index].vpNo.message}
+                              </p>
+                            ) : null}
                           </TableCell>
 
                           <TableCell className="align-top">
                             <Input
                               placeholder="MR/RR no"
-                              {...form.register(`rows.${index}.mrRrNo`)}
+                              maxLength={10}
+                              {...form.register(`rows.${index}.mrRrNo`, {
+                                onChange: (e) => {
+                                  e.target.value = e.target.value.toUpperCase();
+                                },
+                              })}
                             />
+
+                            {errors.rows?.[index]?.mrRrNo?.message ? (
+                              <p className="mt-1 text-xs text-red-600">
+                                {errors.rows[index].mrRrNo.message}
+                              </p>
+                            ) : null}
                           </TableCell>
 
                           <TableCell className="align-top">
-                            <textarea
-                              className="min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            <Input
                               placeholder="Seal no"
-                              {...form.register(`rows.${index}.sealNo`)}
+                              {...form.register(`rows.${index}.sealNo`, {
+                                onChange: (e) => {
+                                  e.target.value = e.target.value.toUpperCase();
+                                },
+                              })}
                             />
                           </TableCell>
                         </TableRow>

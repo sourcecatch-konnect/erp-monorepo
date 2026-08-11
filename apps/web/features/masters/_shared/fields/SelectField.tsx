@@ -25,6 +25,7 @@ type Props<TFormValues extends FieldValues> = {
   disabled?: boolean;
   suffix?: React.ReactNode;
   icon?: React.ReactNode;
+  labelAction?: React.ReactNode;
 };
 
 export default function SelectField<TFormValues extends FieldValues>({
@@ -35,7 +36,8 @@ export default function SelectField<TFormValues extends FieldValues>({
   required,
   disabled,
   suffix,
-  icon
+  icon,
+  labelAction,
 }: Props<TFormValues>) {
   const [search, setSearch] = React.useState("");
 
@@ -54,16 +56,19 @@ export default function SelectField<TFormValues extends FieldValues>({
     if (!term) return options;
 
     return options.filter((option) =>
-      option.label.toLowerCase().includes(term)
+      option.label.toLowerCase().includes(term),
     );
   }, [options, search]);
 
   return (
     <div className="grid gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground">
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
-      </label>
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-xs font-medium text-muted-foreground">
+          {label}
+          {required ? <span className="text-red-600"> *</span> : null}
+        </label>
+        {labelAction}
+      </div>
 
       <Select
         value={typeof value === "string" ? value : ""}
@@ -77,33 +82,31 @@ export default function SelectField<TFormValues extends FieldValues>({
             {
               shouldDirty: true,
               shouldValidate: true,
-            }
+            },
           )
         }
         disabled={disabled}
       >
-    <SelectTrigger
-  aria-invalid={Boolean(error)}
-  className="h-10 w-full rounded-lg"
->
-  <div className="flex min-w-0 flex-1 items-center gap-2">
-    {icon ? (
-      <span className="shrink-0 text-muted-foreground">
-        {icon}
-      </span>
-    ) : null}
+        <SelectTrigger
+          aria-invalid={Boolean(error)}
+          className="h-10 w-full rounded-lg"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {icon ? (
+              <span className="shrink-0 text-muted-foreground">{icon}</span>
+            ) : null}
 
-    <span className="min-w-0 flex-1 truncate text-left">
-      <SelectValue placeholder={placeholder ?? `Select ${label}`} />
-    </span>
+            <span className="min-w-0 flex-1 truncate text-left">
+              <SelectValue placeholder={placeholder ?? `Select ${label}`} />
+            </span>
 
-    {suffix ? (
-      <span className="shrink-0 text-xs font-medium text-muted-foreground">
-        {suffix}
-      </span>
-    ) : null}
-  </div>
-</SelectTrigger>
+            {suffix ? (
+              <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                {suffix}
+              </span>
+            ) : null}
+          </div>
+        </SelectTrigger>
 
         <SelectContent className="w-[var(--radix-select-trigger-width)] min-w-[280px] max-h-[320px] p-2">
           <div className="sticky top-0 z-10 bg-popover pb-2">

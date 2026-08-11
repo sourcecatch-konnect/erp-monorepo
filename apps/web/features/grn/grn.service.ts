@@ -1,7 +1,11 @@
 // apps/web/src/features/grn/grn.service.ts
 
 import { api } from "@/lib/api";
-import type { ApiResponse, GRN as GRNDetail } from "@skerp/types";
+import type {
+  ApiResponse,
+  GRN as GRNDetail,
+  GRNVPLoadingSummary,
+} from "@skerp/types";
 import {
   ListQuery,
   ListResult,
@@ -33,7 +37,8 @@ export type GRNGoodsInput = {
 export type CreateGRNBody = {
   lorryReceiptId: string;
 
-  gateNo?: string;
+  gateNo: string;
+  labourCount: number;
   inDateTime?: string;
   outDateTime?: string;
   unloadingMinutes?: number;
@@ -98,7 +103,8 @@ export type GRN = {
   grnNumber: string;
   status: GRNStatus;
   lorryReceiptId: string;
-  gateNo?: string | null;
+  gateNo: string;
+  labourCount: number;
   totalQty?: number;
   receivedQty?: number;
   damageQty?: number;
@@ -107,6 +113,7 @@ export type GRN = {
   createdAt?: string;
   updatedAt?: string | null;
   damagePhotos?: unknown[];
+  vpLoadingSummary?: GRNVPLoadingSummary;
   [key: string]: unknown;
 };
 
@@ -152,6 +159,8 @@ export type GRNPreview = {
     createdAt?: string;
     invoiceNumber?: string | null;
     invoiceAmount?: number | string | null;
+    totalWeight?: number | string | null;
+    unit?: string | null;
     loadingLocation?: unknown;
     unloadingLocation?: unknown;
     ewayBill?: unknown;
@@ -206,27 +215,24 @@ export const grnApi = {
   },
 
   statusCounts: async (): Promise<Record<string, number>> => {
-    const res = await api.get<ApiResponse<Record<string, number>>>(
-      "/grn/status-counts",
-    );
+    const res =
+      await api.get<ApiResponse<Record<string, number>>>("/grn/status-counts");
 
     return unwrapApiResponse(res);
   },
   getDamagePhotoViewUrl: async (
-  grnId: string,
-  photoId: string,
-): Promise<{ viewUrl: string }> => {
-  const res = await api.get(
-    `/grn/${encodeURIComponent(grnId)}/damage-photos/${encodeURIComponent(
-      photoId,
-    )}/view-url`,
-  );
+    grnId: string,
+    photoId: string,
+  ): Promise<{ viewUrl: string }> => {
+    const res = await api.get(
+      `/grn/${encodeURIComponent(grnId)}/damage-photos/${encodeURIComponent(
+        photoId,
+      )}/view-url`,
+    );
 
-  return res.data.data ?? res.data;
-},
-  eligibleLRs: async (
-    query?: ListQuery,
-  ): Promise<ListResult<EligibleLR>> => {
+    return res.data.data ?? res.data;
+  },
+  eligibleLRs: async (query?: ListQuery): Promise<ListResult<EligibleLR>> => {
     const params: Record<string, string | number> = {};
 
     if (query?.page !== undefined) params.page = query.page;
@@ -234,12 +240,9 @@ export const grnApi = {
     if (query?.search) params.search = query.search;
     if (query?.sort) params.sort = query.sort;
 
-    const res = await api.get<ApiResponse<EligibleLR[]>>(
-      "/grn/eligible-lrs",
-      {
-        params,
-      },
-    );
+    const res = await api.get<ApiResponse<EligibleLR[]>>("/grn/eligible-lrs", {
+      params,
+    });
 
     return unwrapListResponse(res);
   },
@@ -269,10 +272,7 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
-  update: async (
-    identifier: string,
-    body: UpdateGRNBody,
-  ): Promise<GRN> => {
+  update: async (identifier: string, body: UpdateGRNBody): Promise<GRN> => {
     const res = await api.put<ApiResponse<GRN>>(
       `/grn/${encodeGRNIdentifier(identifier)}`,
       {
@@ -284,10 +284,7 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
-  submit: async (
-    identifier: string,
-    body: SubmitGRNBody,
-  ): Promise<GRN> => {
+  submit: async (identifier: string, body: SubmitGRNBody): Promise<GRN> => {
     const res = await api.post<ApiResponse<GRN>>(
       `/grn/${encodeGRNIdentifier(identifier)}/submit`,
       {
@@ -299,10 +296,7 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
-  cancel: async (
-    identifier: string,
-    body: CancelGRNBody,
-  ): Promise<GRN> => {
+  cancel: async (identifier: string, body: CancelGRNBody): Promise<GRN> => {
     const res = await api.post<ApiResponse<GRN>>(
       `/grn/${encodeGRNIdentifier(identifier)}/cancel`,
       body,

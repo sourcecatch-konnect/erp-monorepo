@@ -6,6 +6,7 @@ import {
   dispatchJourneyLegSchema,
   cancelJourneySchema,
   closeJourneySchema,
+  reopenSettlementReviewSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -28,6 +29,7 @@ import {
 } from "../../lib/error.js";
 import { buildTripName, writeTripStatus } from "../trip/trip.service.js";
 import { undeliveredLRNumbersForTrip } from "../lorry-receipt/lr-delivery.service.js";
+import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 import {
   chainViolations,
   computeJourneyTotals,
@@ -37,6 +39,10 @@ import {
   journeyListSelect,
   OPEN_JOURNEY_STATUSES,
 } from "./vehicle-journey.service.js";
+import {
+  buildVehicleJourneyReportHtml,
+  vehicleJourneyReportInclude,
+} from "./vehicle-journey-report.pdf.js";
 import {
   Prisma,
   type JourneySettlementStatus,
@@ -115,6 +121,48 @@ router.get("/", can(PERMS.VEHICLE_JOURNEY.VIEW), async (req, res) => {
   const search = query.search;
   const status = query.filter.status;
   const settlementStatus = query.filter.settlementStatus;
+  const startedFrom = query.filter.startedFrom;
+  const startedTo = query.filter.startedTo;
+
+  const parseBusinessDate = (value: string, endOfDay = false) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      throw new BadRequestError("Date filters must use YYYY-MM-DD format");
+    }
+    const [year, month, day] = value.split("-").map(Number);
+    const calendarCheck = new Date(Date.UTC(year!, month! - 1, day!));
+    if (
+      calendarCheck.getUTCFullYear() !== year ||
+      calendarCheck.getUTCMonth() !== month! - 1 ||
+      calendarCheck.getUTCDate() !== day
+    ) {
+      throw new BadRequestError("Invalid journey date filter");
+    }
+    const date = new Date(
+      `${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}+05:30`,
+    );
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestError("Invalid journey date filter");
+    }
+    return date;
+  };
+
+  const startedFromDate = startedFrom
+    ? parseBusinessDate(startedFrom)
+    : undefined;
+  const startedToDate = startedTo
+    ? parseBusinessDate(startedTo, true)
+    : undefined;
+  if (startedFromDate && startedToDate && startedFromDate > startedToDate) {
+    throw new BadRequestError("Started From cannot be after Started To");
+  }
+
+  const startedAtFilter =
+    startedFromDate || startedToDate
+      ? {
+          ...(startedFromDate ? { gte: startedFromDate } : {}),
+          ...(startedToDate ? { lte: startedToDate } : {}),
+        }
+      : undefined;
 
   const where: Prisma.VehicleJourneyWhereInput = {
     deletedAt: null,
@@ -149,6 +197,7 @@ router.get("/", can(PERMS.VEHICLE_JOURNEY.VIEW), async (req, res) => {
       : {}),
     ...(query.filter.vehicleId ? { vehicleId: query.filter.vehicleId } : {}),
     ...(query.filter.driverId ? { driverId: query.filter.driverId } : {}),
+    ...(startedAtFilter ? { startedAt: startedAtFilter } : {}),
   };
 
   const [data, total] = await Promise.all([
@@ -195,6 +244,7 @@ router.get(
 /* ------------------------------------------------------------------ */
 router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
   const query = parseListQuery(req);
+  const forNewJourney = req.query.context === "journey";
   const now = new Date();
   const where: Prisma.VehicleWhereInput = {
     ownershipType: "Own_Vehicle",
@@ -220,7 +270,12 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
         status: true,
         insuranceDueDate: true,
         journeys: {
-          where: { deletedAt: null, status: "ACTIVE" },
+          where: {
+            deletedAt: null,
+            status: forNewJourney
+              ? { in: [...OPEN_JOURNEY_STATUSES] }
+              : "ACTIVE",
+          },
           take: 1,
           orderBy: { createdAt: "desc" },
           select: {
@@ -286,6 +341,7 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
 
 router.get("/trip-driver-options", can(PERMS.TRIP.VIEW), async (req, res) => {
   const query = parseListQuery(req);
+  const forNewJourney = req.query.context === "journey";
   const where: Prisma.DriverWhereInput = query.search
     ? {
         OR: [
@@ -309,7 +365,12 @@ router.get("/trip-driver-options", can(PERMS.TRIP.VIEW), async (req, res) => {
         onLeave: true,
         blackListed: true,
         journeys: {
-          where: { deletedAt: null, status: "ACTIVE" },
+          where: {
+            deletedAt: null,
+            status: forNewJourney
+              ? { in: [...OPEN_JOURNEY_STATUSES] }
+              : "ACTIVE",
+          },
           take: 1,
           orderBy: { createdAt: "desc" },
           select: {
@@ -461,6 +522,40 @@ router.get("/:id", can(PERMS.VEHICLE_JOURNEY.VIEW), async (req, res) => {
 
   const totals = await computeJourneyTotals(db, id);
   return sendOk(res, { ...journey, totals });
+});
+
+/* ------------------------------------------------------------------ */
+/* Detailed journey report PDF (separate from the log-slip PDF)       */
+/* ------------------------------------------------------------------ */
+router.get("/:id/report-pdf", can(PERMS.LOGSLIP.PRINT), async (req, res) => {
+  const id = getParamId(req);
+  const journey = await db.vehicleJourney.findFirst({
+    where: { id, deletedAt: null },
+    include: vehicleJourneyReportInclude,
+  });
+  if (!journey) throw new NotFoundError("Journey not found");
+  if (
+    !journey.logSlip ||
+    !["GENERATED", "POSTED_TO_ACCOUNTS", "TALLY_SYNCED"].includes(
+      journey.logSlip.status,
+    )
+  ) {
+    throw new BadRequestError(
+      "Generate the log slip before downloading the journey report",
+    );
+  }
+
+  const html = buildVehicleJourneyReportHtml(journey);
+  const buffer = await generatePdfFromHtml(html);
+  const fileNumber = journey.logSlip.logSlipNumber ?? journey.journeyNumber;
+  const safeFileNumber = fileNumber.replace(/[^a-zA-Z0-9_-]+/g, "-");
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="vehicle-journey-${safeFileNumber}.pdf"`,
+  );
+  return res.send(buffer);
 });
 
 /* ------------------------------------------------------------------ */
@@ -1060,6 +1155,86 @@ router.post(
       },
       include: journeyInclude,
     });
+    return sendOk(res, { ...updated, totals });
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Reopen settlement review (before log-slip generation)              */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/:id/reopen-settlement-review",
+  can(PERMS.VEHICLE_JOURNEY.REOPEN_SETTLEMENT),
+  async (req, res) => {
+    const id = getParamId(req);
+    const me = actorId(req);
+
+    const parsed = reopenSettlementReviewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+
+    const journey = await db.vehicleJourney.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        settlementStatus: true,
+        logSlip: { select: { id: true, status: true } },
+      },
+    });
+    if (!journey) throw new NotFoundError("Journey not found");
+    if (
+      journey.status !== "READY_FOR_LOGSLIP" ||
+      journey.settlementStatus !== "READY"
+    ) {
+      throw new BadRequestError(
+        "Only a journey marked ready for log slip can be reopened for settlement review",
+      );
+    }
+    if (
+      journey.logSlip &&
+      !["DRAFT", "REOPENED"].includes(journey.logSlip.status)
+    ) {
+      throw new BadRequestError(
+        "A log slip has already been generated — use Reopen Log Slip instead",
+      );
+    }
+
+    const updated = await db.$transaction(async (tx) => {
+      const row = await tx.vehicleJourney.update({
+        where: { id },
+        data: {
+          status: "RETURNED",
+          settlementStatus: "PENDING_REVIEW",
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        include: journeyInclude,
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: me,
+          action: "vehicle_journey.reopen_settlement",
+          entity: "VehicleJourney",
+          entityId: id,
+          before: {
+            status: journey.status,
+            settlementStatus: journey.settlementStatus,
+          },
+          after: {
+            status: "RETURNED",
+            settlementStatus: "PENDING_REVIEW",
+            reason: parsed.data.reason,
+          },
+        },
+      });
+
+      return row;
+    }, TX_BUDGET);
+
+    const totals = await computeJourneyTotals(db, id);
     return sendOk(res, { ...updated, totals });
   },
 );

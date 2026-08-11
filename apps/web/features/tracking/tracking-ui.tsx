@@ -28,6 +28,33 @@ export function StatusBadge({ status }: { status: DeviceStatus }) {
   );
 }
 
+export function AssignmentBadge({
+  assigned,
+  compact = false,
+}: {
+  assigned: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+        assigned
+          ? "border-blue-500/20 bg-blue-500/10 text-blue-700"
+          : "border-amber-500/20 bg-amber-500/10 text-amber-700",
+      )}
+    >
+      {compact
+        ? assigned
+          ? "VP"
+          : "Free"
+        : assigned
+          ? "Assigned rake"
+          : "Unassigned tracker"}
+    </span>
+  );
+}
+
 /** Pulsing dot + label that reflects the live-socket connection. */
 export function LiveBadge({ connected }: { connected: boolean }) {
   return (

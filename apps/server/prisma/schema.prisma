@@ -97,31 +97,27 @@ model User {
   createdMRRRs MRRR[] @relation("CreatedMRRR")
   updatedMRRRs MRRR[] @relation("UpdatedMRRR")
 
-  createdGRNs    GRN[] @relation("CreatedGRN")
-  updatedGRNs    GRN[] @relation("UpdatedGRN")
-  supervisedGRNs GRN[] @relation("GRNUnloadingSupervisor")
+  createdGRNs GRN[] @relation("CreatedGRN")
+  updatedGRNs GRN[] @relation("UpdatedGRN")
 
   createdVPLoadings   VPLoading[] @relation("CreatedVPLoading")
   updatedVPLoadings   VPLoading[] @relation("UpdatedVPLoading")
   cancelledVPLoadings VPLoading[] @relation("CancelledVPLoading")
 
-  supervisedVPWagonLoadings       VPWagonLoading[] @relation("VPWagonLoadingSupervisor")
   createdVPWagonLoadings          VPWagonLoading[] @relation("CreatedVPWagonLoading")
   updatedVPWagonLoadings          VPWagonLoading[] @relation("UpdatedVPWagonLoading")
   verifiedVPWagonLoadings         VPWagonLoading[] @relation("VerifiedVPWagonLoading")
   cancelledVPWagonLoadings        VPWagonLoading[] @relation("CancelledVPWagonLoading")
   capacityOverrideVPWagonLoadings VPWagonLoading[] @relation("VPWagonCapacityOverride")
 
-  createdRailBranchGRNs    RailBranchGRN[] @relation("CreatedRailBranchGRNs")
-  updatedRailBranchGRNs    RailBranchGRN[] @relation("UpdatedRailBranchGRNs")
-  submittedRailBranchGRNs  RailBranchGRN[] @relation("SubmittedRailBranchGRNs")
-  supervisedRailBranchGRNs RailBranchGRN[] @relation("RailBranchGRNUnloadingSupervisor")
+  createdRailBranchGRNs   RailBranchGRN[] @relation("CreatedRailBranchGRNs")
+  updatedRailBranchGRNs   RailBranchGRN[] @relation("UpdatedRailBranchGRNs")
+  submittedRailBranchGRNs RailBranchGRN[] @relation("SubmittedRailBranchGRNs")
 
-  createdDeliveryChallans    DeliveryChallan[] @relation("CreatedDeliveryChallans")
-  updatedDeliveryChallans    DeliveryChallan[] @relation("UpdatedDeliveryChallans")
-  issuedDeliveryChallans     DeliveryChallan[] @relation("IssuedDeliveryChallans")
-  cancelledDeliveryChallans  DeliveryChallan[] @relation("CancelledDeliveryChallans")
-  supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
+  createdDeliveryChallans   DeliveryChallan[] @relation("CreatedDeliveryChallans")
+  updatedDeliveryChallans   DeliveryChallan[] @relation("UpdatedDeliveryChallans")
+  issuedDeliveryChallans    DeliveryChallan[] @relation("IssuedDeliveryChallans")
+  cancelledDeliveryChallans DeliveryChallan[] @relation("CancelledDeliveryChallans")
 
   createdRailRakeOperations   RailRakeOperation[]     @relation("CreatedRailRakeOperations")
   updatedRailRakeOperations   RailRakeOperation[]     @relation("UpdatedRailRakeOperations")
@@ -213,23 +209,24 @@ model Branch {
 
   users              User[]
   userBranches       UserBranch[]
-  city               City?               @relation(fields: [cityId], references: [id])
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  fromOrders         Order[]             @relation("FromBranch")
-  toOrders           Order[]             @relation("ToBranch")
-  originGroups       LRGroup[]           @relation("GroupOrigin")
-  destinationGroups  LRGroup[]           @relation("GroupDestination")
-  hubGroups          LRGroup[]           @relation("GroupHub")
-  railheadGroups     LRGroup[]           @relation("GroupRailhead")
-  vpSchedulesFrom    VPSchedule[]        @relation("VPScheduleFromBranch")
-  vpSchedulesTo      VPSchedule[]        @relation("VPScheduleToBranch")
-  railRakesFrom      RailRake[]          @relation("RailRakeFromBranch")
-  railRakesTo        RailRake[]          @relation("RailRakeToBranch")
+  city               City?                @relation(fields: [cityId], references: [id])
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  fromOrders         Order[]              @relation("FromBranch")
+  toOrders           Order[]              @relation("ToBranch")
+  originGroups       LRGroup[]            @relation("GroupOrigin")
+  destinationGroups  LRGroup[]            @relation("GroupDestination")
+  hubGroups          LRGroup[]            @relation("GroupHub")
+  railheadGroups     LRGroup[]            @relation("GroupRailhead")
+  vpSchedulesFrom    VPSchedule[]         @relation("VPScheduleFromBranch")
+  vpSchedulesTo      VPSchedule[]         @relation("VPScheduleToBranch")
+  railRakesFrom      RailRake[]           @relation("RailRakeFromBranch")
+  railRakesTo        RailRake[]           @relation("RailRakeToBranch")
   railRakeOperations RailRakeOperation[]
-  deliveryChallans   DeliveryChallan[]   @relation("DeliveryChallanSourceBranch")
-  creditors          Creditor[]          @relation("BranchCreditor")
-  cashPayments       CashPayment[]       @relation("BranchCashPayment")
+  deliveryChallans   DeliveryChallan[]    @relation("DeliveryChallanSourceBranch")
+  managedRailheads   BranchRailheadArea[]
+  creditors          Creditor[]           @relation("BranchCreditor")
+  cashPayments       CashPayment[]        @relation("BranchCashPayment")
 }
 
 model Warehouse {
@@ -662,29 +659,33 @@ model Goods {
 }
 
 model Labour {
-  id                String           @id @default(cuid())
-  name              String
-  photoPath         String?
-  address           String?
-  contactName       String?
-  contactPhone      String?
-  mobileNo          String?
-  referredBy        String?
-  refContactNo      String?
-  startDate         DateTime?
-  pan               String?
-  tdsAmount         BigInt?
-  tdsRate           BigInt?
-  type              WorkerType
-  branchId          String
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  cityId            String
-  branch            Branch           @relation("WorkerBranch", fields: [branchId], references: [id])
-  city              City             @relation(fields: [cityId], references: [id])
-  grnLabours        GRN[]            @relation("GRNLabour")
-  vpWagonLoadings   VPWagonLoading[] @relation("VPWagonLoadingLabour")
-  ledRailBranchGRNs RailBranchGRN[]  @relation("RailBranchGRNLabourLeader")
+  id                         String            @id @default(cuid())
+  name                       String
+  photoPath                  String?
+  address                    String?
+  contactName                String?
+  contactPhone               String?
+  mobileNo                   String?
+  referredBy                 String?
+  refContactNo               String?
+  startDate                  DateTime?
+  pan                        String?
+  tdsAmount                  BigInt?
+  tdsRate                    BigInt?
+  type                       WorkerType
+  branchId                   String
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  cityId                     String
+  branch                     Branch            @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                       City              @relation(fields: [cityId], references: [id])
+  grnLabours                 GRN[]             @relation("GRNLabour")
+  supervisedGRNs             GRN[]             @relation("GRNUnloadingSupervisor")
+  vpWagonLoadings            VPWagonLoading[]  @relation("VPWagonLoadingLabour")
+  supervisedVPWagonLoadings  VPWagonLoading[]  @relation("VPWagonLoadingSupervisor")
+  ledRailBranchGRNs          RailBranchGRN[]   @relation("RailBranchGRNLabourLeader")
+  supervisedRailBranchGRNs   RailBranchGRN[]   @relation("RailBranchGRNUnloadingSupervisor")
+  supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
 }
 
 model City {
@@ -737,11 +738,29 @@ model Area {
   deliveryChallans         DeliveryChallan[]   @relation("DeliveryChallanDestinationArea")
   railRakeOperations       RailRakeOperation[]
 
-  railwayFreightAsSource      RailwayFreightMatrix[] @relation("RailwayFreightSourceArea")
-  railwayFreightAsDestination RailwayFreightMatrix[] @relation("RailwayFreightDestinationArea")
+  railwayFreightAsSource        RailwayFreightMatrix[] @relation("RailwayFreightSourceArea")
+  railwayFreightAsDestination   RailwayFreightMatrix[] @relation("RailwayFreightDestinationArea")
+  managingBranches              BranchRailheadArea[]
+  lrGroupsAsSourceRailhead      LRGroup[]              @relation("LRGroupSourceRailheadArea")
+  lrGroupsAsDestinationRailhead LRGroup[]              @relation("LRGroupDestinationRailheadArea")
 
   @@unique([cityId, name])
   @@index([isRailHead])
+}
+
+model BranchRailheadArea {
+  branchId  String
+  areaId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@id([branchId, areaId])
+  @@index([areaId])
+  @@index([isActive])
 }
 
 model State {
@@ -823,21 +842,15 @@ model Pump {
   name              String
   address           String?
   cityId            String
+  stateId           String
   country           String
-  contactName       String?
-  contactPhone      String?
   rateLastUpdated   DateTime?
   currentDieselRate Int?
-  gstIn             String?
   pan               String?
   creditLimit       BigInt?
-  accountName       String?
-  bankName          String?
-  branchIfscCode    String?
   isBlackListed     Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  stateId           String
 
   city  City  @relation("PumpCity", fields: [cityId], references: [id])
   state State @relation(fields: [stateId], references: [id])
@@ -1068,71 +1081,77 @@ model DocumentSequence {
 }
 
 model LRGroup {
-  id                     String          @id @default(cuid())
-  groupNumber            String          @unique
-  fyCode                 String
-  source                 LRSource
-  orderId                String?
-  truckIndex             Int             @default(1)
-  originBranchId         String
-  destinationBranchId    String
-  consignorId            String
-  consigneeId            String
-  transportType          LRTransportType @default(Road)
-  priority               LRPriority      @default(Normal)
-  isMarketVehicle        Boolean         @default(false)
-  primaryTripId          String?
-  secondaryTripId        String?
-  marketVehicleNumber    String?
-  marketTransportId      String?
-  marketVehicleId        String?
-  marketDriverName       String?
-  marketFreightAmount    BigInt?
-  marketAdvanceAmount    BigInt?
-  marketCommissionAmount BigInt?
-  marketHamaliAmount     BigInt?
-  marketTdsAmount        BigInt?
-  tripLegType            LRTripLegType   @default(DIRECT)
-  hubId                  String?
+  id                        String          @id @default(cuid())
+  groupNumber               String          @unique
+  fyCode                    String
+  source                    LRSource
+  orderId                   String?
+  truckIndex                Int             @default(1)
+  originBranchId            String
+  destinationBranchId       String
+  consignorId               String
+  consigneeId               String
+  transportType             LRTransportType @default(Road)
+  priority                  LRPriority      @default(Normal)
+  isMarketVehicle           Boolean         @default(false)
+  primaryTripId             String?
+  secondaryTripId           String?
+  marketVehicleNumber       String?
+  marketTransportId         String?
+  marketVehicleId           String?
+  marketDriverName          String?
+  marketFreightAmount       BigInt?
+  marketAdvanceAmount       BigInt?
+  marketCommissionAmount    BigInt?
+  marketHamaliAmount        BigInt?
+  marketTdsAmount           BigInt?
+  tripLegType               LRTripLegType   @default(DIRECT)
+  hubId                     String?
   // Stamped by hold-at-hub. With hubId set and secondaryTripId null the group
   // is "lying at hub" — exempt from the trip-close delivery gate.
-  hubArrivalAt           DateTime?
-  railheadBranchId       String?
-  baseFreightAmount      BigInt?
-  sealNumber             String?
-  status                 LRGroupStatus   @default(DRAFT)
-  cancelReason           String?
-  finalisedAt            DateTime?
-  finalisedById          String?
-  createdById            String
-  updatedById            String?
-  version                Int             @default(1)
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  deletedAt              DateTime?
-  marketTransport        Transport?      @relation("LRGroupMarketTransport", fields: [marketTransportId], references: [id], onDelete: Restrict)
-  marketVehicle          Vehicle?        @relation("LRGroupMarketVehicle", fields: [marketVehicleId], references: [id], onDelete: Restrict)
+  hubArrivalAt              DateTime?
+  railheadBranchId          String?
+  sourceRailheadAreaId      String?
+  destinationRailheadAreaId String?
+  baseFreightAmount         BigInt?
+  sealNumber                String?
+  status                    LRGroupStatus   @default(DRAFT)
+  cancelReason              String?
+  finalisedAt               DateTime?
+  finalisedById             String?
+  createdById               String
+  updatedById               String?
+  version                   Int             @default(1)
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+  deletedAt                 DateTime?
+  marketTransport           Transport?      @relation("LRGroupMarketTransport", fields: [marketTransportId], references: [id], onDelete: Restrict)
+  marketVehicle             Vehicle?        @relation("LRGroupMarketVehicle", fields: [marketVehicleId], references: [id], onDelete: Restrict)
 
-  consignee         Customer       @relation("GroupConsignee", fields: [consigneeId], references: [id])
-  consignor         Customer       @relation("GroupConsignor", fields: [consignorId], references: [id])
-  createdBy         User           @relation("CreatedLRGroup", fields: [createdById], references: [id])
-  destinationBranch Branch         @relation("GroupDestination", fields: [destinationBranchId], references: [id])
-  finalisedBy       User?          @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
-  hub               Branch?        @relation("GroupHub", fields: [hubId], references: [id])
-  order             Order?         @relation(fields: [orderId], references: [id])
-  originBranch      Branch         @relation("GroupOrigin", fields: [originBranchId], references: [id])
-  primaryTrip       VehicleTrip?   @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
-  railheadBranch    Branch?        @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
-  secondaryTrip     VehicleTrip?   @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
-  updatedBy         User?          @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
-  lorryReceipts     LorryReceipt[]
-  transport         Transport?     @relation(fields: [transportId], references: [id])
-  transportId       String?
+  consignee               Customer       @relation("GroupConsignee", fields: [consigneeId], references: [id])
+  consignor               Customer       @relation("GroupConsignor", fields: [consignorId], references: [id])
+  createdBy               User           @relation("CreatedLRGroup", fields: [createdById], references: [id])
+  destinationBranch       Branch         @relation("GroupDestination", fields: [destinationBranchId], references: [id])
+  finalisedBy             User?          @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
+  hub                     Branch?        @relation("GroupHub", fields: [hubId], references: [id])
+  order                   Order?         @relation(fields: [orderId], references: [id])
+  originBranch            Branch         @relation("GroupOrigin", fields: [originBranchId], references: [id])
+  primaryTrip             VehicleTrip?   @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
+  railheadBranch          Branch?        @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
+  sourceRailheadArea      Area?          @relation("LRGroupSourceRailheadArea", fields: [sourceRailheadAreaId], references: [id], onDelete: Restrict)
+  destinationRailheadArea Area?          @relation("LRGroupDestinationRailheadArea", fields: [destinationRailheadAreaId], references: [id], onDelete: Restrict)
+  secondaryTrip           VehicleTrip?   @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
+  updatedBy               User?          @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
+  lorryReceipts           LorryReceipt[]
+  transport               Transport?     @relation(fields: [transportId], references: [id])
+  transportId             String?
 
   @@index([status])
   @@index([orderId])
   @@index([originBranchId])
   @@index([destinationBranchId])
+  @@index([sourceRailheadAreaId])
+  @@index([destinationRailheadAreaId])
   @@index([fyCode])
   @@index([marketTransportId])
   @@index([marketVehicleId])
@@ -1215,6 +1234,9 @@ model LRDelivery {
   // Truck arrival at the consignee — the deliveredAt-reportedAt gap is the
   // detention basis charged at acknowledgement time.
   reportedAt       DateTime?
+  // Goods unloading completion at the consignee. Kept separate from
+  // deliveredAt so reporting, unloading and receiver handover remain distinct.
+  unloadingAt      DateTime?
   receiverName     String?
   receiverPhone    String?
   unloadingCharges BigInt?
@@ -1229,6 +1251,7 @@ model LRDelivery {
   updatedBy        User?        @relation("UpdatedLRDelivery", fields: [updatedById], references: [id])
 
   @@index([deliveredAt])
+  @@index([unloadingAt])
 }
 
 /**
@@ -1457,7 +1480,7 @@ model OneLapTracker {
   isPresentOnProvider Boolean @default(true)
 
   lastProviderUpdateAt DateTime?
-  lastSyncedAt         DateTime @default(now())
+  lastSyncedAt         DateTime  @default(now())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1488,11 +1511,11 @@ model OneLapTrackerAssignment {
   assignedById String
   assignedBy   User     @relation("AssignedOneLapTrackerAssignments", fields: [assignedById], references: [id], onDelete: Restrict)
 
-  releasedAt      DateTime?
-  releasedById    String?
-  releasedBy      User?                           @relation("ReleasedOneLapTrackerAssignments", fields: [releasedById], references: [id], onDelete: SetNull)
-  releaseReason   OneLapTrackerReleaseReason?
-  releaseRemarks  String?
+  releasedAt     DateTime?
+  releasedById   String?
+  releasedBy     User?                       @relation("ReleasedOneLapTrackerAssignments", fields: [releasedById], references: [id], onDelete: SetNull)
+  releaseReason  OneLapTrackerReleaseReason?
+  releaseRemarks String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1952,9 +1975,9 @@ model MRRRRow {
   mrRrNo     String?
   sealNo     String?
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  vpWagonLoading VPWagonLoading?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  vpWagonLoading       VPWagonLoading?
   trackerInstallations OneLapTrackerAssignment[]
 
   @@unique([mrRrId, rowNumber])
@@ -1976,7 +1999,8 @@ model GRN {
 
   status GRNStatus @default(DRAFT)
 
-  gateNo String?
+  gateNo      String
+  labourCount Int
 
   inDateTime       DateTime?
   outDateTime      DateTime?
@@ -2013,7 +2037,7 @@ model GRN {
   labourCharge BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   User?         @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+  unloadingSupervisor   Labour?       @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id], onDelete: SetNull)
   damagesBy             GRNDamagesBy?
 
   lrCopyChecked      Boolean @default(false)
@@ -2156,7 +2180,7 @@ model VPWagonLoading {
   capacityOverrideAt     DateTime?
 
   loadingSupervisorId String?
-  loadingSupervisor   User?   @relation("VPWagonLoadingSupervisor", fields: [loadingSupervisorId], references: [id])
+  loadingSupervisor   Labour? @relation("VPWagonLoadingSupervisor", fields: [loadingSupervisorId], references: [id], onDelete: SetNull)
 
   createdById String
   createdBy   User   @relation("CreatedVPWagonLoading", fields: [createdById], references: [id])
@@ -2248,7 +2272,7 @@ model RailBranchGRN {
   labourCharge   BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   User?   @relation("RailBranchGRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id], onDelete: SetNull)
+  unloadingSupervisor   Labour? @relation("RailBranchGRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id], onDelete: SetNull)
 
   totalLoadedQty   Int @default(0)
   totalReceivedQty Int @default(0)
@@ -2332,9 +2356,8 @@ model DeliveryChallan {
 
   vehicleMode DeliveryVehicleMode
 
-  // MARKET requires both transporter and vehicle; OWN requires only vehicle.
-  // CLIENT_DELIVERY may leave both empty. These conditional rules belong in
-  // the API validator and transaction.
+  // MARKET requires a transporter and either a registered vehicle or a manual
+  // vehicle-number snapshot. OWN requires a registered vehicle.
   transportId String?
   transport   Transport? @relation(fields: [transportId], references: [id], onDelete: Restrict)
   vehicleId   String?
@@ -2355,8 +2378,8 @@ model DeliveryChallan {
 
   loadingAt DateTime
 
-  supervisorId String
-  supervisor   User   @relation("DeliveryChallanSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict)
+  supervisorId String?
+  supervisor   Labour? @relation("DeliveryChallanSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
 
   status  DeliveryChallanStatus @default(DRAFT)
   remarks String?
