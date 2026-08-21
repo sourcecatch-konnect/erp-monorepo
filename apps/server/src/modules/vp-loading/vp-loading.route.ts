@@ -41,6 +41,7 @@ import {
   buildAllocationGoods,
   cancelVPLoadingAllocation,
   customerSelect,
+  type EligibilityScheduleRoute,
   generateVPLoadingNumber,
   getCurrentGRNAvailability,
   getEligibleGRNsForRow,
@@ -142,20 +143,23 @@ const getWagonLoadingForReq = async (req: Request, id: string) => {
   return wagon;
 };
 
-const getEligibleGRNCountForRow = async (
-  mrrrRowId: string,
-  loading?: { status: string } | null,
+/**
+ * Eligibility only depends on the schedule's route (fromBranch/toBranch/
+ * source/destination area), not on the individual row — so this resolves it
+ * once for the whole schedule instead of once per row. Previously this ran
+ * two queries (row + eligible-GRN fetch) per wagon row, ~84 queries for a
+ * 42-wagon rake to produce the same integer 42 times.
+ */
+const getEligibleGRNCountForSchedule = async (
+  schedule: EligibilityScheduleRoute,
 ) => {
-  if (!isVPWagonLoadingOpen(loading)) return 0;
-
   try {
-    const row = await getMRRRRowForLoading(readClient, mrrrRowId);
-    const grns = await getEligibleGRNsForRow(readClient, row);
-
+    const grns = await getEligibleGRNsForRow(readClient, schedule);
     return grns.length;
   } catch (error) {
     console.error("Eligible GRN count failed", {
-      mrrrRowId,
+      scheduleFromBranchId: schedule.fromBranchId,
+      scheduleToBranchId: schedule.toBranchId,
       error,
     });
 
@@ -310,6 +314,24 @@ router.get("/schedules", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
       is: {
         deletedAt: null,
         status: "SUBMITTED",
+        // Narrows to schedules that can actually appear in the response below
+        // (at least one row with a VP number and an open wagon loading) so we
+        // don't hydrate the full nested tree for schedules we'd only discard.
+        // The exact isVPWagonLoadingOpen/trim() logic still runs afterward as
+        // the source of truth — this is a pre-filter, not a replacement.
+        rows: {
+          some: {
+            vpNo: { not: null },
+            OR: [
+              { vpWagonLoading: null },
+              {
+                vpWagonLoading: {
+                  status: { in: ["DRAFT", "IN_PROGRESS"] },
+                },
+              },
+            ],
+          },
+        },
       },
     },
   };
@@ -425,6 +447,10 @@ router.get("/allocations", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
       ...branchWhere,
     },
     orderBy: { createdAt: "desc" },
+    // No caller paginates this endpoint today; cap it so it can't grow
+    // unbounded as allocations accumulate. Revisit with real pagination if a
+    // consumer needs more than the latest 500.
+    take: 500,
     include: allocationInclude,
   });
 
@@ -720,21 +746,23 @@ router.get(
       throw new BadRequestError("MR/RR must be submitted before VP loading");
     }
 
-    const rowsWithEligibility = await Promise.all(
-      schedule.mrRr.rows.map(async (row) => ({
-        ...row,
-        vpWagonLoading: row.vpWagonLoading
-          ? {
-            ...row.vpWagonLoading,
-            activeLrCount: row.vpWagonLoading._count.allocations,
-          }
-          : null,
-        eligibleGrnCount: await getEligibleGRNCountForRow(
-          row.id,
-          row.vpWagonLoading,
-        ),
-      })),
-    );
+    // Resolved once for the schedule's route, not once per row (see
+    // getEligibleGRNCountForSchedule) — every open row shares this same count.
+    const scheduleEligibleGrnCount =
+      await getEligibleGRNCountForSchedule(schedule);
+
+    const rowsWithEligibility = schedule.mrRr.rows.map((row) => ({
+      ...row,
+      vpWagonLoading: row.vpWagonLoading
+        ? {
+          ...row.vpWagonLoading,
+          activeLrCount: row.vpWagonLoading._count.allocations,
+        }
+        : null,
+      eligibleGrnCount: isVPWagonLoadingOpen(row.vpWagonLoading)
+        ? scheduleEligibleGrnCount
+        : 0,
+    }));
 
     return sendOk(res, {
       ...schedule,
@@ -1248,7 +1276,7 @@ router.get(
     const row = await getMRRRRowForLoading(readClient, mrrrRowId);
     assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
 
-    const grns = await getEligibleGRNsForRow(readClient, row);
+    const grns = await getEligibleGRNsForRow(readClient, row.mrRr.vpSchedule);
     const eligibleGrns = row.vpWagonLoading?.gateNo
       ? grns.filter((grn) => grn.gateNo === row.vpWagonLoading?.gateNo)
       : grns;
@@ -1300,9 +1328,9 @@ router.get(
         `This wagon is assigned to Gate ${lockedGateNo}`,
       );
     }
-    const grns = (await getEligibleGRNsForRow(readClient, row)).filter(
-      (grn) => grn.gateNo === gateNo,
-    );
+    const grns = (
+      await getEligibleGRNsForRow(readClient, row.mrRr.vpSchedule)
+    ).filter((grn) => grn.gateNo === gateNo);
 
     return sendOk(res, grns.map(mapGRNDropdown));
   },

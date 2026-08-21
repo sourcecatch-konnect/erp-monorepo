@@ -1152,6 +1152,7 @@ model LRGroup {
   @@index([destinationBranchId])
   @@index([sourceRailheadAreaId])
   @@index([destinationRailheadAreaId])
+  @@index([railheadBranchId])
   @@index([fyCode])
   @@index([marketTransportId])
   @@index([marketVehicleId])
@@ -1459,6 +1460,10 @@ model VPSchedule {
   @@index([destinationAreaId])
   @@index([finalisedById])
   @@index([deletedAt])
+  // Serves the list endpoint's branch + status filter, sorted by newest first.
+  @@index([fromBranchId, status, createdAt(sort: Desc)])
+  // Serves the create-time duplicate-schedule check (same route + date).
+  @@index([fromBranchId, toBranchId, sourceAreaId, destinationAreaId, scheduleDate])
 }
 
 /// ERP master record for a physical tracker synchronized from OneLap.

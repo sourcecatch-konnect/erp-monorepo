@@ -19,6 +19,7 @@ import {
   CollapsibleTrigger,
 } from "@skerp/ui/components/collapsible";
 import {
+  canShowNavLink,
   isNavGroup,
   NAV_SECTIONS,
   type NavGroup,
@@ -27,20 +28,15 @@ import {
 } from "@/config/navigation";
 import { useAppSelector } from "@/store/hooks";
 
-const canShowLink = (
-  link: { permission?: string },
-  permissions: string[] | undefined,
-) => !link.permission || Boolean(permissions?.includes(link.permission));
-
 const filterNavItem = (
   item: NavItem,
   permissions: string[] | undefined,
 ): NavItem | null => {
   if (!isNavGroup(item)) {
-    return canShowLink(item, permissions) ? item : null;
+    return canShowNavLink(item, permissions) ? item : null;
   }
 
-  const items = item.items.filter((child) => canShowLink(child, permissions));
+  const items = item.items.filter((child) => canShowNavLink(child, permissions));
   return items.length ? { ...item, items } : null;
 };
 
