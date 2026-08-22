@@ -175,6 +175,9 @@ model Company {
   city              City?       @relation("CityCompanies", fields: [cityId], references: [id])
   state             State?      @relation(fields: [stateId], references: [id])
   users             User[]
+
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Branch {
@@ -227,6 +230,11 @@ model Branch {
   managedRailheads   BranchRailheadArea[]
   creditors          Creditor[]           @relation("BranchCreditor")
   cashPayments       CashPayment[]        @relation("BranchCashPayment")
+
+  @@index([name])
+  @@index([cityId])
+  @@index([companyId])
+  @@index([warehouseId])
 }
 
 model Warehouse {
@@ -254,6 +262,11 @@ model Warehouse {
   branch          Branch    @relation("BranchWarehouses", fields: [branchId], references: [id])
   city            City      @relation(fields: [cityId], references: [id])
   state           State     @relation(fields: [stateId], references: [id])
+
+  @@index([name])
+  @@index([branchId])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Role {
@@ -489,6 +502,7 @@ model Vehicle {
   deliveryChallans DeliveryChallan[]
 
   @@index([transportId, ownershipType])
+  @@index([vehicleTypeId])
 }
 
 model Customer {
@@ -521,6 +535,10 @@ model Customer {
   consigneeOrders         Order[]            @relation("OrderConsignee")
   orders                  Order[]            @relation("OrderCustomer")
   vehicleTrips            VehicleTrip[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Agreement {
@@ -540,6 +558,12 @@ model Agreement {
   branch                  Branch          @relation("BranchAgreement", fields: [leadGeneratedByBranchId], references: [id])
   detentionRates          DetentionRate[]
   RateMatrix              RateMatrix[]
+
+  @@index([agreementDate(sort: Desc)])
+  @@index([companyId])
+  @@index([clientId])
+  @@index([leadGeneratedByBranchId])
+  @@index([cityId])
 }
 
 model DetentionRate {
@@ -565,6 +589,7 @@ model Route {
   VehicleTrip       VehicleTrip[]
 
   @@unique([sourceCityId, destinationCityId])
+  @@index([destinationCityId])
 }
 
 model RateUnit {
@@ -596,6 +621,10 @@ model RateMatrix {
   VehicleTrip   VehicleTrip[]
 
   @@unique([agreementId, routeId, vehicleTypeId, unitId, transportType])
+  @@index([routeId])
+  @@index([vehicleTypeId])
+  @@index([unitId])
+  @@index([rate])
 }
 
 model Driver {
@@ -638,6 +667,8 @@ model Driver {
   journeys               VehicleJourney[]
   advances               DriverAdvance[]
   logSlips               LogSlip[]
+
+  @@index([name])
 }
 
 model Goods {
@@ -656,6 +687,8 @@ model Goods {
   storageLayer      GoodsStorageLayer
   consignmentGoods  OrderConsignmentGoods[]
   orderItems        OrderItem[]
+
+  @@index([name])
 }
 
 model Labour {
@@ -686,6 +719,10 @@ model Labour {
   ledRailBranchGRNs          RailBranchGRN[]   @relation("RailBranchGRNLabourLeader")
   supervisedRailBranchGRNs   RailBranchGRN[]   @relation("RailBranchGRNUnloadingSupervisor")
   supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
+
+  @@index([name])
+  @@index([branchId])
+  @@index([cityId])
 }
 
 model City {
@@ -718,6 +755,9 @@ model City {
   tripsFrom           VehicleTrip[]          @relation("TripFromCity")
   tripsTo             VehicleTrip[]          @relation("TripToCity")
   tripExpenses        TripExpense[]          @relation("TripExpenseCity")
+
+  @@index([name])
+  @@index([stateId])
 }
 
 model Area {
@@ -746,6 +786,7 @@ model Area {
 
   @@unique([cityId, name])
   @@index([isRailHead])
+  @@index([name])
 }
 
 model BranchRailheadArea {
@@ -787,6 +828,10 @@ model Transport {
   vehicles         Vehicle[]
   deliveryChallans DeliveryChallan[]
   lrgroups         LRGroup[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model RailwayFreightMatrix {
@@ -856,6 +901,10 @@ model Pump {
   state State @relation(fields: [stateId], references: [id])
 
   tripExpenses TripExpense[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model SpareCategory {
@@ -866,6 +915,8 @@ model SpareCategory {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   parts      SparePart[] @relation("PartCategory")
+
+  @@index([name])
 }
 
 model SparePartSupplier {
@@ -885,6 +936,9 @@ model SparePartSupplier {
   updatedAt     DateTime    @updatedAt
   spareparts    SparePart[] @relation("PartSupplier")
   city          City        @relation("SparePartySupplierCity", fields: [cityId], references: [id])
+
+  @@index([name])
+  @@index([cityId])
 }
 
 model SparePart {
@@ -903,6 +957,10 @@ model SparePart {
   updatedAt      DateTime          @updatedAt
   category       SpareCategory     @relation("PartCategory", fields: [categoryId], references: [id])
   supplier       SparePartSupplier @relation("PartSupplier", fields: [supplierId], references: [id])
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([supplierId])
 }
 
 model Order {
@@ -1039,6 +1097,8 @@ model VehicleType {
   orders           Order[]
   rateMatrices     RateMatrix[]
   vehicles         Vehicle[]
+
+  @@index([name])
 }
 
 model CustomerLocation {
@@ -1822,6 +1882,9 @@ model Creditor {
 
   branch   Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
   payments CashPayment[]
+
+  @@index([deletedAt, name])
+  @@index([branchId])
 }
 
 model CashAccount {
@@ -1838,6 +1901,8 @@ model CashAccount {
   balances       CashAccountBalance[]
   payments       CashPayment[]
   driverAdvances DriverAdvance[]
+
+  @@index([deletedAt, name])
 }
 
 model CashPlanDay {

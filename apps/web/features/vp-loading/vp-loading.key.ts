@@ -18,10 +18,8 @@ export const vpLoadingKeys = {
   availableTrackers: (vpScheduleId: string) =>
     ["vp-loading", "available-trackers", vpScheduleId] as const,
 
-  gates: (mrrrRowId: string) => ["vp-loading", "gates", mrrrRowId] as const,
-
-  eligibleGRNs: (mrrrRowId: string, gateNo: string) =>
-    ["vp-loading", "eligible-grns", mrrrRowId, gateNo] as const,
+  eligibleGrns: (vpScheduleId: string) =>
+    ["vp-loading", "eligible-grns", vpScheduleId] as const,
 
   loadingPreview: (mrrrRowId: string, grnId: string) =>
     ["vp-loading", "loading-preview", mrrrRowId, grnId] as const,
@@ -41,10 +39,4 @@ export const vpLoadingLookupKeys = {
 
   schedules: (scheduleDate?: string) =>
     ["vp-loading-lookups", "schedules", scheduleDate ?? "all"] as const,
-
-  gates: (mrrrRowId: string) =>
-    ["vp-loading-lookups", "gates", mrrrRowId] as const,
-
-  eligibleGRNs: (mrrrRowId: string, gateNo: string) =>
-    ["vp-loading-lookups", "eligible-grns", mrrrRowId, gateNo] as const,
 };

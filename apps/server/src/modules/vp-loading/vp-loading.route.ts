@@ -28,6 +28,11 @@ import { fyCodeFor, nextSequence } from "../_shared/doc-number.js";
 import { sendOk } from "../_shared/response.js";
 import { getDateRange } from "../vp-schedule/vp-schedule.route.js";
 import {
+  getCachedEligibleGrns,
+  invalidateEligibleGrns,
+  setCachedEligibleGrns,
+} from "./vp-loading.cache.js";
+import {
   assignOneLapTracker,
   getActiveTrackerAssignment,
   listAvailableOneLapTrackers,
@@ -154,7 +159,15 @@ const getEligibleGRNCountForSchedule = async (
   schedule: EligibilityScheduleRoute,
 ) => {
   try {
+    const cached = await getCachedEligibleGrns<
+      ReturnType<typeof mapGRNDropdown>[]
+    >(schedule);
+
+    if (cached) return cached.length;
+
     const grns = await getEligibleGRNsForRow(readClient, schedule);
+    await setCachedEligibleGrns(schedule, grns.map(mapGRNDropdown));
+
     return grns.length;
   } catch (error) {
     console.error("Eligible GRN count failed", {
@@ -1267,72 +1280,58 @@ router.post(
     return sendOk(res, result);
   },
 );
-// after select VP no In form then hit this APIs aand Show Gate if has in GRN create
+/*
+ * Eligibility depends only on the schedule's branch/area route (see
+ * getEligibleGRNsForRow), not on which VP row/wagon is asking — so this is
+ * schedule-scoped, not row-scoped. The client picks a VP row, then groups
+ * and filters this same list by gate in memory; a gate-locked row (already
+ * has a wagon loading assigned to a gate) filters to that gate client-side
+ * too. This replaces the old per-row /gates and /gates/:gateNo/grns
+ * endpoints, which independently re-ran this same query up to 3 times for
+ * one schedule's worth of wagons. Redis-cached per route (see
+ * vp-loading.cache.ts) since every wagon in the schedule shares one answer.
+ */
 router.get(
-  "/rows/:mrrrRowId/gates",
+  "/schedules/:vpScheduleId/eligible-grns",
   can(PERMS.VP_LOADING.VIEW),
   async (req, res) => {
-    const mrrrRowId = getIdParam(req.params.mrrrRowId, "MR/RR row");
-    const row = await getMRRRRowForLoading(readClient, mrrrRowId);
-    assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
 
-    const grns = await getEligibleGRNsForRow(readClient, row.mrRr.vpSchedule);
-    const eligibleGrns = row.vpWagonLoading?.gateNo
-      ? grns.filter((grn) => grn.gateNo === row.vpWagonLoading?.gateNo)
-      : grns;
-    const gates = new Map<
-      string,
-      {
-        gateNo: string;
-        eligibleGrnCount: number;
-        eligibleLrCount: number;
-        totalAvailableQty: number;
-      }
-    >();
+    const schedule = await db.vPSchedule.findFirst({
+      where: {
+        id: vpScheduleId,
+        deletedAt: null,
+        ...branchFilter(req, "fromBranchId"),
+      },
+      select: {
+        fromBranchId: true,
+        toBranchId: true,
+        sourceAreaId: true,
+        destinationAreaId: true,
+        mrRr: { select: { status: true } },
+      },
+    });
 
-    for (const grn of eligibleGrns) {
-      const gateNo = grn.gateNo?.trim();
-
-      if (!gateNo) continue;
-
-      const current = gates.get(gateNo) ?? {
-        gateNo,
-        eligibleGrnCount: 0,
-        eligibleLrCount: 0,
-        totalAvailableQty: 0,
-      };
-
-      current.eligibleGrnCount += 1;
-      current.eligibleLrCount += 1;
-      current.totalAvailableQty += grn.availableQty;
-
-      gates.set(gateNo, current);
+    if (!schedule) throw new NotFoundError("VP Schedule not found");
+    if (schedule.mrRr?.status !== "SUBMITTED") {
+      throw new BadRequestError("MR/RR must be submitted before VP loading");
     }
 
-    return sendOk(res, [...gates.values()]);
-  },
-);
-// it run after the select the Gate No and show the GRN(LR) in the Dropdown
-router.get(
-  "/rows/:mrrrRowId/gates/:gateNo/grns",
-  can(PERMS.VP_LOADING.VIEW),
-  async (req, res) => {
-    const mrrrRowId = getIdParam(req.params.mrrrRowId, "MR/RR row");
-    const gateNo = getIdParam(req.params.gateNo, "Gate No");
-    const row = await getMRRRRowForLoading(readClient, mrrrRowId);
-    assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
-    const lockedGateNo = row.vpWagonLoading?.gateNo?.trim();
+    const cached = await getCachedEligibleGrns<
+      ReturnType<typeof mapGRNDropdown>[]
+    >(schedule);
 
-    if (lockedGateNo && lockedGateNo !== gateNo) {
-      throw new BadRequestError(
-        `This wagon is assigned to Gate ${lockedGateNo}`,
-      );
+    if (cached) {
+      return sendOk(res, cached);
     }
-    const grns = (
-      await getEligibleGRNsForRow(readClient, row.mrRr.vpSchedule)
-    ).filter((grn) => grn.gateNo === gateNo);
 
-    return sendOk(res, grns.map(mapGRNDropdown));
+    const grns = (await getEligibleGRNsForRow(readClient, schedule)).map(
+      mapGRNDropdown,
+    );
+
+    await setCachedEligibleGrns(schedule, grns);
+
+    return sendOk(res, grns);
   },
 );
 // shwo the Preview AFter selecte GRN(LR) from Dropdown
@@ -1686,6 +1685,10 @@ router.post(
       };
     });
 
+    // Allocating against a GRN changes its available quantity for every
+    // other wagon in this schedule's route — bust the shared cache.
+    await invalidateEligibleGrns(row.mrRr.vpSchedule);
+
     /*
      * Fetch the complete response only after
      * the transaction has committed.
@@ -1855,6 +1858,12 @@ router.patch(
       throw new NotFoundError("Updated VP loading allocation not found");
     }
 
+    // Loaded quantities changed — bust the shared eligibility cache for
+    // this schedule's route.
+    await invalidateEligibleGrns(
+      updated.vpWagonLoading.mrRrRow.mrRr.vpSchedule,
+    );
+
     return sendOk(res, updated);
   },
 );
@@ -1932,6 +1941,11 @@ router.post(
     if (!cancelled) {
       throw new NotFoundError("Cancelled allocation not found");
     }
+
+    // Cancelling frees up the GRN's quantity again — bust the shared cache.
+    await invalidateEligibleGrns(
+      cancelled.vpWagonLoading.mrRrRow.mrRr.vpSchedule,
+    );
 
     return sendOk(res, {
       allocation: cancelled,
