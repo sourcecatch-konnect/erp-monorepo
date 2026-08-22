@@ -114,4 +114,6 @@ export * from "./vehicle-journey/vehicle-journey.schema.js";
 export * from "./trip-expense/trip-expense.schema.js";
 export * from "./log-slip/log-slip.schema.js";
 export * from "./user/table-pref.schema.js";
-export * from "./master/one-lap-tracker.js"
+export * from "./billing/billing.schema.js";
+export * from "./receipt/receipt.schema.js";
+export * from "./master/one-lap-tracker.js";

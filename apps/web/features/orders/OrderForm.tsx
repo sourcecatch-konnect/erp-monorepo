@@ -165,48 +165,48 @@ export default function OrderForm({ mode, order }: Props) {
     mode: "onTouched",
     defaultValues: order
       ? {
-          customerId: order.customerId,
-          consigneeId: order.consigneeId ?? undefined,
-          fromBranchId: order.fromBranchId,
-          toBranchId: order.toBranchId,
-          pickupDate: dateInputValue(order.pickupDate),
-          customerLocationId: order.customerLocationId ?? undefined,
-          pickupAddressOverride: order.pickupAddressOverride ?? undefined,
-          specialInstructions: order.specialInstructions ?? undefined,
-          orderType: order.orderType,
-          routeId: order.routeId ?? undefined,
-          truckQuantity: order.truckQuantity ?? undefined,
-          vehicleTypeId: order.vehicleTypeId ?? undefined,
-          contactPersonName: order.contactPersonName ?? undefined,
-          contactMobile: order.contactMobile ?? undefined,
-          contactEmail: order.contactEmail ?? undefined,
-          items:
-            order.items?.map((i) => ({
-              goodsId: i.goodsId,
-              quantity: i.quantity,
-            })) ?? [],
-          consignments:
-            order.consignments?.map((c) => ({
-              truckIndex: c.truckIndex,
-              loadingLocationId: c.loadingLocationId ?? undefined,
-              unloadingLocationId: c.unloadingLocationId ?? undefined,
-              totalWeight:
-                c.totalWeight != null ? Number(c.totalWeight) : undefined,
-              goods:
-                c.goods && c.goods.length
-                  ? c.goods.map((g) => ({
-                      goodsId: g.goodsId,
-                      quantity: g.quantity,
-                    }))
-                  : [],
-            })) ?? [],
-        }
+        customerId: order.customerId,
+        consigneeId: order.consigneeId ?? undefined,
+        fromBranchId: order.fromBranchId,
+        toBranchId: order.toBranchId,
+        pickupDate: dateInputValue(order.pickupDate),
+        customerLocationId: order.customerLocationId ?? undefined,
+        pickupAddressOverride: order.pickupAddressOverride ?? undefined,
+        specialInstructions: order.specialInstructions ?? undefined,
+        orderType: order.orderType,
+        routeId: order.routeId ?? undefined,
+        truckQuantity: order.truckQuantity ?? undefined,
+        vehicleTypeId: order.vehicleTypeId ?? undefined,
+        contactPersonName: order.contactPersonName ?? undefined,
+        contactMobile: order.contactMobile ?? undefined,
+        contactEmail: order.contactEmail ?? undefined,
+        items:
+          order.items?.map((i) => ({
+            goodsId: i.goodsId,
+            quantity: i.quantity,
+          })) ?? [],
+        consignments:
+          order.consignments?.map((c) => ({
+            truckIndex: c.truckIndex,
+            loadingLocationId: c.loadingLocationId ?? undefined,
+            unloadingLocationId: c.unloadingLocationId ?? undefined,
+            totalWeight:
+              c.totalWeight != null ? Number(c.totalWeight) : undefined,
+            goods:
+              c.goods && c.goods.length
+                ? c.goods.map((g) => ({
+                  goodsId: g.goodsId,
+                  quantity: g.quantity,
+                }))
+                : [],
+          })) ?? [],
+      }
       : {
-          orderType: "Truck",
-          truckQuantity: 1,
-          items: [],
-          consignments: [],
-        },
+        orderType: "Truck",
+        truckQuantity: 1,
+        items: [],
+        consignments: [],
+      },
   });
 
   const orderType = form.watch("orderType");

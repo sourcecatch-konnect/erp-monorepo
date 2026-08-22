@@ -799,16 +799,16 @@ export default function VPLoadingDetail({
             </Button>
 
             {["LOADED", "VERIFIED"].includes(schedule.status) &&
-            schedule.mrRr?.status === "SUBMITTED" &&
-            rows.length > 0 &&
-            rows.every(
-              (row) =>
-                Boolean(row.vpNo?.trim()) &&
-                Boolean(row.vpWagonLoading) &&
-                ["COMPLETED", "VERIFIED"].includes(
-                  row.vpWagonLoading?.status ?? "",
-                ),
-            ) ? (
+              schedule.mrRr?.status === "SUBMITTED" &&
+              rows.length > 0 &&
+              rows.every(
+                (row) =>
+                  Boolean(row.vpNo?.trim()) &&
+                  Boolean(row.vpWagonLoading) &&
+                  ["COMPLETED", "VERIFIED"].includes(
+                    row.vpWagonLoading?.status ?? "",
+                  ),
+              ) ? (
               <Button asChild size="sm">
                 <Link
                   href={`/vp-management/vp-loading/${encodeURIComponent(

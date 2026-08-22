@@ -22,6 +22,7 @@ import {
   IconFileDescription,
   IconLoader2,
   IconPackage,
+  IconStack2,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
@@ -32,7 +33,11 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 
 import { lrGroupApi } from "./lr-group.service";
 import { lrGroupKeys } from "./lr-group.keys";
-import { lorryReceiptApi } from "./lorry-receipt.service";
+import {
+  lorryReceiptApi,
+  lrLookups,
+  lrLookupKeys,
+} from "./lorry-receipt.service";
 import {
   LRStatusBadge,
   SOURCE_LABELS,
@@ -157,6 +162,34 @@ export default function LRDetail({ id }: { id: string }) {
     queryFn: () => lrGroupApi.detail(id),
   });
   const actionGroupId = group.data?.id ?? id;
+
+  // Multi-truck orders create one LRGroup per truck. These two queries — the
+  // same ones LRForm uses to build its truck dropdown — let us tell whether
+  // this order still has trucks with consignment lines that haven't been
+  // turned into an LR yet. Driven entirely by the freshly-loaded group's own
+  // order.id, not by anything passed through routing, so it stays correct on
+  // refresh, back-navigation, or landing here from a different flow.
+  const orderId = group.data?.order?.id;
+  const orderContext = useQuery({
+    queryKey: lrLookupKeys.orderContext(orderId ?? ""),
+    queryFn: () => lrLookups.orderContext(orderId as string),
+    enabled: Boolean(orderId),
+  });
+  const orderGroups = useQuery({
+    queryKey: ["lr-groups", "by-order", orderId ?? ""] as const,
+    queryFn: () => lrGroupApi.list({ filter: { orderId: orderId as string } }),
+    enabled: Boolean(orderId),
+  });
+  const ungroupedTrucks = React.useMemo(() => {
+    const taken = new Set(
+      (orderGroups.data?.data ?? [])
+        .filter((og) => og.status !== "CANCELLED")
+        .map((og) => og.truckIndex),
+    );
+    return (orderContext.data?.trucks ?? [])
+      .filter((t) => !taken.has(t.truckIndex))
+      .sort((a, b) => a.truckIndex - b.truckIndex);
+  }, [orderContext.data, orderGroups.data]);
 
   // The page may have been opened via an LR number (deep link); when the
   // group holds several LRs, highlight the one the user came for.
@@ -463,6 +496,23 @@ export default function LRDetail({ id }: { id: string }) {
   const marketNetBalance =
     Number(g.marketFreightAmount ?? 0) - marketAdvanceTotal;
 
+  // bookingFreightAmount on the order is the TOTAL across every truck
+  // (computeFreight multiplies the rate-matrix's per-truck rate by
+  // truckQuantity when the order is confirmed) — not a per-truck figure.
+  // Split it evenly across the order's trucks so defaulting it into each
+  // truck's finalise dialog sums back to the real total instead of billing
+  // the full amount once per truck. Any odd-paise remainder goes to truck 1.
+  const orderTruckQuantity = g.order?.truckQuantity ?? 1;
+  const defaultFreightPaise =
+    g.order?.bookingFreightAmount != null
+      ? (() => {
+          const total = g.order!.bookingFreightAmount!;
+          const perTruck = Math.floor(total / orderTruckQuantity);
+          const remainder = total - perTruck * orderTruckQuantity;
+          return perTruck + (g.truckIndex === 1 ? remainder : 0);
+        })()
+      : null;
+
   const pendingLrs = g.lorryReceipts.filter((lr) => lr.status === "FINALISED");
   const eligiblePendingLrs = pendingLrs.filter(
     (lr) => lr.deliveryEligibility?.eligible !== false,
@@ -663,6 +713,26 @@ export default function LRDetail({ id }: { id: string }) {
             . Awaiting leg-2 dispatch to{" "}
             {g.destinationBranch?.name ?? "destination"}.
           </p>
+        </div>
+      )}
+
+      {g.order && ungroupedTrucks.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          <div className="flex items-start gap-3">
+            <IconStack2 size={19} className="mt-0.5 shrink-0 text-primary" />
+            <p>
+              Order {g.order.orderNumber} has {ungroupedTrucks.length} more
+              truck{ungroupedTrucks.length === 1 ? "" : "s"} without an LR yet.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() =>
+              router.push(`/lorry-receipts/new?orderId=${g.order!.id}`)
+            }
+          >
+            Create LR for Truck #{ungroupedTrucks[0]!.truckIndex}
+          </Button>
         </div>
       )}
 
@@ -994,9 +1064,7 @@ export default function LRDetail({ id }: { id: string }) {
           missingFields: getMissingLRFields(lr),
         }))}
         defaultFreight={
-          g.order?.bookingFreightAmount != null
-            ? paiseToRupees(g.order.bookingFreightAmount)
-            : null
+          defaultFreightPaise != null ? paiseToRupees(defaultFreightPaise) : null
         }
         isPending={finalise.isPending}
         onConfirm={(data) => finalise.mutate(data)}

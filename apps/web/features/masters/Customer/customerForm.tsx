@@ -52,6 +52,7 @@ const defaultValues: CreateCustomerFormInput = {
   shortName: "",
   customerPAN: "",
   disallowNewLRBooking: false,
+  splitBillsByChargeType: false,
   interestRateLatePayment: "",
   gstNo: "",
   creditLimit: "",
@@ -126,6 +127,7 @@ export default function CustomerAdvancedForm({
       shortName: row?.shortName ?? "",
       customerPAN: row?.customerPAN ?? "",
       disallowNewLRBooking: row?.disallowNewLRBooking ?? false,
+      splitBillsByChargeType: row?.splitBillsByChargeType ?? false,
       interestRateLatePayment:
         row?.interestRateLatePayment != null
           ? String(row.interestRateLatePayment)
@@ -252,7 +254,6 @@ export default function CustomerAdvancedForm({
           icon={<IconFileDescription size={16} />}
           maxLength={15}
           onChangeTransform={(value) => value.toUpperCase()}
-
         />
         <IconTextField<CreateCustomerFormInput>
           name="website"
@@ -305,6 +306,11 @@ export default function CustomerAdvancedForm({
           description="Block new LR bookings for this customer"
           tone="danger"
         />
+        <SwitchField<CreateCustomerFormInput>
+          name="splitBillsByChargeType"
+          label="Split Billing by Charge Type"
+          description="Create separate freight and additional-charge bills for this customer"
+        />
       </FormSection>
 
       <FormSection
@@ -337,9 +343,9 @@ export default function CustomerAdvancedForm({
           initialCity={
             row?.city
               ? {
-                id: row.city.id,
-                name: row.city.name,
-              }
+                  id: row.city.id,
+                  name: row.city.name,
+                }
               : null
           }
         />

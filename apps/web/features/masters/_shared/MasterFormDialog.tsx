@@ -32,6 +32,7 @@ type Props<
   children: React.ReactNode;
   columns?: 1 | 2 | 3;
   footerLeft?: React.ReactNode;
+  contentClassName?: string;
 };
 
 const gridClassByColumns = {
@@ -83,6 +84,7 @@ export default function MasterFormDialog<
   children,
   columns = 1,
   footerLeft,
+  contentClassName,
 }: Props<TFieldValues, TSubmitValues>) {
   const rootError = form.formState.errors.root?.message;
 
@@ -107,37 +109,38 @@ export default function MasterFormDialog<
         }
       }
 
-    const hasFieldErrors = Object.keys(details?.fieldErrors ?? {}).length > 0;
+      const hasFieldErrors = Object.keys(details?.fieldErrors ?? {}).length > 0;
 
-if (!hasFieldErrors) {
-  const message = details?.formErrors?.[0] || getErrorMessage(error);
+      if (!hasFieldErrors) {
+        const message = details?.formErrors?.[0] || getErrorMessage(error);
 
-  form.setError("root", {
-    type: "server",
-    message,
-  });
-}
+        form.setError("root", {
+          type: "server",
+          message,
+        });
+      }
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-          onInteractOutside={(event) => {
-      const target = event.target as HTMLElement;
+        onInteractOutside={(event) => {
+          const target = event.target as HTMLElement;
 
-      if (target.closest(".pac-container")) {
-        event.preventDefault();
-      }
-    }}
-    onPointerDownOutside={(event) => {
-      const target = event.target as HTMLElement;
+          if (target.closest(".pac-container")) {
+            event.preventDefault();
+          }
+        }}
+        onPointerDownOutside={(event) => {
+          const target = event.target as HTMLElement;
 
-      if (target.closest(".pac-container")) {
-        event.preventDefault();
-      }
-    }}
-        className={`${widthClassByColumns[columns]} max-h-[90vh] overflow-hidden`}
+          if (target.closest(".pac-container")) {
+            event.preventDefault();
+          }
+        }}
+        className={`${widthClassByColumns[columns]} max-h-[90vh] overflow-hidden ${contentClassName ?? ""
+          }`}
       >
         <DialogHeader className="space-y-1">
           <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>

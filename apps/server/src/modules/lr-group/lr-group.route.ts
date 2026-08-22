@@ -422,7 +422,12 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       },
     });
     if (!order) throw new BadRequestError("Order not found");
-    if (order.status !== "Confirmed") {
+    // "LRCreated" is set the moment the *first* truck on this order gets a
+    // group — a multi-truck order stays in that status while its remaining
+    // trucks still need one. Rejecting it here would lock out every truck
+    // after the first. assertGroupSlotAvailable (below) is what actually
+    // guards against double-booking a truck, independent of order status.
+    if (!["Confirmed", "LRCreated"].includes(order.status)) {
       throw new BadRequestError(
         "A group can only be created for a Confirmed order",
       );

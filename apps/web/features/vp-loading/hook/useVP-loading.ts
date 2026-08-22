@@ -203,6 +203,12 @@ export const useVPWagonAllocations = (vpWagonLoadingId?: string) => {
 /* Invalidation Helper                                                */
 /* ------------------------------------------------------------------ */
 
+
+
+/* ------------------------------------------------------------------ */
+/* Invalidation Helper — FIXED                                        */
+/* ------------------------------------------------------------------ */
+
 type VPLoadingInvalidationValues = {
   scheduleId?: string;
   mrrrRowId?: string;
@@ -216,17 +222,28 @@ const invalidateVPLoading = (
   queryClient: ReturnType<typeof useQueryClient>,
   values: VPLoadingInvalidationValues = {},
 ) => {
-  queryClient.invalidateQueries({
-    queryKey: vpLoadingKeys.all,
-  });
-
-  queryClient.invalidateQueries({
-    queryKey: vpLoadingLookupKeys.all,
-  });
+  // REMOVED: the two blanket calls that used to run here —
+  //   queryClient.invalidateQueries({ queryKey: vpLoadingKeys.all })
+  //   queryClient.invalidateQueries({ queryKey: vpLoadingLookupKeys.all })
+  // invalidateQueries does a PREFIX match on the key array, so invalidating
+  // the top-level "vp-loading" key also matched (and refetched) every other
+  // query that happens to start with that same string — labours,
+  // supervisors, tracker-assignment, available-trackers — none of which
+  // have anything to do with, say, one wagon being marked loaded. That's
+  // why toggling one switch fired ~10 network requests instead of the 2-3
+  // that actually changed. Below, only what this specific mutation could
+  // have actually affected gets invalidated.
 
   if (values.scheduleId) {
+    // schedulePreview and finalReview are the two schedule-level views that
+    // show the list/status of every wagon under a schedule — there is no
+    // separate top-level "all wagons" key in vpLoadingKeys, so these two are
+    // what actually need refreshing when one wagon's state changes.
     queryClient.invalidateQueries({
       queryKey: vpLoadingKeys.schedulePreview(values.scheduleId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: vpLoadingKeys.finalReview(values.scheduleId),
     });
   }
 
@@ -237,8 +254,20 @@ const invalidateVPLoading = (
   }
 
   if (values.wagonId) {
+    // vpLoadingKeys.wagon(id) is ["vp-loading","wagon",id] and
+    // vpLoadingKeys.wagonAllocations(id) is
+    // ["vp-loading","wagon",id,"allocations"] — the wagon key is a literal
+    // PREFIX of the wagonAllocations key. Without `exact: true`, invalidating
+    // wagon(id) below ALSO matches and refetches wagonAllocations(id) as a
+    // side effect (the same prefix-matching behavior that caused the
+    // original bug, just one level deeper) — and then the very next line
+    // invalidates wagonAllocations again on purpose. That double invalidation
+    // on the same active query is exactly why the allocations request was
+    // firing twice (once with real data, once as a wasted 304). `exact: true`
+    // makes this line match only the wagon detail query, nothing else.
     queryClient.invalidateQueries({
       queryKey: vpLoadingKeys.wagon(values.wagonId),
+      exact: true,
     });
 
     queryClient.invalidateQueries({
@@ -252,7 +281,6 @@ const invalidateVPLoading = (
     });
   }
 };
-
 /* ------------------------------------------------------------------ */
 /* Allocation Mutations                                               */
 /* ------------------------------------------------------------------ */

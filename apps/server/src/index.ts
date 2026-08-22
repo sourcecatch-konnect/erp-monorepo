@@ -67,7 +67,9 @@ import railBranchGrnRoute from "./modules/rail-branch-grn/rail-branch-grn.route.
 import deliveryChallanRoute from "./modules/delivery-challan/delivery-challan.route.js";
 import railRakeOperationRoute from "./modules/rail-rake-operation/rail-rake-operation.route.js";
 import tablePrefRoute from "./modules/user-pref/table-pref.route.js";
-import oneLapTrackerRoute from "./modules/one-lap-tracker/one-lap-tracker.route.js"
+import oneLapTrackerRoute from "./modules/one-lap-tracker/one-lap-tracker.route.js";
+import billingRoute from "./modules/billing/billing.route.js";
+import receiptRoute from "./modules/receipt/receipt.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -145,6 +147,8 @@ app.use("/me/table-prefs", tablePrefRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)
 app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use("/one-lap-trackers", oneLapTrackerRoute);
+app.use("/billing", billingRoute);
+app.use("/receipt", receiptRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>

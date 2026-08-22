@@ -256,6 +256,7 @@ function FullMetrics({
   return (
     <section className="mt-3 grid grid-cols-4 gap-1.5">
       <Metric label="Opening cash" value={money(day.totalOpening)} />
+      <Metric label="Adjustments" value={money(day.totalAdjustments)} />
       <Metric label="Approved payments" value={money(day.approvedTotal)} />
       <Metric label="Available cash" value={money(day.availableCash)} />
       <Metric label="Pending payments" value={money(day.pendingTotal)} />
@@ -286,6 +287,7 @@ function QueueOnlyMetrics({ day }: { day: CashPlanDayView }) {
   return (
     <section className="mt-3 grid grid-cols-4 gap-1.5">
       <Metric label="Opening cash" value={money(day.totalOpening)} />
+      <Metric label="Adjustments" value={money(day.totalAdjustments)} />
       <Metric label="Available cash" value={money(day.availableCash)} />
       <Metric label="Approved payments" value={money(day.approvedTotal)} />
       <Metric label="Pending payments" value={money(day.pendingTotal)} />

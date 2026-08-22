@@ -1997,71 +1997,14 @@ router.get(
     ];
 
     /*
-     * 2. Get total received quantity for
-     * every selected GRN.
-     */
-    const grns = await db.gRN.findMany({
-      where: {
-        id: {
-          in: grnIds,
-        },
-      },
-      select: {
-        id: true,
-
-        goods: {
-          select: {
-            receivedQty: true,
-          },
-        },
-      },
-    });
-
-    const totalReceivedByGrn = new Map(
-      grns.map((grn) => [
-        grn.id,
-
-        grn.goods.reduce(
-          (sum, goods) => sum + Number(goods.receivedQty ?? 0),
-          0,
-        ),
-      ]),
-    );
-
-    /*
-     * 3. Calculate total active loaded
-     * quantity across every wagon.
-     *
-     * This query is not branch-filtered because
-     * availability must consider every active
-     * allocation. It only returns totals and
-     * does not expose another branch's details.
-     */
-    const activeTotals = await db.vPLoading.groupBy({
-      by: ["grnId"],
-
-      where: {
-        grnId: {
-          in: grnIds,
-        },
-
-        status: {
-          not: "CANCELLED",
-        },
-      },
-
-      _sum: {
-        loadedQty: true,
-      },
-    });
-
-    const totalLoadedByGrn = new Map(
-      activeTotals.map((row) => [row.grnId, Number(row._sum.loadedQty ?? 0)]),
-    );
-
-    /*
-     * Apply branch access while returning
-     * other-wagon identifying information.
+     * FIX: steps 2, 3, and 4 below are independent of each other — none of
+     * them uses another's result, they only need `grnIds` (and, for step 4,
+     * req.ctx / vpWagonLoadingId, both already known). Previously these ran
+     * as three separate sequential `await`s, so the server waited for each
+     * one to fully finish before starting the next. That serial chain was
+     * the main reason this endpoint took 4-7 seconds. Running them together
+     * with Promise.all cuts the wait to roughly the slowest of the three
+     * instead of the sum of all three.
      */
     const relatedBranchWhere: Prisma.VPLoadingWhereInput =
       req.ctx?.branchScope === "ALL"
@@ -2080,58 +2023,108 @@ router.get(
           },
         };
 
-    /*
-     * 4. Find active allocations for the
-     * same GRNs in other accessible wagons.
-     */
-    const otherAllocations = await db.vPLoading.findMany({
-      where: {
-        grnId: {
-          in: grnIds,
+    const [grns, activeTotals, otherAllocations] = await Promise.all([
+      /*
+       * 2. Get total received quantity for
+       * every selected GRN.
+       */
+      db.gRN.findMany({
+        where: {
+          id: {
+            in: grnIds,
+          },
+        },
+        select: {
+          id: true,
+
+          goods: {
+            select: {
+              receivedQty: true,
+            },
+          },
+        },
+      }),
+
+      /*
+       * 3. Calculate total active loaded
+       * quantity across every wagon.
+       *
+       * This query is not branch-filtered because
+       * availability must consider every active
+       * allocation. It only returns totals and
+       * does not expose another branch's details.
+       */
+      db.vPLoading.groupBy({
+        by: ["grnId"],
+
+        where: {
+          grnId: {
+            in: grnIds,
+          },
+
+          status: {
+            not: "CANCELLED",
+          },
         },
 
-        status: {
-          not: "CANCELLED",
+        _sum: {
+          loadedQty: true,
+        },
+      }),
+
+      /*
+       * 4. Find active allocations for the
+       * same GRNs in other accessible wagons.
+       */
+      db.vPLoading.findMany({
+        where: {
+          grnId: {
+            in: grnIds,
+          },
+
+          status: {
+            not: "CANCELLED",
+          },
+
+          vpWagonLoadingId: {
+            not: vpWagonLoadingId,
+          },
+
+          ...relatedBranchWhere,
         },
 
-        vpWagonLoadingId: {
-          not: vpWagonLoadingId,
-        },
+        select: {
+          id: true,
+          grnId: true,
+          loadedQty: true,
+          status: true,
 
-        ...relatedBranchWhere,
-      },
+          vpWagonLoading: {
+            select: {
+              id: true,
+              status: true,
+              gateNo: true,
 
-      select: {
-        id: true,
-        grnId: true,
-        loadedQty: true,
-        status: true,
+              mrRrRow: {
+                select: {
+                  id: true,
+                  vpNo: true,
+                  rowLabel: true,
 
-        vpWagonLoading: {
-          select: {
-            id: true,
-            status: true,
-            gateNo: true,
-
-            mrRrRow: {
-              select: {
-                id: true,
-                vpNo: true,
-                rowLabel: true,
-
-                wagon: {
-                  select: {
-                    id: true,
-                    name: true,
+                  wagon: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
                   },
-                },
 
-                mrRr: {
-                  select: {
-                    vpSchedule: {
-                      select: {
-                        id: true,
-                        scheduleNumber: true,
+                  mrRr: {
+                    select: {
+                      vpSchedule: {
+                        select: {
+                          id: true,
+                          scheduleNumber: true,
+                        },
                       },
                     },
                   },
@@ -2140,8 +2133,23 @@ router.get(
             },
           },
         },
-      },
-    });
+      }),
+    ]);
+
+    const totalReceivedByGrn = new Map(
+      grns.map((grn) => [
+        grn.id,
+
+        grn.goods.reduce(
+          (sum, goods) => sum + Number(goods.receivedQty ?? 0),
+          0,
+        ),
+      ]),
+    );
+
+    const totalLoadedByGrn = new Map(
+      activeTotals.map((row) => [row.grnId, Number(row._sum.loadedQty ?? 0)]),
+    );
 
     /*
      * Group other-wagon records by GRN.
@@ -2185,7 +2193,6 @@ router.get(
         vpNo: row.vpNo ?? row.rowLabel ?? null,
 
         wagonId: row.wagon?.id ?? null,
-
         wagonName: row.wagon?.name ?? null,
 
         gateNo: loading.gateNo ?? null,

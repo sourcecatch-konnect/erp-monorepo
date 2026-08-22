@@ -101,137 +101,140 @@ export default function CashPlanningPage() {
   return (
     <TooltipProvider>
       <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <IconWallet size={20} />
-          </span>
-          <div className="space-y-0.5">
-            <h1 className="text-xl font-semibold tracking-tight">
-              Cash Planning
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Daily cash position, priority payment queue and stakeholder
-              approvals
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-44">
-            <DatePicker
-              selected={new Date(`${date}T00:00:00`)}
-              onSelect={(d) => d && setDate(toIsoDate(d))}
-              clearable={false}
-            />
-          </div>
-
-          {day ? (
-            <span
-              className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium ${
-                day.status === "CLOSED"
-                  ? "bg-muted text-muted-foreground"
-                  : "bg-emerald-100 text-emerald-700"
-              }`}
-            >
-              <span
-                className={`size-1.5 rounded-full ${
-                  day.status === "CLOSED" ? "bg-muted-foreground" : "bg-emerald-500"
-                }`}
-              />
-              {day.status === "CLOSED" ? "Closed" : "Open"}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <IconWallet size={20} />
             </span>
-          ) : null}
-
-          {day ? (
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/cash-planning/report/${date}`)}
-            >
-              <IconFileText size={15} className="mr-1" />
-              Day report
-            </Button>
-          ) : null}
-          {day && day.status === "OPEN" && canClose ? (
-            <Button
-              variant="outline"
-              onClick={() => closeDay.mutate(day.id)}
-              disabled={closeDay.isPending}
-            >
-              <IconLock size={15} className="mr-1" />
-              {closeDay.isPending ? "Closing…" : "Close day"}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {dayQuery.isLoading ? (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
-          <CashPositionSkeleton />
-          <PaymentQueueSkeleton />
-        </div>
-      ) : !day ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed py-16 text-center">
-          <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <IconCalendarPlus size={24} />
-          </span>
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium">No cash plan for this day</p>
-            <p className="text-xs text-muted-foreground">
-              Open the day to carry forward balances and start the queue.
-            </p>
+            <div className="space-y-0.5">
+              <h1 className="text-xl font-semibold tracking-tight">
+                Cash Planning
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Daily cash position, priority payment queue and stakeholder
+                approvals
+              </p>
+            </div>
           </div>
-          {canEnter ? (
-            <Button onClick={() => openDay.mutate()} disabled={openDay.isPending}>
-              <IconPlus size={15} className="mr-1" />
-              {openDay.isPending ? "Opening…" : "Open this day"}
-            </Button>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              You don&apos;t have permission to open a day.
-            </p>
-          )}
-        </div>
-      ) : (
-        <Tabs defaultValue="queue" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="queue" className="gap-1.5">
-              <IconListCheck size={15} />
-              Payment Queue
-              <TabCount n={day.payments.length} />
-            </TabsTrigger>
-            <TabsTrigger value="ledger" className="gap-1.5">
-              <IconReceipt2 size={15} />
-              Creditor Ledger
-            </TabsTrigger>
-            <TabsTrigger value="receivables" className="gap-1.5">
-              <IconCoins size={15} />
-              Receivables
-              <TabCount n={openReceivables} />
-            </TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="queue">
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
-              <CashPositionPanel day={day} date={date} canEnter={canEnter} />
-              <PaymentQueue
-                day={day}
-                date={date}
-                canEnter={canEnter}
-                canApprove={canApprove}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-44">
+              <DatePicker
+                selected={new Date(`${date}T00:00:00`)}
+                onSelect={(d) => d && setDate(toIsoDate(d))}
+                clearable={false}
               />
             </div>
-          </TabsContent>
 
-          <TabsContent value="ledger">
-            <CreditorLedgerView />
-          </TabsContent>
+            {day ? (
+              <span
+                className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium ${day.status === "CLOSED"
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-emerald-100 text-emerald-700"
+                  }`}
+              >
+                <span
+                  className={`size-1.5 rounded-full ${day.status === "CLOSED" ? "bg-muted-foreground" : "bg-emerald-500"
+                    }`}
+                />
+                {day.status === "CLOSED" ? "Closed" : "Open"}
+              </span>
+            ) : null}
 
-          <TabsContent value="receivables">
-            <ReceivablesPanel day={day} date={date} canEnter={canEnter} />
-          </TabsContent>
-        </Tabs>
-      )}
+            {day ? (
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/cash-planning/report/${date}`)}
+              >
+                <IconFileText size={15} className="mr-1" />
+                Day report
+              </Button>
+            ) : null}
+            {day && day.status === "OPEN" && canClose ? (
+              <Button
+                variant="outline"
+                onClick={() => closeDay.mutate(day.id)}
+                disabled={closeDay.isPending}
+              >
+                <IconLock size={15} className="mr-1" />
+                {closeDay.isPending ? "Closing…" : "Close day"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        {dayQuery.isLoading ? (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
+            <CashPositionSkeleton />
+            <PaymentQueueSkeleton />
+          </div>
+        ) : !day ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed py-16 text-center">
+            <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <IconCalendarPlus size={24} />
+            </span>
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">No cash plan for this day</p>
+              <p className="text-xs text-muted-foreground">
+                Open the day to carry forward balances and start the queue.
+              </p>
+            </div>
+            {canEnter ? (
+              <Button onClick={() => openDay.mutate()} disabled={openDay.isPending}>
+                <IconPlus size={15} className="mr-1" />
+                {openDay.isPending ? "Opening…" : "Open this day"}
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                You don&apos;t have permission to open a day.
+              </p>
+            )}
+          </div>
+        ) : (
+          <Tabs defaultValue="queue" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="queue" className="gap-1.5">
+                <IconListCheck size={15} />
+                Payment Queue
+                <TabCount n={day.payments.length} />
+              </TabsTrigger>
+              <TabsTrigger value="ledger" className="gap-1.5">
+                <IconReceipt2 size={15} />
+                Creditor Ledger
+              </TabsTrigger>
+              <TabsTrigger value="receivables" className="gap-1.5">
+                <IconCoins size={15} />
+                Receivables
+                <TabCount n={openReceivables} />
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="queue">
+              <div className="grid gap-5 xl:grid-cols-2">
+                <div className="min-w-0">
+                  <CashPositionPanel day={day} date={date} canEnter={canEnter} />
+                </div>
+
+                <div className="min-w-0">
+                  <PaymentQueue
+                    day={day}
+                    date={date}
+                    canEnter={canEnter}
+                    canApprove={canApprove}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="ledger">
+              <CreditorLedgerView />
+            </TabsContent>
+
+            <TabsContent value="receivables">
+              <ReceivablesPanel day={day} date={date} canEnter={canEnter} />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </TooltipProvider>
   );

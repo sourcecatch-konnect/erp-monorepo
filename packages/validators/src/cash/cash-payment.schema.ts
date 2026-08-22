@@ -81,7 +81,10 @@ export const createCashPaymentSchema = z.object({
 
   branchId: optionalString,
 
-  fromAccountId: optionalString,
+  fromAccountId: z
+    .string()
+    .trim()
+    .min(1, "Select which cash account this payment draws from"),
 
   note: optionalString.refine(
     (v) => !v || v.length <= 280,
