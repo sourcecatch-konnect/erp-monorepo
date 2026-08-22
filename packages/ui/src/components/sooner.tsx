@@ -17,6 +17,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Without this, Sonner only ever applies the "normal" bg/text/border
+      // below to every toast — success, error, warning all look identical
+      // except for the icon. richColors turns on its built-in per-type
+      // palette (green/red/amber/blue) so toast.success/.error/.warning
+      // actually render with different colors, matching the type they
+      // already correctly specify at every call site across the app.
+      richColors
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,
