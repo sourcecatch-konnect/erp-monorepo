@@ -855,22 +855,15 @@ export const vpLoadingApi = {
     return unwrapApiResponse(response);
   },
 
-  gates: async (mrrrRowId: string): Promise<VPLoadingGate[]> => {
-    const response = await api.get<ApiResponse<VPLoadingGate[]>>(
-      `/vp-loading/rows/${encodeIdentifier(mrrrRowId)}/gates`,
-    );
-
-    return unwrapApiResponse(response);
-  },
-
-  eligibleGRNs: async (
-    mrrrRowId: string,
-    gateNo: string,
+  // Eligibility depends only on the schedule's route, not the wagon/VP row —
+  // one call covers every wagon in the schedule. Gate grouping and the
+  // gate-locked-row filter happen client-side over this single list (see
+  // vp-loadingForm.tsx) instead of two more round trips.
+  eligibleGrns: async (
+    vpScheduleId: string,
   ): Promise<EligibleVPLoadingGRN[]> => {
     const response = await api.get<ApiResponse<EligibleVPLoadingGRN[]>>(
-      `/vp-loading/rows/${encodeIdentifier(
-        mrrrRowId,
-      )}/gates/${encodeIdentifier(gateNo)}/grns`,
+      `/vp-loading/schedules/${encodeIdentifier(vpScheduleId)}/eligible-grns`,
     );
 
     return unwrapApiResponse(response);

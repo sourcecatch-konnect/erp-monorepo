@@ -463,11 +463,23 @@ export const withAvailability = <
   };
 };
 
+export type EligibilityScheduleRoute = {
+  fromBranchId: string;
+  toBranchId: string;
+  sourceAreaId: string;
+  destinationAreaId: string;
+};
+
+/**
+ * Eligibility depends only on the schedule's branch/area route, not on the
+ * specific MR/RR row — so callers checking multiple rows of the same
+ * schedule should resolve this once and reuse it, rather than calling it
+ * once per row (see the /schedules/:vpScheduleId/preview handler).
+ */
 export const getEligibleGRNsForRow = async (
   tx: Tx,
-  row: Awaited<ReturnType<typeof getMRRRRowForLoading>>,
+  schedule: EligibilityScheduleRoute,
 ) => {
-  const schedule = row.mrRr.vpSchedule;
   const grns = await tx.gRN.findMany({
     where: {
       deletedAt: null,

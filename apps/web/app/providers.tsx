@@ -15,6 +15,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             retry: 1,
             refetchOnWindowFocus: false,
+            // Avoid refetching on every mount/remount for data that's seconds
+            // old. Screens that need fresher data set their own staleTime or
+            // refetchInterval (which ignores staleTime for its own polling).
+            staleTime: 30_000,
           },
         },
       })

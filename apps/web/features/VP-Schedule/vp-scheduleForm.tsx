@@ -51,6 +51,7 @@ import ComboboxField from "@/features/masters/_shared/fields/ComboboxField";
 import TextAreaField from "@/features/masters/_shared/fields/TextAreaField";
 import TextField from "@/features/masters/_shared/fields/TextField";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 import {
   useCreateVPSchedule,
@@ -393,6 +394,10 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
   const previewSignature = previewWagonCounts
     .map((row) => `${row.wagonId}:${row.count}`)
     .join("|");
+  // Debounce the query key so typing a wagon count doesn't fire a new
+  // freight-preview request (and its server-side freight-matrix lookup) on
+  // every keystroke — only once typing has paused.
+  const debouncedPreviewSignature = useDebouncedValue(previewSignature, 500);
   const freightPreviewEnabled = Boolean(
     watchedSourceAreaId &&
     watchedDestinationAreaId &&
@@ -402,7 +407,7 @@ export function VPScheduleForm({ mode, scheduleId }: Props) {
     queryKey: vpScheduleKeys.freightPreview(
       watchedSourceAreaId,
       watchedDestinationAreaId,
-      previewSignature,
+      debouncedPreviewSignature,
     ),
     queryFn: () =>
       vpScheduleApi.freightPreview({

@@ -170,23 +170,15 @@ export const useFinaliseVPScheduleLoading = () => {
   });
 };
 
-export const useVPLoadingGates = (mrrrRowId?: string) => {
+// Eligibility depends only on the schedule's route, so this fetches once per
+// schedule — every wagon (VP row) reuses the same cached list. The caller
+// derives gate groupings and gate-locked filtering from this in memory
+// (see vp-loadingForm.tsx) instead of issuing per-row/per-gate requests.
+export const useVPScheduleEligibleGrns = (vpScheduleId?: string) => {
   return useQuery({
-    queryKey: vpLoadingLookupKeys.gates(mrrrRowId ?? ""),
-    queryFn: () => vpLoadingApi.gates(mrrrRowId as string),
-    enabled: Boolean(mrrrRowId),
-  });
-};
-
-export const useEligibleVPLoadingGRNs = (
-  mrrrRowId?: string,
-  gateNo?: string,
-) => {
-  return useQuery({
-    queryKey: vpLoadingLookupKeys.eligibleGRNs(mrrrRowId ?? "", gateNo ?? ""),
-    queryFn: () =>
-      vpLoadingApi.eligibleGRNs(mrrrRowId as string, gateNo as string),
-    enabled: Boolean(mrrrRowId && gateNo),
+    queryKey: vpLoadingKeys.eligibleGrns(vpScheduleId ?? ""),
+    queryFn: () => vpLoadingApi.eligibleGrns(vpScheduleId as string),
+    enabled: Boolean(vpScheduleId),
   });
 };
 
@@ -235,21 +227,6 @@ const invalidateVPLoading = (
   if (values.scheduleId) {
     queryClient.invalidateQueries({
       queryKey: vpLoadingKeys.schedulePreview(values.scheduleId),
-    });
-  }
-
-  if (values.mrrrRowId) {
-    queryClient.invalidateQueries({
-      queryKey: vpLoadingLookupKeys.gates(values.mrrrRowId),
-    });
-  }
-
-  if (values.mrrrRowId && values.gateNo) {
-    queryClient.invalidateQueries({
-      queryKey: vpLoadingLookupKeys.eligibleGRNs(
-        values.mrrrRowId,
-        values.gateNo,
-      ),
     });
   }
 
