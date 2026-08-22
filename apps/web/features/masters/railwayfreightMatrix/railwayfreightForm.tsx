@@ -156,22 +156,22 @@ export default function RailwayFreightForm({
     (isPreset && preset
       ? [{ label: preset.sourceAreaName, value: preset.sourceAreaId }]
       : sourceAreas.data?.data.map((area) => ({
-          label: area.name,
-          value: area.id,
-        }))) ?? [];
+        label: area.name,
+        value: area.id,
+      }))) ?? [];
 
   const destinationAreaOptions =
     (isPreset && preset
       ? [
-          {
-            label: preset.destinationAreaName,
-            value: preset.destinationAreaId,
-          },
-        ]
+        {
+          label: preset.destinationAreaName,
+          value: preset.destinationAreaId,
+        },
+      ]
       : destinationAreas.data?.data.map((area) => ({
-          label: area.name,
-          value: area.id,
-        }))) ?? [];
+        label: area.name,
+        value: area.id,
+      }))) ?? [];
 
   React.useEffect(() => {
     if (suppressSourceAreaReset.current) {
@@ -203,9 +203,9 @@ export default function RailwayFreightForm({
     isPreset && preset
       ? [{ label: preset.wagonName, value: preset.wagonId }]
       : (wagons.data?.data ?? []).map((w) => ({
-          label: w.name,
-          value: w.id,
-        }));
+        label: w.name,
+        value: w.id,
+      }));
 
   return (
     <MasterFormDialog<
@@ -219,6 +219,7 @@ export default function RailwayFreightForm({
       onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       columns={2}
+      contentClassName="w-[95vw] sm:!max-w-5xl min-h-[75vh]"
     >
       {/* BASIC INFO */}
       <FormSection
@@ -261,9 +262,9 @@ export default function RailwayFreightForm({
               ? { id: preset.sourceCityId, name: preset.sourceCityName }
               : row?.sourceCity
                 ? {
-                    id: row.sourceCity.id,
-                    name: row.sourceCity.name,
-                  }
+                  id: row.sourceCity.id,
+                  name: row.sourceCity.name,
+                }
                 : null
           }
           disabled={isPreset}
@@ -276,14 +277,14 @@ export default function RailwayFreightForm({
           initialCity={
             isPreset && preset
               ? {
-                  id: preset.destinationCityId,
-                  name: preset.destinationCityName,
-                }
+                id: preset.destinationCityId,
+                name: preset.destinationCityName,
+              }
               : row?.destinationCity
                 ? {
-                    id: row.destinationCity.id,
-                    name: row.destinationCity.name,
-                  }
+                  id: row.destinationCity.id,
+                  name: row.destinationCity.name,
+                }
                 : null
           }
           disabled={isPreset}

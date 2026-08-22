@@ -68,3 +68,32 @@ export const upsertCashBalancesSchema = z.object({
 export const closeCashDaySchema = z.object({
   confirm: z.literal(true),
 });
+
+/* -----------------------------
+   ACCOUNT ADJUSTMENT (manual add funds / correction)
+   Signed — positive adds to the account, negative corrects it down.
+------------------------------ */
+export const cashAccountAdjustmentSchema = z.object({
+  id: z.string(),
+  dayId: z.string(),
+  accountId: z.string(),
+  amountPaise: z.number(),
+  reason: z.string(),
+  receiptId: z.string().nullable().optional(),
+  createdById: z.string(),
+  createdAt: z.date(),
+});
+
+export const createCashAccountAdjustmentSchema = z.object({
+  amountPaise: z
+    .union([z.string(), z.number()])
+    .transform((v) => Number(v))
+    .refine((v) => Number.isInteger(v) && v !== 0, {
+      message: "Amount must be a non-zero whole number of paise",
+    }),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Reason is required")
+    .max(280, "Reason cannot exceed 280 characters"),
+});

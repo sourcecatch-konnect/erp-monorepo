@@ -21,6 +21,9 @@ const amountPaise = z
 export const cashReceivableSchema = z.object({
   id: z.string(),
   partyName: z.string(),
+  source: z.enum(["MANUAL", "BILL"]).default("MANUAL"), // NEW
+  billId: z.string().nullable().optional(), // NEW
+  customerId: z.string().nullable().optional(), // NEW
   totalAmount: z.number(), // total still to receive (paise)
   expectedAmount: z.number(), // slice expected by expectedDate (paise)
   expectedDate: z.date().nullable().optional(),
@@ -45,6 +48,8 @@ export const cashReceiptSchema = z.object({
 
 /* -----------------------------
    CREATE / UPDATE
+   Unchanged — manual entry never sets source/billId/customerId directly;
+   the backend sets those only when syncing from a finalised Bill.
 ------------------------------ */
 const cashReceivableFields = z.object({
   partyName: z
@@ -90,8 +95,6 @@ export const updateCashReceivableSchema = cashReceivableFields
 
 /* -----------------------------
    RECEIVE (record a receipt against the outstanding total)
-   The amount is deducted from the outstanding total; the receivable closes
-   automatically once nothing is left. ackReceived is computed server-side.
 ------------------------------ */
 const receivedAmountPaise = z
   .union([z.string(), z.number()])

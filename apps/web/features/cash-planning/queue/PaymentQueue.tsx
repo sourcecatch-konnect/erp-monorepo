@@ -77,6 +77,7 @@ const PaymentRow = React.memo(function PaymentRow({
   index,
   remainingAfter,
   fits,
+  accountShort,
   editable,
   approvable,
   pending,
@@ -87,6 +88,7 @@ const PaymentRow = React.memo(function PaymentRow({
   index: number;
   remainingAfter: number;
   fits: boolean;
+  accountShort: boolean;
   editable: boolean;
   approvable: boolean;
   pending: boolean;
@@ -111,9 +113,11 @@ const PaymentRow = React.memo(function PaymentRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 bg-card px-4 py-2.5 ${
-        isDragging ? "relative z-10 opacity-80 shadow-sm" : ""
-      } ${!fits ? "bg-red-50/40" : ""} ${pending ? "opacity-60" : ""}`}
+      className={`grid min-w-0 grid-cols-[auto_auto_auto_minmax(0,1fr)_auto]
+      items-center gap-x-2 gap-y-2 bg-card px-3 py-3
+      ${isDragging ? "relative z-10 opacity-80 shadow-sm" : ""}
+      ${accountShort ? "bg-amber-50/50" : !fits ? "bg-red-50/40" : ""}
+      ${pending ? "opacity-60" : ""}`}
     >
       {editable ? (
         <button
@@ -125,7 +129,10 @@ const PaymentRow = React.memo(function PaymentRow({
         >
           <IconGripVertical size={15} />
         </button>
-      ) : null}
+      ) : (
+        <span />
+      )}
+
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-muted-foreground">
         {index + 1}
       </span>
@@ -134,48 +141,75 @@ const PaymentRow = React.memo(function PaymentRow({
         {p.payeeName.charAt(0).toUpperCase()}
       </span>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium">{p.payeeName}</span>
+      {/* Payee information */}
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span
+            className="min-w-0 truncate text-sm font-medium"
+            title={p.payeeName}
+          >
+            {p.payeeName}
+          </span>
+
           {p.isLate ? (
-            <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-700">
-              <IconSparkles size={11} /> new
+            <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-700">
+              <IconSparkles size={11} />
+              new
             </span>
           ) : null}
+
           {p.segment ? (
             <span
-              className={`rounded px-1.5 py-0.5 text-xs font-medium ${segmentBadge[p.segment]}`}
+              className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${segmentBadge[p.segment]
+                }`}
             >
               {p.segment}
             </span>
           ) : null}
         </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
+
+        <div
+          className="mt-0.5 truncate text-xs text-muted-foreground"
+          title={`${labelOf(p.category)} · ${labelOf(p.mode)}${p.fromAccount ? ` · ${p.fromAccount.name}` : ""
+            }`}
+        >
           {labelOf(p.category)} · {labelOf(p.mode)}
+          {p.fromAccount ? ` · ${p.fromAccount.name}` : ""}
         </div>
       </div>
 
+      {/* Amount */}
       <div className="shrink-0 text-right">
         <CompactMoney className="text-sm font-semibold" value={p.amount} />
+
         <div
-          className={`text-[11px] ${
-            remainingAfter < 0 ? "text-red-600" : "text-muted-foreground"
-          }`}
-          title={formatPaise(Math.abs(remainingAfter))}
+          className={`whitespace-nowrap text-[11px] ${accountShort || remainingAfter < 0
+              ? "text-amber-700"
+              : "text-muted-foreground"
+            }`}
+          title={
+            accountShort
+              ? `Exceeds ${p.fromAccount?.name ?? "the tagged account"}'s available balance`
+              : formatPaise(Math.abs(remainingAfter))
+          }
         >
-          {remainingAfter < 0
-            ? `over by ${formatPaiseCompact(-remainingAfter)}`
-            : `${formatPaiseCompact(remainingAfter)} left`}
+          {accountShort
+            ? `exceeds ${p.fromAccount?.name ?? "account"}`
+            : remainingAfter < 0
+              ? `over by ${formatPaiseCompact(-remainingAfter)}`
+              : `${formatPaiseCompact(remainingAfter)} left`}
         </div>
       </div>
 
-      <span
-        className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${statusBadge[p.status]}`}
-      >
-        {labelOf(p.status)}
-      </span>
+      {/* Status and actions move to a second line */}
+      <div className="col-span-full flex items-center justify-end gap-1 border-t pt-2">
+        <span
+          className={`mr-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${statusBadge[p.status]
+            }`}
+        >
+          {labelOf(p.status)}
+        </span>
 
-      <div className="flex shrink-0 items-center gap-0.5">
         {approvable ? (
           <>
             <Button
@@ -188,6 +222,7 @@ const PaymentRow = React.memo(function PaymentRow({
             >
               <IconCheck size={15} />
             </Button>
+
             <Button
               size="icon-sm"
               variant="ghost"
@@ -198,6 +233,7 @@ const PaymentRow = React.memo(function PaymentRow({
             >
               <IconPlayerPause size={15} />
             </Button>
+
             <Button
               size="icon-sm"
               variant="ghost"
@@ -210,6 +246,7 @@ const PaymentRow = React.memo(function PaymentRow({
             </Button>
           </>
         ) : null}
+
         {editable ? (
           <Button
             size="icon-sm"
@@ -348,19 +385,65 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
     },
   });
 
-  // ── waterline computation (top-down running total vs available opening) ──
+  // ── waterline computation ──
+  // Mirrors the backend guards exactly (cash-planning.route.ts): the pool
+  // check is a hard stop — once the whole pool would be exceeded, every
+  // later consuming payment is treated as out too, since the queue is
+  // priority-ordered and pool cash only depletes going down the list. The
+  // per-account check only skips the one payment whose specific account is
+  // short — a later payment on a different, still-solvent account can still
+  // fit, so it does NOT propagate like the pool check does.
   const computed = React.useMemo(() => {
-    let cum = 0;
+    const poolCeiling = day.totalOpening + day.totalAdjustments;
+    const accountCeiling = new Map(
+      day.balances.map((b) => [b.accountId, b.openingBalance + b.adjustmentsTotal]),
+    );
+    const accountRunning = new Map<string, number>();
+    let poolRunning = 0;
+    let poolExhausted = false;
+
     return dragItems.map((p) => {
       const consumes = p.status !== "REJECTED" && p.status !== "HOLD";
-      if (consumes) cum += p.amount;
-      return { p, remainingAfter: day.totalOpening - cum, fits: cum <= day.totalOpening, consumes };
-    });
-  }, [dragItems, day.totalOpening]);
+      if (!consumes) {
+        return {
+          p,
+          remainingAfter: poolCeiling - poolRunning,
+          fits: true,
+          accountShort: false,
+          poolShort: false,
+          consumes,
+        };
+      }
 
-  const waterlineIndex = computed.findIndex((c) => c.consumes && !c.fits);
+      let accountShort = false;
+      if (p.fromAccountId) {
+        const ceiling = accountCeiling.get(p.fromAccountId) ?? 0;
+        const running = accountRunning.get(p.fromAccountId) ?? 0;
+        accountShort = running + p.amount > ceiling;
+        if (!accountShort) accountRunning.set(p.fromAccountId, running + p.amount);
+      }
+
+      let poolShort = false;
+      if (!accountShort) {
+        if (!poolExhausted && poolRunning + p.amount > poolCeiling) poolExhausted = true;
+        poolShort = poolExhausted;
+        if (!poolShort) poolRunning += p.amount;
+      }
+
+      return {
+        p,
+        remainingAfter: poolCeiling - poolRunning,
+        fits: !accountShort && !poolShort,
+        accountShort,
+        poolShort,
+        consumes,
+      };
+    });
+  }, [dragItems, day.totalOpening, day.totalAdjustments, day.balances]);
+
+  const waterlineIndex = computed.findIndex((c) => c.poolShort);
   const pendingThatFit = computed
-    .filter((c, i) => c.p.status === "PENDING" && (waterlineIndex === -1 || i < waterlineIndex))
+    .filter((c) => c.p.status === "PENDING" && c.fits)
     .map((c) => c.p.id);
 
   const approvedCount = day.payments.filter((p) => p.status === "APPROVED").length;
@@ -451,7 +534,7 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
         >
           <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
             <div className="divide-y">
-              {computed.map(({ p, remainingAfter, fits }, index) => (
+              {computed.map(({ p, remainingAfter, fits, accountShort }, index) => (
                 <React.Fragment key={p.id}>
                   {index === waterlineIndex ? (
                     <div className="flex items-center gap-2 bg-red-50 px-4 py-1.5 text-xs font-medium text-red-600">
@@ -465,6 +548,7 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
                     index={index}
                     remainingAfter={remainingAfter}
                     fits={fits}
+                    accountShort={accountShort}
                     editable={editable}
                     approvable={approvable}
                     pending={pendingIds.has(p.id)}

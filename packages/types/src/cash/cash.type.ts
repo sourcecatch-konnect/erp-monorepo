@@ -17,6 +17,8 @@ import {
   openCashDaySchema,
   upsertCashBalancesSchema,
   closeCashDaySchema,
+  cashAccountAdjustmentSchema,
+  createCashAccountAdjustmentSchema,
   cashReceivableSchema,
   cashReceiptSchema,
   createCashReceivableSchema,
@@ -87,6 +89,12 @@ export type OpenCashDayBody = z.output<typeof openCashDaySchema>;
 export type UpsertCashBalancesBody = z.output<typeof upsertCashBalancesSchema>;
 export type CloseCashDayBody = z.output<typeof closeCashDaySchema>;
 
+/* ---- Account adjustments (manual add funds / receipt credit) ---- */
+export type CashAccountAdjustment = z.infer<typeof cashAccountAdjustmentSchema>;
+export type CreateCashAccountAdjustmentBody = z.output<
+  typeof createCashAccountAdjustmentSchema
+>;
+
 /* ---- Composite read shapes (API responses) ---- */
 export type CashPaymentWithCreditor = CashPayment & {
   creditor?: Pick<Creditor, "id" | "name" | "category"> | null;
@@ -96,7 +104,9 @@ export type CashPaymentWithCreditor = CashPayment & {
 
 export type CashAccountBalanceWithAccount = CashAccountBalance & {
   account: Pick<CashAccount, "id" | "name" | "type">;
-  /** opening − approved payments tagged to this account, computed server-side */
+  /** Σ manual/receipt adjustments posted to this account today (paise) */
+  adjustmentsTotal: number;
+  /** opening − approved payments + adjustments for this account, computed server-side */
   closingBalance: number;
 };
 
@@ -105,13 +115,17 @@ export type CashPlanDayView = CashPlanDay & {
   balances: CashAccountBalanceWithAccount[];
   /** ordered by priority asc (top = pay first) */
   payments: CashPaymentWithCreditor[];
+  /** every manual/receipt adjustment posted today, across all accounts */
+  adjustments: CashAccountAdjustment[];
   /** Σ opening balances (paise) */
   totalOpening: number;
   /** Σ approved payments (paise) */
   approvedTotal: number;
   /** Σ pending payments (paise) */
   pendingTotal: number;
-  /** totalOpening − approvedTotal (paise) */
+  /** Σ manual/receipt adjustments posted today, across all accounts (paise) */
+  totalAdjustments: number;
+  /** totalOpening + totalAdjustments − approvedTotal (paise) */
   availableCash: number;
 };
 

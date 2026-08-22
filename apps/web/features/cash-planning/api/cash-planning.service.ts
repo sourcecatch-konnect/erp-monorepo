@@ -11,6 +11,7 @@ import type {
   ReceivablesView,
   CreateCashReceivableBody,
   UpdateCashReceivableBody,
+  CreateCashAccountAdjustmentBody,
 } from "@skerp/types";
 import { unwrapApiResponse } from "../../masters/_shared/master-api";
 
@@ -123,6 +124,19 @@ export const cashPlanningApi = {
     const res = await api.post<ApiResponse<CashPlanDayView>>(
       `/cash-planning/days/${dayId}/close`,
       { confirm: true },
+    );
+    return unwrapApiResponse(res);
+  },
+
+  /** Manual add-funds / correction against one account for a day. */
+  addAdjustment: async (
+    dayId: string,
+    accountId: string,
+    body: CreateCashAccountAdjustmentBody,
+  ): Promise<CashPlanDayView> => {
+    const res = await api.post<ApiResponse<CashPlanDayView>>(
+      `/cash-planning/days/${dayId}/accounts/${accountId}/adjustments`,
+      body,
     );
     return unwrapApiResponse(res);
   },

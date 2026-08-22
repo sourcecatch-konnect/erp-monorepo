@@ -15,8 +15,6 @@ import {
 } from "@tabler/icons-react";
 import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
 
-
-
 const formatPercent = (value?: number | null) => {
   if (value == null) return "-";
   return `${value}%`;
@@ -97,6 +95,12 @@ export const customerColumns: ColumnDef<Customer>[] = [
     accessorKey: "tdsDeductionRate",
     header: "TDS",
     cell: ({ row }) => formatPercent(row.original.tdsDeductionRate),
+  },
+  {
+    accessorKey: "splitBillsByChargeType",
+    header: "Billing Split",
+    cell: ({ row }) =>
+      row.original.splitBillsByChargeType ? "Freight / Additional" : "Combined",
   },
   {
     accessorKey: "contactPerson",

@@ -141,6 +141,23 @@ type CashPlanningPermissionKey =
   | "cashplanning.approve"
   | "cashplanning.close";
 
+type BillingPermissionKey =
+  | "billing.view"
+  | "billing.create"
+  | "billing.update"
+  | "billing.approve"
+  | "billing.finalise"
+  | "billing.cancel"
+  | "billing.print"
+  | "billing.charge_approve"
+  | "billing.tax_rule_manage";
+
+type ReceiptPermissionKey =
+  | "receipt.view"
+  | "receipt.create"
+  | "receipt.approve"
+  | "receipt.cancel";
+
 type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
 
 type NotificationPermissionKey =
@@ -172,6 +189,8 @@ export type PermissionKey =
   | VPLoadingPermissionKey
   | VPSchedulePermissionKey
   | CashPlanningPermissionKey
+  | BillingPermissionKey
+  | ReceiptPermissionKey
   | GRNPermissionKey
   | RailBranchGRNPermissionKey
   | DeliveryChallanPermissionKey
@@ -385,6 +404,23 @@ export const PERMS = {
     ENTER: "cashplanning.enter",
     APPROVE: "cashplanning.approve",
     CLOSE: "cashplanning.close",
+  },
+  BILLING: {
+    VIEW: "billing.view",
+    CREATE: "billing.create",
+    UPDATE: "billing.update",
+    APPROVE: "billing.approve",
+    FINALISE: "billing.finalise",
+    CANCEL: "billing.cancel",
+    PRINT: "billing.print",
+    CHARGE_APPROVE: "billing.charge_approve",
+    TAX_RULE_MANAGE: "billing.tax_rule_manage",
+  },
+  RECEIPT: {
+    VIEW: "receipt.view",
+    CREATE: "receipt.create",
+    APPROVE: "receipt.approve",
+    CANCEL: "receipt.cancel",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",

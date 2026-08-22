@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "BillingTaxRule_billType_chargeMechanism_effectiveFrom_isActive_" RENAME TO "BillingTaxRule_billType_chargeMechanism_effectiveFrom_isAct_idx";

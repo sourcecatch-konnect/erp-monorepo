@@ -16,6 +16,7 @@ import {
   IconChartBar,
   IconCalendarEvent,
   IconArrowsSort,
+  IconLink,
 } from "@tabler/icons-react";
 
 import type {
@@ -109,6 +110,10 @@ const statusRank = (r: ReceivableRow) => {
   return 2;
 };
 
+// NEW — Bill-linked rows (single-bill or customer-grouped) are system-synced;
+// their numbers must always match the real Bill/Receipt, so manual edits are
+// blocked here rather than letting the UI drift from what the backend owns.
+const isLinked = (r: ReceivableRow) => r.source === "BILL";
 export default function ReceivablesPanel({ day, date, canEnter }: Props) {
   const queryClient = useQueryClient();
   const editable = canEnter;
@@ -439,6 +444,15 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                             <span className="text-sm font-medium">
                               {r.partyName}
                             </span>
+                            {isLinked(r) ? (
+                              <span
+                                title="Synced from billing — updates automatically as receipts post"
+                                className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+                              >
+                                <IconLink size={10} />
+                                Linked
+                              </span>
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell className="text-right text-sm">
@@ -457,11 +471,10 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                         <TableCell>
                           {r.expectedDate ? (
                             <span
-                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs ${
-                                due
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs ${due
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-muted text-muted-foreground"
+                                }`}
                             >
                               <IconCalendarEvent size={12} />
                               {new Date(r.expectedDate).toLocaleDateString(
@@ -495,7 +508,7 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                                       ((r.receivedAmount ?? 0) /
                                         ((r.receivedAmount ?? 0) + r.totalAmount ||
                                           1)) *
-                                        100,
+                                      100,
                                     )}%`,
                                   }}
                                 />
@@ -507,50 +520,43 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                             </span>
                           )}
                         </TableCell>
+
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
                             {r.receipts.length > 0 ? (
                               <ReceiptTimeline receipts={r.receipts} />
                             ) : null}
                             {editable &&
-                            !r.ackReceived &&
-                            r.expectedAmount > 0 ? (
+                              !r.ackReceived &&
+                              !isLinked(r) &&
+                              r.expectedAmount > 0 ? (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                title={`Receive the expected ${formatPaiseCompact(
-                                  r.expectedAmount,
-                                )}`}
+                                title={`Receive the expected ${formatPaiseCompact(r.expectedAmount)}`}
                                 className="h-8 gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                                 disabled={received.isPending}
                                 onClick={() =>
-                                  received.mutate({
-                                    id: r.id,
-                                    amt: r.expectedAmount,
-                                  })
+                                  received.mutate({ id: r.id, amt: r.expectedAmount })
                                 }
                               >
                                 <IconCheck size={14} />
                                 {formatPaiseCompact(r.expectedAmount)}
                               </Button>
                             ) : null}
-                            {editable && !r.ackReceived ? (
+                            {editable && !r.ackReceived && !isLinked(r) ? (
                               <Button
                                 size="icon-sm"
                                 variant="ghost"
-                                title={`Settle full remaining (${formatPaiseCompact(
-                                  r.totalAmount,
-                                )})`}
+                                title={`Settle full remaining (${formatPaiseCompact(r.totalAmount)})`}
                                 className="text-emerald-600 hover:bg-emerald-50"
                                 disabled={received.isPending}
-                                onClick={() =>
-                                  received.mutate({ id: r.id, amt: r.totalAmount })
-                                }
+                                onClick={() => received.mutate({ id: r.id, amt: r.totalAmount })}
                               >
                                 <IconChecks size={15} />
                               </Button>
                             ) : null}
-                            {editable && !r.ackReceived ? (
+                            {editable && !r.ackReceived && !isLinked(r) ? (
                               <Button
                                 size="icon-sm"
                                 variant="ghost"
@@ -561,7 +567,7 @@ export default function ReceivablesPanel({ day, date, canEnter }: Props) {
                                 <IconPencil size={15} />
                               </Button>
                             ) : null}
-                            {editable ? (
+                            {editable && !isLinked(r) ? (
                               <Button
                                 size="icon-sm"
                                 variant="ghost"

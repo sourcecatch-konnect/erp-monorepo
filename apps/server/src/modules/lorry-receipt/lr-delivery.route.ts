@@ -30,6 +30,7 @@ import {
   getLRDeliveryEligibilities,
   getLRDeliveryEligibility,
 } from "./lr-delivery-eligibility.service.js";
+import { evaluateBillingForLR } from "../billing/billing.service.js";
 
 /**
  * Delivery + acknowledgement actions on a single LR. Mounted on
@@ -927,6 +928,8 @@ router.post(
       });
     });
 
+    await evaluateBillingForLR(db, id, me);
+
     const ack = await db.lRAcknowledgement.findUniqueOrThrow({
       where: { lrId: id },
       include: ackInclude,
@@ -950,6 +953,16 @@ router.patch(
       );
     }
     assertBranchAccess(req, lr.group.originBranchId);
+
+    const activeBillLine = await db.billLine.findFirst({
+      where: { lrId: id, bill: { status: { not: "CANCELLED" } } },
+      select: { id: true },
+    });
+    if (activeBillLine) {
+      throw new BadRequestError(
+        "Cancel active billing drafts before changing an acknowledgement",
+      );
+    }
 
     const parsed = updateLRAcknowledgementSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1018,6 +1031,8 @@ router.patch(
       });
     });
 
+    await evaluateBillingForLR(db, id, me);
+
     return sendOk(res, updated);
   },
 );
@@ -1037,8 +1052,19 @@ router.post(
     }
     assertBranchAccess(req, lr.group.originBranchId);
 
+    const billedCharge = await db.billLine.findFirst({
+      where: { lrId: id, bill: { status: { not: "CANCELLED" } } },
+      select: { id: true },
+    });
+    if (billedCharge) {
+      throw new BadRequestError(
+        "Cancel every active draft/final bill for this LR before undoing acknowledgement",
+      );
+    }
+
     const me = actorId(req);
     await db.$transaction(async (tx) => {
+      await tx.lRCharge.deleteMany({ where: { lrId: id } });
       await tx.lRAcknowledgement.delete({
         where: { id: lr.acknowledgement!.id },
       });
@@ -1046,6 +1072,7 @@ router.post(
         where: { id },
         data: {
           status: "DELIVERED",
+          billingStatus: "NOT_BILLABLE",
           updatedById: me,
           version: { increment: 1 },
         },
