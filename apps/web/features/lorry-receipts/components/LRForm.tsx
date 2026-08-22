@@ -51,6 +51,7 @@ import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
 import LRCreateSummary from "./LRCreateSummary";
 import { FieldLabel, MoneyField } from "./moneyField";
 import CreateTripDialog from "@/features/trips/CreateTripDialog";
+import { branchApi } from "@/features/masters/branch/branch.service";
 
 type Props = {
   orderId?: string;
@@ -455,6 +456,30 @@ export default function LRForm({ orderId, tripId }: Props) {
           },
   });
 
+  const watchedRailheadBranchId = form.watch(
+    "railheadBranchId" as never,
+  ) as unknown as string | undefined;
+  const sourceRailheadAreas = useQuery({
+    queryKey: ["lr-source-railheads", watchedRailheadBranchId ?? ""],
+    queryFn: () => branchApi.railheads(watchedRailheadBranchId as string),
+    enabled: source === "FROM_ORDER" && Boolean(watchedRailheadBranchId),
+  });
+  const previousRailheadBranchRef = React.useRef(watchedRailheadBranchId);
+  React.useEffect(() => {
+    if (previousRailheadBranchRef.current === watchedRailheadBranchId) return;
+    previousRailheadBranchRef.current = watchedRailheadBranchId;
+    form.setValue("sourceRailheadAreaId" as never, undefined as never, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [form, watchedRailheadBranchId]);
+  const destinationRailheadBranchId = orderContext.data?.toBranch?.id;
+  const destinationRailheadAreas = useQuery({
+    queryKey: ["lr-destination-railheads", destinationRailheadBranchId ?? ""],
+    queryFn: () => branchApi.railheads(destinationRailheadBranchId as string),
+    enabled: source === "FROM_ORDER" && Boolean(destinationRailheadBranchId),
+  });
+
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "lrs",
@@ -567,6 +592,14 @@ export default function LRForm({ orderId, tripId }: Props) {
       : (d.mobile ?? undefined),
     badge: d.isAssigned ? "Assigned" : "Available",
     badgeTone: d.isAssigned ? "warning" : "success",
+  }));
+  const marketVehicleSuggestions: SuggestOption[] = (
+    marketVehicles.data ?? []
+  ).map((vehicle) => ({
+    value: vehicle.vehicleNumber,
+    hint: vehicle.vehicleTypeRef.name,
+    badge: "Registered",
+    badgeTone: "muted",
   }));
   const loadingOptions = (consignorLocations.data ?? []).map((l) => ({
     value: l.value,
@@ -822,6 +855,16 @@ export default function LRForm({ orderId, tripId }: Props) {
                             "railheadBranchId" as never,
                             undefined as never,
                           );
+                        if (v !== "RoadAndRail") {
+                          form.setValue(
+                            "sourceRailheadAreaId" as never,
+                            undefined as never,
+                          );
+                          form.setValue(
+                            "destinationRailheadAreaId" as never,
+                            undefined as never,
+                          );
+                        }
                       }}
                       options={TRANSPORT_OPTIONS}
                     />
@@ -829,16 +872,40 @@ export default function LRForm({ orderId, tripId }: Props) {
                 )}
               />
               {showRailhead && (
-                <ComboboxField
-                  name="railheadBranchId"
-                  label="Railhead branch"
-                  required
-                  options={(railheads.data ?? []).map((b) => ({
-                    value: b.value,
-                    label: b.label,
-                  }))}
-                  emptyText="No railhead branches found"
-                />
+                <>
+                  <ComboboxField
+                    name="railheadBranchId"
+                    label="Source railway branch"
+                    required
+                    options={(railheads.data ?? []).map((b) => ({
+                      value: b.value,
+                      label: b.label,
+                    }))}
+                    emptyText="No railhead branches found"
+                  />
+                  <ComboboxField
+                    name="sourceRailheadAreaId"
+                    label="Source railhead"
+                    required
+                    options={(sourceRailheadAreas.data ?? []).map((item) => ({
+                      value: item.area.id,
+                      label: `${item.area.name} (${item.area.city.name})`,
+                    }))}
+                    emptyText="No railheads mapped to this branch"
+                  />
+                  <ComboboxField
+                    name="destinationRailheadAreaId"
+                    label="Destination railhead"
+                    required
+                    options={(destinationRailheadAreas.data ?? []).map(
+                      (item) => ({
+                        value: item.area.id,
+                        label: `${item.area.name} (${item.area.city.name})`,
+                      }),
+                    )}
+                    emptyText="No railheads mapped to the destination branch"
+                  />
+                </>
               )}
             </FormSection>
           )}
@@ -1012,52 +1079,45 @@ export default function LRForm({ orderId, tripId }: Props) {
                 />
 
                 <Controller
-                  name="marketVehicleId"
+                  name="marketVehicleNumber"
                   control={form.control}
                   render={({ field }) => (
                     <div>
                       <FieldLabel required>Vehicle number</FieldLabel>
-                      <Select
+                      <SuggestInput
                         value={(field.value as string) ?? ""}
-                        onValueChange={(value) => {
+                        onChange={(value) => {
                           field.onChange(value);
                           const vehicle = (marketVehicles.data ?? []).find(
-                            (row) => row.id === value,
+                            (row) =>
+                              row.vehicleNumber.trim().toLowerCase() ===
+                              value.trim().toLowerCase(),
                           );
                           form.setValue(
-                            "marketVehicleNumber" as never,
-                            vehicle?.vehicleNumber as never,
+                            "marketVehicleId" as never,
+                            vehicle?.id as never,
+                            { shouldValidate: true },
                           );
                         }}
-                        disabled={
-                          !marketTransportId || marketVehicles.isLoading
+                        onBlur={field.onBlur}
+                        suggestions={marketVehicleSuggestions}
+                        disabled={!marketTransportId}
+                        placeholder={
+                          !marketTransportId
+                            ? "Select transporter first"
+                            : marketVehicles.isLoading
+                              ? "Loading vehicles or type vehicle number"
+                              : "Select or type vehicle number"
                         }
-                      >
-                        <SelectTrigger
-                          className="h-9 w-full"
-                          aria-invalid={Boolean(
-                            errors.marketVehicleId?.message,
-                          )}
-                        >
-                          <SelectValue
-                            placeholder={
-                              !marketTransportId
-                                ? "Select transporter first"
-                                : marketVehicles.isLoading
-                                  ? "Loading market vehicles..."
-                                  : "Select vehicle"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(marketVehicles.data ?? []).map((vehicle) => (
-                            <SelectItem key={vehicle.id} value={vehicle.id}>
-                              {vehicle.vehicleNumber} ·{" "}
-                              {vehicle.vehicleTypeRef.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        invalid={Boolean(errors.marketVehicleNumber?.message)}
+                        className="[&_input]:h-9 [&_input]:uppercase"
+                      />
+                      {typeof errors.marketVehicleNumber?.message ===
+                      "string" ? (
+                        <p className="mt-1 text-xs text-red-600">
+                          {errors.marketVehicleNumber.message}
+                        </p>
+                      ) : null}
                     </div>
                   )}
                 />
@@ -1067,7 +1127,7 @@ export default function LRForm({ orderId, tripId }: Props) {
                   control={form.control}
                   render={({ field }) => (
                     <div>
-                      <FieldLabel>Driver</FieldLabel>
+                      <FieldLabel>Driver (optional)</FieldLabel>
                       <SuggestInput
                         value={(field.value as string) ?? ""}
                         onChange={field.onChange}

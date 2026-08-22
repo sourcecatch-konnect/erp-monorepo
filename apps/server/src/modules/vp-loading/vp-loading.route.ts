@@ -16,7 +16,7 @@ import {
 import { db } from "../../../prisma/prisma.js";
 import { Prisma } from "../../../generated/prisma/index.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
-import { can } from "../../auth/can.middleware.js";
+import { can, canAny } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
@@ -27,6 +27,11 @@ import {
 import { fyCodeFor, nextSequence } from "../_shared/doc-number.js";
 import { sendOk } from "../_shared/response.js";
 import { getDateRange } from "../vp-schedule/vp-schedule.route.js";
+import {
+  getCachedEligibleGrns,
+  invalidateEligibleGrns,
+  setCachedEligibleGrns,
+} from "./vp-loading.cache.js";
 import {
   assignOneLapTracker,
   getActiveTrackerAssignment,
@@ -41,7 +46,9 @@ import {
   buildAllocationGoods,
   cancelVPLoadingAllocation,
   customerSelect,
+  type EligibilityScheduleRoute,
   generateVPLoadingNumber,
+  getCurrentGRNAvailability,
   getEligibleGRNsForRow,
   getGRNForLoading,
   getMRRRRowForLoading,
@@ -58,6 +65,7 @@ import {
 
 const router: Router = Router();
 const readClient = db as unknown as Prisma.TransactionClient;
+const VP_LOADING_TX_BUDGET = { timeout: 15_000, maxWait: 10_000 } as const;
 
 router.use(authMiddleware);
 
@@ -65,6 +73,29 @@ const actorId = (req: { user?: { userId: string } }) => {
   const userId = req.user?.userId;
   if (!userId) throw new BadRequestError("User context is missing");
   return userId;
+};
+
+const assertLoadingSupervisor = async (
+  tx: Prisma.TransactionClient,
+  supervisorId: string | undefined,
+  branchId: string,
+) => {
+  if (!supervisorId) return;
+
+  const supervisor = await tx.labour.findFirst({
+    where: {
+      id: supervisorId,
+      branchId,
+      type: "Supervisor",
+    },
+    select: { id: true },
+  });
+
+  if (!supervisor) {
+    throw new BadRequestError(
+      "Select a Supervisor from the Labour master for the VP Schedule branch",
+    );
+  }
 };
 
 const getIdParam = (value: string | string[] | undefined, label: string) => {
@@ -117,20 +148,31 @@ const getWagonLoadingForReq = async (req: Request, id: string) => {
   return wagon;
 };
 
-const getEligibleGRNCountForRow = async (
-  mrrrRowId: string,
-  loading?: { status: string } | null,
+/**
+ * Eligibility only depends on the schedule's route (fromBranch/toBranch/
+ * source/destination area), not on the individual row — so this resolves it
+ * once for the whole schedule instead of once per row. Previously this ran
+ * two queries (row + eligible-GRN fetch) per wagon row, ~84 queries for a
+ * 42-wagon rake to produce the same integer 42 times.
+ */
+const getEligibleGRNCountForSchedule = async (
+  schedule: EligibilityScheduleRoute,
 ) => {
-  if (!isVPWagonLoadingOpen(loading)) return 0;
-
   try {
-    const row = await getMRRRRowForLoading(readClient, mrrrRowId);
-    const grns = await getEligibleGRNsForRow(readClient, row);
+    const cached = await getCachedEligibleGrns<
+      ReturnType<typeof mapGRNDropdown>[]
+    >(schedule);
+
+    if (cached) return cached.length;
+
+    const grns = await getEligibleGRNsForRow(readClient, schedule);
+    await setCachedEligibleGrns(schedule, grns.map(mapGRNDropdown));
 
     return grns.length;
   } catch (error) {
     console.error("Eligible GRN count failed", {
-      mrrrRowId,
+      scheduleFromBranchId: schedule.fromBranchId,
+      scheduleToBranchId: schedule.toBranchId,
       error,
     });
 
@@ -154,19 +196,45 @@ const assertTrackerScheduleAccess = async (
   if (!schedule) throw new NotFoundError("VP Schedule not found");
 };
 
+router.get("/supervisors", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
+  const vpScheduleId = getIdParam(
+    req.query.vpScheduleId as string | string[] | undefined,
+    "VP Schedule",
+  );
+  const schedule = await db.vPSchedule.findFirst({
+    where: {
+      id: vpScheduleId,
+      deletedAt: null,
+      ...branchFilter(req, "fromBranchId"),
+    },
+    select: { fromBranchId: true },
+  });
+
+  if (!schedule) throw new NotFoundError("VP Schedule not found");
+
+  const supervisors = await db.labour.findMany({
+    where: {
+      branchId: schedule.fromBranchId,
+      type: "Supervisor",
+    },
+    select: {
+      id: true,
+      name: true,
+      mobileNo: true,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return sendOk(res, supervisors);
+});
+
 router.get(
   "/schedules/:vpScheduleId/tracker-assignment",
   can(PERMS.VP_LOADING.VIEW),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
-    return sendOk(
-      res,
-      await getActiveTrackerAssignment(vpScheduleId),
-    );
+    return sendOk(res, await getActiveTrackerAssignment(vpScheduleId));
   },
 );
 
@@ -174,10 +242,7 @@ router.get(
   "/schedules/:vpScheduleId/available-trackers",
   can(PERMS.VP_LOADING.VIEW),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
     return sendOk(res, await listAvailableOneLapTrackers());
   },
@@ -187,10 +252,7 @@ router.post(
   "/schedules/:vpScheduleId/tracker-assignment",
   can(PERMS.VP_LOADING.ASSIGN_TRACKER),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
 
     const parsed = assignOneLapTrackerSchema.safeParse(req.body);
@@ -200,11 +262,7 @@ router.post(
 
     return sendOk(
       res,
-      await assignOneLapTracker(
-        vpScheduleId,
-        parsed.data,
-        actorId(req),
-      ),
+      await assignOneLapTracker(vpScheduleId, parsed.data, actorId(req)),
     );
   },
 );
@@ -213,10 +271,7 @@ router.post(
   "/schedules/:vpScheduleId/tracker-assignment/replace",
   can(PERMS.VP_LOADING.REPLACE_TRACKER),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
 
     const parsed = replaceOneLapTrackerSchema.safeParse(req.body);
@@ -226,11 +281,7 @@ router.post(
 
     return sendOk(
       res,
-      await replaceOneLapTracker(
-        vpScheduleId,
-        parsed.data,
-        actorId(req),
-      ),
+      await replaceOneLapTracker(vpScheduleId, parsed.data, actorId(req)),
     );
   },
 );
@@ -239,10 +290,7 @@ router.post(
   "/schedules/:vpScheduleId/tracker-assignment/release",
   can(PERMS.VP_LOADING.RELEASE_TRACKER),
   async (req, res) => {
-    const vpScheduleId = getIdParam(
-      req.params.vpScheduleId,
-      "VP Schedule",
-    );
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
     await assertTrackerScheduleAccess(req, vpScheduleId);
 
     const parsed = releaseOneLapTrackerSchema.safeParse(req.body);
@@ -279,6 +327,24 @@ router.get("/schedules", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
       is: {
         deletedAt: null,
         status: "SUBMITTED",
+        // Narrows to schedules that can actually appear in the response below
+        // (at least one row with a VP number and an open wagon loading) so we
+        // don't hydrate the full nested tree for schedules we'd only discard.
+        // The exact isVPWagonLoadingOpen/trim() logic still runs afterward as
+        // the source of truth — this is a pre-filter, not a replacement.
+        rows: {
+          some: {
+            vpNo: { not: null },
+            OR: [
+              { vpWagonLoading: null },
+              {
+                vpWagonLoading: {
+                  status: { in: ["DRAFT", "IN_PROGRESS"] },
+                },
+              },
+            ],
+          },
+        },
       },
     },
   };
@@ -394,6 +460,10 @@ router.get("/allocations", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
       ...branchWhere,
     },
     orderBy: { createdAt: "desc" },
+    // No caller paginates this endpoint today; cap it so it can't grow
+    // unbounded as allocations accumulate. Revisit with real pagination if a
+    // consumer needs more than the latest 500.
+    take: 500,
     include: allocationInclude,
   });
 
@@ -660,7 +730,7 @@ router.get(
                     labour: { select: labourSelect },
                     labourCharge: true,
                     loadingSupervisorId: true,
-                    loadingSupervisor: { select: userSelect },
+                    loadingSupervisor: { select: labourSelect },
                     loadingStartedAt: true,
                     loadingCompletedAt: true,
                     verifiedAt: true,
@@ -668,6 +738,13 @@ router.get(
                     remarks: true,
                     cancelReason: true,
                     version: true,
+                    _count: {
+                      select: {
+                        allocations: {
+                          where: { status: { not: "CANCELLED" } },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -682,15 +759,23 @@ router.get(
       throw new BadRequestError("MR/RR must be submitted before VP loading");
     }
 
-    const rowsWithEligibility = await Promise.all(
-      schedule.mrRr.rows.map(async (row) => ({
-        ...row,
-        eligibleGrnCount: await getEligibleGRNCountForRow(
-          row.id,
-          row.vpWagonLoading,
-        ),
-      })),
-    );
+    // Resolved once for the schedule's route, not once per row (see
+    // getEligibleGRNCountForSchedule) — every open row shares this same count.
+    const scheduleEligibleGrnCount =
+      await getEligibleGRNCountForSchedule(schedule);
+
+    const rowsWithEligibility = schedule.mrRr.rows.map((row) => ({
+      ...row,
+      vpWagonLoading: row.vpWagonLoading
+        ? {
+          ...row.vpWagonLoading,
+          activeLrCount: row.vpWagonLoading._count.allocations,
+        }
+        : null,
+      eligibleGrnCount: isVPWagonLoadingOpen(row.vpWagonLoading)
+        ? scheduleEligibleGrnCount
+        : 0,
+    }));
 
     return sendOk(res, {
       ...schedule,
@@ -786,7 +871,7 @@ router.get(
                     capacityCheckStatus: true,
                     labourCharge: true,
                     labour: { select: labourSelect },
-                    loadingSupervisor: { select: userSelect },
+                    loadingSupervisor: { select: labourSelect },
                     loadingStartedAt: true,
                     loadingCompletedAt: true,
                     verifiedAt: true,
@@ -887,37 +972,10 @@ router.get(
         code: "SCHEDULE_ALREADY_FINALISED",
         message: "VP Schedule is already finalised and has a Rail Rake",
       });
-    } else if (schedule.status !== "VERIFIED") {
+    } else if (!["LOADED", "VERIFIED"].includes(schedule.status)) {
       validationIssues.push({
-        code: "SCHEDULE_NOT_VERIFIED",
-        message: "VP Schedule must be verified before finalisation",
-      });
-    }
-
-    const activeTrackerAssignment = schedule.trackerAssignments[0];
-    if (!activeTrackerAssignment) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_MISSING",
-        message:
-          "Assign one OneLap tracker to the VP Schedule before finalisation",
-      });
-    } else if (!activeTrackerAssignment.tracker.isEnabled) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_DISABLED",
-        message: "The assigned OneLap tracker is disabled",
-      });
-    } else if (!activeTrackerAssignment.tracker.isPresentOnProvider) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_MISSING_ON_PROVIDER",
-        message: "The assigned tracker is no longer present in OneLap",
-      });
-    } else if (
-      activeTrackerAssignment.tracker.validityAt &&
-      activeTrackerAssignment.tracker.validityAt.getTime() < Date.now()
-    ) {
-      validationIssues.push({
-        code: "RAKE_TRACKER_EXPIRED",
-        message: "The assigned OneLap tracker has expired",
+        code: "SCHEDULE_NOT_LOADED",
+        message: "Every VP wagon must be marked Loaded before finalisation",
       });
     }
 
@@ -958,10 +1016,12 @@ router.get(
             mrrrRowId: row.id,
             vpNo: row.vpNo,
           });
-        } else if (row.vpWagonLoading.status !== "VERIFIED") {
+        } else if (
+          !["COMPLETED", "VERIFIED"].includes(row.vpWagonLoading.status)
+        ) {
           validationIssues.push({
-            code: "WAGON_LOADING_NOT_VERIFIED",
-            message: `${row.rowLabel} VP wagon loading is not verified`,
+            code: "WAGON_LOADING_NOT_LOADED",
+            message: `${row.rowLabel} VP wagon is not marked Loaded`,
             mrrrRowId: row.id,
             vpNo: row.vpNo,
           });
@@ -983,8 +1043,8 @@ router.get(
       summary: {
         totalWagonRows: rows.length,
         wagonLoadingsCreated: loadings.length,
-        verifiedWagonCount: loadings.filter(
-          (loading) => loading.status === "VERIFIED",
+        verifiedWagonCount: loadings.filter((loading) =>
+          ["COMPLETED", "VERIFIED"].includes(loading.status),
         ).length,
         activeAllocationCount: allocations.length,
         sourceGoodsLineCount: goods.length,
@@ -1121,9 +1181,9 @@ router.post(
         "VP Schedule changed. Please refresh the final review.",
       );
 
-      if (schedule.status !== "VERIFIED") {
+      if (!["LOADED", "VERIFIED"].includes(schedule.status)) {
         throw new BadRequestError(
-          "Only a VERIFIED VP Schedule can be finalised",
+          "Every VP wagon must be marked Loaded before finalisation",
         );
       }
 
@@ -1135,28 +1195,6 @@ router.post(
 
       if (!schedule.mrRr.rows.length) {
         throw new BadRequestError("MR/RR does not contain any wagon rows");
-      }
-
-      if (schedule.trackerAssignments.length === 0) {
-        throw new BadRequestError(
-          "Assign one OneLap tracker before finalising the VP Schedule",
-        );
-      }
-
-      const assignedTracker = schedule.trackerAssignments[0]!.tracker;
-      if (!assignedTracker.isEnabled) {
-        throw new BadRequestError("The assigned OneLap tracker is disabled");
-      }
-      if (!assignedTracker.isPresentOnProvider) {
-        throw new BadRequestError(
-          "The assigned tracker is no longer present in OneLap",
-        );
-      }
-      if (
-        assignedTracker.validityAt &&
-        assignedTracker.validityAt.getTime() < Date.now()
-      ) {
-        throw new BadRequestError("The assigned OneLap tracker has expired");
       }
 
       for (const row of schedule.mrRr.rows) {
@@ -1172,9 +1210,9 @@ router.post(
           );
         }
 
-        if (row.vpWagonLoading.status !== "VERIFIED") {
+        if (!["COMPLETED", "VERIFIED"].includes(row.vpWagonLoading.status)) {
           throw new BadRequestError(
-            `${row.rowLabel} VP wagon loading is not verified`,
+            `${row.rowLabel} VP wagon is not marked Loaded`,
           );
         }
       }
@@ -1242,72 +1280,58 @@ router.post(
     return sendOk(res, result);
   },
 );
-// after select VP no In form then hit this APIs aand Show Gate if has in GRN create
+/*
+ * Eligibility depends only on the schedule's branch/area route (see
+ * getEligibleGRNsForRow), not on which VP row/wagon is asking — so this is
+ * schedule-scoped, not row-scoped. The client picks a VP row, then groups
+ * and filters this same list by gate in memory; a gate-locked row (already
+ * has a wagon loading assigned to a gate) filters to that gate client-side
+ * too. This replaces the old per-row /gates and /gates/:gateNo/grns
+ * endpoints, which independently re-ran this same query up to 3 times for
+ * one schedule's worth of wagons. Redis-cached per route (see
+ * vp-loading.cache.ts) since every wagon in the schedule shares one answer.
+ */
 router.get(
-  "/rows/:mrrrRowId/gates",
+  "/schedules/:vpScheduleId/eligible-grns",
   can(PERMS.VP_LOADING.VIEW),
   async (req, res) => {
-    const mrrrRowId = getIdParam(req.params.mrrrRowId, "MR/RR row");
-    const row = await getMRRRRowForLoading(readClient, mrrrRowId);
-    assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
+    const vpScheduleId = getIdParam(req.params.vpScheduleId, "VP Schedule");
 
-    const grns = await getEligibleGRNsForRow(readClient, row);
-    const eligibleGrns = row.vpWagonLoading?.gateNo
-      ? grns.filter((grn) => grn.gateNo === row.vpWagonLoading?.gateNo)
-      : grns;
-    const gates = new Map<
-      string,
-      {
-        gateNo: string;
-        eligibleGrnCount: number;
-        eligibleLrCount: number;
-        totalAvailableQty: number;
-      }
-    >();
+    const schedule = await db.vPSchedule.findFirst({
+      where: {
+        id: vpScheduleId,
+        deletedAt: null,
+        ...branchFilter(req, "fromBranchId"),
+      },
+      select: {
+        fromBranchId: true,
+        toBranchId: true,
+        sourceAreaId: true,
+        destinationAreaId: true,
+        mrRr: { select: { status: true } },
+      },
+    });
 
-    for (const grn of eligibleGrns) {
-      const gateNo = grn.gateNo?.trim();
-
-      if (!gateNo) continue;
-
-      const current = gates.get(gateNo) ?? {
-        gateNo,
-        eligibleGrnCount: 0,
-        eligibleLrCount: 0,
-        totalAvailableQty: 0,
-      };
-
-      current.eligibleGrnCount += 1;
-      current.eligibleLrCount += 1;
-      current.totalAvailableQty += grn.availableQty;
-
-      gates.set(gateNo, current);
+    if (!schedule) throw new NotFoundError("VP Schedule not found");
+    if (schedule.mrRr?.status !== "SUBMITTED") {
+      throw new BadRequestError("MR/RR must be submitted before VP loading");
     }
 
-    return sendOk(res, [...gates.values()]);
-  },
-);
-// it run after the select the Gate No and show the GRN(LR) in the Dropdown
-router.get(
-  "/rows/:mrrrRowId/gates/:gateNo/grns",
-  can(PERMS.VP_LOADING.VIEW),
-  async (req, res) => {
-    const mrrrRowId = getIdParam(req.params.mrrrRowId, "MR/RR row");
-    const gateNo = getIdParam(req.params.gateNo, "Gate No");
-    const row = await getMRRRRowForLoading(readClient, mrrrRowId);
-    assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
-    const lockedGateNo = row.vpWagonLoading?.gateNo?.trim();
+    const cached = await getCachedEligibleGrns<
+      ReturnType<typeof mapGRNDropdown>[]
+    >(schedule);
 
-    if (lockedGateNo && lockedGateNo !== gateNo) {
-      throw new BadRequestError(
-        `This wagon is assigned to Gate ${lockedGateNo}`,
-      );
+    if (cached) {
+      return sendOk(res, cached);
     }
-    const grns = (await getEligibleGRNsForRow(readClient, row)).filter(
-      (grn) => grn.gateNo === gateNo,
+
+    const grns = (await getEligibleGRNsForRow(readClient, schedule)).map(
+      mapGRNDropdown,
     );
 
-    return sendOk(res, grns.map(mapGRNDropdown));
+    await setCachedEligibleGrns(schedule, grns);
+
+    return sendOk(res, grns);
   },
 );
 // shwo the Preview AFter selecte GRN(LR) from Dropdown
@@ -1402,6 +1426,12 @@ router.post(
     ]);
 
     assertBranchAccess(req, row.mrRr.vpSchedule.fromBranchId);
+
+    await assertLoadingSupervisor(
+      readClient,
+      input.loadingSupervisorId,
+      row.mrRr.vpSchedule.fromBranchId,
+    );
 
     assertGRNCompatibleWithRow(row, grn);
 
@@ -1655,6 +1685,10 @@ router.post(
       };
     });
 
+    // Allocating against a GRN changes its available quantity for every
+    // other wagon in this schedule's route — bust the shared cache.
+    await invalidateEligibleGrns(row.mrRr.vpSchedule);
+
     /*
      * Fetch the complete response only after
      * the transaction has committed.
@@ -1749,8 +1783,12 @@ router.patch(
         );
       }
 
-      if (existing.vpWagonLoading.status !== "IN_PROGRESS") {
-        throw new BadRequestError("Only an in-progress wagon can be updated");
+      if (
+        !["IN_PROGRESS", "COMPLETED"].includes(existing.vpWagonLoading.status)
+      ) {
+        throw new BadRequestError(
+          "Only an in-progress or loaded wagon can be updated",
+        );
       }
 
       assertVersion(
@@ -1762,9 +1800,13 @@ router.patch(
       const row = await getMRRRRowForLoading(
         tx,
         existing.vpWagonLoading.mrRrRowId,
+        { allowCompleted: true },
       );
 
-      const grn = await getGRNForLoading(tx, existing.grnId);
+      const grn = await getCurrentGRNAvailability(
+        tx,
+        existing.grnId,
+      );
 
       assertGRNCompatibleWithRow(row, grn);
 
@@ -1802,7 +1844,7 @@ router.patch(
       await recalculateVPWagonLoadingTotals(tx, existing.vpWagonLoadingId, {
         detail: false,
       });
-    });
+    }, VP_LOADING_TX_BUDGET);
 
     // Large response query runs after transaction commits
     const updated = await db.vPLoading.findUnique({
@@ -1815,6 +1857,12 @@ router.patch(
     if (!updated) {
       throw new NotFoundError("Updated VP loading allocation not found");
     }
+
+    // Loaded quantities changed — bust the shared eligibility cache for
+    // this schedule's route.
+    await invalidateEligibleGrns(
+      updated.vpWagonLoading.mrRrRow.mrRr.vpSchedule,
+    );
 
     return sendOk(res, updated);
   },
@@ -1894,6 +1942,11 @@ router.post(
       throw new NotFoundError("Cancelled allocation not found");
     }
 
+    // Cancelling frees up the GRN's quantity again — bust the shared cache.
+    await invalidateEligibleGrns(
+      cancelled.vpWagonLoading.mrRrRow.mrRr.vpSchedule,
+    );
+
     return sendOk(res, {
       allocation: cancelled,
       vpWagonLoadingId: result.vpWagonLoadingId,
@@ -1944,71 +1997,14 @@ router.get(
     ];
 
     /*
-     * 2. Get total received quantity for
-     * every selected GRN.
-     */
-    const grns = await db.gRN.findMany({
-      where: {
-        id: {
-          in: grnIds,
-        },
-      },
-      select: {
-        id: true,
-
-        goods: {
-          select: {
-            receivedQty: true,
-          },
-        },
-      },
-    });
-
-    const totalReceivedByGrn = new Map(
-      grns.map((grn) => [
-        grn.id,
-
-        grn.goods.reduce(
-          (sum, goods) => sum + Number(goods.receivedQty ?? 0),
-          0,
-        ),
-      ]),
-    );
-
-    /*
-     * 3. Calculate total active loaded
-     * quantity across every wagon.
-     *
-     * This query is not branch-filtered because
-     * availability must consider every active
-     * allocation. It only returns totals and
-     * does not expose another branch's details.
-     */
-    const activeTotals = await db.vPLoading.groupBy({
-      by: ["grnId"],
-
-      where: {
-        grnId: {
-          in: grnIds,
-        },
-
-        status: {
-          not: "CANCELLED",
-        },
-      },
-
-      _sum: {
-        loadedQty: true,
-      },
-    });
-
-    const totalLoadedByGrn = new Map(
-      activeTotals.map((row) => [row.grnId, Number(row._sum.loadedQty ?? 0)]),
-    );
-
-    /*
-     * Apply branch access while returning
-     * other-wagon identifying information.
+     * FIX: steps 2, 3, and 4 below are independent of each other — none of
+     * them uses another's result, they only need `grnIds` (and, for step 4,
+     * req.ctx / vpWagonLoadingId, both already known). Previously these ran
+     * as three separate sequential `await`s, so the server waited for each
+     * one to fully finish before starting the next. That serial chain was
+     * the main reason this endpoint took 4-7 seconds. Running them together
+     * with Promise.all cuts the wait to roughly the slowest of the three
+     * instead of the sum of all three.
      */
     const relatedBranchWhere: Prisma.VPLoadingWhereInput =
       req.ctx?.branchScope === "ALL"
@@ -2027,58 +2023,108 @@ router.get(
           },
         };
 
-    /*
-     * 4. Find active allocations for the
-     * same GRNs in other accessible wagons.
-     */
-    const otherAllocations = await db.vPLoading.findMany({
-      where: {
-        grnId: {
-          in: grnIds,
+    const [grns, activeTotals, otherAllocations] = await Promise.all([
+      /*
+       * 2. Get total received quantity for
+       * every selected GRN.
+       */
+      db.gRN.findMany({
+        where: {
+          id: {
+            in: grnIds,
+          },
+        },
+        select: {
+          id: true,
+
+          goods: {
+            select: {
+              receivedQty: true,
+            },
+          },
+        },
+      }),
+
+      /*
+       * 3. Calculate total active loaded
+       * quantity across every wagon.
+       *
+       * This query is not branch-filtered because
+       * availability must consider every active
+       * allocation. It only returns totals and
+       * does not expose another branch's details.
+       */
+      db.vPLoading.groupBy({
+        by: ["grnId"],
+
+        where: {
+          grnId: {
+            in: grnIds,
+          },
+
+          status: {
+            not: "CANCELLED",
+          },
         },
 
-        status: {
-          not: "CANCELLED",
+        _sum: {
+          loadedQty: true,
+        },
+      }),
+
+      /*
+       * 4. Find active allocations for the
+       * same GRNs in other accessible wagons.
+       */
+      db.vPLoading.findMany({
+        where: {
+          grnId: {
+            in: grnIds,
+          },
+
+          status: {
+            not: "CANCELLED",
+          },
+
+          vpWagonLoadingId: {
+            not: vpWagonLoadingId,
+          },
+
+          ...relatedBranchWhere,
         },
 
-        vpWagonLoadingId: {
-          not: vpWagonLoadingId,
-        },
+        select: {
+          id: true,
+          grnId: true,
+          loadedQty: true,
+          status: true,
 
-        ...relatedBranchWhere,
-      },
+          vpWagonLoading: {
+            select: {
+              id: true,
+              status: true,
+              gateNo: true,
 
-      select: {
-        id: true,
-        grnId: true,
-        loadedQty: true,
-        status: true,
+              mrRrRow: {
+                select: {
+                  id: true,
+                  vpNo: true,
+                  rowLabel: true,
 
-        vpWagonLoading: {
-          select: {
-            id: true,
-            status: true,
-            gateNo: true,
-
-            mrRrRow: {
-              select: {
-                id: true,
-                vpNo: true,
-                rowLabel: true,
-
-                wagon: {
-                  select: {
-                    id: true,
-                    name: true,
+                  wagon: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
                   },
-                },
 
-                mrRr: {
-                  select: {
-                    vpSchedule: {
-                      select: {
-                        id: true,
-                        scheduleNumber: true,
+                  mrRr: {
+                    select: {
+                      vpSchedule: {
+                        select: {
+                          id: true,
+                          scheduleNumber: true,
+                        },
                       },
                     },
                   },
@@ -2087,8 +2133,23 @@ router.get(
             },
           },
         },
-      },
-    });
+      }),
+    ]);
+
+    const totalReceivedByGrn = new Map(
+      grns.map((grn) => [
+        grn.id,
+
+        grn.goods.reduce(
+          (sum, goods) => sum + Number(goods.receivedQty ?? 0),
+          0,
+        ),
+      ]),
+    );
+
+    const totalLoadedByGrn = new Map(
+      activeTotals.map((row) => [row.grnId, Number(row._sum.loadedQty ?? 0)]),
+    );
 
     /*
      * Group other-wagon records by GRN.
@@ -2132,7 +2193,6 @@ router.get(
         vpNo: row.vpNo ?? row.rowLabel ?? null,
 
         wagonId: row.wagon?.id ?? null,
-
         wagonName: row.wagon?.name ?? null,
 
         gateNo: loading.gateNo ?? null,
@@ -2226,6 +2286,7 @@ router.patch(
                   vpSchedule: {
                     select: {
                       fromBranchId: true,
+                      status: true,
                     },
                   },
                 },
@@ -2241,9 +2302,19 @@ router.patch(
 
       assertBranchAccess(req, current.mrRrRow.mrRr.vpSchedule.fromBranchId);
 
-      if (current.status !== "IN_PROGRESS") {
+      if (current.mrRrRow.mrRr.vpSchedule.status === "FINALISED") {
+        throw new BadRequestError("A finalised VP Schedule cannot be changed");
+      }
+
+      await assertLoadingSupervisor(
+        tx,
+        parsed.data.loadingSupervisorId,
+        current.mrRrRow.mrRr.vpSchedule.fromBranchId,
+      );
+
+      if (!["IN_PROGRESS", "COMPLETED"].includes(current.status)) {
         throw new BadRequestError(
-          "Only an in-progress wagon labour can be updated",
+          "Only an in-progress or loaded wagon labour can be updated",
         );
       }
 
@@ -2296,7 +2367,7 @@ router.patch(
 
 router.post(
   "/wagons/:vpWagonLoadingId/complete",
-  can(PERMS.VP_LOADING.COMPLETE),
+  canAny(PERMS.VP_LOADING.MARK_LOADED, PERMS.VP_LOADING.COMPLETE),
   async (req, res) => {
     const vpWagonLoadingId = getIdParam(
       req.params.vpWagonLoadingId,
@@ -2338,6 +2409,7 @@ router.post(
                   vpSchedule: {
                     select: {
                       fromBranchId: true,
+                      status: true,
                     },
                   },
                 },
@@ -2353,10 +2425,19 @@ router.post(
 
       assertBranchAccess(req, current.mrRrRow.mrRr.vpSchedule.fromBranchId);
 
-      if (!["IN_PROGRESS", "COMPLETED"].includes(current.status)) {
+      if (current.mrRrRow.mrRr.vpSchedule.status === "FINALISED") {
+        throw new BadRequestError("A finalised VP Schedule cannot be changed");
+      }
+
+      const markLoaded = parsed.data.loaded;
+
+      if (markLoaded && current.status !== "IN_PROGRESS") {
         throw new BadRequestError(
-          "Only in-progress or completed wagon can be finished",
+          "Only an in-progress wagon can be marked loaded",
         );
+      }
+      if (!markLoaded && current.status !== "COMPLETED") {
+        throw new BadRequestError("Only a loaded wagon can be reopened");
       }
 
       assertVersion(
@@ -2365,33 +2446,33 @@ router.post(
         "Wagon loading changed. Please refresh.",
       );
 
-      const activeAllocations = current.allocations.filter(
-        (allocation) => allocation.status !== "CANCELLED",
-      );
+      if (markLoaded) {
+        const activeAllocations = current.allocations.filter(
+          (allocation) => allocation.status !== "CANCELLED",
+        );
 
-      if (!activeAllocations.length) {
-        throw new BadRequestError("At least one loaded allocation is required");
+        if (!activeAllocations.length) {
+          throw new BadRequestError(
+            "At least one loaded allocation is required",
+          );
+        }
+
+        if (
+          activeAllocations.some((allocation) => allocation.status !== "LOADED")
+        ) {
+          throw new BadRequestError("All active allocations must be loaded");
+        }
       }
-
-      const hasIncompleteAllocation = activeAllocations.some(
-        (allocation) => allocation.status !== "LOADED",
-      );
-
-      if (hasIncompleteAllocation) {
-        throw new BadRequestError("All active allocations must be loaded");
-      }
-
-      const finishedAt = new Date();
 
       await tx.vPWagonLoading.update({
         where: {
           id: current.id,
         },
         data: {
-          status: "VERIFIED",
-          loadingCompletedAt: current.loadingCompletedAt ?? finishedAt,
-          verifiedById: userId,
-          verifiedAt: finishedAt,
+          status: markLoaded ? "COMPLETED" : "IN_PROGRESS",
+          loadingCompletedAt: markLoaded
+            ? (current.loadingCompletedAt ?? new Date())
+            : null,
           updatedById: userId,
           version: {
             increment: 1,

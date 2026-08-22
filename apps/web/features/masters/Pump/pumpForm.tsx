@@ -13,10 +13,7 @@ import type {
 import {
   IconGasStation,
   IconMapPin,
-  IconUser,
-  IconPhone,
   IconCash,
-  IconBuildingBank,
   IconFileDescription,
 } from "@tabler/icons-react";
 
@@ -51,16 +48,8 @@ const defaultValues: CreatePumpFormInput = {
   stateId: "",
   country: "India",
 
-  contactName: "",
-  contactPhone: "",
-
-  gstIn: "",
   pan: "",
   creditLimit: "",
-
-  accountName: "",
-  bankName: "",
-  branchIfscCode: "",
 
   currentDieselRate: "",
   isBlackListed: false,
@@ -112,17 +101,9 @@ const isSubmitting = create.isPending || update.isPending;
       stateId: row?.stateId ?? "",
       country: row?.country ?? "India",
 
-      contactName: row?.contactName ?? "",
-      contactPhone: row?.contactPhone ?? "",
-
-      gstIn: row?.gstIn ?? "",
       pan: row?.pan ?? "",
       creditLimit:
         row?.creditLimit != null ? String(paiseToRupees(row.creditLimit)) : "",
-
-      accountName: row?.accountName ?? "",
-      bankName: row?.bankName ?? "",
-      branchIfscCode: row?.branchIfscCode ?? "",
 
       currentDieselRate:
         row?.currentDieselRate != null
@@ -213,27 +194,6 @@ const stateOptions = (states.data?.data ?? []).map((state) => ({
   </FormSection>
 
   <FormSection
-    icon={<IconUser size={18} />}
-    title="Contact Details"
-    description="Pump contact person and phone number"
-  >
-    <IconTextField<CreatePumpFormInput>
-      name="contactName"
-      label="Contact Person"
-      placeholder="Enter contact person"
-      icon={<IconUser size={16} />}
-    />
-
-    <IconTextField<CreatePumpFormInput>
-      name="contactPhone"
-      label="Contact Phone"
-      placeholder="10-digit phone number"
-      icon={<IconPhone size={16} />}
-      maxLength={10}
-    />
-  </FormSection>
-
-  <FormSection
     icon={<IconCash size={18} />}
     title="Fuel & Finance"
     description="Diesel rate and credit limit details"
@@ -266,49 +226,10 @@ const stateOptions = (states.data?.data ?? []).map((state) => ({
   </FormSection>
 
   <FormSection
-    icon={<IconBuildingBank size={18} />}
-    title="Bank Details"
-    description="Bank account and IFSC information"
-  >
-    <IconTextField<CreatePumpFormInput>
-      name="accountName"
-      label="Account Name"
-      placeholder="Enter account name"
-      icon={<IconBuildingBank size={16} />}
-    />
-
-    <IconTextField<CreatePumpFormInput>
-      name="bankName"
-      label="Bank Name"
-      placeholder="Enter bank name"
-      icon={<IconBuildingBank size={16} />}
-    />
-
-    <IconTextField<CreatePumpFormInput>
-      name="branchIfscCode"
-      label="IFSC Code"
-      placeholder="ABCD0123456"
-      icon={<IconBuildingBank size={16} />}
-      maxLength={11}
-      onChangeTransform={(value) => value.toUpperCase()}
-    />
-  </FormSection>
-
-  <FormSection
     icon={<IconFileDescription size={18} />}
     title="Tax Details"
-    description="GSTIN and PAN details"
+    description="Pump PAN details"
   >
-    <IconTextField<CreatePumpFormInput>
-      name="gstIn"
-      label="GSTIN"
-      placeholder="27ABCDE1234F1Z5"
-      icon={<IconFileDescription size={16} />}
-      maxLength={15}
-      onChangeTransform={(value) => value.toUpperCase()}
-      hint="Format: 27ABCDE1234F1Z5"
-    />
-
     <IconTextField<CreatePumpFormInput>
       name="pan"
       label="PAN"

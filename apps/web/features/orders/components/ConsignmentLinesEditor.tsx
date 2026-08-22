@@ -60,9 +60,9 @@ export default function ConsignmentLinesEditor({
     control,
     trigger,
     getValues,
+    clearErrors,
     formState: { isSubmitted },
   } = useFormContext<FormValues>();
-
   const { fields, append, remove } = useFieldArray<FormValues, "consignments">({
     control,
     name: "consignments",
@@ -74,11 +74,17 @@ export default function ConsignmentLinesEditor({
   const removeLine = React.useCallback(
     (index: number) => {
       remove(index);
-      if (isSubmitted) void trigger("consignments");
-    },
-    [remove, trigger, isSubmitted],
-  );
 
+      clearErrors("consignments");
+
+      if (isSubmitted) {
+        queueMicrotask(() => {
+          void trigger("consignments");
+        });
+      }
+    },
+    [remove, clearErrors, trigger, isSubmitted],
+  );
   const addLine = React.useCallback(
     () =>
       append({
@@ -92,20 +98,20 @@ export default function ConsignmentLinesEditor({
     [append],
   );
 
+
+  const didInitialize = React.useRef(false);
+
   React.useEffect(() => {
+    if (didInitialize.current) return;
+
+    didInitialize.current = true;
+
     const current = getValues("consignments") ?? [];
 
     if (current.length === 0) {
-      append({
-        truckIndex: 1,
-        loadingLocationId: undefined,
-        unloadingLocationId: undefined,
-        totalWeight: undefined,
-        totalWeightUnit: "MT",
-        goods: [],
-      });
+      addLine();
     }
-  }, [append, getValues]);
+  }, [getValues, addLine]);
   return (
     <div className="space-y-3">
       <AnimatePresence initial={false}>
@@ -197,10 +203,10 @@ function ConsignmentLineCard({
   // (Combobox fires no native blur), so we touch the field on change.
   const touchOnChange =
     (f: { onChange: (v: string) => void; onBlur: () => void }) =>
-    (val: string) => {
-      f.onChange(val);
-      f.onBlur();
-    };
+      (val: string) => {
+        f.onChange(val);
+        f.onBlur();
+      };
 
   return (
     <div className="rounded-lg border bg-card p-4 transition-shadow hover:shadow-sm">
@@ -281,22 +287,53 @@ function ConsignmentLineCard({
 
         <div className="grid gap-1.5">
           <label className="text-xs font-medium text-muted-foreground">
-            Unloading point <span className="text-red-600">*</span>
+            Unloading point<span className="font-normal text-muted-foreground">(Optional)</span>
           </label>
           <Controller
             control={control}
             name={`consignments.${index}.unloadingLocationId`}
-            render={({ field: f }) => (
-              <Combobox
-                options={unloadingOptions}
-                value={typeof f.value === "string" ? f.value : undefined}
-                onChange={touchOnChange(f)}
-                placeholder={
-                  consigneeChosen ? "Drop location" : "Pick consignee first"
-                }
-                invalid={Boolean(lineErr?.unloadingLocationId)}
-              />
-            )}
+            render={({ field: f }) => {
+              const hasUnloadingPoint =
+                typeof f.value === "string" && f.value.length > 0;
+
+              return (
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Combobox
+                      options={unloadingOptions}
+                      value={hasUnloadingPoint ? f.value : undefined}
+                      onChange={touchOnChange(f)}
+                      placeholder={
+                        consigneeChosen
+                          ? "Select unloading point (optional)"
+                          : "Pick consignee first"
+                      }
+                      disabled={!consigneeChosen}
+                      invalid={Boolean(lineErr?.unloadingLocationId)}
+                    />
+                  </div>
+
+                  {hasUnloadingPoint ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 px-2.5 text-xs"
+                      onClick={() => {
+                        f.onChange(undefined);
+                        f.onBlur();
+
+                        void trigger(
+                          `consignments.${index}.unloadingLocationId`,
+                        );
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            }}
           />
           {lineErr?.unloadingLocationId?.message ? (
             <p className="mt-1.5 text-xs text-red-600">
@@ -306,7 +343,7 @@ function ConsignmentLineCard({
         </div>
       </div>
 
-    
+
 
       {/* Goods */}
       <div className="mt-4 rounded-md bg-muted/30 p-3">
@@ -317,11 +354,11 @@ function ConsignmentLineCard({
         </div>
 
         {/* Column header (desktop) */}
-     <div className="flex items-center gap-2 px-1 pb-1.5 text-[11px] uppercase text-muted-foreground">
-  <span className="min-w-0 flex-1">Item</span>
-  <span className="w-24 shrink-0">Qty</span>
-  <span className="w-8 shrink-0" />
-</div>
+        <div className="flex items-center gap-2 px-1 pb-1.5 text-[11px] uppercase text-muted-foreground">
+          <span className="min-w-0 flex-1">Item</span>
+          <span className="w-24 shrink-0">Qty</span>
+          <span className="w-8 shrink-0" />
+        </div>
 
         <div className="space-y-2 sm:space-y-1">
           {fields.length === 0 ? (
@@ -333,61 +370,61 @@ function ConsignmentLineCard({
               {fields.map((goodsField, gIndex) => {
                 const goodsErr = lineErr?.goods?.[gIndex];
                 return (
-                 <motion.div
-  key={goodsField.id}
-  layout
-  {...lineMotion}
-  className="flex items-start gap-2"
->
-  <div className="min-w-0 flex-1">
-    <Controller
-      control={control}
-      name={`consignments.${index}.goods.${gIndex}.goodsId`}
-      render={({ field: f }) => (
-        <Combobox
-          options={goodsOptions}
-          value={typeof f.value === "string" ? f.value : undefined}
-          onChange={f.onChange}
-          placeholder="Select goods"
-          invalid={Boolean(goodsErr?.goodsId)}
-        />
-      )}
-    />
-    {goodsErr?.goodsId?.message ? (
-      <p className="mt-1 text-xs text-red-600">
-        {goodsErr.goodsId.message}
-      </p>
-    ) : null}
-  </div>
+                  <motion.div
+                    key={goodsField.id}
+                    layout
+                    {...lineMotion}
+                    className="flex items-start gap-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <Controller
+                        control={control}
+                        name={`consignments.${index}.goods.${gIndex}.goodsId`}
+                        render={({ field: f }) => (
+                          <Combobox
+                            options={goodsOptions}
+                            value={typeof f.value === "string" ? f.value : undefined}
+                            onChange={f.onChange}
+                            placeholder="Select goods"
+                            invalid={Boolean(goodsErr?.goodsId)}
+                          />
+                        )}
+                      />
+                      {goodsErr?.goodsId?.message ? (
+                        <p className="mt-1 text-xs text-red-600">
+                          {goodsErr.goodsId.message}
+                        </p>
+                      ) : null}
+                    </div>
 
-  <div className="w-24 shrink-0">
-    <Controller
-      control={control}
-      name={`consignments.${index}.goods.${gIndex}.quantity`}
-      render={({ field: f }) => (
-        <Input
-          type="number"
-          min={1}
-          placeholder="Qty"
-          value={(f.value as number | string) ?? ""}
-          onChange={(e) => f.onChange(e.target.value)}
-          aria-invalid={Boolean(goodsErr?.quantity)}
-        />
-      )}
-    />
-  </div>
+                    <div className="w-24 shrink-0">
+                      <Controller
+                        control={control}
+                        name={`consignments.${index}.goods.${gIndex}.quantity`}
+                        render={({ field: f }) => (
+                          <Input
+                            type="number"
+                            min={1}
+                            placeholder="Qty"
+                            value={(f.value as number | string) ?? ""}
+                            onChange={(e) => f.onChange(e.target.value)}
+                            aria-invalid={Boolean(goodsErr?.quantity)}
+                          />
+                        )}
+                      />
+                    </div>
 
-  <Button
-    type="button"
-    size="icon-sm"
-    variant="ghost"
-    className="shrink-0 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-    onClick={() => removeGoods(gIndex)}
-    aria-label="Remove goods row"
-  >
-    <IconTrash size={16} />
-  </Button>
-</motion.div>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="shrink-0 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                      onClick={() => removeGoods(gIndex)}
+                      aria-label="Remove goods row"
+                    >
+                      <IconTrash size={16} />
+                    </Button>
+                  </motion.div>
                 );
               })}
             </AnimatePresence>
@@ -402,58 +439,58 @@ function ConsignmentLineCard({
           <IconPlus size={14} /> Add goods
         </button>
       </div>
-<div className="mt-3 grid gap-1.5">
-  <div className="flex items-center justify-start gap-3">
-    <label className="w-28 shrink-0 text-xs font-medium text-muted-foreground">
-      Total weight
-    </label>
+      <div className="mt-3 grid gap-1.5">
+        <div className="flex items-center justify-start gap-3">
+          <label className="w-28 shrink-0 text-xs font-medium text-muted-foreground">
+            Total weight
+          </label>
 
-    <div className="w-40 shrink-0">
-      <Controller
-        control={control}
-        name={`consignments.${index}.totalWeight`}
-        render={({ field: f }) => (
-          <Input
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="Weight"
-            value={(f.value as number | string) ?? ""}
-            onChange={(e) => f.onChange(e.target.value)}
-            aria-invalid={Boolean(lineErr?.totalWeight)}
-          />
-        )}
-      />
-    </div>
+          <div className="w-40 shrink-0">
+            <Controller
+              control={control}
+              name={`consignments.${index}.totalWeight`}
+              render={({ field: f }) => (
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="Weight"
+                  value={(f.value as number | string) ?? ""}
+                  onChange={(e) => f.onChange(e.target.value)}
+                  aria-invalid={Boolean(lineErr?.totalWeight)}
+                />
+              )}
+            />
+          </div>
 
-    <div className="w-28 shrink-0">
-      <Controller
-        control={control}
-        name={`consignments.${index}.totalWeightUnit`}
-        render={({ field: f }) => (
-          <Combobox
-            options={unitOptions}
-            value={typeof f.value === "string" ? f.value : undefined}
-            onChange={f.onChange}
-            placeholder="Unit"
-            emptyText="No units found"
-            invalid={Boolean(lineErr?.totalWeightUnit)}
-          />
-        )}
-      />
-    </div>
-  </div>
+          <div className="w-28 shrink-0">
+            <Controller
+              control={control}
+              name={`consignments.${index}.totalWeightUnit`}
+              render={({ field: f }) => (
+                <Combobox
+                  options={unitOptions}
+                  value={typeof f.value === "string" ? f.value : undefined}
+                  onChange={f.onChange}
+                  placeholder="Unit"
+                  emptyText="No units found"
+                  invalid={Boolean(lineErr?.totalWeightUnit)}
+                />
+              )}
+            />
+          </div>
+        </div>
 
-  {lineErr?.totalWeight?.message ? (
-    <p className="ml-28 text-xs text-red-600">{lineErr.totalWeight.message}</p>
-  ) : null}
+        {lineErr?.totalWeight?.message ? (
+          <p className="ml-28 text-xs text-red-600">{lineErr.totalWeight.message}</p>
+        ) : null}
 
-  {lineErr?.totalWeightUnit?.message ? (
-    <p className="ml-28 text-xs text-red-600">
-      {lineErr.totalWeightUnit.message}
-    </p>
-  ) : null}
-</div>
+        {lineErr?.totalWeightUnit?.message ? (
+          <p className="ml-28 text-xs text-red-600">
+            {lineErr.totalWeightUnit.message}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { PERMS } from "@skerp/types";
 
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
-import { can } from "../../auth/can.middleware.js";
+import { can, canAny } from "../../auth/can.middleware.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
@@ -34,6 +34,10 @@ import {
   publishLRDelivered,
   syncGroupDeliveryStatus,
 } from "../lorry-receipt/lr-delivery.service.js";
+import {
+  assertLRDeliveryEligible,
+  getLRDeliveryEligibilities,
+} from "../lorry-receipt/lr-delivery-eligibility.service.js";
 import {
   generateGroupNumber,
   assertGroupSlotAvailable,
@@ -65,6 +69,30 @@ const groupBranchFilter = (req: Parameters<typeof assertBranchAccess>[0]) => {
       { destinationBranchId: { in: req.ctx.branchIds } },
     ],
   };
+};
+
+const assertBranchRailheadArea = async (
+  branchId: string,
+  areaId: string,
+  label: "Source" | "Destination",
+) => {
+  const area = await db.area.findUnique({
+    where: { id: areaId },
+    select: { name: true, isRailHead: true },
+  });
+  if (!area?.isRailHead) {
+    throw new BadRequestError(`${label} Area must be marked as a Rail Head`);
+  }
+
+  const mapping = await db.branchRailheadArea.findUnique({
+    where: { branchId_areaId: { branchId, areaId } },
+    select: { isActive: true },
+  });
+  if (!mapping?.isActive) {
+    throw new BadRequestError(
+      `${area.name} is not managed by the selected ${label.toLowerCase()} Branch`,
+    );
+  }
 };
 
 /** A goods line as stored on an LR (denormalised name + dimensions). */
@@ -225,7 +253,7 @@ router.get(
 
 router.get(
   "/options/transports",
-  can(PERMS.LORRY_RECEIPT.CREATE),
+  canAny(PERMS.LORRY_RECEIPT.CREATE, PERMS.LORRY_RECEIPT.UPDATE),
   async (_req, res) => {
     const transports = await db.transport.findMany({
       select: { id: true, name: true, phoneNo: true },
@@ -238,7 +266,7 @@ router.get(
 
 router.get(
   "/options/market-vehicles",
-  can(PERMS.LORRY_RECEIPT.CREATE),
+  canAny(PERMS.LORRY_RECEIPT.CREATE, PERMS.LORRY_RECEIPT.UPDATE),
   async (req, res) => {
     const transportId =
       typeof req.query.transportId === "string"
@@ -304,7 +332,16 @@ router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
 
   if (!group) throw new NotFoundError("Lorry receipt group not found");
 
-  return sendOk(res, group);
+  const deliveryEligibility = await getLRDeliveryEligibilities(
+    group.lorryReceipts.map((lr) => lr.id),
+  );
+  return sendOk(res, {
+    ...group,
+    lorryReceipts: group.lorryReceipts.map((lr) => ({
+      ...lr,
+      deliveryEligibility: deliveryEligibility.get(lr.id),
+    })),
+  });
 });
 /* ------------------------------------------------------------------ */
 /* Create                                                              */
@@ -316,25 +353,37 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   }
   const input = parsed.data;
   const me = actorId(req);
+
   const isMarketVehicle = input.isMarketVehicle ?? false;
-  const marketVehicle = isMarketVehicle
-    ? await db.vehicle.findUnique({
-        where: { id: input.marketVehicleId },
-        select: {
-          id: true,
-          vehicleNumber: true,
-          ownershipType: true,
-          transportId: true,
-          status: true,
-        },
-      })
-    : null;
+  const enteredMarketVehicleNumber = input.marketVehicleNumber
+    ?.trim()
+    .toUpperCase();
+  const marketVehicle =
+    isMarketVehicle && (input.marketVehicleId || enteredMarketVehicleNumber)
+      ? await db.vehicle.findFirst({
+          where: input.marketVehicleId
+            ? { id: input.marketVehicleId }
+            : {
+                vehicleNumber: {
+                  equals: enteredMarketVehicleNumber,
+                  mode: "insensitive",
+                },
+              },
+          select: {
+            id: true,
+            vehicleNumber: true,
+            ownershipType: true,
+            transportId: true,
+            status: true,
+          },
+        })
+      : null;
 
-  if (isMarketVehicle) {
-    if (!marketVehicle) {
-      throw new BadRequestError("Market vehicle not found");
-    }
+  if (isMarketVehicle && input.marketVehicleId && !marketVehicle) {
+    throw new BadRequestError("Market vehicle not found");
+  }
 
+  if (marketVehicle) {
     if (marketVehicle.ownershipType !== "Market_Vehicle") {
       throw new BadRequestError("Selected vehicle is not a market vehicle");
     }
@@ -373,7 +422,12 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       },
     });
     if (!order) throw new BadRequestError("Order not found");
-    if (order.status !== "Confirmed") {
+    // "LRCreated" is set the moment the *first* truck on this order gets a
+    // group — a multi-truck order stays in that status while its remaining
+    // trucks still need one. Rejecting it here would lock out every truck
+    // after the first. assertGroupSlotAvailable (below) is what actually
+    // guards against double-booking a truck, independent of order status.
+    if (!["Confirmed", "LRCreated"].includes(order.status)) {
       throw new BadRequestError(
         "A group can only be created for a Confirmed order",
       );
@@ -469,7 +523,9 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
     ? await generateLRNumbers(db, originBranch.branchCode, fyCode, lines.length)
     : [];
   const activeStatuses: LRGroupStatus[] = ["DRAFT", "FINALISED"];
-  const marketVehicleNumber = marketVehicle?.vehicleNumber ?? null;
+  const marketVehicleNumber = isMarketVehicle
+    ? (marketVehicle?.vehicleNumber ?? enteredMarketVehicleNumber ?? null)
+    : null;
   const marketDriverName =
     isMarketVehicle && input.marketDriverName
       ? input.marketDriverName.trim()
@@ -481,7 +537,15 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
         deletedAt: null,
         status: { in: activeStatuses },
         isMarketVehicle: true,
-        OR: [{ marketVehicleId: marketVehicle!.id }, { marketVehicleNumber }],
+        OR: [
+          ...(marketVehicle ? [{ marketVehicleId: marketVehicle.id }] : []),
+          {
+            marketVehicleNumber: {
+              equals: marketVehicleNumber,
+              mode: "insensitive",
+            },
+          },
+        ],
       },
       select: {
         id: true,
@@ -528,6 +592,34 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   const hubId = tripLegType === "DIRECT" ? null : await resolveHubBranchId(db);
   const railheadBranchId =
     input.source === "FROM_ORDER" ? (input.railheadBranchId ?? null) : null;
+  const sourceRailheadAreaId =
+    input.source === "FROM_ORDER" && transportType === "RoadAndRail"
+      ? (input.sourceRailheadAreaId ?? null)
+      : null;
+  const destinationRailheadAreaId =
+    input.source === "FROM_ORDER" && transportType === "RoadAndRail"
+      ? (input.destinationRailheadAreaId ?? null)
+      : null;
+
+  if (
+    transportType === "RoadAndRail" &&
+    railheadBranchId &&
+    sourceRailheadAreaId &&
+    destinationRailheadAreaId
+  ) {
+    await Promise.all([
+      assertBranchRailheadArea(
+        railheadBranchId,
+        sourceRailheadAreaId,
+        "Source",
+      ),
+      assertBranchRailheadArea(
+        destinationBranchId,
+        destinationRailheadAreaId,
+        "Destination",
+      ),
+    ]);
+  }
   const primaryTripId = !isMarketVehicle ? (input.primaryTripId ?? null) : null;
   if (!isMarketVehicle && primaryTripId) {
     const trip = await db.vehicleTrip.findUnique({
@@ -595,6 +687,8 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
           tripLegType,
           hubId,
           railheadBranchId,
+          sourceRailheadAreaId,
+          destinationRailheadAreaId,
           isMarketVehicle,
           primaryTripId,
           marketTransportId: isMarketVehicle
@@ -695,6 +789,49 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
   const input = parsed.data;
   const me = actorId(req);
 
+  const nextTransportType = input.transportType ?? existing.transportType;
+  const nextRailheadBranchId =
+    nextTransportType === "RoadAndRail"
+      ? input.railheadBranchId !== undefined
+        ? (input.railheadBranchId ?? null)
+        : existing.railheadBranchId
+      : null;
+  const nextSourceRailheadAreaId =
+    nextTransportType === "RoadAndRail"
+      ? input.sourceRailheadAreaId !== undefined
+        ? (input.sourceRailheadAreaId ?? null)
+        : existing.sourceRailheadAreaId
+      : null;
+  const nextDestinationRailheadAreaId =
+    nextTransportType === "RoadAndRail"
+      ? input.destinationRailheadAreaId !== undefined
+        ? (input.destinationRailheadAreaId ?? null)
+        : existing.destinationRailheadAreaId
+      : null;
+
+  if (nextTransportType === "RoadAndRail") {
+    if (!nextRailheadBranchId) {
+      throw new BadRequestError("Select a railhead Branch for Road & Rail");
+    }
+    if (!nextSourceRailheadAreaId || !nextDestinationRailheadAreaId) {
+      throw new BadRequestError(
+        "Select both source and destination railway railheads",
+      );
+    }
+    await Promise.all([
+      assertBranchRailheadArea(
+        nextRailheadBranchId,
+        nextSourceRailheadAreaId,
+        "Source",
+      ),
+      assertBranchRailheadArea(
+        existing.destinationBranchId,
+        nextDestinationRailheadAreaId,
+        "Destination",
+      ),
+    ]);
+  }
+
   const nextIsMarketVehicle =
     input.isMarketVehicle !== undefined
       ? input.isMarketVehicle
@@ -719,16 +856,106 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
     }
   }
 
+  const nextMarketTransportId = nextIsMarketVehicle
+    ? input.marketTransportId !== undefined
+      ? (input.marketTransportId ?? null)
+      : existing.marketTransportId
+    : null;
+  const enteredMarketVehicleNumber = input.marketVehicleNumber
+    ?.trim()
+    .toUpperCase();
+  const fallbackMarketVehicleNumber = existing.marketVehicleNumber
+    ?.trim()
+    .toUpperCase();
+  const requestedMarketVehicleId = nextIsMarketVehicle
+    ? (input.marketVehicleId ??
+      (input.marketVehicleNumber === undefined
+        ? (existing.marketVehicleId ?? undefined)
+        : undefined))
+    : undefined;
+  const requestedMarketVehicleNumber = nextIsMarketVehicle
+    ? (enteredMarketVehicleNumber ?? fallbackMarketVehicleNumber)
+    : undefined;
+  const nextMarketVehicle =
+    nextIsMarketVehicle &&
+    (requestedMarketVehicleId || requestedMarketVehicleNumber)
+      ? await db.vehicle.findFirst({
+          where: requestedMarketVehicleId
+            ? { id: requestedMarketVehicleId }
+            : {
+                vehicleNumber: {
+                  equals: requestedMarketVehicleNumber,
+                  mode: "insensitive",
+                },
+              },
+          select: {
+            id: true,
+            vehicleNumber: true,
+            ownershipType: true,
+            transportId: true,
+          },
+        })
+      : null;
+
+  if (requestedMarketVehicleId && !nextMarketVehicle) {
+    throw new BadRequestError("Market vehicle not found");
+  }
+
+  if (nextMarketVehicle) {
+    if (nextMarketVehicle.ownershipType !== "Market_Vehicle") {
+      throw new BadRequestError("Selected vehicle is not a market vehicle");
+    }
+
+    if (nextMarketVehicle.transportId !== nextMarketTransportId) {
+      throw new BadRequestError(
+        "Selected vehicle does not belong to the selected transporter",
+      );
+    }
+  }
+
+  const nextMarketVehicleNumber = nextIsMarketVehicle
+    ? (nextMarketVehicle?.vehicleNumber ?? requestedMarketVehicleNumber ?? null)
+    : null;
+
+  if (nextIsMarketVehicle && nextMarketVehicleNumber) {
+    const busyVehicle = await db.lRGroup.findFirst({
+      where: {
+        id: { not: existing.id },
+        deletedAt: null,
+        status: { in: ["DRAFT", "FINALISED"] },
+        isMarketVehicle: true,
+        OR: [
+          ...(nextMarketVehicle
+            ? [{ marketVehicleId: nextMarketVehicle.id }]
+            : []),
+          {
+            marketVehicleNumber: {
+              equals: nextMarketVehicleNumber,
+              mode: "insensitive",
+            },
+          },
+        ],
+      },
+      select: { groupNumber: true },
+    });
+
+    if (busyVehicle) {
+      throw new BadRequestError(
+        `Vehicle ${nextMarketVehicleNumber} is already assigned to LR group ${busyVehicle.groupNumber}`,
+      );
+    }
+  }
+
   const updated = await db.lRGroup.update({
     where: { id },
     data: {
       ...(input.consigneeId !== undefined
         ? { consigneeId: input.consigneeId }
         : {}),
-      ...(input.transportType ? { transportType: input.transportType } : {}),
-      ...(input.railheadBranchId !== undefined
-        ? { railheadBranchId: input.railheadBranchId ?? null }
-        : {}),
+      transportType: nextTransportType,
+      railheadBranchId: nextRailheadBranchId,
+      sourceRailheadAreaId: nextSourceRailheadAreaId,
+      destinationRailheadAreaId: nextDestinationRailheadAreaId,
       ...(input.priority ? { priority: input.priority } : {}),
 
       isMarketVehicle: nextIsMarketVehicle,
@@ -737,11 +964,12 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
       // If own vehicle, allow trip and clear market vehicle values.
       primaryTripId: nextPrimaryTripId,
 
-      marketVehicleNumber: nextIsMarketVehicle
-        ? input.marketVehicleNumber !== undefined
-          ? (input.marketVehicleNumber ?? null)
-          : existing.marketVehicleNumber
+      marketTransportId: nextMarketTransportId,
+      marketVehicleId: nextIsMarketVehicle
+        ? (nextMarketVehicle?.id ?? null)
         : null,
+
+      marketVehicleNumber: nextMarketVehicleNumber,
 
       marketDriverName: nextIsMarketVehicle
         ? input.marketDriverName !== undefined
@@ -1193,13 +1421,27 @@ router.post(
       }
     }
 
+    const selectedLrIds = input.lrs.map((line) => line.lrId);
+    const eligibility = await getLRDeliveryEligibilities(selectedLrIds);
+    for (const lrId of selectedLrIds) {
+      assertLRDeliveryEligible(eligibility.get(lrId)!);
+    }
+
     await db.$transaction(async (tx) => {
+      const currentEligibility = await getLRDeliveryEligibilities(
+        selectedLrIds,
+        tx,
+      );
+      for (const lrId of selectedLrIds) {
+        assertLRDeliveryEligible(currentEligibility.get(lrId)!);
+      }
       for (const line of input.lrs) {
         await tx.lRDelivery.create({
           data: {
             lrId: line.lrId,
             deliveredAt: input.deliveredAt,
             reportedAt: input.reportedAt ?? null,
+            unloadingAt: input.unloadingAt ?? null,
             receiverName: input.receiverName ?? null,
             receiverPhone: input.receiverPhone ?? null,
             unloadingCharges: existing.isMarketVehicle

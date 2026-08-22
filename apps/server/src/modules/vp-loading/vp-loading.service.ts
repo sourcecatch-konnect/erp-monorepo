@@ -68,7 +68,7 @@ export const scheduleHeaderSelect = {
 
 export const vpWagonLoadingInclude = {
   labour: { select: labourSelect },
-  loadingSupervisor: { select: userSelect },
+  loadingSupervisor: { select: labourSelect },
   createdBy: { select: userSelect },
   updatedBy: { select: userSelect },
   verifiedBy: { select: userSelect },
@@ -95,6 +95,20 @@ export const vpWagonLoadingInclude = {
               id: true,
               lrNumber: true,
               status: true,
+              createdAt: true,
+              invoiceNumber: true,
+              invoiceAmount: true,
+              totalWeight: true,
+              unit: true,
+              weightUnit: true,
+              unloadingLocation: {
+                select: {
+                  id: true,
+                  name: true,
+                  address: true,
+                  city: { select: { id: true, name: true } },
+                },
+              },
               group: {
                 select: {
                   id: true,
@@ -151,6 +165,20 @@ export const allocationInclude = {
           id: true,
           lrNumber: true,
           status: true,
+          createdAt: true,
+          invoiceNumber: true,
+          invoiceAmount: true,
+          totalWeight: true,
+          unit: true,
+          weightUnit: true,
+          unloadingLocation: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+              city: { select: { id: true, name: true } },
+            },
+          },
           group: {
             select: {
               id: true,
@@ -194,7 +222,11 @@ export const toMoney = (value: number | undefined) =>
 export const isVPWagonLoadingOpen = (loading?: { status: string } | null) =>
   !loading || ["DRAFT", "IN_PROGRESS"].includes(loading.status);
 
-export const getMRRRRowForLoading = async (tx: Tx, mrrrRowId: string) => {
+export const getMRRRRowForLoading = async (
+  tx: Tx,
+  mrrrRowId: string,
+  options: { allowCompleted?: boolean } = {},
+) => {
   const row = await tx.mRRRRow.findUnique({
     where: { id: mrrrRowId },
     include: {
@@ -224,7 +256,11 @@ export const getMRRRRowForLoading = async (tx: Tx, mrrrRowId: string) => {
   if (!row.vpNo?.trim()) {
     throw new BadRequestError("MR/RR row does not have VP No");
   }
-  if (!isVPWagonLoadingOpen(row.vpWagonLoading)) {
+  const canUseRow =
+    isVPWagonLoadingOpen(row.vpWagonLoading) ||
+    (options.allowCompleted && row.vpWagonLoading?.status === "COMPLETED");
+
+  if (!canUseRow) {
     throw new BadRequestError(
       "This VP wagon loading is already closed and cannot be reused",
     );
@@ -246,6 +282,8 @@ export const assertGRNCompatibleWithRow = (
         originBranchId: string;
         destinationBranchId: string;
         railheadBranchId: string | null;
+        sourceRailheadAreaId: string | null;
+        destinationRailheadAreaId: string | null;
       };
     };
   },
@@ -287,6 +325,22 @@ export const assertGRNCompatibleWithRow = (
       "GRN/LR destination does not match VP Schedule destination",
     );
   }
+  if (
+    group.sourceRailheadAreaId &&
+    group.sourceRailheadAreaId !== schedule.sourceAreaId
+  ) {
+    throw new BadRequestError(
+      "GRN/LR source railhead does not match VP Schedule source railhead",
+    );
+  }
+  if (
+    group.destinationRailheadAreaId &&
+    group.destinationRailheadAreaId !== schedule.destinationAreaId
+  ) {
+    throw new BadRequestError(
+      "GRN/LR destination railhead does not match VP Schedule destination railhead",
+    );
+  }
 };
 
 export const getGRNForLoading = async (tx: Tx, grnId: string) => {
@@ -298,6 +352,20 @@ export const getGRNForLoading = async (tx: Tx, grnId: string) => {
           id: true,
           lrNumber: true,
           status: true,
+          createdAt: true,
+          invoiceNumber: true,
+          invoiceAmount: true,
+          totalWeight: true,
+          unit: true,
+          weightUnit: true,
+          unloadingLocation: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+              city: { select: { id: true, name: true } },
+            },
+          },
           group: {
             select: {
               id: true,
@@ -306,6 +374,8 @@ export const getGRNForLoading = async (tx: Tx, grnId: string) => {
               originBranchId: true,
               destinationBranchId: true,
               railheadBranchId: true,
+              sourceRailheadAreaId: true,
+              destinationRailheadAreaId: true,
               consignor: { select: customerSelect },
               consignee: { select: customerSelect },
               originBranch: { select: branchSelect },
@@ -393,11 +463,23 @@ export const withAvailability = <
   };
 };
 
+export type EligibilityScheduleRoute = {
+  fromBranchId: string;
+  toBranchId: string;
+  sourceAreaId: string;
+  destinationAreaId: string;
+};
+
+/**
+ * Eligibility depends only on the schedule's branch/area route, not on the
+ * specific MR/RR row — so callers checking multiple rows of the same
+ * schedule should resolve this once and reuse it, rather than calling it
+ * once per row (see the /schedules/:vpScheduleId/preview handler).
+ */
 export const getEligibleGRNsForRow = async (
   tx: Tx,
-  row: Awaited<ReturnType<typeof getMRRRRowForLoading>>,
+  schedule: EligibilityScheduleRoute,
 ) => {
-  const schedule = row.mrRr.vpSchedule;
   const grns = await tx.gRN.findMany({
     where: {
       deletedAt: null,
@@ -410,6 +492,20 @@ export const getEligibleGRNsForRow = async (
           transportType: "RoadAndRail",
           railheadBranchId: schedule.fromBranchId,
           destinationBranchId: schedule.toBranchId,
+          AND: [
+            {
+              OR: [
+                { sourceRailheadAreaId: schedule.sourceAreaId },
+                { sourceRailheadAreaId: null },
+              ],
+            },
+            {
+              OR: [
+                { destinationRailheadAreaId: schedule.destinationAreaId },
+                { destinationRailheadAreaId: null },
+              ],
+            },
+          ],
         },
       },
     },
@@ -419,12 +515,28 @@ export const getEligibleGRNsForRow = async (
           id: true,
           lrNumber: true,
           status: true,
+          createdAt: true,
+          invoiceNumber: true,
+          invoiceAmount: true,
+          totalWeight: true,
+          unit: true,
+          weightUnit: true,
+          unloadingLocation: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+              city: { select: { id: true, name: true } },
+            },
+          },
           group: {
             select: {
               id: true,
               groupNumber: true,
               transportType: true,
               railheadBranchId: true,
+              sourceRailheadAreaId: true,
+              destinationRailheadAreaId: true,
               consignor: { select: customerSelect },
               consignee: { select: customerSelect },
               originBranch: { select: branchSelect },
@@ -722,6 +834,8 @@ export const getCurrentGRNAvailability = async (tx: Tx, grnId: string) => {
               originBranchId: true,
               destinationBranchId: true,
               railheadBranchId: true,
+              sourceRailheadAreaId: true,
+              destinationRailheadAreaId: true,
             },
           },
         },
@@ -733,6 +847,7 @@ export const getCurrentGRNAvailability = async (tx: Tx, grnId: string) => {
         },
         select: {
           id: true,
+          goodsName: true,
           receivedQty: true,
 
           vpLoadingGoods: {
@@ -766,32 +881,19 @@ export const recalculateVPWagonLoadingTotals = async (
     detail?: boolean;
   } = {},
 ) => {
-  const wagon = await tx.vPWagonLoading.findUnique({
+  const totals = await tx.vPLoading.aggregate({
     where: {
-      id: vpWagonLoadingId,
-    },
-    include: {
-      allocations: {
-        where: {
-          status: {
-            not: "CANCELLED",
-          },
-        },
-        select: {
-          loadedQty: true,
-        },
+      vpWagonLoadingId,
+      status: {
+        not: "CANCELLED",
       },
+    },
+    _sum: {
+      loadedQty: true,
     },
   });
 
-  if (!wagon) {
-    throw new NotFoundError("VP wagon loading not found");
-  }
-
-  const totalLoadedQty = wagon.allocations.reduce(
-    (sum, allocation) => sum + allocation.loadedQty,
-    0,
-  );
+  const totalLoadedQty = totals._sum.loadedQty ?? 0;
 
   const updateArgs = {
     where: {
@@ -864,9 +966,10 @@ export const recalculateVpScheduleLoadingStatus = async (
     return schedule;
   }
 
-  const requiredRows = schedule.mrRr.rows.filter((row) =>
-    Boolean(row.vpNo?.trim()),
-  );
+  const requiredRows = schedule.mrRr.rows;
+  const allRequiredRowsHaveVpNumber =
+    requiredRows.length > 0 &&
+    requiredRows.every((row) => Boolean(row.vpNo?.trim()));
 
   const activeLoadings = requiredRows
     .map((row) => row.vpWagonLoading)
@@ -883,7 +986,8 @@ export const recalculateVpScheduleLoadingStatus = async (
   }
 
   const allRequiredRowsHaveLoading =
-    requiredRows.length > 0 && activeLoadings.length === requiredRows.length;
+    allRequiredRowsHaveVpNumber &&
+    activeLoadings.length === requiredRows.length;
 
   if (
     allRequiredRowsHaveLoading &&

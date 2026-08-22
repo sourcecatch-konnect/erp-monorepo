@@ -97,6 +97,14 @@
     "./user/table-pref": {
       "types": "./src/user/table-pref.schema.ts",
       "import": "./dist/user/table-pref.schema.js"
+    },
+    "./billing": {
+      "types": "./src/billing/billing.schema.ts",
+      "import": "./dist/billing/billing.schema.js"
+    },
+    "./receipt": {
+      "types": "./src/receipt/receipt.schema.ts",
+      "import": "./dist/receipt/receipt.schema.js"
     }
   },
   "scripts": {

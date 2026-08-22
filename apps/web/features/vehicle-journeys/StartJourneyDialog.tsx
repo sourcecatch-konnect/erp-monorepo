@@ -8,7 +8,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { startJourneySchema } from "@skerp/validators";
-import type { StartJourneyFormInput, StartJourneyBody } from "@skerp/types";
+import {
+  PERMS,
+  type StartJourneyFormInput,
+  type StartJourneyBody,
+} from "@skerp/types";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +30,11 @@ import IconTextField from "../masters/_shared/fields/IconTextField";
 import SelectField from "../masters/_shared/fields/SelectField";
 import CheckboxField from "../masters/_shared/fields/CheckBoxField";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
+import RouteForm from "../masters/routes/routeForm";
 import { toValidDate } from "@/lib/date";
+import { useCan } from "@/features/auth";
+import VehicleComboboxField from "@/components/lookups/VehicleComboboxField";
+import DriverComboboxField from "@/components/lookups/DriverComboboxField";
 
 import { journeyApi, journeyLookups } from "./journey.service";
 import { journeyKeys, journeyLookupKeys } from "./journey.keys";
@@ -56,15 +64,12 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = React.useState(false);
+  const [routeFormOpen, setRouteFormOpen] = React.useState(false);
+  const canCreateRoute = useCan(PERMS.MASTERS.ROUTE.CREATE);
 
   const vehicles = useQuery({
     queryKey: journeyLookupKeys.ownVehicles,
     queryFn: journeyLookups.ownVehicles,
-    enabled: open,
-  });
-  const drivers = useQuery({
-    queryKey: journeyLookupKeys.drivers,
-    queryFn: journeyLookups.drivers,
     enabled: open,
   });
   const routes = useQuery({
@@ -180,178 +185,203 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
   const errorMessages = flattenErrors(form.formState.errors);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Start Journey</DialogTitle>
-          <DialogDescription>
-            Open a new truck cycle. The first leg is created with the journey;
-            add further legs as the vehicle moves.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Start Journey</DialogTitle>
+            <DialogDescription>
+              Open a new truck cycle. The first leg is created with the journey;
+              add further legs as the vehicle moves.
+            </DialogDescription>
+          </DialogHeader>
 
-        <FormProvider {...form}>
-          <form
-            id="start-journey-form"
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-5"
-          >
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">Vehicle & Driver</h3>
-              <div className="grid gap-3 md:grid-cols-2">
-                <ComboboxField
-                  name="vehicleId"
-                  label="Vehicle"
-                  required
-                  options={vehicles.data ?? []}
-                  emptyText="No own vehicles found"
-                />
-                <ComboboxField
-                  name="driverId"
-                  label="Driver"
-                  required
-                  options={drivers.data ?? []}
-                />
-                <ComboboxField
-                  name="homeBranchId"
-                  label="Home branch"
-                  required
-                  options={branches.data ?? []}
-                />
-                <IconTextField<StartJourneyFormInput>
-                  name="openingKm"
-                  label="Opening KM"
-                  placeholder={
-                    vehicleCurrentKm != null
-                      ? `${vehicleCurrentKm} or more`
-                      : "e.g. 145200"
-                  }
-                  hint={
-                    vehicleCurrentKm != null
-                      ? `Vehicle's current KM: ${vehicleCurrentKm.toLocaleString("en-IN")} — opening KM can't be below this.`
-                      : undefined
-                  }
-                  type="number"
-                  min={1}
-                  required
-                  onBlur={() => validateOpeningKm()}
-                />
-                <Controller
-                  name="startedAt"
-                  control={form.control}
-                  render={({ field }) => (
-                    <DateTimePicker
-                      label="Start date/time"
-                      selected={toValidDate(field.value)}
-                      onSelect={field.onChange}
-                      placeholder="Select journey start date and time"
-                    />
-                  )}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">First Leg</h3>
-              <div className="grid gap-3 md:grid-cols-2">
-                <SelectField
-                  name="firstLeg.legType"
-                  label="Leg type"
-                  required
-                  options={LEG_TYPE_OPTIONS}
-                />
-                <ComboboxField
-                  name="firstLeg.routeId"
-                  label="Route"
-                  required
-                  options={routes.data ?? []}
-                />
-                {legType === "LR" ? (
-                  <ComboboxField
-                    name="firstLeg.consignorId"
-                    label="Client"
+          <FormProvider {...form}>
+            <form
+              id="start-journey-form"
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="space-y-5"
+            >
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Vehicle & Driver</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <VehicleComboboxField<StartJourneyFormInput>
+                    name="vehicleId"
+                    label="Vehicle"
                     required
-                    options={customers.data ?? []}
+                    selectionContext="journey"
+                    emptyText="No own vehicles found"
                   />
-                ) : null}
-                {legType === "DC" ? (
-                  <div className="grid gap-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Rake date <span className="text-red-600">*</span>
-                    </label>
-                    <Input
-                      type="date"
-                      {...form.register("firstLeg.rakeDate")}
-                    />
-                  </div>
-                ) : null}
-                <IconTextField<StartJourneyFormInput>
-                  name="firstLeg.onwardFreight"
-                  label="Onward freight"
-                  placeholder="0"
-                  type="number"
-                  min={0}
-                  prefix="₹"
-                  required
-                />
-                <div className="md:col-span-2">
-                  <CheckboxField<StartJourneyFormInput>
+                  <DriverComboboxField<StartJourneyFormInput>
+                    name="driverId"
+                    label="Driver"
+                    required
+                    selectionContext="journey"
+                  />
+                  <ComboboxField
+                    name="homeBranchId"
+                    label="Home branch"
+                    required
+                    options={branches.data ?? []}
+                  />
+                  <IconTextField<StartJourneyFormInput>
+                    name="openingKm"
+                    label="Opening KM"
+                    placeholder={
+                      vehicleCurrentKm != null
+                        ? `${vehicleCurrentKm} or more`
+                        : "e.g. 145200"
+                    }
+                    hint={
+                      vehicleCurrentKm != null
+                        ? `Vehicle's current KM: ${vehicleCurrentKm.toLocaleString("en-IN")} — opening KM can't be below this.`
+                        : undefined
+                    }
+                    type="number"
+                    min={1}
+                    required
+                    onBlur={() => validateOpeningKm()}
+                  />
+                  <Controller
+                    name="startedAt"
                     control={form.control}
-                    name="firstLeg.isTripEmpty"
-                    label="This leg runs empty (no goods)"
+                    render={({ field }) => (
+                      <DateTimePicker
+                        label="Start date/time"
+                        selected={toValidDate(field.value)}
+                        onSelect={field.onChange}
+                        placeholder="Select journey start date and time"
+                      />
+                    )}
                   />
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">Base / Return Rule</h3>
-              <div className="grid gap-3 md:grid-cols-2">
-                <ComboboxField
-                  name="startCityId"
-                  label="Start city (from first leg route)"
-                  required
-                  options={cities.data ?? []}
-                  disabled
-                />
-                <ComboboxField
-                  name="returnCityId"
-                  label="Return city (journey closes here)"
-                  required
-                  options={cities.data ?? []}
-                />
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">First Leg</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <SelectField
+                    name="firstLeg.legType"
+                    label="Leg type"
+                    required
+                    options={LEG_TYPE_OPTIONS}
+                  />
+                  <ComboboxField
+                    name="firstLeg.routeId"
+                    label="Route"
+                    required
+                    options={routes.data ?? []}
+                    actionLabel="+ Add route"
+                    onAction={
+                      canCreateRoute ? () => setRouteFormOpen(true) : undefined
+                    }
+                  />
+                  {legType === "LR" ? (
+                    <ComboboxField
+                      name="firstLeg.consignorId"
+                      label="Client"
+                      required
+                      options={customers.data ?? []}
+                    />
+                  ) : null}
+                  {legType === "DC" ? (
+                    <div className="grid gap-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Rake date <span className="text-red-600">*</span>
+                      </label>
+                      <Input
+                        type="date"
+                        {...form.register("firstLeg.rakeDate")}
+                      />
+                    </div>
+                  ) : null}
+                  <IconTextField<StartJourneyFormInput>
+                    name="firstLeg.onwardFreight"
+                    label="Onward freight"
+                    placeholder="0"
+                    type="number"
+                    min={0}
+                    prefix="₹"
+                    required
+                  />
+                  <div className="md:col-span-2">
+                    <CheckboxField<StartJourneyFormInput>
+                      control={form.control}
+                      name="firstLeg.isTripEmpty"
+                      label="This leg runs empty (no goods)"
+                    />
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                The journey is marked returned when a leg closes at the return
-                city. Closing anywhere else needs a supervisor override.
-              </p>
-            </div>
 
-            {errorMessages.length > 0 ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                {errorMessages.map((message, index) => (
-                  <p key={index} className="text-xs text-destructive">
-                    {message}
-                  </p>
-                ))}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Base / Return Rule</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <ComboboxField
+                    name="startCityId"
+                    label="Start city (from first leg route)"
+                    required
+                    options={cities.data ?? []}
+                    disabled
+                  />
+                  <ComboboxField
+                    name="returnCityId"
+                    label="Return city (journey closes here)"
+                    required
+                    options={cities.data ?? []}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The journey is marked returned when a leg closes at the return
+                  city. Closing anywhere else needs a supervisor override.
+                </p>
               </div>
-            ) : null}
-          </form>
-        </FormProvider>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" form="start-journey-form" disabled={submitting}>
-            {submitting ? "Starting…" : "Start Journey"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              {errorMessages.length > 0 ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                  {errorMessages.map((message, index) => (
+                    <p key={index} className="text-xs text-destructive">
+                      {message}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+            </form>
+          </FormProvider>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="start-journey-form"
+              disabled={submitting}
+            >
+              {submitting ? "Starting…" : "Start Journey"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <RouteForm
+        open={routeFormOpen}
+        onOpenChange={setRouteFormOpen}
+        onSaved={async (route) => {
+          await queryClient.invalidateQueries({
+            queryKey: journeyLookupKeys.routes,
+          });
+          form.setValue("firstLeg.routeId", route.id, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+          });
+        }}
+      />
+    </>
   );
 }

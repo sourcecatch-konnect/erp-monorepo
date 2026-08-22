@@ -218,6 +218,71 @@ export const createVPScheduleSchema = vpScheduleBodySchema.superRefine(
   validateVPScheduleBody,
 );
 
+export const vpScheduleFreightPreviewSchema = z
+  .object({
+    sourceAreaId: idString("Source area"),
+    destinationAreaId: idString("Destination area"),
+    wagonCounts: z
+      .array(vpScheduleWagonCountSchema.pick({ wagonId: true, count: true }))
+      .min(1, "At least one wagon is required"),
+  })
+  .superRefine(validateVPScheduleBody);
+
+export const vpScheduleFreightMatchTypeSchema = z.enum([
+  "EXACT_AREAS",
+  "SOURCE_AREA",
+  "DESTINATION_AREA",
+  "CITY_ROUTE",
+]);
+
+const freightPreviewMoneySchema = z.union([z.string(), z.number()]);
+const freightPreviewLocationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+const freightPreviewAreaSchema = freightPreviewLocationSchema.extend({
+  city: freightPreviewLocationSchema,
+});
+
+export const vpScheduleFreightPreviewResponseSchema = z.object({
+  sourceArea: freightPreviewAreaSchema,
+  destinationArea: freightPreviewAreaSchema,
+  wagons: z.array(
+    z.object({
+      wagonId: z.string(),
+      wagonName: z.string(),
+      count: z.number(),
+      isActive: z.boolean(),
+      capacityCft: z.number(),
+      capacityMt: z.number(),
+      status: z.enum(["AVAILABLE", "MISSING"]),
+      matchType: vpScheduleFreightMatchTypeSchema.nullable(),
+      freightMatrixId: z.string().nullable(),
+      freightAmount: freightPreviewMoneySchema.nullable(),
+      totalFreight: freightPreviewMoneySchema.nullable(),
+      alternativeWagons: z.array(
+        z.object({
+          wagonId: z.string(),
+          wagonName: z.string(),
+          freightMatrixId: z.string(),
+          matchType: vpScheduleFreightMatchTypeSchema,
+          freightAmount: freightPreviewMoneySchema,
+        }),
+      ),
+      configuredRoutes: z.array(
+        z.object({
+          freightMatrixId: z.string(),
+          sourceCity: freightPreviewLocationSchema,
+          destinationCity: freightPreviewLocationSchema,
+          sourceArea: freightPreviewLocationSchema.nullable(),
+          destinationArea: freightPreviewLocationSchema.nullable(),
+          freightAmount: freightPreviewMoneySchema,
+        }),
+      ),
+    }),
+  ),
+});
+
 export const updateVPScheduleSchema = vpScheduleBodySchema
   .partial()
   .superRefine(validateVPScheduleBody);

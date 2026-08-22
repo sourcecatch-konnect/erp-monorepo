@@ -65,8 +65,8 @@ export default function ApproveOrderModal({
       : "—";
 
   const branchLabel =
-    order.fromBranch?.shortCode && order.toBranch?.shortCode
-      ? `${order.fromBranch.shortCode} → ${order.toBranch.shortCode}`
+    order.fromBranch?.name && order.toBranch?.name
+      ? `${order.fromBranch.name} → ${order.toBranch.name}`
       : "—";
 
   const autoFreight =
@@ -137,18 +137,17 @@ export default function ApproveOrderModal({
               <dd className="font-medium">{routeLabel}</dd>
             </div>
 
-            <div>
+            <div className="sm:col-span-3">
               <dt className="text-xs text-muted-foreground">Branch</dt>
-              <dd>{branchLabel}</dd>
+              <dd className="font-medium break-words">{branchLabel}</dd>
             </div>
 
             <div>
               <dt className="text-xs text-muted-foreground">Type</dt>
               <dd>
                 {order.orderType === "Truck"
-                  ? `${order.truckQuantity ?? ""} × ${
-                      order.vehicleType?.name ?? "Truck"
-                    }`
+                  ? `${order.truckQuantity ?? ""} × ${order.vehicleType?.name ?? "Truck"
+                  }`
                   : `${order.items?.length ?? 0} item(s)`}
               </dd>
             </div>
@@ -210,8 +209,8 @@ export default function ApproveOrderModal({
               </label>
 
               {freightEdited &&
-              autoFreight != null &&
-              enteredFreight != null ? (
+                autoFreight != null &&
+                enteredFreight != null ? (
                 <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
                   Edited · {freightDiff > 0 ? "+" : ""}
                   {formatRupees(freightDiff)}

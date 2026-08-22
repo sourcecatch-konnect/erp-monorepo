@@ -9,6 +9,7 @@ import {
   IconClipboardCheck,
   IconPencil,
   IconArrowBackUp,
+  IconAlertTriangle,
 } from "@tabler/icons-react";
 
 import { attachmentApi } from "@/features/attachments/attachment.client";
@@ -78,6 +79,21 @@ export default function DeliverySection({
 
   if (lr.status === "FINALISED") {
     if (!canDeliver) return null;
+    if (lr.deliveryEligibility && !lr.deliveryEligibility.eligible) {
+      return (
+        <div className="mt-5 border-t border-border pt-5">
+          <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground">
+            <IconAlertTriangle className="mt-0.5 shrink-0" size={16} />
+            <div>
+              <p className="font-medium">Delivery is not ready</p>
+              <p className="mt-0.5 text-xs">
+                {lr.deliveryEligibility.reasons.join("; ")}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mt-5 border-t border-border pt-5">
         <Button variant="outline" onClick={onDeliver}>
@@ -128,6 +144,14 @@ export default function DeliverySection({
             label="Truck reported"
             value={
               delivery.reportedAt ? formatDateTime(delivery.reportedAt) : "—"
+            }
+          />
+          <InfoField
+            label="Unloading completed"
+            value={
+              delivery.unloadingAt
+                ? formatDateTime(delivery.unloadingAt)
+                : "—"
             }
           />
           <InfoField

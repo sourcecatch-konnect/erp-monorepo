@@ -92,6 +92,9 @@ function Section({
 
 export function DayCloseReportDialog({ day, open, onOpenChange }: Props) {
   const approved = day.payments.filter((p) => p.status === "APPROVED");
+  const accountNameById = new Map(
+    day.balances.map((b) => [b.accountId, b.account.name]),
+  );
   const dateLabel = new Date(day.date).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "long",
@@ -192,12 +195,38 @@ export function DayCloseReportDialog({ day, open, onOpenChange }: Props) {
               </div>
             </Section>
 
+            {/* adjustments (add-funds / receipt credits / corrections) */}
+            {day.adjustments.length > 0 ? (
+              <Section title="Adjustments">
+                {day.adjustments.map((a) => (
+                  <Row
+                    key={a.id}
+                    label={`${accountNameById.get(a.accountId) ?? "Account"} — ${a.reason}`}
+                    amount={a.amountPaise}
+                  />
+                ))}
+                <div className="mt-1 flex items-center justify-between border-t border-foreground/15 pt-1.5 text-sm font-semibold">
+                  <span>Total Adjustments</span>
+                  <span className="tabular-nums">{money(day.totalAdjustments)}</span>
+                </div>
+              </Section>
+            ) : null}
+
             {/* closing */}
             <Section title="Closing">
               <div className="flex items-center justify-between py-1 text-sm">
                 <span>Total Opening</span>
                 <span className="tabular-nums">{money(day.totalOpening)}</span>
               </div>
+              {day.totalAdjustments !== 0 ? (
+                <div className="flex items-center justify-between py-1 text-sm">
+                  <span>{day.totalAdjustments >= 0 ? "Add: Adjustments" : "Less: Adjustments"}</span>
+                  <span className="tabular-nums">
+                    {day.totalAdjustments >= 0 ? "+" : "−"}
+                    {money(Math.abs(day.totalAdjustments))}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between py-1 text-sm">
                 <span>Less: Payments</span>
                 <span className="tabular-nums">

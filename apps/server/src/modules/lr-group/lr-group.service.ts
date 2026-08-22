@@ -55,7 +55,9 @@ export const assertGroupSlotAvailable = async (
   });
 
   if (groups.some((g) => g.truckIndex === truckIndex)) {
-    throw new BadRequestError(`Truck #${truckIndex} of this order already has a group`);
+    throw new BadRequestError(
+      `Truck #${truckIndex} of this order already has a group`,
+    );
   }
   if (groups.length >= truckQuantity) {
     throw new BadRequestError(
@@ -162,6 +164,22 @@ export const groupListSelect = {
   secondaryTrip: { select: tripSelect },
   hub: { select: { id: true, name: true, branchCode: true } },
   railheadBranch: { select: { id: true, name: true, branchCode: true } },
+  sourceRailheadArea: {
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      city: { select: { id: true, name: true } },
+    },
+  },
+  destinationRailheadArea: {
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      city: { select: { id: true, name: true } },
+    },
+  },
   consignor: { select: { id: true, name: true, shortName: true } },
   consignee: { select: { id: true, name: true, shortName: true } },
   originBranch: { select: { id: true, name: true, branchCode: true } },
@@ -227,6 +245,22 @@ export const groupDetailInclude = {
   secondaryTrip: { select: tripSelect },
   hub: { select: { id: true, name: true, branchCode: true } },
   railheadBranch: { select: { id: true, name: true, branchCode: true } },
+  sourceRailheadArea: {
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      city: { select: { id: true, name: true } },
+    },
+  },
+  destinationRailheadArea: {
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      city: { select: { id: true, name: true } },
+    },
+  },
   consignor: { select: { id: true, name: true, shortName: true } },
   consignee: { select: { id: true, name: true, shortName: true } },
   originBranch: { select: { id: true, name: true, branchCode: true } },

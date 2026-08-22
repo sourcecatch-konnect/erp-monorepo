@@ -1,6 +1,11 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { ALL_PERMISSION_KEYS, PERMS, moduleCodeOf, type PermissionKey } from "@skerp/types";
+import {
+  ALL_PERMISSION_KEYS,
+  PERMS,
+  moduleCodeOf,
+  type PermissionKey,
+} from "@skerp/types";
 import { db } from "./prisma.js";
 
 /**
@@ -21,14 +26,17 @@ const ADMIN_PASSWORD = "Admin@123";
 
 const RM = PERMS.MASTERS;
 
-const allMasterKeys = (
-  m: (typeof RM)[keyof typeof RM],
-): PermissionKey[] => Object.values(m) as PermissionKey[];
+const allMasterKeys = (m: (typeof RM)[keyof typeof RM]): PermissionKey[] =>
+  Object.values(m) as PermissionKey[];
 
-const masterViewKeys = (m: typeof RM[keyof typeof RM]): PermissionKey[] => [m.VIEW];
+const masterViewKeys = (m: (typeof RM)[keyof typeof RM]): PermissionKey[] => [
+  m.VIEW,
+];
 
-const ALL_MASTER_KEYS_FLAT: PermissionKey[] = Object.values(RM).flatMap(allMasterKeys);
-const ALL_MASTER_VIEW_KEYS: PermissionKey[] = Object.values(RM).flatMap(masterViewKeys);
+const ALL_MASTER_KEYS_FLAT: PermissionKey[] =
+  Object.values(RM).flatMap(allMasterKeys);
+const ALL_MASTER_VIEW_KEYS: PermissionKey[] =
+  Object.values(RM).flatMap(masterViewKeys);
 
 /**
  * Canonical roles. Permission set is computed against the registry, so as
@@ -87,6 +95,10 @@ const CANONICAL_ROLES: {
       PERMS.ATTACHMENTS.CREATE,
       PERMS.ATTACHMENTS.DOWNLOAD,
       PERMS.ATTACHMENTS.DELETE,
+      PERMS.BILLING.VIEW,
+      PERMS.BILLING.APPROVE,
+      PERMS.RECEIPT.VIEW,
+      PERMS.RECEIPT.APPROVE,
     ],
   },
   {
@@ -151,6 +163,19 @@ const CANONICAL_ROLES: {
       PERMS.CASH_PLANNING.CLOSE,
       PERMS.ATTACHMENTS.VIEW,
       PERMS.ATTACHMENTS.DOWNLOAD,
+      PERMS.BILLING.VIEW,
+      PERMS.BILLING.CREATE,
+      PERMS.BILLING.UPDATE,
+      PERMS.BILLING.APPROVE,
+      PERMS.BILLING.FINALISE,
+      PERMS.BILLING.CANCEL,
+      PERMS.BILLING.PRINT,
+      PERMS.BILLING.CHARGE_APPROVE,
+      PERMS.BILLING.TAX_RULE_MANAGE,
+      PERMS.RECEIPT.VIEW,
+      PERMS.RECEIPT.CREATE,
+      PERMS.RECEIPT.APPROVE,
+      PERMS.RECEIPT.CANCEL,
     ],
   },
   {
@@ -169,6 +194,8 @@ const CANONICAL_ROLES: {
       PERMS.ADMIN.AUDIT_LOG_VIEW,
       PERMS.ATTACHMENTS.VIEW,
       PERMS.ATTACHMENTS.DOWNLOAD,
+      PERMS.BILLING.VIEW,
+      PERMS.RECEIPT.VIEW,
     ],
   },
 ];
@@ -215,7 +242,7 @@ async function syncCanonicalRoles(keyToId: Map<string, string>) {
     const desiredIds = new Set(
       desiredKeys
         .map((k) => keyToId.get(k))
-        .filter((v): v is string => Boolean(v))
+        .filter((v): v is string => Boolean(v)),
     );
 
     const existing = await db.rolePermission.findMany({
@@ -245,7 +272,7 @@ async function syncCanonicalRoles(keyToId: Map<string, string>) {
 
     console.log(
       `Role ${role.name}: +${toCreate.length} permissions, ` +
-        `${r.isSystem ? "(system, no removals)" : `-${toDelete.length}`}`
+        `${r.isSystem ? "(system, no removals)" : `-${toDelete.length}`}`,
     );
   }
 }
@@ -321,7 +348,9 @@ async function main() {
   const keyToId = await syncPermissionCatalog();
   await syncCanonicalRoles(keyToId);
 
-  const adminRole = await db.role.findFirstOrThrow({ where: { name: "Admin" } });
+  const adminRole = await db.role.findFirstOrThrow({
+    where: { name: "Admin" },
+  });
 
   // 4. Admin user
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);

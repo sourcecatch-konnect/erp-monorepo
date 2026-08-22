@@ -46,15 +46,15 @@ import {
 
 type Props =
   | {
-      mode: "create";
-      context: RailRakeOperationContext;
-      initialData?: never;
-    }
+    mode: "create";
+    context: RailRakeOperationContext;
+    initialData?: never;
+  }
   | {
-      mode: "edit";
-      context: RailRakeOperationContext;
-      initialData: RailRakeOperationDetail;
-    };
+    mode: "edit";
+    context: RailRakeOperationContext;
+    initialData: RailRakeOperationDetail;
+  };
 
 type PlacementState = {
   key: string;
@@ -72,11 +72,11 @@ type ChargeState = {
   paymentBy: "COMPANY" | "CUSTOMER" | "RAILWAY" | "TRANSPORTER" | "OTHER";
   waiverEnabled: boolean;
   waiverStatus:
-    | "REQUESTED"
-    | "APPROVED"
-    | "REJECTED"
-    | "RECEIVED"
-    | "CANCELLED";
+  | "REQUESTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "RECEIVED"
+  | "CANCELLED";
   waiverPercentage: string;
   requestedAmount: string;
   approvedAmount: string;
@@ -242,25 +242,17 @@ export default function RailRakeOperationForm({
     toLocal(initialData?.departureAt),
   );
   const [placements, setPlacements] = React.useState<PlacementState[]>(() => {
-    const rows: PlacementState[] = (initialData?.placements ?? [])
-      .slice(0, 2)
-      .map((placement, index) => ({
-        key: placement.id,
-        sequence: index + 1,
-        placedAt: toLocal(placement.placedAt),
-        removedAt: toLocal(placement.removedAt),
-        freeHours: String((placement.freeMinutes ?? 0) / 60),
-      }));
-    while (rows.length < 2) {
-      rows.push({
-        key: crypto.randomUUID(),
-        sequence: rows.length + 1,
-        placedAt: rows.length === 0 ? nowLocal() : "",
-        removedAt: "",
-        freeHours: "0",
-      });
-    }
-    return rows;
+    const placement = initialData?.placements?.[0];
+
+    return [
+      {
+        key: placement?.id ?? crypto.randomUUID(),
+        sequence: 1,
+        placedAt: toLocal(placement?.placedAt) || nowLocal(),
+        removedAt: toLocal(placement?.removedAt),
+        freeHours: String((placement?.freeMinutes ?? 0) / 60),
+      },
+    ];
   });
   const [charges, setCharges] = React.useState<ChargeState[]>(() => [
     chargeFromDetail(
@@ -275,17 +267,17 @@ export default function RailRakeOperationForm({
   const rakesQuery = useRailRakeOperationRakes(contextConfig.stage);
   const selectedRake = isEdit
     ? {
-        id: initialData.railRake.id,
-        stage: initialData.stage,
-        rakeNumber: initialData.railRake.rakeNumber,
-        branch: initialData.branch,
-        area: initialData.area,
-        fromBranch: initialData.railRake.fromBranch,
-        toBranch: initialData.railRake.toBranch,
-        sourceArea: initialData.railRake.vpSchedule.sourceArea,
-        destinationArea: initialData.railRake.vpSchedule.destinationArea,
-        scheduleNumber: initialData.railRake.vpSchedule.scheduleNumber,
-      }
+      id: initialData.railRake.id,
+      stage: initialData.stage,
+      rakeNumber: initialData.railRake.rakeNumber,
+      branch: initialData.branch,
+      area: initialData.area,
+      fromBranch: initialData.railRake.fromBranch,
+      toBranch: initialData.railRake.toBranch,
+      sourceArea: initialData.railRake.vpSchedule.sourceArea,
+      destinationArea: initialData.railRake.vpSchedule.destinationArea,
+      scheduleNumber: initialData.railRake.vpSchedule.scheduleNumber,
+    }
     : (rakesQuery.data ?? []).find((rake) => rake.id === rakeOptionKey);
   const stage = selectedRake?.stage;
   const railRakeId = selectedRake?.id ?? "";
@@ -323,19 +315,19 @@ export default function RailRakeOperationForm({
       current.map((charge) =>
         charge.type === "DEMURRAGE" && charge.manualAmount !== amount
           ? {
-              ...charge,
-              manualAmount: amount,
-              approvedAmount:
-                charge.type === "DEMURRAGE" && charge.waiverPercentage
-                  ? String(
-                      Math.round(
-                        Number(amount || 0) *
-                          Number(charge.waiverPercentage) *
-                          100,
-                      ) / 10_000,
-                    )
-                  : charge.approvedAmount,
-            }
+            ...charge,
+            manualAmount: amount,
+            approvedAmount:
+              charge.type === "DEMURRAGE" && charge.waiverPercentage
+                ? String(
+                  Math.round(
+                    Number(amount || 0) *
+                    Number(charge.waiverPercentage) *
+                    100,
+                  ) / 10_000,
+                )
+                : charge.approvedAmount,
+          }
           : charge,
       ),
     );
@@ -374,18 +366,18 @@ export default function RailRakeOperationForm({
       current.map((charge) =>
         charge.type === type
           ? {
-              ...charge,
-              manualAmount: value,
-              approvedAmount: charge.waiverPercentage
-                ? String(
-                    Math.round(
-                      Number(value || 0) *
-                        Number(charge.waiverPercentage) *
-                        100,
-                    ) / 10_000,
-                  )
-                : charge.approvedAmount,
-            }
+            ...charge,
+            manualAmount: value,
+            approvedAmount: charge.waiverPercentage
+              ? String(
+                Math.round(
+                  Number(value || 0) *
+                  Number(charge.waiverPercentage) *
+                  100,
+                ) / 10_000,
+              )
+              : charge.approvedAmount,
+          }
           : charge,
       ),
     );
@@ -399,18 +391,18 @@ export default function RailRakeOperationForm({
       current.map((charge) =>
         charge.type === type
           ? {
-              ...charge,
-              waiverPercentage: percentage,
-              approvedAmount: percentage
-                ? String(
-                    Math.round(
-                      Number(charge.manualAmount || 0) *
-                        Number(percentage) *
-                        100,
-                    ) / 10_000,
-                  )
-                : "",
-            }
+            ...charge,
+            waiverPercentage: percentage,
+            approvedAmount: percentage
+              ? String(
+                Math.round(
+                  Number(charge.manualAmount || 0) *
+                  Number(percentage) *
+                  100,
+                ) / 10_000,
+              )
+              : "",
+          }
           : charge,
       ),
     );
@@ -443,28 +435,28 @@ export default function RailRakeOperationForm({
       waiver:
         charge.type === "DEMURRAGE"
           ? {
-              enabled: charge.waiverEnabled,
-              status: charge.waiverStatus,
-              waiverPercentage: charge.waiverPercentage
-                ? Number(charge.waiverPercentage)
-                : undefined,
-              requestedAmount: charge.requestedAmount
-                ? Number(charge.requestedAmount)
-                : undefined,
-              approvedAmount: charge.approvedAmount
-                ? Number(charge.approvedAmount)
-                : undefined,
-              referenceNumber: charge.waiverReference || undefined,
-              letterGivenAt: charge.letterGivenAt
-                ? new Date(charge.letterGivenAt)
-                : undefined,
-              letterApprovedAt: charge.letterApprovedAt
-                ? new Date(charge.letterApprovedAt)
-                : undefined,
-              letterReceivedAt: charge.letterReceivedAt
-                ? new Date(charge.letterReceivedAt)
-                : undefined,
-            }
+            enabled: charge.waiverEnabled,
+            status: charge.waiverStatus,
+            waiverPercentage: charge.waiverPercentage
+              ? Number(charge.waiverPercentage)
+              : undefined,
+            requestedAmount: charge.requestedAmount
+              ? Number(charge.requestedAmount)
+              : undefined,
+            approvedAmount: charge.approvedAmount
+              ? Number(charge.approvedAmount)
+              : undefined,
+            referenceNumber: charge.waiverReference || undefined,
+            letterGivenAt: charge.letterGivenAt
+              ? new Date(charge.letterGivenAt)
+              : undefined,
+            letterApprovedAt: charge.letterApprovedAt
+              ? new Date(charge.letterApprovedAt)
+              : undefined,
+            letterReceivedAt: charge.letterReceivedAt
+              ? new Date(charge.letterReceivedAt)
+              : undefined,
+          }
           : undefined,
       payment: {
         enabled: charge.paymentEnabled,
@@ -481,12 +473,14 @@ export default function RailRakeOperationForm({
 
   const validate = (submitting: boolean) => {
     if (!selectedRake || !stage || !railRakeId) return "Select a Rake ID";
-    if (!placements.length) return "Add at least one placement";
+    if (placements.length !== 1) {
+      return "Exactly one rake placement is required";
+    }
     if (placements.some((row) => !row.placedAt)) {
       return "Placement date and time are required";
     }
-    if (submitting && (!arrivalAt || !departureAt)) {
-      return "Arrival and departure are required before submission";
+    if (submitting && placements.some((row) => !row.removedAt)) {
+      return "Every placement needs a removal time before submission";
     }
     if (submitting && placements.some((row) => !row.removedAt)) {
       return "Every placement needs a removal time before submission";
@@ -575,9 +569,9 @@ export default function RailRakeOperationForm({
         saved.status === "SUBMITTED"
           ? saved
           : await submitMutation.mutateAsync({
-              id: saved.id,
-              version: saved.version,
-            });
+            id: saved.id,
+            version: saved.version,
+          });
       toast.success("Rake operation submitted");
       router.push(`${contextConfig.basePath}/${submitted.id}`);
     } catch (cause) {
@@ -729,7 +723,7 @@ export default function RailRakeOperationForm({
       <Section
         icon={<IconClock size={18} />}
         title="Rake placement and removal"
-        description="Placement hours are calculated separately for the 1st and 2nd Rake."
+        description="Record the placement and removal time for the rake."
       >
         <div className="space-y-3">
           {placements.map((placement, index) => (
@@ -741,8 +735,8 @@ export default function RailRakeOperationForm({
                 <p className="text-[11px] uppercase text-muted-foreground">
                   Rake
                 </p>
-                <p className="mt-2 text-sm font-semibold">
-                  {index === 0 ? "1st Rake" : "2nd Rake"}
+                <p className="mt-4 text-sm font-semibold">
+                  Rake
                 </p>
               </div>
               <Field label="Placed at" required>

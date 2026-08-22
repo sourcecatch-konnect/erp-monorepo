@@ -63,13 +63,27 @@ export type GRNGroupLite = {
   consignor?: Ref | null;
   consignee?: Ref | null;
 };
-
+export type GRNLocationLite = {
+  id: string;
+  name: string;
+  address?: string | null;
+  city?: {
+    id: string;
+    name: string;
+  } | null;
+};
 export type GRNLorryReceiptLite = {
   id: string;
   lrNumber: string;
   status: string;
   invoiceNumber?: string | null;
   invoiceAmount?: string | null;
+  totalWeight?: string | number | null;
+  unit?: string | null;
+
+  loadingLocation?: GRNLocationLite | null;
+  unloadingLocation?: GRNLocationLite | null;
+
   ewayBill?: GRNEwayBillLite | null;
   group?: GRNGroupLite | null;
 };
@@ -95,10 +109,6 @@ export type GRNBranchLite = {
   name?: string | null;
   branchCode?: string | null;
 };
-
-
-
-
 
 export type GRNGoodsRow = {
   id: string;
@@ -130,6 +140,54 @@ export type GRNGoodsRow = {
   updatedAt: string;
 };
 
+export type GRNVPLoadingStatus =
+  | "PENDING"
+  | "PARTIALLY_LOADED"
+  | "FULLY_LOADED"
+  | "CANCELLED";
+
+export type GRNVPLoadingSummary = {
+  status: GRNVPLoadingStatus;
+  loadedQty: number;
+  remainingQty: number;
+  progressPercent: number;
+  activeLoadingCount: number;
+};
+
+export type GRNVPLoadingHistory = {
+  id: string;
+  loadingNumber: string;
+  status: "DRAFT" | "LOADED" | "CANCELLED";
+  loadedQty: number;
+  loadedWeightMt?: string | null;
+  remarks?: string | null;
+  cancelReason?: string | null;
+  createdAt: string;
+  vpWagonLoading: {
+    id: string;
+    status: string;
+    gateNo?: string | null;
+    loadingStartedAt?: string | null;
+    loadingCompletedAt?: string | null;
+    mrRrRow: {
+      rowNumber: number;
+      rowLabel: string;
+      vpNo?: string | null;
+      mrRrNo?: string | null;
+      mrRr: {
+        vpSchedule: {
+          id: string;
+          scheduleNumber: string;
+        };
+      };
+      wagon: {
+        id: string;
+        name: string;
+      };
+    };
+  };
+};
+
 export type GRN = {
   id: string;
 
@@ -138,7 +196,8 @@ export type GRN = {
 
   status: GRNStatus;
 
-  gateNo: string | null;
+  gateNo: string;
+  labourCount: number;
   damagePhotos?: GRNAttachmentLite[];
   inDateTime: string | null;
   outDateTime: string | null;
@@ -203,13 +262,14 @@ export type GRN = {
   lorryReceipt?: GRNLorryReceiptLite | null;
 
   labour?: Ref | null;
-  unloadingSupervisor?: UserLite | null;
+  unloadingSupervisor?: Ref | null;
 
   createdBy?: UserLite | null;
   updatedBy?: UserLite | null;
 
   goods?: GRNGoodsRow[];
-
+  vpLoadingSummary?: GRNVPLoadingSummary;
+  vpLoadings?: GRNVPLoadingHistory[];
 };
 
 export type GRNQuickView = Pick<
@@ -229,8 +289,7 @@ export type GRNQuickView = Pick<
     id: string;
     lrNumber: string;
   } | null;
-
-
+  vpLoadingSummary?: GRNVPLoadingSummary;
 };
 
 export type GRNPreviewGoods = {

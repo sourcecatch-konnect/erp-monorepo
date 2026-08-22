@@ -73,7 +73,7 @@ type FormItem = {
   consignorName?: string | null;
   consigneeName?: string | null;
   loadedQty: number;
-  receivedQty: number;
+  receivedQty: number | string;
   damageQty: number;
   shortageQty: number;
   remarks: string;
@@ -226,9 +226,11 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
 
   const rakesForDate = React.useMemo(
     () =>
-      (incomingRakes.data ?? []).filter(
-        (rake) => dateKey(rake.vpSchedule.scheduleDate) === scheduleDate,
-      ),
+      scheduleDate
+        ? (incomingRakes.data ?? []).filter(
+          (rake) => dateKey(rake.vpSchedule.scheduleDate) === scheduleDate,
+        )
+        : (incomingRakes.data ?? []),
     [incomingRakes.data, scheduleDate],
   );
 
@@ -245,7 +247,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
     () =>
       (availableVPs.data ?? []).map((vp) => ({
         value: vp.vpWagonLoadingId,
-        label: `${vp.vpNo} · ${vp.row.wagon.name} · ${formatNumber(vp.totalLoadedQty)} loaded`,
+        label: `${vp.vpNo} · ${vp.row.wagon.name}`,
       })),
     [availableVPs.data],
   );
@@ -279,9 +281,9 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
         consignorName: item.consignorName,
         consigneeName: item.consigneeName,
         loadedQty: item.loadedQty,
-        receivedQty: item.receivedQty,
+        receivedQty: "",
         damageQty: item.damageQty,
-        shortageQty: calculateShortage(item.loadedQty, item.receivedQty),
+        shortageQty: 0,
         remarks: item.remarks ?? "",
       })),
     });
@@ -309,7 +311,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
       form.items.reduce(
         (total, item) => ({
           loaded: total.loaded + item.loadedQty,
-          received: total.received + item.receivedQty,
+          received: total.received + quantityValue(item.receivedQty),
           damage: total.damage + item.damageQty,
           shortage: total.shortage + item.shortageQty,
         }),
@@ -350,6 +352,15 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
         const enteredQty = quantityValue(value);
 
         if (field === "receivedQty") {
+          if (value === "") {
+            return {
+              ...item,
+              receivedQty: "",
+              shortageQty: 0,
+              damageQty: 0,
+            };
+          }
+
           const receivedQty = Math.min(enteredQty, item.loadedQty);
 
           return {
@@ -368,7 +379,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
           ...item,
 
           // Damage cannot be more than received.
-          damageQty: Math.min(enteredQty, item.receivedQty),
+          damageQty: Math.min(enteredQty, quantityValue(item.receivedQty)),
         };
       }),
     }));
@@ -464,10 +475,16 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
     }
 
     for (const item of form.items) {
-      if (item.receivedQty + item.shortageQty > item.loadedQty) {
+      if (item.receivedQty === "") {
+        return `${item.goodsName}: enter the received quantity.`;
+      }
+
+      const receivedQty = quantityValue(item.receivedQty);
+
+      if (receivedQty + item.shortageQty > item.loadedQty) {
         return `${item.goodsName}: received and shortage cannot exceed loaded quantity.`;
       }
-      if (item.damageQty > item.receivedQty) {
+      if (item.damageQty > receivedQty) {
         return `${item.goodsName}: damage cannot exceed received quantity.`;
       }
       if (
@@ -479,7 +496,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
       }
       if (
         submitting &&
-        item.receivedQty + item.shortageQty !== item.loadedQty
+        receivedQty + item.shortageQty !== item.loadedQty
       ) {
         return `${item.goodsName}: received plus shortage must equal loaded quantity before submission.`;
       }
@@ -509,7 +526,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
     damagePhotoAttachmentIds: [],
     items: form.items.map((item) => ({
       vpLoadingGoodsId: item.sourceId,
-      receivedQty: item.receivedQty,
+      receivedQty: quantityValue(item.receivedQty),
       damageQty: item.damageQty,
       shortageQty: item.shortageQty,
       remarks:
@@ -532,7 +549,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
     damagePhotoAttachmentIds,
     items: form.items.map((item) => ({
       id: item.sourceId,
-      receivedQty: item.receivedQty,
+      receivedQty: quantityValue(item.receivedQty),
       damageQty: item.damageQty,
       shortageQty: item.shortageQty,
       remarks:
@@ -708,7 +725,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
           <div>
             <h2 className="font-semibold">Select incoming Rake</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Only active destination rakes and verified VPs without a Branch
+              Only active destination rakes and loaded VPs without a Branch
               GRN are available.
             </p>
           </div>
@@ -740,9 +757,11 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
                 emptyText={
                   incomingRakes.isLoading
                     ? "Loading rakes..."
-                    : "No incoming rake for this date"
+                    : scheduleDate
+                      ? "No incoming rake for this date"
+                      : "No incoming rakes available"
                 }
-                disabled={!scheduleDate || incomingRakes.isLoading}
+                disabled={incomingRakes.isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -754,11 +773,11 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
                   setVpWagonLoadingId(value);
                   setForm(EMPTY_FORM);
                 }}
-                placeholder="Select verified VP"
+                placeholder="Select loaded VP"
                 emptyText={
                   availableVPs.isLoading
                     ? "Loading VPs..."
-                    : "No verified VP available"
+                    : "No loaded VP available"
                 }
                 disabled={!rakeId || availableVPs.isLoading}
               />
@@ -874,9 +893,15 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
                 </TableHeader>
                 <TableBody>
                   {form.items.map((item) => {
+                    const receivedQty = quantityValue(item.receivedQty);
                     const reconciles =
-                      item.receivedQty + item.shortageQty === item.loadedQty &&
-                      item.damageQty <= item.receivedQty;
+                      item.receivedQty !== "" &&
+                      receivedQty + item.shortageQty === item.loadedQty &&
+                      item.damageQty <= receivedQty;
+                    const quantityClass =
+                      item.receivedQty === "" || reconciles
+                        ? "w-24"
+                        : "w-24 border-destructive";
                     const showReason =
                       item.damageQty > 0 || item.shortageQty > 0;
                     return (
@@ -901,9 +926,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
                               min={0}
                               max={item.loadedQty}
                               step="any"
-                              className={
-                                reconciles ? "w-24" : "w-24 border-destructive"
-                              }
+                              className={quantityClass}
                               value={item.receivedQty}
                               disabled={!isEditable}
                               onChange={(event) =>
@@ -920,11 +943,9 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
                             <Input
                               type="number"
                               min={0}
-                              max={item.receivedQty}
+                              max={receivedQty}
                               step="any"
-                              className={
-                                reconciles ? "w-24" : "w-24 border-destructive"
-                              }
+                              className={quantityClass}
                               value={item.damageQty}
                               disabled={!isEditable}
                               onChange={(event) =>
@@ -939,7 +960,9 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
 
                           <TableCell>
                             <div className="flex h-9 w-24 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
-                              {formatNumber(item.shortageQty)}
+                              {item.receivedQty === ""
+                                ? "—"
+                                : formatNumber(item.shortageQty)}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1020,21 +1043,29 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
                 <label className="text-sm font-medium">
                   No. of Labour <span className="text-destructive">*</span>
                 </label>
-                <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  required
+                <Select
                   value={form.labourCount}
                   disabled={!isEditable}
-                  placeholder="Enter labour count"
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setForm({
                       ...form,
-                      labourCount: event.target.value,
+                      labourCount: value,
                     })
                   }
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select labour count" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 10 }, (_, index) => index + 1).map(
+                      (count) => (
+                        <SelectItem key={count} value={String(count)}>
+                          {count}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

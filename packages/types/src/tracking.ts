@@ -62,7 +62,11 @@ export type FleetVehicle = {
   validity: string | null;
   /** Latest known position, or null if the device has never reported one. */
   position: DevicePosition | null;
-  /** ERP rake journey currently represented by this physical tracker. */
+  /**
+   * ERP rake journey currently represented by this physical tracker.
+   * When absent, the location belongs only to an unassigned tracker and must
+   * not be presented as the confirmed location of a wagon.
+   */
   assignment?: TrackingAssignment;
 };
 

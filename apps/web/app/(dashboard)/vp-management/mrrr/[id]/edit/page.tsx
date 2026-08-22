@@ -1,17 +1,20 @@
 import { ProtectedRoute } from "@/features/auth";
-import { MRRRForm } from "@/features/mrrr/mrrrForm";
+import { MRRREditPage } from "@/features/mrrr/mrrrEditPage";
+
 import { PERMS } from "@skerp/types";
 
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+type Props = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
+export default async function Page({ params }: Props) {
   const { id } = await params;
 
   return (
     <ProtectedRoute permission={PERMS.MRRR.UPDATE}>
-      <MRRRForm mode="edit" mrrrId={id} />
+      <MRRREditPage mrrrId={id} />
     </ProtectedRoute>
   );
 }

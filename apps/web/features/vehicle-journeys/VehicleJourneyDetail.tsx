@@ -40,6 +40,8 @@ import {
   IconFileInvoice,
   IconEdit,
   IconTrash,
+  IconLockOpen,
+  IconDownload,
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
@@ -76,6 +78,8 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
   );
   const [advanceOpen, setAdvanceOpen] = React.useState(false);
   const [markReadyOpen, setMarkReadyOpen] = React.useState(false);
+  const [reportDownloading, setReportDownloading] = React.useState(false);
+  const [reopenSettlementOpen, setReopenSettlementOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [forceCloseOpen, setForceCloseOpen] = React.useState(false);
   const [rejectExpense, setRejectExpense] = React.useState<TripExpense | null>(
@@ -92,12 +96,14 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
   const canUpdate = useCan(PERMS.VEHICLE_JOURNEY.UPDATE);
   const canClose = useCan(PERMS.VEHICLE_JOURNEY.CLOSE);
   const canCancel = useCan(PERMS.VEHICLE_JOURNEY.CANCEL);
+  const canReopenSettlement = useCan(PERMS.VEHICLE_JOURNEY.REOPEN_SETTLEMENT);
   const canExpense = useCan(PERMS.TRIP_EXPENSE.CREATE);
   const canApproveExpense = useCan(PERMS.TRIP_EXPENSE.APPROVE);
   const canReverseExpense = useCan(PERMS.TRIP_EXPENSE.REVERSE);
   const canAdvance = useCan(PERMS.TRIP_ADVANCE.CREATE);
   const canReverseAdvance = useCan(PERMS.TRIP_ADVANCE.REVERSE);
   const canViewLogSlip = useCan(PERMS.LOGSLIP.VIEW);
+  const canPrintLogSlip = useCan(PERMS.LOGSLIP.PRINT);
 
   const query = useQuery({
     queryKey: journeyKeys.detail(id),
@@ -123,6 +129,17 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
     onSuccess: () => {
       toast.success("Journey is ready for log slip");
       setMarkReadyOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const reopenSettlement = useMutation({
+    mutationFn: (reason: string) =>
+      journeyApi.reopenSettlementReview(id, { reason }),
+    onSuccess: () => {
+      toast.success("Settlement review reopened");
+      setReopenSettlementOpen(false);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -190,6 +207,25 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
+  const handleDownloadJourneyReport = async () => {
+    try {
+      setReportDownloading(true);
+      const blob = await journeyApi.downloadReportPdf(id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `vehicle-journey-${journey?.logSlip?.logSlipNumber ?? journey?.journeyNumber ?? id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setReportDownloading(false);
+    }
+  };
+
   if (query.isLoading || !journey) {
     return (
       <div className="space-y-4 p-4">
@@ -208,10 +244,19 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
   const canAddLeg =
     canUpdate && journey.status === "ACTIVE" && lastLeg?.status === "Closed";
   const canMarkReady = canUpdate && journey.status === "RETURNED";
+  const canReopenSettlementReview =
+    canReopenSettlement &&
+    journey.status === "READY_FOR_LOGSLIP" &&
+    journey.settlementStatus === "READY";
   const moneyEntryAllowed = ["ACTIVE", "RETURNED"].includes(journey.status);
   const showLogSlipLink =
     canViewLogSlip &&
     ["RETURNED", "READY_FOR_LOGSLIP", "SETTLED"].includes(journey.status);
+  const hasFrozenLogSlip =
+    journey.logSlip &&
+    ["GENERATED", "POSTED_TO_ACCOUNTS", "TALLY_SYNCED"].includes(
+      journey.logSlip.status,
+    );
 
   return (
     <div className="space-y-4 p-4">
@@ -252,11 +297,30 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                 Log Slip
               </Button>
             ) : null}
+            {canReopenSettlementReview ? (
+              <Button
+                variant="outline"
+                onClick={() => setReopenSettlementOpen(true)}
+              >
+                <IconLockOpen size={16} className="mr-1" /> Reopen Settlement
+                Review
+              </Button>
+            ) : null}
             {showLogSlipLink ? (
               <Button variant={canMarkReady ? "outline" : "default"} asChild>
                 <Link href={`/vehicle-journeys/${journey.id}/log-slip`}>
                   <IconFileInvoice size={16} className="mr-1" /> Log Slip
                 </Link>
+              </Button>
+            ) : null}
+            {canPrintLogSlip && hasFrozenLogSlip ? (
+              <Button
+                variant="outline"
+                disabled={reportDownloading}
+                onClick={handleDownloadJourneyReport}
+              >
+                <IconDownload size={16} className="mr-1" />
+                {reportDownloading ? "Downloading..." : "Download Journey PDF"}
               </Button>
             ) : null}
             {(canClose && journey.status === "ACTIVE") ||
@@ -722,6 +786,16 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
         pendingLabel="Marking..."
         isPending={markReady.isPending}
         onConfirm={() => markReady.mutate()}
+      />
+
+      <ReasonDialog
+        open={reopenSettlementOpen}
+        onOpenChange={setReopenSettlementOpen}
+        title="Reopen settlement review?"
+        description="Returns this journey to pending review and unlocks expenses and advances. Correct the entries, then mark it ready for log slip again. Advances must be reversed and recreated instead of edited."
+        confirmLabel="Reopen review"
+        isPending={reopenSettlement.isPending}
+        onConfirm={(reason) => reopenSettlement.mutate(reason)}
       />
 
       <ReasonDialog

@@ -61,7 +61,16 @@ export default function PaymentEntryForm({
   const [category, setCategory] = React.useState<(typeof CATEGORIES)[number]>("OTHER");
   const [mode, setMode] = React.useState<(typeof MODES)[number]>("CASH");
   const [segment, setSegment] = React.useState<CashSegment | "">("");
+  const [fromAccountId, setFromAccountId] = React.useState("");
   const payeeRef = React.useRef<HTMLInputElement>(null);
+
+  // Default to the only account when there's exactly one, so single-account
+  // branches don't have to pick every time.
+  React.useEffect(() => {
+    if (!fromAccountId && day.balances.length === 1) {
+      setFromAccountId(day.balances[0]!.accountId);
+    }
+  }, [day.balances, fromAccountId]);
 
   const applyCreditor = (c: Creditor) => {
     setCreditorId(c.id);
@@ -82,6 +91,8 @@ export default function PaymentEntryForm({
     setCategory("OTHER");
     setMode("CASH");
     setSegment("");
+    // fromAccountId is deliberately kept — paying from the same account
+    // repeatedly is the common case during fast entry.
   };
 
   const buildBody = (): CreateCashPaymentBody => ({
@@ -92,7 +103,7 @@ export default function PaymentEntryForm({
     segment: segment || undefined,
     creditorId: creditorId || undefined,
     branchId: creditorBranchId,
-    fromAccountId: undefined,
+    fromAccountId,
     projectCode: undefined,
     note: undefined,
   });
@@ -106,6 +117,7 @@ export default function PaymentEntryForm({
     setCategory(body.category);
     setMode(body.mode);
     setSegment((body.segment ?? "") as CashSegment | "");
+    setFromAccountId(body.fromAccountId ?? "");
   };
 
   const add = useMutation({
@@ -116,6 +128,7 @@ export default function PaymentEntryForm({
     onMutate: (body) => {
       const prev = queryClient.getQueryData<CashPlanDayView>(dayKey);
       if (prev) {
+        const account = day.balances.find((b) => b.accountId === body.fromAccountId)?.account;
         const temp: CashPaymentWithCreditor = {
           id: `temp-${Date.now()}`,
           dayId: day.id,
@@ -128,7 +141,7 @@ export default function PaymentEntryForm({
           projectCode: null,
           priority: prev.payments.reduce((m, p) => Math.max(m, p.priority), 0) + 1,
           branchId: body.branchId ?? null,
-          fromAccountId: null,
+          fromAccountId: body.fromAccountId ?? null,
           status: "PENDING",
           isLate: prev.payments.some((p) => p.status === "APPROVED"),
           note: null,
@@ -138,7 +151,7 @@ export default function PaymentEntryForm({
           createdAt: new Date(),
           updatedAt: new Date(),
           creditor: null,
-          fromAccount: null,
+          fromAccount: account ?? null,
           branch: null,
         };
         queryClient.setQueryData(
@@ -159,7 +172,10 @@ export default function PaymentEntryForm({
   });
 
   const canSubmit =
-    payeeName.trim().length > 0 && Number(amount) > 0 && !add.isPending;
+    payeeName.trim().length > 0 &&
+    Number(amount) > 0 &&
+    fromAccountId.length > 0 &&
+    !add.isPending;
   const submit = () => {
     if (canSubmit) add.mutate(buildBody());
   };
@@ -210,6 +226,25 @@ export default function PaymentEntryForm({
             {CATEGORIES.map((c) => (
               <SelectItem key={c} value={c}>
                 {labelOf(c)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid gap-1">
+        <label className={fieldLabel}>Pay from</label>
+        <Select value={fromAccountId} onValueChange={setFromAccountId}>
+          <SelectTrigger
+            className="h-9 w-36"
+            aria-invalid={fromAccountId.length === 0 || undefined}
+          >
+            <SelectValue placeholder="Select account" />
+          </SelectTrigger>
+          <SelectContent>
+            {day.balances.map((b) => (
+              <SelectItem key={b.accountId} value={b.accountId}>
+                {b.account.name}
               </SelectItem>
             ))}
           </SelectContent>

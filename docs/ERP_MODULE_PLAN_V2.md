@@ -235,6 +235,10 @@ LR Acknowledgement + Delivery handled inside the LR module (see §4.2).
 
 ### 5.1 Billing / GST Invoicing
 
+**Confirmed Accounts flow:** payer is selected at billing time after LR acknowledgement, not during Order/LR creation. The screen is `Bill Head (Consignor|Consignee) → Transport Type → eligible Client → Show LR → select LR(s) → review derived GST → create draft(s)`. Third-party billing is out of scope. Client choices are distinct LR parties with acknowledged, pending-to-bill LRs; the system does not show the entire Customer master.
+
+**Automatic invoice context:** the selected Client is also Bill To. Customer-master name/address/GSTIN are frozen on the draft. Place of Supply is the selected LR destination state and cannot be manually chosen in the normal flow. Mixed destination states require separate bills. Road is no-GST under the current project rule, RoadRail uses forward charge, and only RoadGTA asks for Forward/Reverse Charge when needed.
+
 **Entity:** `Bill(billNumber, billDate, billType: Road|RoadRail|RoadGTA, billingPartyType: Consignor|Consignee, customerId, placeOfSupplyStateId, branchId, fyCode, subTotal, taxLines json, totalAmount, status, isReverseCharge, ...)`.
 
 **Children:**

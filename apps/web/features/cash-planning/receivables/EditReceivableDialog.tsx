@@ -44,6 +44,7 @@ type Props = {
 export function EditReceivableDialog({ receivable, onOpenChange }: Props) {
   const queryClient = useQueryClient();
   const open = receivable != null;
+  const isLinked = receivable?.source === "BILL";
 
   const [party, setParty] = React.useState("");
   const [total, setTotal] = React.useState("");
@@ -88,6 +89,7 @@ export function EditReceivableDialog({ receivable, onOpenChange }: Props) {
     party.trim().length > 0 &&
     Number(total) > 0 &&
     !expectedExceeds &&
+    !isLinked &&               // NEW — belt-and-suspenders, blocks Save even if opened
     !save.isPending;
 
   return (
@@ -96,14 +98,20 @@ export function EditReceivableDialog({ receivable, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Edit receivable</DialogTitle>
           <DialogDescription>
-            Update the total pending, the expected slice and its date.
+            {isLinked
+              ? "This receivable is synced from a bill and can't be edited manually."
+              : "Update the total pending, the expected slice and its date."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3">
           <div className="grid gap-1.5">
             <label className="text-xs text-muted-foreground">Party</label>
-            <Input value={party} onChange={(e) => setParty(e.target.value)} />
+            <Input
+              value={party}
+              onChange={(e) => setParty(e.target.value)}
+              disabled={isLinked}   // NEW
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -152,7 +160,7 @@ export function EditReceivableDialog({ receivable, onOpenChange }: Props) {
             Cancel
           </Button>
           <Button onClick={() => save.mutate()} disabled={!canSave}>
-            {save.isPending ? "Saving…" : "Save changes"}
+            {isLinked ? "Locked" : save.isPending ? "Saving…" : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>

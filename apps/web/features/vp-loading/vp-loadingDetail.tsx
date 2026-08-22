@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { Switch } from "@skerp/ui/components/switch";
 import { toast } from "sonner";
 import {
   IconAlertCircle,
@@ -148,16 +149,16 @@ const wagonStatusConfig: Record<
     dotClassName: "bg-amber-500",
   },
   COMPLETED: {
-    label: "Ready to finish",
+    label: "Loaded",
     className:
       "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-400",
     dotClassName: "bg-blue-500",
   },
   VERIFIED: {
-    label: "Completed",
+    label: "Loaded - locked",
     className:
-      "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-    dotClassName: "bg-emerald-500",
+      "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-400",
+    dotClassName: "bg-blue-500",
   },
   CANCELLED: {
     label: "Cancelled",
@@ -215,8 +216,6 @@ function AllocationStatusBadge({ status }: { status: string }) {
     </span>
   );
 }
-
-
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -358,23 +357,47 @@ function ScheduleProgress({ status }: { status?: string | null }) {
   );
 }
 
-function userName(
-  user?: { firstName?: string; lastName?: string; userName?: string } | null,
-) {
-  if (!user) return DASH;
-
-  return (
-    `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ||
-    user.userName ||
-    DASH
-  );
-}
-
 function allocationParty(
   allocation: VPLoadingAllocation,
   key: "consignor" | "consignee",
 ) {
   return allocation.grn.lorryReceipt.group?.[key]?.name ?? DASH;
+}
+
+function allocationWeightMt(allocation: VPLoadingAllocation) {
+  const weight = allocationWeightMtValue(allocation);
+  return weight > 0 ? formatNumber(weight) : DASH;
+}
+
+function allocationWeightMtValue(allocation: VPLoadingAllocation) {
+  const measuredRows = allocation.goods.filter(
+    (goods) =>
+      goods.loadedWeightMt !== null && goods.loadedWeightMt !== undefined,
+  );
+  return measuredRows.length
+    ? measuredRows.reduce(
+      (total, goods) => total + Number(goods.loadedWeightMt ?? 0),
+      0,
+    )
+    : Number(allocation.grn.totalWeightMt ?? 0);
+}
+
+function allocationGoodsNames(allocation: VPLoadingAllocation) {
+  const names = [
+    ...new Set(
+      allocation.goods.map(
+        (goods) => goods.grnGoods?.goodsName ?? goods.grnGoodsId,
+      ),
+    ),
+  ];
+  return names.length ? names.join(", ") : DASH;
+}
+
+function deliveryAt(allocation: VPLoadingAllocation) {
+  const location = allocation.grn.lorryReceipt.unloadingLocation;
+  if (!location) return DASH;
+
+  return [location.name, location.city?.name].filter(Boolean).join(", ");
 }
 
 function rowTitle(row: MRRRRowPreview) {
@@ -391,7 +414,9 @@ export default function VPLoadingDetail({
   const router = useRouter();
   const canCreate = useCan(PERMS.VP_LOADING.CREATE);
   const canUpdate = useCan(PERMS.VP_LOADING.UPDATE);
-  const canComplete = useCan(PERMS.VP_LOADING.COMPLETE);
+  const hasMarkLoadedPermission = useCan(PERMS.VP_LOADING.MARK_LOADED);
+  const hasCompletePermission = useCan(PERMS.VP_LOADING.COMPLETE);
+  const canMarkLoaded = hasMarkLoadedPermission || hasCompletePermission;
   const canCancel = useCan(PERMS.VP_LOADING.CANCEL);
 
   const scheduleQuery = useVPLoadingSchedulePreview(scheduleId);
@@ -420,13 +445,15 @@ export default function VPLoadingDetail({
   });
 
   const supervisorsQuery = useQuery({
-    queryKey: ["vp-loading", "supervisors"],
+    queryKey: ["vp-loading", "supervisors", scheduleId],
     queryFn: async () => {
       const res = await api.get<{ data: SupervisorOption[] }>(
-        "/grn/supervisors",
+        "/vp-loading/supervisors",
+        { params: { vpScheduleId: scheduleId } },
       );
       return res.data.data;
     },
+    enabled: Boolean(scheduleId),
   });
 
   const schedule = scheduleQuery.data;
@@ -464,7 +491,7 @@ export default function VPLoadingDetail({
     () =>
       (laboursQuery.data?.data ?? []).map((labour) => ({
         value: labour.id,
-        label: `${labour.name}${labour.mobileNo ? ` - ${labour.mobileNo}` : ""}`,
+        label: `${labour.name}`,
       })),
     [laboursQuery.data],
   );
@@ -484,11 +511,20 @@ export default function VPLoadingDetail({
   const readyCount = rows.filter(
     (row) => row.vpWagonLoading?.status === "COMPLETED",
   ).length;
-  const completedCount = rows.filter(
-    (row) => row.vpWagonLoading?.status === "VERIFIED",
-  ).length;
   const totalLoadedQty = rows.reduce(
     (sum, row) => sum + Number(row.vpWagonLoading?.totalLoadedQty ?? 0),
+    0,
+  );
+  const totalAttachedLrs = rows.reduce(
+    (sum, row) => sum + Number(row.vpWagonLoading?.activeLrCount ?? 0),
+    0,
+  );
+  const selectedLoadedQty = activeAllocations.reduce(
+    (sum, allocation) => sum + Number(allocation.loadedQty ?? 0),
+    0,
+  );
+  const selectedLoadedWeightMt = activeAllocations.reduce(
+    (sum, allocation) => sum + allocationWeightMtValue(allocation),
     0,
   );
 
@@ -599,7 +635,7 @@ export default function VPLoadingDetail({
     }
   };
 
-  const runWagonAction = async () => {
+  const setWagonLoaded = async (loaded: boolean) => {
     if (!schedule || !selectedRow || !selectedLoading) return;
 
     try {
@@ -607,9 +643,13 @@ export default function VPLoadingDetail({
         vpWagonLoadingId: selectedLoading.id,
         mrrrRowId: selectedRow.id,
         scheduleId: schedule.id,
-        body: { version: selectedLoading.version },
+        body: { loaded, version: selectedLoading.version },
       });
-      toast.success("VP wagon loading completed");
+      toast.success(
+        loaded
+          ? "Wagon marked loaded and removed from loading selection"
+          : "Wagon reopened and available for loading again",
+      );
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
@@ -679,19 +719,23 @@ export default function VPLoadingDetail({
 
         <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0">
+            {/* Schedule Number + Status */}
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-xl font-semibold tracking-tight">
                 {schedule.scheduleNumber}
               </h1>
-              <VPScheduleStatusBadge status={schedule.status} />
 
+              <VPScheduleStatusBadge status={schedule.status} />
             </div>
 
+            {/* Schedule Name */}
             <p className="mt-1 text-sm text-muted-foreground">
               {schedule.scheduleName || "VP loading schedule"}
             </p>
 
-            <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+            {/* Details */}
+            <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+              {/* Branch */}
               <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
                 <IconRoute
                   size={16}
@@ -702,16 +746,8 @@ export default function VPLoadingDetail({
                   {schedule.toBranch?.name ?? DASH}
                 </span>
               </div>
-              <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
-                <IconMapPin
-                  size={16}
-                  className="shrink-0 text-muted-foreground"
-                />
-                <span className="truncate">
-                  {schedule.sourceArea?.name ?? DASH} to{" "}
-                  {schedule.destinationArea?.name ?? DASH}
-                </span>
-              </div>
+
+              {/* Date */}
               <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
                 <IconClock
                   size={16}
@@ -724,9 +760,32 @@ export default function VPLoadingDetail({
                     : ""}
                 </span>
               </div>
+
+              {/* Location - Full Width */}
+              <div className="mt-3 flex items-start gap-3 border-t pt-3">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <IconMapPin size={16} />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Location
+                  </p>
+
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
+                    <span>{schedule.sourceArea?.name ?? DASH}</span>
+
+                    <IconChevronRight
+                      size={15}
+                      className="shrink-0 text-muted-foreground"
+                    />
+
+                    <span>{schedule.destinationArea?.name ?? DASH}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
           <div className="flex flex-wrap items-start gap-2 lg:justify-end">
             <Button
               type="button"
@@ -739,7 +798,17 @@ export default function VPLoadingDetail({
               Refresh
             </Button>
 
-            {schedule.status === "VERIFIED" ? (
+            {["LOADED", "VERIFIED"].includes(schedule.status) &&
+              schedule.mrRr?.status === "SUBMITTED" &&
+              rows.length > 0 &&
+              rows.every(
+                (row) =>
+                  Boolean(row.vpNo?.trim()) &&
+                  Boolean(row.vpWagonLoading) &&
+                  ["COMPLETED", "VERIFIED"].includes(
+                    row.vpWagonLoading?.status ?? "",
+                  ),
+              ) ? (
               <Button asChild size="sm">
                 <Link
                   href={`/vp-management/vp-loading/${encodeURIComponent(
@@ -748,21 +817,6 @@ export default function VPLoadingDetail({
                 >
                   <IconClipboardList size={14} className="mr-1.5" />
                   Final Review
-                </Link>
-              </Button>
-            ) : null}
-
-
-
-            {canAddLoading ? (
-              <Button asChild size="sm">
-                <Link
-                  href={`/vp-management/vp-loading/${encodeURIComponent(
-                    schedule.id,
-                  )}/edit?rowId=${encodeURIComponent(selectedRow.id)}`}
-                >
-                  <IconPackage size={14} className="mr-1.5" />
-                  Add Loading
                 </Link>
               </Button>
             ) : null}
@@ -785,7 +839,9 @@ export default function VPLoadingDetail({
                 size="sm"
                 className="border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
               >
-                <Link href={`/vp-management/rail-rakes/${schedule.railRake.id}`}>
+                <Link
+                  href={`/vp-management/rail-rakes/${schedule.railRake.id}`}
+                >
                   <IconTrain className="mr-1.5" />
                   View Rake
                 </Link>
@@ -815,14 +871,14 @@ export default function VPLoadingDetail({
           icon={<IconPackage size={18} />}
         />
         <MetricCard
-          label="Ready"
+          label="Marked loaded"
           value={formatNumber(readyCount)}
-          icon={<IconClipboardList size={18} />}
+          icon={<IconCircleCheck size={18} />}
         />
         <MetricCard
-          label="Completed"
-          value={formatNumber(completedCount)}
-          icon={<IconCircleCheck size={18} />}
+          label="Attached LRs"
+          value={formatNumber(totalAttachedLrs)}
+          icon={<IconClipboardList size={18} />}
         />
         <MetricCard
           label="Loaded qty"
@@ -831,329 +887,71 @@ export default function VPLoadingDetail({
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-4">
-          <Section
-            title={`Wagon workspace (${rows.length})`}
-            icon={<IconTrain size={15} />}
-          >
-            {rows.length ? (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {rows.map((row: MRRRRowPreview) => {
-                  const loading = row.vpWagonLoading;
-                  const isSelected = row.id === selectedRow?.id;
+      <div className="space-y-4">
+        <Section
+          title={`1. Choose wagon (${rows.length})`}
+          icon={<IconTrain size={15} />}
+        >
+          {rows.length ? (
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+              {rows.map((row: MRRRRowPreview) => {
+                const loading = row.vpWagonLoading;
+                const isSelected = row.id === selectedRow?.id;
 
-                  return (
-                    <button
-                      key={row.id}
-                      type="button"
-                      onClick={() => showWagon(row.id)}
-                      className={`group rounded-lg border bg-background p-4 text-left shadow-sm transition hover:border-primary/50 hover:bg-muted/20 ${isSelected
-                        ? "border-primary ring-2 ring-primary/15"
-                        : "border-border"
-                        }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-semibold">
-                              {rowTitle(row)}
-                            </p>
-                            <WagonStatusBadge status={loading?.status} />
-                          </div>
-                          <p className="mt-1 truncate text-xs text-muted-foreground">
-                            {row.wagon?.name || row.wagonTypeLabel || "Wagon"}
-                          </p>
-                        </div>
-                        <IconChevronRight
-                          size={18}
-                          className={`mt-0.5 shrink-0 text-muted-foreground transition group-hover:text-primary ${isSelected ? "text-primary" : ""
-                            }`}
-                        />
-                      </div>
+                return (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => showWagon(row.id)}
+                    className={`group min-w-0 rounded-md border bg-background p-3 text-left transition hover:border-primary/50 hover:bg-muted/20 ${isSelected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                      : "border-border"
+                      }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 truncate text-sm font-semibold">
+                        {rowTitle(row)}
+                      </p>
+                      <IconChevronRight
+                        size={15}
+                        className={`shrink-0 text-muted-foreground transition group-hover:text-primary ${isSelected ? "text-primary" : ""
+                          }`}
+                      />
+                    </div>
 
-                      <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <Field label="Gate" value={loading?.gateNo ?? DASH} />
-                        <Field
-                          label="Loaded"
-                          value={formatNumber(loading?.totalLoadedQty ?? 0)}
-                        />
-                        <Field
-                          label="Capacity MT"
-                          value={formatNumber(row.wagon?.capacityMt)}
-                        />
-                        <Field
-                          label="Eligible GRNs"
-                          value={formatNumber(row.eligibleGrnCount ?? 0)}
-                        />
-                      </dl>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                title="No VP wagons found"
-                description="VP rows from the submitted MR/RR will appear here when they are available for loading."
-              />
-            )}
-          </Section>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <WagonStatusBadge status={loading?.status} />
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        {formatNumber(loading?.activeLrCount ?? 0)} LRs · Qty{" "}
+                        {formatNumber(loading?.totalLoadedQty ?? 0)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              title="No VP wagons found"
+              description="VP rows from the submitted MR/RR will appear here when they are available for loading."
+            />
+          )}
+        </Section>
 
-          <Section
-            title={`LR allocations (${activeAllocations.length})`}
-            icon={<IconPackage size={15} />}
-            action={
-              selectedLoading ? (
-                <WagonStatusBadge status={selectedLoading.status} />
-              ) : null
-            }
-          >
-            {!selectedLoading ? (
-              <EmptyState
-                title="Loading has not started"
-                description="Add the first LR/GRN to this wagon to start tracking loading details."
-              />
-            ) : allocationsQuery.isLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-44 w-full rounded-lg" />
-                <Skeleton className="h-44 w-full rounded-lg" />
-              </div>
-            ) : allocations.length ? (
-              <div className="space-y-4">
-                {allocations.map((allocation) => {
-                  const splitCount = (allocation.otherWagons?.length ?? 0) + 1;
-                  const canEditAllocation =
-                    canUpdate &&
-                    allocation.status === "LOADED" &&
-                    selectedLoading?.status === "IN_PROGRESS";
-
-                  return (
-                    <article
-                      key={allocation.id}
-                      className="rounded-lg border bg-background p-4 shadow-sm"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-semibold">
-                              LR {allocation.grn.lorryReceipt.lrNumber}
-                            </p>
-                            <AllocationStatusBadge status={allocation.status} />
-                          </div>
-                          <p className="mt-1 truncate text-xs text-muted-foreground">
-                            GRN {allocation.grn.grnNumber} /{" "}
-                            {allocation.loadingNumber}
-                          </p>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                          <div className="rounded-md bg-muted/30 px-3 py-2 text-sm font-semibold tabular-nums">
-                            {formatNumber(allocation.loadedQty)}
-                          </div>
-
-                          {canEditAllocation ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openAllocationEdit(allocation)}
-                            >
-                              <IconEdit size={14} className="mr-1.5" />
-                              Edit Qty
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <dl className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-                        <Field
-                          label="Consignor"
-                          value={allocationParty(allocation, "consignor")}
-                        />
-                        <Field
-                          label="Consignee"
-                          value={allocationParty(allocation, "consignee")}
-                        />
-                        <Field
-                          label="Gate"
-                          value={allocation.grn.gateNo ?? DASH}
-                        />
-                        <Field
-                          label="Created"
-                          value={formatDateTime(allocation.createdAt)}
-                        />
-                      </dl>
-
-                      {allocation.quantitySummary ? (
-                        <dl className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-muted/30 p-3 md:grid-cols-4">
-                          <Field
-                            label="Total received"
-                            value={formatNumber(
-                              allocation.quantitySummary.totalReceivedQty,
-                            )}
-                          />
-                          <Field
-                            label="Loaded here"
-                            value={formatNumber(
-                              allocation.quantitySummary.loadedInCurrentWagon,
-                            )}
-                          />
-                          <Field
-                            label="Other wagons"
-                            value={formatNumber(
-                              allocation.quantitySummary.loadedInOtherWagons,
-                            )}
-                          />
-                          <Field
-                            label="Available"
-                            value={formatNumber(
-                              allocation.quantitySummary.availableQty,
-                            )}
-                          />
-                        </dl>
-                      ) : null}
-
-                      {allocation.otherWagons?.length ? (
-                        <div className="mt-4 space-y-3">
-                          <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300">
-                            <IconAlertCircle
-                              size={17}
-                              className="mt-0.5 shrink-0"
-                            />
-                            <p>
-                              This LR is split across {splitCount} wagons.
-                              {allocation.quantitySummary
-                                ? ` ${formatNumber(
-                                  allocation.quantitySummary
-                                    .loadedInCurrentWagon,
-                                )} is loaded here and ${formatNumber(
-                                  allocation.quantitySummary
-                                    .loadedInOtherWagons,
-                                )} is loaded in other wagons.`
-                                : " Part of this LR is loaded in other wagons."}
-                            </p>
-                          </div>
-
-                          <div className="overflow-hidden rounded-lg border">
-                            <div className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3 text-sm">
-                              <div className="min-w-0">
-                                <p className="truncate font-medium">
-                                  {selectedRow ? rowTitle(selectedRow) : DASH}
-                                </p>
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {selectedRow?.wagon?.name ||
-                                    selectedRow?.wagonTypeLabel ||
-                                    "Wagon"}
-                                  {selectedLoading?.gateNo
-                                    ? ` / Gate ${selectedLoading.gateNo}`
-                                    : ""}
-                                </p>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                <p className="font-semibold">
-                                  {formatNumber(
-                                    allocation.quantitySummary
-                                      ?.loadedInCurrentWagon ??
-                                    allocation.loadedQty,
-                                  )}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  This wagon
-                                </p>
-                              </div>
-                            </div>
-
-                            {allocation.otherWagons.map((otherWagon) => (
-                              <div
-                                key={otherWagon.allocationId}
-                                className="flex flex-col gap-3 border-b px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-                              >
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium">
-                                    {otherWagon.vpNo ||
-                                      otherWagon.wagonName ||
-                                      "Other wagon"}
-                                  </p>
-                                  <p className="truncate text-xs text-muted-foreground">
-                                    {otherWagon.wagonName ?? DASH}
-                                    {" / Gate "}
-                                    {otherWagon.gateNo ?? DASH}
-                                  </p>
-                                </div>
-                                <div className="flex items-center justify-between gap-5 sm:justify-end">
-                                  <p className="text-sm font-semibold">
-                                    {formatNumber(otherWagon.loadedQty)}
-                                  </p>
-                                  <Link
-                                    href={`/vp-management/vp-loading/${encodeURIComponent(
-                                      otherWagon.scheduleId,
-                                    )}?rowId=${encodeURIComponent(
-                                      otherWagon.mrrrRowId,
-                                    )}`}
-                                    className="inline-flex items-center text-xs font-medium text-primary hover:underline"
-                                  >
-                                    View
-                                    <IconChevronRight
-                                      size={14}
-                                      className="ml-1"
-                                    />
-                                  </Link>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {allocation.goods?.length ? (
-                        <div className="mt-4">
-                          <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-                            Goods
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {allocation.goods.map((goods) => (
-                              <span
-                                key={goods.id}
-                                className="rounded-md bg-muted px-2.5 py-1 text-xs"
-                              >
-                                {goods.grnGoods?.goodsName ?? goods.grnGoodsId}
-                                {" / Qty "}
-                                {formatNumber(goods.loadedQty)}
-                                {goods.loadingDamageQty
-                                  ? ` / ${formatNumber(
-                                    goods.loadingDamageQty,
-                                  )} damaged`
-                                  : ""}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                title="No LR allocations found"
-                description="Loaded LR/GRN records for the selected wagon will appear here."
-              />
-            )}
-          </Section>
-        </div>
-
-        <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-          <Section
-            title="Selected wagon"
-            icon={<IconClipboardList size={15} />}
-            action={<WagonStatusBadge status={selectedLoading?.status} />}
-          >
-            {selectedRow ? (
-              <div className="space-y-4">
-                <div className="rounded-lg bg-muted/30 p-4">
-                  <p className="text-lg font-semibold">
-                    {rowTitle(selectedRow)}
-                  </p>
+        <Section
+          title={`2. Selected wagon: ${selectedRow ? rowTitle(selectedRow) : "Select wagon"}`}
+          icon={<IconPackage size={15} />}
+        >
+          {selectedRow ? (
+            <div className="mb-4 overflow-hidden rounded-lg border bg-background">
+              <div className="flex flex-col gap-4 border-b bg-muted/20 p-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-lg font-semibold">
+                      {rowTitle(selectedRow)}
+                    </p>
+                    <WagonStatusBadge status={selectedLoading?.status} />
+                  </div>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {selectedRow.wagon?.name ||
                       selectedRow.wagonTypeLabel ||
@@ -1161,66 +959,33 @@ export default function VPLoadingDetail({
                   </p>
                 </div>
 
-                <dl className="grid grid-cols-2 gap-4">
-                  <Field label="Gate" value={selectedLoading?.gateNo ?? DASH} />
-                  <Field
-                    label="Loaded qty"
-                    value={formatNumber(selectedLoading?.totalLoadedQty ?? 0)}
-                  />
-                  <Field label="MR/RR no" value={selectedRow.mrRrNo ?? DASH} />
-                  <Field
-                    label="Eligible GRNs"
-                    value={formatNumber(selectedRow.eligibleGrnCount ?? 0)}
-                  />
-                  <Field
-                    label="Capacity MT"
-                    value={formatNumber(selectedRow.wagon?.capacityMt)}
-                  />
-                  <Field
-                    label="Capacity CFT"
-                    value={formatNumber(selectedRow.wagon?.totalCft)}
-                  />
-                  <Field
-                    label="Started"
-                    value={formatDateTime(selectedLoading?.loadingStartedAt)}
-                  />
-                  <Field
-                    label="Finished"
-                    value={formatDateTime(
-                      selectedLoading?.verifiedAt ??
-                      selectedLoading?.loadingCompletedAt,
-                    )}
-                  />
-                </dl>
-
-                <div className="grid gap-3 border-t pt-4">
-                  {canComplete &&
-                    selectedLoading &&
-                    ["IN_PROGRESS", "COMPLETED"].includes(
-                      selectedLoading.status,
-                    ) ? (
-                    <Button
-                      type="button"
-                      disabled={isActionPending}
-                      onClick={runWagonAction}
-                    >
-                      <IconCircleCheck size={15} className="mr-1.5" />
-                      {completeWagon.isPending
-                        ? "Finishing..."
-                        : "Complete Loading"}
-                    </Button>
-                  ) : null}
-
+                <div className="flex flex-wrap items-center gap-2">
                   {canAddLoading ? (
-                    <Button asChild variant="outline">
+                    <Button asChild size="sm">
                       <Link
                         href={`/vp-management/vp-loading/${encodeURIComponent(
                           schedule.id,
                         )}/edit?rowId=${encodeURIComponent(selectedRow.id)}`}
                       >
-                        <IconPackage size={15} className="mr-1.5" />
+                        <IconPackage size={14} className="mr-1.5" />
                         Add LR / GRN
                       </Link>
+                    </Button>
+                  ) : null}
+
+                  {canUpdate &&
+                    schedule.status !== "FINALISED" &&
+                    ["IN_PROGRESS", "COMPLETED"].includes(
+                      selectedLoading?.status ?? "",
+                    ) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={openLabourEdit}
+                    >
+                      <IconUsers size={14} className="mr-1.5" />
+                      Edit team
                     </Button>
                   ) : null}
 
@@ -1232,61 +997,506 @@ export default function VPLoadingDetail({
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
                       disabled={isActionPending}
                       onClick={() => setCancelOpen(true)}
                     >
-                      <IconBan size={15} className="mr-1.5" />
-                      Cancel Loading
+                      <IconBan size={14} className="mr-1.5" />
+                      Cancel loading
                     </Button>
                   ) : null}
                 </div>
               </div>
-            ) : (
-              <EmptyState
-                title="Select a wagon"
-                description="Choose a VP wagon from the workspace to review loading details."
-              />
-            )}
-          </Section>
 
-          <Section
-            title="Team"
-            icon={<IconUsers size={15} />}
-            action={
-              canUpdate && selectedLoading?.status === "IN_PROGRESS" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={openLabourEdit}
-                >
-                  <IconEdit size={14} className="mr-1.5" />
-                  Edit Labour
-                </Button>
-              ) : null
-            }
-          >
-            <dl className="grid gap-4">
-              <Field
-                label="Labour"
-                value={selectedLoading?.labour?.name ?? DASH}
-              />
-              <Field
-                label="Labour charge"
-                value={formatPaise(selectedLoading?.labourCharge)}
-              />
-              <Field
-                label="Supervisor"
-                value={userName(selectedLoading?.loadingSupervisor)}
-              />
-              <Field
-                label="Active LRs"
-                value={formatNumber(activeAllocations.length)}
-              />
-            </dl>
-          </Section>
-        </aside>
+              <dl className="grid gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+                <Field label="MR/RR No." value={selectedRow.mrRrNo ?? DASH} />
+                <Field label="Gate" value={selectedLoading?.gateNo ?? DASH} />
+                <Field
+                  label="Attached LRs"
+                  value={formatNumber(activeAllocations.length)}
+                />
+                <Field
+                  label="Loaded qty"
+                  value={formatNumber(selectedLoadedQty)}
+                />
+                <Field
+                  label="Weight MT"
+                  value={formatNumber(selectedLoadedWeightMt)}
+                />
+                <Field
+                  label="Capacity MT"
+                  value={formatNumber(selectedRow.wagon?.capacityMt)}
+                />
+                <Field
+                  label="Supervisor"
+                  value={selectedLoading?.loadingSupervisor?.name || DASH}
+                />
+                <Field
+                  label="Labour"
+                  value={selectedLoading?.labour?.name ?? DASH}
+                />
+                <Field
+                  label="Labour charge"
+                  value={formatPaise(selectedLoading?.labourCharge)}
+                />
+
+                <Field
+                  label="Started"
+                  value={formatDateTime(selectedLoading?.loadingStartedAt)}
+                />
+                <Field
+                  label="Finished"
+                  value={formatDateTime(
+                    selectedLoading?.verifiedAt ??
+                    selectedLoading?.loadingCompletedAt,
+                  )}
+                />
+              </dl>
+
+              {selectedLoading &&
+                ["IN_PROGRESS", "COMPLETED", "VERIFIED"].includes(
+                  selectedLoading.status,
+                ) ? (
+                <div className="flex items-center justify-between gap-4 border-t bg-muted/10 px-4 py-3">
+                  <div className="min-w-0">
+                    <label
+                      htmlFor="selected-wagon-loaded"
+                      className="text-sm font-medium"
+                    >
+                      Mark as loaded
+                    </label>
+
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Mark this wagon when loading is complete. Turn it off to reopen
+                      the wagon for loading.
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {["COMPLETED", "VERIFIED"].includes(selectedLoading.status)
+                        ? "Loaded"
+                        : "In loading"}
+                    </span>
+
+                    <Switch
+                      id="selected-wagon-loaded"
+                      checked={["COMPLETED", "VERIFIED"].includes(
+                        selectedLoading.status,
+                      )}
+                      disabled={
+                        selectedLoading.status === "VERIFIED" ||
+                        schedule.status === "FINALISED" ||
+                        !canMarkLoaded ||
+                        isActionPending
+                      }
+                      onCheckedChange={(checked) => {
+                        void setWagonLoaded(checked);
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!selectedLoading ? (
+            <EmptyState
+              title="Loading has not started"
+              description="Add the first LR/GRN to this wagon to start tracking loading details."
+            />
+          ) : allocationsQuery.isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-44 w-full rounded-lg" />
+              <Skeleton className="h-44 w-full rounded-lg" />
+            </div>
+          ) : allocations.length ? (
+            <div className="space-y-4">
+              {activeAllocations.length ? (
+                <div className="overflow-hidden rounded-lg border bg-background">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[1800px] w-full text-left text-xs">
+                      <thead className="bg-muted/30 text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-right font-medium">
+                            S.No.
+                          </th>
+                          <th className="px-3 py-2 font-medium">
+                            VP No. / MR-RR No.
+                          </th>
+                          <th className="px-3 py-2 font-medium">Consignor</th>
+                          <th className="px-3 py-2 font-medium">LR No.</th>
+                          <th className="px-3 py-2 font-medium">LR Date</th>
+                          <th className="px-3 py-2 text-right font-medium">
+                            Loaded Qty
+                          </th>
+                          <th className="px-3 py-2 font-medium">Goods</th>
+                          <th className="px-3 py-2 text-right font-medium">
+                            Weight MT
+                          </th>
+                          <th className="px-3 py-2 font-medium">Invoice</th>
+                          <th className="px-3 py-2 font-medium">Consignee</th>
+                          <th className="px-3 py-2 font-medium">Delivery At</th>
+                          <th className="px-3 py-2 font-medium">Destination</th>
+                          <th className="px-3 py-2 font-medium">Supervisor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {activeAllocations.map((allocation, index) => {
+                          const lr = allocation.grn.lorryReceipt;
+                          return (
+                            <tr key={`summary-${allocation.id}`}>
+                              <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
+                                {index + 1}
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="block font-semibold">
+                                  {selectedRow?.vpNo || DASH}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {selectedRow?.mrRrNo || DASH}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3">
+                                {allocationParty(allocation, "consignor")}
+                              </td>
+                              <td className="px-3 py-3 font-medium">
+                                {lr.lrNumber}
+                              </td>
+                              <td className="px-3 py-3">
+                                {formatDate(lr.createdAt)}
+                              </td>
+                              <td className="px-3 py-3 text-right font-medium tabular-nums">
+                                {formatNumber(allocation.loadedQty)}
+                              </td>
+                              <td className="max-w-60 px-3 py-3">
+                                {allocationGoodsNames(allocation)}
+                              </td>
+                              <td className="px-3 py-3 text-right tabular-nums">
+                                {allocationWeightMt(allocation)}
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="block font-medium">
+                                  {lr.invoiceNumber || DASH}
+                                </span>
+                                {lr.invoiceAmount ? (
+                                  <span className="text-muted-foreground">
+                                    {formatPaise(lr.invoiceAmount)}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-3">
+                                {allocationParty(allocation, "consignee")}
+                              </td>
+                              <td className="px-3 py-3">
+                                {deliveryAt(allocation)}
+                              </td>
+                              <td className="px-3 py-3">
+                                {lr.group?.destinationBranch?.name || DASH}
+                              </td>
+                              <td className="px-3 py-3">
+                                {selectedLoading?.loadingSupervisor?.name ||
+                                  DASH}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeAllocations.length ? (
+                <div className="flex items-center justify-between gap-3 border-b pb-2">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      LR edit and split details
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Use these cards to edit quantity or review an LR split
+                      across wagons.
+                    </p>
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {activeAllocations.length} active
+                  </span>
+                </div>
+              ) : null}
+
+              {allocations.map((allocation) => {
+                const splitCount = (allocation.otherWagons?.length ?? 0) + 1;
+                const canEditAllocation =
+                  canUpdate &&
+                  schedule.status !== "FINALISED" &&
+                  allocation.status === "LOADED" &&
+                  ["IN_PROGRESS", "COMPLETED"].includes(
+                    selectedLoading?.status ?? "",
+                  );
+
+                return (
+                  <article
+                    key={allocation.id}
+                    className="rounded-lg border bg-background p-4 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-semibold">
+                            LR {allocation.grn.lorryReceipt.lrNumber}
+                          </p>
+                          <AllocationStatusBadge status={allocation.status} />
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          GRN {allocation.grn.grnNumber} /{" "}
+                          {allocation.loadingNumber}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm font-semibold tabular-nums">
+                          {formatNumber(allocation.loadedQty)}
+                        </div>
+
+                        {canEditAllocation ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openAllocationEdit(allocation)}
+                          >
+                            <IconEdit size={14} className="mr-1.5" />
+                            Edit Qty
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <dl className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <Field
+                        label="Consignor"
+                        value={allocationParty(allocation, "consignor")}
+                      />
+                      <Field
+                        label="Consignee"
+                        value={allocationParty(allocation, "consignee")}
+                      />
+                      <Field
+                        label="Gate"
+                        value={allocation.grn.gateNo ?? DASH}
+                      />
+                      <Field
+                        label="Created"
+                        value={formatDateTime(allocation.createdAt)}
+                      />
+                    </dl>
+
+                    {allocation.quantitySummary ? (
+                      <dl className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-muted/30 p-3 md:grid-cols-4">
+                        <Field
+                          label="Total received"
+                          value={formatNumber(
+                            allocation.quantitySummary.totalReceivedQty,
+                          )}
+                        />
+                        <Field
+                          label="Loaded here"
+                          value={formatNumber(
+                            allocation.quantitySummary.loadedInCurrentWagon,
+                          )}
+                        />
+                        <Field
+                          label="Other wagons"
+                          value={formatNumber(
+                            allocation.quantitySummary.loadedInOtherWagons,
+                          )}
+                        />
+                        <Field
+                          label="Available"
+                          value={formatNumber(
+                            allocation.quantitySummary.availableQty,
+                          )}
+                        />
+                      </dl>
+                    ) : null}
+
+                    {allocation.otherWagons?.length ? (
+                      <div className="mt-4 space-y-3">
+                        <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300">
+                          <IconAlertCircle
+                            size={17}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <p>
+                            This LR is split across {splitCount} wagons.
+                            {allocation.quantitySummary
+                              ? ` ${formatNumber(
+                                allocation.quantitySummary
+                                  .loadedInCurrentWagon,
+                              )} is loaded here and ${formatNumber(
+                                allocation.quantitySummary
+                                  .loadedInOtherWagons,
+                              )} is loaded in other wagons.`
+                              : " Part of this LR is loaded in other wagons."}
+                          </p>
+                        </div>
+
+                        <div className="overflow-hidden rounded-lg border">
+                          <div className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3 text-sm">
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">
+                                {selectedRow ? rowTitle(selectedRow) : DASH}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {selectedRow?.wagon?.name ||
+                                  selectedRow?.wagonTypeLabel ||
+                                  "Wagon"}
+                                {selectedLoading?.gateNo
+                                  ? ` / Gate ${selectedLoading.gateNo}`
+                                  : ""}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="font-semibold">
+                                {formatNumber(
+                                  allocation.quantitySummary
+                                    ?.loadedInCurrentWagon ??
+                                  allocation.loadedQty,
+                                )}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                This wagon
+                              </p>
+                            </div>
+                          </div>
+
+                          {allocation.otherWagons.map((otherWagon) => (
+                            <div
+                              key={otherWagon.allocationId}
+                              className="flex flex-col gap-3 border-b px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">
+                                  {otherWagon.vpNo ||
+                                    otherWagon.wagonName ||
+                                    "Other wagon"}
+                                </p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {otherWagon.wagonName ?? DASH}
+                                  {" / Gate "}
+                                  {otherWagon.gateNo ?? DASH}
+                                </p>
+                              </div>
+                              <div className="flex items-center justify-between gap-5 sm:justify-end">
+                                <p className="text-sm font-semibold">
+                                  {formatNumber(otherWagon.loadedQty)}
+                                </p>
+                                <Link
+                                  href={`/vp-management/vp-loading/${encodeURIComponent(
+                                    otherWagon.scheduleId,
+                                  )}?rowId=${encodeURIComponent(
+                                    otherWagon.mrrrRowId,
+                                  )}`}
+                                  className="inline-flex items-center text-xs font-medium text-primary hover:underline"
+                                >
+                                  View
+                                  <IconChevronRight
+                                    size={14}
+                                    className="ml-1"
+                                  />
+                                </Link>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {allocation.goods?.length ? (
+                      <div className="mt-4">
+                        {/* Section Header */}
+                        <div className="mb-2 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold">Goods Details</p>
+                            <p className="text-xs text-muted-foreground">
+                              Loaded and damaged quantities
+                            </p>
+                          </div>
+
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {allocation.goods.length}{" "}
+                            {allocation.goods.length === 1 ? "Item" : "Items"}
+                          </span>
+                        </div>
+
+                        {/* Goods Table */}
+                        <div className="overflow-hidden rounded-lg border bg-background">
+                          {/* Header */}
+                          <div className="grid grid-cols-[minmax(0,1fr)_100px_100px] items-center gap-3 border-b bg-muted/30 px-4 py-2.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Goods
+                            </p>
+
+                            <p className="text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Loaded Qty
+                            </p>
+
+                            <p className="text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Damaged
+                            </p>
+                          </div>
+
+                          {/* Goods Rows */}
+                          <div>
+                            {allocation.goods.map((goods) => {
+                              const damagedQty = Number(goods.loadingDamageQty ?? 0);
+
+                              return (
+                                <div
+                                  key={goods.id}
+                                  className="grid grid-cols-[minmax(0,1fr)_100px_100px] items-center gap-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/20"
+                                >
+                                  {/* Goods Name */}
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-foreground">
+                                      {goods.grnGoods?.goodsName ?? goods.grnGoodsId}
+                                    </p>
+                                  </div>
+
+                                  {/* Loaded */}
+                                  <p className="text-right text-sm font-semibold tabular-nums">
+                                    {formatNumber(goods.loadedQty)}
+                                  </p>
+
+                                  {/* Damaged */}
+                                  <div className="text-right">
+                                    {damagedQty > 0 ? (
+                                      <span className="inline-flex rounded-md bg-red-50 px-2 py-1 text-xs font-semibold text-red-600 dark:bg-red-950/30 dark:text-red-400">
+                                        {formatNumber(damagedQty)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">—</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              title="No LR allocations found"
+              description="Loaded LR/GRN records for the selected wagon will appear here."
+            />
+          )}
+        </Section>
       </div>
 
       <ReasonDialog

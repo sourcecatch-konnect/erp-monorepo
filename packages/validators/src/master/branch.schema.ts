@@ -161,3 +161,20 @@ export const createBranchSchema = z.object({
 });
 
 export const updateBranchSchema = createBranchSchema.partial();
+
+export const branchRailheadAreaSchema = z.object({
+  branchId: z.string(),
+  areaId: z.string(),
+  isActive: z.boolean(),
+  area: z.object({
+    id: z.string(),
+    name: z.string(),
+    cityId: z.string(),
+    isRailHead: z.boolean(),
+    city: z.object({ id: z.string(), name: z.string() }),
+  }),
+});
+
+export const updateBranchRailheadsSchema = z.object({
+  areaIds: z.array(z.string().min(1)).max(500),
+});

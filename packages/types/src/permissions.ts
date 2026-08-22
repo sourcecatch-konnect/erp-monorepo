@@ -53,7 +53,11 @@ type LorryReceiptPermissionKey =
   | "lorry_receipt.deliver"
   | "lorry_receipt.acknowledge";
 
-type TripPermissionKey = `trip.${CrudAction}` | "trip.close" | "trip.cancel";
+type TripPermissionKey =
+  | `trip.${CrudAction}`
+  | "trip.close"
+  | "trip.cancel"
+  | "trip.correct_closed";
 
 type VehicleJourneyPermissionKey =
   | "vehicle_journey.view"
@@ -61,6 +65,7 @@ type VehicleJourneyPermissionKey =
   | "vehicle_journey.update"
   | "vehicle_journey.close"
   | "vehicle_journey.cancel"
+  | "vehicle_journey.reopen_settlement"
   | "vehicle_journey.override_chain";
 
 type TripExpensePermissionKey =
@@ -136,6 +141,23 @@ type CashPlanningPermissionKey =
   | "cashplanning.approve"
   | "cashplanning.close";
 
+type BillingPermissionKey =
+  | "billing.view"
+  | "billing.create"
+  | "billing.update"
+  | "billing.approve"
+  | "billing.finalise"
+  | "billing.cancel"
+  | "billing.print"
+  | "billing.charge_approve"
+  | "billing.tax_rule_manage";
+
+type ReceiptPermissionKey =
+  | "receipt.view"
+  | "receipt.create"
+  | "receipt.approve"
+  | "receipt.cancel";
+
 type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
 
 type NotificationPermissionKey =
@@ -167,6 +189,8 @@ export type PermissionKey =
   | VPLoadingPermissionKey
   | VPSchedulePermissionKey
   | CashPlanningPermissionKey
+  | BillingPermissionKey
+  | ReceiptPermissionKey
   | GRNPermissionKey
   | RailBranchGRNPermissionKey
   | DeliveryChallanPermissionKey
@@ -264,6 +288,7 @@ export const PERMS = {
     DELETE: "trip.delete",
     CLOSE: "trip.close",
     CANCEL: "trip.cancel",
+    CORRECT_CLOSED: "trip.correct_closed",
   },
   VEHICLE_JOURNEY: {
     VIEW: "vehicle_journey.view",
@@ -271,6 +296,7 @@ export const PERMS = {
     UPDATE: "vehicle_journey.update",
     CLOSE: "vehicle_journey.close",
     CANCEL: "vehicle_journey.cancel",
+    REOPEN_SETTLEMENT: "vehicle_journey.reopen_settlement",
     OVERRIDE_CHAIN: "vehicle_journey.override_chain",
   },
   TRIP_EXPENSE: {
@@ -378,6 +404,23 @@ export const PERMS = {
     ENTER: "cashplanning.enter",
     APPROVE: "cashplanning.approve",
     CLOSE: "cashplanning.close",
+  },
+  BILLING: {
+    VIEW: "billing.view",
+    CREATE: "billing.create",
+    UPDATE: "billing.update",
+    APPROVE: "billing.approve",
+    FINALISE: "billing.finalise",
+    CANCEL: "billing.cancel",
+    PRINT: "billing.print",
+    CHARGE_APPROVE: "billing.charge_approve",
+    TAX_RULE_MANAGE: "billing.tax_rule_manage",
+  },
+  RECEIPT: {
+    VIEW: "receipt.view",
+    CREATE: "receipt.create",
+    APPROVE: "receipt.approve",
+    CANCEL: "receipt.cancel",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",

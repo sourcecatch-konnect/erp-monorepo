@@ -6,7 +6,6 @@ const optionalString = z
   .optional()
   .transform((value) => (value ? value : undefined));
 
-
 const optionalNumberField = (message: string) =>
   z
     .union([z.string(), z.number()])
@@ -17,10 +16,7 @@ const optionalNumberField = (message: string) =>
       }
       return Number(value);
     })
-    .refine(
-      (value) => value === undefined || !Number.isNaN(value),
-      message
-    );
+    .refine((value) => value === undefined || !Number.isNaN(value), message);
 const optionalUppercaseRegex = (regex: RegExp, message: string) =>
   z
     .string()
@@ -29,12 +25,29 @@ const optionalUppercaseRegex = (regex: RegExp, message: string) =>
     .or(z.literal(""))
     .transform((value) => (value ? value.toUpperCase() : undefined))
     .refine((value) => !value || regex.test(value), message);
+const clearableUppercaseRegex = (regex: RegExp, message: string) =>
+  z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .transform((value) => {
+      if (value === undefined) return undefined;
+      if (value === null || value === "") return null;
+
+      return value.toUpperCase();
+    })
+    .refine(
+      (value) => value === undefined || value === null || regex.test(value),
+      message,
+    );
 export const customerSchema = z.object({
   id: z.string(),
   name: z.string(),
   shortName: z.string().nullable().optional(),
   customerPAN: z.string().nullable().optional(),
   disallowNewLRBooking: z.boolean(),
+  splitBillsByChargeType: z.boolean(),
   interestRateLatePayment: z.number().nullable().optional(),
   gstNo: z.string().nullable().optional(),
   creditLimit: z.number().nullable().optional(),
@@ -79,66 +92,58 @@ export const createCustomerSchema = z.object({
   shortName: optionalString,
 
   customerPAN: optionalUppercaseRegex(
-  /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
-  "Enter valid PAN number"
-),
+    /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+    "Enter valid PAN number",
+  ),
 
   disallowNewLRBooking: z.boolean().default(false),
+  splitBillsByChargeType: z.boolean().default(false),
 
-  interestRateLatePayment: optionalNumberField("Enter valid interest rate")
-    .refine(
-      (value) => value === undefined || value >= 0,
-      "Interest rate cannot be negative"
-    ),
+  interestRateLatePayment: optionalNumberField(
+    "Enter valid interest rate",
+  ).refine(
+    (value) => value === undefined || value >= 0,
+    "Interest rate cannot be negative",
+  ),
 
-  gstNo: optionalUppercaseRegex(
-  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
-  "Enter valid GST number"
-),
-
-  creditLimit: optionalNumberField("Enter valid credit limit")
-    .refine(
-      (value) => value === undefined || value >= 0,
-      "Credit limit cannot be negative"
-    ),
+  gstNo: clearableUppercaseRegex(
+    /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+    "Enter valid GST number",
+  ),
+  creditLimit: optionalNumberField("Enter valid credit limit").refine(
+    (value) => value === undefined || value >= 0,
+    "Credit limit cannot be negative",
+  ),
 
   tdsDeductionRate: optionalNumberField("Enter valid TDS rate")
     .refine(
       (value) => value === undefined || value >= 0,
-      "TDS rate cannot be negative"
+      "TDS rate cannot be negative",
     )
     .refine(
       (value) => value === undefined || value <= 100,
-      "TDS rate cannot exceed 100%"
+      "TDS rate cannot exceed 100%",
     ),
 
   address: optionalString,
 
-  country: z
+  country: z.string().trim().min(1, "Country is required"),
+
+  stateId: z.string().min(1, "State is required"),
+
+  cityId: z.string().min(1, "City is required"),
+
+  contactPhone: indianPhone,
+
+  mobileNo: z
     .string()
     .trim()
-    .min(1, "Country is required"),
-
-  stateId: z
-    .string()
-    .min(1, "State is required"),
-
-  cityId: z
-    .string()
-    .min(1, "City is required"),
-
-
-     contactPhone: indianPhone,
-    
-      mobileNo: z
-        .string()
-        .trim()
-        .optional()
-        .or(z.literal(""))
-        .refine(
-          (value) => !value || /^(\+91)?[6-9]\d{9}$/.test(value),
-          "Enter valid Indian mobile number"
-        ),
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (value) => !value || /^(\+91)?[6-9]\d{9}$/.test(value),
+      "Enter valid Indian mobile number",
+    ),
   primaryEmail: z
     .string()
     .trim()
@@ -147,7 +152,6 @@ export const createCustomerSchema = z.object({
     .or(z.literal("").transform(() => undefined)),
 
   contactPerson: z.string().min(1, "Contact person is required"),
-
 
   website: z
     .string()
@@ -173,10 +177,8 @@ export const customerLocationSchema = z.object({
   contactPhone: z.string().nullable().optional(),
   gstNo: z.string().nullable().optional(),
   areaId: z.string().nullable().optional(),
-  city: z
-    .object({ id: z.string(), name: z.string() })
-    .optional(),
-    area: z
+  city: z.object({ id: z.string(), name: z.string() }).optional(),
+  area: z
     .object({
       id: z.string(),
       name: z.string(),
@@ -205,21 +207,21 @@ export const createCustomerLocationSchema = z.object({
     .or(z.literal(""))
     .refine(
       (value) => !value || /^(\+91)?[6-9]\d{9}$/.test(value),
-      "Enter valid Indian mobile number"
+      "Enter valid Indian mobile number",
     )
     .transform((value) => (value ? value : undefined)),
-gstNo: z
-  .string()
-  .trim()
-  .optional()
-  .or(z.literal(""))
-  .transform((value) => (value ? value.toUpperCase() : undefined))
-  .refine(
-    (value) =>
-      !value ||
-      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value),
-    "Enter valid GST number"
-  ),
+  gstNo: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value ? value.toUpperCase() : undefined))
+    .refine(
+      (value) =>
+        !value ||
+        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value),
+      "Enter valid GST number",
+    ),
 });
 
 export const updateCustomerLocationSchema =

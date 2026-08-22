@@ -10,6 +10,7 @@ const optionalNullableString = z
 export const createAreaSchema = z.object({
   name: z.string().trim().min(1, "Area name is required"),
   cityId: z.string().min(1, "City is required"),
+  isRailHead: z.boolean().default(false),
 
   googlePlaceId: optionalNullableString,
   formattedAddress: optionalNullableString,

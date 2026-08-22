@@ -10,7 +10,11 @@ import { cn } from "@/lib/utils";
 import { trackingApi } from "./tracking.service";
 import { trackingKeys } from "./tracking.keys";
 import { FleetMap } from "./FleetMap";
-import { WagonList, type StatusFilter } from "./WagonList";
+import {
+  WagonList,
+  type AssignmentFilter,
+  type StatusFilter,
+} from "./WagonList";
 import { WagonPanel } from "./WagonPanel";
 import { useTrackingSocket } from "./useTrackingSocket";
 import { LiveBadge, toLocalInputValue } from "./tracking-ui";
@@ -53,6 +57,8 @@ export default function TrackingPage() {
 
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
+  const [assignmentFilter, setAssignmentFilter] =
+    React.useState<AssignmentFilter>("all");
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
   const [mode, setMode] = React.useState<Mode>("live");
 
@@ -86,11 +92,20 @@ export default function TrackingPage() {
     [fleetQuery.data],
   );
 
-  const counts = React.useMemo<Record<StatusFilter, number>>(
+  const statusCounts = React.useMemo<Record<StatusFilter, number>>(
     () => ({
       all: vehicles.length,
       online: vehicles.filter((v) => v.status === "online").length,
       offline: vehicles.filter((v) => v.status !== "online").length,
+    }),
+    [vehicles],
+  );
+
+  const assignmentCounts = React.useMemo<Record<AssignmentFilter, number>>(
+    () => ({
+      all: vehicles.length,
+      assigned: vehicles.filter((v) => Boolean(v.assignment)).length,
+      unassigned: vehicles.filter((v) => !v.assignment).length,
     }),
     [vehicles],
   );
@@ -100,6 +115,8 @@ export default function TrackingPage() {
     return vehicles.filter((v) => {
       if (statusFilter === "online" && v.status !== "online") return false;
       if (statusFilter === "offline" && v.status === "online") return false;
+      if (assignmentFilter === "assigned" && !v.assignment) return false;
+      if (assignmentFilter === "unassigned" && v.assignment) return false;
       if (!q) return true;
       return (
         v.name.toLowerCase().includes(q) ||
@@ -110,25 +127,19 @@ export default function TrackingPage() {
         (v.assignment?.installedOnVpNo ?? "").toLowerCase().includes(q)
       );
     });
-  }, [vehicles, search, statusFilter]);
+  }, [vehicles, search, statusFilter, assignmentFilter]);
 
   const selected = vehicles.find((v) => v.id === selectedId) ?? null;
 
   // History trail
   const historyQuery = useQuery({
-    queryKey: range && selected?.assignment
-      ? trackingKeys.history(selected.assignment.id, range.from, range.to)
-      : ["tracking", "history", "idle"],
+    queryKey:
+      range && selected?.assignment
+        ? trackingKeys.history(selected.assignment.id, range.from, range.to)
+        : ["tracking", "history", "idle"],
     queryFn: () =>
-      trackingApi.history(
-        selected!.assignment!.id,
-        range!.from,
-        range!.to,
-      ),
-    enabled:
-      mode === "history" &&
-      !!range &&
-      Boolean(selected?.assignment),
+      trackingApi.history(selected!.assignment!.id, range!.from, range!.to),
+    enabled: mode === "history" && !!range && Boolean(selected?.assignment),
   });
   const trail = range ? (historyQuery.data ?? null) : null;
 
@@ -204,9 +215,8 @@ export default function TrackingPage() {
             <LiveBadge connected={connected} />
           </div>
           <p className="text-sm text-muted-foreground">
-            {counts.all} active rake{counts.all === 1 ? "" : "s"} ·{" "}
-            {counts.online}{" "}
-            online
+            {statusCounts.all} tracker{statusCounts.all === 1 ? "" : "s"} ·{" "}
+            {assignmentCounts.assigned} assigned · {statusCounts.online} online
           </p>
         </div>
         <Button
@@ -226,7 +236,8 @@ export default function TrackingPage() {
         <div className="flex min-h-0 flex-col rounded-md border border-border bg-card p-3">
           <WagonList
             vehicles={filtered}
-            counts={counts}
+            statusCounts={statusCounts}
+            assignmentCounts={assignmentCounts}
             isLoading={fleetQuery.isLoading}
             isError={fleetQuery.isError}
             errorMessage={(fleetQuery.error as Error | null)?.message}
@@ -236,6 +247,8 @@ export default function TrackingPage() {
             onSearch={setSearch}
             statusFilter={statusFilter}
             onStatusFilter={setStatusFilter}
+            assignmentFilter={assignmentFilter}
+            onAssignmentFilter={setAssignmentFilter}
           />
         </div>
 

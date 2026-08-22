@@ -53,10 +53,9 @@ export type RailBranchGRNDetail = {
   unloadingSupervisorId?: string | null;
   unloadingSupervisor?: {
     id: string;
-    firstName?: string | null;
-    middleName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
+    name: string;
+    mobileNo?: string | null;
+    type: string;
   } | null;
   totalLoadedQty: number;
   totalReceivedQty: number;
@@ -206,7 +205,8 @@ export type UpdateRailBranchGRNBody = {
 export type RailBranchGRNSupervisor = {
   id: string;
   name: string;
-  email: string;
+  mobileNo?: string | null;
+  type: string;
 };
 
 export const railBranchGrnApi = {

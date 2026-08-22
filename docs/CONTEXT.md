@@ -22,41 +22,41 @@ Scale assumption for v1: ~6–10 branches, 500–1500 LRs/day at peak, 50–200 
 
 Domain terms used throughout the plan + codebase. Memorise these — they appear everywhere.
 
-| Term | Meaning |
-|---|---|
-| **LR** | Lorry Receipt — the core transport document, one per consignment. Legal proof of goods accepted for carriage. |
-| **Order Booking** | Customer's request to move goods (Truck-hire or Item type). Spawns N LRs after Confirm. |
-| **Consignor** | Sender of goods (usually the booking customer). |
-| **Consignee** | Receiver of goods. May or may not be a known customer. |
-| **POD** | Proof of Delivery — signed delivery receipt (paper, scanned into ERP). Required to bill. |
-| **GRN** | Goods Receipt Note — goods physically received at a branch (origin or destination). |
-| **TBB** | "To Be Billed" — Payment Mode meaning the booking customer will be invoiced later (vs Paid up-front or To Pay at delivery). |
-| **Rake** | A full goods train (multiple wagons) operated by Indian Railways. SK books own rakes. |
-| **VP** | Vehicle Placement — one wagon's worth of cargo space on a rake. A rake has several VPs (e.g. 7 VPs). |
-| **RR** | Railway Receipt — Indian Railways' legal doc per VP. Entered into ERP from paper. |
-| **MR** | Money Receipt — IR's receipt for railway freight SK paid. Entered into ERP from paper. |
-| **DC** | Delivery Challan — transport doc handed over at the railhead when goods move from rake → truck for last-mile delivery. One DC covers many LRs. |
-| **LDC** | Local Delivery Challan (legacy: `LGST_DChallan`). Same concept as DC; the "L" prefix surfaces in screen names like "LDC Ack". |
-| **DC/WC at Rail Head** | A combined form capturing **Demurrage Charges** (DC, for rake detention at railhead) and **Warpage Charges** (WC). Also captures **Waivel** (waiver of demurrage). |
-| **Demurrage** | Charge by Indian Railways for holding a rake/wagon beyond free time. Currently ₹150/hr per the SOP. |
-| **Warpage** | Charge for damaged goods during rail transit, paid to/by IR. |
-| **Waivel** | A waiver granted (letter-based) on demurrage. Reduces what SK owes IR. |
-| **Detention** | Charge by SK to **the customer** for trucks/wagons held beyond free time at consignor/consignee site. Different from Demurrage (which is paid TO IR). |
-| **Hamali** | Manual labour for loading/unloading goods. Three flavours: at origin GRN, at branch GRN, at VP Loading (rail). |
-| **Broker / Transporter** | External party providing trucks (market vehicles) and clearing-agent services at railheads. SK pays them via the Slip → Entry → Approval workflow. |
-| **GTA** | Goods Transport Agency — a legal classification under Indian GST. GTA services have special GST rules (5%/12% rate, RCM option). |
-| **RCM** | Reverse Charge Mechanism — for GTA services, the **consignor** (not the transporter) pays GST to the government. SK doesn't collect GST in this case. |
-| **Place of Supply** | The destination state for GST purposes. Drives intra-state (CGST+SGST) vs inter-state (IGST). |
-| **CGST / SGST / IGST** | Central / State / Integrated GST. For SK (Maharashtra), Maharashtra → Maharashtra = 2.5%+2.5%; Maharashtra → other state = 5% IGST. |
-| **HSN / SAC** | Tax classification codes — HSN for goods, SAC for services. Transport services typically `9965` (GTA) or `9967`. |
-| **TDS** | Tax Deducted at Source — customer withholds ~2% (section 194C) from payments to SK. Reclaimed via Form 26AS reconciliation. |
-| **Log Slip** | Internal trip closure document — official record that a vehicle finished a trip with end-km, end-time, expenses. Generated after Trip Close. |
-| **Happay Card** | Prepaid card given to drivers for fuel/toll expenses. Reconciled against trip expenses. |
-| **EWB** | E-way Bill — government-mandated transit pass (NIC portal) for goods > ₹50k. Customer generates Part A; transporter updates Part B (vehicle + transporter ID). |
-| **TRANSIN** | Transporter ID issued by GSTN for EWB Part B updates. |
-| **FY** | Financial Year (India: April → March). E.g. FY26-27 means April 2026 – March 2027. |
-| **Docket** | Courier waybill number — tracks paperwork (POD originals) being couriered back to HO via DTDC/Shree Maruti etc. |
-| **Retention** | Amount the consignee holds back from freight payment until conditions met (rare; SK still tracks). |
+| Term                     | Meaning                                                                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **LR**                   | Lorry Receipt — the core transport document, one per consignment. Legal proof of goods accepted for carriage.                                                      |
+| **Order Booking**        | Customer's request to move goods (Truck-hire or Item type). Spawns N LRs after Confirm.                                                                            |
+| **Consignor**            | Sender of goods (usually the booking customer).                                                                                                                    |
+| **Consignee**            | Receiver of goods. May or may not be a known customer.                                                                                                             |
+| **POD**                  | Proof of Delivery — signed delivery receipt (paper, scanned into ERP). Required to bill.                                                                           |
+| **GRN**                  | Goods Receipt Note — goods physically received at a branch (origin or destination).                                                                                |
+| **TBB**                  | "To Be Billed" — Payment Mode meaning the booking customer will be invoiced later (vs Paid up-front or To Pay at delivery).                                        |
+| **Rake**                 | A full goods train (multiple wagons) operated by Indian Railways. SK books own rakes.                                                                              |
+| **VP**                   | Vehicle Placement — one wagon's worth of cargo space on a rake. A rake has several VPs (e.g. 7 VPs).                                                               |
+| **RR**                   | Railway Receipt — Indian Railways' legal doc per VP. Entered into ERP from paper.                                                                                  |
+| **MR**                   | Money Receipt — IR's receipt for railway freight SK paid. Entered into ERP from paper.                                                                             |
+| **DC**                   | Delivery Challan — transport doc handed over at the railhead when goods move from rake → truck for last-mile delivery. One DC covers many LRs.                     |
+| **LDC**                  | Local Delivery Challan (legacy: `LGST_DChallan`). Same concept as DC; the "L" prefix surfaces in screen names like "LDC Ack".                                      |
+| **DC/WC at Rail Head**   | A combined form capturing **Demurrage Charges** (DC, for rake detention at railhead) and **Warpage Charges** (WC). Also captures **Waivel** (waiver of demurrage). |
+| **Demurrage**            | Charge by Indian Railways for holding a rake/wagon beyond free time. Currently ₹150/hr per the SOP.                                                                |
+| **Warpage**              | Charge for damaged goods during rail transit, paid to/by IR.                                                                                                       |
+| **Waivel**               | A waiver granted (letter-based) on demurrage. Reduces what SK owes IR.                                                                                             |
+| **Detention**            | Charge by SK to **the customer** for trucks/wagons held beyond free time at consignor/consignee site. Different from Demurrage (which is paid TO IR).              |
+| **Hamali**               | Manual labour for loading/unloading goods. Three flavours: at origin GRN, at branch GRN, at VP Loading (rail).                                                     |
+| **Broker / Transporter** | External party providing trucks (market vehicles) and clearing-agent services at railheads. SK pays them via the Slip → Entry → Approval workflow.                 |
+| **GTA**                  | Goods Transport Agency — a legal classification under Indian GST. GTA services have special GST rules (5%/12% rate, RCM option).                                   |
+| **RCM**                  | Reverse Charge Mechanism — for GTA services, the **consignor** (not the transporter) pays GST to the government. SK doesn't collect GST in this case.              |
+| **Place of Supply**      | The destination state for GST purposes. Drives intra-state (CGST+SGST) vs inter-state (IGST).                                                                      |
+| **CGST / SGST / IGST**   | Central / State / Integrated GST. For SK (Maharashtra), Maharashtra → Maharashtra = 2.5%+2.5%; Maharashtra → other state = 5% IGST.                                |
+| **HSN / SAC**            | Tax classification codes — HSN for goods, SAC for services. Transport services typically `9965` (GTA) or `9967`.                                                   |
+| **TDS**                  | Tax Deducted at Source — customer withholds ~2% (section 194C) from payments to SK. Reclaimed via Form 26AS reconciliation.                                        |
+| **Log Slip**             | Internal trip closure document — official record that a vehicle finished a trip with end-km, end-time, expenses. Generated after Trip Close.                       |
+| **Happay Card**          | Prepaid card given to drivers for fuel/toll expenses. Reconciled against trip expenses.                                                                            |
+| **EWB**                  | E-way Bill — government-mandated transit pass (NIC portal) for goods > ₹50k. Customer generates Part A; transporter updates Part B (vehicle + transporter ID).     |
+| **TRANSIN**              | Transporter ID issued by GSTN for EWB Part B updates.                                                                                                              |
+| **FY**                   | Financial Year (India: April → March). E.g. FY26-27 means April 2026 – March 2027.                                                                                 |
+| **Docket**               | Courier waybill number — tracks paperwork (POD originals) being couriered back to HO via DTDC/Shree Maruti etc.                                                    |
+| **Retention**            | Amount the consignee holds back from freight payment until conditions met (rare; SK still tracks).                                                                 |
 
 ---
 
@@ -64,14 +64,14 @@ Domain terms used throughout the plan + codebase. Memorise these — they appear
 
 SK currently runs **two ASP.NET ERPs** — that's not a typo, two. They're not well integrated.
 
-| URL | Internal name | Used for |
-|---|---|---|
-| `http://l.sktranslines.com/` | "Snehal123" (ERP) | Direct enterprise shippers (Samsonite, Whirlpool, Britannia). Has full Order → LR → Trip → Rail → DC → Accounts flow. |
-| `http://35.154.123.37/` | "Snehalj" / "Dumb website" | General freight, walk-in clients, "Generate Instant LR" (no prior order). Smaller subset of features. |
+| URL                          | Internal name              | Used for                                                                                                              |
+| ---------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `http://l.sktranslines.com/` | "Snehal123" (ERP)          | Direct enterprise shippers (Samsonite, Whirlpool, Britannia). Has full Order → LR → Trip → Rail → DC → Accounts flow. |
+| `http://35.154.123.37/`      | "Snehalj" / "Dumb website" | General freight, walk-in clients, "Generate Instant LR" (no prior order). Smaller subset of features.                 |
 
 Database tables seen in legacy code (relevant examples): `LGST_DChallan`, `LGST_DCAcknowledgment`, `LGST_DCApproved`. Mostly stored procedures over SQL Server.
 
-**The legacy code is the functional reference, never the architectural reference.** It demonstrates *what* SK needs to do, not *how* to model it. From `docs/ERP_DEVELOPMENT_PLAN.md` §2 and `CLAUDE.md`: do not port the dynamic `/:masterName` engine; do not port the runtime field-config metadata; do not port the `Float` money columns; do not port the `db push`-style schema management.
+**The legacy code is the functional reference, never the architectural reference.** It demonstrates _what_ SK needs to do, not _how_ to model it. From `docs/ERP_DEVELOPMENT_PLAN.md` §2 and `CLAUDE.md`: do not port the dynamic `/:masterName` engine; do not port the runtime field-config metadata; do not port the `Float` money columns; do not port the `db push`-style schema management.
 
 **Communication outside the ERP:** SK ops uses a WhatsApp group with branch supervisors (e.g. "Sanjay Sharma (Station)") for things the system can't track — chasing missing GRN, escalating stuck trips. The new ERP should reduce this with the Notifications module, but expect WhatsApp coordination to remain part of the workflow.
 
@@ -90,7 +90,7 @@ Read this as a story. Each numbered step maps to a module in the plan.
 7. **LR Acknowledgement.** Guwahati branch ops opens LR Ack screen, enters received qty, damage qty, shortage qty, observed detention days, POD docket number (paper POD couriered back to HO via DTDC), uploads POD scan. LR moves to `Acknowledged` → `Delivered`.
 8. **POD courier tracking.** Separate sub-tracker: PODDispatch record per LR captures docket #, courier vendor, dispatch date, expected receipt at HO.
 9. **DC Detention calc.** Cron or trigger picks up the DC's dates, runs the slab engine (Bipin Singh slab, 32HQ slab, or 407 hourly slab per matchKeys), stores a DetentionCalc snapshot. Goes through Operator → Accounts → Manager approval.
-10. **Bill.** Accounts opens "LR to Bill", picks Whirlpool, picks Consignor as billing party, picks Bill Type = `RoadRail` (GST applies), selects acknowledged LRs, picks Place of Supply = Assam (Guwahati). Freight is locked (sourced from LR). Detention/Hamali/Misc editable. GST engine: Maharashtra → Assam = 5% IGST. Whirlpool has `splitBillsByChargeType=true`, so two bills generate: one for Freight (₹25k example), one for Detention/Hamali (₹3k example), both linked to the same LR. Numbers `SKT/B/JAL/26-27/00xxx`.
+10. **Bill.** After POD acknowledgement, Accounts is told whether the consignor or consignee will pay. Accounts opens "LR to Bill", selects Bill Head (`Consignor` or `Consignee`), Transport Type, then a Client drawn only from customers with acknowledged pending LRs. Accounts selects the LR(s); the system derives Bill To/GST details and Place of Supply = Assam from the Guwahati destination. Freight is locked (sourced from LR). GST engine: Maharashtra → Assam = 5% IGST under the documented RoadRail forward-charge rule. Whirlpool has `splitBillsByChargeType=true`, so two bills generate when both groups of charges exist: one for Freight (₹25k example), one for Detention/Hamali/additional charges (₹3k example), both linked to the same LR. Numbers `SKT/B/JAL/26-27/00xxx`.
 11. **Receipt.** Whirlpool pays a month-end transfer covering 5 bills minus TDS. Receipt entered, allocated across bills via ReceiptAllocation rows (each with `tdsAmount` and later `tdsCertNumber` from Form 16A). Customer ledger updates.
 12. **Tally posting.** Every journal entry (LR bill, receipt, broker payment, hamali, etc.) is tagged broker-wise (per legacy requirement). Bridge service syncs to Tally Prime.
 13. **Anything wrong?** Damage qty > 0 at step 7 auto-creates a Claim. Customer calls complaining → Complaint module ticket, polymorphic-linked to the LR + Bill. SLA tracked.
@@ -99,7 +99,7 @@ Read this as a story. Each numbered step maps to a module in the plan.
 
 ## 5. Key Business Rules — the "Why" behind plan decisions
 
-These are the surprising rules. New contributors should understand the *reason*, not just the rule.
+These are the surprising rules. New contributors should understand the _reason_, not just the rule.
 
 ### 5.1 One LR can have multiple Bills (Whirlpool requirement)
 
@@ -185,13 +185,13 @@ These are the surprising rules. New contributors should understand the *reason*,
 
 ## 6. Client-Specific Quirks (the named ones)
 
-| Client | Quirk |
-|---|---|
-| **Whirlpool** | Requires separate Freight Bill + separate Detention/Hamali Bill against the same LR. Drives `Customer.splitBillsByChargeType` flag. Bills via legacy "Snehal123" environment in old system. |
-| **Britannia, Samsonite** | Direct ERP shippers — same "Snehal123" environment, "Update LR Finalised" flow. |
-| **Walk-in / general freight** | "Generate Instant LR" path with no parent order. v1 supports this via `LR.orderId nullable`. |
-| **Jai Anand Transport** | Pump + transporter + barter counterparty (see §5.11). |
-| **Goodyear, LG, Haier, Nilons, Jain Irrigation, CEAT** | Standard enterprise flow — orders → LRs → bills. |
+| Client                                                 | Quirk                                                                                                                                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Whirlpool**                                          | Requires separate Freight Bill + separate Detention/Hamali Bill against the same LR. Drives `Customer.splitBillsByChargeType` flag. Bills via legacy "Snehal123" environment in old system. |
+| **Britannia, Samsonite**                               | Direct ERP shippers — same "Snehal123" environment, "Update LR Finalised" flow.                                                                                                             |
+| **Walk-in / general freight**                          | "Generate Instant LR" path with no parent order. v1 supports this via `LR.orderId nullable`.                                                                                                |
+| **Jai Anand Transport**                                | Pump + transporter + barter counterparty (see §5.11).                                                                                                                                       |
+| **Goodyear, LG, Haier, Nilons, Jain Irrigation, CEAT** | Standard enterprise flow — orders → LRs → bills.                                                                                                                                            |
 
 ---
 
@@ -223,22 +223,22 @@ When proposing infra: lead with lean option, present enterprise upgrades only as
 
 ## 9. What's Authoritative Where
 
-| Question | Read this |
-|---|---|
-| What entities exist, what's their shape, what fields? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §4–§8 |
-| What's the phase order? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §11 |
-| Cross-module conventions (soft delete, money, jobs, branch scope, etc.)? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §10 |
-| AWS deployment topology? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §12 |
-| How to verify a phase ships correctly? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §13 |
-| Master CRUD architecture, no-dynamic-engine rule? | [MASTER_MODULE_PLAN.md](MASTER_MODULE_PLAN.md) |
-| How do I manually understand/test the current Order -> LR flow? | [CURRENT_ORDER_LR_FLOW_GUIDE.md](CURRENT_ORDER_LR_FLOW_GUIDE.md) |
-| Auth/permission/branch-scoping patterns? | [RBAC_PLAN.md](RBAC_PLAN.md) |
-| Stack + design system + folder rules? | [../CLAUDE.md](../CLAUDE.md) |
-| Domain meaning of LR/VP/DC/Hamali/etc.? | **This file, §2** |
-| Why a specific plan decision was made? | **This file, §5** |
-| Who SK is, what they do, what the legacy looks like? | **This file, §1 + §3** |
-| The happy-path narrative end-to-end? | **This file, §4** |
-| Client-specific quirks (Whirlpool etc.)? | **This file, §6** |
+| Question                                                                 | Read this                                                        |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| What entities exist, what's their shape, what fields?                    | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §4–§8             |
+| What's the phase order?                                                  | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §11               |
+| Cross-module conventions (soft delete, money, jobs, branch scope, etc.)? | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §10               |
+| AWS deployment topology?                                                 | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §12               |
+| How to verify a phase ships correctly?                                   | [ERP_MODULE_PLAN_V2.md](ERP_MODULE_PLAN_V2.md) §13               |
+| Master CRUD architecture, no-dynamic-engine rule?                        | [MASTER_MODULE_PLAN.md](MASTER_MODULE_PLAN.md)                   |
+| How do I manually understand/test the current Order -> LR flow?          | [CURRENT_ORDER_LR_FLOW_GUIDE.md](CURRENT_ORDER_LR_FLOW_GUIDE.md) |
+| Auth/permission/branch-scoping patterns?                                 | [RBAC_PLAN.md](RBAC_PLAN.md)                                     |
+| Stack + design system + folder rules?                                    | [../CLAUDE.md](../CLAUDE.md)                                     |
+| Domain meaning of LR/VP/DC/Hamali/etc.?                                  | **This file, §2**                                                |
+| Why a specific plan decision was made?                                   | **This file, §5**                                                |
+| Who SK is, what they do, what the legacy looks like?                     | **This file, §1 + §3**                                           |
+| The happy-path narrative end-to-end?                                     | **This file, §4**                                                |
+| Client-specific quirks (Whirlpool etc.)?                                 | **This file, §6**                                                |
 
 [ERP_DEVELOPMENT_PLAN.md](ERP_DEVELOPMENT_PLAN.md) is **superseded** for module scope/ordering by `ERP_MODULE_PLAN_V2.md` but kept for historical context.
 

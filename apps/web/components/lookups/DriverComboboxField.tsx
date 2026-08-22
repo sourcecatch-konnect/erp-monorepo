@@ -28,7 +28,7 @@ type Props<TFormValues extends FieldValues> = {
   emptyText?: string;
   required?: boolean;
   disabled?: boolean;
-  selectionContext?: "default" | "trip";
+  selectionContext?: "default" | "trip" | "journey";
   showStatusBadge?: boolean;
   getBadge?: (driver: Driver) => string | undefined;
   getBadgeTone?: (driver: Driver) => BadgeTone | undefined;
@@ -65,6 +65,16 @@ const tripChoiceBadge = (choice: TripDriverChoice) => {
   };
 
   return badges[choice.selectionState];
+};
+
+const journeyChoiceBadge = (choice: TripDriverChoice) => {
+  if (choice.selectionState === "AVAILABLE_FOR_NEW_JOURNEY") {
+    return "Available";
+  }
+  if (choice.selectionState === "ON_LEAVE") return "On leave";
+  if (choice.selectionState === "BLACKLISTED") return "Blacklisted";
+  if (choice.selectionState === "UNAVAILABLE") return "Unavailable";
+  return "Assigned";
 };
 
 const tripChoiceTone = (choice: TripDriverChoice): BadgeTone => {
@@ -175,12 +185,17 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
   });
 
   const tripChoices = useInfiniteQuery({
-    queryKey: [...driverKeys.all, "trip-options", { search: debouncedSearch }],
+    queryKey: [
+      ...driverKeys.all,
+      "trip-options",
+      { search: debouncedSearch, selectionContext },
+    ],
     queryFn: ({ pageParam = 0 }) =>
       driverApi.tripOptions({
         page: pageParam,
         size: PAGE_SIZE,
         search: debouncedSearch,
+        context: selectionContext === "journey" ? "journey" : undefined,
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
@@ -193,7 +208,7 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
 
       return lastPage.data.length === PAGE_SIZE ? allPages.length : undefined;
     },
-    enabled: selectionContext === "trip" && !disabled,
+    enabled: selectionContext !== "default" && !disabled,
   });
 
   const selectedDriver = useQuery({
@@ -203,7 +218,7 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
   });
 
   const options = React.useMemo<DriverComboboxOption[]>(() => {
-    if (selectionContext === "trip") {
+    if (selectionContext !== "default") {
       const choices =
         tripChoices.data?.pages.flatMap((page) => page.data) ?? [];
       const contextualOptions: DriverComboboxOption[] = choices.map(
@@ -214,12 +229,17 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
           badge:
             highlightDriverId && choice.id === highlightDriverId
               ? "Journey driver"
-              : tripChoiceBadge(choice),
+              : selectionContext === "journey"
+                ? journeyChoiceBadge(choice)
+                : tripChoiceBadge(choice),
           badgeTone:
             highlightDriverId && choice.id === highlightDriverId
               ? "info"
               : tripChoiceTone(choice),
-          disabled: !choice.selectable,
+          disabled:
+            selectionContext === "journey"
+              ? choice.selectionState !== "AVAILABLE_FOR_NEW_JOURNEY"
+              : !choice.selectable,
           tripChoice: choice,
         }),
       );
@@ -287,7 +307,7 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
     drivers.data,
   ]);
 
-  const activeQuery = selectionContext === "trip" ? tripChoices : drivers;
+  const activeQuery = selectionContext === "default" ? drivers : tripChoices;
 
   return (
     <ComboboxField<TFormValues>

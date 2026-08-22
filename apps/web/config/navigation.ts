@@ -76,6 +76,12 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.LORRY_RECEIPT.VIEW,
       },
       {
+        title: "LR Unloading Report",
+        href: "/lorry-receipts/unloading-report",
+        icon: IconFileBarcode,
+        permission: PERMS.LORRY_RECEIPT.VIEW,
+      },
+      {
         title: "VP Management",
         icon: IconTrain,
         items: [
@@ -314,10 +320,22 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.CASH_PLANNING.VIEW,
       },
       {
-        title: "Accounts",
-        href: "/accounts",
+        title: "LR to Bill",
+        href: "/accounts/lr-to-bill",
         icon: IconWallet,
-        disabled: true,
+        permission: PERMS.BILLING.VIEW,
+      },
+      {
+        title: "Billing Register",
+        href: "/accounts/bills",
+        icon: IconWallet,
+        permission: PERMS.BILLING.VIEW,
+      },
+      {
+        title: "Client Payment Receivable",
+        href: "/accounts/receipts",
+        icon: IconReceipt2,
+        permission: PERMS.RECEIPT.VIEW,
       },
     ],
   },
@@ -376,3 +394,121 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+/* ------------------------------------------------------------------ *
+ * Nav search — flat, permission-filtered index of every reachable page
+ * ------------------------------------------------------------------ */
+
+/** A nav entry is visible when it carries no permission or the user has it. */
+export const canShowNavLink = (
+  link: { permission?: PermissionKey },
+  permissions: string[] | undefined,
+) => !link.permission || Boolean(permissions?.includes(link.permission));
+
+export type NavSearchEntry = {
+  /** Stable key — a page can appear once per href/title pair. */
+  id: string;
+  title: string;
+  href: string;
+  icon: NavIcon;
+  /** Section label, e.g. "Operations". */
+  section: string;
+  /** Parent group title when the page sits inside one, e.g. "Masters". */
+  group?: string;
+  /** Lowercased text the matcher searches (title + group + section + href). */
+  haystack: string;
+};
+
+const toEntry = (
+  title: string,
+  href: string,
+  icon: NavIcon,
+  section: string,
+  group?: string,
+): NavSearchEntry => ({
+  id: `${href}:${title}`,
+  title,
+  href,
+  icon,
+  section,
+  group,
+  haystack: [title, group ?? "", section, href.replace(/[-/]/g, " ")]
+    .join(" ")
+    .toLowerCase(),
+});
+
+/**
+ * Flattens `NAV_SECTIONS` into every page the user may open — top-level links,
+ * group landing pages (e.g. Masters → /masters) and all group children.
+ * Disabled ("coming soon") entries are left out; they can't be navigated to.
+ */
+export function buildNavSearchIndex(
+  permissions: string[] | undefined,
+): NavSearchEntry[] {
+  const entries: NavSearchEntry[] = [];
+
+  for (const section of NAV_SECTIONS) {
+    for (const item of section.items) {
+      if (!isNavGroup(item)) {
+        if (item.disabled || !canShowNavLink(item, permissions)) continue;
+        entries.push(toEntry(item.title, item.href, item.icon, section.label));
+        continue;
+      }
+
+      const children = item.items.filter(
+        (child) => !child.disabled && canShowNavLink(child, permissions),
+      );
+      if (!children.length) continue;
+
+      // Some groups double as a real page (Masters → /masters).
+      if ("href" in item && typeof item.href === "string") {
+        entries.push(toEntry(item.title, item.href, item.icon, section.label));
+      }
+
+      for (const child of children) {
+        entries.push(
+          toEntry(child.title, child.href, item.icon, section.label, item.title),
+        );
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Ranks the index against a free-text query. Every whitespace-separated token
+ * must match somewhere; title matches outrank group/section/href matches, and a
+ * title *prefix* outranks a title substring. An empty query returns the whole
+ * index in nav order.
+ */
+export function searchNavEntries(
+  entries: NavSearchEntry[],
+  query: string,
+): NavSearchEntry[] {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return entries;
+
+  const scored: { entry: NavSearchEntry; score: number }[] = [];
+
+  for (const entry of entries) {
+    const title = entry.title.toLowerCase();
+    let score = 0;
+    let matchesAll = true;
+
+    for (const token of tokens) {
+      if (!entry.haystack.includes(token)) {
+        matchesAll = false;
+        break;
+      }
+      if (title.startsWith(token)) score += 3;
+      else if (title.includes(token)) score += 2;
+      else score += 1;
+    }
+
+    if (matchesAll) scored.push({ entry, score });
+  }
+
+  // Stable sort keeps nav order for equally-scoring pages.
+  return scored.sort((a, b) => b.score - a.score).map(({ entry }) => entry);
+}

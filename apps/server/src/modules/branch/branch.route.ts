@@ -1,10 +1,19 @@
 import { Router } from "express";
-import { createBranchSchema, updateBranchSchema } from "@skerp/validators";
+import { PERMS } from "@skerp/types";
+import {
+  createBranchSchema,
+  updateBranchSchema,
+  updateBranchRailheadsSchema,
+} from "@skerp/validators";
 
 import { db } from "../../../prisma/prisma.js";
 import { createCrudRouter } from "../_shared/crud.factory.js";
 import { ZodTypeAny } from "zod";
 import { BadRequestError } from "../../lib/error.js";
+import { NotFoundError, ValidationError } from "../../lib/error.js";
+import { can, canAny } from "../../auth/can.middleware.js";
+import { getParamId } from "../_shared/param.js";
+import { sendOk } from "../_shared/response.js";
 
 const plural = (count: number, singular: string, pluralName?: string) =>
   `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
@@ -158,7 +167,6 @@ const router: Router = createCrudRouter({
 
   uniqueErrorMessages: {
     branchCode: "This branch code already exists.",
-
   },
 
   listOptions: {
@@ -187,6 +195,147 @@ const router: Router = createCrudRouter({
       },
     },
   },
+});
+
+const branchRailheadInclude = {
+  area: {
+    select: {
+      id: true,
+      name: true,
+      cityId: true,
+      isRailHead: true,
+      city: { select: { id: true, name: true } },
+    },
+  },
+} as const;
+
+router.get(
+  "/:id/railheads",
+  canAny(
+    "masters.branch.view",
+    PERMS.VP_SCHEDULE.VIEW,
+    PERMS.VP_SCHEDULE.CREATE,
+    PERMS.VP_SCHEDULE.UPDATE,
+    PERMS.LORRY_RECEIPT.CREATE,
+    PERMS.LORRY_RECEIPT.UPDATE,
+  ),
+  async (req, res) => {
+    const branchId = getParamId(req);
+    const branch = await db.branch.findUnique({
+      where: { id: branchId },
+      select: { id: true },
+    });
+    if (!branch) throw new NotFoundError("Branch not found");
+
+    const railheads = await db.branchRailheadArea.findMany({
+      where: { branchId, isActive: true },
+      include: branchRailheadInclude,
+      orderBy: [{ area: { city: { name: "asc" } } }, { area: { name: "asc" } }],
+    });
+
+    return sendOk(res, railheads);
+  },
+);
+
+router.put("/:id/railheads", can("masters.branch.update"), async (req, res) => {
+  const branchId = getParamId(req);
+  const branch = await db.branch.findUnique({
+    where: { id: branchId },
+    select: { id: true },
+  });
+  if (!branch) throw new NotFoundError("Branch not found");
+
+  const parsed = updateBranchRailheadsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+
+  const areaIds = [...new Set(parsed.data.areaIds)];
+  const areas = areaIds.length
+    ? await db.area.findMany({
+        where: { id: { in: areaIds }, isRailHead: true },
+        select: { id: true },
+      })
+    : [];
+
+  if (areas.length !== areaIds.length) {
+    throw new BadRequestError(
+      "Every managed railhead must be an Area marked as Rail Head",
+    );
+  }
+
+  const removedMappings = await db.branchRailheadArea.findMany({
+    where: {
+      branchId,
+      isActive: true,
+      ...(areaIds.length ? { areaId: { notIn: areaIds } } : {}),
+    },
+    select: { areaId: true, area: { select: { name: true } } },
+  });
+
+  for (const mapping of removedMappings) {
+    const [vpSchedules, lrGroups] = await Promise.all([
+      db.vPSchedule.count({
+        where: {
+          deletedAt: null,
+          status: { not: "CANCELLED" },
+          OR: [
+            { fromBranchId: branchId, sourceAreaId: mapping.areaId },
+            { toBranchId: branchId, destinationAreaId: mapping.areaId },
+          ],
+        },
+      }),
+      db.lRGroup.count({
+        where: {
+          deletedAt: null,
+          status: { not: "CANCELLED" },
+          OR: [
+            {
+              railheadBranchId: branchId,
+              sourceRailheadAreaId: mapping.areaId,
+            },
+            {
+              destinationBranchId: branchId,
+              destinationRailheadAreaId: mapping.areaId,
+            },
+          ],
+        },
+      }),
+    ]);
+
+    if (vpSchedules || lrGroups) {
+      throw new BadRequestError(
+        `${mapping.area.name} cannot be removed from this branch because it is used by ${plural(vpSchedules, "active VP Schedule")} and ${plural(lrGroups, "active LR group")}`,
+      );
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.branch.update({
+      where: { id: branchId },
+      data: { isRailHead: areaIds.length > 0 },
+    });
+    await tx.branchRailheadArea.updateMany({
+      where: { branchId, isActive: true },
+      data: { isActive: false },
+    });
+
+    for (const areaId of areaIds) {
+      await tx.branchRailheadArea.upsert({
+        where: { branchId_areaId: { branchId, areaId } },
+        create: { branchId, areaId, isActive: true },
+        update: { isActive: true },
+      });
+    }
+  });
+
+  const railheads = await db.branchRailheadArea.findMany({
+    where: { branchId, isActive: true },
+    include: branchRailheadInclude,
+    orderBy: [{ area: { city: { name: "asc" } } }, { area: { name: "asc" } }],
+  });
+
+  return sendOk(res, railheads);
 });
 
 export default router;

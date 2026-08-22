@@ -3,6 +3,7 @@ import {
   createTripSchema,
   updateTripSchema,
   closeTripSchema,
+  correctClosedTripSchema,
   cancelTripSchema,
   tripTypeSchema,
   tripStatusSchema,
@@ -18,6 +19,10 @@ export type CreateTripBody = z.input<typeof createTripSchema>;
 export type CreateTripFormInput = z.input<typeof createTripSchema>;
 export type UpdateTripBody = z.input<typeof updateTripSchema>;
 export type CloseTripBody = z.output<typeof closeTripSchema>;
+export type CorrectClosedTripFormInput = z.input<
+  typeof correctClosedTripSchema
+>;
+export type CorrectClosedTripBody = z.output<typeof correctClosedTripSchema>;
 export type CancelTripBody = z.output<typeof cancelTripSchema>;
 
 export type TripStatusHistoryRow = {
@@ -118,7 +123,10 @@ export type Trip = {
   openingKm: number;
   startDateTime: string | null;
   endDateTime: string | null;
+  arrivalDateTime: string | null;
+  unloadingCompletedAt: string | null;
   closingKm: number | null;
+  closeReason: string | null;
   cancelReason: string | null;
   fyCode: string;
   createdById: string;

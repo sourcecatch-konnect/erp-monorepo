@@ -6,6 +6,8 @@ import type {
   UpdateVPScheduleBody,
   ConfirmVPScheduleBody,
   CancelVPScheduleBody,
+  VPScheduleFreightPreview,
+  VPScheduleFreightPreviewBody,
 } from "@skerp/types";
 import {
   ListQuery,
@@ -31,6 +33,17 @@ const encodeVPScheduleIdentifier = (identifier: string) =>
   encodeURIComponent(identifier);
 
 export const vpScheduleApi = {
+  freightPreview: async (
+    body: VPScheduleFreightPreviewBody,
+  ): Promise<VPScheduleFreightPreview> => {
+    const res = await api.post<ApiResponse<VPScheduleFreightPreview>>(
+      "/vp-schedules/freight-preview",
+      body,
+    );
+
+    return unwrapApiResponse(res);
+  },
+
   list: async (query?: ListQuery): Promise<ListResult<VPSchedule>> => {
     const params: Record<string, string | number> = {};
 

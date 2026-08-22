@@ -14,6 +14,7 @@ import type {
   Trip,
   TripDriverChoice,
 } from "@skerp/types";
+import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -42,6 +43,7 @@ import IconTextField from "../masters/_shared/fields/IconTextField";
 import CheckboxField from "../masters/_shared/fields/CheckBoxField";
 import TextAreaField from "../masters/_shared/fields/TextAreaField";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
+import RouteForm from "../masters/routes/routeForm";
 
 import {
   DriverComboboxField,
@@ -51,6 +53,7 @@ import { paiseToRupees } from "@/lib/money";
 import { tripApi, tripLookups, tripLookupKeys } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
+import { useCan } from "@/features/auth";
 
 type Props = {
   mode: "create" | "edit";
@@ -78,6 +81,8 @@ export default function TripForm({
   const { setLabel } = useBreadcrumbLabels();
   const [discardOpen, setDiscardOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [routeFormOpen, setRouteFormOpen] = useState(false);
+  const canCreateRoute = useCan(PERMS.MASTERS.ROUTE.CREATE);
 
   const actionButtonsRef = useRef<HTMLDivElement>(null);
   const [actionButtonsHaveBeenSeen, setActionButtonsHaveBeenSeen] =
@@ -512,6 +517,10 @@ export default function TripForm({
               label="Route"
               required
               options={routes.data ?? []}
+              actionLabel="+ Add route"
+              onAction={
+                canCreateRoute ? () => setRouteFormOpen(true) : undefined
+              }
             />
 
             <IconTextField<CreateTripFormInput>
@@ -717,6 +726,21 @@ export default function TripForm({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RouteForm
+        open={routeFormOpen}
+        onOpenChange={setRouteFormOpen}
+        onSaved={async (route) => {
+          await queryClient.invalidateQueries({
+            queryKey: tripLookupKeys.routes,
+          });
+          form.setValue("routeId", route.id, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+          });
+        }}
+      />
     </FormProvider>
   );
 }

@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { FormProvider, useFieldArray, useForm, useWatch } from "react-hook-form";
+import {
+  FormProvider,
+  useFieldArray,
+  useForm,
+  useWatch,
+} from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { formatPaise } from "@/lib/money";
 import { toast } from "sonner";
@@ -43,13 +48,17 @@ import { api } from "@/lib/api";
 
 import {
   useCreateVPLoadingAllocation,
-  useEligibleVPLoadingGRNs,
-  useVPLoadingGates,
   useVPLoadingPreview,
   useVPLoadingSchedulePreview,
   useVPLoadingSchedules,
+  useVPScheduleEligibleGrns,
 } from "./hook/useVP-loading";
-import type { MRRRRowPreview, VPLoadingPreviewGoods } from "./vp-loading.service";
+import type {
+  EligibleVPLoadingGRN,
+  MRRRRowPreview,
+  VPLoadingGate,
+  VPLoadingPreviewGoods,
+} from "./vp-loading.service";
 import { OneLapTrackerAssignmentPanel } from "./components/OneLapTrackerAssignmentPanel";
 
 type Props = {
@@ -108,20 +117,16 @@ const formatNumber = (value: number | string | null | undefined) => {
 };
 
 const unitLabel = (row: VPLoadingPreviewGoods) =>
-  row.quantityUnit?.symbol || row.quantityUnit?.code || row.quantityUnit?.name || "Qty";
+  row.quantityUnit?.symbol ||
+  row.quantityUnit?.code ||
+  row.quantityUnit?.name ||
+  "Qty";
 
 const getParamId = (value: string | string[] | undefined) =>
-  decodeURIComponent(Array.isArray(value) ? value[0] ?? "" : value ?? "");
+  decodeURIComponent(Array.isArray(value) ? (value[0] ?? "") : (value ?? ""));
 
 const canAcceptLoading = (status?: string | null) =>
   !status || ["DRAFT", "IN_PROGRESS"].includes(status);
-
-const getLocalDateInputValue = () => {
-  const now = new Date();
-  const timezoneOffset = now.getTimezoneOffset() * 60_000;
-
-  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
-};
 
 function InfoTile({
   label,
@@ -151,25 +156,17 @@ function InfoTile({
   );
 }
 
-function SummaryStep({
-  label,
-  done,
-}: {
-  label: string;
-  done: boolean;
-}) {
+function SummaryStep({ label, done }: { label: string; done: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium ${
-        done
-          ? "bg-emerald-500/10 text-emerald-700"
-          : "bg-muted text-muted-foreground"
-      }`}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium ${done
+        ? "bg-emerald-500/10 text-emerald-700"
+        : "bg-muted text-muted-foreground"
+        }`}
     >
       <span
-        className={`size-1.5 rounded-full ${
-          done ? "bg-emerald-500" : "bg-muted-foreground/40"
-        }`}
+        className={`size-1.5 rounded-full ${done ? "bg-emerald-500" : "bg-muted-foreground/40"
+          }`}
       />
       {label}
     </span>
@@ -228,7 +225,7 @@ export default function VPLoadingForm({ mode }: Props) {
 
   const form = useForm<VPLoadingFormValues>({
     defaultValues: {
-      scheduleDate: getLocalDateInputValue(),
+      scheduleDate: "",
       scheduleId: scheduleIdFromRoute,
       mrrrRowId: "",
       gateNo: "",
@@ -246,7 +243,10 @@ export default function VPLoadingForm({ mode }: Props) {
     name: "goods",
   });
 
-  const scheduleDate = useWatch({ control: form.control, name: "scheduleDate" });
+  const scheduleDate = useWatch({
+    control: form.control,
+    name: "scheduleDate",
+  });
   const scheduleId = useWatch({ control: form.control, name: "scheduleId" });
   const mrrrRowId = useWatch({ control: form.control, name: "mrrrRowId" });
   const gateNo = useWatch({ control: form.control, name: "gateNo" });
@@ -255,8 +255,10 @@ export default function VPLoadingForm({ mode }: Props) {
 
   const schedulesQuery = useVPLoadingSchedules(scheduleDate);
   const schedulePreview = useVPLoadingSchedulePreview(scheduleId);
-  const gatesQuery = useVPLoadingGates(mrrrRowId);
-  const grnsQuery = useEligibleVPLoadingGRNs(mrrrRowId, gateNo);
+  // One request per schedule (Redis-cached server-side), reused for every
+  // VP row/wagon in it. Gate grouping and the gate-locked-row filter are
+  // derived from this in memory below instead of separate requests.
+  const eligibleGrnsQuery = useVPScheduleEligibleGrns(scheduleId);
   const loadingPreview = useVPLoadingPreview(mrrrRowId, grnId);
   const createAllocation = useCreateVPLoadingAllocation();
 
@@ -266,11 +268,15 @@ export default function VPLoadingForm({ mode }: Props) {
   });
 
   const supervisorsQuery = useQuery({
-    queryKey: ["vp-loading", "supervisors"],
+    queryKey: ["vp-loading", "supervisors", scheduleId],
     queryFn: async () => {
-      const res = await api.get<{ data: SupervisorOption[] }>("/grn/supervisors");
+      const res = await api.get<{ data: SupervisorOption[] }>(
+        "/vp-loading/supervisors",
+        { params: { vpScheduleId: scheduleId } },
+      );
       return res.data.data;
     },
+    enabled: Boolean(scheduleId),
   });
 
   React.useEffect(() => {
@@ -353,39 +359,30 @@ export default function VPLoadingForm({ mode }: Props) {
         receivedQty: numberValue(row.receivedQty),
         alreadyAllocatedQty: numberValue(row.alreadyAllocatedQty),
         quantityUnitLabel: unitLabel(row),
-        loadedQty: numberValue(row.suggestedLoadQty),
+        loadedQty: "",
         loadingDamageQty: 0,
       })),
     );
   }, [form, loadingPreview.data, replace]);
 
   const scheduleOptions = React.useMemo<ComboboxOption[]>(
-
     () =>
-
       (schedulesQuery.data ?? [])
 
         .filter((schedule) =>
-
           (schedule.loadingRows ?? []).some((row) =>
-
             canAcceptLoading(row.vpWagonLoading?.status),
-
           ),
-
         )
 
         .map((schedule) => ({
-
           value: schedule.id,
 
-          label: `${schedule.scheduleName}`,
-
+          label: `${schedule.scheduleName} `,
         })),
 
     [schedulesQuery.data],
-
-  ); 
+  );
 
   const rowOptions = React.useMemo<ComboboxOption[]>(() => {
     const rows = schedulePreview.data?.mrRr?.rows ?? [];
@@ -393,40 +390,80 @@ export default function VPLoadingForm({ mode }: Props) {
     return rows
       .filter(
         (row) =>
-          row.vpNo?.trim() &&
-          canAcceptLoading(row.vpWagonLoading?.status),
+          row.vpNo?.trim() && canAcceptLoading(row.vpWagonLoading?.status),
       )
       .map((row: MRRRRowPreview, index) => ({
         value: row.id,
-        label: `${row.vpNo ?? `VP row ${index + 1}`} - ${
-          row.wagon?.name ?? row.wagonTypeLabel ?? "Wagon"
-        }`,
+        label: `${row.vpNo ?? `VP row ${index + 1}`} - ${row.wagon?.name ?? row.wagonTypeLabel ?? "Wagon"
+          }`,
       }));
   }, [schedulePreview.data]);
 
-  const gateOptions = React.useMemo<ComboboxOption[]>(
-    () =>
-      (gatesQuery.data ?? []).map((gate) => ({
-        value: gate.gateNo,
-        label: `${gate.gateNo} - ${gate.eligibleGrnCount} GRN, ${gate.totalAvailableQty} qty`,
-      })),
-    [gatesQuery.data],
+  const selectedRow = React.useMemo(
+    () => schedulePreview.data?.mrRr?.rows?.find((row) => row.id === mrrrRowId),
+    [mrrrRowId, schedulePreview.data],
+  );
+  const existingWagonLoading = selectedRow?.vpWagonLoading ?? null;
+  const isExistingWagonLoading = Boolean(existingWagonLoading);
+
+  // Once a wagon has taken its first LR, it's locked to that LR's gate —
+  // mirrors the write-side check in assertGRNCompatibleWithRow. Filtering
+  // here is a UX nicety only; the server still enforces the lock on submit.
+  const rowLockedGateNo = existingWagonLoading?.gateNo?.trim() || null;
+
+  const eligibleGrnsForRow = React.useMemo<EligibleVPLoadingGRN[]>(() => {
+    const grns = eligibleGrnsQuery.data ?? [];
+    return rowLockedGateNo
+      ? grns.filter((grn) => grn.gateNo === rowLockedGateNo)
+      : grns;
+  }, [eligibleGrnsQuery.data, rowLockedGateNo]);
+
+  const gateOptions = React.useMemo<ComboboxOption[]>(() => {
+    const gates = new Map<string, VPLoadingGate>();
+
+    for (const grn of eligibleGrnsForRow) {
+      const gateNo = grn.gateNo?.trim();
+      if (!gateNo) continue;
+
+      const current = gates.get(gateNo) ?? {
+        gateNo,
+        eligibleGrnCount: 0,
+        eligibleLrCount: 0,
+        totalAvailableQty: 0,
+      };
+
+      current.eligibleGrnCount += 1;
+      current.eligibleLrCount += 1;
+      current.totalAvailableQty += grn.availableQty;
+
+      gates.set(gateNo, current);
+    }
+
+    return [...gates.values()].map((gate) => ({
+      value: gate.gateNo,
+      label: `${gate.gateNo}`,
+    }));
+  }, [eligibleGrnsForRow]);
+
+  const grnsForGate = React.useMemo<EligibleVPLoadingGRN[]>(
+    () => eligibleGrnsForRow.filter((grn) => grn.gateNo === gateNo),
+    [eligibleGrnsForRow, gateNo],
   );
 
   const grnOptions = React.useMemo<ComboboxOption[]>(
     () =>
-      (grnsQuery.data ?? []).map((grn) => ({
+      grnsForGate.map((grn) => ({
         value: grn.grnId,
         label: `${grn.grnNumber}- ${grn.availableQty} qty`,
       })),
-    [grnsQuery.data],
+    [grnsForGate],
   );
 
   const labourOptions = React.useMemo<ComboboxOption[]>(
     () =>
       (laboursQuery.data?.data ?? []).map((labour) => ({
         value: labour.id,
-        label: `${labour.name}${labour.mobileNo ? ` - ${labour.mobileNo}` : ""}`,
+        label: `${labour.name}`,
       })),
     [laboursQuery.data],
   );
@@ -440,15 +477,9 @@ export default function VPLoadingForm({ mode }: Props) {
     [supervisorsQuery.data],
   );
 
-  const selectedRow = React.useMemo(
-    () => schedulePreview.data?.mrRr?.rows?.find((row) => row.id === mrrrRowId),
-    [mrrrRowId, schedulePreview.data],
-  );
-  const existingWagonLoading = selectedRow?.vpWagonLoading ?? null;
-  const isExistingWagonLoading = Boolean(existingWagonLoading);
   const selectedGrn = React.useMemo(
-    () => grnsQuery.data?.find((grn) => grn.grnId === grnId),
-    [grnId, grnsQuery.data],
+    () => grnsForGate.find((grn) => grn.grnId === grnId),
+    [grnId, grnsForGate],
   );
 
   React.useEffect(() => {
@@ -477,12 +508,16 @@ export default function VPLoadingForm({ mode }: Props) {
       const damageQty = numberValue(row.loadingDamageQty);
 
       if (loadedQty > row.availableQty) {
-        toast.error(`Row ${index + 1}: loaded quantity exceeds available quantity`);
+        toast.error(
+          `Row ${index + 1}: loaded quantity exceeds available quantity`,
+        );
         return false;
       }
 
       if (damageQty > loadedQty) {
-        toast.error(`Row ${index + 1}: damage quantity cannot exceed loaded quantity`);
+        toast.error(
+          `Row ${index + 1}: damage quantity cannot exceed loaded quantity`,
+        );
         return false;
       }
     }
@@ -510,7 +545,9 @@ export default function VPLoadingForm({ mode }: Props) {
 
     const body: CreateVPLoadingAllocationBody = {
       grnId: values.grnId,
-      labourId: isExistingWagonLoading ? undefined : values.labourId || undefined,
+      labourId: isExistingWagonLoading
+        ? undefined
+        : values.labourId || undefined,
       labourCharge: isExistingWagonLoading
         ? undefined
         : optionalNumber(values.labourCharge),
@@ -528,7 +565,9 @@ export default function VPLoadingForm({ mode }: Props) {
 
     const parsed = createVPLoadingAllocationSchema.safeParse(body);
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Please check loading details");
+      toast.error(
+        parsed.error.issues[0]?.message ?? "Please check loading details",
+      );
       return;
     }
 
@@ -584,21 +623,23 @@ export default function VPLoadingForm({ mode }: Props) {
                 Create VP Loading
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Select a loading-ready schedule, pick the VP wagon, then add an LR/GRN with goods quantity.
+                Select a loading-ready schedule, pick the VP wagon, then add an
+                LR/GRN with goods quantity.
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
                 <span className="inline-flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2">
                   <IconRoute size={15} className="text-muted-foreground" />
                   {schedulePreview.data
-                    ? `${schedulePreview.data.fromBranch?.name ?? DASH} to ${
-                        schedulePreview.data.toBranch?.name ?? DASH
-                      }`
+                    ? `${schedulePreview.data.fromBranch?.name ?? DASH} to ${schedulePreview.data.toBranch?.name ?? DASH
+                    }`
                     : "Select schedule"}
                 </span>
                 <span className="inline-flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2">
                   <IconTrain size={15} className="text-muted-foreground" />
-                  {selectedRow?.wagon?.name ?? selectedRow?.wagonTypeLabel ?? "Select VP wagon"}
+                  {selectedRow?.wagon?.name ??
+                    selectedRow?.wagonTypeLabel ??
+                    "Select VP wagon"}
                 </span>
               </div>
             </div>
@@ -621,7 +662,8 @@ export default function VPLoadingForm({ mode }: Props) {
         {!canCreate ? (
           <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             <IconAlertTriangle size={17} className="mt-0.5 shrink-0" />
-            You can view this loading workspace, but creating a new VP loading allocation needs create permission.
+            You can view this loading workspace, but creating a new VP loading
+            allocation needs create permission.
           </div>
         ) : null}
 
@@ -634,7 +676,7 @@ export default function VPLoadingForm({ mode }: Props) {
               columns={2}
             >
               <div className="grid gap-1.5">
-                <FieldLabel>VP Schedule Date</FieldLabel>
+                <FieldLabel>VP Schedule Date (Optional)</FieldLabel>
                 <Input
                   type="date"
                   value={scheduleDate}
@@ -646,6 +688,9 @@ export default function VPLoadingForm({ mode }: Props) {
                     })
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to view all loading-ready schedules.
+                </p>
               </div>
 
               <div className="grid gap-1.5">
@@ -656,7 +701,9 @@ export default function VPLoadingForm({ mode }: Props) {
                   onChange={(value) => form.setValue("scheduleId", value)}
                   placeholder="Select loading-ready schedule"
                   emptyText="No loading-ready schedules found"
-                  disabled={Boolean(scheduleIdFromRoute) || schedulesQuery.isLoading}
+                  disabled={
+                    Boolean(scheduleIdFromRoute) || schedulesQuery.isLoading
+                  }
                 />
               </div>
 
@@ -680,7 +727,7 @@ export default function VPLoadingForm({ mode }: Props) {
                   onChange={(value) => form.setValue("gateNo", value)}
                   placeholder="Select GRN gate"
                   emptyText="No eligible gate found"
-                  disabled={!mrrrRowId || gatesQuery.isLoading}
+                  disabled={!mrrrRowId || eligibleGrnsQuery.isLoading}
                 />
               </div>
 
@@ -692,7 +739,7 @@ export default function VPLoadingForm({ mode }: Props) {
                   onChange={(value) => form.setValue("grnId", value)}
                   placeholder="Select LR / GRN"
                   emptyText="No eligible LR / GRN found for gate"
-                  disabled={!gateNo || grnsQuery.isLoading}
+                  disabled={!gateNo || eligibleGrnsQuery.isLoading}
                 />
               </div>
             </FormSection>
@@ -703,7 +750,11 @@ export default function VPLoadingForm({ mode }: Props) {
               hostVpNo={selectedRow?.vpNo}
             />
 
-            <FormSection icon={<IconPackage size={16} />} title="Goods Loading" columns={1}>
+            <FormSection
+              icon={<IconPackage size={16} />}
+              title="Goods Loading"
+              columns={1}
+            >
               <div className="overflow-hidden rounded-lg border bg-background">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
                   <div>
@@ -721,8 +772,12 @@ export default function VPLoadingForm({ mode }: Props) {
                     <TableHeader>
                       <TableRow className="bg-muted/40">
                         <TableHead>Goods</TableHead>
-                        <TableHead className="w-26 text-right">Received</TableHead>
-                        <TableHead className="w-26 text-right">Available</TableHead>
+                        <TableHead className="w-26 text-right">
+                          Received
+                        </TableHead>
+                        <TableHead className="w-26 text-right">
+                          Available
+                        </TableHead>
                         <TableHead className="w-30">Loaded Qty</TableHead>
                         <TableHead className="w-30">Damage Qty</TableHead>
                       </TableRow>
@@ -730,7 +785,10 @@ export default function VPLoadingForm({ mode }: Props) {
                     <TableBody>
                       {loadingPreview.isLoading ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                          <TableCell
+                            colSpan={5}
+                            className="py-10 text-center text-sm text-muted-foreground"
+                          >
                             Loading GRN goods...
                           </TableCell>
                         </TableRow>
@@ -742,7 +800,8 @@ export default function VPLoadingForm({ mode }: Props) {
                                 No goods selected
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                Select a gate and LR/GRN to preview goods rows here.
+                                Select a gate and LR/GRN to preview goods rows
+                                here.
                               </p>
                             </div>
                           </TableCell>
@@ -753,21 +812,28 @@ export default function VPLoadingForm({ mode }: Props) {
                           const loadedQty = numberValue(row?.loadedQty);
                           const damageQty = numberValue(row?.loadingDamageQty);
                           const hasError =
-                            loadedQty > field.availableQty || damageQty > loadedQty;
+                            loadedQty > field.availableQty ||
+                            damageQty > loadedQty;
 
                           return (
                             <TableRow key={field.id}>
                               <TableCell className="min-w-50">
-                                <div className="font-medium">{field.goodsName}</div>
+                                <div className="font-medium">
+                                  {field.goodsName}
+                                </div>
                                 <div className="text-xs text-muted-foreground">
-                                  Already loaded: {formatNumber(field.alreadyAllocatedQty)} {field.quantityUnitLabel}
+                                  Already loaded:{" "}
+                                  {formatNumber(field.alreadyAllocatedQty)}{" "}
+                                  {field.quantityUnitLabel}
                                 </div>
                               </TableCell>
                               <TableCell className="text-right tabular-nums">
-                                {formatNumber(field.receivedQty)} {field.quantityUnitLabel}
+                                {formatNumber(field.receivedQty)}{" "}
+                                {field.quantityUnitLabel}
                               </TableCell>
                               <TableCell className="text-right font-medium tabular-nums">
-                                {formatNumber(field.availableQty)} {field.quantityUnitLabel}
+                                {formatNumber(field.availableQty)}{" "}
+                                {field.quantityUnitLabel}
                               </TableCell>
                               <TableCell>
                                 <Input
@@ -777,7 +843,9 @@ export default function VPLoadingForm({ mode }: Props) {
                                   step={1}
                                   className="h-9"
                                   aria-invalid={hasError}
-                                  {...form.register(`goods.${index}.loadedQty` as const)}
+                                  {...form.register(
+                                    `goods.${index}.loadedQty` as const,
+                                  )}
                                 />
                               </TableCell>
                               <TableCell>
@@ -788,7 +856,9 @@ export default function VPLoadingForm({ mode }: Props) {
                                   step={1}
                                   className="h-9"
                                   aria-invalid={hasError}
-                                  {...form.register(`goods.${index}.loadingDamageQty` as const)}
+                                  {...form.register(
+                                    `goods.${index}.loadingDamageQty` as const,
+                                  )}
                                 />
                               </TableCell>
                             </TableRow>
@@ -815,7 +885,8 @@ export default function VPLoadingForm({ mode }: Props) {
                         Labour charge is already locked for this wagon.
                       </p>
                       <p className="mt-1 text-xs text-emerald-700">
-                        Add another LR/GRN only. Labour, labour charge, and supervisor stay from the first loading.
+                        Add another LR/GRN only. Labour, labour charge, and
+                        supervisor stay from the first loading.
                       </p>
                     </div>
                   </div>
@@ -828,7 +899,8 @@ export default function VPLoadingForm({ mode }: Props) {
                         First LR for this wagon
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Add labour details once here. Later LRs for this wagon will reuse this same wagon-level labour charge.
+                        Add labour details once here. Later LRs for this wagon
+                        will reuse this same wagon-level labour charge.
                       </p>
                     </div>
                   </div>
@@ -861,7 +933,9 @@ export default function VPLoadingForm({ mode }: Props) {
                     <Combobox
                       options={supervisorOptions}
                       value={form.watch("loadingSupervisorId") ?? ""}
-                      onChange={(value) => form.setValue("loadingSupervisorId", value)}
+                      onChange={(value) =>
+                        form.setValue("loadingSupervisorId", value)
+                      }
                       placeholder="Select supervisor"
                       emptyText="No supervisors found"
                       disabled={supervisorsQuery.isLoading}
@@ -927,9 +1001,8 @@ export default function VPLoadingForm({ mode }: Props) {
                   label="Area"
                   value={
                     schedulePreview.data
-                      ? `${schedulePreview.data.sourceArea?.name ?? DASH} to ${
-                          schedulePreview.data.destinationArea?.name ?? DASH
-                        }`
+                      ? `${schedulePreview.data.sourceArea?.name ?? DASH} to ${schedulePreview.data.destinationArea?.name ?? DASH
+                      }`
                       : DASH
                   }
                 />
@@ -941,22 +1014,17 @@ export default function VPLoadingForm({ mode }: Props) {
                   label="VP/Wagon"
                   value={
                     selectedRow
-                      ? `${selectedRow.vpNo ?? selectedRow.rowLabel ?? DASH} / ${
-                          selectedRow.wagon?.name ??
-                          selectedRow.wagonTypeLabel ??
-                          DASH
-                        }`
+                      ? `${selectedRow.vpNo ?? selectedRow.rowLabel ?? DASH} / ${selectedRow.wagon?.name ??
+                      selectedRow.wagonTypeLabel ??
+                      DASH
+                      }`
                       : DASH
                   }
                 />
                 <SummaryRow label="Gate" value={gateNo || DASH} />
                 <SummaryRow
                   label="LR/GRN"
-                  value={
-                    selectedGrn
-                      ? `${selectedGrn.grnNumber}`
-                      : DASH
-                  }
+                  value={selectedGrn ? `${selectedGrn.grnNumber}` : DASH}
                 />
                 <SummaryRow
                   label="Consignor"
@@ -1012,19 +1080,14 @@ export default function VPLoadingForm({ mode }: Props) {
                     <SummaryRow
                       label="Supervisor"
                       value={
-                        existingWagonLoading?.loadingSupervisor
-                          ? `${existingWagonLoading.loadingSupervisor.firstName ?? ""} ${
-                              existingWagonLoading.loadingSupervisor.lastName ?? ""
-                            }`.trim() ||
-                            existingWagonLoading.loadingSupervisor.userName ||
-                            DASH
-                          : DASH
+                        existingWagonLoading?.loadingSupervisor?.name || DASH
                       }
                     />
                   </dl>
                 ) : (
                   <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                    Labour details entered on the left will become the wagon-level labour record after the first LR is added.
+                    Labour details entered on the left will become the
+                    wagon-level labour record after the first LR is added.
                   </div>
                 )}
               </div>
@@ -1036,17 +1099,18 @@ export default function VPLoadingForm({ mode }: Props) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <span
-                className={`flex size-9 shrink-0 items-center justify-center rounded-md ${
-                  canSubmit
-                    ? "bg-emerald-500/10 text-emerald-700"
-                    : "bg-muted text-muted-foreground"
-                }`}
+                className={`flex size-9 shrink-0 items-center justify-center rounded-md ${canSubmit
+                  ? "bg-emerald-500/10 text-emerald-700"
+                  : "bg-muted text-muted-foreground"
+                  }`}
               >
                 <IconClipboardList size={17} />
               </span>
               <div className="min-w-0">
                 <p className="text-sm font-semibold">
-                  {canSubmit ? "Ready to add loading" : "Complete loading details"}
+                  {canSubmit
+                    ? "Ready to add loading"
+                    : "Complete loading details"}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {totalLoadedQty > 0

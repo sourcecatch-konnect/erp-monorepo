@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -97,31 +98,27 @@ model User {
   createdMRRRs MRRR[] @relation("CreatedMRRR")
   updatedMRRRs MRRR[] @relation("UpdatedMRRR")
 
-  createdGRNs    GRN[] @relation("CreatedGRN")
-  updatedGRNs    GRN[] @relation("UpdatedGRN")
-  supervisedGRNs GRN[] @relation("GRNUnloadingSupervisor")
+  createdGRNs GRN[] @relation("CreatedGRN")
+  updatedGRNs GRN[] @relation("UpdatedGRN")
 
   createdVPLoadings   VPLoading[] @relation("CreatedVPLoading")
   updatedVPLoadings   VPLoading[] @relation("UpdatedVPLoading")
   cancelledVPLoadings VPLoading[] @relation("CancelledVPLoading")
 
-  supervisedVPWagonLoadings       VPWagonLoading[] @relation("VPWagonLoadingSupervisor")
   createdVPWagonLoadings          VPWagonLoading[] @relation("CreatedVPWagonLoading")
   updatedVPWagonLoadings          VPWagonLoading[] @relation("UpdatedVPWagonLoading")
   verifiedVPWagonLoadings         VPWagonLoading[] @relation("VerifiedVPWagonLoading")
   cancelledVPWagonLoadings        VPWagonLoading[] @relation("CancelledVPWagonLoading")
   capacityOverrideVPWagonLoadings VPWagonLoading[] @relation("VPWagonCapacityOverride")
 
-  createdRailBranchGRNs    RailBranchGRN[] @relation("CreatedRailBranchGRNs")
-  updatedRailBranchGRNs    RailBranchGRN[] @relation("UpdatedRailBranchGRNs")
-  submittedRailBranchGRNs  RailBranchGRN[] @relation("SubmittedRailBranchGRNs")
-  supervisedRailBranchGRNs RailBranchGRN[] @relation("RailBranchGRNUnloadingSupervisor")
+  createdRailBranchGRNs   RailBranchGRN[] @relation("CreatedRailBranchGRNs")
+  updatedRailBranchGRNs   RailBranchGRN[] @relation("UpdatedRailBranchGRNs")
+  submittedRailBranchGRNs RailBranchGRN[] @relation("SubmittedRailBranchGRNs")
 
-  createdDeliveryChallans    DeliveryChallan[] @relation("CreatedDeliveryChallans")
-  updatedDeliveryChallans    DeliveryChallan[] @relation("UpdatedDeliveryChallans")
-  issuedDeliveryChallans     DeliveryChallan[] @relation("IssuedDeliveryChallans")
-  cancelledDeliveryChallans  DeliveryChallan[] @relation("CancelledDeliveryChallans")
-  supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
+  createdDeliveryChallans   DeliveryChallan[] @relation("CreatedDeliveryChallans")
+  updatedDeliveryChallans   DeliveryChallan[] @relation("UpdatedDeliveryChallans")
+  issuedDeliveryChallans    DeliveryChallan[] @relation("IssuedDeliveryChallans")
+  cancelledDeliveryChallans DeliveryChallan[] @relation("CancelledDeliveryChallans")
 
   createdRailRakeOperations   RailRakeOperation[]     @relation("CreatedRailRakeOperations")
   updatedRailRakeOperations   RailRakeOperation[]     @relation("UpdatedRailRakeOperations")
@@ -142,6 +139,28 @@ model User {
   createdTripExpenses   TripExpense[]   @relation("CreatedTripExpenses")
   createdDriverAdvances DriverAdvance[] @relation("CreatedDriverAdvances")
   generatedLogSlips     LogSlip[]       @relation("GeneratedLogSlips")
+
+  createdLRCharges  LRCharge[] @relation("CreatedLRCharges")
+  updatedLRCharges  LRCharge[] @relation("UpdatedLRCharges")
+  approvedLRCharges LRCharge[] @relation("ApprovedLRCharges")
+
+  createdBills      Bill[]              @relation("CreatedBills")
+  updatedBills      Bill[]              @relation("UpdatedBills")
+  reviewedBills     Bill[]              @relation("ReviewedBills")
+  approvedBills     Bill[]              @relation("ApprovedBills")
+  finalisedBills    Bill[]              @relation("FinalisedBills")
+  cancelledBills    Bill[]              @relation("CancelledBills")
+  billStatusChanges BillStatusHistory[]
+
+  createdBillingTaxRules BillingTaxRule[] @relation("CreatedBillingTaxRules")
+  updatedBillingTaxRules BillingTaxRule[] @relation("UpdatedBillingTaxRules")
+
+  createdReceipts               Receipt[]               @relation("CreatedReceipts")
+  updatedReceipts               Receipt[]               @relation("UpdatedReceipts")
+  approvedReceipts              Receipt[]               @relation("ApprovedReceipts")
+  cancelledReceipts             Receipt[]               @relation("CancelledReceipts")
+  receiptStatusChanges          ReceiptStatusHistory[]
+  createdCashAccountAdjustments CashAccountAdjustment[] @relation("CreatedCashAccountAdjustments")
 
   tablePrefs UserTablePref[]
 }
@@ -179,6 +198,11 @@ model Company {
   city              City?       @relation("CityCompanies", fields: [cityId], references: [id])
   state             State?      @relation(fields: [stateId], references: [id])
   users             User[]
+  bills             Bill[]
+  receipts          Receipt[]
+
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Branch {
@@ -213,23 +237,31 @@ model Branch {
 
   users              User[]
   userBranches       UserBranch[]
-  city               City?               @relation(fields: [cityId], references: [id])
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  fromOrders         Order[]             @relation("FromBranch")
-  toOrders           Order[]             @relation("ToBranch")
-  originGroups       LRGroup[]           @relation("GroupOrigin")
-  destinationGroups  LRGroup[]           @relation("GroupDestination")
-  hubGroups          LRGroup[]           @relation("GroupHub")
-  railheadGroups     LRGroup[]           @relation("GroupRailhead")
-  vpSchedulesFrom    VPSchedule[]        @relation("VPScheduleFromBranch")
-  vpSchedulesTo      VPSchedule[]        @relation("VPScheduleToBranch")
-  railRakesFrom      RailRake[]          @relation("RailRakeFromBranch")
-  railRakesTo        RailRake[]          @relation("RailRakeToBranch")
+  city               City?                @relation(fields: [cityId], references: [id])
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  fromOrders         Order[]              @relation("FromBranch")
+  toOrders           Order[]              @relation("ToBranch")
+  originGroups       LRGroup[]            @relation("GroupOrigin")
+  destinationGroups  LRGroup[]            @relation("GroupDestination")
+  hubGroups          LRGroup[]            @relation("GroupHub")
+  railheadGroups     LRGroup[]            @relation("GroupRailhead")
+  vpSchedulesFrom    VPSchedule[]         @relation("VPScheduleFromBranch")
+  vpSchedulesTo      VPSchedule[]         @relation("VPScheduleToBranch")
+  railRakesFrom      RailRake[]           @relation("RailRakeFromBranch")
+  railRakesTo        RailRake[]           @relation("RailRakeToBranch")
   railRakeOperations RailRakeOperation[]
-  deliveryChallans   DeliveryChallan[]   @relation("DeliveryChallanSourceBranch")
-  creditors          Creditor[]          @relation("BranchCreditor")
-  cashPayments       CashPayment[]       @relation("BranchCashPayment")
+  deliveryChallans   DeliveryChallan[]    @relation("DeliveryChallanSourceBranch")
+  managedRailheads   BranchRailheadArea[]
+  creditors          Creditor[]           @relation("BranchCreditor")
+  cashPayments       CashPayment[]        @relation("BranchCashPayment")
+  bills              Bill[]
+  receipts           Receipt[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([companyId])
+  @@index([warehouseId])
 }
 
 model Warehouse {
@@ -257,6 +289,11 @@ model Warehouse {
   branch          Branch    @relation("BranchWarehouses", fields: [branchId], references: [id])
   city            City      @relation(fields: [cityId], references: [id])
   state           State     @relation(fields: [stateId], references: [id])
+
+  @@index([name])
+  @@index([branchId])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Role {
@@ -492,6 +529,7 @@ model Vehicle {
   deliveryChallans DeliveryChallan[]
 
   @@index([transportId, ownershipType])
+  @@index([vehicleTypeId])
 }
 
 model Customer {
@@ -500,6 +538,7 @@ model Customer {
   shortName               String?
   customerPAN             String?
   disallowNewLRBooking    Boolean            @default(false)
+  splitBillsByChargeType  Boolean            @default(false)
   interestRateLatePayment BigInt?
   gstNo                   String?
   creditLimit             BigInt?
@@ -524,6 +563,14 @@ model Customer {
   consigneeOrders         Order[]            @relation("OrderConsignee")
   orders                  Order[]            @relation("OrderCustomer")
   vehicleTrips            VehicleTrip[]
+  billsAsServiceCustomer  Bill[]             @relation("BillServiceCustomer")
+  billsAsBillingCustomer  Bill[]             @relation("BillBillingCustomer")
+  receipts                Receipt[]
+  cashReceivables         CashReceivable[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Agreement {
@@ -543,6 +590,12 @@ model Agreement {
   branch                  Branch          @relation("BranchAgreement", fields: [leadGeneratedByBranchId], references: [id])
   detentionRates          DetentionRate[]
   RateMatrix              RateMatrix[]
+
+  @@index([agreementDate(sort: Desc)])
+  @@index([companyId])
+  @@index([clientId])
+  @@index([leadGeneratedByBranchId])
+  @@index([cityId])
 }
 
 model DetentionRate {
@@ -568,6 +621,7 @@ model Route {
   VehicleTrip       VehicleTrip[]
 
   @@unique([sourceCityId, destinationCityId])
+  @@index([destinationCityId])
 }
 
 model RateUnit {
@@ -599,6 +653,10 @@ model RateMatrix {
   VehicleTrip   VehicleTrip[]
 
   @@unique([agreementId, routeId, vehicleTypeId, unitId, transportType])
+  @@index([routeId])
+  @@index([vehicleTypeId])
+  @@index([unitId])
+  @@index([rate])
 }
 
 model Driver {
@@ -641,6 +699,8 @@ model Driver {
   journeys               VehicleJourney[]
   advances               DriverAdvance[]
   logSlips               LogSlip[]
+
+  @@index([name])
 }
 
 model Goods {
@@ -659,32 +719,42 @@ model Goods {
   storageLayer      GoodsStorageLayer
   consignmentGoods  OrderConsignmentGoods[]
   orderItems        OrderItem[]
+
+  @@index([name])
 }
 
 model Labour {
-  id                String           @id @default(cuid())
-  name              String
-  photoPath         String?
-  address           String?
-  contactName       String?
-  contactPhone      String?
-  mobileNo          String?
-  referredBy        String?
-  refContactNo      String?
-  startDate         DateTime?
-  pan               String?
-  tdsAmount         BigInt?
-  tdsRate           BigInt?
-  type              WorkerType
-  branchId          String
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  cityId            String
-  branch            Branch           @relation("WorkerBranch", fields: [branchId], references: [id])
-  city              City             @relation(fields: [cityId], references: [id])
-  grnLabours        GRN[]            @relation("GRNLabour")
-  vpWagonLoadings   VPWagonLoading[] @relation("VPWagonLoadingLabour")
-  ledRailBranchGRNs RailBranchGRN[]  @relation("RailBranchGRNLabourLeader")
+  id                         String            @id @default(cuid())
+  name                       String
+  photoPath                  String?
+  address                    String?
+  contactName                String?
+  contactPhone               String?
+  mobileNo                   String?
+  referredBy                 String?
+  refContactNo               String?
+  startDate                  DateTime?
+  pan                        String?
+  tdsAmount                  BigInt?
+  tdsRate                    BigInt?
+  type                       WorkerType
+  branchId                   String
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  cityId                     String
+  branch                     Branch            @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                       City              @relation(fields: [cityId], references: [id])
+  grnLabours                 GRN[]             @relation("GRNLabour")
+  supervisedGRNs             GRN[]             @relation("GRNUnloadingSupervisor")
+  vpWagonLoadings            VPWagonLoading[]  @relation("VPWagonLoadingLabour")
+  supervisedVPWagonLoadings  VPWagonLoading[]  @relation("VPWagonLoadingSupervisor")
+  ledRailBranchGRNs          RailBranchGRN[]   @relation("RailBranchGRNLabourLeader")
+  supervisedRailBranchGRNs   RailBranchGRN[]   @relation("RailBranchGRNUnloadingSupervisor")
+  supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
+
+  @@index([name])
+  @@index([branchId])
+  @@index([cityId])
 }
 
 model City {
@@ -717,6 +787,9 @@ model City {
   tripsFrom           VehicleTrip[]          @relation("TripFromCity")
   tripsTo             VehicleTrip[]          @relation("TripToCity")
   tripExpenses        TripExpense[]          @relation("TripExpenseCity")
+
+  @@index([name])
+  @@index([stateId])
 }
 
 model Area {
@@ -737,22 +810,43 @@ model Area {
   deliveryChallans         DeliveryChallan[]   @relation("DeliveryChallanDestinationArea")
   railRakeOperations       RailRakeOperation[]
 
-  railwayFreightAsSource      RailwayFreightMatrix[] @relation("RailwayFreightSourceArea")
-  railwayFreightAsDestination RailwayFreightMatrix[] @relation("RailwayFreightDestinationArea")
+  railwayFreightAsSource        RailwayFreightMatrix[] @relation("RailwayFreightSourceArea")
+  railwayFreightAsDestination   RailwayFreightMatrix[] @relation("RailwayFreightDestinationArea")
+  managingBranches              BranchRailheadArea[]
+  lrGroupsAsSourceRailhead      LRGroup[]              @relation("LRGroupSourceRailheadArea")
+  lrGroupsAsDestinationRailhead LRGroup[]              @relation("LRGroupDestinationRailheadArea")
 
   @@unique([cityId, name])
   @@index([isRailHead])
+  @@index([name])
+}
+
+model BranchRailheadArea {
+  branchId  String
+  areaId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@id([branchId, areaId])
+  @@index([areaId])
+  @@index([isActive])
 }
 
 model State {
-  id         String      @id @default(cuid())
-  name       String      @unique
-  cities     City[]
-  companies  Company[]
-  customers  Customer[]
-  pumps      Pump[]
-  transports Transport[]
-  warehouses Warehouse[]
+  id                        String      @id @default(cuid())
+  name                      String      @unique
+  cities                    City[]
+  companies                 Company[]
+  customers                 Customer[]
+  billsAsSupplierState      Bill[]      @relation("BillSupplierState")
+  billsAsPlaceOfSupplyState Bill[]      @relation("BillPlaceOfSupplyState")
+  pumps                     Pump[]
+  transports                Transport[]
+  warehouses                Warehouse[]
 }
 
 model Transport {
@@ -768,6 +862,10 @@ model Transport {
   vehicles         Vehicle[]
   deliveryChallans DeliveryChallan[]
   lrgroups         LRGroup[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model RailwayFreightMatrix {
@@ -823,26 +921,24 @@ model Pump {
   name              String
   address           String?
   cityId            String
+  stateId           String
   country           String
-  contactName       String?
-  contactPhone      String?
   rateLastUpdated   DateTime?
   currentDieselRate Int?
-  gstIn             String?
   pan               String?
   creditLimit       BigInt?
-  accountName       String?
-  bankName          String?
-  branchIfscCode    String?
   isBlackListed     Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  stateId           String
 
   city  City  @relation("PumpCity", fields: [cityId], references: [id])
   state State @relation(fields: [stateId], references: [id])
 
   tripExpenses TripExpense[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model SpareCategory {
@@ -853,6 +949,8 @@ model SpareCategory {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   parts      SparePart[] @relation("PartCategory")
+
+  @@index([name])
 }
 
 model SparePartSupplier {
@@ -872,6 +970,9 @@ model SparePartSupplier {
   updatedAt     DateTime    @updatedAt
   spareparts    SparePart[] @relation("PartSupplier")
   city          City        @relation("SparePartySupplierCity", fields: [cityId], references: [id])
+
+  @@index([name])
+  @@index([cityId])
 }
 
 model SparePart {
@@ -890,6 +991,10 @@ model SparePart {
   updatedAt      DateTime          @updatedAt
   category       SpareCategory     @relation("PartCategory", fields: [categoryId], references: [id])
   supplier       SparePartSupplier @relation("PartSupplier", fields: [supplierId], references: [id])
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([supplierId])
 }
 
 model Order {
@@ -1026,6 +1131,8 @@ model VehicleType {
   orders           Order[]
   rateMatrices     RateMatrix[]
   vehicles         Vehicle[]
+
+  @@index([name])
 }
 
 model CustomerLocation {
@@ -1051,6 +1158,7 @@ model CustomerLocation {
   consignmentLoadings   OrderConsignment[]   @relation("ConsignmentLoading")
   consignmentUnloadings OrderConsignment[]   @relation("ConsignmentUnloading")
   deliveryChallans      DeliveryChallan[]    @relation("DeliveryChallanDestinationLocation")
+  bills                 Bill[]
 
   @@index([customerId])
   @@index([areaId])
@@ -1068,109 +1176,124 @@ model DocumentSequence {
 }
 
 model LRGroup {
-  id                     String          @id @default(cuid())
-  groupNumber            String          @unique
-  fyCode                 String
-  source                 LRSource
-  orderId                String?
-  truckIndex             Int             @default(1)
-  originBranchId         String
-  destinationBranchId    String
-  consignorId            String
-  consigneeId            String
-  transportType          LRTransportType @default(Road)
-  priority               LRPriority      @default(Normal)
-  isMarketVehicle        Boolean         @default(false)
-  primaryTripId          String?
-  secondaryTripId        String?
-  marketVehicleNumber    String?
-  marketTransportId      String?
-  marketVehicleId        String?
-  marketDriverName       String?
-  marketFreightAmount    BigInt?
-  marketAdvanceAmount    BigInt?
-  marketCommissionAmount BigInt?
-  marketHamaliAmount     BigInt?
-  marketTdsAmount        BigInt?
-  tripLegType            LRTripLegType   @default(DIRECT)
-  hubId                  String?
+  id                        String          @id @default(cuid())
+  groupNumber               String          @unique
+  fyCode                    String
+  source                    LRSource
+  orderId                   String?
+  truckIndex                Int             @default(1)
+  originBranchId            String
+  destinationBranchId       String
+  consignorId               String
+  consigneeId               String
+  transportType             LRTransportType @default(Road)
+  priority                  LRPriority      @default(Normal)
+  isMarketVehicle           Boolean         @default(false)
+  primaryTripId             String?
+  secondaryTripId           String?
+  marketVehicleNumber       String?
+  marketTransportId         String?
+  marketVehicleId           String?
+  marketDriverName          String?
+  marketFreightAmount       BigInt?
+  marketAdvanceAmount       BigInt?
+  marketCommissionAmount    BigInt?
+  marketHamaliAmount        BigInt?
+  marketTdsAmount           BigInt?
+  tripLegType               LRTripLegType   @default(DIRECT)
+  hubId                     String?
   // Stamped by hold-at-hub. With hubId set and secondaryTripId null the group
   // is "lying at hub" — exempt from the trip-close delivery gate.
-  hubArrivalAt           DateTime?
-  railheadBranchId       String?
-  baseFreightAmount      BigInt?
-  sealNumber             String?
-  status                 LRGroupStatus   @default(DRAFT)
-  cancelReason           String?
-  finalisedAt            DateTime?
-  finalisedById          String?
-  createdById            String
-  updatedById            String?
-  version                Int             @default(1)
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  deletedAt              DateTime?
-  marketTransport        Transport?      @relation("LRGroupMarketTransport", fields: [marketTransportId], references: [id], onDelete: Restrict)
-  marketVehicle          Vehicle?        @relation("LRGroupMarketVehicle", fields: [marketVehicleId], references: [id], onDelete: Restrict)
+  hubArrivalAt              DateTime?
+  railheadBranchId          String?
+  sourceRailheadAreaId      String?
+  destinationRailheadAreaId String?
+  baseFreightAmount         BigInt?
+  sealNumber                String?
+  status                    LRGroupStatus   @default(DRAFT)
+  cancelReason              String?
+  finalisedAt               DateTime?
+  finalisedById             String?
+  createdById               String
+  updatedById               String?
+  version                   Int             @default(1)
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+  deletedAt                 DateTime?
+  marketTransport           Transport?      @relation("LRGroupMarketTransport", fields: [marketTransportId], references: [id], onDelete: Restrict)
+  marketVehicle             Vehicle?        @relation("LRGroupMarketVehicle", fields: [marketVehicleId], references: [id], onDelete: Restrict)
 
-  consignee         Customer       @relation("GroupConsignee", fields: [consigneeId], references: [id])
-  consignor         Customer       @relation("GroupConsignor", fields: [consignorId], references: [id])
-  createdBy         User           @relation("CreatedLRGroup", fields: [createdById], references: [id])
-  destinationBranch Branch         @relation("GroupDestination", fields: [destinationBranchId], references: [id])
-  finalisedBy       User?          @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
-  hub               Branch?        @relation("GroupHub", fields: [hubId], references: [id])
-  order             Order?         @relation(fields: [orderId], references: [id])
-  originBranch      Branch         @relation("GroupOrigin", fields: [originBranchId], references: [id])
-  primaryTrip       VehicleTrip?   @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
-  railheadBranch    Branch?        @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
-  secondaryTrip     VehicleTrip?   @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
-  updatedBy         User?          @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
-  lorryReceipts     LorryReceipt[]
-  transport         Transport?     @relation(fields: [transportId], references: [id])
-  transportId       String?
+  consignee               Customer       @relation("GroupConsignee", fields: [consigneeId], references: [id])
+  consignor               Customer       @relation("GroupConsignor", fields: [consignorId], references: [id])
+  createdBy               User           @relation("CreatedLRGroup", fields: [createdById], references: [id])
+  destinationBranch       Branch         @relation("GroupDestination", fields: [destinationBranchId], references: [id])
+  finalisedBy             User?          @relation("FinalisedLRGroup", fields: [finalisedById], references: [id])
+  hub                     Branch?        @relation("GroupHub", fields: [hubId], references: [id])
+  order                   Order?         @relation(fields: [orderId], references: [id])
+  originBranch            Branch         @relation("GroupOrigin", fields: [originBranchId], references: [id])
+  primaryTrip             VehicleTrip?   @relation("GroupPrimaryTrip", fields: [primaryTripId], references: [id])
+  railheadBranch          Branch?        @relation("GroupRailhead", fields: [railheadBranchId], references: [id])
+  sourceRailheadArea      Area?          @relation("LRGroupSourceRailheadArea", fields: [sourceRailheadAreaId], references: [id], onDelete: Restrict)
+  destinationRailheadArea Area?          @relation("LRGroupDestinationRailheadArea", fields: [destinationRailheadAreaId], references: [id], onDelete: Restrict)
+  secondaryTrip           VehicleTrip?   @relation("GroupSecondaryTrip", fields: [secondaryTripId], references: [id])
+  updatedBy               User?          @relation("UpdatedLRGroup", fields: [updatedById], references: [id])
+  lorryReceipts           LorryReceipt[]
+  transport               Transport?     @relation(fields: [transportId], references: [id])
+  transportId             String?
 
   @@index([status])
   @@index([orderId])
   @@index([originBranchId])
   @@index([destinationBranchId])
+  @@index([sourceRailheadAreaId])
+  @@index([destinationRailheadAreaId])
+  @@index([railheadBranchId])
   @@index([fyCode])
   @@index([marketTransportId])
   @@index([marketVehicleId])
 }
 
 model LorryReceipt {
-  id                  String             @id @default(cuid())
+  id                  String          @id @default(cuid())
   cancelReason        String?
   createdById         String
   updatedById         String?
-  createdAt           DateTime           @default(now())
+  createdAt           DateTime        @default(now())
   deletedAt           DateTime?
   fyCode              String
-  lrNumber            String             @unique
-  status              LRStatus           @default(DRAFT)
-  updatedAt           DateTime           @updatedAt
-  version             Int                @default(1)
+  lrNumber            String          @unique
+  status              LRStatus        @default(DRAFT)
+  billingStatus       LRBillingStatus @default(NOT_BILLABLE)
+  updatedAt           DateTime        @updatedAt
+  version             Int             @default(1)
   invoiceAmount       BigInt?
   invoiceNumber       String?
   groupId             String
   loadingLocationId   String?
   unloadingLocationId String?
   ewayBill            EwayBill?
-  totalWeight         Decimal?           @db.Decimal(14, 4)
+  totalWeight         Decimal?        @db.Decimal(14, 4)
   weightUnitId        String?
   unit                String?
-  goods               LRGoods[]
-  grn                 GRN?
-  delivery            LRDelivery?
-  acknowledgement     LRAcknowledgement?
-  createdBy           User               @relation("CreatedLR", fields: [createdById], references: [id])
-  group               LRGroup            @relation(fields: [groupId], references: [id])
-  loadingLocation     CustomerLocation?  @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
-  unloadingLocation   CustomerLocation?  @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
-  updatedBy           User?              @relation("UpdatedLR", fields: [updatedById], references: [id])
-  weightUnit          UnitOfMeasure?     @relation("LRWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
+
+  goods           LRGoods[]
+  grn             GRN?
+  delivery        LRDelivery?
+  acknowledgement LRAcknowledgement?
+
+  billableCharges LRCharge[]
+  billLines       BillLine[]
+  billLinks       BillLorryReceipt[]
+
+  createdBy         User              @relation("CreatedLR", fields: [createdById], references: [id])
+  group             LRGroup           @relation(fields: [groupId], references: [id])
+  loadingLocation   CustomerLocation? @relation("LRLoadingLocation", fields: [loadingLocationId], references: [id])
+  unloadingLocation CustomerLocation? @relation("LRUnloadingLocation", fields: [unloadingLocationId], references: [id])
+  updatedBy         User?             @relation("UpdatedLR", fields: [updatedById], references: [id])
+  weightUnit        UnitOfMeasure?    @relation("LRWeightUnit", fields: [weightUnitId], references: [id], onDelete: Restrict)
 
   @@index([status])
+  @@index([billingStatus])
   @@index([groupId])
   @@index([fyCode])
   @@index([weightUnitId])
@@ -1215,6 +1338,9 @@ model LRDelivery {
   // Truck arrival at the consignee — the deliveredAt-reportedAt gap is the
   // detention basis charged at acknowledgement time.
   reportedAt       DateTime?
+  // Goods unloading completion at the consignee. Kept separate from
+  // deliveredAt so reporting, unloading and receiver handover remain distinct.
+  unloadingAt      DateTime?
   receiverName     String?
   receiverPhone    String?
   unloadingCharges BigInt?
@@ -1229,6 +1355,7 @@ model LRDelivery {
   updatedBy        User?        @relation("UpdatedLRDelivery", fields: [updatedById], references: [id])
 
   @@index([deliveredAt])
+  @@index([unloadingAt])
 }
 
 /**
@@ -1271,6 +1398,316 @@ model LRAcknowledgementItem {
   goods       LRGoods           @relation(fields: [lrGoodsId], references: [id])
 
   @@unique([ackId, lrGoodsId])
+}
+
+model BillLorryReceipt {
+  billId    String
+  lrId      String
+  createdAt DateTime @default(now())
+
+  bill Bill         @relation(fields: [billId], references: [id], onDelete: Cascade)
+  lr   LorryReceipt @relation(fields: [lrId], references: [id], onDelete: Restrict)
+
+  @@id([billId, lrId])
+  @@index([lrId])
+}
+
+/// A billable amount originating from one LR. Freight, POD detention and
+/// approved manual adjustments all enter billing through this auditable row.
+/// Money is stored in paise. Billing progress is independent of LR movement.
+model LRCharge {
+  id                  String         @id @default(cuid())
+  lrId                String
+  type                LRChargeType
+  effect              LRChargeEffect @default(ADDITION)
+  source              LRChargeSource
+  sourceReferenceId   String?
+  description         String?
+  amountPaise         BigInt
+  approvedAmountPaise BigInt?
+  isTaxable           Boolean        @default(true)
+  sacCode             String?
+  status              LRChargeStatus @default(DRAFT)
+  reason              String?
+
+  createdById  String
+  updatedById  String?
+  approvedById String?
+  approvedAt   DateTime?
+  version      Int       @default(1)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lr         LorryReceipt @relation(fields: [lrId], references: [id], onDelete: Restrict)
+  createdBy  User         @relation("CreatedLRCharges", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy  User?        @relation("UpdatedLRCharges", fields: [updatedById], references: [id], onDelete: SetNull)
+  approvedBy User?        @relation("ApprovedLRCharges", fields: [approvedById], references: [id], onDelete: SetNull)
+  billLines  BillLine[]
+
+  @@index([lrId, status])
+  @@index([type, status])
+  @@index([source, sourceReferenceId])
+}
+
+/// Customer invoice generated from one or more LR charges. Party, GSTIN,
+/// address, supplier registration and state names are frozen as snapshots so
+/// a later master edit cannot rewrite an issued tax invoice.
+model Bill {
+  id                   String              @id @default(cuid())
+  billNumber           String?             @unique
+  fyCode               String
+  status               BillStatus          @default(DRAFT)
+  billType             BillType
+  billingPartyType     BillPartyType
+  chargeMechanism      BillChargeMechanism @default(NOT_APPLICABLE)
+  taxTreatment         BillTaxTreatment
+  billDate             DateTime
+  billingCutoffDate    DateTime?
+  dueDate              DateTime?
+  branchId             String
+  companyId            String
+  serviceCustomerId    String
+  billingCustomerId    String
+  billingLocationId    String?
+  supplierStateId      String
+  placeOfSupplyStateId String
+  taxRuleId            String?
+
+  billingPartyNameSnapshot  String
+  billingGstinSnapshot      String?
+  billingAddressSnapshot    String?
+  supplierNameSnapshot      String
+  supplierGstinSnapshot     String?
+  supplierAddressSnapshot   String?
+  supplierStateNameSnapshot String
+  placeOfSupplyNameSnapshot String
+
+  subtotalAmountPaise    BigInt @default(0)
+  taxableAmountPaise     BigInt @default(0)
+  taxAmountPaise         BigInt @default(0)
+  roundOffPaise          BigInt @default(0)
+  totalAmountPaise       BigInt @default(0)
+  paidAmountPaise        BigInt @default(0)
+  outstandingAmountPaise BigInt @default(0)
+
+  remarks            String?
+  cancellationReason String?
+  createdById        String
+  updatedById        String?
+  reviewedById       String?
+  reviewedAt         DateTime?
+  approvedById       String?
+  approvedAt         DateTime?
+  finalisedById      String?
+  finalisedAt        DateTime?
+  cancelledById      String?
+  cancelledAt        DateTime?
+  version            Int       @default(1)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  branch             Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  serviceCustomer    Customer            @relation("BillServiceCustomer", fields: [serviceCustomerId], references: [id], onDelete: Restrict)
+  billingCustomer    Customer            @relation("BillBillingCustomer", fields: [billingCustomerId], references: [id], onDelete: Restrict)
+  billingLocation    CustomerLocation?   @relation(fields: [billingLocationId], references: [id], onDelete: SetNull)
+  supplierState      State               @relation("BillSupplierState", fields: [supplierStateId], references: [id], onDelete: Restrict)
+  placeOfSupplyState State               @relation("BillPlaceOfSupplyState", fields: [placeOfSupplyStateId], references: [id], onDelete: Restrict)
+  taxRule            BillingTaxRule?     @relation(fields: [taxRuleId], references: [id], onDelete: SetNull)
+  createdBy          User                @relation("CreatedBills", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy          User?               @relation("UpdatedBills", fields: [updatedById], references: [id], onDelete: SetNull)
+  reviewedBy         User?               @relation("ReviewedBills", fields: [reviewedById], references: [id], onDelete: SetNull)
+  approvedBy         User?               @relation("ApprovedBills", fields: [approvedById], references: [id], onDelete: SetNull)
+  finalisedBy        User?               @relation("FinalisedBills", fields: [finalisedById], references: [id], onDelete: SetNull)
+  cancelledBy        User?               @relation("CancelledBills", fields: [cancelledById], references: [id], onDelete: SetNull)
+  lines              BillLine[]
+  taxLines           BillTaxLine[]
+  statusHistory      BillStatusHistory[]
+  lrLinks            BillLorryReceipt[]
+  receiptAllocations ReceiptAllocation[]
+  cashReceivable     CashReceivable?
+
+  @@index([branchId, status])
+  @@index([serviceCustomerId, status])
+  @@index([billingCustomerId, status])
+  @@index([billDate])
+  @@index([fyCode])
+  @@index([placeOfSupplyStateId])
+}
+
+/// Frozen allocation of one LR charge to one bill. A charge may be allocated
+/// over several bills, allowing partial billing and separate freight/add-on
+/// invoices without creating dummy LR numbers.
+model BillLine {
+  id                  String         @id @default(cuid())
+  billId              String
+  lrId                String
+  lrChargeId          String
+  lineNumber          Int
+  chargeTypeSnapshot  LRChargeType
+  effectSnapshot      LRChargeEffect
+  descriptionSnapshot String?
+  sacCodeSnapshot     String?
+  quantity            Decimal        @default(1) @db.Decimal(14, 4)
+  ratePaise           BigInt
+  amountPaise         BigInt
+  taxableAmountPaise  BigInt         @default(0)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  bill     Bill         @relation(fields: [billId], references: [id], onDelete: Cascade)
+  lr       LorryReceipt @relation(fields: [lrId], references: [id], onDelete: Restrict)
+  lrCharge LRCharge     @relation(fields: [lrChargeId], references: [id], onDelete: Restrict)
+
+  @@unique([billId, lineNumber])
+  @@unique([billId, lrChargeId])
+  @@index([lrId])
+  @@index([lrChargeId])
+}
+
+/// Frozen GST component for an issued bill. `rateBps` uses basis points:
+/// 250 = 2.50%, 500 = 5.00%.
+model BillTaxLine {
+  id                 String      @id @default(cuid())
+  billId             String
+  taxType            BillTaxType
+  rateBps            Int
+  taxableAmountPaise BigInt
+  taxAmountPaise     BigInt
+  createdAt          DateTime    @default(now())
+
+  bill Bill @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@unique([billId, taxType, rateBps])
+  @@index([billId])
+}
+
+model BillStatusHistory {
+  id          String      @id @default(cuid())
+  billId      String
+  fromStatus  BillStatus?
+  toStatus    BillStatus
+  reason      String?
+  changedById String
+  changedAt   DateTime    @default(now())
+
+  bill      Bill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  changedBy User @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([billId, changedAt])
+}
+
+/// Customer payment receipt — the "Client Payment Receivable" flow. One
+/// Receipt can settle several bills (ReceiptAllocation), and each allocation
+/// carries its own TDS/damage/rate-difference deductions rather than a
+/// single fixed rate on the receipt.
+model Receipt {
+  id                    String             @id @default(cuid())
+  receiptNumber         String?            @unique
+  fyCode                String
+  status                ReceiptStatus      @default(DRAFT)
+  customerId            String
+  branchId              String
+  companyId             String
+  receivedIntoAccountId String? // required by the app for new receipts; nullable for pre-existing rows
+  amountPaise           BigInt
+  unallocatedPaise      BigInt             @default(0)
+  paymentMode           ReceiptPaymentMode
+  referenceNumber       String?
+  receivedAt            DateTime
+  remarks               String?
+  createdById           String
+  updatedById           String?
+  approvedById          String?
+  approvedAt            DateTime?
+  cancelledById         String?
+  cancelledAt           DateTime?
+  cancellationReason    String?
+  version               Int                @default(1)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  customer            Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branch              Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  company             Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  receivedIntoAccount CashAccount?            @relation(fields: [receivedIntoAccountId], references: [id], onDelete: SetNull)
+  createdBy           User                    @relation("CreatedReceipts", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy           User?                   @relation("UpdatedReceipts", fields: [updatedById], references: [id], onDelete: SetNull)
+  approvedBy          User?                   @relation("ApprovedReceipts", fields: [approvedById], references: [id], onDelete: SetNull)
+  cancelledBy         User?                   @relation("CancelledReceipts", fields: [cancelledById], references: [id], onDelete: SetNull)
+  allocations         ReceiptAllocation[]
+  statusHistory       ReceiptStatusHistory[]
+  accountAdjustments  CashAccountAdjustment[]
+
+  @@index([branchId, status])
+  @@index([customerId, status])
+  @@index([receivedAt])
+  @@index([fyCode])
+}
+
+/// Frozen allocation of one receipt to one bill — replaces the legacy
+/// RefNo$Amount string-packed allocation with a real, queryable row.
+model ReceiptAllocation {
+  id                  String    @id @default(cuid())
+  receiptId           String
+  billId              String
+  amountAppliedPaise  BigInt
+  tdsAmountPaise      BigInt    @default(0)
+  tdsSection          String?
+  tdsCertNumber       String?
+  tdsCertDate         DateTime?
+  damageAmountPaise   BigInt    @default(0)
+  rateDiffAmountPaise BigInt    @default(0)
+  createdAt           DateTime  @default(now())
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  bill    Bill    @relation(fields: [billId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptId, billId])
+  @@index([billId])
+}
+
+model ReceiptStatusHistory {
+  id          String         @id @default(cuid())
+  receiptId   String
+  fromStatus  ReceiptStatus?
+  toStatus    ReceiptStatus
+  reason      String?
+  changedById String
+  changedAt   DateTime       @default(now())
+
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  changedBy User    @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([receiptId, changedAt])
+}
+
+/// Effective-dated GST configuration. Bill tax lines remain snapshots; this
+/// rule is only the source used by the billing calculation at finalisation.
+model BillingTaxRule {
+  id              String              @id @default(cuid())
+  name            String
+  billType        BillType
+  chargeMechanism BillChargeMechanism
+  sacCode         String
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  cgstRateBps     Int                 @default(0)
+  sgstRateBps     Int                 @default(0)
+  igstRateBps     Int                 @default(0)
+  isActive        Boolean             @default(true)
+  createdById     String
+  updatedById     String?
+  version         Int                 @default(1)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  createdBy User   @relation("CreatedBillingTaxRules", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy User?  @relation("UpdatedBillingTaxRules", fields: [updatedById], references: [id], onDelete: SetNull)
+  bills     Bill[]
+
+  @@index([billType, chargeMechanism, effectiveFrom, isActive])
+  @@index([effectiveTo])
 }
 
 model EwayBill {
@@ -1436,6 +1873,10 @@ model VPSchedule {
   @@index([destinationAreaId])
   @@index([finalisedById])
   @@index([deletedAt])
+  // Serves the list endpoint's branch + status filter, sorted by newest first.
+  @@index([fromBranchId, status, createdAt(sort: Desc)])
+  // Serves the create-time duplicate-schedule check (same route + date).
+  @@index([fromBranchId, toBranchId, sourceAreaId, destinationAreaId, scheduleDate])
 }
 
 /// ERP master record for a physical tracker synchronized from OneLap.
@@ -1457,7 +1898,7 @@ model OneLapTracker {
   isPresentOnProvider Boolean @default(true)
 
   lastProviderUpdateAt DateTime?
-  lastSyncedAt         DateTime @default(now())
+  lastSyncedAt         DateTime  @default(now())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1488,11 +1929,11 @@ model OneLapTrackerAssignment {
   assignedById String
   assignedBy   User     @relation("AssignedOneLapTrackerAssignments", fields: [assignedById], references: [id], onDelete: Restrict)
 
-  releasedAt      DateTime?
-  releasedById    String?
-  releasedBy      User?                           @relation("ReleasedOneLapTrackerAssignments", fields: [releasedById], references: [id], onDelete: SetNull)
-  releaseReason   OneLapTrackerReleaseReason?
-  releaseRemarks  String?
+  releasedAt     DateTime?
+  releasedById   String?
+  releasedBy     User?                       @relation("ReleasedOneLapTrackerAssignments", fields: [releasedById], references: [id], onDelete: SetNull)
+  releaseReason  OneLapTrackerReleaseReason?
+  releaseRemarks String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1794,6 +2235,9 @@ model Creditor {
 
   branch   Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
   payments CashPayment[]
+
+  @@index([deletedAt, name])
+  @@index([branchId])
 }
 
 model CashAccount {
@@ -1810,6 +2254,10 @@ model CashAccount {
   balances       CashAccountBalance[]
   payments       CashPayment[]
   driverAdvances DriverAdvance[]
+  adjustments    CashAccountAdjustment[]
+  receipts       Receipt[]
+
+  @@index([deletedAt, name])
 }
 
 model CashPlanDay {
@@ -1821,8 +2269,32 @@ model CashPlanDay {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  balances CashAccountBalance[]
-  payments CashPayment[]
+  balances    CashAccountBalance[]
+  payments    CashPayment[]
+  adjustments CashAccountAdjustment[]
+}
+
+/// A credit or correction to a cash account's balance outside the normal
+/// payment-approval flow — either a manual top-up/correction someone logs
+/// directly, or an automatic credit created when a Receipt posts and the
+/// money lands in this account. Signed so a correction can also subtract.
+model CashAccountAdjustment {
+  id          String   @id @default(cuid())
+  dayId       String
+  accountId   String
+  amountPaise BigInt
+  reason      String
+  receiptId   String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  day       CashPlanDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  account   CashAccount @relation(fields: [accountId], references: [id])
+  receipt   Receipt?    @relation(fields: [receiptId], references: [id])
+  createdBy User        @relation("CreatedCashAccountAdjustments", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([dayId, accountId])
+  @@index([receiptId])
 }
 
 model CashAccountBalance {
@@ -1875,6 +2347,9 @@ model CashPayment {
 model CashReceivable {
   id             String                  @id @default(cuid())
   partyName      String
+  source         CashReceivableSource    @default(MANUAL)
+  billId         String?                 @unique
+  customerId     String?
   totalAmount    BigInt // outstanding still to be received from this party (paise)
   expectedAmount BigInt                  @default(0) // next slice expected by expectedDate (paise)
   expectedDate   DateTime?               @db.Date
@@ -1883,7 +2358,11 @@ model CashReceivable {
   note           String?
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
+  bill           Bill?                   @relation(fields: [billId], references: [id], onDelete: SetNull)
+  customer       Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
   receipts       CashReceivableReceipt[]
+
+  @@index([customerId])
 }
 
 // One recorded receipt against a receivable — the slice history / audit trail
@@ -1952,9 +2431,9 @@ model MRRRRow {
   mrRrNo     String?
   sealNo     String?
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  vpWagonLoading VPWagonLoading?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  vpWagonLoading       VPWagonLoading?
   trackerInstallations OneLapTrackerAssignment[]
 
   @@unique([mrRrId, rowNumber])
@@ -1976,7 +2455,8 @@ model GRN {
 
   status GRNStatus @default(DRAFT)
 
-  gateNo String?
+  gateNo      String
+  labourCount Int
 
   inDateTime       DateTime?
   outDateTime      DateTime?
@@ -2013,7 +2493,7 @@ model GRN {
   labourCharge BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   User?         @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id])
+  unloadingSupervisor   Labour?       @relation("GRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id], onDelete: SetNull)
   damagesBy             GRNDamagesBy?
 
   lrCopyChecked      Boolean @default(false)
@@ -2156,7 +2636,7 @@ model VPWagonLoading {
   capacityOverrideAt     DateTime?
 
   loadingSupervisorId String?
-  loadingSupervisor   User?   @relation("VPWagonLoadingSupervisor", fields: [loadingSupervisorId], references: [id])
+  loadingSupervisor   Labour? @relation("VPWagonLoadingSupervisor", fields: [loadingSupervisorId], references: [id], onDelete: SetNull)
 
   createdById String
   createdBy   User   @relation("CreatedVPWagonLoading", fields: [createdById], references: [id])
@@ -2248,7 +2728,7 @@ model RailBranchGRN {
   labourCharge   BigInt?
 
   unloadingSupervisorId String?
-  unloadingSupervisor   User?   @relation("RailBranchGRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id], onDelete: SetNull)
+  unloadingSupervisor   Labour? @relation("RailBranchGRNUnloadingSupervisor", fields: [unloadingSupervisorId], references: [id], onDelete: SetNull)
 
   totalLoadedQty   Int @default(0)
   totalReceivedQty Int @default(0)
@@ -2332,9 +2812,8 @@ model DeliveryChallan {
 
   vehicleMode DeliveryVehicleMode
 
-  // MARKET requires both transporter and vehicle; OWN requires only vehicle.
-  // CLIENT_DELIVERY may leave both empty. These conditional rules belong in
-  // the API validator and transaction.
+  // MARKET requires a transporter and either a registered vehicle or a manual
+  // vehicle-number snapshot. OWN requires a registered vehicle.
   transportId String?
   transport   Transport? @relation(fields: [transportId], references: [id], onDelete: Restrict)
   vehicleId   String?
@@ -2355,8 +2834,8 @@ model DeliveryChallan {
 
   loadingAt DateTime
 
-  supervisorId String
-  supervisor   User   @relation("DeliveryChallanSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict)
+  supervisorId String?
+  supervisor   Labour? @relation("DeliveryChallanSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
 
   status  DeliveryChallanStatus @default(DRAFT)
   remarks String?
@@ -2746,6 +3225,108 @@ enum LRStatus {
   FINALISED
   DELIVERED
   ACKNOWLEDGED
+  CANCELLED
+}
+
+enum LRBillingStatus {
+  NOT_BILLABLE
+  READY_TO_BILL
+  PARTIALLY_BILLED
+  BILLED
+  DISPUTED
+}
+
+enum LRChargeType {
+  FREIGHT
+  DETENTION
+  HAMALI
+  UNLOADING
+  TOLL
+  MULTIPOINT
+  FREIGHT_ADJUSTMENT
+  DAMAGE_DEDUCTION
+  OTHER
+}
+
+enum LRChargeEffect {
+  ADDITION
+  DEDUCTION
+}
+
+enum LRChargeSource {
+  LR_FREIGHT
+  ACKNOWLEDGEMENT
+  DETENTION_CALCULATION
+  AGREEMENT
+  MANUAL
+}
+
+enum LRChargeStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PARTIALLY_BILLED
+  BILLED
+  CANCELLED
+}
+
+enum BillType {
+  ROAD
+  ROAD_RAIL
+  ROAD_GTA
+}
+
+enum BillPartyType {
+  CONSIGNOR
+  CONSIGNEE
+}
+
+enum BillChargeMechanism {
+  NOT_APPLICABLE
+  FORWARD_CHARGE
+  REVERSE_CHARGE
+}
+
+enum CashReceivableSource {
+  MANUAL
+  BILL
+}
+
+enum BillTaxTreatment {
+  NO_GST
+  INTRA_STATE
+  INTER_STATE
+  REVERSE_CHARGE
+}
+
+enum BillTaxType {
+  CGST
+  SGST
+  IGST
+}
+
+enum BillStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  FINALISED
+  SENT
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum ReceiptPaymentMode {
+  CASH
+  CHEQUE
+  BANK
+  UPI
+}
+
+enum ReceiptStatus {
+  DRAFT
+  PENDING_APPROVAL
+  POSTED
   CANCELLED
 }
 

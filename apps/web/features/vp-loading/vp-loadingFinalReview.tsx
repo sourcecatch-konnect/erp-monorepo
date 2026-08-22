@@ -50,21 +50,10 @@ const formatNumber = (value?: number | string | null) => {
   const number = Number(value ?? 0);
   return Number.isFinite(number)
     ? new Intl.NumberFormat("en-IN", { maximumFractionDigits: 4 }).format(
-      number,
-    )
+        number,
+      )
     : DASH;
 };
-
-const userName = (
-  user?: {
-    firstName?: string;
-    lastName?: string;
-    userName?: string;
-  } | null,
-) =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-  user?.userName ||
-  DASH;
 
 function Metric({
   label,
@@ -193,10 +182,11 @@ export default function VPLoadingFinalReview({
 
           <div className="space-y-3">
             <div
-              className={`rounded-lg border px-4 py-3 ${review.canFinalise
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-amber-200 bg-amber-50 text-amber-700"
-                }`}
+              className={`rounded-lg border px-4 py-3 ${
+                review.canFinalise
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-amber-200 bg-amber-50 text-amber-700"
+              }`}
             >
               <div className="flex items-center gap-2 font-semibold">
                 {review.canFinalise ? (
@@ -244,7 +234,7 @@ export default function VPLoadingFinalReview({
           icon={<IconTrain size={18} />}
         />
         <Metric
-          label="Verified"
+          label="Loaded wagons"
           value={`${formatNumber(review.summary.verifiedWagonCount)} / ${formatNumber(
             review.summary.totalWagonRows,
           )}`}
@@ -280,7 +270,7 @@ export default function VPLoadingFinalReview({
 
       <section className="rounded-lg border bg-card shadow-sm">
         <div className="border-b px-5 py-4">
-          <h2 className="font-semibold">Verified wagon loading</h2>
+          <h2 className="font-semibold">Loaded wagon details</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Review VP numbers, loaded GRNs and source goods before finalisation.
           </p>
@@ -305,7 +295,9 @@ export default function VPLoadingFinalReview({
                       {formatNumber(loading?.totalLoadedQty)} loaded
                     </p>
                     <p className="text-muted-foreground">
-                      {loading?.status ?? "Loading missing"}
+                      {loading?.status === "COMPLETED"
+                        ? "LOADED"
+                        : (loading?.status ?? "Loading missing")}
                     </p>
                   </div>
                 </div>
@@ -387,9 +379,11 @@ export default function VPLoadingFinalReview({
                   <span>Gate: {loading?.gateNo || DASH}</span>
                   <span>Labour: {loading?.labour?.name || DASH}</span>
                   <span>
-                    Supervisor: {userName(loading?.loadingSupervisor)}
+                    Supervisor: {loading?.loadingSupervisor?.name || DASH}
                   </span>
-                  <span>Verified by: {userName(loading?.verifiedBy)}</span>
+                  <span>
+                    Marked loaded: {formatDate(loading?.loadingCompletedAt)}
+                  </span>
                 </div>
               </article>
             );

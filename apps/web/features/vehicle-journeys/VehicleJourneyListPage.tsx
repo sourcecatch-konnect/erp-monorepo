@@ -23,6 +23,8 @@ export default function VehicleJourneyListPage() {
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
+  const [startedFrom, setStartedFrom] = React.useState("");
+  const [startedTo, setStartedTo] = React.useState("");
   const [sort, setSort] = React.useState("startedAt:desc");
   const [startOpen, setStartOpen] = React.useState(false);
   const debouncedSearch = useDebouncedValue(search);
@@ -34,18 +36,25 @@ export default function VehicleJourneyListPage() {
   const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder } =
     useTablePrefs("vehicle-journeys", DEFAULT_JOURNEY_COLUMN_ORDER);
 
-  React.useEffect(() => setPage(0), [debouncedSearch, statusFilter, sort]);
+  React.useEffect(
+    () => setPage(0),
+    [debouncedSearch, statusFilter, startedFrom, startedTo, sort],
+  );
 
-  const listQuery = React.useMemo<ListQuery>(
-    () => ({
+  const listQuery = React.useMemo<ListQuery>(() => {
+    const filter: Record<string, string> = {};
+    if (statusFilter !== "ALL") filter.status = statusFilter;
+    if (startedFrom) filter.startedFrom = startedFrom;
+    if (startedTo) filter.startedTo = startedTo;
+
+    return {
       page,
       size,
       sort,
       ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
-      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
-    }),
-    [page, size, sort, debouncedSearch, statusFilter],
-  );
+      ...(Object.keys(filter).length ? { filter } : {}),
+    };
+  }, [page, size, sort, debouncedSearch, statusFilter, startedFrom, startedTo]);
 
   const journeys = useQuery({
     queryKey: journeyKeys.list(listQuery),
@@ -89,6 +98,10 @@ export default function VehicleJourneyListPage() {
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        startedFrom={startedFrom}
+        onStartedFromChange={setStartedFrom}
+        startedTo={startedTo}
+        onStartedToChange={setStartedTo}
         sort={sort}
         onSortChange={setSort}
         columnVisibility={columnVisibility}

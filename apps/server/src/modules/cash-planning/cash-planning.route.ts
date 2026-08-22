@@ -13,6 +13,7 @@ import {
   createCashReceivableSchema,
   updateCashReceivableSchema,
   markReceivableReceivedSchema,
+  createCashAccountAdjustmentSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -28,6 +29,7 @@ import {
   ValidationError,
 } from "../../lib/error.js";
 import {
+  accountTotals,
   buildDayView,
   buildLedgerView,
   buildReceivablesView,
@@ -257,7 +259,6 @@ router.patch(
     if (payment.status !== "PENDING") {
       throw new BadRequestError("Only pending payments can be edited");
     }
-
     const parsed = updateCashPaymentSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.flatten().fieldErrors);
@@ -341,13 +342,28 @@ router.post(
       const wasApproved = payment.status === "APPROVED";
       const willApprove = status === "APPROVED";
 
-      // Cash guard: approving must not push approved total past available cash.
+      // Cash guard: approving must not push approved total past available cash —
+      // checked both for the pool overall and for the specific account this
+      // payment draws from, since one account can run dry while the pool
+      // still looks fine on paper.
       if (willApprove && !wasApproved) {
-        const { totalOpening, approvedTotal } = await poolTotals(tx, payment.dayId, id);
-        if (approvedTotal + Number(payment.amount) > totalOpening) {
+        const pool = await poolTotals(tx, payment.dayId, id);
+        if (Number(payment.amount) > pool.availableCash) {
           throw new BadRequestError(
             "Approving this payment would exceed available cash",
           );
+        }
+        if (payment.fromAccountId) {
+          const account = await accountTotals(tx, payment.dayId, payment.fromAccountId, id);
+          if (Number(payment.amount) > account.availableCash) {
+            const acc = await tx.cashAccount.findUnique({
+              where: { id: payment.fromAccountId },
+              select: { name: true },
+            });
+            throw new BadRequestError(
+              `Approving this payment would exceed available cash in ${acc?.name ?? "the selected account"}`,
+            );
+          }
         }
       }
 
@@ -410,15 +426,55 @@ router.post(
 
     if (toApprove.length > 0) {
       await db.$transaction(async (tx) => {
-        const { totalOpening, approvedTotal } = await poolTotals(tx, id);
-        let running = approvedTotal;
+        const pool = await poolTotals(tx, id);
+        let running = pool.approvedTotal;
+        const poolCeiling = pool.totalOpening + pool.totalAdjustments;
         const approvedAt = new Date();
         const approvedById = actorId(req);
 
+        // Per-account running totals, seeded from what's already approved
+        // today for each account — a payment can be pool-affordable overall
+        // but still overdraw the one account it's tagged to. The ceiling per
+        // account includes both its opening balance and any adjustments
+        // (manual top-ups or receipt credits) posted to it today.
+        const adjustedByAccount = new Map<string, number>();
+        for (const a of day.adjustments) {
+          adjustedByAccount.set(
+            a.accountId,
+            (adjustedByAccount.get(a.accountId) ?? 0) + Number(a.amountPaise),
+          );
+        }
+        const ceilingByAccount = new Map(
+          day.balances.map((b) => [
+            b.accountId,
+            Number(b.openingBalance) + (adjustedByAccount.get(b.accountId) ?? 0),
+          ]),
+        );
+        const approvedByAccount = new Map<string, number>();
+        for (const p of day.payments) {
+          if (p.status !== "APPROVED" || !p.fromAccountId) continue;
+          approvedByAccount.set(
+            p.fromAccountId,
+            (approvedByAccount.get(p.fromAccountId) ?? 0) + Number(p.amount),
+          );
+        }
+
         for (const p of toApprove) {
           const amount = Number(p.amount);
-          // Cumulative guard: stop once the next payment no longer fits.
-          if (running + amount > totalOpening) break;
+          // Pool-wide cumulative guard: once the whole pool is out, every
+          // later payment is out too (queue is priority-ordered), so a hard
+          // stop here is equivalent to checking each one individually.
+          if (running + amount > poolCeiling) break;
+
+          // Per-account guard: unlike the pool, one account running dry
+          // doesn't mean the next payment (on a different account) won't
+          // fit — skip just this one and keep going instead of stopping.
+          if (p.fromAccountId) {
+            const accCeiling = ceilingByAccount.get(p.fromAccountId) ?? 0;
+            const accApproved = approvedByAccount.get(p.fromAccountId) ?? 0;
+            if (accApproved + amount > accCeiling) continue;
+            approvedByAccount.set(p.fromAccountId, accApproved + amount);
+          }
           running += amount;
 
           if (p.creditorId) {
@@ -480,6 +536,45 @@ router.put(
   },
 );
 
+// Manual add-funds / correction against one account for a day — only while
+// the day is still OPEN, same rule as editing opening balances. Signed
+// amount so it also covers corrections (negative).
+router.post(
+  "/days/:id/accounts/:accountId/adjustments",
+  can(PERMS.CASH_PLANNING.ENTER),
+  async (req, res) => {
+    const id = getParamId(req);
+    const accountId = req.params.accountId;
+    if (!accountId || Array.isArray(accountId)) {
+      throw new ValidationError("Invalid account id");
+    }
+    const day = await loadDayOr404(id);
+    assertOpen(day.status);
+
+    if (!day.balances.some((b) => b.accountId === accountId)) {
+      throw new BadRequestError("This account isn't part of today's cash position");
+    }
+
+    const parsed = createCashAccountAdjustmentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+
+    await db.cashAccountAdjustment.create({
+      data: {
+        dayId: id,
+        accountId,
+        amountPaise: BigInt(parsed.data.amountPaise),
+        reason: parsed.data.reason,
+        createdById: actorId(req),
+      },
+    });
+
+    const fresh = await findDay(id);
+    return sendOk(res, buildDayView(fresh!));
+  },
+);
+
 /* ──────────────────── Receivables (global) ──────────────────── */
 
 // List all receivables with pending / expected subtotals.
@@ -514,7 +609,10 @@ router.patch(
     const id = getParamId(req);
     const existing = await db.cashReceivable.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Receivable not found");
-
+    if (existing.source === "BILL")
+      throw new BadRequestError(
+        "This receivable is synced from a bill and cannot be edited manually",
+      );
     const parsed = updateCashReceivableSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.flatten().fieldErrors);
@@ -549,7 +647,10 @@ router.post(
     const id = getParamId(req);
     const existing = await db.cashReceivable.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Receivable not found");
-
+    if (existing.source === "BILL")
+      throw new BadRequestError(
+        "This receivable is synced from a bill — record payment through a receipt instead",
+      );
     const parsed = markReceivableReceivedSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.flatten().fieldErrors);
@@ -595,6 +696,10 @@ router.delete(
     const id = getParamId(req);
     const existing = await db.cashReceivable.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Receivable not found");
+    if (existing.source === "BILL")
+      throw new BadRequestError(
+        "This receivable is synced from a bill and cannot be deleted manually — cancel the bill instead",
+      );
 
     await db.cashReceivable.delete({ where: { id } });
 

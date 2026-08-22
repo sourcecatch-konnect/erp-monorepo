@@ -1,0 +1,1312 @@
+import { Router } from "express";
+import {
+  addBillChargesSchema,
+  approveLRChargeSchema,
+  billingTaxRuleSchema,
+  cancelBillSchema,
+  cancelLRChargeSchema,
+  createBillDraftSchema,
+  createManualLRChargeSchema,
+  eligibleClientQuerySchema,
+  eligibleLRQuerySchema,
+  evaluateLRBillingSchema,
+  returnBillToDraftSchema,
+  transitionBillSchema,
+} from "@skerp/validators";
+import { PERMS } from "@skerp/types";
+import { Prisma, type BillStatus } from "../../../generated/prisma/index.js";
+import { db } from "../../../prisma/prisma.js";
+import { authMiddleware } from "../../middlewares/auth.middlware.js";
+import { can } from "../../auth/can.middleware.js";
+import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
+import { sendOk } from "../_shared/response.js";
+import { getParamId } from "../_shared/param.js";
+import {
+  fyCodeFor,
+  formatDocNumber,
+  nextSequence,
+} from "../_shared/doc-number.js";
+import {
+  billDetailInclude,
+  calculateBill,
+  evaluateBillingForLR,
+  refreshLRBillingStatus,
+} from "./billing.service.js";
+
+const router: Router = Router();
+router.use(authMiddleware);
+const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
+
+const LR_RESERVING_BILL_STATUSES: BillStatus[] = [
+  "DRAFT",
+  "PENDING_REVIEW",
+  "APPROVED",
+];
+
+const validate = <T>(
+  result:
+    | { success: true; data: T }
+    | {
+      success: false;
+      error: { flatten: () => { fieldErrors: Record<string, string[]> } };
+    },
+) => {
+  if (!result.success)
+    throw new ValidationError(result.error.flatten().fieldErrors);
+  return result.data;
+};
+
+const servicePartyWhere = (
+  partyType: "CONSIGNOR" | "CONSIGNEE",
+  customerId: string,
+): Prisma.LRGroupWhereInput =>
+  partyType === "CONSIGNOR"
+    ? { consignorId: customerId }
+    : { consigneeId: customerId };
+
+const transportWhere = (
+  billType: "ROAD" | "ROAD_RAIL" | "ROAD_GTA",
+): Prisma.LRGroupWhereInput["transportType"] =>
+  billType === "ROAD_RAIL" ? { in: ["RoadAndRail", "Rail"] } : "Road";
+
+router.get("/options", can(PERMS.BILLING.VIEW), async (req, res) => {
+  const branches = await db.branch.findMany({
+    where: branchFilter(req, "id"),
+    select: {
+      id: true,
+      name: true,
+      branchCode: true,
+      gstNo: true,
+      companyId: true,
+      address: true,
+      city: { select: { id: true, name: true, state: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+  return sendOk(res, { branches });
+});
+
+router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
+  const input = validate(eligibleClientQuerySchema.safeParse(req.query));
+  assertBranchAccess(req, input.branchId);
+  const lrs = await db.lorryReceipt.findMany({
+    where: {
+      status: "ACKNOWLEDGED",
+      billingStatus: {
+        in: ["NOT_BILLABLE", "READY_TO_BILL", "PARTIALLY_BILLED"],
+      },
+      ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
+      group: {
+        is: {
+          originBranchId: input.branchId,
+          transportType: transportWhere(input.billType),
+        },
+      },
+    },
+    select: {
+      billingStatus: true,
+      acknowledgement: {
+        select: { detentionAmount: true, damageAmount: true },
+      },
+      delivery: { select: { unloadingCharges: true } },
+      billableCharges: {
+        where: { status: { in: ["APPROVED", "PARTIALLY_BILLED"] } },
+        select: {
+          amountPaise: true,
+          approvedAmountPaise: true,
+          billLines: {
+            where: { bill: { status: { not: "CANCELLED" } } },
+            select: { amountPaise: true },
+          },
+        },
+      },
+      billLines: {
+        where: {
+          bill: { status: { in: LR_RESERVING_BILL_STATUSES } },
+        },
+        select: { id: true },
+        take: 1,
+      },
+      group: {
+        select: {
+          baseFreightAmount: true,
+          consignor: {
+            select: { id: true, name: true, splitBillsByChargeType: true },
+          },
+          consignee: {
+            select: { id: true, name: true, splitBillsByChargeType: true },
+          },
+        },
+      },
+    },
+    take: 1000,
+  });
+  const unique = new Map<
+    string,
+    { id: string; name: string; splitBillsByChargeType: boolean }
+  >();
+  for (const lr of lrs) {
+    const hasRemainingCharge = lr.billableCharges.some((charge) => {
+      const target = charge.approvedAmountPaise ?? charge.amountPaise;
+      const allocated = charge.billLines.reduce(
+        (sum, line) => sum + line.amountPaise,
+        0n,
+      );
+      return allocated < target;
+    });
+    const hasSourceCharge =
+      (lr.group.baseFreightAmount ?? 0n) > 0n ||
+      (lr.acknowledgement?.detentionAmount ?? 0n) > 0n ||
+      (lr.acknowledgement?.damageAmount ?? 0n) > 0n ||
+      (lr.delivery?.unloadingCharges ?? 0n) > 0n;
+    if (
+      !hasRemainingCharge &&
+      !(lr.billingStatus === "NOT_BILLABLE" && hasSourceCharge)
+    )
+      continue;
+    const customer =
+      input.billingPartyType === "CONSIGNOR"
+        ? lr.group.consignor
+        : lr.group.consignee;
+    if (!customer.splitBillsByChargeType && lr.billLines.length > 0) continue;
+    if (
+      !input.search ||
+      customer.name.toLowerCase().includes(input.search.toLowerCase())
+    )
+      unique.set(customer.id, customer);
+  }
+  return sendOk(
+    res,
+    [...unique.values()].sort((a, b) => a.name.localeCompare(b.name)),
+  );
+});
+
+router.post(
+  "/readiness/evaluate",
+  can(PERMS.BILLING.CREATE),
+  async (req, res) => {
+    const input = validate(evaluateLRBillingSchema.safeParse(req.body));
+    const lrs = await db.lorryReceipt.findMany({
+      where: { id: { in: input.lrIds }, status: "ACKNOWLEDGED" },
+      select: { id: true, group: { select: { originBranchId: true } } },
+    });
+    for (const lr of lrs) assertBranchAccess(req, lr.group.originBranchId);
+    const results = [];
+    for (const lr of lrs) {
+      results.push(await evaluateBillingForLR(db, lr.id, actorId(req)));
+    }
+    return sendOk(res, results);
+  },
+);
+
+router.post(
+  "/readiness/evaluate-eligible",
+  can(PERMS.BILLING.CREATE),
+  async (req, res) => {
+    const input = validate(eligibleLRQuerySchema.safeParse(req.body));
+    assertBranchAccess(req, input.branchId);
+    const groupWhere: Prisma.LRGroupWhereInput = {
+      originBranchId: input.branchId,
+      transportType: transportWhere(input.billType),
+      ...servicePartyWhere(input.billingPartyType, input.customerId),
+    };
+    const lrs = await db.lorryReceipt.findMany({
+      where: {
+        status: "ACKNOWLEDGED",
+        ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
+        group: { is: groupWhere },
+      },
+      select: { id: true },
+      take: 250,
+    });
+    const results = [];
+    for (const lr of lrs)
+      results.push(await evaluateBillingForLR(db, lr.id, actorId(req)));
+    return sendOk(res, results);
+  },
+);
+
+router.get("/eligible-lrs", can(PERMS.BILLING.VIEW), async (req, res) => {
+  const input = validate(eligibleLRQuerySchema.safeParse(req.query));
+  assertBranchAccess(req, input.branchId);
+  const customer = await db.customer.findUnique({
+    where: { id: input.customerId },
+    select: { splitBillsByChargeType: true },
+  });
+  if (!customer) throw new NotFoundError("Billing client not found");
+  const groupWhere: Prisma.LRGroupWhereInput = {
+    originBranchId: input.branchId,
+    transportType: transportWhere(input.billType),
+    ...servicePartyWhere(input.billingPartyType, input.customerId),
+  };
+  const lrs = await db.lorryReceipt.findMany({
+    where: {
+      status: "ACKNOWLEDGED",
+      billingStatus: {
+        in: ["NOT_BILLABLE", "READY_TO_BILL", "PARTIALLY_BILLED"],
+      },
+      ...(input.search
+        ? { lrNumber: { contains: input.search, mode: "insensitive" } }
+        : {}),
+      ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
+      group: { is: groupWhere },
+      ...(!customer.splitBillsByChargeType
+        ? {
+          billLines: {
+            none: {
+              bill: { status: { in: LR_RESERVING_BILL_STATUSES } },
+            },
+          },
+        }
+        : {}),
+    },
+    include: {
+      group: {
+        include: {
+          originBranch: { include: { city: { include: { state: true } } } },
+          destinationBranch: {
+            include: { city: { include: { state: true } } },
+          },
+          consignor: { select: { id: true, name: true, gstNo: true } },
+          consignee: { select: { id: true, name: true, gstNo: true } },
+        },
+      },
+      acknowledgement: { select: { receivedAt: true } },
+      billableCharges: {
+        where: { status: { in: ["APPROVED", "PARTIALLY_BILLED"] } },
+        include: {
+          billLines: {
+            where: { bill: { status: { not: "CANCELLED" } } },
+            select: { amountPaise: true },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const seenSharedFreightGroups = new Set<string>();
+  const mappedLRs = lrs.map((lr) => ({
+    id: lr.id,
+    groupId: lr.groupId,
+    groupNumber: lr.group.groupNumber,
+    lrNumber: lr.lrNumber,
+    lrDate: lr.createdAt,
+    billingStatus: lr.billingStatus,
+    transportType: lr.group.transportType,
+    origin: lr.group.originBranch.name,
+    destination: lr.group.destinationBranch.name,
+    placeOfSupply: lr.group.destinationBranch.city?.state ?? null,
+    consignor: lr.group.consignor,
+    consignee: lr.group.consignee,
+    podReceivedAt: lr.acknowledgement?.receivedAt ?? null,
+    charges: lr.billableCharges
+      .filter((charge) => {
+        if (charge.type !== "FREIGHT") return true;
+        if (seenSharedFreightGroups.has(lr.groupId)) return false;
+        seenSharedFreightGroups.add(lr.groupId);
+        return true;
+      })
+      .map((charge) => {
+        const approved = charge.approvedAmountPaise ?? charge.amountPaise;
+        const allocated = charge.billLines.reduce(
+          (sum, line) => sum + line.amountPaise,
+          0n,
+        );
+        return {
+          id: charge.id,
+          type: charge.type,
+          effect: charge.effect,
+          description: charge.description,
+          isTaxable: charge.isTaxable,
+          approvedAmountPaise: approved,
+          allocatedAmountPaise: allocated,
+          remainingAmountPaise: approved - allocated,
+        };
+      })
+      .filter((charge) => charge.remainingAmountPaise > 0n),
+  }));
+  const eligibleGroupIds = new Set(
+    mappedLRs.filter((lr) => lr.charges.length > 0).map((lr) => lr.groupId),
+  );
+  const freightOwnerByGroup = new Map<string, string>();
+  for (const lr of mappedLRs) {
+    if (lr.charges.some((charge) => charge.type === "FREIGHT"))
+      freightOwnerByGroup.set(lr.groupId, lr.lrNumber);
+  }
+  const data = mappedLRs
+    .filter((lr) => eligibleGroupIds.has(lr.groupId))
+    .map((lr) => ({
+      ...lr,
+      isCompanionOnly: lr.charges.length === 0,
+      sharedFreightOwnerLRNumber: freightOwnerByGroup.get(lr.groupId) ?? null,
+    }));
+  return sendOk(res, data);
+});
+
+router.post("/lrs/:id/charges", can(PERMS.BILLING.CREATE), async (req, res) => {
+  const lrId = getParamId(req);
+  const input = validate(createManualLRChargeSchema.safeParse(req.body));
+
+  const lr = await db.lorryReceipt.findUnique({
+    where: { id: lrId },
+    select: { status: true, group: { select: { originBranchId: true } } },
+  });
+  if (!lr) throw new NotFoundError("Lorry receipt not found");
+  assertBranchAccess(req, lr.group.originBranchId);
+  if (lr.status !== "ACKNOWLEDGED")
+    throw new BadRequestError("Only acknowledged LRs can receive bill charges");
+  const charge = await db.lRCharge.create({
+    data: {
+      lrId,
+      ...input,
+      source: "MANUAL",
+      status: "PENDING_APPROVAL",
+      createdById: actorId(req),
+    },
+  });
+  return sendOk(res, charge, undefined, 201);
+});
+
+router.post(
+  "/charges/:id/approve",
+  can(PERMS.BILLING.CHARGE_APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(approveLRChargeSchema.safeParse(req.body ?? {}));
+
+    const existing = await db.lRCharge.findUnique({
+      where: { id },
+      include: {
+        lr: { include: { group: { select: { originBranchId: true } } } },
+      },
+    });
+    if (!existing) throw new NotFoundError("LR charge not found");
+    assertBranchAccess(req, existing.lr.group.originBranchId);
+    if (existing.status !== "PENDING_APPROVAL" && existing.status !== "DRAFT")
+      throw new BadRequestError("Charge is not pending approval");
+
+    const approvedAmountPaise =
+      input.approvedAmountPaise ?? existing.amountPaise;
+
+    const charge = await db.$transaction(async (tx) => {
+      // Conditional update: guards against a concurrent request having
+      // already moved this charge out of PENDING_APPROVAL/DRAFT, and avoids
+      // relying on the earlier read remaining true under concurrency.
+      const result = await tx.lRCharge.updateMany({
+        where: {
+          id,
+          status: { in: ["PENDING_APPROVAL", "DRAFT"] },
+        },
+        data: {
+          status: "APPROVED",
+          approvedAmountPaise,
+          approvedById: actorId(req),
+          approvedAt: new Date(),
+          reason: input.reason ?? existing.reason,
+        },
+      });
+      if (result.count === 0) {
+        throw new BadRequestError("Charge is not pending approval");
+      }
+
+      // Only touch the LR row if it isn't already in the target state.
+      // This is the write most likely to collide with a sibling charge's
+      // approval on the same LR — skipping it when it's a no-op removes
+      // most of the lock contention.
+      await tx.lorryReceipt.updateMany({
+        where: {
+          id: existing.lrId,
+          billingStatus: { not: "READY_TO_BILL" },
+        },
+        data: { billingStatus: "READY_TO_BILL" },
+      });
+
+      return tx.lRCharge.findUniqueOrThrow({ where: { id } });
+    });
+
+    return sendOk(res, charge);
+  },
+);
+
+router.post(
+  "/charges/:id/cancel",
+  can(PERMS.BILLING.CHARGE_APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(cancelLRChargeSchema.safeParse(req.body));
+    const existing = await db.lRCharge.findUnique({
+      where: { id },
+      include: {
+        lr: { include: { group: { select: { originBranchId: true } } } },
+        billLines: {
+          where: { bill: { status: { not: "CANCELLED" } } },
+          select: { id: true },
+        },
+      },
+    });
+    if (!existing) throw new NotFoundError("LR charge not found");
+    assertBranchAccess(req, existing.lr.group.originBranchId);
+    if (existing.status === "CANCELLED") return sendOk(res, existing);
+    if (existing.source !== "MANUAL")
+      throw new BadRequestError(
+        "System-generated charges must be corrected at their POD, delivery or freight source",
+      );
+    if (existing.billLines.length > 0)
+      throw new BadRequestError(
+        "This charge is already attached to a bill and cannot be cancelled",
+      );
+    if (["PARTIALLY_BILLED", "BILLED"].includes(existing.status))
+      throw new BadRequestError("A billed charge cannot be cancelled");
+
+    const me = actorId(req);
+    const charge = await db.$transaction(async (tx) => {
+      const cancelled = await tx.lRCharge.update({
+        where: { id },
+        data: {
+          status: "CANCELLED",
+          reason: `Cancellation: ${input.reason}`,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+      });
+      await refreshLRBillingStatus(tx, existing.lrId);
+      return cancelled;
+    });
+    return sendOk(res, charge);
+  },
+);
+
+const loadDraftContext = async (branchId: string, customerId: string) => {
+  const [branch, customer] = await Promise.all([
+    db.branch.findUnique({
+      where: { id: branchId },
+      include: { city: { include: { state: true } }, company: true },
+    }),
+    db.customer.findUnique({ where: { id: customerId } }),
+  ]);
+  if (!branch?.city?.state)
+    throw new BadRequestError("Supplier branch city/state is incomplete");
+  if (!customer) throw new NotFoundError("Billing client not found");
+  return { branch, customer };
+};
+
+router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
+  const input = validate(createBillDraftSchema.safeParse(req.body));
+  assertBranchAccess(req, input.branchId);
+  const context = await loadDraftContext(input.branchId, input.customerId);
+  const chargeMechanism =
+    input.billType === "ROAD"
+      ? ("NOT_APPLICABLE" as const)
+      : input.billType === "ROAD_RAIL"
+        ? ("FORWARD_CHARGE" as const)
+        : input.chargeMechanism!;
+  const charges = await db.lRCharge.findMany({
+    where: { id: { in: input.lrChargeIds } },
+    include: {
+      lr: {
+        include: {
+          group: {
+            include: {
+              destinationBranch: {
+                include: { city: { include: { state: true } } },
+              },
+            },
+          },
+        },
+      },
+      billLines: {
+        where: { bill: { status: { not: "CANCELLED" } } },
+        select: { amountPaise: true },
+      },
+    },
+  });
+  if (charges.length !== new Set(input.lrChargeIds).size)
+    throw new BadRequestError("One or more LR charges were not found");
+  for (const charge of charges) {
+    if (charge.lr.status !== "ACKNOWLEDGED")
+      throw new BadRequestError("Only acknowledged LRs can be billed");
+    if (!["APPROVED", "PARTIALLY_BILLED"].includes(charge.status))
+      throw new BadRequestError("Only approved charges can be billed");
+    if (charge.lr.group.originBranchId !== input.branchId)
+      throw new BadRequestError(
+        "All LRs must belong to the selected origin branch",
+      );
+    const transportMatches =
+      input.billType === "ROAD_RAIL"
+        ? ["RoadAndRail", "Rail"].includes(charge.lr.group.transportType)
+        : charge.lr.group.transportType === "Road";
+    if (!transportMatches)
+      throw new BadRequestError(
+        "An LR does not match the selected transport type",
+      );
+    const partyMatches =
+      input.billingPartyType === "CONSIGNOR"
+        ? charge.lr.group.consignorId === input.customerId
+        : charge.lr.group.consigneeId === input.customerId;
+    if (!partyMatches)
+      throw new BadRequestError(
+        "An LR does not match the selected client and bill head",
+      );
+    if (!charge.lr.group.destinationBranch.city?.state)
+      throw new BadRequestError("An LR destination state is incomplete");
+  }
+  const selectedFreightGroups = new Set<string>();
+  for (const charge of charges) {
+    if (charge.type !== "FREIGHT") continue;
+    if (selectedFreightGroups.has(charge.lr.groupId))
+      throw new BadRequestError(
+        "The same truckload freight was selected more than once. Refresh eligible LRs and try again.",
+      );
+    selectedFreightGroups.add(charge.lr.groupId);
+  }
+  const allocations = charges.map((charge) => {
+    const approved = charge.approvedAmountPaise ?? charge.amountPaise;
+    const used = charge.billLines.reduce(
+      (sum, line) => sum + line.amountPaise,
+      0n,
+    );
+    const remaining = approved - used;
+    if (remaining <= 0n)
+      throw new BadRequestError(
+        `Charge ${charge.id} is already fully allocated`,
+      );
+    return { charge, remaining };
+  });
+  const destinationStates = new Map(
+    charges.map((charge) => {
+      const state = charge.lr.group.destinationBranch.city!.state;
+      return [state.id, state] as const;
+    }),
+  );
+  if (destinationStates.size !== 1)
+    throw new BadRequestError(
+      "Selected LRs have different Places of Supply; create separate bills",
+    );
+  const placeOfSupply = [...destinationStates.values()][0]!;
+  const supplierState = context.branch.city!.state;
+  const allocationGroups = context.customer.splitBillsByChargeType
+    ? [
+      allocations.filter(({ charge }) => charge.type === "FREIGHT"),
+      allocations.filter(({ charge }) => charge.type !== "FREIGHT"),
+    ].filter((group) => group.length > 0)
+    : [allocations];
+  const preparedBills = await Promise.all(
+    allocationGroups.map(async (group) => ({
+      allocations: group,
+      calculation: await calculateBill({
+        billType: input.billType,
+        chargeMechanism,
+        billDate: input.billDate,
+        supplierStateId: supplierState.id,
+        placeOfSupplyStateId: placeOfSupply.id,
+        charges: group.map(({ charge, remaining }) => ({
+          ...charge,
+          amountPaise: remaining,
+          approvedAmountPaise: remaining,
+        })),
+      }),
+    })),
+  );
+  const me = actorId(req);
+  const billIds = await db.$transaction(async (tx) => {
+    if (!context.customer.splitBillsByChargeType) {
+      const lrIds = [...new Set(charges.map((charge) => charge.lrId))].sort();
+
+      // Serialize draft creation per LR. The eligibility response is only a
+      // convenience; this lock and re-check are the authoritative guard
+      // against stale tabs and concurrent requests creating duplicate drafts.
+      for (const lrId of lrIds)
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lrId}))`;
+
+      const reservedLine = await tx.billLine.findFirst({
+        where: {
+          lrId: { in: lrIds },
+          bill: { status: { in: LR_RESERVING_BILL_STATUSES } },
+        },
+        select: {
+          lr: { select: { lrNumber: true } },
+          bill: { select: { billNumber: true, status: true } },
+        },
+      });
+      if (reservedLine) {
+        const billReference =
+          reservedLine.bill.billNumber ?? `${reservedLine.bill.status} bill`;
+        throw new BadRequestError(
+          `LR ${reservedLine.lr.lrNumber} already belongs to an active ${billReference}. Add charges to that bill or cancel it before creating another draft.`,
+        );
+      }
+    }
+
+    const ids: string[] = [];
+    for (const prepared of preparedBills) {
+      const { taxLines, ...calculationTotals } = prepared.calculation;
+
+      // Every LR on a billed truck should be visible on the bill, even the
+      // companion LRs whose freight is carried by another LR's charge — not
+      // just the LRs that happen to own a BillLine.
+      const truckLrIds = new Set(
+        prepared.allocations.map(({ charge }) => charge.lrId),
+      );
+      const freightGroupIds = new Set(
+        prepared.allocations
+          .filter(({ charge }) => charge.type === "FREIGHT")
+          .map(({ charge }) => charge.lr.groupId),
+      );
+      if (freightGroupIds.size > 0) {
+        const companions = await tx.lorryReceipt.findMany({
+          where: { groupId: { in: [...freightGroupIds] } },
+          select: { id: true },
+        });
+        for (const companion of companions) truckLrIds.add(companion.id);
+      }
+
+      const bill = await tx.bill.create({
+        data: {
+          fyCode: fyCodeFor(input.billDate),
+          status: "DRAFT",
+          billType: input.billType,
+          billingPartyType: input.billingPartyType,
+          chargeMechanism,
+          taxTreatment: calculationTotals.taxTreatment,
+          billDate: input.billDate,
+          billingCutoffDate: input.billingCutoffDate,
+          dueDate: input.dueDate,
+          branchId: input.branchId,
+          companyId: context.branch.companyId,
+          serviceCustomerId: input.customerId,
+          billingCustomerId: input.customerId,
+          billingLocationId: null,
+          supplierStateId: supplierState.id,
+          placeOfSupplyStateId: placeOfSupply.id,
+          taxRuleId: calculationTotals.taxRuleId,
+          billingPartyNameSnapshot: context.customer.name,
+          billingGstinSnapshot: context.customer.gstNo,
+          billingAddressSnapshot: context.customer.address,
+          supplierNameSnapshot: context.branch.company.name,
+          supplierGstinSnapshot: context.branch.gstNo,
+          supplierAddressSnapshot: context.branch.address,
+          supplierStateNameSnapshot: supplierState.name,
+          placeOfSupplyNameSnapshot: placeOfSupply.name,
+          subtotalAmountPaise: calculationTotals.subtotalAmountPaise,
+          taxableAmountPaise: calculationTotals.taxableAmountPaise,
+          taxAmountPaise: calculationTotals.taxAmountPaise,
+          roundOffPaise: calculationTotals.roundOffPaise,
+          totalAmountPaise: calculationTotals.totalAmountPaise,
+          outstandingAmountPaise: calculationTotals.outstandingAmountPaise,
+          remarks: input.remarks,
+          createdById: me,
+          lines: {
+            create: prepared.allocations.map(
+              ({ charge, remaining }, index) => ({
+                lrId: charge.lrId,
+                lrChargeId: charge.id,
+                lineNumber: index + 1,
+                chargeTypeSnapshot: charge.type,
+                effectSnapshot: charge.effect,
+                descriptionSnapshot: charge.description,
+                sacCodeSnapshot: charge.sacCode,
+                ratePaise: remaining,
+                amountPaise: remaining,
+                taxableAmountPaise: charge.isTaxable ? remaining : 0n,
+              }),
+            ),
+          },
+          lrLinks: {
+            create: [...truckLrIds].map((lrId) => ({ lrId })),
+          },
+          taxLines: { create: taxLines },
+          statusHistory: { create: { toStatus: "DRAFT", changedById: me } },
+        },
+        select: { id: true },
+      });
+      ids.push(bill.id);
+    }
+    return ids;
+  });
+  const bills = await db.bill.findMany({
+    where: { id: { in: billIds } },
+    include: billDetailInclude,
+  });
+  const orderedBills = billIds.map(
+    (id) => bills.find((bill) => bill.id === id)!,
+  );
+  return sendOk(res, orderedBills, undefined, 201);
+});
+
+router.get("/bills", can(PERMS.BILLING.VIEW), async (req, res) => {
+  const status =
+    typeof req.query.status === "string"
+      ? (req.query.status as BillStatus)
+      : undefined;
+  const data = await db.bill.findMany({
+    where: { ...branchFilter(req), ...(status ? { status } : {}) },
+    include: {
+      branch: { select: { name: true, branchCode: true } },
+      billingCustomer: { select: { id: true, name: true } },
+      placeOfSupplyState: true,
+      _count: { select: { lines: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  return sendOk(res, data);
+});
+
+router.get("/bills/:id", can(PERMS.BILLING.VIEW), async (req, res) => {
+  const bill = await db.bill.findUnique({
+    where: { id: getParamId(req) },
+    include: billDetailInclude,
+  });
+  if (!bill) throw new NotFoundError("Bill not found");
+  assertBranchAccess(req, bill.branchId);
+  return sendOk(res, bill);
+});
+
+router.get(
+  "/bills/:id/available-charges",
+  can(PERMS.BILLING.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const bill = await db.bill.findUnique({
+      where: { id },
+      select: {
+        branchId: true,
+        status: true,
+        lines: { select: { lrId: true } },
+      },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    if (bill.status !== "DRAFT") return sendOk(res, []);
+
+    const lrIds = [...new Set(bill.lines.map((line) => line.lrId))];
+    const charges = await db.lRCharge.findMany({
+      where: {
+        lrId: { in: lrIds },
+        status: { in: ["APPROVED", "PARTIALLY_BILLED"] },
+      },
+      include: {
+        lr: { select: { lrNumber: true } },
+        billLines: {
+          where: { bill: { status: { not: "CANCELLED" } } },
+          select: { amountPaise: true },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const data = charges
+      .map((charge) => {
+        const approved = charge.approvedAmountPaise ?? charge.amountPaise;
+        const allocated = charge.billLines.reduce(
+          (sum, line) => sum + line.amountPaise,
+          0n,
+        );
+        return {
+          id: charge.id,
+          lrId: charge.lrId,
+          lrNumber: charge.lr.lrNumber,
+          type: charge.type,
+          effect: charge.effect,
+          description: charge.description,
+          source: charge.source,
+          remainingAmountPaise: approved - allocated,
+        };
+      })
+      .filter((charge) => charge.remainingAmountPaise > 0n);
+    return sendOk(res, data);
+  },
+);
+router.post(
+  "/bills/:id/charges",
+  can(PERMS.BILLING.UPDATE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(addBillChargesSchema.safeParse(req.body));
+    const me = actorId(req);
+
+    const updatedId = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`bill:${id}`}))`;
+      const bill = await tx.bill.findUnique({
+        where: { id },
+        include: {
+          serviceCustomer: { select: { splitBillsByChargeType: true } },
+          lines: {
+            include: { lrCharge: { select: { isTaxable: true } } },
+            orderBy: { lineNumber: "asc" },
+          },
+        },
+      });
+      if (!bill) throw new NotFoundError("Bill not found");
+      assertBranchAccess(req, bill.branchId);
+      if (bill.status !== "DRAFT")
+        throw new BadRequestError(
+          "Only a draft bill can be amended. Return the bill to draft first.",
+        );
+      if (bill.version !== input.version)
+        throw new BadRequestError(
+          "This draft changed in another session. Refresh and try again.",
+        );
+
+      const allowedLRIds = new Set(bill.lines.map((line) => line.lrId));
+      const requestedIds = [...new Set(input.lrChargeIds)];
+
+      // Lightweight precheck — existence/ownership/status only, no billLines.
+      const precheck = await tx.lRCharge.findMany({
+        where: { id: { in: requestedIds } },
+        select: { id: true, lrId: true, status: true, lr: { select: { lrNumber: true } } },
+      });
+      if (precheck.length !== requestedIds.length)
+        throw new BadRequestError("One or more LR charges were not found");
+      for (const charge of precheck) {
+        if (!allowedLRIds.has(charge.lrId))
+          throw new BadRequestError(
+            `Charge for LR ${charge.lr.lrNumber} does not belong to this bill`,
+          );
+        if (!["APPROVED", "PARTIALLY_BILLED"].includes(charge.status))
+          throw new BadRequestError("Only approved charges can be added");
+      }
+
+      for (const lrId of [...new Set(precheck.map((charge) => charge.lrId))].sort())
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lrId}))`;
+
+      // Single full read, post-lock — the only place we need billLines.
+      const charges = await tx.lRCharge.findMany({
+        where: { id: { in: requestedIds } },
+        include: {
+          lr: { select: { lrNumber: true } },
+          billLines: {
+            where: { bill: { status: { not: "CANCELLED" } } },
+            select: { amountPaise: true },
+          },
+        },
+      });
+
+      const allocations = charges.map((charge) => {
+        const approved = charge.approvedAmountPaise ?? charge.amountPaise;
+        const used = charge.billLines.reduce((sum, line) => sum + line.amountPaise, 0n);
+        const remaining = approved - used;
+        if (remaining <= 0n)
+          throw new BadRequestError(
+            `Charge for LR ${charge.lr.lrNumber} is already fully allocated`,
+          );
+        return { charge, remaining };
+      });
+
+      if (bill.serviceCustomer.splitBillsByChargeType) {
+        const existingKinds = new Set(
+          bill.lines.map((line) => (line.chargeTypeSnapshot === "FREIGHT" ? "FREIGHT" : "ADDITIONAL")),
+        );
+        const incomingKinds = new Set(
+          allocations.map(({ charge }) => (charge.type === "FREIGHT" ? "FREIGHT" : "ADDITIONAL")),
+        );
+        if (
+          existingKinds.size !== 1 ||
+          incomingKinds.size !== 1 ||
+          [...incomingKinds][0] !== [...existingKinds][0]
+        )
+          throw new BadRequestError(
+            "This customer separates freight and additional charges. Add the charge to the matching draft.",
+          );
+      }
+
+      const calculation = await calculateBill(
+        {
+          billType: bill.billType,
+          chargeMechanism: bill.chargeMechanism,
+          billDate: bill.billDate,
+          supplierStateId: bill.supplierStateId,
+          placeOfSupplyStateId: bill.placeOfSupplyStateId,
+          charges: [
+            ...bill.lines.map((line) => ({
+              amountPaise: line.amountPaise,
+              approvedAmountPaise: line.amountPaise,
+              effect: line.effectSnapshot,
+              isTaxable: line.lrCharge.isTaxable,
+            })),
+            ...allocations.map(({ charge, remaining }) => ({
+              amountPaise: remaining,
+              approvedAmountPaise: remaining,
+              effect: charge.effect,
+              isTaxable: charge.isTaxable,
+            })),
+          ],
+        },
+        tx, // CHANGED — stays on this transaction's connection
+      );
+
+      const firstLineNumber = Math.max(0, ...bill.lines.map((line) => line.lineNumber)) + 1;
+
+      const updated = await tx.bill.update({
+        where: { id, version: input.version },
+        data: {
+          taxTreatment: calculation.taxTreatment,
+          taxRuleId: calculation.taxRuleId,
+          subtotalAmountPaise: calculation.subtotalAmountPaise,
+          taxableAmountPaise: calculation.taxableAmountPaise,
+          taxAmountPaise: calculation.taxAmountPaise,
+          roundOffPaise: calculation.roundOffPaise,
+          totalAmountPaise: calculation.totalAmountPaise,
+          outstandingAmountPaise: calculation.outstandingAmountPaise,
+          updatedById: me,
+          version: { increment: 1 },
+          lines: {
+            create: allocations.map(({ charge, remaining }, index) => ({
+              lrId: charge.lrId,
+              lrChargeId: charge.id,
+              lineNumber: firstLineNumber + index,
+              chargeTypeSnapshot: charge.type,
+              effectSnapshot: charge.effect,
+              descriptionSnapshot: charge.description,
+              sacCodeSnapshot: charge.sacCode,
+              ratePaise: remaining,
+              amountPaise: remaining,
+              taxableAmountPaise: charge.isTaxable ? remaining : 0n,
+            })),
+          },
+          taxLines: {
+            deleteMany: {},
+            create: calculation.taxLines,
+          },
+        },
+        select: { id: true }, // CHANGED — no billDetailInclude here anymore
+      });
+      return updated.id;
+    }); // no TX_BUDGET — should now comfortably fit the default 5s
+
+    // CHANGED — the heavy nested read happens after commit, no locks held.
+    const bill = await db.bill.findUniqueOrThrow({
+      where: { id: updatedId },
+      include: billDetailInclude,
+    });
+    return sendOk(res, bill);
+  },
+);
+
+router.post(
+  "/bills/:id/return-to-draft",
+  can(PERMS.BILLING.APPROVE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(returnBillToDraftSchema.safeParse(req.body));
+    const bill = await db.bill.findUnique({ where: { id } });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    if (!["PENDING_REVIEW", "APPROVED"].includes(bill.status))
+      throw new BadRequestError(
+        "Only a pending-review or approved bill can be returned to draft",
+      );
+    if (bill.version !== input.version)
+      throw new BadRequestError(
+        "This bill changed in another session. Refresh and try again.",
+      );
+    const me = actorId(req);
+    const updated = await db.bill.update({
+      where: { id, version: input.version },
+      data: {
+        status: "DRAFT",
+        reviewedById: null,
+        reviewedAt: null,
+        approvedById: null,
+        approvedAt: null,
+        updatedById: me,
+        version: { increment: 1 },
+        statusHistory: {
+          create: {
+            fromStatus: bill.status,
+            toStatus: "DRAFT",
+            reason: input.reason,
+            changedById: me,
+          },
+        },
+      },
+      // Slim on purpose: returning to draft doesn't touch lines/LR/group
+      // data, only bill-level status fields — the frontend merges this
+      // patch onto its existing bill state instead of re-fetching the
+      // whole deep detail tree (billDetailInclude) for nothing changed.
+      select: { id: true, version: true, status: true },
+    });
+    return sendOk(res, updated);
+  },
+);
+
+const transition = (
+  path: string,
+  permission: Parameters<typeof can>[0],
+  from: BillStatus[],
+  to: BillStatus,
+  stamp?: "approved",
+) => {
+  router.post(path, can(permission), async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(transitionBillSchema.safeParse(req.body ?? {}));
+    const bill = await db.bill.findUnique({ where: { id } });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    if (!from.includes(bill.status))
+      throw new BadRequestError(
+        `Bill cannot move from ${bill.status} to ${to}`,
+      );
+    const me = actorId(req);
+    const updated = await db.bill.update({
+      where: { id },
+      data: {
+        status: to,
+        ...(stamp === "approved"
+          ? { approvedById: me, approvedAt: new Date() }
+          : {}),
+        statusHistory: {
+          create: {
+            fromStatus: bill.status,
+            toStatus: to,
+            reason: input.reason,
+            changedById: me,
+          },
+        },
+      },
+      // Slim on purpose — submit/approve are pure status flips, no line/LR/
+      // group data changes. The frontend merges this patch onto its existing
+      // bill state rather than re-fetching the whole deep detail tree.
+      select: { id: true, version: true, status: true },
+    });
+    return sendOk(res, updated);
+  });
+};
+
+// Approve goes straight from DRAFT to APPROVED — the old intermediate
+// "submit for review" / PENDING_REVIEW step was removed. PENDING_REVIEW is
+// still accepted here too, only so any bill already sitting in that status
+// from before this change isn't stranded with no way forward.
+transition(
+  "/bills/:id/approve",
+  PERMS.BILLING.APPROVE,
+  ["DRAFT", "PENDING_REVIEW"],
+  "APPROVED",
+  "approved",
+);
+
+router.post(
+  "/bills/:id/finalise",
+  can(PERMS.BILLING.FINALISE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const bill = await db.bill.findUnique({
+      where: { id },
+      include: {
+        branch: true,
+        lines: {
+          include: {
+            lrCharge: {
+              include: {
+                billLines: {
+                  where: {
+                    bill: { status: { not: "CANCELLED" } },
+                    NOT: { billId: id },
+                  },
+                  select: { amountPaise: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    if (["FINALISED", "SENT", "PARTIALLY_PAID", "PAID"].includes(bill.status)) {
+      return sendOk(
+        res,
+        await db.bill.findUniqueOrThrow({
+          where: { id },
+          include: billDetailInclude,
+        }),
+      );
+    }
+    if (bill.status !== "APPROVED")
+      throw new BadRequestError("Only an approved bill can be finalised");
+    for (const line of bill.lines) {
+      const approved =
+        line.lrCharge.approvedAmountPaise ?? line.lrCharge.amountPaise;
+      const otherAllocated = line.lrCharge.billLines.reduce(
+        (sum, item) => sum + item.amountPaise,
+        0n,
+      );
+      if (otherAllocated + line.amountPaise > approved)
+        throw new BadRequestError(
+          "An LR charge is over-allocated by another bill",
+        );
+    }
+    const calculation = await calculateBill({
+      billType: bill.billType,
+      chargeMechanism: bill.chargeMechanism,
+      billDate: bill.billDate,
+      supplierStateId: bill.supplierStateId,
+      placeOfSupplyStateId: bill.placeOfSupplyStateId,
+      charges: bill.lines.map((line) => ({
+        amountPaise: line.amountPaise,
+        approvedAmountPaise: line.amountPaise,
+        effect: line.effectSnapshot,
+        isTaxable: line.lrCharge.isTaxable,
+      })),
+    });
+    const seq = await nextSequence(
+      db,
+      bill.branch.branchCode,
+      bill.fyCode,
+      "BILL",
+    );
+    const billNumber = formatDocNumber(
+      bill.branch.branchCode,
+      bill.fyCode,
+      seq,
+      "SKT/B",
+    );
+    const me = actorId(req);
+    await db.$transaction(async (tx) => {
+      await tx.bill.update({
+        where: { id, version: bill.version },
+        data: {
+          billNumber,
+          status: "FINALISED",
+          taxTreatment: calculation.taxTreatment,
+          taxRuleId: calculation.taxRuleId,
+          subtotalAmountPaise: calculation.subtotalAmountPaise,
+          taxableAmountPaise: calculation.taxableAmountPaise,
+          taxAmountPaise: calculation.taxAmountPaise,
+          roundOffPaise: calculation.roundOffPaise,
+          totalAmountPaise: calculation.totalAmountPaise,
+          outstandingAmountPaise: calculation.outstandingAmountPaise,
+          finalisedById: me,
+          finalisedAt: new Date(),
+          version: { increment: 1 },
+          statusHistory: {
+            create: {
+              fromStatus: "APPROVED",
+              toStatus: "FINALISED",
+              changedById: me,
+            },
+          },
+          taxLines: {
+            deleteMany: {},
+            create: calculation.taxLines,
+          },
+        },
+      });
+      for (const lrId of new Set(bill.lines.map((line) => line.lrId)))
+        await refreshLRBillingStatus(tx, lrId);
+      await tx.cashReceivable.upsert({
+        where: { billId: id },
+        create: {
+          billId: id,
+          customerId: bill.billingCustomerId,
+          partyName: bill.billingPartyNameSnapshot,
+          source: "BILL",
+          totalAmount: calculation.outstandingAmountPaise,
+          expectedAmount: calculation.outstandingAmountPaise,
+          expectedDate: bill.dueDate,
+        },
+        update: {
+          partyName: bill.billingPartyNameSnapshot,
+          totalAmount: calculation.outstandingAmountPaise,
+          expectedAmount: calculation.outstandingAmountPaise,
+          expectedDate: bill.dueDate,
+        },
+      });
+    });
+    return sendOk(
+      res,
+      await db.bill.findUniqueOrThrow({
+        where: { id },
+        include: billDetailInclude,
+      }),
+    );
+  },
+);
+
+router.post(
+  "/bills/:id/cancel",
+  can(PERMS.BILLING.CANCEL),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(cancelBillSchema.safeParse(req.body));
+    const bill = await db.bill.findUnique({
+      where: { id },
+      include: { lines: { select: { lrId: true } } },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    if (["PARTIALLY_PAID", "PAID"].includes(bill.status))
+      throw new BadRequestError("A paid bill cannot be cancelled");
+    const me = actorId(req);
+    await db.$transaction(async (tx) => {
+      await tx.bill.update({
+        where: { id },
+        data: {
+          status: "CANCELLED",
+          cancellationReason: input.reason,
+          cancelledById: me,
+          cancelledAt: new Date(),
+          statusHistory: {
+            create: {
+              fromStatus: bill.status,
+              toStatus: "CANCELLED",
+              reason: input.reason,
+              changedById: me,
+            },
+          },
+        },
+      });
+      // Cancelling a bill — including one that was already FINALISED — frees
+      // its LRs/charges back to billable. A charge that had reached
+      // BILLED/PARTIALLY_BILLED but lost its only allocation reverts to
+      // APPROVED (see refreshLRBillingStatus) so it's immediately available
+      // for a new bill.
+      for (const lrId of new Set(bill.lines.map((line) => line.lrId)))
+        await refreshLRBillingStatus(tx, lrId);
+      // NEW — remove the linked Cash Planning entry, if one exists.
+      // Safe to hard-delete: the guard above already blocks cancelling a
+      // PARTIALLY_PAID/PAID bill, so a linked receivable here never had
+      // real money received against it.
+      await tx.cashReceivable.deleteMany({ where: { billId: id } });
+    });
+    // Slim on purpose — cancelling doesn't change line/LR/group data on this
+    // bill, only its own status fields. The frontend merges this patch onto
+    // its existing bill state rather than re-fetching the whole deep detail
+    // tree (billDetailInclude) for nothing changed.
+    return sendOk(
+      res,
+      await db.bill.findUniqueOrThrow({
+        where: { id },
+        select: { id: true, version: true, status: true },
+      }),
+    );
+  },
+);
+
+router.get("/tax-rules", can(PERMS.BILLING.VIEW), async (_req, res) =>
+  sendOk(
+    res,
+    await db.billingTaxRule.findMany({
+      orderBy: [{ effectiveFrom: "desc" }, { name: "asc" }],
+    }),
+  ),
+);
+
+router.post(
+  "/tax-rules",
+  can(PERMS.BILLING.TAX_RULE_MANAGE),
+  async (req, res) => {
+    const input = validate(billingTaxRuleSchema.safeParse(req.body));
+    const rule = await db.billingTaxRule.create({
+      data: { ...input, createdById: actorId(req) },
+    });
+    return sendOk(res, rule, undefined, 201);
+  },
+);
+
+export default router;

@@ -146,7 +146,7 @@ const branchGrnDetailInclude = {
     },
   },
   labourLeader: { select: labourSelect },
-  unloadingSupervisor: { select: userSelect },
+  unloadingSupervisor: { select: labourSelect },
   createdBy: { select: userSelect },
   updatedBy: { select: userSelect },
   submittedBy: { select: userSelect },
@@ -306,7 +306,7 @@ const mapSourceLines = (loading: BranchGrnSourceLoading) =>
       loadedQty: goods.loadedQty,
       loadingDamageQty: goods.loadingDamageQty,
 
-      receivedQty: goods.loadedQty,
+      receivedQty: 0,
       damageQty: 0,
       shortageQty: 0,
       remarks: null,
@@ -405,48 +405,18 @@ router.get(
       throw new NotFoundError("Rail Rake not found");
     }
 
-    const supervisorRole = await db.role.findFirst({
+    const supervisors = await db.labour.findMany({
       where: {
-        name: "SuperVisor",
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!supervisorRole) {
-      return sendOk(res, []);
-    }
-
-    const supervisors = await db.user.findMany({
-      where: {
-        status: true,
-        roleId: supervisorRole.id,
+        type: "Supervisor",
         branchId: rake.toBranchId,
       },
-      select: {
-        id: true,
-        firstName: true,
-        middleName: true,
-        lastName: true,
-        email: true,
-      },
+      select: labourSelect,
       orderBy: {
-        firstName: "asc",
+        name: "asc",
       },
     });
 
-    return sendOk(
-      res,
-      supervisors.map((user) => ({
-        id: user.id,
-        name:
-          [user.firstName, user.middleName, user.lastName]
-            .filter(Boolean)
-            .join(" ") || user.email,
-        email: user.email,
-      })),
-    );
+    return sendOk(res, supervisors);
   },
 );
 
@@ -530,7 +500,7 @@ router.get("/preview", can(PERMS.RAIL_BRANCH_GRN.CREATE), async (req, res) => {
   const loading = await db.vPWagonLoading.findFirst({
     where: {
       id: vpWagonLoadingId,
-      status: "VERIFIED",
+      status: { in: ["COMPLETED", "VERIFIED"] },
 
       mrRrRow: {
         mrRr: {
@@ -544,7 +514,7 @@ router.get("/preview", can(PERMS.RAIL_BRANCH_GRN.CREATE), async (req, res) => {
 
   if (!loading) {
     throw new NotFoundError(
-      "Verified VP wagon does not belong to this Rail Rake",
+      "Loaded VP wagon does not belong to this Rail Rake",
     );
   }
 
@@ -719,7 +689,7 @@ router.post(
     const loading = await db.vPWagonLoading.findFirst({
       where: {
         id: input.vpWagonLoadingId,
-        status: "VERIFIED",
+        status: { in: ["COMPLETED", "VERIFIED"] },
 
         mrRrRow: {
           mrRr: {
@@ -733,7 +703,7 @@ router.post(
 
     if (!loading) {
       throw new NotFoundError(
-        "Verified VP wagon does not belong to this Rail Rake",
+        "Loaded VP wagon does not belong to this Rail Rake",
       );
     }
 
@@ -883,10 +853,10 @@ router.post(
           : Promise.resolve(null),
 
         input.unloadingSupervisorId
-          ? db.user.findFirst({
+          ? db.labour.findFirst({
             where: {
               id: input.unloadingSupervisorId,
-              status: true,
+              type: "Supervisor",
               branchId: accessibleRake.toBranchId,
             },
 
@@ -908,7 +878,7 @@ router.post(
       !unloadingSupervisor
     ) {
       throw new BadRequestError(
-        "Unloading supervisor must belong to the destination branch",
+        "Select an unloading Supervisor from the destination branch Labour master",
       );
     }
 
@@ -1018,7 +988,7 @@ router.post(
           await tx.vPWagonLoading.findFirst({
             where: {
               id: input.vpWagonLoadingId,
-              status: "VERIFIED",
+              status: { in: ["COMPLETED", "VERIFIED"] },
 
               mrRrRow: {
                 mrRr: {
@@ -1041,7 +1011,7 @@ router.post(
 
         if (!currentLoading) {
           throw new NotFoundError(
-            "Verified VP wagon does not belong to this Rail Rake",
+            "Loaded VP wagon does not belong to this Rail Rake",
           );
         }
 
@@ -1249,10 +1219,10 @@ router.patch("/:id", can(PERMS.RAIL_BRANCH_GRN.UPDATE), async (req, res) => {
     }
   }
   if (parsed.data.unloadingSupervisorId) {
-    const supervisor = await db.user.findFirst({
+    const supervisor = await db.labour.findFirst({
       where: {
         id: parsed.data.unloadingSupervisorId,
-        status: true,
+        type: "Supervisor",
         branchId: existing.railRake.toBranchId,
       },
       select: {
@@ -1262,7 +1232,7 @@ router.patch("/:id", can(PERMS.RAIL_BRANCH_GRN.UPDATE), async (req, res) => {
 
     if (!supervisor) {
       throw new BadRequestError(
-        "Unloading supervisor must belong to the destination branch",
+        "Select an unloading Supervisor from the destination branch Labour master",
       );
     }
   }

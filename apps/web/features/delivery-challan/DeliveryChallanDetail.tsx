@@ -45,15 +45,6 @@ const formatDate = (value?: string | null) =>
     }).format(new Date(value))
     : "—";
 
-const fullName = (user?: {
-  firstName?: string | null;
-  middleName?: string | null;
-  lastName?: string | null;
-}) =>
-  [user?.firstName, user?.middleName, user?.lastName]
-    .filter(Boolean)
-    .join(" ") || "—";
-
 const DetailField = ({
   label,
   value,
@@ -203,7 +194,10 @@ export default function DeliveryChallanDetail({
               value={row.branchGrn.railRake.vpSchedule.scheduleNumber}
             />
             <DetailField label="Loading at" value={formatDate(row.loadingAt)} />
-            <DetailField label="Supervisor" value={fullName(row.supervisor)} />
+            <DetailField
+              label="Unloading supervisor"
+              value={row.supervisor?.name ?? "—"}
+            />
           </div>
         </section>
 

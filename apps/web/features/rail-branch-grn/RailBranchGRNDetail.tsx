@@ -44,18 +44,11 @@ const formatNumber = (value?: number | null) =>
   value == null ? "—" : new Intl.NumberFormat("en-IN").format(value);
 
 const fullName = (
-  user?: {
-    firstName?: string | null;
-    middleName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
+  supervisor?: {
+    name?: string | null;
   } | null,
 ) =>
-  user
-    ? [user.firstName, user.middleName, user.lastName]
-      .filter(Boolean)
-      .join(" ") || user.email
-    : "—";
+  supervisor?.name || "—";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
