@@ -154,11 +154,11 @@ model User {
   createdBillingTaxRules BillingTaxRule[] @relation("CreatedBillingTaxRules")
   updatedBillingTaxRules BillingTaxRule[] @relation("UpdatedBillingTaxRules")
 
-  createdReceipts      Receipt[]              @relation("CreatedReceipts")
-  updatedReceipts      Receipt[]              @relation("UpdatedReceipts")
-  approvedReceipts     Receipt[]              @relation("ApprovedReceipts")
-  cancelledReceipts    Receipt[]              @relation("CancelledReceipts")
-  receiptStatusChanges ReceiptStatusHistory[]
+  createdReceipts               Receipt[]               @relation("CreatedReceipts")
+  updatedReceipts               Receipt[]               @relation("UpdatedReceipts")
+  approvedReceipts              Receipt[]               @relation("ApprovedReceipts")
+  cancelledReceipts             Receipt[]               @relation("CancelledReceipts")
+  receiptStatusChanges          ReceiptStatusHistory[]
   createdCashAccountAdjustments CashAccountAdjustment[] @relation("CreatedCashAccountAdjustments")
 
   tablePrefs UserTablePref[]
@@ -199,6 +199,9 @@ model Company {
   users             User[]
   bills             Bill[]
   receipts          Receipt[]
+
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Branch {
@@ -253,6 +256,11 @@ model Branch {
   cashPayments       CashPayment[]        @relation("BranchCashPayment")
   bills              Bill[]
   receipts           Receipt[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([companyId])
+  @@index([warehouseId])
 }
 
 model Warehouse {
@@ -280,6 +288,11 @@ model Warehouse {
   branch          Branch    @relation("BranchWarehouses", fields: [branchId], references: [id])
   city            City      @relation(fields: [cityId], references: [id])
   state           State     @relation(fields: [stateId], references: [id])
+
+  @@index([name])
+  @@index([branchId])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Role {
@@ -515,6 +528,7 @@ model Vehicle {
   deliveryChallans DeliveryChallan[]
 
   @@index([transportId, ownershipType])
+  @@index([vehicleTypeId])
 }
 
 model Customer {
@@ -552,6 +566,10 @@ model Customer {
   billsAsBillingCustomer  Bill[]             @relation("BillBillingCustomer")
   receipts                Receipt[]
   cashReceivables         CashReceivable[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model Agreement {
@@ -571,6 +589,12 @@ model Agreement {
   branch                  Branch          @relation("BranchAgreement", fields: [leadGeneratedByBranchId], references: [id])
   detentionRates          DetentionRate[]
   RateMatrix              RateMatrix[]
+
+  @@index([agreementDate(sort: Desc)])
+  @@index([companyId])
+  @@index([clientId])
+  @@index([leadGeneratedByBranchId])
+  @@index([cityId])
 }
 
 model DetentionRate {
@@ -596,6 +620,7 @@ model Route {
   VehicleTrip       VehicleTrip[]
 
   @@unique([sourceCityId, destinationCityId])
+  @@index([destinationCityId])
 }
 
 model RateUnit {
@@ -627,6 +652,10 @@ model RateMatrix {
   VehicleTrip   VehicleTrip[]
 
   @@unique([agreementId, routeId, vehicleTypeId, unitId, transportType])
+  @@index([routeId])
+  @@index([vehicleTypeId])
+  @@index([unitId])
+  @@index([rate])
 }
 
 model Driver {
@@ -669,6 +698,8 @@ model Driver {
   journeys               VehicleJourney[]
   advances               DriverAdvance[]
   logSlips               LogSlip[]
+
+  @@index([name])
 }
 
 model Goods {
@@ -687,6 +718,8 @@ model Goods {
   storageLayer      GoodsStorageLayer
   consignmentGoods  OrderConsignmentGoods[]
   orderItems        OrderItem[]
+
+  @@index([name])
 }
 
 model Labour {
@@ -717,6 +750,10 @@ model Labour {
   ledRailBranchGRNs          RailBranchGRN[]   @relation("RailBranchGRNLabourLeader")
   supervisedRailBranchGRNs   RailBranchGRN[]   @relation("RailBranchGRNUnloadingSupervisor")
   supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
+
+  @@index([name])
+  @@index([branchId])
+  @@index([cityId])
 }
 
 model City {
@@ -749,6 +786,9 @@ model City {
   tripsFrom           VehicleTrip[]          @relation("TripFromCity")
   tripsTo             VehicleTrip[]          @relation("TripToCity")
   tripExpenses        TripExpense[]          @relation("TripExpenseCity")
+
+  @@index([name])
+  @@index([stateId])
 }
 
 model Area {
@@ -777,6 +817,7 @@ model Area {
 
   @@unique([cityId, name])
   @@index([isRailHead])
+  @@index([name])
 }
 
 model BranchRailheadArea {
@@ -820,6 +861,10 @@ model Transport {
   vehicles         Vehicle[]
   deliveryChallans DeliveryChallan[]
   lrgroups         LRGroup[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model RailwayFreightMatrix {
@@ -889,6 +934,10 @@ model Pump {
   state State @relation(fields: [stateId], references: [id])
 
   tripExpenses TripExpense[]
+
+  @@index([name])
+  @@index([cityId])
+  @@index([stateId])
 }
 
 model SpareCategory {
@@ -899,6 +948,8 @@ model SpareCategory {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   parts      SparePart[] @relation("PartCategory")
+
+  @@index([name])
 }
 
 model SparePartSupplier {
@@ -918,6 +969,9 @@ model SparePartSupplier {
   updatedAt     DateTime    @updatedAt
   spareparts    SparePart[] @relation("PartSupplier")
   city          City        @relation("SparePartySupplierCity", fields: [cityId], references: [id])
+
+  @@index([name])
+  @@index([cityId])
 }
 
 model SparePart {
@@ -936,6 +990,10 @@ model SparePart {
   updatedAt      DateTime          @updatedAt
   category       SpareCategory     @relation("PartCategory", fields: [categoryId], references: [id])
   supplier       SparePartSupplier @relation("PartSupplier", fields: [supplierId], references: [id])
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([supplierId])
 }
 
 model Order {
@@ -1072,6 +1130,8 @@ model VehicleType {
   orders           Order[]
   rateMatrices     RateMatrix[]
   vehicles         Vehicle[]
+
+  @@index([name])
 }
 
 model CustomerLocation {
@@ -1186,6 +1246,7 @@ model LRGroup {
   @@index([destinationBranchId])
   @@index([sourceRailheadAreaId])
   @@index([destinationRailheadAreaId])
+  @@index([railheadBranchId])
   @@index([fyCode])
   @@index([marketTransportId])
   @@index([marketVehicleId])
@@ -1540,42 +1601,42 @@ model BillStatusHistory {
 /// carries its own TDS/damage/rate-difference deductions rather than a
 /// single fixed rate on the receipt.
 model Receipt {
-  id                 String             @id @default(cuid())
-  receiptNumber      String?            @unique
-  fyCode             String
-  status             ReceiptStatus      @default(DRAFT)
-  customerId         String
-  branchId           String
-  companyId          String
+  id                    String             @id @default(cuid())
+  receiptNumber         String?            @unique
+  fyCode                String
+  status                ReceiptStatus      @default(DRAFT)
+  customerId            String
+  branchId              String
+  companyId             String
   receivedIntoAccountId String? // required by the app for new receipts; nullable for pre-existing rows
-  amountPaise        BigInt
-  unallocatedPaise   BigInt             @default(0)
-  paymentMode        ReceiptPaymentMode
-  referenceNumber    String?
-  receivedAt         DateTime
-  remarks            String?
-  createdById        String
-  updatedById        String?
-  approvedById       String?
-  approvedAt         DateTime?
-  cancelledById      String?
-  cancelledAt        DateTime?
-  cancellationReason String?
-  version            Int                @default(1)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  amountPaise           BigInt
+  unallocatedPaise      BigInt             @default(0)
+  paymentMode           ReceiptPaymentMode
+  referenceNumber       String?
+  receivedAt            DateTime
+  remarks               String?
+  createdById           String
+  updatedById           String?
+  approvedById          String?
+  approvedAt            DateTime?
+  cancelledById         String?
+  cancelledAt           DateTime?
+  cancellationReason    String?
+  version               Int                @default(1)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
-  customer          Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  branch            Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  company           Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  receivedIntoAccount CashAccount?         @relation(fields: [receivedIntoAccountId], references: [id], onDelete: SetNull)
-  createdBy     User                   @relation("CreatedReceipts", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedBy     User?                  @relation("UpdatedReceipts", fields: [updatedById], references: [id], onDelete: SetNull)
-  approvedBy    User?                  @relation("ApprovedReceipts", fields: [approvedById], references: [id], onDelete: SetNull)
-  cancelledBy   User?                  @relation("CancelledReceipts", fields: [cancelledById], references: [id], onDelete: SetNull)
-  allocations   ReceiptAllocation[]
-  statusHistory ReceiptStatusHistory[]
-  accountAdjustments CashAccountAdjustment[]
+  customer            Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branch              Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  company             Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  receivedIntoAccount CashAccount?            @relation(fields: [receivedIntoAccountId], references: [id], onDelete: SetNull)
+  createdBy           User                    @relation("CreatedReceipts", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy           User?                   @relation("UpdatedReceipts", fields: [updatedById], references: [id], onDelete: SetNull)
+  approvedBy          User?                   @relation("ApprovedReceipts", fields: [approvedById], references: [id], onDelete: SetNull)
+  cancelledBy         User?                   @relation("CancelledReceipts", fields: [cancelledById], references: [id], onDelete: SetNull)
+  allocations         ReceiptAllocation[]
+  statusHistory       ReceiptStatusHistory[]
+  accountAdjustments  CashAccountAdjustment[]
 
   @@index([branchId, status])
   @@index([customerId, status])
@@ -1811,6 +1872,10 @@ model VPSchedule {
   @@index([destinationAreaId])
   @@index([finalisedById])
   @@index([deletedAt])
+  // Serves the list endpoint's branch + status filter, sorted by newest first.
+  @@index([fromBranchId, status, createdAt(sort: Desc)])
+  // Serves the create-time duplicate-schedule check (same route + date).
+  @@index([fromBranchId, toBranchId, sourceAreaId, destinationAreaId, scheduleDate])
 }
 
 /// ERP master record for a physical tracker synchronized from OneLap.
@@ -2169,6 +2234,9 @@ model Creditor {
 
   branch   Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
   payments CashPayment[]
+
+  @@index([deletedAt, name])
+  @@index([branchId])
 }
 
 model CashAccount {
@@ -2187,6 +2255,8 @@ model CashAccount {
   driverAdvances DriverAdvance[]
   adjustments    CashAccountAdjustment[]
   receipts       Receipt[]
+
+  @@index([deletedAt, name])
 }
 
 model CashPlanDay {

@@ -48,14 +48,15 @@ import { api } from "@/lib/api";
 
 import {
   useCreateVPLoadingAllocation,
-  useEligibleVPLoadingGRNs,
-  useVPLoadingGates,
   useVPLoadingPreview,
   useVPLoadingSchedulePreview,
   useVPLoadingSchedules,
+  useVPScheduleEligibleGrns,
 } from "./hook/useVP-loading";
 import type {
+  EligibleVPLoadingGRN,
   MRRRRowPreview,
+  VPLoadingGate,
   VPLoadingPreviewGoods,
 } from "./vp-loading.service";
 import { OneLapTrackerAssignmentPanel } from "./components/OneLapTrackerAssignmentPanel";
@@ -254,8 +255,10 @@ export default function VPLoadingForm({ mode }: Props) {
 
   const schedulesQuery = useVPLoadingSchedules(scheduleDate);
   const schedulePreview = useVPLoadingSchedulePreview(scheduleId);
-  const gatesQuery = useVPLoadingGates(mrrrRowId);
-  const grnsQuery = useEligibleVPLoadingGRNs(mrrrRowId, gateNo);
+  // One request per schedule (Redis-cached server-side), reused for every
+  // VP row/wagon in it. Gate grouping and the gate-locked-row filter are
+  // derived from this in memory below instead of separate requests.
+  const eligibleGrnsQuery = useVPScheduleEligibleGrns(scheduleId);
   const loadingPreview = useVPLoadingPreview(mrrrRowId, grnId);
   const createAllocation = useCreateVPLoadingAllocation();
 
@@ -396,22 +399,64 @@ export default function VPLoadingForm({ mode }: Props) {
       }));
   }, [schedulePreview.data]);
 
-  const gateOptions = React.useMemo<ComboboxOption[]>(
-    () =>
-      (gatesQuery.data ?? []).map((gate) => ({
-        value: gate.gateNo,
-        label: `${gate.gateNo}`,
-      })),
-    [gatesQuery.data],
+  const selectedRow = React.useMemo(
+    () => schedulePreview.data?.mrRr?.rows?.find((row) => row.id === mrrrRowId),
+    [mrrrRowId, schedulePreview.data],
+  );
+  const existingWagonLoading = selectedRow?.vpWagonLoading ?? null;
+  const isExistingWagonLoading = Boolean(existingWagonLoading);
+
+  // Once a wagon has taken its first LR, it's locked to that LR's gate —
+  // mirrors the write-side check in assertGRNCompatibleWithRow. Filtering
+  // here is a UX nicety only; the server still enforces the lock on submit.
+  const rowLockedGateNo = existingWagonLoading?.gateNo?.trim() || null;
+
+  const eligibleGrnsForRow = React.useMemo<EligibleVPLoadingGRN[]>(() => {
+    const grns = eligibleGrnsQuery.data ?? [];
+    return rowLockedGateNo
+      ? grns.filter((grn) => grn.gateNo === rowLockedGateNo)
+      : grns;
+  }, [eligibleGrnsQuery.data, rowLockedGateNo]);
+
+  const gateOptions = React.useMemo<ComboboxOption[]>(() => {
+    const gates = new Map<string, VPLoadingGate>();
+
+    for (const grn of eligibleGrnsForRow) {
+      const gateNo = grn.gateNo?.trim();
+      if (!gateNo) continue;
+
+      const current = gates.get(gateNo) ?? {
+        gateNo,
+        eligibleGrnCount: 0,
+        eligibleLrCount: 0,
+        totalAvailableQty: 0,
+      };
+
+      current.eligibleGrnCount += 1;
+      current.eligibleLrCount += 1;
+      current.totalAvailableQty += grn.availableQty;
+
+      gates.set(gateNo, current);
+    }
+
+    return [...gates.values()].map((gate) => ({
+      value: gate.gateNo,
+      label: `${gate.gateNo}`,
+    }));
+  }, [eligibleGrnsForRow]);
+
+  const grnsForGate = React.useMemo<EligibleVPLoadingGRN[]>(
+    () => eligibleGrnsForRow.filter((grn) => grn.gateNo === gateNo),
+    [eligibleGrnsForRow, gateNo],
   );
 
   const grnOptions = React.useMemo<ComboboxOption[]>(
     () =>
-      (grnsQuery.data ?? []).map((grn) => ({
+      grnsForGate.map((grn) => ({
         value: grn.grnId,
         label: `${grn.grnNumber}- ${grn.availableQty} qty`,
       })),
-    [grnsQuery.data],
+    [grnsForGate],
   );
 
   const labourOptions = React.useMemo<ComboboxOption[]>(
@@ -432,15 +477,9 @@ export default function VPLoadingForm({ mode }: Props) {
     [supervisorsQuery.data],
   );
 
-  const selectedRow = React.useMemo(
-    () => schedulePreview.data?.mrRr?.rows?.find((row) => row.id === mrrrRowId),
-    [mrrrRowId, schedulePreview.data],
-  );
-  const existingWagonLoading = selectedRow?.vpWagonLoading ?? null;
-  const isExistingWagonLoading = Boolean(existingWagonLoading);
   const selectedGrn = React.useMemo(
-    () => grnsQuery.data?.find((grn) => grn.grnId === grnId),
-    [grnId, grnsQuery.data],
+    () => grnsForGate.find((grn) => grn.grnId === grnId),
+    [grnId, grnsForGate],
   );
 
   React.useEffect(() => {
@@ -688,7 +727,7 @@ export default function VPLoadingForm({ mode }: Props) {
                   onChange={(value) => form.setValue("gateNo", value)}
                   placeholder="Select GRN gate"
                   emptyText="No eligible gate found"
-                  disabled={!mrrrRowId || gatesQuery.isLoading}
+                  disabled={!mrrrRowId || eligibleGrnsQuery.isLoading}
                 />
               </div>
 
@@ -700,7 +739,7 @@ export default function VPLoadingForm({ mode }: Props) {
                   onChange={(value) => form.setValue("grnId", value)}
                   placeholder="Select LR / GRN"
                   emptyText="No eligible LR / GRN found for gate"
-                  disabled={!gateNo || grnsQuery.isLoading}
+                  disabled={!gateNo || eligibleGrnsQuery.isLoading}
                 />
               </div>
             </FormSection>

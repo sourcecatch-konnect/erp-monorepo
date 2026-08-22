@@ -175,41 +175,23 @@ export const generateVPScheduleNumber = async (
   };
 };
 
-export const calculateVPScheduleTotals = async (
-  tx: Tx,
-  wagonCounts: VPScheduleWagonInput[],
+/**
+ * Sums wagon totals from an already-resolved freight preview instead of
+ * re-querying the Wagon table. Callers that already called
+ * resolveVPScheduleFreightMatrices (create/update) should pass its
+ * `wagons` array here rather than hitting the DB a second time.
+ */
+export const deriveVPScheduleTotals = (
+  wagons: Array<{ count: number; capacityCft: number; capacityMt: number }>,
 ) => {
-  const wagonIds = wagonCounts.map((item) => item.wagonId);
-
-  const wagons = await tx.wagon.findMany({
-    where: {
-      id: {
-        in: wagonIds,
-      },
-    },
-    select: {
-      id: true,
-      totalCft: true,
-      capacityMt: true,
-    },
-  });
-
-  const wagonMap = new Map(wagons.map((wagon) => [wagon.id, wagon]));
-
   let totalWagonCount = 0;
   let totalCapacityCft = 0;
   let totalCapacityMt = 0;
 
-  for (const item of wagonCounts) {
-    const wagon = wagonMap.get(item.wagonId);
-
-    if (!wagon) {
-      throw new BadRequestError("Selected wagon not found");
-    }
-
-    totalWagonCount += item.count;
-    totalCapacityCft += Number(wagon.totalCft ?? 0) * item.count;
-    totalCapacityMt += Number(wagon.capacityMt ?? 0) * item.count;
+  for (const wagon of wagons) {
+    totalWagonCount += wagon.count;
+    totalCapacityCft += wagon.capacityCft * wagon.count;
+    totalCapacityMt += wagon.capacityMt * wagon.count;
   }
 
   return {
@@ -527,11 +509,47 @@ export const resolveVPScheduleFreightMatrices = async (
   };
 };
 
-export const assertVPScheduleFreightMatrices = async (
-  tx: Tx,
-  data: VPScheduleFreightMatrixInput,
+/**
+ * Shapes the VPScheduleWagonCount create rows from an already-resolved
+ * freight preview — pure, no query. Callers that already called
+ * resolveVPScheduleFreightMatrices should use this instead of re-resolving.
+ */
+export const buildWagonCountRowsFromPreview = (
+  wagons: Awaited<ReturnType<typeof resolveVPScheduleFreightMatrices>>["wagons"],
+) =>
+  wagons.map((wagon) => {
+    if (
+      !wagon.freightMatrixId ||
+      wagon.freightAmount === null ||
+      wagon.totalFreight === null
+    ) {
+      throw new BadRequestError(
+        `Railway freight not found for selected wagon: ${wagon.wagonName}`,
+        "RAILWAY_FREIGHT_MISSING",
+      );
+    }
+
+    return {
+      wagonId: wagon.wagonId,
+      count: wagon.count,
+      capacityCft: wagon.capacityCft,
+      capacityMt: wagon.capacityMt,
+      totalCft: wagon.capacityCft * wagon.count,
+      totalMt: wagon.capacityMt * wagon.count,
+      freightMatrixId: wagon.freightMatrixId,
+      freightAmount: wagon.freightAmount,
+      totalFreight: wagon.totalFreight,
+    };
+  });
+
+/**
+ * Pure check over an already-resolved freight preview. Split out so callers
+ * that already have a preview (create/update) don't force a second
+ * resolveVPScheduleFreightMatrices round trip just to validate it.
+ */
+export const assertNoMissingFreightMatrices = (
+  preview: Awaited<ReturnType<typeof resolveVPScheduleFreightMatrices>>,
 ) => {
-  const preview = await resolveVPScheduleFreightMatrices(tx, data);
   const missing = preview.wagons.filter((wagon) => wagon.status === "MISSING");
 
   if (!missing.length) return;
@@ -556,6 +574,14 @@ export const assertVPScheduleFreightMatrices = async (
   );
 };
 
+export const assertVPScheduleFreightMatrices = async (
+  tx: Tx,
+  data: VPScheduleFreightMatrixInput,
+) => {
+  const preview = await resolveVPScheduleFreightMatrices(tx, data);
+  assertNoMissingFreightMatrices(preview);
+};
+
 export const assertVPScheduleReferences = async (
   tx: Tx,
   data: {
@@ -566,44 +592,43 @@ export const assertVPScheduleReferences = async (
     wagonCounts?: VPScheduleWagonInput[];
   },
 ) => {
-  const fromBranch = data.fromBranchId
-    ? await tx.branch.findUnique({
-        where: { id: data.fromBranchId },
-        select: { id: true },
-      })
-    : null;
-
-  const toBranch = data.toBranchId
-    ? await tx.branch.findUnique({
-        where: { id: data.toBranchId },
-        select: { id: true },
-      })
-    : null;
-
-  const sourceArea = data.sourceAreaId
-    ? await tx.area.findUnique({
-        where: { id: data.sourceAreaId },
-        select: { id: true },
-      })
-    : null;
-
-  const destinationArea = data.destinationAreaId
-    ? await tx.area.findUnique({
-        where: { id: data.destinationAreaId },
-        select: { id: true },
-      })
-    : null;
-
-  const wagons = data.wagonCounts?.length
-    ? await tx.wagon.findMany({
-        where: {
-          id: {
-            in: data.wagonCounts.map((item) => item.wagonId),
-          },
-        },
-        select: { id: true },
-      })
-    : [];
+  const [fromBranch, toBranch, sourceArea, destinationArea, wagons] =
+    await Promise.all([
+      data.fromBranchId
+        ? tx.branch.findUnique({
+            where: { id: data.fromBranchId },
+            select: { id: true },
+          })
+        : null,
+      data.toBranchId
+        ? tx.branch.findUnique({
+            where: { id: data.toBranchId },
+            select: { id: true },
+          })
+        : null,
+      data.sourceAreaId
+        ? tx.area.findUnique({
+            where: { id: data.sourceAreaId },
+            select: { id: true },
+          })
+        : null,
+      data.destinationAreaId
+        ? tx.area.findUnique({
+            where: { id: data.destinationAreaId },
+            select: { id: true },
+          })
+        : null,
+      data.wagonCounts?.length
+        ? tx.wagon.findMany({
+            where: {
+              id: {
+                in: data.wagonCounts.map((item) => item.wagonId),
+              },
+            },
+            select: { id: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
   if (data.fromBranchId && !fromBranch) {
     throw new BadRequestError("From branch not found");
