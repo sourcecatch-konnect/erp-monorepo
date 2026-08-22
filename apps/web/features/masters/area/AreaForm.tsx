@@ -233,9 +233,7 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
   const hasLinkedGoogleLocation = Boolean(
     googlePlaceId && formattedAddress && hasMapLocation,
   );
-  const hasAnyGoogleLocationData = Boolean(
-    googlePlaceId || formattedAddress || latitude != null || longitude != null,
-  );
+
   const linkedGoogleNameRef = React.useRef<string | null>(null);
   const clearGoogleLocation = React.useCallback(() => {
     linkedGoogleNameRef.current = null;

@@ -71,13 +71,7 @@ type AllocationDraft = {
   rateDiff: string;
 };
 
-const emptyAllocation = (outstandingAmountPaise: string): AllocationDraft => ({
-  amountApplied: (Number(BigInt(outstandingAmountPaise)) / 100).toFixed(2),
-  tds: "0",
-  tdsSection: "",
-  damage: "0",
-  rateDiff: "0",
-});
+
 
 const settledPaise = (a: AllocationDraft) =>
   BigInt(rupeesToPaise(a.amountApplied || "0")) +

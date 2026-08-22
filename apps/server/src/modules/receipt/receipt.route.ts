@@ -27,7 +27,6 @@ import {
 const router: Router = Router();
 router.use(authMiddleware);
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
-const TX_BUDGET = { timeout: 15000, maxWait: 10000 } as const;
 
 // Bills carrying a real invoice number that can still receive payment.
 const RECEIVABLE_BILL_STATUSES: BillStatus[] = [

@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -11,6 +12,11 @@ type Props<TFormValues extends FieldValues> = {
   required?: boolean;
   inputRef?: React.Ref<HTMLInputElement>;
   disabled?: boolean;
+  // Fires on every keystroke with the raw input value, in addition to (not
+  // instead of) react-hook-form's own state update — for callers that need
+  // to react to typing directly (e.g. detecting when a manually-edited value
+  // has drifted from a previously-linked external selection).
+  onValueChange?: (value: string) => void;
 };
 
 function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
@@ -30,7 +36,8 @@ export default function TextField<TFormValues extends FieldValues>({
   placeholder,
   required,
   inputRef,
-  disabled
+  disabled,
+  onValueChange,
 }: Props<TFormValues>) {
   const {
     register,
@@ -54,6 +61,12 @@ export default function TextField<TFormValues extends FieldValues>({
         ref={(element) => {
           field.ref(element);
           assignRef(inputRef, element);
+        }}
+        onChange={(event) => {
+          // Keep react-hook-form's own state update working exactly as
+          // before, then additionally notify the caller with the raw value.
+          field.onChange(event);
+          onValueChange?.(event.target.value);
         }}
         disabled={disabled}
       />
