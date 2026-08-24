@@ -126,23 +126,16 @@ export default function LRCreateSummary({
 
   const selectedTruck = Number(truckIndex) || null;
 
-  // FROM_ORDER: the lines that will become LRs for the chosen truck.
-  const truckLines = React.useMemo(
-    () =>
-      source === "FROM_ORDER" && order && selectedTruck != null
-        ? order.lines.filter((l) => l.truckIndex === selectedTruck)
-        : [],
-    [source, order, selectedTruck],
-  );
-
-  const instantLines = (Array.isArray(lrs) ? lrs : []) as {
+  // Both sources declare their lines in the live form now — this is what
+  // will actually become LRs, for either FROM_ORDER or INSTANT.
+  const currentLines = (Array.isArray(lrs) ? lrs : []) as {
     loadingLocationId?: string;
     unloadingLocationId?: string;
+    totalWeight?: number;
     goods?: { name?: string; quantity?: number; unit?: string }[];
   }[];
 
-  const lrCount =
-    source === "FROM_ORDER" ? truckLines.length : instantLines.length;
+  const lrCount = currentLines.length;
 
   const tripLabel = labelOf(tripOptions, primaryTripId);
   const transportLabel =
@@ -314,72 +307,42 @@ export default function LRCreateSummary({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {source === "FROM_ORDER"
-                    ? truckLines.map((line, i) => {
-                        const loading = line.loadingLocation;
-                        const unloading = line.unloadingLocation;
+                  {currentLines.map((line, i) => {
+                    const loading = labelOf(
+                      locationOptions,
+                      line.loadingLocationId,
+                    );
+                    const unloading = labelOf(
+                      locationOptions,
+                      line.unloadingLocationId,
+                    );
 
-                        const goods = (line.goods ?? [])
-                          .map((g) =>
-                            [
-                              g.name,
-                              g.quantity && g.unit
-                                ? `${g.quantity} ${g.unit}`
-                                : g.quantity
-                                  ? String(g.quantity)
-                                  : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · "),
-                          )
-                          .filter(Boolean);
+                    const goods = (line.goods ?? [])
+                      .map((g) =>
+                        [
+                          g.name,
+                          g.quantity && g.unit
+                            ? `${g.quantity} ${g.unit}`
+                            : g.quantity
+                              ? String(g.quantity)
+                              : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · "),
+                      )
+                      .filter(Boolean);
 
-                        return (
-                          <ConsignmentCard
-                            key={i}
-                            index={i}
-                            loading={loading}
-                            unloading={unloading}
-                            totalWeight={line.totalWeight}
-                            goods={goods}
-                          />
-                        );
-                      })
-                    : instantLines.map((line, i) => {
-                        const loading = labelOf(
-                          locationOptions,
-                          line.loadingLocationId,
-                        );
-                        const unloading = labelOf(
-                          locationOptions,
-                          line.unloadingLocationId,
-                        );
-
-                        const goods = (line.goods ?? [])
-                          .map((g) =>
-                            [
-                              g.name,
-                              g.quantity && g.unit
-                                ? `${g.quantity} ${g.unit}`
-                                : g.quantity
-                                  ? String(g.quantity)
-                                  : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · "),
-                          )
-                          .filter(Boolean);
-
-                        return (
-                          <ConsignmentCard
-                            key={i}
-                            index={i}
-                            loading={loading}
-                            unloading={unloading}
-                            goods={goods}
-                          />
-                        );
-                      })}
+                    return (
+                      <ConsignmentCard
+                        key={i}
+                        index={i}
+                        loading={loading}
+                        unloading={unloading}
+                        totalWeight={line.totalWeight}
+                        goods={goods}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </Section>
