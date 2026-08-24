@@ -171,6 +171,10 @@ export const createGroupFromOrderSchema = z.object({
   destinationRailheadAreaId: optionalId,
   priority: lrPrioritySchema.default("Normal"),
   ...vehicleShape,
+  // This truck's own consignments — entered here, not read from the order.
+  // The order only fixes the truck count; loading/unloading/goods are
+  // decided per truck, at the point this specific LR gets created.
+  lrs: z.array(lrGroupLineSchema).optional().default([]),
 });
 
 export type CreateGroupFromOrderInput = z.infer<
@@ -259,7 +263,9 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
       path: ["primaryTripId"],
     });
   }
-  if (d.source === "INSTANT") {
+  // Both sources now declare their consignments inline — FROM_ORDER no
+  // longer reads them from the order's OrderConsignment rows.
+  if (d.source === "INSTANT" || d.source === "FROM_ORDER") {
     if (!d.lrs || d.lrs.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -277,7 +283,9 @@ export const createLRGroupSchema = _createGroupUnion.superRefine((d, ctx) => {
         });
       }
 
-      if (!line.unloadingLocationId) {
+      // Required for INSTANT (no order to fall back on). Optional for
+      // FROM_ORDER — the drop point may not be finalised at LR-creation time.
+      if (d.source === "INSTANT" && !line.unloadingLocationId) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Unloading point is required",

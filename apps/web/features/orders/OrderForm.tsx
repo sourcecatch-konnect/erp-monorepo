@@ -44,7 +44,6 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { orderApi, orderLookups, orderLookupKeys } from "./order.service";
 
 import ItemLinesEditor from "./components/ItemLinesEditor";
-import ConsignmentLinesEditor from "./components/ConsignmentLinesEditor";
 import { DatePicker } from "@skerp/ui/components/datepicker";
 import IconTextField from "../masters/_shared/fields/IconTextField";
 import { useState } from "react";
@@ -211,24 +210,13 @@ export default function OrderForm({ mode, order }: Props) {
 
   const orderType = form.watch("orderType");
   const customerId = form.watch("customerId");
-  const consigneeId = form.watch("consigneeId");
-  const consignments = form.watch("consignments");
   const items = form.watch("items");
   const truckQuantity = form.watch("truckQuantity");
-  // Bounds the per-line truck selector; falls back to 1 until a quantity is set.
-  const truckCount = Math.max(1, Number(truckQuantity) || 1);
 
   const locations = useQuery({
     queryKey: orderLookupKeys.customerLocations(customerId ?? ""),
     queryFn: () => orderApi.customerLocations(customerId as string),
     enabled: Boolean(customerId),
-  });
-
-  // Consignee's saved locations feed the consignment editor's unloading points.
-  const consigneeLocations = useQuery({
-    queryKey: orderLookupKeys.customerLocations(consigneeId ?? ""),
-    queryFn: () => orderApi.customerLocations(consigneeId as string),
-    enabled: Boolean(consigneeId),
   });
 
   const [submitting, setSubmitting] = React.useState(false);
@@ -251,29 +239,6 @@ export default function OrderForm({ mode, order }: Props) {
   }, [orderType, form]);
 
   const onSubmit = async (values: CreateOrderBody) => {
-    if (values.orderType === "Truck") {
-      const truckQty = Number(values.truckQuantity) || 0;
-      const assignedTrucks = new Set(
-        (values.consignments ?? []).map((line) => Number(line.truckIndex)),
-      );
-      const missingTrucks = Array.from(
-        { length: truckQty },
-        (_, index) => index + 1,
-      ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
-
-      if (missingTrucks.length > 0) {
-        const message = `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}.`;
-        form.setError("consignments", {
-          type: "manual",
-          message,
-        });
-
-        toast.error(message);
-
-        return;
-      }
-    }
-
     setSubmitting(true);
 
     try {
@@ -307,20 +272,15 @@ export default function OrderForm({ mode, order }: Props) {
   // Live summary shown on the left of the sticky action bar.
   const footerSummary = React.useMemo(() => {
     if (orderType === "Truck") {
-      const lines = consignments?.length ?? 0;
-      const trucks = new Set(
-        (consignments ?? [])
-          .map((c) => Number(c?.truckIndex) || 1)
-          .filter((n) => Number.isFinite(n)),
-      ).size;
-      if (lines === 0) return "Add a consignment line to continue";
-      return `${lines} line${lines === 1 ? "" : "s"} · ${trucks} truck${trucks === 1 ? "" : "s"}`;
+      const trucks = Math.max(0, Number(truckQuantity) || 0);
+      if (trucks === 0) return "Set a truck quantity to continue";
+      return `${trucks} truck${trucks === 1 ? "" : "s"} booked — add LRs per truck after confirming`;
     }
     const count = items?.length ?? 0;
     return count === 0
       ? "Add an item to continue"
       : `${count} item${count === 1 ? "" : "s"}`;
-  }, [orderType, consignments, items]);
+  }, [orderType, truckQuantity, items]);
 
   // Flattened validation issues, surfaced above the footer once a save is
   // attempted so the user can see everything they missed at a glance.
@@ -545,33 +505,10 @@ export default function OrderForm({ mode, order }: Props) {
                 </div>
 
                 {!softOnly && (
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm font-medium">Consignment lines</p>
-                      <p className="text-xs text-muted-foreground">
-                        One LR per line. Add a line for each loading → unloading
-                        pair; list every invoice for that pair as a goods row on
-                        the same line.
-                      </p>
-                    </div>
-                    <ConsignmentLinesEditor
-                      goodsOptions={toOptions(goods.data ?? [])}
-                      loadingOptions={toOptions(
-                        (locations.data ?? []).map((l) => ({
-                          id: l.id,
-                          name: l.name,
-                        })),
-                      )}
-                      unloadingOptions={toOptions(
-                        (consigneeLocations.data ?? []).map((l) => ({
-                          id: l.id,
-                          name: l.name,
-                        })),
-                      )}
-                      consigneeChosen={Boolean(consigneeId)}
-                      truckCount={truckCount}
-                    />
-                  </div>
+                  <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+                    Loading/unloading points and goods aren&apos;t needed here
+                    — add them per truck when you create that truck&apos;s LR.
+                  </p>
                 )}
               </div>
             ) : (

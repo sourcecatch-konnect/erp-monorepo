@@ -339,6 +339,7 @@ export type LROrderContext = {
   consignor: string | null;
   consignorId: string | null;
   consignee: string | null;
+  consigneeId: string | null;
   fromBranch: { id: string; name: string; branchCode: string } | null;
   toBranch: { id: string; name: string; branchCode: string } | null;
   route: { source: string | null; destination: string | null } | null;
@@ -559,6 +560,7 @@ export const lrLookups = {
       consignor: order.customer?.name ?? null,
       consignorId: order.customer?.id ?? null,
       consignee: order.consignee?.name ?? null,
+      consigneeId: order.consignee?.id ?? null,
       fromBranch: order.fromBranch
         ? {
             id: order.fromBranch.id,

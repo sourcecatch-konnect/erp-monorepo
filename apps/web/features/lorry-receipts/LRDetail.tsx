@@ -180,15 +180,20 @@ export default function LRDetail({ id }: { id: string }) {
     queryFn: () => lrGroupApi.list({ filter: { orderId: orderId as string } }),
     enabled: Boolean(orderId),
   });
+  // Every truck 1..truckQuantity minus whichever already have a live group —
+  // not derived from consignment lines, since those no longer pre-exist on
+  // the order (they're entered per truck, in the LR form, when that truck's
+  // LR actually gets created).
   const ungroupedTrucks = React.useMemo(() => {
+    const truckQuantity = orderContext.data?.truckQuantity ?? 0;
     const taken = new Set(
       (orderGroups.data?.data ?? [])
         .filter((og) => og.status !== "CANCELLED")
         .map((og) => og.truckIndex),
     );
-    return (orderContext.data?.trucks ?? [])
-      .filter((t) => !taken.has(t.truckIndex))
-      .sort((a, b) => a.truckIndex - b.truckIndex);
+    return Array.from({ length: truckQuantity }, (_, i) => i + 1).filter(
+      (truckIndex) => !taken.has(truckIndex),
+    );
   }, [orderContext.data, orderGroups.data]);
 
   // The page may have been opened via an LR number (deep link); when the
@@ -731,7 +736,7 @@ export default function LRDetail({ id }: { id: string }) {
               router.push(`/lorry-receipts/new?orderId=${g.order!.id}`)
             }
           >
-            Create LR for Truck #{ungroupedTrucks[0]!.truckIndex}
+            Create LR for Truck #{ungroupedTrucks[0]!}
           </Button>
         </div>
       )}
