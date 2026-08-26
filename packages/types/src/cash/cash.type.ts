@@ -106,6 +106,10 @@ export type CashAccountBalanceWithAccount = CashAccountBalance & {
   account: Pick<CashAccount, "id" | "name" | "type">;
   /** Σ manual/receipt adjustments posted to this account today (paise) */
   adjustmentsTotal: number;
+  /** Σ money in today: positive adjustments — receipt credits + manual "add funds" (paise) */
+  receivedTotal: number;
+  /** Σ money out today: approved payments tagged to this account + negative/correction adjustments (paise) */
+  paymentTotal: number;
   /** opening − approved payments + adjustments for this account, computed server-side */
   closingBalance: number;
 };
@@ -125,6 +129,10 @@ export type CashPlanDayView = CashPlanDay & {
   pendingTotal: number;
   /** Σ manual/receipt adjustments posted today, across all accounts (paise) */
   totalAdjustments: number;
+  /** Σ receivedTotal across all accounts (paise) */
+  totalReceived: number;
+  /** Σ paymentTotal across all accounts (paise) */
+  totalPayment: number;
   /** totalOpening + totalAdjustments − approvedTotal (paise) */
   availableCash: number;
 };

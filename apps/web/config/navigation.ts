@@ -12,6 +12,7 @@ import {
   IconUser,
   IconWallet,
   IconCashBanknote,
+  IconBook2,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -318,6 +319,12 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/cash-planning",
         icon: IconCashBanknote,
         permission: PERMS.CASH_PLANNING.VIEW,
+      },
+      {
+        title: "Ledgers",
+        href: "/ledger",
+        icon: IconBook2,
+        permission: PERMS.LEDGER.VIEW,
       },
       {
         title: "LR to Bill",
