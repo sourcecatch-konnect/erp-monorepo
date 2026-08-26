@@ -63,14 +63,6 @@ export const vpScheduleApi = {
     return unwrapListResponse(res);
   },
 
-  statusCounts: async (): Promise<Record<string, number>> => {
-    const res = await api.get<ApiResponse<Record<string, number>>>(
-      "/vp-schedules/status-counts",
-    );
-
-    return unwrapApiResponse(res);
-  },
-
   detail: async (identifier: string): Promise<VPScheduleDetail> => {
     const res = await api.get<ApiResponse<VPScheduleDetail>>(
       `/vp-schedules/${encodeVPScheduleIdentifier(identifier)}`,

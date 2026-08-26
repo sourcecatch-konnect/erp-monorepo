@@ -192,6 +192,7 @@ export default function OrderForm({ mode, order }: Props) {
             unloadingLocationId: c.unloadingLocationId ?? undefined,
             totalWeight:
               c.totalWeight != null ? Number(c.totalWeight) : undefined,
+            totalWeightUnit: c.unit ?? undefined,
             goods:
               c.goods && c.goods.length
                 ? c.goods.map((g) => ({

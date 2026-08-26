@@ -28,6 +28,17 @@ export const goodsUnitSchema = z
       errorMap: () => ({ message: "Select a valid unit" }),
     }),
   );
+
+// Consignment weight units come from the free-form UnitOfMeasure master
+// (any admin-defined code), not the fixed goodsUnitValues list above — so
+// this must not be piped through that enum or every non-legacy unit code
+// fails validation and blocks order save.
+const weightUnitCode = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value.toUpperCase() : undefined));
+
 const optionalString = z
   .string()
   .trim()
@@ -124,7 +135,7 @@ export const orderConsignmentSchema = z.object({
     "Total weight cannot be negative",
   ),
 
-  totalWeightUnit: goodsUnitSchema,
+  totalWeightUnit: weightUnitCode,
 
   goods: z.array(orderConsignmentGoodsSchema).optional().default([]),
 });

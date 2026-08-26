@@ -650,10 +650,16 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
     }, TX_BUDGET);
   }
 
+  // Every caller only reads `.id` and `.tripNumber` from the created trip
+  // (see TripForm.tsx / CreateTripDialog.tsx) — no need for the full
+  // tripInclude tree here.
   const trip = await db.vehicleTrip.findUnique({
     where: { id: tripId },
-    include: tripInclude,
+    select: { id: true, tripNumber: true },
   });
+  if (!trip) {
+    throw new NotFoundError("Trip was created but could not be loaded");
+  }
   return sendOk(res, trip, undefined, 201);
 });
 
@@ -796,7 +802,7 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
         updatedById: me,
         version: { increment: 1 },
       },
-      select: { id: true },
+      select: { id: true, status: true, version: true },
     });
 
     // Editing leg 1 moves the journey's starting point with it.
@@ -820,11 +826,7 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
     return row;
   }, TX_BUDGET);
 
-  const trip = await db.vehicleTrip.findUnique({
-    where: { id: updated.id },
-    include: tripInclude,
-  });
-  return sendOk(res, trip);
+  return sendOk(res, updated);
 });
 
 /* ------------------------------------------------------------------ */
@@ -857,7 +859,7 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
         updatedById: me,
         version: { increment: 1 },
       },
-      select: { id: true },
+      select: { id: true, status: true, version: true },
     });
     await tx.vehicle.update({
       where: { id: existing.vehicleId },
@@ -867,11 +869,7 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
     return row;
   }, TX_BUDGET);
 
-  const trip = await db.vehicleTrip.findUnique({
-    where: { id: updated.id },
-    include: tripInclude,
-  });
-  return sendOk(res, trip);
+  return sendOk(res, updated);
 });
 
 /* ------------------------------------------------------------------ */
@@ -991,9 +989,13 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
     });
   }
 
+  // Neither branch above returns the row directly to this scope (the
+  // journey-leg path updates it through closeLegAndUpdateJourney), so one
+  // lightweight re-fetch is unavoidable here — but nothing downstream reads
+  // more than id/status/version, so skip the heavy tripInclude tree.
   const trip = await db.vehicleTrip.findUnique({
     where: { id },
-    include: tripInclude,
+    select: { id: true, status: true, version: true },
   });
   return sendOk(res, trip);
 });
@@ -1143,15 +1145,15 @@ router.post(
     const after = snapshot(afterValues);
     const isCurrentLeg = !nextLeg;
 
-    await db.$transaction(async (tx) => {
-      await tx.vehicleTrip.update({
+    const updated = await db.$transaction(async (tx) => {
+      const row = await tx.vehicleTrip.update({
         where: { id },
         data: {
           ...afterValues,
           updatedById: me,
           version: { increment: 1 },
         },
-        select: { id: true },
+        select: { id: true, status: true, version: true },
       });
 
       if (existing.journey && isCurrentLeg) {
@@ -1187,13 +1189,11 @@ router.post(
           },
         },
       });
+
+      return row;
     }, TX_BUDGET);
 
-    const trip = await db.vehicleTrip.findUnique({
-      where: { id },
-      include: tripInclude,
-    });
-    return sendOk(res, trip);
+    return sendOk(res, updated);
   },
 );
 
@@ -1233,11 +1233,11 @@ router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
 
     return tx.vehicleTrip.delete({
       where: { id },
-      include: tripInclude,
+      select: { id: true },
     });
   });
 
-  return sendOk(res, deleted);
+  return sendOk(res, { id: deleted.id, deleted: true });
 });
 
 /* ------------------------------------------------------------------ */
@@ -1285,8 +1285,8 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
       })
     : 0;
 
-  await db.$transaction(async (tx) => {
-    await tx.vehicleTrip.update({
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.vehicleTrip.update({
       where: { id },
       data: {
         status: "Cancelled",
@@ -1294,7 +1294,7 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
         updatedById: me,
         version: { increment: 1 },
       },
-      select: { id: true },
+      select: { id: true, status: true, version: true },
     });
 
     if (journey && journey.status === "ACTIVE") {
@@ -1331,13 +1331,10 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
     }
 
     await writeTripStatus(tx, id, me, "Cancelled", parsed.data.reason);
+    return row;
   }, TX_BUDGET);
 
-  const trip = await db.vehicleTrip.findUnique({
-    where: { id },
-    include: tripInclude,
-  });
-  return sendOk(res, trip);
+  return sendOk(res, updated);
 });
 
 export default router;

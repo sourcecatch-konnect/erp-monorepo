@@ -760,10 +760,15 @@ router.post("/", can(PERMS.VEHICLE_JOURNEY.CREATE), async (req, res) => {
     return journey.id;
   }, TX_BUDGET);
 
+  // StartJourneyDialog.tsx only reads `.id` / `.journeyNumber` from the
+  // created journey (toast + navigation) — no need for journeyInclude here.
   const journey = await db.vehicleJourney.findUnique({
     where: { id: journeyId },
-    include: journeyInclude,
+    select: { id: true, journeyNumber: true },
   });
+  if (!journey) {
+    throw new NotFoundError("Journey was created but could not be loaded");
+  }
   return sendOk(res, journey, undefined, 201);
 });
 
@@ -1104,9 +1109,10 @@ router.post(
       );
     }, TX_BUDGET);
 
+    // CloseLegDialog.tsx doesn't read the response at all (toast + refetch).
     const updated = await db.vehicleJourney.findUnique({
       where: { id },
-      include: journeyInclude,
+      select: { id: true, status: true, version: true },
     });
     return sendOk(res, updated);
   },
@@ -1145,6 +1151,8 @@ router.post(
       );
     }
 
+    // VehicleJourneyDetail.tsx's markReady mutation doesn't read the
+    // response (toast + refetch) — no need for journeyInclude/totals here.
     const updated = await db.vehicleJourney.update({
       where: { id },
       data: {
@@ -1153,9 +1161,9 @@ router.post(
         updatedById: me,
         version: { increment: 1 },
       },
-      include: journeyInclude,
+      select: { id: true, status: true, version: true },
     });
-    return sendOk(res, { ...updated, totals });
+    return sendOk(res, updated);
   },
 );
 
@@ -1201,6 +1209,9 @@ router.post(
       );
     }
 
+    // VehicleJourneyDetail.tsx's reopenSettlement mutation doesn't read the
+    // response (toast + refetch), so keep this to a minimal select — no
+    // journeyInclude materialised while the transaction is open.
     const updated = await db.$transaction(async (tx) => {
       const row = await tx.vehicleJourney.update({
         where: { id },
@@ -1210,7 +1221,7 @@ router.post(
           updatedById: me,
           version: { increment: 1 },
         },
-        include: journeyInclude,
+        select: { id: true, status: true, version: true },
       });
 
       await tx.auditLog.create({
@@ -1234,8 +1245,7 @@ router.post(
       return row;
     }, TX_BUDGET);
 
-    const totals = await computeJourneyTotals(db, id);
-    return sendOk(res, { ...updated, totals });
+    return sendOk(res, updated);
   },
 );
 
@@ -1311,9 +1321,11 @@ router.post(
       });
     }, TX_BUDGET);
 
+    // VehicleJourneyDetail.tsx's forceClose mutation doesn't read the
+    // response (toast + refetch).
     const updated = await db.vehicleJourney.findUnique({
       where: { id },
-      include: journeyInclude,
+      select: { id: true, status: true, version: true },
     });
     return sendOk(res, updated);
   },
@@ -1362,18 +1374,30 @@ router.post(
     });
 
     await db.$transaction(async (tx) => {
-      for (const leg of plannedLegs) {
-        await tx.vehicleTrip.update({
-          where: { id: leg.id },
+      if (plannedLegs.length > 0) {
+        const legIds = plannedLegs.map((leg) => leg.id);
+
+        // Bulk update + bulk history insert instead of looping per leg —
+        // a journey with several open legs was previously doing 2 sequential
+        // writes per leg inside the transaction.
+        await tx.vehicleTrip.updateMany({
+          where: { id: { in: legIds } },
           data: {
             status: "Cancelled",
             cancelReason: "Journey cancelled",
             updatedById: me,
             version: { increment: 1 },
           },
-          select: { id: true },
         });
-        await writeTripStatus(tx, leg.id, me, "Cancelled", parsed.data.reason);
+
+        await tx.tripStatusHistory.createMany({
+          data: legIds.map((legId) => ({
+            vehicleTripId: legId,
+            userId: me,
+            status: "Cancelled" as const,
+            note: parsed.data.reason,
+          })),
+        });
       }
       await tx.vehicleJourney.update({
         where: { id },
@@ -1394,9 +1418,10 @@ router.post(
       });
     }, TX_BUDGET);
 
+    // VehicleJourneyDetail.tsx's cancel mutation doesn't read the response.
     const updated = await db.vehicleJourney.findUnique({
       where: { id },
-      include: journeyInclude,
+      select: { id: true, status: true, version: true },
     });
     return sendOk(res, updated);
   },

@@ -50,7 +50,12 @@ import {
   VehicleComboboxField,
 } from "@/components/lookups";
 import { paiseToRupees } from "@/lib/money";
-import { tripApi, tripLookups, tripLookupKeys } from "./trip.service";
+import {
+  tripApi,
+  tripLookups,
+  tripLookupKeys,
+  type TripCreateResult,
+} from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { useCan } from "@/features/auth";
@@ -61,7 +66,7 @@ type Props = {
   /** Rendered inside a dialog (e.g. from Instant LR) instead of as a routed page. */
   embedded?: boolean;
   /** Called instead of navigating to the trip detail page when embedded. */
-  onCreated?: (trip: Trip) => void;
+  onCreated?: (trip: TripCreateResult) => void;
   /** Called instead of navigating to /trips when embedded and the user cancels. */
   onCancel?: () => void;
   /** Prefills the client field — e.g. the consignor of the LR this trip is created for. */

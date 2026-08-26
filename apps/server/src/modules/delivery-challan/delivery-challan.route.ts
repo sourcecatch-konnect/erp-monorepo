@@ -169,6 +169,41 @@ const activeAllocatedQty = (item: DispatchItem, excludeChallanId?: string) =>
     return total + allocation.quantity;
   }, 0);
 
+/*
+ * Lightweight pending-quantity check for the /options/rakes and
+ * /options/vps dropdowns. Those only need to know whether a Branch GRN
+ * item still has quantity left to dispatch — they don't render LR,
+ * consignee, or destination details — so they select a shallow shape
+ * instead of the full branchGrnDispatchInclude (which pulls the whole
+ * LR -> group -> consignee/unloadingLocation chain per item).
+ */
+const pendingQtyItemSelect = {
+  receivedQty: true,
+  damageQty: true,
+  deliveryChallanItems: {
+    select: {
+      quantity: true,
+      deliveryChallan: { select: { status: true } },
+    },
+  },
+} satisfies Prisma.RailBranchGRNItemSelect;
+
+type PendingQtyItem = Prisma.RailBranchGRNItemGetPayload<{
+  select: typeof pendingQtyItemSelect;
+}>;
+
+const computePendingQty = (item: PendingQtyItem) => {
+  const dispatchableQty = Math.max(item.receivedQty - item.damageQty, 0);
+  const challanedQty = item.deliveryChallanItems.reduce(
+    (total, allocation) =>
+      allocation.deliveryChallan.status === "CANCELLED"
+        ? total
+        : total + allocation.quantity,
+    0,
+  );
+  return Math.max(dispatchableQty - challanedQty, 0);
+};
+
 const previewItem = (item: DispatchItem, excludeChallanId?: string) => {
   const lr = item.vpLoadingGoods.grnGoods.grn.lorryReceipt;
   const location = lr.unloadingLocation;
@@ -498,7 +533,9 @@ router.get(
         },
         branchGrns: {
           where: { status: "SUBMITTED" },
-          include: branchGrnDispatchInclude,
+          select: {
+            items: { select: pendingQtyItemSelect },
+          },
         },
       },
       orderBy: { vpSchedule: { scheduleDate: "desc" } },
@@ -508,7 +545,7 @@ router.get(
     const options = rakes
       .map((rake) => {
         const eligibleVpCount = rake.branchGrns.filter((grn) =>
-          grn.items.some((item) => previewItem(item).pendingQty > 0),
+          grn.items.some((item) => computePendingQty(item) > 0),
         ).length;
         return {
           id: rake.id,
@@ -545,7 +582,17 @@ router.get(
 
     const grns = await db.railBranchGRN.findMany({
       where: { railRakeId: rakeId, status: "SUBMITTED" },
-      include: branchGrnDispatchInclude,
+      select: {
+        id: true,
+        vpWagonLoadingId: true,
+        totalReceivedQty: true,
+        vpWagonLoading: {
+          select: {
+            mrRrRow: { select: { vpNo: true, rowLabel: true } },
+          },
+        },
+        items: { select: pendingQtyItemSelect },
+      },
       orderBy: {
         vpWagonLoading: { mrRrRow: { rowNumber: "asc" } },
       },
@@ -554,7 +601,7 @@ router.get(
     const options = grns
       .map((grn) => {
         const pendingQty = grn.items.reduce(
-          (total, item) => total + previewItem(item).pendingQty,
+          (total, item) => total + computePendingQty(item),
           0,
         );
         return {
@@ -828,7 +875,7 @@ router.post("/", can(PERMS.DELIVERY_CHALLAN.CREATE), async (req, res) => {
    * STEP 2:
    * Keep the transaction short.
    */
-  const createdId = await db.$transaction(async (tx) => {
+  const created = await db.$transaction(async (tx) => {
     await tx.$queryRaw`
       SELECT "id"
       FROM "RailBranchGRN"
@@ -861,7 +908,7 @@ router.post("/", can(PERMS.DELIVERY_CHALLAN.CREATE), async (req, res) => {
     );
     const seq = await nextSequence(tx, branchCode, fyCode, "DELIVERY_CHALLAN");
 
-    const created = await tx.deliveryChallan.create({
+    const createdChallan = await tx.deliveryChallan.create({
       data: {
         challanNumber: formatDocNumber(branchCode, fyCode, seq, "SKDC"),
 
@@ -914,35 +961,22 @@ router.post("/", can(PERMS.DELIVERY_CHALLAN.CREATE), async (req, res) => {
       },
 
       /*
-       * Do not use challanInclude inside the transaction.
-       * Return only the created ID.
+       * Do not use challanInclude inside the transaction, and don't
+       * re-fetch the full detail after commit either — every caller of
+       * this endpoint only reads `.id` from the response and refetches
+       * detail separately via GET /:id when it actually needs it.
        */
       select: {
         id: true,
+        status: true,
+        version: true,
       },
     });
 
-    return created.id;
+    return createdChallan;
   });
 
-  /*
-   * STEP 3:
-   * Load the large response after the transaction has committed.
-   */
-  const created = await db.deliveryChallan.findUnique({
-    where: {
-      id: createdId,
-    },
-    include: challanInclude,
-  });
-
-  if (!created) {
-    throw new NotFoundError(
-      "Delivery Challan was created but could not be loaded",
-    );
-  }
-
-  return sendOk(res, withBalancePayable(created), undefined, 201);
+  return sendOk(res, created, undefined, 201);
 });
 router.get("/:id", can(PERMS.DELIVERY_CHALLAN.VIEW), async (req, res) => {
   const row = await db.deliveryChallan.findUnique({
@@ -1029,7 +1063,7 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
    * STEP 2:
    * Keep the transaction short.
    */
-  const updatedId = await db.$transaction(async (tx) => {
+  const updated = await db.$transaction(async (tx) => {
     /*
      * Use the same lock order as the Issue API:
      * 1. RailBranchGRN
@@ -1111,7 +1145,7 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
       },
     });
 
-    const updated = await tx.deliveryChallan.update({
+    const updatedChallan = await tx.deliveryChallan.update({
       where: {
         id: current.id,
         version: current.version,
@@ -1171,34 +1205,21 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
       },
 
       /*
-       * Don't load challanInclude here.
+       * Don't load challanInclude here, and don't re-fetch full detail
+       * after commit either — the caller only reads `.id` from the
+       * response and refetches detail separately via GET /:id.
        */
       select: {
         id: true,
+        status: true,
+        version: true,
       },
     });
 
-    return updated.id;
+    return updatedChallan;
   });
 
-  /*
-   * STEP 3:
-   * Load the complete response after transaction commit.
-   */
-  const updated = await db.deliveryChallan.findUnique({
-    where: {
-      id: updatedId,
-    },
-    include: challanInclude,
-  });
-
-  if (!updated) {
-    throw new NotFoundError(
-      "Delivery Challan was updated but could not be loaded",
-    );
-  }
-
-  return sendOk(res, withBalancePayable(updated));
+  return sendOk(res, updated);
 });
 router.post(
   "/:id/issue",
@@ -1229,7 +1250,7 @@ router.post(
 
     assertBranchAccess(req, existing.sourceBranchId);
 
-    const issuedId = await db.$transaction(async (tx) => {
+    const issued = await db.$transaction(async (tx) => {
       // Lock the shared Branch GRN first.
       // Create/update routes should use the same lock order.
       await tx.$queryRaw`
@@ -1356,8 +1377,9 @@ router.post(
         }
       }
 
-      // Update only; don't load the complete relation tree here
-      const updated = await tx.deliveryChallan.update({
+      // Update only; don't load the complete relation tree here, and don't
+      // re-fetch it after commit either — the caller only reads `.id`.
+      const updatedChallan = await tx.deliveryChallan.update({
         where: {
           id: challan.id,
           version: challan.version,
@@ -1371,23 +1393,15 @@ router.post(
         },
         select: {
           id: true,
+          status: true,
+          version: true,
         },
       });
 
-      return updated.id;
+      return updatedChallan;
     });
 
-    // Load complete response after the transaction has committed
-    const issued = await db.deliveryChallan.findUnique({
-      where: { id: issuedId },
-      include: challanInclude,
-    });
-
-    if (!issued) {
-      throw new NotFoundError("Issued Delivery Challan not found");
-    }
-
-    return sendOk(res, withBalancePayable(issued));
+    return sendOk(res, issued);
   },
 );
 router.post(
@@ -1399,11 +1413,23 @@ router.post(
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
     const id = getParamId(req);
-    const existing = await db.deliveryChallan.findUnique({ where: { id } });
+    const existing = await db.deliveryChallan.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        sourceBranchId: true,
+      },
+    });
     if (!existing) throw new NotFoundError("Delivery Challan not found");
     assertBranchAccess(req, existing.sourceBranchId);
     if (existing.status === "CANCELLED") {
-      return sendOk(res, existing);
+      return sendOk(res, {
+        id: existing.id,
+        status: existing.status,
+        version: existing.version,
+      });
     }
     if (existing.version !== parsed.data.version) {
       throw new ConflictError(
@@ -1411,6 +1437,7 @@ router.post(
       );
     }
 
+    // Don't load challanInclude here — the caller only reads `.id`.
     const cancelled = await db.deliveryChallan.update({
       where: { id: existing.id, version: existing.version },
       data: {
@@ -1421,9 +1448,13 @@ router.post(
         updatedById: actorId(req),
         version: { increment: 1 },
       },
-      include: challanInclude,
+      select: {
+        id: true,
+        status: true,
+        version: true,
+      },
     });
-    return sendOk(res, withBalancePayable(cancelled));
+    return sendOk(res, cancelled);
   },
 );
 

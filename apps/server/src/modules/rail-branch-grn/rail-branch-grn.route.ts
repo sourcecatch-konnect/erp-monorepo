@@ -8,10 +8,8 @@ import {
 } from "@skerp/validators";
 
 import { db } from "../../../prisma/prisma.js";
-import type {
-  Prisma,
-  RailBranchGRNStatus,
-} from "../../../generated/prisma/index.js";
+import { Prisma } from "../../../generated/prisma/index.js";
+import type { RailBranchGRNStatus } from "../../../generated/prisma/index.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
@@ -1291,19 +1289,24 @@ router.patch("/:id", can(PERMS.RAIL_BRANCH_GRN.UPDATE), async (req, res) => {
       : null);
 
   const updated = await db.$transaction(async (tx) => {
-    await Promise.all(
-      parsed.data.items.map((item) =>
-        tx.railBranchGRNItem.update({
-          where: { id: item.id, railBranchGrnId: existing.id },
-          data: {
-            receivedQty: item.receivedQty,
-            damageQty: item.damageQty,
-            shortageQty: item.shortageQty,
-            remarks: item.remarks ?? null,
-          },
-        }),
+    const itemValues = Prisma.join(
+      parsed.data.items.map(
+        (item) =>
+          Prisma.sql`(${item.id}::text, ${item.receivedQty}::int, ${item.damageQty}::int, ${item.shortageQty}::int, ${item.remarks ?? null}::text)`,
       ),
     );
+
+    await tx.$executeRaw`
+      UPDATE "RailBranchGRNItem" AS t
+      SET
+        "receivedQty" = v."receivedQty",
+        "damageQty" = v."damageQty",
+        "shortageQty" = v."shortageQty",
+        "remarks" = v."remarks",
+        "updatedAt" = now()
+      FROM (VALUES ${itemValues}) AS v(id, "receivedQty", "damageQty", "shortageQty", "remarks")
+      WHERE t.id = v.id AND t."railBranchGrnId" = ${existing.id}
+    `;
 
     return tx.railBranchGRN.update({
       where: { id: existing.id, version: existing.version },

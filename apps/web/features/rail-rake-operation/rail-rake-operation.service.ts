@@ -114,6 +114,12 @@ export type RailRakeOperationDetail = {
   charges: RailRakeOperationCharge[];
 };
 
+export type RailRakeOperationStatusResult = {
+  id: string;
+  status: RailRakeOperationStatus;
+  version: number;
+};
+
 export const railRakeOperationApi = {
   list: async (
     query: ListQuery,
@@ -153,7 +159,7 @@ export const railRakeOperationApi = {
   },
 
   create: async (body: CreateRailRakeOperationBody) => {
-    const response = await api.post<ApiResponse<RailRakeOperationDetail>>(
+    const response = await api.post<ApiResponse<RailRakeOperationStatusResult>>(
       "/rail-rake-operations",
       body,
     );
@@ -168,7 +174,7 @@ export const railRakeOperationApi = {
   },
 
   update: async (id: string, body: UpdateRailRakeOperationBody) => {
-    const response = await api.patch<ApiResponse<RailRakeOperationDetail>>(
+    const response = await api.patch<ApiResponse<RailRakeOperationStatusResult>>(
       `/rail-rake-operations/${encodeURIComponent(id)}`,
       body,
     );
@@ -176,7 +182,7 @@ export const railRakeOperationApi = {
   },
 
   submit: async (id: string, version: number) => {
-    const response = await api.post<ApiResponse<RailRakeOperationDetail>>(
+    const response = await api.post<ApiResponse<RailRakeOperationStatusResult>>(
       `/rail-rake-operations/${encodeURIComponent(id)}/submit`,
       { version },
     );
