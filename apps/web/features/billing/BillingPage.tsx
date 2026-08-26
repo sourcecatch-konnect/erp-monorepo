@@ -1233,7 +1233,7 @@ function BillPreview({ bill }: { bill: Bill }) {
   );
 }
 
-function LRToBillWorkbench() {
+export function LRToBillWorkbenchLegacy() {
   const router = useRouter();
   const canCreate = useCan(PERMS.BILLING.CREATE);
   const canApproveCharge = useCan(PERMS.BILLING.CHARGE_APPROVE);
@@ -1977,6 +1977,654 @@ function LRToBillWorkbench() {
   );
 }
 
+type InlineChargeDraft = {
+  detention: string;
+  hamali: string;
+  freightAdd: string;
+  deduction: string;
+};
+
+const emptyInlineCharge = (): InlineChargeDraft => ({
+  detention: "",
+  hamali: "",
+  freightAdd: "",
+  deduction: "",
+});
+
+const paiseFromInput = (value: string | undefined) => {
+  const rupees = Number(value || 0);
+  return Number.isFinite(rupees) && rupees > 0
+    ? BigInt(Math.round(rupees * 100))
+    : 0n;
+};
+
+const rateAmount = (amountPaise: bigint, rateBps: number) =>
+  (amountPaise * BigInt(Math.max(0, Math.round(rateBps)))) / 10_000n;
+
+/**
+ * Simple, single-page billing form.
+ *
+ * The API still stores auditable LRCharge rows. Users select LRs and type the
+ * four common adjustments directly in the grid; this component translates
+ * those values into approved manual charges immediately before creating the
+ * draft bill.
+ */
+function LRToBillWorkbench() {
+  const router = useRouter();
+  const canCreate = useCan(PERMS.BILLING.CREATE);
+  const canApproveCharge = useCan(PERMS.BILLING.CHARGE_APPROVE);
+
+  const options = useQuery({
+    queryKey: ["billing", "options"],
+    queryFn: billingApi.options,
+  });
+  const taxRules = useQuery({
+    queryKey: ["billing", "tax-rules"],
+    queryFn: billingApi.taxRules,
+  });
+
+  const [branchId, setBranchId] = React.useState("");
+  const [partyType, setPartyType] =
+    React.useState<BillPartyType>("CONSIGNOR");
+  const [customerId, setCustomerId] = React.useState("");
+  const [billType, setBillType] = React.useState<BillType>("ROAD");
+  const [mechanism, setMechanism] =
+    React.useState<ChargeMechanism>("FORWARD_CHARGE");
+  const [billDate, setBillDate] = React.useState(today());
+  const [cutoffDate, setCutoffDate] = React.useState(today());
+  const [remarks, setRemarks] = React.useState("");
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [selectedLRIds, setSelectedLRIds] = React.useState<Set<string>>(
+    new Set(),
+  );
+  const [inlineCharges, setInlineCharges] = React.useState<
+    Record<string, InlineChargeDraft>
+  >({});
+
+  const branch = options.data?.branches.find((item) => item.id === branchId);
+  const clientFilters = {
+    branchId,
+    billingPartyType: partyType,
+    billType,
+    cutoffDate,
+  };
+  const clients = useQuery({
+    queryKey: ["billing", "eligible-clients", clientFilters],
+    queryFn: () => billingApi.eligibleClients(clientFilters),
+    enabled: Boolean(branchId),
+  });
+  const client = clients.data?.find((item) => item.id === customerId);
+  const filters: EligibilityFilters = {
+    branchId,
+    billingPartyType: partyType,
+    customerId,
+    billType,
+    cutoffDate,
+  };
+  const eligible = useQuery({
+    queryKey: ["billing", "eligible", filters],
+    queryFn: async () => {
+      await billingApi.evaluateEligible(filters);
+      return billingApi.eligibleLRs(filters);
+    },
+    enabled: Boolean(branchId && customerId),
+  });
+
+  React.useEffect(() => {
+    const branches = options.data?.branches;
+    if (branches?.length === 1) setBranchId(branches[0]!.id);
+  }, [options.data?.branches]);
+
+  React.useEffect(() => {
+    setCustomerId("");
+    setSelectedLRIds(new Set());
+    setInlineCharges({});
+  }, [branchId, partyType, billType, cutoffDate]);
+
+  React.useEffect(() => {
+    setSelectedLRIds(new Set());
+    setInlineCharges({});
+  }, [customerId]);
+
+  const availableLRs = eligible.data ?? [];
+  const selectedLRs = availableLRs.filter((lr) => selectedLRIds.has(lr.id));
+  const selectedPlaceIds = new Set(
+    selectedLRs
+      .map((lr) => lr.placeOfSupply?.id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const selectedPlace = selectedLRs.find((lr) => lr.placeOfSupply)?.placeOfSupply;
+
+  const setInlineValue = (
+    lrId: string,
+    key: keyof InlineChargeDraft,
+    value: string,
+  ) => {
+    if (value && !/^\d*\.?\d{0,2}$/.test(value)) return;
+    setInlineCharges((current) => ({
+      ...current,
+      [lrId]: {
+        ...(current[lrId] ?? emptyInlineCharge()),
+        [key]: value,
+      },
+    }));
+  };
+
+  const toggleTruckload = (lrId: string, checked: boolean) => {
+    const lr = availableLRs.find((item) => item.id === lrId);
+    if (!lr) return;
+    const sameTruck = availableLRs.filter((item) => item.groupId === lr.groupId);
+    const newPlaceId = lr.placeOfSupply?.id;
+
+    if (checked && newPlaceId && selectedPlaceIds.size) {
+      if (!selectedPlaceIds.has(newPlaceId)) {
+        toast.error(
+          "This LR has a different Place of Supply. Create a separate bill for it.",
+        );
+        return;
+      }
+    }
+
+    setSelectedLRIds((current) => {
+      const next = new Set(current);
+      for (const row of sameTruck) {
+        if (checked) next.add(row.id);
+        else next.delete(row.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = (checked: boolean) => {
+    if (!checked) {
+      setSelectedLRIds(new Set());
+      return;
+    }
+    const firstPlace = availableLRs.find((lr) => lr.placeOfSupply?.id)
+      ?.placeOfSupply?.id;
+    const rows = firstPlace
+      ? availableLRs.filter((lr) => lr.placeOfSupply?.id === firstPlace)
+      : availableLRs;
+    setSelectedLRIds(new Set(rows.map((lr) => lr.id)));
+    if (rows.length !== availableLRs.length) {
+      toast.info("Selected LRs from one Place of Supply only");
+    }
+  };
+
+  const existingTotals = selectedLRs.reduce(
+    (result, lr) => {
+      for (const charge of lr.charges) {
+        const amount = BigInt(charge.remainingAmountPaise);
+        if (charge.type === "FREIGHT") result.freight += amount;
+        else if (charge.effect === "DEDUCTION") result.deductions += amount;
+        else result.additions += amount;
+      }
+      return result;
+    },
+    { freight: 0n, additions: 0n, deductions: 0n },
+  );
+
+  const inlineTotals = selectedLRs.reduce(
+    (result, lr) => {
+      const values = inlineCharges[lr.id] ?? emptyInlineCharge();
+      result.detention += paiseFromInput(values.detention);
+      result.hamali += paiseFromInput(values.hamali);
+      result.freightAdd += paiseFromInput(values.freightAdd);
+      result.deductions += paiseFromInput(values.deduction);
+      return result;
+    },
+    { detention: 0n, hamali: 0n, freightAdd: 0n, deductions: 0n },
+  );
+
+  const totalAdditions =
+    existingTotals.additions +
+    inlineTotals.detention +
+    inlineTotals.hamali +
+    inlineTotals.freightAdd;
+  const totalDeductions = existingTotals.deductions + inlineTotals.deductions;
+  const taxableAmount =
+    existingTotals.freight + totalAdditions > totalDeductions
+      ? existingTotals.freight + totalAdditions - totalDeductions
+      : 0n;
+
+  const supplier = branch as
+    | (typeof branch & {
+      stateId?: string;
+      stateName?: string;
+      gstNo?: string;
+      state?: { id?: string; name?: string };
+    })
+    | undefined;
+  const supplierStateId = supplier?.stateId ?? supplier?.state?.id;
+  const supplierStateName = supplier?.stateName ?? supplier?.state?.name;
+  const placeOfSupplyId = selectedPlace?.id;
+  const isReverseCharge =
+    billType === "ROAD_GTA" && mechanism === "REVERSE_CHARGE";
+  const taxTreatment = isReverseCharge
+    ? "REVERSE_CHARGE"
+    : supplierStateId && placeOfSupplyId
+      ? supplierStateId === placeOfSupplyId
+        ? "INTRA_STATE"
+        : "INTER_STATE"
+      : "PENDING";
+
+  const activeTaxRule = React.useMemo(() => {
+    const invoiceTime = new Date(billDate).getTime();
+    return [...(taxRules.data ?? [])]
+      .filter((rule) => {
+        const starts = new Date(String(rule.effectiveFrom)).getTime();
+        const ends = rule.effectiveTo
+          ? new Date(String(rule.effectiveTo)).getTime()
+          : Number.POSITIVE_INFINITY;
+        return (
+          String(rule.billType) === billType &&
+          String(rule.chargeMechanism) === mechanism &&
+          rule.isActive !== false &&
+          starts <= invoiceTime &&
+          ends >= invoiceTime
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(String(b.effectiveFrom)).getTime() -
+          new Date(String(a.effectiveFrom)).getTime(),
+      )[0];
+  }, [billDate, billType, mechanism, taxRules.data]);
+
+  const cgstRate = Number(activeTaxRule?.cgstRateBps ?? 0);
+  const sgstRate = Number(activeTaxRule?.sgstRateBps ?? 0);
+  const igstRate = Number(activeTaxRule?.igstRateBps ?? 0);
+  const cgstAmount =
+    taxTreatment === "INTRA_STATE" ? rateAmount(taxableAmount, cgstRate) : 0n;
+  const sgstAmount =
+    taxTreatment === "INTRA_STATE" ? rateAmount(taxableAmount, sgstRate) : 0n;
+  const igstAmount =
+    taxTreatment === "INTER_STATE" ? rateAmount(taxableAmount, igstRate) : 0n;
+  const previewTax = cgstAmount + sgstAmount + igstAmount;
+  const previewGrandTotal = taxableAmount + previewTax;
+
+  const hasInlineAdjustments = selectedLRs.some((lr) => {
+    const row = inlineCharges[lr.id];
+    return row
+      ? Object.values(row).some((value) => paiseFromInput(value) > 0n)
+      : false;
+  });
+
+  const create = useMutation({
+    mutationFn: async () => {
+      if (!selectedLRs.length) throw new Error("Select at least one LR");
+      if (selectedPlaceIds.size > 1) {
+        throw new Error("Selected LRs must have one Place of Supply");
+      }
+      if (hasInlineAdjustments && !canApproveCharge) {
+        throw new Error(
+          "You can select existing approved charges, but inline adjustments require charge approval permission.",
+        );
+      }
+
+      const chargeIds = new Set(
+        selectedLRs.flatMap((lr) => lr.charges.map((charge) => charge.id)),
+      );
+      const adjustmentDefinitions: Array<{
+        key: keyof InlineChargeDraft;
+        type: string;
+        effect: "ADDITION" | "DEDUCTION";
+        label: string;
+      }> = [
+          { key: "detention", type: "DETENTION", effect: "ADDITION", label: "Detention" },
+          { key: "hamali", type: "HAMALI", effect: "ADDITION", label: "Hamali" },
+          {
+            key: "freightAdd",
+            type: "FREIGHT_ADJUSTMENT",
+            effect: "ADDITION",
+            label: "Freight addition",
+          },
+          {
+            key: "deduction",
+            type: "FREIGHT_ADJUSTMENT",
+            effect: "DEDUCTION",
+            label: "Billing deduction",
+          },
+        ];
+
+      for (const lr of selectedLRs) {
+        const row = inlineCharges[lr.id] ?? emptyInlineCharge();
+        for (const definition of adjustmentDefinitions) {
+          const amountPaise = paiseFromInput(row[definition.key]);
+          if (amountPaise <= 0n) continue;
+          const reason = `${definition.label} entered while creating bill for ${lr.lrNumber}`;
+          const charge = await billingApi.createManualCharge(lr.id, {
+            type: definition.type,
+            effect: definition.effect,
+            amountPaise: String(amountPaise),
+            reason,
+            description: reason,
+            isTaxable: true,
+          });
+          await billingApi.approveCharge(charge.id);
+          chargeIds.add(charge.id);
+        }
+      }
+
+      if (!chargeIds.size) {
+        throw new Error("The selected LRs do not contain any billable charge");
+      }
+
+      return billingApi.createBill({
+        branchId,
+        billType,
+        billingPartyType: partyType,
+        customerId,
+        ...(billType === "ROAD_GTA" ? { chargeMechanism: mechanism } : {}),
+        billDate,
+        billingCutoffDate: cutoffDate,
+        remarks: remarks.trim() || null,
+        lrChargeIds: [...chargeIds],
+      });
+    },
+    onSuccess: (created) => {
+      toast.success(
+        `${created.length} draft bill${created.length === 1 ? "" : "s"} created`,
+      );
+      router.push(
+        created.length === 1
+          ? `/accounts/bills/${created[0]!.id}`
+          : "/accounts/bills",
+      );
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Could not create bill",
+      ),
+  });
+
+  if (options.isLoading) {
+    return <Skeleton className="h-[540px]" />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b bg-muted/20 pb-4">
+          <div className="flex flex-col justify-between gap-2 lg:flex-row lg:items-center">
+            <div>
+              <CardTitle>Bill information</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Select the client. Eligible, acknowledged LRs load automatically.
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Fields marked automatic come from the customer and LR masters.
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 lg:p-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {(options.data?.branches.length ?? 0) > 1 ? (
+              <Field label="Branch">
+                <Select value={branchId} onValueChange={setBranchId}>
+                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                  <SelectContent>
+                    {options.data?.branches.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            ) : null}
+            <Field label="Bill Head">
+              <Select value={partyType} onValueChange={(value) => setPartyType(value as BillPartyType)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CONSIGNOR">Consignor</SelectItem>
+                  <SelectItem value="CONSIGNEE">Consignee</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Transport Type">
+              <Select value={billType} onValueChange={(value) => setBillType(value as BillType)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ROAD">Road</SelectItem>
+                  <SelectItem value="ROAD_RAIL">Road + Rail</SelectItem>
+                  <SelectItem value="ROAD_GTA">Road GTA</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Bill Date">
+              <Input type="date" value={billDate} onChange={(event) => setBillDate(event.target.value)} />
+            </Field>
+            <Field label="Client" className={(options.data?.branches.length ?? 0) > 1 ? "md:col-span-2 xl:col-span-1" : "md:col-span-2"}>
+              <Select disabled={!branchId || clients.isLoading} value={customerId} onValueChange={setCustomerId}>
+                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+                <SelectContent>
+                  {clients.data?.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          {billType === "ROAD_GTA" ? (
+            <div className="max-w-xs">
+              <Field label="GST Responsibility">
+                <Select value={mechanism} onValueChange={(value) => setMechanism(value as ChargeMechanism)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FORWARD_CHARGE">We charge GST</SelectItem>
+                    <SelectItem value="REVERSE_CHARGE">Customer pays GST (Reverse Charge)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            className="text-sm font-medium text-primary hover:underline"
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            {filtersOpen ? "Hide filters" : "More filters"}
+          </button>
+          {filtersOpen ? (
+            <div className="max-w-xs rounded-md border bg-muted/20 p-3">
+              <Field label="Include LRs up to">
+                <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
+              </Field>
+            </div>
+          ) : null}
+
+          {client ? (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+              <span><span className="text-muted-foreground">Bill To:</span> <strong>{client.name}</strong></span>
+              <span><span className="text-muted-foreground">Branch:</span> {branch?.name ?? "—"}</span>
+              <span><span className="text-muted-foreground">Place of Supply:</span> {selectedPlace?.name ?? "Select an LR"}</span>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {customerId ? (
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <Card className="min-w-0 overflow-hidden">
+            <CardHeader className="flex-col items-start justify-between gap-3 border-b bg-muted/20 lg:flex-row lg:items-center">
+              <div>
+                <CardTitle>Select LRs and enter charges</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Selecting one LR selects its complete truckload. Amounts are in rupees.
+                </p>
+              </div>
+              <span className="rounded-md border bg-background px-3 py-1 text-xs font-medium">
+                {availableLRs.length} eligible · {selectedLRs.length} selected
+              </span>
+            </CardHeader>
+            <CardContent className="p-0">
+              {eligible.isLoading || eligible.isFetching ? (
+                <div className="p-5"><Skeleton className="h-56" /></div>
+              ) : !availableLRs.length ? (
+                <div className="py-16 text-center">
+                  <IconTruckDelivery className="mx-auto text-muted-foreground" size={32} />
+                  <p className="mt-3 font-medium">No eligible LR found</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Try another client or change the cut-off date.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[1120px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={selectedLRs.length > 0 && selectedLRs.length === availableLRs.length}
+                            onCheckedChange={(value) => toggleAll(value === true)}
+                            aria-label="Select all eligible LRs"
+                          />
+                        </TableHead>
+                        <TableHead className="min-w-52">LR No. / Route</TableHead>
+                        <TableHead className="text-right">Freight</TableHead>
+                        <TableHead>Delivery / POD</TableHead>
+                        <TableHead className="w-28 text-right">Detention</TableHead>
+                        <TableHead className="w-28 text-right">Hamali</TableHead>
+                        <TableHead className="w-28 text-right">Freight Add.</TableHead>
+                        <TableHead className="w-28 text-right">Deduction</TableHead>
+                        <TableHead className="text-right">Row Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {availableLRs.map((lr) => {
+                        const checked = selectedLRIds.has(lr.id);
+                        const row = inlineCharges[lr.id] ?? emptyInlineCharge();
+                        const freight = lr.charges.reduce(
+                          (sum, charge) => charge.type === "FREIGHT" ? sum + BigInt(charge.remainingAmountPaise) : sum,
+                          0n,
+                        );
+                        const existingOther = lr.charges.reduce(
+                          (sum, charge) => charge.type !== "FREIGHT"
+                            ? sum + (charge.effect === "DEDUCTION" ? -BigInt(charge.remainingAmountPaise) : BigInt(charge.remainingAmountPaise))
+                            : sum,
+                          0n,
+                        );
+                        const rowTotal = freight + existingOther + paiseFromInput(row.detention) + paiseFromInput(row.hamali) + paiseFromInput(row.freightAdd) - paiseFromInput(row.deduction);
+                        const sameTruckCount = availableLRs.filter((item) => item.groupId === lr.groupId).length;
+                        const amountInput = (key: keyof InlineChargeDraft, label: string) => (
+                          <Input
+                            aria-label={`${label} for ${lr.lrNumber}`}
+                            inputMode="decimal"
+                            disabled={!checked}
+                            value={row[key]}
+                            onChange={(event) => setInlineValue(lr.id, key, event.target.value)}
+                            placeholder="0"
+                            className="h-8 text-right"
+                          />
+                        );
+                        return (
+                          <TableRow key={lr.id} className={checked ? "bg-primary/5" : undefined}>
+                            <TableCell>
+                              <Checkbox checked={checked} onCheckedChange={(value) => toggleTruckload(lr.id, value === true)} />
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-semibold">{lr.lrNumber}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{lr.origin} → {lr.destination}</p>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {sameTruckCount > 1 ? (
+                                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+                                    {lr.groupNumber} · {sameTruckCount} LRs
+                                  </span>
+                                ) : null}
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                                  {lr.placeOfSupply?.name ?? "Place of Supply missing"}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {lr.isCompanionOnly ? "Included" : money(freight)}
+                            </TableCell>
+                            <TableCell>{invoiceDate(lr.podReceivedAt)}</TableCell>
+                            <TableCell>{amountInput("detention", "Detention")}</TableCell>
+                            <TableCell>{amountInput("hamali", "Hamali")}</TableCell>
+                            <TableCell>{amountInput("freightAdd", "Freight addition")}</TableCell>
+                            <TableCell>{amountInput("deduction", "Deduction")}</TableCell>
+                            <TableCell className="text-right font-semibold">{checked ? money(rowTotal) : "—"}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4 xl:sticky xl:top-4">
+            <Card className="overflow-hidden border-primary/20">
+              <CardHeader className="border-b bg-primary/5 pb-4">
+                <CardTitle>Bill Summary</CardTitle>
+                <p className="text-sm text-muted-foreground">{selectedLRs.length} LR{selectedLRs.length === 1 ? "" : "s"} selected</p>
+              </CardHeader>
+              <CardContent className="space-y-3 p-4 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Freight</span><span>{money(existingTotals.freight)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Additions</span><span className="text-emerald-600">+ {money(totalAdditions)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Deductions</span><span className="text-rose-600">− {money(totalDeductions)}</span></div>
+                <div className="flex justify-between border-t pt-3 font-medium"><span>Taxable amount</span><span>{money(taxableAmount)}</span></div>
+                {taxTreatment === "INTRA_STATE" ? (
+                  <>
+                    <div className="flex justify-between"><span>CGST ({cgstRate / 100}%)</span><span>{money(cgstAmount)}</span></div>
+                    <div className="flex justify-between"><span>SGST ({sgstRate / 100}%)</span><span>{money(sgstAmount)}</span></div>
+                  </>
+                ) : taxTreatment === "INTER_STATE" ? (
+                  <div className="flex justify-between"><span>IGST ({igstRate / 100}%)</span><span>{money(igstAmount)}</span></div>
+                ) : taxTreatment === "REVERSE_CHARGE" ? (
+                  <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">Reverse Charge — GST is payable by the recipient and is not added here.</div>
+                ) : (
+                  <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">CGST/SGST or IGST will be confirmed from the branch state and selected Place of Supply.</div>
+                )}
+                <div className="flex items-end justify-between border-t pt-3">
+                  <span className="font-semibold">Estimated Bill Total</span>
+                  <span className="text-xl font-bold text-primary">{money(previewGrandTotal)}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Final GST is calculated and snapshotted by the server when the invoice is created.</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex items-start gap-2">
+                  <IconShieldCheck className="mt-0.5 shrink-0 text-primary" size={17} />
+                  <div className="text-sm">
+                    <p className="font-medium">
+                      {taxTreatment === "INTRA_STATE" ? "CGST + SGST" : taxTreatment === "INTER_STATE" ? "IGST" : taxTreatment === "REVERSE_CHARGE" ? "Reverse Charge" : "GST checked automatically"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {supplierStateName ?? "Billing state"} → {selectedPlace?.name ?? "Select an LR"}
+                    </p>
+                  </div>
+                </div>
+                <Field label="Remarks">
+                  <Textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} placeholder="Optional invoice remarks" rows={3} />
+                </Field>
+                <Button className="w-full" disabled={!canCreate || !selectedLRs.length || create.isPending} onClick={() => create.mutate()}>
+                  {create.isPending ? "Creating draft…" : `Create Draft Bill (${selectedLRs.length} LR${selectedLRs.length === 1 ? "" : "s"})`}
+                </Button>
+                {hasInlineAdjustments && !canApproveCharge ? (
+                  <p className="text-xs text-destructive">Inline charges require charge approval permission.</p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-14 text-center">
+            <IconUsers className="mx-auto text-muted-foreground" size={32} />
+            <p className="mt-3 font-medium">Select a client to view eligible LRs</p>
+            <p className="mt-1 text-sm text-muted-foreground">You can combine multiple LRs from the same Place of Supply into one bill.</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function BillsList() {
   const router = useRouter();
   const query = useQuery({
@@ -2289,7 +2937,7 @@ export function LRToBillPage() {
     <div className="space-y-6">
       <PageHeader
         title="LR to Bill"
-        description="Select the billing customer and eligible LRs, then create one draft. All later work happens on that draft's detail page."
+        description="Select the client, combine eligible LRs, enter common charges and review GST on one page."
         actions={
           <Button
             variant="outline"

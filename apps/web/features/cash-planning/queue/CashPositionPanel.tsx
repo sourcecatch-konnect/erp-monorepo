@@ -35,6 +35,7 @@ import { formatPaise } from "@/lib/money";
 import { cashPlanningApi } from "../api/cash-planning.service";
 import { cashPlanningKeys } from "../api/cash-planning.keys";
 import { CompactMoney } from "../components/CompactMoney";
+import { AccountActivityPopover, type ActivityEntry } from "./AccountActivityPopover";
 
 type Props = {
   day: CashPlanDayView;
@@ -48,6 +49,65 @@ const toRupeeInput = (paise: number): string => (paise / 100).toFixed(2);
 export default function CashPositionPanel({ day, date, canEnter }: Props) {
   const queryClient = useQueryClient();
   const editable = canEnter && day.status === "OPEN";
+
+  // Drill-down entries for the Received column: every positive adjustment
+  // today (receipt credits + manual "add funds"), grouped by account.
+  const receivedByAccount = React.useMemo(() => {
+    const map = new Map<string, ActivityEntry[]>();
+    for (const a of day.adjustments) {
+      if (a.amountPaise <= 0) continue;
+      const list = map.get(a.accountId) ?? [];
+      list.push({
+        id: a.id,
+        label: a.receiptId ? a.reason : "Manual add funds",
+        detail: a.receiptId ? undefined : a.reason,
+        amountPaise: a.amountPaise,
+        at: a.createdAt,
+        tag: a.receiptId ? "receipt" : "manual",
+      });
+      map.set(a.accountId, list);
+    }
+    for (const list of map.values()) {
+      list.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
+    }
+    return map;
+  }, [day.adjustments]);
+
+  // Drill-down entries for the Payment column: approved payments from the
+  // queue + negative/correction adjustments today, grouped by account.
+  const paymentByAccount = React.useMemo(() => {
+    const map = new Map<string, ActivityEntry[]>();
+    for (const a of day.adjustments) {
+      if (a.amountPaise >= 0) continue;
+      const list = map.get(a.accountId) ?? [];
+      list.push({
+        id: a.id,
+        label: "Correction",
+        detail: a.reason,
+        amountPaise: -a.amountPaise,
+        at: a.createdAt,
+        tag: "correction",
+      });
+      map.set(a.accountId, list);
+    }
+    for (const p of day.payments) {
+      if (p.status !== "APPROVED" || !p.fromAccountId) continue;
+      const list = map.get(p.fromAccountId) ?? [];
+      list.push({
+        id: p.id,
+        label: p.payeeName,
+        detail: p.creditor?.name,
+        amountPaise: p.amount,
+        at: p.approvedAt ?? p.createdAt,
+        tag: "payment",
+      });
+      map.set(p.fromAccountId, list);
+    }
+    for (const list of map.values()) {
+      list.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
+    }
+    return map;
+  }, [day.adjustments, day.payments]);
 
   // Local draft of opening balances (rupee strings), keyed by accountId.
   const [draft, setDraft] = React.useState<Record<string, string>>({});
@@ -109,7 +169,7 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold">Cash Position</h2>
           <p className="text-xs text-muted-foreground">
-            Opening across accounts · closing = opening − approved
+            Closing = opening + received − payment. Click Received / Payment for details.
           </p>
         </div>
         {editable ? (
@@ -130,6 +190,8 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
           <TableRow>
             <TableHead className="text-xs">Account</TableHead>
             <TableHead className="text-right text-xs">Opening</TableHead>
+            <TableHead className="text-right text-xs">Received</TableHead>
+            <TableHead className="text-right text-xs">Payment</TableHead>
             <TableHead className="text-right text-xs">Closing</TableHead>
             <TableHead className="text-right text-xs">Actions</TableHead>
           </TableRow>
@@ -137,7 +199,7 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
         <TableBody>
           {day.balances.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                 No cash accounts. Add accounts in the Cash Accounts master, then
                 re-open the day.
               </TableCell>
@@ -185,18 +247,26 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
                       <CompactMoney value={b.openingBalance} />
                     )}
                   </TableCell>
+                  <TableCell className="text-right text-sm text-emerald-600">
+                    <AccountActivityPopover
+                      accountName={b.account.name}
+                      columnLabel="Received today"
+                      total={b.receivedTotal}
+                      entries={receivedByAccount.get(b.accountId) ?? []}
+                      emptyLabel="No receipts or funds added today"
+                    />
+                  </TableCell>
+                  <TableCell className="text-right text-sm text-red-600">
+                    <AccountActivityPopover
+                      accountName={b.account.name}
+                      columnLabel="Payment today"
+                      total={b.paymentTotal}
+                      entries={paymentByAccount.get(b.accountId) ?? []}
+                      emptyLabel="No payments made today"
+                    />
+                  </TableCell>
                   <TableCell className="text-right text-sm">
                     <CompactMoney value={b.closingBalance} />
-                    {b.adjustmentsTotal !== 0 ? (
-                      <div
-                        className={`text-[11px] ${
-                          b.adjustmentsTotal > 0 ? "text-emerald-600" : "text-red-600"
-                        }`}
-                      >
-                        {b.adjustmentsTotal > 0 ? "+" : ""}
-                        {formatPaise(b.adjustmentsTotal)} today
-                      </div>
-                    ) : null}
                   </TableCell>
                   <TableCell className="text-right">
                     {editable ? (
@@ -220,20 +290,23 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
         </TableBody>
       </Table>
 
-      <div className="grid grid-cols-4 gap-px border-t bg-border text-sm">
+      <div className="grid grid-cols-5 gap-px border-t bg-border text-sm">
         <div className="bg-card px-4 py-3">
           <p className="text-xs text-muted-foreground">Total Opening</p>
           <CompactMoney className="text-base font-semibold" value={day.totalOpening} />
         </div>
         <div className="bg-card px-4 py-3">
-          <p className="text-xs text-muted-foreground">Adjustments</p>
+          <p className="text-xs text-muted-foreground">Received</p>
           <CompactMoney
-            className={
-              day.totalAdjustments < 0
-                ? "text-base font-semibold text-red-600"
-                : "text-base font-semibold text-emerald-600"
-            }
-            value={day.totalAdjustments}
+            className="text-base font-semibold text-emerald-600"
+            value={day.totalReceived}
+          />
+        </div>
+        <div className="bg-card px-4 py-3">
+          <p className="text-xs text-muted-foreground">Payment</p>
+          <CompactMoney
+            className="text-base font-semibold text-red-600"
+            value={day.totalPayment}
           />
         </div>
         <div className="bg-card px-4 py-3">
@@ -259,11 +332,12 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
       <Dialog open={adjustFor !== null} onOpenChange={(open) => !open && closeAdjustDialog()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add funds — {adjustFor?.name}</DialogTitle>
+            <DialogTitle>Add funds / correction — {adjustFor?.name}</DialogTitle>
             <DialogDescription>
-              Enter a positive amount to add funds, or a negative amount to
-              correct this account down. Recorded with a reason for the audit
-              trail.
+              A positive amount shows up in the <strong>Received</strong> column
+              (e.g. owner topped up cash). A negative amount shows up in the{" "}
+              <strong>Payment</strong> column as a correction (e.g. cash
+              shortage). Recorded with a reason for the audit trail.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -278,6 +352,16 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
                 value={adjustAmount}
                 onChange={(e) => setAdjustAmount(e.target.value)}
               />
+              {adjustAmountValid ? (
+                <p
+                  className={`text-xs font-medium ${
+                    Number(adjustAmount) > 0 ? "text-emerald-600" : "text-red-600"
+                  }`}
+                >
+                  Will be recorded as{" "}
+                  {Number(adjustAmount) > 0 ? "Received" : "Payment (correction)"}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
