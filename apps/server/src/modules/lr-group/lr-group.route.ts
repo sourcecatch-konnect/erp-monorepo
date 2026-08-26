@@ -452,33 +452,26 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       truckIndex,
     );
 
-    const consignments = await db.orderConsignment.findMany({
-      where: { orderId: order.id, truckIndex },
-      include: { goods: { include: { goods: { select: { name: true } } } } },
-    });
-    if (consignments.length === 0) {
-      throw new BadRequestError(
-        `Order has no consignment lines for truck #${truckIndex}`,
-      );
-    }
-
     originBranchId = order.fromBranchId;
     destinationBranchId = order.toBranchId;
     consignorId = order.customerId;
     consigneeId = order.consigneeId;
     orderId = order.id;
-    lines = consignments.map((c) => ({
-      loadingLocationId: c.loadingLocationId,
-      unloadingLocationId: c.unloadingLocationId,
-      totalWeight: c.totalWeight != null ? Number(c.totalWeight) : null,
-      unit: c.unit ?? null,
-      goods: c.goods.map((g) => ({
-        name: g.goods.name,
-        description: null,
+    // This truck's consignments come straight from the request — the order
+    // no longer pre-populates OrderConsignment rows to read here. Same shape
+    // as the INSTANT branch below.
+    lines = (input.lrs ?? []).map((l) => ({
+      loadingLocationId: l.loadingLocationId ?? null,
+      unloadingLocationId: l.unloadingLocationId ?? null,
+      totalWeight: l.totalWeight ?? null,
+      unit: l.totalWeightUnit ?? null,
+      goods: l.goods.map((g) => ({
+        name: g.name,
+        description: g.description ?? null,
         quantity: g.quantity,
-        length: null,
-        width: null,
-        height: null,
+        length: g.length ?? null,
+        width: g.width ?? null,
+        height: g.height ?? null,
       })),
     }));
   } else {
@@ -737,6 +730,27 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       // Own-vehicle group attached to a Planned trip dispatches it (-> InTransit).
       if (primaryTripId) {
         await dispatchTripOnAttach(tx, primaryTripId, group.groupNumber, me);
+      }
+
+      // Mirror this truck's consignments back onto the order as
+      // OrderConsignment rows — order-level reporting/traceability, not a
+      // requirement for LR creation itself (the order never asks for this
+      // upfront anymore; it's recorded here as a side effect of the LR
+      // actually being made). Goods aren't copied: LR goods are free-text
+      // names, while OrderConsignmentGoods requires a Goods master FK — the
+      // two aren't the same shape, and the real goods detail already lives
+      // on the LR itself.
+      if (input.source === "FROM_ORDER" && orderId && lines.length) {
+        await tx.orderConsignment.createMany({
+          data: lines.map((line) => ({
+            orderId: orderId as string,
+            truckIndex,
+            loadingLocationId: line.loadingLocationId,
+            unloadingLocationId: line.unloadingLocationId,
+            totalWeight: line.totalWeight,
+            unit: line.unit,
+          })),
+        });
       }
 
       if (input.source === "FROM_ORDER" && orderId) {

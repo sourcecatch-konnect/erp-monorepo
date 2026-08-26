@@ -158,6 +158,8 @@ type ReceiptPermissionKey =
   | "receipt.approve"
   | "receipt.cancel";
 
+type LedgerPermissionKey = "ledger.view";
+
 type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
 
 type NotificationPermissionKey =
@@ -191,6 +193,7 @@ export type PermissionKey =
   | CashPlanningPermissionKey
   | BillingPermissionKey
   | ReceiptPermissionKey
+  | LedgerPermissionKey
   | GRNPermissionKey
   | RailBranchGRNPermissionKey
   | DeliveryChallanPermissionKey
@@ -421,6 +424,9 @@ export const PERMS = {
     CREATE: "receipt.create",
     APPROVE: "receipt.approve",
     CANCEL: "receipt.cancel",
+  },
+  LEDGER: {
+    VIEW: "ledger.view",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",

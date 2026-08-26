@@ -161,6 +161,7 @@ model User {
   cancelledReceipts             Receipt[]               @relation("CancelledReceipts")
   receiptStatusChanges          ReceiptStatusHistory[]
   createdCashAccountAdjustments CashAccountAdjustment[] @relation("CreatedCashAccountAdjustments")
+  createdLedgerEntries          LedgerEntry[]           @relation("CreatedLedgerEntries")
 
   tablePrefs UserTablePref[]
 }
@@ -567,6 +568,7 @@ model Customer {
   billsAsBillingCustomer  Bill[]             @relation("BillBillingCustomer")
   receipts                Receipt[]
   cashReceivables         CashReceivable[]
+  ledgerEntries           LedgerEntry[]
 
   @@index([name])
   @@index([cityId])
@@ -2233,8 +2235,9 @@ model Creditor {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  branch   Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
-  payments CashPayment[]
+  branch        Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
+  payments      CashPayment[]
+  ledgerEntries LedgerEntry[]
 
   @@index([deletedAt, name])
   @@index([branchId])
@@ -2256,6 +2259,7 @@ model CashAccount {
   driverAdvances DriverAdvance[]
   adjustments    CashAccountAdjustment[]
   receipts       Receipt[]
+  ledgerEntries  LedgerEntry[]
 
   @@index([deletedAt, name])
 }
@@ -2295,6 +2299,55 @@ model CashAccountAdjustment {
 
   @@index([dayId, accountId])
   @@index([receiptId])
+}
+
+enum LedgerDirection {
+  IN
+  OUT
+}
+
+enum LedgerSourceType {
+  RECEIPT
+  PAYMENT
+  ADJUSTMENT
+}
+
+/// Append-only record of every money movement, written alongside (never
+/// instead of) the CashAccountAdjustment/CashPayment/Receipt rows that
+/// already exist — powers the Bank/Cash/Debtor/Creditor/Expense ledger
+/// reports as simple filtered reads of this one table. `sourceId` is
+/// intentionally not a typed relation: it points at Receipt, CashPayment, or
+/// CashAccountAdjustment depending on `sourceType`, and Prisma has no
+/// polymorphic FK — the pairing is a contract enforced by the write helper
+/// (recordLedgerEntry), not by Postgres. A reversal (payment un-approved/
+/// deleted, receipt cancelled) writes a second mirror-direction row sharing
+/// the same sourceId rather than deleting the original — don't assume
+/// sourceId is unique.
+model LedgerEntry {
+  id            String            @id @default(cuid())
+  occurredAt    DateTime // business date of the event (receivedAt / approvedAt / adjustment createdAt)
+  direction     LedgerDirection
+  amountPaise   BigInt // always positive; direction carries the sign
+  cashAccountId String?
+  customerId    String?
+  creditorId    String?
+  category      CreditorCategory? // snapshot of CashPayment.category at write time; null for RECEIPT/ADJUSTMENT
+  sourceType    LedgerSourceType
+  sourceId      String
+  description   String
+  createdById   String
+  createdAt     DateTime          @default(now())
+
+  cashAccount CashAccount? @relation(fields: [cashAccountId], references: [id])
+  customer    Customer?    @relation(fields: [customerId], references: [id])
+  creditor    Creditor?    @relation(fields: [creditorId], references: [id])
+  createdBy   User         @relation("CreatedLedgerEntries", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([cashAccountId, occurredAt])
+  @@index([customerId, occurredAt])
+  @@index([creditorId, occurredAt])
+  @@index([sourceType, sourceId])
+  @@index([category, occurredAt])
 }
 
 model CashAccountBalance {

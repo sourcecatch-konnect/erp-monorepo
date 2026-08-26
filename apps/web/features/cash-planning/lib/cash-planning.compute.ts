@@ -17,8 +17,12 @@ export function recomputeDayView(
   payments: CashPaymentWithCreditor[],
 ): CashPlanDayView {
   const approved = payments.filter((p) => p.status === "APPROVED");
+  const oldApproved = day.payments.filter((p) => p.status === "APPROVED");
 
-  // Σ approved payments tagged to each account (paise).
+  // Σ approved payments tagged to each account (paise), before and after the
+  // transform — the delta isolates just the payment-queue contribution to
+  // paymentTotal, so the correction/adjustment portion (untouched by this
+  // transform) carries over unchanged.
   const taggedByAccount = new Map<string, number>();
   for (const p of approved) {
     if (!p.fromAccountId) continue;
@@ -27,17 +31,32 @@ export function recomputeDayView(
       (taggedByAccount.get(p.fromAccountId) ?? 0) + p.amount,
     );
   }
+  const oldTaggedByAccount = new Map<string, number>();
+  for (const p of oldApproved) {
+    if (!p.fromAccountId) continue;
+    oldTaggedByAccount.set(
+      p.fromAccountId,
+      (oldTaggedByAccount.get(p.fromAccountId) ?? 0) + p.amount,
+    );
+  }
 
-  const balances = day.balances.map((b) => ({
-    ...b,
-    closingBalance: b.openingBalance - (taggedByAccount.get(b.accountId) ?? 0),
-  }));
+  const balances = day.balances.map((b) => {
+    const approvedForAccount = taggedByAccount.get(b.accountId) ?? 0;
+    const correctionOutflow = b.paymentTotal - (oldTaggedByAccount.get(b.accountId) ?? 0);
+    return {
+      ...b,
+      paymentTotal: approvedForAccount + correctionOutflow,
+      closingBalance: b.openingBalance - approvedForAccount + b.adjustmentsTotal,
+    };
+  });
 
   const totalOpening = balances.reduce((s, b) => s + b.openingBalance, 0);
   const approvedTotal = approved.reduce((s, p) => s + p.amount, 0);
   const pendingTotal = payments
     .filter((p) => p.status === "PENDING")
     .reduce((s, p) => s + p.amount, 0);
+  const totalReceived = balances.reduce((s, b) => s + b.receivedTotal, 0);
+  const totalPayment = balances.reduce((s, b) => s + b.paymentTotal, 0);
 
   return {
     ...day,
@@ -46,7 +65,9 @@ export function recomputeDayView(
     totalOpening,
     approvedTotal,
     pendingTotal,
-    availableCash: totalOpening - approvedTotal,
+    totalReceived,
+    totalPayment,
+    availableCash: totalOpening + day.totalAdjustments - approvedTotal,
   };
 }
 

@@ -39,25 +39,35 @@ export function buildDayView(day: DayWithRelations) {
     );
   }
 
-  // Σ manual/receipt adjustments tagged to each account (paise, signed).
+  // Σ manual/receipt adjustments tagged to each account (paise, signed), split
+  // into "received" (positive — receipt credits + manual add-funds) and
+  // "payment" (negative — manual corrections, shown as an outflow) buckets so
+  // the UI can render them as separate columns.
   const adjustedByAccount = new Map<string, number>();
+  const receivedByAccount = new Map<string, number>();
+  const correctionByAccount = new Map<string, number>();
   for (const a of day.adjustments) {
-    adjustedByAccount.set(
-      a.accountId,
-      (adjustedByAccount.get(a.accountId) ?? 0) + Number(a.amountPaise),
-    );
+    const amt = Number(a.amountPaise);
+    adjustedByAccount.set(a.accountId, (adjustedByAccount.get(a.accountId) ?? 0) + amt);
+    if (amt > 0) {
+      receivedByAccount.set(a.accountId, (receivedByAccount.get(a.accountId) ?? 0) + amt);
+    } else if (amt < 0) {
+      correctionByAccount.set(a.accountId, (correctionByAccount.get(a.accountId) ?? 0) - amt);
+    }
   }
 
   const balances = day.balances.map((b) => {
     const opening = Number(b.openingBalance);
     const adjustmentsTotal = adjustedByAccount.get(b.accountId) ?? 0;
-    const closingBalance =
-      opening - (taggedByAccount.get(b.accountId) ?? 0) + adjustmentsTotal;
+    const approvedForAccount = taggedByAccount.get(b.accountId) ?? 0;
+    const closingBalance = opening - approvedForAccount + adjustmentsTotal;
     return {
       ...b,
       openingBalance: opening,
       carriedOpening: b.carriedOpening === null ? null : Number(b.carriedOpening),
       adjustmentsTotal,
+      receivedTotal: receivedByAccount.get(b.accountId) ?? 0,
+      paymentTotal: approvedForAccount + (correctionByAccount.get(b.accountId) ?? 0),
       closingBalance,
     };
   });
@@ -71,6 +81,8 @@ export function buildDayView(day: DayWithRelations) {
     (s, a) => s + Number(a.amountPaise),
     0,
   );
+  const totalReceived = balances.reduce((s, b) => s + b.receivedTotal, 0);
+  const totalPayment = balances.reduce((s, b) => s + b.paymentTotal, 0);
 
   return {
     ...day,
@@ -81,6 +93,8 @@ export function buildDayView(day: DayWithRelations) {
     approvedTotal,
     pendingTotal,
     totalAdjustments,
+    totalReceived,
+    totalPayment,
     availableCash: totalOpening + totalAdjustments - approvedTotal,
   };
 }

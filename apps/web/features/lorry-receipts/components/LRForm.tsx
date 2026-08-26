@@ -104,11 +104,10 @@ function ReadOnlyAmount({
 
       <div className="  px-3 py-2">
         <div
-          className={`text-sm ${
-            strong
-              ? "font-semibold text-foreground"
-              : "font-medium text-foreground"
-          }`}
+          className={`text-sm ${strong
+            ? "font-semibold text-foreground"
+            : "font-medium text-foreground"
+            }`}
         >
           ₹ {value.toFixed(2)}
         </div>
@@ -132,11 +131,10 @@ function Segmented<T extends string | boolean>({
           key={String(o.value)}
           type="button"
           onClick={() => onChange(o.value)}
-          className={`rounded-[5px] px-3 py-1 text-xs font-medium transition-colors ${
-            value === o.value
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
+          className={`rounded-[5px] px-3 py-1 text-xs font-medium transition-colors ${value === o.value
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+            }`}
         >
           {o.label}
         </button>
@@ -220,7 +218,7 @@ function InstantLRLineCard({
         <ComboboxField
           name={`${base}.unloadingLocationId`}
           label="Unloading point"
-          required
+
           options={unloadingOptions}
           emptyText={
             watchConsignee ? "No saved locations" : "Pick a consignee first"
@@ -419,10 +417,10 @@ export default function LRForm({ orderId, tripId }: Props) {
   });
   const units = useUnitOfMeasureOptions();
 
-  // FROM_ORDER: the order's context (parties, route, freight, consignment lines
-  // per truck) and the groups already created against it — so we offer only
-  // trucks that both have lines and aren't already grouped, and can summarise
-  // exactly what will be generated.
+  // FROM_ORDER: the order's context (parties, route, freight, truck count)
+  // and the groups already created against it — so we offer only trucks that
+  // aren't already grouped. Consignments themselves (loading/unloading,
+  // goods) are entered right here in the form, not read from the order.
   const orderContext = useQuery({
     queryKey: lrLookupKeys.orderContext(orderId ?? ""),
     queryFn: () => lrLookups.orderContext(orderId as string),
@@ -439,21 +437,22 @@ export default function LRForm({ orderId, tripId }: Props) {
     defaultValues:
       source === "FROM_ORDER"
         ? {
-            source: "FROM_ORDER",
-            orderId,
-            truckIndex: 1,
-            transportType: "Road",
-            tripLegType: "DIRECT",
-            priority: "Normal",
-            isMarketVehicle: false,
-          }
+          source: "FROM_ORDER",
+          orderId,
+          truckIndex: 1,
+          transportType: "Road",
+          tripLegType: "DIRECT",
+          priority: "Normal",
+          isMarketVehicle: false,
+          lrs: [EMPTY_LINE],
+        }
         : {
-            source: "INSTANT",
-            priority: "Normal",
-            isMarketVehicle: false,
-            primaryTripId: tripId,
-            lrs: [EMPTY_LINE],
-          },
+          source: "INSTANT",
+          priority: "Normal",
+          isMarketVehicle: false,
+          primaryTripId: tripId,
+          lrs: [EMPTY_LINE],
+        },
   });
 
   const watchedRailheadBranchId = form.watch(
@@ -513,6 +512,10 @@ export default function LRForm({ orderId, tripId }: Props) {
     source === "INSTANT"
       ? ((watchConsignor as string | undefined) ?? undefined)
       : (orderContext.data?.consignorId ?? undefined);
+  const activeConsigneeId =
+    source === "INSTANT"
+      ? ((watchConsignee as string | undefined) ?? undefined)
+      : (orderContext.data?.consigneeId ?? undefined);
 
   const trips = useQuery({
     queryKey: lrLookupKeys.attachableTrips(activeConsignorId),
@@ -554,16 +557,18 @@ export default function LRForm({ orderId, tripId }: Props) {
     }
   }, [activeConsignorId, form, selectedTrip]);
 
-  // Instant lines pick loading/unloading from the parties' saved locations.
+  // Consignment lines (both sources now) pick loading/unloading from the
+  // parties' saved locations — INSTANT's user-picked consignor/consignee,
+  // or FROM_ORDER's fixed ones from the order itself.
   const consignorLocations = useQuery({
-    queryKey: lrLookupKeys.customerLocations((watchConsignor as string) ?? ""),
-    queryFn: () => lrLookups.customerLocations(watchConsignor as string),
-    enabled: source === "INSTANT" && Boolean(watchConsignor),
+    queryKey: lrLookupKeys.customerLocations(activeConsignorId ?? ""),
+    queryFn: () => lrLookups.customerLocations(activeConsignorId as string),
+    enabled: Boolean(activeConsignorId),
   });
   const consigneeLocations = useQuery({
-    queryKey: lrLookupKeys.customerLocations((watchConsignee as string) ?? ""),
-    queryFn: () => lrLookups.customerLocations(watchConsignee as string),
-    enabled: source === "INSTANT" && Boolean(watchConsignee),
+    queryKey: lrLookupKeys.customerLocations(activeConsigneeId ?? ""),
+    queryFn: () => lrLookups.customerLocations(activeConsigneeId as string),
+    enabled: Boolean(activeConsigneeId),
   });
 
   const customerOptions = customers.data ?? [];
@@ -629,16 +634,18 @@ export default function LRForm({ orderId, tripId }: Props) {
       ),
     [orderGroups.data],
   );
-  const truckOptions = React.useMemo(
-    () =>
-      (orderContext.data?.trucks ?? [])
-        .filter((t) => !takenTrucks.has(t.truckIndex))
-        .map((t) => ({
-          value: String(t.truckIndex),
-          label: `Truck #${t.truckIndex} · ${t.lineCount} LR${t.lineCount === 1 ? "" : "s"}`,
-        })),
-    [orderContext.data, takenTrucks],
-  );
+  // Every truck 1..truckQuantity is offered, minus whichever already have a
+  // live group — no longer limited to trucks that happen to already have
+  // consignment lines, since those are entered in this form now, not before.
+  const truckOptions = React.useMemo(() => {
+    const truckQuantity = orderContext.data?.truckQuantity ?? 0;
+    return Array.from({ length: truckQuantity }, (_, i) => i + 1)
+      .filter((truckIndex) => !takenTrucks.has(truckIndex))
+      .map((truckIndex) => ({
+        value: String(truckIndex),
+        label: `Truck #${truckIndex}`,
+      }));
+  }, [orderContext.data, takenTrucks]);
   const trucksLoading = orderContext.isLoading || orderGroups.isLoading;
 
   // Keep truckIndex on a valid, available truck: preselect the first option, and
@@ -660,16 +667,8 @@ export default function LRForm({ orderId, tripId }: Props) {
     source === "FROM_ORDER" && (watchTransport as string) === "RoadAndRail";
 
   // How many LRs this submit will create — drives LR-first button/toast copy.
-  const watchTruckIndex = form.watch("truckIndex" as never) as unknown as
-    | number
-    | string
-    | undefined;
-  const plannedLrCount =
-    source === "FROM_ORDER"
-      ? ((orderContext.data?.trucks ?? []).find(
-          (t) => t.truckIndex === Number(watchTruckIndex),
-        )?.lineCount ?? 0)
-      : fields.length;
+  // Same source for both: the live consignment-line editor's current rows.
+  const plannedLrCount = fields.length;
 
   const onSubmit = async (values: CreateLRGroupBody) => {
     setSubmitting(true);
@@ -806,9 +805,9 @@ export default function LRForm({ orderId, tripId }: Props) {
                     <Select
                       value={
                         field.value != null &&
-                        truckOptions.some(
-                          (o) => o.value === String(field.value),
-                        )
+                          truckOptions.some(
+                            (o) => o.value === String(field.value),
+                          )
                           ? String(field.value)
                           : undefined
                       }
@@ -832,8 +831,8 @@ export default function LRForm({ orderId, tripId }: Props) {
                     </Select>
                     {!trucksLoading && truckOptions.length === 0 && (
                       <p className="mt-1 text-xs text-amber-600">
-                        {(orderContext.data?.trucks?.length ?? 0) === 0
-                          ? "This order has no consignment lines — add them on the order first."
+                        {(orderContext.data?.truckQuantity ?? 0) === 0
+                          ? "This order has no truck quantity set."
                           : "All trucks for this order already have a group."}
                       </p>
                     )}
@@ -942,7 +941,54 @@ export default function LRForm({ orderId, tripId }: Props) {
               />
             </FormSection>
           )}
-
+          {/* Consignment lines — both sources declare them here now. FROM_ORDER
+              no longer reads these from the order; the order only fixes the
+              truck count, each truck's own loading/unloading/goods is
+              entered when that truck's LR actually gets created. */}
+          <FormSection
+            icon={<IconPackage size={16} />}
+            title="Consignments / LR Lines"
+            columns={1}
+          >
+            <div className="space-y-3">
+              {fields.length === 0 && (
+                <div className="rounded-lg border border-dashed bg-muted/20 p-4">
+                  <p className="text-sm font-medium">
+                    No consignment line added
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add at least one consignment line with loading and
+                    unloading points.
+                  </p>
+                </div>
+              )}
+              {fields.map((field, idx) => {
+                return (
+                  <InstantLRLineCard
+                    key={field.id}
+                    form={form}
+                    idx={idx}
+                    totalLines={fields.length}
+                    loadingOptions={loadingOptions}
+                    unloadingOptions={unloadingOptions}
+                    unitOptions={units.options}
+                    goodsSuggestions={goodsSuggestions}
+                    watchConsignor={activeConsignorId}
+                    watchConsignee={activeConsigneeId}
+                    onRemove={() => remove(idx)}
+                  />
+                );
+              })}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => append(EMPTY_LINE)}
+              >
+                <IconPlus size={14} className="mr-1" /> Add consignment line
+              </Button>
+            </div>
+          </FormSection>
           {/* Vehicle */}
           <FormSection
             icon={<IconTruck size={16} />}
@@ -1113,7 +1159,7 @@ export default function LRForm({ orderId, tripId }: Props) {
                         className="[&_input]:h-9 [&_input]:uppercase"
                       />
                       {typeof errors.marketVehicleNumber?.message ===
-                      "string" ? (
+                        "string" ? (
                         <p className="mt-1 text-xs text-red-600">
                           {errors.marketVehicleNumber.message}
                         </p>
@@ -1183,53 +1229,7 @@ export default function LRForm({ orderId, tripId }: Props) {
             )}
           </FormSection>
 
-          {/* Consignment lines (INSTANT only — FROM_ORDER reads from the order) */}
-          {source === "INSTANT" && (
-            <FormSection
-              icon={<IconPackage size={16} />}
-              title="Consignments / LR Lines"
-              columns={1}
-            >
-              <div className="space-y-3">
-                {fields.length === 0 && (
-                  <div className="rounded-lg border border-dashed bg-muted/20 p-4">
-                    <p className="text-sm font-medium">
-                      No consignment line added
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Add at least one consignment line with loading and
-                      unloading points.
-                    </p>
-                  </div>
-                )}
-                {fields.map((field, idx) => {
-                  return (
-                    <InstantLRLineCard
-                      key={field.id}
-                      form={form}
-                      idx={idx}
-                      totalLines={fields.length}
-                      loadingOptions={loadingOptions}
-                      unloadingOptions={unloadingOptions}
-                      unitOptions={units.options}
-                      goodsSuggestions={goodsSuggestions}
-                      watchConsignor={watchConsignor}
-                      watchConsignee={watchConsignee}
-                      onRemove={() => remove(idx)}
-                    />
-                  );
-                })}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => append(EMPTY_LINE)}
-                >
-                  <IconPlus size={14} className="mr-1" /> Add consignment line
-                </Button>
-              </div>
-            </FormSection>
-          )}
+
         </form>
 
         <div className="order-1 lg:order-2">

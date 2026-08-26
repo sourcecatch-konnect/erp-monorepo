@@ -117,3 +117,4 @@ export * from "./user/table-pref.schema.js";
 export * from "./billing/billing.schema.js";
 export * from "./receipt/receipt.schema.js";
 export * from "./master/one-lap-tracker.js";
+export * from "./ledger/ledger.schema.js";

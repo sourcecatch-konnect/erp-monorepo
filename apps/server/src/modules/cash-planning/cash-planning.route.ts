@@ -38,6 +38,7 @@ import {
   poolTotals,
   priorClosings,
 } from "./cash-planning.service.js";
+import { recordLedgerEntry } from "../ledger/ledger.service.js";
 
 const parseReceivableDate = (value?: string): Date | null =>
   value ? new Date(`${value}T00:00:00.000Z`) : null;
@@ -311,6 +312,22 @@ router.delete(
           data: { outstandingBalance: { increment: payment.amount } },
         });
       }
+      if (payment.status === "APPROVED") {
+        // Mirror-IN row before the hard delete — otherwise the ledger keeps
+        // a phantom OUT for a payment that no longer exists anywhere else.
+        await recordLedgerEntry(tx, {
+          direction: "IN",
+          amountPaise: payment.amount,
+          cashAccountId: payment.fromAccountId,
+          creditorId: payment.creditorId,
+          category: payment.category,
+          sourceType: "PAYMENT",
+          sourceId: payment.id,
+          occurredAt: new Date(),
+          description: `Reversal: payment to ${payment.payeeName} deleted`,
+          createdById: actorId(req),
+        });
+      }
       await tx.cashPayment.delete({ where: { id } });
     });
 
@@ -391,6 +408,34 @@ router.post(
           approvedAt: willApprove ? new Date() : null,
         },
       });
+
+      if (willApprove && !wasApproved) {
+        await recordLedgerEntry(tx, {
+          direction: "OUT",
+          amountPaise: payment.amount,
+          cashAccountId: payment.fromAccountId,
+          creditorId: payment.creditorId,
+          category: payment.category,
+          sourceType: "PAYMENT",
+          sourceId: payment.id,
+          occurredAt: new Date(),
+          description: `Payment to ${payment.payeeName}`,
+          createdById: actorId(req),
+        });
+      } else if (!willApprove && wasApproved) {
+        await recordLedgerEntry(tx, {
+          direction: "IN",
+          amountPaise: payment.amount,
+          cashAccountId: payment.fromAccountId,
+          creditorId: payment.creditorId,
+          category: payment.category,
+          sourceType: "PAYMENT",
+          sourceId: payment.id,
+          occurredAt: new Date(),
+          description: `Reversal: payment to ${payment.payeeName} unapproved`,
+          createdById: actorId(req),
+        });
+      }
 
       return payment.dayId;
     });
@@ -487,6 +532,18 @@ router.post(
             where: { id: p.id },
             data: { status: "APPROVED", approvedById, approvedAt },
           });
+          await recordLedgerEntry(tx, {
+            direction: "OUT",
+            amountPaise: p.amount,
+            cashAccountId: p.fromAccountId,
+            creditorId: p.creditorId,
+            category: p.category,
+            sourceType: "PAYMENT",
+            sourceId: p.id,
+            occurredAt: approvedAt,
+            description: `Payment to ${p.payeeName}`,
+            createdById: approvedById,
+          });
         }
       });
     }
@@ -560,14 +617,29 @@ router.post(
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
 
-    await db.cashAccountAdjustment.create({
-      data: {
-        dayId: id,
-        accountId,
-        amountPaise: BigInt(parsed.data.amountPaise),
-        reason: parsed.data.reason,
-        createdById: actorId(req),
-      },
+    const me = actorId(req);
+    // Wrapped in a transaction (this route previously did a bare create())
+    // so the ledger row can never exist without its adjustment, or vice versa.
+    await db.$transaction(async (tx) => {
+      const adjustment = await tx.cashAccountAdjustment.create({
+        data: {
+          dayId: id,
+          accountId,
+          amountPaise: BigInt(parsed.data.amountPaise),
+          reason: parsed.data.reason,
+          createdById: me,
+        },
+      });
+      await recordLedgerEntry(tx, {
+        direction: parsed.data.amountPaise > 0 ? "IN" : "OUT",
+        amountPaise: BigInt(Math.abs(parsed.data.amountPaise)),
+        cashAccountId: accountId,
+        sourceType: "ADJUSTMENT",
+        sourceId: adjustment.id,
+        occurredAt: new Date(),
+        description: parsed.data.reason,
+        createdById: me,
+      });
     });
 
     const fresh = await findDay(id);

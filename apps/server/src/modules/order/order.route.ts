@@ -58,28 +58,6 @@ const orderWhereByIdentifier = (identifier: string) => ({
 
 const orderLink = (orderNumber: string) =>
   `/orders/${encodeURIComponent(orderNumber)}`;
-const assertEveryBookedTruckHasLRLine = (data: {
-  orderType?: string;
-  truckQuantity?: number | null;
-  consignments?: { truckIndex?: number | null }[] | null;
-}) => {
-  if (data.orderType !== "Truck") return;
-
-  const truckQty = Number(data.truckQuantity) || 0;
-  const assignedTrucks = new Set(
-    (data.consignments ?? []).map((line) => Number(line.truckIndex)),
-  );
-  const missingTrucks = Array.from(
-    { length: truckQty },
-    (_, index) => index + 1,
-  ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
-
-  if (missingTrucks.length > 0) {
-    throw new BadRequestError(
-      `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}.`,
-    );
-  }
-};
 /* ------------------------------------------------------------------ */
 /* List                                                               */
 /* ------------------------------------------------------------------ */
@@ -222,7 +200,6 @@ router.post("/", can(PERMS.ORDER.CREATE), async (req, res) => {
 
   const data = parsed.data;
 
-  assertEveryBookedTruckHasLRLine(data);
   assertBranchAccess(req, data.fromBranchId);
 
   const me = actorId(req);
@@ -398,9 +375,6 @@ router.patch("/:id", can(PERMS.ORDER.UPDATE), async (req, res) => {
   }
   const data = parsed.data;
   const me = actorId(req);
-if (existing.status !== "Confirmed") {
-  assertEveryBookedTruckHasLRLine(data);
-}
   const isResubmit = existing.status === "Rejected";
 
   const updated = await db.$transaction(async (tx) => {

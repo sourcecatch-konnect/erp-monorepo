@@ -202,30 +202,10 @@ const typeRefinement = (
         path: ["vehicleTypeId"],
       });
     }
-    if (!data.consignments || data.consignments.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Add at least one consignment line",
-        path: ["consignments"],
-      });
-    }
-    if (data.truckQuantity && data.consignments) {
-      const assignedTrucks = new Set(
-        data.consignments.map((line) => line.truckIndex),
-      );
-      const missingTrucks = Array.from(
-        { length: data.truckQuantity },
-        (_, index) => index + 1,
-      ).filter((truckIndex) => !assignedTrucks.has(truckIndex));
-
-      if (missingTrucks.length > 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Add at least one LR/consignment line for truck${missingTrucks.length === 1 ? "" : "s"} ${missingTrucks.join(", ")}`,
-          path: ["consignments"],
-        });
-      }
-    }
+    // Consignment lines (loading/unloading point, goods) are no longer
+    // collected at order-booking time — they're entered per truck, in the LR
+    // form, when that truck's LR actually gets created. `consignments` here
+    // stays fully optional; nothing requires a line to exist per truck.
     // A loading -> unloading pair must not repeat within the same truck: put
     // multiple goods on a single line instead of cloning the line. Different
     // trucks may share a lane (e.g. two trucks booked for A -> B), so the key
@@ -243,14 +223,6 @@ const typeRefinement = (
           path: ["consignments", index, "truckIndex"],
         });
       }
-      if (!c.loadingLocationId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Loading point is required",
-          path: ["consignments", index, "loadingLocationId"],
-        });
-      }
-
       if (!c.loadingLocationId || !c.unloadingLocationId) return;
       const key = `${c.truckIndex}|${c.loadingLocationId}|${c.unloadingLocationId}`;
       if (seen.has(key)) {

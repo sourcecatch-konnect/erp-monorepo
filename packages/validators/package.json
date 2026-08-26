@@ -105,6 +105,10 @@
     "./receipt": {
       "types": "./src/receipt/receipt.schema.ts",
       "import": "./dist/receipt/receipt.schema.js"
+    },
+    "./ledger": {
+      "types": "./src/ledger/ledger.schema.ts",
+      "import": "./dist/ledger/ledger.schema.js"
     }
   },
   "scripts": {
