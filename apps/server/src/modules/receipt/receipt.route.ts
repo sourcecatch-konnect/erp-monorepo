@@ -23,6 +23,7 @@ import {
   creditAccountForReceipt,
   reverseAccountAdjustmentsForReceipt,
 } from "../cash-planning/cash-planning.service.js";
+import { recordLedgerEntry } from "../ledger/ledger.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -412,6 +413,17 @@ router.post("/", can(PERMS.RECEIPT.CREATE), async (req, res) => {
         receiptId: receipt.id,
         createdById: me,
       });
+      await recordLedgerEntry(tx, {
+        direction: "IN",
+        amountPaise,
+        cashAccountId: input.receivedIntoAccountId,
+        customerId: input.customerId,
+        sourceType: "RECEIPT",
+        sourceId: receipt.id,
+        occurredAt: input.receivedAt,
+        description: `Receipt ${receiptNumber ?? receipt.id}`,
+        createdById: me,
+      });
     }
 
     return { id: receipt.id, status };
@@ -574,6 +586,17 @@ router.post("/:id/approve", can(PERMS.RECEIPT.APPROVE), async (req, res) => {
         receiptId: receipt.id,
         createdById: me,
       });
+      await recordLedgerEntry(tx, {
+        direction: "IN",
+        amountPaise: receipt.amountPaise,
+        cashAccountId: receipt.receivedIntoAccountId,
+        customerId: receipt.customerId,
+        sourceType: "RECEIPT",
+        sourceId: receipt.id,
+        occurredAt: receipt.receivedAt,
+        description: `Receipt ${receiptNumber}`,
+        createdById: me,
+      });
     }
   });
 
@@ -657,6 +680,21 @@ router.post("/:id/cancel", can(PERMS.RECEIPT.CANCEL), async (req, res) => {
         `Reversal: Receipt ${receipt.receiptNumber ?? receipt.id} cancelled`,
         me,
       );
+      if (receipt.receivedIntoAccountId) {
+        // Mirror-OUT ledger row — same sourceId as the original IN row
+        // written on post/approve, per design (reversal, not delete).
+        await recordLedgerEntry(tx, {
+          direction: "OUT",
+          amountPaise: receipt.amountPaise,
+          cashAccountId: receipt.receivedIntoAccountId,
+          customerId: receipt.customerId,
+          sourceType: "RECEIPT",
+          sourceId: receipt.id,
+          occurredAt: new Date(),
+          description: `Reversal: Receipt ${receipt.receiptNumber ?? receipt.id} cancelled`,
+          createdById: me,
+        });
+      }
     }
 
     await tx.receipt.update({
