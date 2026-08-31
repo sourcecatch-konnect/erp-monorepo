@@ -13,6 +13,8 @@ export type OutstandingBill = {
   id: string;
   billNumber: string | null;
   billDate: string;
+  branchId: string;
+  branchName: string;
   lrNumber: string | null;
   additionalLRCount: number;
   truckNumber: string | null;
@@ -22,7 +24,7 @@ export type OutstandingBill = {
 };
 
 export type OutstandingBillsFilters = {
-  branchId: string;
+  branchId?: string;
   customerId: string;
   truckNumber?: string;
   lrNumber?: string;

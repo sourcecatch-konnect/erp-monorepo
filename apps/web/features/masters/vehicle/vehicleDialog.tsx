@@ -20,7 +20,6 @@ import {
 
 import {
   IconTruck,
-  IconId,
   IconCalendar,
   IconGauge,
   IconShieldCheck,
@@ -98,18 +97,6 @@ const isLoading = vehicleDetail.isLoading;
                   label="Vehicle Number"
                   value={data?.vehicleNumber}
                   icon={<IconTruck size={12} />}
-                />
-
-                <Field
-                  label="Chasis Number"
-                  value={data?.chasisNumber}
-                  icon={<IconId size={12} />}
-                />
-
-                <Field
-                  label="Engine Number"
-                  value={data?.engineNumber}
-                  icon={<IconId size={12} />}
                 />
 
                 <Field

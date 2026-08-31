@@ -52,6 +52,11 @@ const PRIORITY = [
   { value: "Critical", label: "Critical" },
 ] as const;
 
+const PAYMENT_MODE = [
+  { value: "TO_BE_BILLED", label: "To be Billed" },
+  { value: "TO_PAY", label: "To Pay" },
+] as const;
+
 type DriverLookup = {
   name: string;
   mobile?: string | null;
@@ -80,6 +85,7 @@ function ReadOnlyAmount({ label, value }: { label: string; value: number }) {
 const editDefaults = (group: LRGroup): UpdateLRGroupBody => ({
   consigneeId: group.consigneeId,
   transportType: group.transportType,
+  paymentMode: group.paymentMode,
   railheadBranchId: group.railheadBranchId ?? undefined,
   sourceRailheadAreaId: group.sourceRailheadAreaId ?? undefined,
   destinationRailheadAreaId: group.destinationRailheadAreaId ?? undefined,
@@ -280,6 +286,38 @@ export default function EditGroupDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+              />
+              <Controller
+                name="paymentMode"
+                control={form.control}
+                render={({ field }) => (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                      Payment mode
+                    </label>
+                    <Select
+                      value={field.value ?? "TO_BE_BILLED"}
+                      onValueChange={field.onChange}
+                      disabled={group.status !== "DRAFT"}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_MODE.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {group.status !== "DRAFT" ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Locked — group is no longer a draft.
+                      </p>
+                    ) : null}
                   </div>
                 )}
               />

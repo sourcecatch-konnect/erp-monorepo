@@ -102,15 +102,37 @@ router.get("/:id/pdf", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
   });
   if (!lr) throw new NotFoundError("Lorry receipt not found");
 
-  const pdfBuffer = await generatePdfFromHtml(buildLrPdfHtml(lr));
+  const withLetterhead = req.query.letterhead !== "false";
+  const pdfBuffer = await generatePdfFromHtml(
+    buildLrPdfHtml(lr, { withLetterhead }),
+  );
 
+  const suffix = withLetterhead ? "" : "-plain";
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${lr.lrNumber.replaceAll("/", "-")}.pdf"`,
+    `attachment; filename="${lr.lrNumber.replaceAll("/", "-")}${suffix}.pdf"`,
   );
   return res.send(pdfBuffer);
 });
+
+router.get(
+  "/:id/print-preview",
+  can(PERMS.LORRY_RECEIPT.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const lr = await db.lorryReceipt.findFirst({
+      where: { id, deletedAt: null, ...lrBranchFilter(req) },
+      include: lrPdfInclude,
+    });
+    if (!lr) throw new NotFoundError("Lorry receipt not found");
+
+    const withLetterhead = req.query.letterhead !== "false";
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).send(buildLrPdfHtml(lr, { withLetterhead }));
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Update draft (per-LR: location / goods / invoice)                   */

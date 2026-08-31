@@ -4,11 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useForm, FormProvider, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 
 import { createOrderSchema } from "@skerp/validators";
+import { PERMS } from "@skerp/types";
 import type {
   CreateOrderFormInput,
   CreateOrderBody,
@@ -40,6 +41,8 @@ import FormSection from "../masters/_shared/fields/FormSection";
 import ComboboxField from "../masters/_shared/fields/ComboboxField";
 import TextAreaField from "../masters/_shared/fields/TextAreaField";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
+import RouteForm from "../masters/routes/routeForm";
+import { useCan } from "@/features/auth";
 
 import { orderApi, orderLookups, orderLookupKeys } from "./order.service";
 
@@ -131,6 +134,9 @@ const collectErrors = (node: unknown, path: string[] = []): FlatError[] => {
 
 export default function OrderForm({ mode, order }: Props) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const canCreateRoute = useCan(PERMS.MASTERS.ROUTE.CREATE);
+  const [routeFormOpen, setRouteFormOpen] = React.useState(false);
   const [discardOpen, setDiscardOpen] = React.useState(false);
   const [showContactFields, setShowContactFields] = useState(
     Boolean(
@@ -391,6 +397,12 @@ export default function OrderForm({ mode, order }: Props) {
               }))}
               emptyText="No routes found"
               disabled={softOnly}
+              actionLabel="+ Add route"
+              onAction={
+                !softOnly && canCreateRoute
+                  ? () => setRouteFormOpen(true)
+                  : undefined
+              }
             />
             {orderType === "Item" && (
               <>
@@ -690,6 +702,20 @@ export default function OrderForm({ mode, order }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RouteForm
+        open={routeFormOpen}
+        onOpenChange={setRouteFormOpen}
+        onSaved={async (route) => {
+          await queryClient.invalidateQueries({
+            queryKey: orderLookupKeys.routes,
+          });
+          form.setValue("routeId", route.id, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+        }}
+      />
     </FormProvider>
   );
 }

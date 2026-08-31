@@ -1,18 +1,32 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   IconArrowLeft,
   IconCalendarTime,
+  IconDownload,
   IconEdit,
+  IconEye,
+  IconLoader2,
   IconPackage,
+  IconPrinter,
   IconRoute,
   IconTrain,
 } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@skerp/ui/components/dropdown";
 import {
   Table,
   TableBody,
@@ -25,8 +39,10 @@ import {
 import { useCan } from "@/features/auth";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { formatPaise } from "@/lib/money";
+import { runPdfAction, type PdfAction } from "@/lib/pdf-actions";
 
 import { RailBranchGRNStatusBadge } from "./RailBranchGRNStatusBadge";
+import { railBranchGrnApi } from "./rail-branch-grn.service";
 import { useRailBranchGRNDetail } from "./useRailBranchGRN";
 
 const formatDateTime = (value?: string | null) =>
@@ -62,6 +78,28 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 export default function RailBranchGRNDetail({ id }: { id: string }) {
   const query = useRailBranchGRNDetail(id);
   const canUpdate = useCan(PERMS.RAIL_BRANCH_GRN.UPDATE);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const handlePdf = async (action: PdfAction, withLetterhead: boolean) => {
+    try {
+      setPdfBusy(true);
+      const blob = await railBranchGrnApi.downloadPdf(id, withLetterhead);
+      const suffix = withLetterhead ? "" : "-plain";
+      runPdfAction(blob, action, `branch-grn-${id.slice(-6)}${suffix}.pdf`);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const openPrintPreview = (withLetterhead: boolean) => {
+    window.open(
+      `/api/rail-branch-grns/${encodeURIComponent(id)}/print-preview?letterhead=${withLetterhead}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
 
   if (query.isLoading) {
     return (
@@ -115,14 +153,54 @@ export default function RailBranchGRNDetail({ id }: { id: string }) {
             {grn.railRake.fromBranch.name} → {grn.railRake.toBranch.name}
           </p>
         </div>
-        {canUpdate && ["DRAFT", "SUBMITTED"].includes(grn.status) ? (
-          <Button asChild variant="outline">
-            <Link href={`/vp-management/branch-grn/${grn.id}/edit`}>
-              <IconEdit size={16} className="mr-1.5" />
-              {grn.status === "SUBMITTED" ? "Correct GRN" : "Edit"}
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" disabled={pdfBusy}>
+                {pdfBusy ? (
+                  <IconLoader2 size={16} className="mr-1.5 animate-spin" />
+                ) : (
+                  <IconDownload size={16} className="mr-1.5" />
+                )}
+                {pdfBusy ? "Preparing…" : "Print / PDF"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Download</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handlePdf("download", true)}>
+                <IconDownload size={16} className="mr-2" /> With letterhead
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handlePdf("download", false)}>
+                <IconDownload size={16} className="mr-2" /> Without letterhead
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Print</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handlePdf("print", true)}>
+                <IconPrinter size={16} className="mr-2" /> With letterhead
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handlePdf("print", false)}>
+                <IconPrinter size={16} className="mr-2" /> Without letterhead
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Preview</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => openPrintPreview(true)}>
+                <IconEye size={16} className="mr-2" /> With letterhead
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openPrintPreview(false)}>
+                <IconEye size={16} className="mr-2" /> Without letterhead
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {canUpdate && ["DRAFT", "SUBMITTED"].includes(grn.status) ? (
+            <Button asChild variant="outline">
+              <Link href={`/vp-management/branch-grn/${grn.id}/edit`}>
+                <IconEdit size={16} className="mr-1.5" />
+                {grn.status === "SUBMITTED" ? "Correct GRN" : "Edit"}
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       <section className="rounded-lg border bg-card p-5">

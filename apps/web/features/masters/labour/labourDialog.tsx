@@ -14,21 +14,18 @@ import {
   SectionLabel,
   Field,
   formatDate,
-  formatCurrencyFromPaise,
   SkeletonBody,
 } from "../_shared/dialog-parts";
 
 import {
   IconBuilding,
   IconCalendar,
-  IconCash,
   IconCircleCheckFilled,
   IconClock,
   IconClockEdit,
   IconFileCertificate,
   IconHome,
   IconMapPin,
-  IconPercentage,
   IconPhone,
   IconTool,
   IconUser,
@@ -161,20 +158,6 @@ const isLoading = labourDetail.isLoading;
                     </div>
 
                     <div className="rounded-lg bg-white p-2">
-                      <p className="text-muted-foreground">TDS Amount</p>
-                      <p className="font-medium">
-                        {formatCurrencyFromPaise(data?.tdsAmount)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg bg-white p-2">
-                      <p className="text-muted-foreground">TDS Rate</p>
-                      <p className="font-medium">
-                        {data?.tdsRate != null ? `${data.tdsRate}%` : "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg bg-white p-2">
                       <p className="text-muted-foreground">Start Date</p>
                       <p className="font-medium">{formatDate(data?.startDate)}</p>
                     </div>
@@ -228,18 +211,6 @@ const isLoading = labourDetail.isLoading;
                   label="PAN"
                   value={display(data?.pan)}
                   icon={<IconFileCertificate size={12} />}
-                />
-
-                <Field
-                  label="TDS Amount"
-                  value={formatCurrencyFromPaise(data?.tdsAmount)}
-                  icon={<IconCash size={12} />}
-                />
-
-                <Field
-                  label="TDS Rate"
-                  value={data?.tdsRate != null ? `${data.tdsRate}%` : "-"}
-                  icon={<IconPercentage size={12} />}
                 />
               </div>
             </div>

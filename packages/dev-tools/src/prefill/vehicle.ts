@@ -1,4 +1,4 @@
-import { pick, randInt, randDigits, randAlpha } from "../fake/random";
+import { pick, randInt, randDigits } from "../fake/random";
 
 export type VehiclePrefillOptions = {
   vehicleTypes: Array<{ id: string; name: string }>;
@@ -6,8 +6,6 @@ export type VehiclePrefillOptions = {
 
 export type VehicleFormPrefill = {
   vehicleNumber: string;
-  chasisNumber: string;
-  engineNumber: string;
   ownershipType: "Own_Vehicle" | "Market_Vehicle";
   vehicleTypeId: string;
   capacityMT: string;
@@ -48,14 +46,6 @@ function fakeVehicleNumber(): string {
   return `${stateCode}${rto}${series}${digits}`;
 }
 
-function fakeChasisNumber(): string {
-  return `${randAlpha(6)}${randDigits(11)}`;
-}
-
-function fakeEngineNumber(): string {
-  return `${randAlpha(4)}${randDigits(8)}`;
-}
-
 function randomPastDate(maxDaysAgo: number): Date {
   const offset = randInt(1, maxDaysAgo);
   return new Date(Date.now() - offset * 24 * 60 * 60 * 1000);
@@ -78,8 +68,6 @@ export function prefillVehicle(
 
   return {
     vehicleNumber: fakeVehicleNumber(),
-    chasisNumber: fakeChasisNumber(),
-    engineNumber: fakeEngineNumber(),
     ownershipType: pick(["Own_Vehicle", "Market_Vehicle"]),
     vehicleTypeId: vehicleType?.id ?? "",
     capacityMT: String(randInt(6, 40)),

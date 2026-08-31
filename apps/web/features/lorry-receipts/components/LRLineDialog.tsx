@@ -204,7 +204,7 @@ export default function LRLineDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[95vw] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[100vh] w-[95vw] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{mode === "add" ? "Add LR" : "Edit LR"}</DialogTitle>
           <DialogDescription>
@@ -271,9 +271,12 @@ export default function LRLineDialog({
                 be finalised until every LR has goods.
               </div>
             ) : (
-              <div className="max-h-[240px] space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-[200px] space-y-2 overflow-y-auto overscroll-contain pr-1">
                 {fields.map((field, index) => (
-                  <div key={field.id} className="rounded-md border bg-muted/20 p-3">
+                  <div
+                    key={field.id}
+                    className="relative rounded-md border bg-muted/20 p-3 focus-within:z-50"
+                  >
                     <div className="flex items-end gap-3">
                       <div className="min-w-0 flex-1">
                         <label className="mb-1 block text-xs font-medium text-muted-foreground">
@@ -288,9 +291,15 @@ export default function LRLineDialog({
                               onChange={field.onChange}
                               onBlur={field.onBlur}
                               suggestions={goodsSuggestions}
-                              placeholder={goodsMaster.isLoading ? "Loading goods..." : "Select or type goods"}
-                              invalid={Boolean(form.formState.errors.goods?.[index]?.name?.message)}
-                              className="[&_input]:h-9"
+                              placeholder={
+                                goodsMaster.isLoading
+                                  ? "Loading goods..."
+                                  : "Select or type goods"
+                              }
+                              invalid={Boolean(
+                                form.formState.errors.goods?.[index]?.name?.message,
+                              )}
+                              className="relative z-50 [&_input]:h-9"
                             />
                           )}
                         />

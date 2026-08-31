@@ -32,25 +32,18 @@ export const useDeliveryChallanRakes = (scheduleDate?: string) =>
     queryFn: () => deliveryChallanApi.rakes(scheduleDate),
   });
 
-export const useDeliveryChallanVps = (rakeId?: string) =>
+export const useDeliveryChallanPreview = (railRakeId?: string) =>
   useQuery({
-    queryKey: deliveryChallanKeys.vps(rakeId),
-    queryFn: () => deliveryChallanApi.vps(rakeId as string),
-    enabled: Boolean(rakeId),
+    queryKey: deliveryChallanKeys.preview(railRakeId),
+    queryFn: () => deliveryChallanApi.preview(railRakeId as string),
+    enabled: Boolean(railRakeId),
   });
 
-export const useDeliveryChallanPreview = (branchGrnId?: string) =>
+export const useDeliveryChallanSupervisors = (railRakeId?: string) =>
   useQuery({
-    queryKey: deliveryChallanKeys.preview(branchGrnId),
-    queryFn: () => deliveryChallanApi.preview(branchGrnId as string),
-    enabled: Boolean(branchGrnId),
-  });
-
-export const useDeliveryChallanSupervisors = (branchGrnId?: string) =>
-  useQuery({
-    queryKey: deliveryChallanKeys.supervisors(branchGrnId),
-    queryFn: () => deliveryChallanApi.supervisors(branchGrnId as string),
-    enabled: Boolean(branchGrnId),
+    queryKey: deliveryChallanKeys.supervisors(railRakeId),
+    queryFn: () => deliveryChallanApi.supervisors(railRakeId as string),
+    enabled: Boolean(railRakeId),
   });
 
 export const useDeliveryChallanTransports = (enabled: boolean) =>

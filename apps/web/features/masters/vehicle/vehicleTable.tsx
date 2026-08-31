@@ -7,7 +7,6 @@ import {
   IconTruck,
   IconGauge,
   IconCalendar,
-  IconEngine,
   IconShieldCheck,
 } from "@tabler/icons-react";
 
@@ -104,26 +103,6 @@ export const vehicleColumns: ColumnDef<Vehicle>[] = [
         <span>
           Length: {row.original.lengthFeet ?? "-"} ft
         </span>
-      </div>
-    ),
-  },
-
-  {
-    id: "engine",
-    header: "Engine Details",
-    cell: ({ row }) => (
-      <div className="flex items-start gap-2">
-        <IconEngine size={15} className="mt-1" />
-
-        <div className="flex flex-col text-xs">
-          <span>
-            Chasis: {row.original.chasisNumber ?? "-"}
-          </span>
-
-          <span>
-            Engine: {row.original.engineNumber ?? "-"}
-          </span>
-        </div>
       </div>
     ),
   },

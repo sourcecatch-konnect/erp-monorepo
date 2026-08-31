@@ -16,7 +16,7 @@ const paise = z.coerce.bigint().min(0n);
 const signedPaise = z.coerce.bigint();
 
 export const outstandingBillsQuerySchema = z.object({
-  branchId: id,
+  branchId: id.optional(),
   customerId: id,
   truckNumber: z.string().trim().optional(),
   lrNumber: z.string().trim().optional(),

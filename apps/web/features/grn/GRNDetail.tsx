@@ -10,9 +10,13 @@ import {
   IconCalendarTime,
   IconCircleCheck,
   IconClock,
+  IconDownload,
   IconEdit,
+  IconEye,
   IconFileText,
+  IconLoader2,
   IconPackage,
+  IconPrinter,
   IconReceipt,
   IconRoute,
   IconScale,
@@ -20,9 +24,18 @@ import {
   IconUser,
   IconUsers,
 } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@skerp/ui/components/dropdown";
 import {
   Table,
   TableBody,
@@ -33,6 +46,8 @@ import {
 } from "@skerp/ui/components/table";
 
 import { formatPaise } from "@/lib/money";
+import { runPdfAction, type PdfAction } from "@/lib/pdf-actions";
+import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { useGRNDetail } from "./useHook/useGRN";
 import { GRNStatusBadge, GRNVPLoadingStatusBadge } from "./components/grn-ui";
 import { grnApi } from "./grn.service";
@@ -259,6 +274,7 @@ export default function GRNDetailPage({ id }: GRNDetailPageProps) {
   const [photoPreviewUrls, setPhotoPreviewUrls] = React.useState<
     Record<string, string>
   >({});
+  const [pdfBusy, setPdfBusy] = React.useState(false);
 
   const grn = grnQuery.data;
   const lr = grn?.lorryReceipt;
@@ -391,6 +407,33 @@ export default function GRNDetailPage({ id }: GRNDetailPageProps) {
   }
 
   const isEditable = ["DRAFT", "SUBMITTED"].includes(grn.status);
+  const grnNumber = grn.grnNumber || grn.id;
+
+  const handlePdf = async (action: PdfAction, withLetterhead: boolean) => {
+    try {
+      setPdfBusy(true);
+      const blob = await grnApi.downloadPdf(grn.id, withLetterhead);
+      const suffix = withLetterhead ? "" : "-plain";
+      runPdfAction(
+        blob,
+        action,
+        `${grnNumber.replaceAll("/", "-")}${suffix}.pdf`,
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const openPrintPreview = (withLetterhead: boolean) => {
+    window.open(
+      `/api/grn/${encodeURIComponent(grn.id)}/print-preview?letterhead=${withLetterhead}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
   const trip = detailGroup?.primaryTrip ?? detailGroup?.secondaryTrip ?? null;
   const vehicleNumber = detailGroup?.isMarketVehicle
     ? detailGroup.marketVehicleNumber
@@ -426,17 +469,62 @@ export default function GRNDetailPage({ id }: GRNDetailPageProps) {
             Back to GRN
           </Button>
 
-          {isEditable ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => router.push(`/vp-management/grn/${grn.id}/edit`)}
-            >
-              <IconEdit size={14} className="mr-1.5" />
-              Edit GRN
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pdfBusy}
+                >
+                  {pdfBusy ? (
+                    <IconLoader2 size={14} className="mr-1.5 animate-spin" />
+                  ) : (
+                    <IconDownload size={14} className="mr-1.5" />
+                  )}
+                  {pdfBusy ? "Preparing…" : "Print / PDF"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Download</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => handlePdf("download", true)}>
+                  <IconDownload size={16} className="mr-2" /> With letterhead
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handlePdf("download", false)}>
+                  <IconDownload size={16} className="mr-2" /> Without letterhead
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Print</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => handlePdf("print", true)}>
+                  <IconPrinter size={16} className="mr-2" /> With letterhead
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handlePdf("print", false)}>
+                  <IconPrinter size={16} className="mr-2" /> Without letterhead
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Preview</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => openPrintPreview(true)}>
+                  <IconEye size={16} className="mr-2" /> With letterhead
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openPrintPreview(false)}>
+                  <IconEye size={16} className="mr-2" /> Without letterhead
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {isEditable ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/vp-management/grn/${grn.id}/edit`)}
+              >
+                <IconEdit size={14} className="mr-1.5" />
+                Edit GRN
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <div className="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:p-5">

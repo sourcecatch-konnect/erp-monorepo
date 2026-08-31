@@ -107,29 +107,29 @@ router.get("/", can(PERMS.VP_LOADING.VIEW), async (req, res) => {
 
   const searchFilter: Prisma.RailRakeWhereInput = query.search
     ? {
-        OR: [
-          {
-            rakeNumber: {
+      OR: [
+        {
+          rakeNumber: {
+            contains: query.search,
+            mode: "insensitive",
+          },
+        },
+        {
+          railwayRakeNumber: {
+            contains: query.search,
+            mode: "insensitive",
+          },
+        },
+        {
+          vpSchedule: {
+            scheduleNumber: {
               contains: query.search,
               mode: "insensitive",
             },
           },
-          {
-            railwayRakeNumber: {
-              contains: query.search,
-              mode: "insensitive",
-            },
-          },
-          {
-            vpSchedule: {
-              scheduleNumber: {
-                contains: query.search,
-                mode: "insensitive",
-              },
-            },
-          },
-        ],
-      }
+        },
+      ],
+    }
     : {};
 
   const where: Prisma.RailRakeWhereInput = {
@@ -175,17 +175,83 @@ router.get(
   async (req, res) => {
     const rakes = await db.railRake.findMany({
       where: {
-        status: { in: ["CREATED", "DISPATCHED", "UNLOADING"] },
+        status: {
+          in: ["CREATED", "DISPATCHED", "UNLOADING"],
+        },
+
         ...(req.ctx?.branchScope === "ALL"
           ? {}
-          : { toBranchId: { in: req.ctx?.branchIds ?? [] } }),
+          : {
+            toBranchId: {
+              in: req.ctx?.branchIds ?? [],
+            },
+          }),
       },
-      select: rakeListSelect,
-      orderBy: [{ expectedArrivalAt: "asc" }, { dispatchedAt: "asc" }],
+
+      select: {
+        ...rakeListSelect,
+        vpScheduleId: true,
+      },
+
+      orderBy: [
+        { expectedArrivalAt: "asc" },
+        { dispatchedAt: "asc" },
+      ],
+
       take: 500,
     });
 
-    return sendOk(res, rakes);
+    if (!rakes.length) {
+      return sendOk(res, []);
+    }
+
+    /*
+     * Find completed/verified VPs that still do not have
+     * any Branch GRN.
+     */
+    const pendingVpLoadings = await db.vPWagonLoading.findMany({
+      where: {
+        status: {
+          in: ["COMPLETED", "VERIFIED"],
+        },
+
+        branchGrn: {
+          is: null,
+        },
+
+        mrRrRow: {
+          mrRr: {
+            vpScheduleId: {
+              in: rakes.map((rake) => rake.vpScheduleId),
+            },
+          },
+        },
+      },
+
+      select: {
+        mrRrRow: {
+          select: {
+            mrRr: {
+              select: {
+                vpScheduleId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const scheduleIdsWithPendingVp = new Set(
+      pendingVpLoadings.map(
+        (loading) => loading.mrRrRow.mrRr.vpScheduleId,
+      ),
+    );
+
+    const rakesWithPendingGrn = rakes.filter((rake) =>
+      scheduleIdsWithPendingVp.has(rake.vpScheduleId),
+    );
+
+    return sendOk(res, rakesWithPendingGrn);
   },
 );
 

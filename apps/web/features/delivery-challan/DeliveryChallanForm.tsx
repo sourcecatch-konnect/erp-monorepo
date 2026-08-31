@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconArrowLeft,
@@ -19,6 +19,7 @@ import type {
   DeliveryChallanPreviewItem,
   UpdateDeliveryChallanBody,
 } from "@skerp/types";
+import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
@@ -45,6 +46,9 @@ import { Textarea } from "@skerp/ui/components/textarea";
 
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { driverApi } from "@/features/masters/driver/driver.service";
+import DriverForm from "@/features/masters/driver/driverForm";
+import VehicleForm from "@/features/masters/vehicle/vehicleForm";
+import { useCan } from "@/features/auth";
 
 import {
   type DeliveryChallanDetail,
@@ -57,16 +61,26 @@ import {
   useDeliveryChallanSupervisors,
   useDeliveryChallanTransports,
   useDeliveryChallanVehicles,
-  useDeliveryChallanVps,
   useUpdateDeliveryChallan,
 } from "./useDeliveryChallan";
+
+import { Popover, PopoverContent, PopoverTrigger } from "@skerp/ui/components/popver";
 
 type Props =
   | { mode: "create"; initialData?: never }
   | { mode: "edit"; initialData: DeliveryChallanDetail };
 
 type Quantities = Record<string, number>;
-
+type LrDispatchGroup = {
+  key: string;
+  lrNumber: string;
+  consigneeId: string;
+  consigneeName: string | null;
+  destinationAddress: string | null;
+  items: DeliveryChallanPreviewItem[];
+  vpLabels: string[];
+  goodsLabels: string[];
+};
 const nowLocal = () => {
   const date = new Date();
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -117,17 +131,110 @@ const Section = ({
     <div className="p-4">{children}</div>
   </section>
 );
+function VpListPopover({ labels }: { labels: string[] }) {
+  if (!labels.length) {
+    return <span>—</span>;
+  }
 
+  if (labels.length === 1) {
+    return <span className="whitespace-nowrap">{labels[0]}</span>;
+  }
+
+  const [firstLabel, ...remainingLabels] = labels;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm transition-colors hover:bg-muted"
+        >
+          <span className="whitespace-nowrap font-medium">
+            {firstLabel}
+          </span>
+
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            +{remainingLabels.length}
+          </span>
+        </button>
+      </PopoverTrigger>
+
+      <PopoverContent align="start" className="w-64 p-0">
+        <div className="border-b px-3 py-2">
+          <p className="text-sm font-semibold">Source VPs</p>
+
+          <p className="text-xs text-muted-foreground">
+            This goods quantity was received through {labels.length} wagons.
+          </p>
+        </div>
+
+        <div className="max-h-60 overflow-y-auto p-2">
+          <div className="space-y-1">
+            {labels.map((label, index) => (
+              <div
+                key={label}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+              >
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                  {index + 1}
+                </span>
+
+                <span className="font-medium">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+function AddressPopover({
+  consignee,
+  address,
+}: {
+  consignee: string | null;
+  address: string | null;
+}) {
+  return (
+    <div className="max-w-[240px]">
+      <p className="truncate font-medium" title={consignee ?? undefined}>
+        {consignee || "—"}
+      </p>
+
+      {address ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="mt-0.5 block max-w-full truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+            >
+              {address}
+            </button>
+          </PopoverTrigger>
+
+          <PopoverContent align="start" className="w-80">
+            <p className="text-sm font-semibold">
+              {consignee || "Delivery address"}
+            </p>
+
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
+              {address}
+            </p>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          No saved address
+        </p>
+      )}
+    </div>
+  );
+}
 export default function DeliveryChallanForm({ mode, initialData }: Props) {
   const router = useRouter();
   const isEdit = mode === "edit";
   const [scheduleDate, setScheduleDate] = React.useState("");
-  const [rakeId, setRakeId] = React.useState(
-    initialData?.branchGrn.railRake.id ?? "",
-  );
-  const [branchGrnId, setBranchGrnId] = React.useState(
-    initialData?.branchGrnId ?? "",
-  );
+  const [rakeId, setRakeId] = React.useState(initialData?.railRakeId ?? "");
   const [vehicleMode, setVehicleMode] = React.useState<DeliveryVehicleMode>(
     initialData?.vehicleMode ?? "MARKET",
   );
@@ -137,6 +244,8 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   const [vehicleId, setVehicleId] = React.useState(
     initialData?.vehicleId ?? "",
   );
+  const [selectedBranchGrnId, setSelectedBranchGrnId] =
+    React.useState("");
   const [vehicleNumber, setVehicleNumber] = React.useState(
     initialData?.vehicleNumberSnapshot ?? "",
   );
@@ -186,9 +295,8 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   );
 
   const rakesQuery = useDeliveryChallanRakes(scheduleDate || undefined);
-  const vpsQuery = useDeliveryChallanVps(rakeId);
-  const previewQuery = useDeliveryChallanPreview(branchGrnId);
-  const supervisorsQuery = useDeliveryChallanSupervisors(branchGrnId);
+  const previewQuery = useDeliveryChallanPreview(rakeId || undefined);
+  const supervisorsQuery = useDeliveryChallanSupervisors(rakeId || undefined);
   const transportsQuery = useDeliveryChallanTransports(
     vehicleMode === "MARKET",
   );
@@ -199,6 +307,11 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   });
   const createMutation = useCreateDeliveryChallan();
   const updateMutation = useUpdateDeliveryChallan();
+  const queryClient = useQueryClient();
+  const canCreateVehicle = useCan(PERMS.MASTERS.VEHICLE.CREATE);
+  const canCreateDriver = useCan(PERMS.MASTERS.DRIVER.CREATE);
+  const [vehicleFormOpen, setVehicleFormOpen] = React.useState(false);
+  const [driverFormOpen, setDriverFormOpen] = React.useState(false);
   const preview = previewQuery.data;
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const selectedRake = React.useMemo(
@@ -207,12 +320,11 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   );
   const railRoute = isEdit
     ? {
-        sourceBranch: initialData.branchGrn.railRake.fromBranch,
-        receivingBranch: initialData.branchGrn.railRake.toBranch,
-        sourceArea: initialData.branchGrn.railRake.vpSchedule.sourceArea,
-        destinationArea:
-          initialData.branchGrn.railRake.vpSchedule.destinationArea,
-      }
+      sourceBranch: initialData.railRake.fromBranch,
+      receivingBranch: initialData.railRake.toBranch,
+      sourceArea: initialData.railRake.vpSchedule.sourceArea,
+      destinationArea: initialData.railRake.vpSchedule.destinationArea,
+    }
     : selectedRake;
 
   const currentByItem = React.useMemo(
@@ -228,7 +340,63 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
 
   const maxFor = (item: DeliveryChallanPreviewItem) =>
     item.pendingQty + (currentByItem.get(item.branchGrnItemId) ?? 0);
+  const selectedFor = (item: DeliveryChallanPreviewItem) =>
+    quantities[item.branchGrnItemId] ?? 0;
 
+  const remainingFor = (item: DeliveryChallanPreviewItem) =>
+    Math.max(maxFor(item) - selectedFor(item), 0);
+
+  const pendingForWagon = (branchGrnId: string) =>
+    (preview?.items ?? [])
+      .filter((item) => item.branchGrnId === branchGrnId)
+      .reduce(
+        (total, item) => total + remainingFor(item),
+        0,
+      );
+  const lrGroups = React.useMemo(() => {
+    const groups = new Map<string, LrDispatchGroup>();
+
+    for (const item of preview?.items ?? []) {
+      const key = `${item.consigneeId}:${item.lrNumber}:${item.grnGoodsId}`;
+      const vpLabel = item.vpNo || item.rowLabel;
+      const goodsLabel = item.unit
+        ? `${item.goodsName} (${item.unit})`
+        : item.goodsName;
+
+      const existing = groups.get(key);
+
+      if (existing) {
+        const isNewGoods = !existing.items.some(
+          (source) => source.grnGoodsId === item.grnGoodsId,
+        );
+
+        existing.items.push(item);
+
+        if (vpLabel && !existing.vpLabels.includes(vpLabel)) {
+          existing.vpLabels.push(vpLabel);
+        }
+
+        if (isNewGoods && !existing.goodsLabels.includes(goodsLabel)) {
+          existing.goodsLabels.push(goodsLabel);
+        }
+
+        continue;
+      }
+
+      groups.set(key, {
+        key,
+        lrNumber: item.lrNumber,
+        consigneeId: item.consigneeId,
+        consigneeName: item.consigneeName,
+        destinationAddress: item.deliveryAddress,
+        items: [item],
+        vpLabels: vpLabel ? [vpLabel] : [],
+        goodsLabels: [goodsLabel],
+      });
+    }
+
+    return Array.from(groups.values());
+  }, [preview?.items]);
   const selectDestinationFrom = (
     item: DeliveryChallanPreviewItem,
     force = false,
@@ -244,38 +412,143 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
     setDeliveryAddress(item.deliveryAddress ?? "");
   };
 
-  const setItemQuantity = (
-    item: DeliveryChallanPreviewItem,
+  const setLrQuantity = (
+    group: LrDispatchGroup,
     rawValue: string,
   ) => {
-    const value = Math.max(
+    const availableQuantity = group.items.reduce(
+      (total, item) => total + maxFor(item),
       0,
-      Math.min(maxFor(item), Number.parseInt(rawValue || "0", 10) || 0),
     );
-    const hasAnotherSelectedItem = (preview?.items ?? []).some(
-      (candidate) =>
-        candidate.branchGrnItemId !== item.branchGrnItemId &&
-        (quantities[candidate.branchGrnItemId] ?? 0) > 0,
+
+    const requestedQuantity = Math.max(
+      0,
+      Math.min(
+        availableQuantity,
+        Number.parseInt(rawValue || "0", 10) || 0,
+      ),
     );
-    setQuantities((current) => ({
-      ...current,
-      [item.branchGrnItemId]: value,
-    }));
-    if (value > 0 && !hasAnotherSelectedItem) {
-      selectDestinationFrom(item, true);
-    } else if (value === 0 && !hasAnotherSelectedItem) {
+
+    const currentlySelectedConsignee = (preview?.items ?? []).find(
+      (item) => (quantities[item.branchGrnItemId] ?? 0) > 0,
+    )?.consigneeId;
+
+    if (
+      requestedQuantity > 0 &&
+      currentlySelectedConsignee &&
+      currentlySelectedConsignee !== group.consigneeId
+    ) {
+      toast.error(
+        "Create a separate Delivery Challan for a different consignee.",
+      );
+      return;
+    }
+
+    const groupItemIds = new Set(
+      group.items.map((item) => item.branchGrnItemId),
+    );
+
+    const hasSelectedOutsideGroup = (preview?.items ?? []).some(
+      (item) =>
+        !groupItemIds.has(item.branchGrnItemId) &&
+        (quantities[item.branchGrnItemId] ?? 0) > 0,
+    );
+
+    setQuantities((current) => {
+      const next = { ...current };
+      let remainingQuantity = requestedQuantity;
+
+      for (const item of group.items) {
+        const sourceAvailable = maxFor(item);
+        const allocatedQuantity = Math.min(
+          remainingQuantity,
+          sourceAvailable,
+        );
+
+        next[item.branchGrnItemId] = allocatedQuantity;
+        remainingQuantity -= allocatedQuantity;
+      }
+
+      return next;
+    });
+
+    if (
+      requestedQuantity > 0 &&
+      !currentlySelectedConsignee &&
+      group.items[0]
+    ) {
+      selectDestinationFrom(group.items[0], true);
+    }
+
+    if (requestedQuantity === 0 && !hasSelectedOutsideGroup) {
       setDestinationAreaId("");
       setDestinationLocationId("");
       setDeliveryAddress("");
     }
   };
-
   const selectedItems = (preview?.items ?? [])
     .map((item) => ({
       source: item,
       quantity: quantities[item.branchGrnItemId] ?? 0,
     }))
     .filter((item) => item.quantity > 0);
+  const availableLrGroups = lrGroups
+    .map((group) => {
+      const items = group.items.filter(
+        (item) => item.branchGrnId === selectedBranchGrnId,
+      );
+
+      const vpLabels = Array.from(
+        new Set(
+          items
+            .map((item) => item.vpNo || item.rowLabel)
+            .filter((label): label is string => Boolean(label)),
+        ),
+      );
+
+      return {
+        ...group,
+        items,
+        vpLabels,
+      };
+    })
+    .filter((group) => {
+      if (!group.items.length) return false;
+
+      const availableQuantity = group.items.reduce(
+        (total, item) => total + maxFor(item),
+        0,
+      );
+
+      return availableQuantity > 0;
+    });
+  const selectedLrGroups = lrGroups
+    .map((group) => {
+      const selectedSources = group.items.filter(
+        (item) => (quantities[item.branchGrnItemId] ?? 0) > 0,
+      );
+
+      const quantity = selectedSources.reduce(
+        (total, item) =>
+          total + (quantities[item.branchGrnItemId] ?? 0),
+        0,
+      );
+
+      const vpLabels = Array.from(
+        new Set(
+          selectedSources
+            .map((item) => item.vpNo || item.rowLabel)
+            .filter((label): label is string => Boolean(label)),
+        ),
+      );
+
+      return {
+        group,
+        quantity,
+        vpLabels,
+      };
+    })
+    .filter(({ quantity }) => quantity > 0);
   const selectedConsigneeIds = new Set(
     selectedItems.map(({ source }) => source.consigneeId),
   );
@@ -291,20 +564,20 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
       ),
     [transportId, transportsQuery.data],
   );
-  const vehicleSuggestions: SuggestOption[] = (vehiclesQuery.data ?? []).map(
-    (vehicle) => ({
-      value: vehicle.vehicleNumber,
-      hint: vehicle.vehicleTypeRef.name,
-      badge: vehicle.status === "ON_TRIP" ? "On trip" : "Registered",
-      badgeTone: vehicle.status === "ON_TRIP" ? "warning" : "muted",
-    }),
-  );
+  const vehicleSuggestions: SuggestOption[] = (
+    vehiclesQuery.data ?? []
+  ).map((vehicle) => ({
+    value: vehicle.vehicleNumber,
+    hint: vehicle.vehicleTypeRef.name,
+    badge: vehicle.status === "ON_TRIP" ? "Assigned" : "Available",
+    badgeTone: vehicle.status === "ON_TRIP" ? "warning" : "success",
+  }));
   const drivers = driversQuery.data?.data ?? [];
   const driverSuggestions: SuggestOption[] = drivers.map((driver) => ({
     value: driver.name,
-    hint: driver.mobile,
-    badge: "Registered",
-    badgeTone: "muted",
+    hint: driver.mobile ?? undefined,
+    badge: "Available",
+    badgeTone: "success",
   }));
 
   const freightValue = Math.max(Number(freightAmount) || 0, 0);
@@ -318,14 +591,14 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
     setDestinationAreaId(destination?.areaId ?? "");
     setDeliveryAddress(
       destination?.address ??
-        destination?.area?.formattedAddress ??
-        destination?.area?.name ??
-        "",
+      destination?.area?.formattedAddress ??
+      destination?.area?.name ??
+      "",
     );
   };
 
   const validate = () => {
-    if (!branchGrnId) return "Select a VP number";
+    if (!rakeId) return "Select a Rake ID";
     if (!selectedItems.length)
       return "Enter quantity for at least one goods line";
     if (selectedConsigneeIds.size > 1) {
@@ -389,16 +662,16 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
     try {
       const row = isEdit
         ? await updateMutation.mutateAsync({
-            id: initialData.id,
-            body: {
-              ...fields,
-              version: initialData.version,
-            } satisfies UpdateDeliveryChallanBody,
-          })
-        : await createMutation.mutateAsync({
+          id: initialData.id,
+          body: {
             ...fields,
-            branchGrnId,
-          } satisfies CreateDeliveryChallanBody);
+            version: initialData.version,
+          } satisfies UpdateDeliveryChallanBody,
+        })
+        : await createMutation.mutateAsync({
+          ...fields,
+          railRakeId: rakeId,
+        } satisfies CreateDeliveryChallanBody);
       toast.success(
         isEdit ? "Delivery Challan updated" : "Delivery Challan draft created",
       );
@@ -407,7 +680,48 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
       toast.error(getErrorMessage(mutationError));
     }
   };
+  React.useEffect(() => {
+    const wagons = preview?.vps ?? [];
 
+    if (!rakeId || !wagons.length) {
+      setSelectedBranchGrnId("");
+      return;
+    }
+
+    const selectedWagonStillExists = wagons.some(
+      (wagon) => wagon.branchGrnId === selectedBranchGrnId,
+    );
+
+    if (selectedWagonStillExists) return;
+
+    const initialItemIds = new Set(
+      (initialData?.items ?? []).map(
+        (item) => item.branchGrnItemId,
+      ),
+    );
+
+    const initialWagon = preview?.items.find((item) =>
+      initialItemIds.has(item.branchGrnItemId),
+    );
+
+    const firstWagon = wagons[0];
+
+    if (!firstWagon) {
+      setSelectedBranchGrnId("");
+      return;
+    }
+
+    setSelectedBranchGrnId(
+      initialWagon?.branchGrnId ??
+      wagons.find((wagon) => wagon.pendingQty > 0)?.branchGrnId ??
+      firstWagon.branchGrnId,
+    );
+  }, [
+    rakeId,
+    preview,
+    selectedBranchGrnId,
+    initialData?.items,
+  ]);
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-7xl space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -439,38 +753,19 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
 
       <Section
         icon={<IconRoute size={18} />}
-        title="Rake and VP"
-        description="Only VPs with a submitted Branch GRN and pending goods are available."
+        title="Rake"
+        description="Goods from any of the rake's wagons with a submitted Branch GRN and pending quantity are available below — pick as many as belong on this vehicle."
       >
         {isEdit ? (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel>Rake ID</FieldLabel>
-              <Input
-                value={initialData.branchGrn.railRake.rakeNumber}
-                disabled
-              />
+              <Input value={initialData.railRake.rakeNumber} disabled />
             </div>
-            <div>
-              <FieldLabel>Schedule</FieldLabel>
-              <Input
-                value={initialData.branchGrn.railRake.vpSchedule.scheduleNumber}
-                disabled
-              />
-            </div>
-            <div>
-              <FieldLabel>VP number</FieldLabel>
-              <Input
-                value={
-                  initialData.branchGrn.vpWagonLoading.mrRrRow.vpNo ||
-                  initialData.branchGrn.vpWagonLoading.mrRrRow.rowLabel
-                }
-                disabled
-              />
-            </div>
+
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel>Schedule date</FieldLabel>
               <Input
@@ -479,7 +774,11 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                 onChange={(event) => {
                   setScheduleDate(event.target.value);
                   setRakeId("");
-                  setBranchGrnId("");
+                  setSelectedBranchGrnId("");
+                  setQuantities({});
+                  setDeliveryAddress("");
+                  setDestinationAreaId("");
+                  setDestinationLocationId("");
                 }}
               />
             </div>
@@ -489,7 +788,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                 value={rakeId}
                 onValueChange={(value) => {
                   setRakeId(value);
-                  setBranchGrnId("");
+                  setSelectedBranchGrnId("");
                   setQuantities({});
                   setDeliveryAddress("");
                   setDestinationAreaId("");
@@ -512,37 +811,9 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <FieldLabel required>VP number</FieldLabel>
-              <Select
-                value={branchGrnId}
-                onValueChange={(value) => {
-                  setBranchGrnId(value);
-                  setQuantities({});
-                  setDeliveryAddress("");
-                  setDestinationAreaId("");
-                  setDestinationLocationId("");
-                }}
-                disabled={!rakeId}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      vpsQuery.isLoading ? "Loading..." : "Select VP"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {(vpsQuery.data ?? []).map((vp) => (
-                    <SelectItem key={vp.branchGrnId} value={vp.branchGrnId}>
-                      {vp.vpNo || vp.rowLabel} · pending {vp.pendingQty}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         )}
+
         {railRoute ? (
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4 text-sm">
             <div className="flex items-center gap-2 text-primary">
@@ -588,11 +859,11 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
       <Section
         icon={<IconPackage size={18} />}
         title="Goods to dispatch"
-        description="Enter only the quantity being sent on this challan."
+        description="LR quantities split across multiple wagons are combined automatically."
       >
-        {!branchGrnId ? (
+        {!rakeId ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            Select a Rake and VP to load received goods.
+            Select a Rake to view available LRs.
           </div>
         ) : previewQuery.isLoading ? (
           <Skeleton className="h-40 w-full" />
@@ -601,80 +872,280 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
             {getErrorMessage(previewQuery.error)}
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead>LR number</TableHead>
-                  <TableHead>Consignee</TableHead>
-                  <TableHead>Goods</TableHead>
-                  <TableHead className="text-right">Received</TableHead>
-                  <TableHead className="text-right">Damage</TableHead>
-                  <TableHead className="text-right">Pending</TableHead>
-                  <TableHead className="w-36">Dispatch qty</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(preview?.items ?? []).map((item) => (
-                  <TableRow key={item.branchGrnItemId}>
-                    <TableCell className="font-medium">
-                      {item.lrNumber}
-                    </TableCell>
-                    <TableCell>
-                      <div>{item.consigneeName || "—"}</div>
-                      <div className="max-w-xs truncate text-xs text-muted-foreground">
-                        {item.deliveryAddress || "No saved address"}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {item.goodsName}
-                      {item.unit ? (
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          ({item.unit})
-                        </span>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.receivedQty}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.damageQty}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {maxFor(item)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={maxFor(item)}
-                          value={quantities[item.branchGrnItemId] ?? 0}
-                          onChange={(event) =>
-                            setItemQuantity(item, event.target.value)
-                          }
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            setItemQuantity(item, String(maxFor(item)))
-                          }
+          <div className="space-y-5">
+            <div className="max-w-sm">
+              <FieldLabel required>Wagon / VP</FieldLabel>
+
+              <Select
+                value={selectedBranchGrnId}
+                onValueChange={setSelectedBranchGrnId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select wagon" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  {(preview?.vps ?? []).map((wagon) => {
+                    const livePendingQty = pendingForWagon(
+                      wagon.branchGrnId,
+                    );
+
+                    return (
+                      <SelectItem
+                        key={wagon.branchGrnId}
+                        value={wagon.branchGrnId}
+                      >
+                        {wagon.vpNo || wagon.rowLabel}
+                        {" · "}
+                        Pending {livePendingQty}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">
+                Available LRs
+              </h3>
+
+              <div className="overflow-hidden rounded-md border">
+                <Table className="w-full table-fixed">
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead className="w-[16%]">LR number</TableHead>
+                      <TableHead className="w-[12%]">Source VP</TableHead>
+                      <TableHead className="w-[23%]">Consignee</TableHead>
+                      <TableHead className="w-[17%]">Goods</TableHead>
+                      <TableHead className="w-[18%] text-center">
+                        Quantity
+                      </TableHead>
+                      <TableHead className="w-[14%]">
+                        Dispatch qty
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {availableLrGroups.length ? (
+                      availableLrGroups.map((group) => {
+                        const receivedQuantity = group.items.reduce(
+                          (total, item) => total + item.receivedQty,
+                          0,
+                        );
+
+                        const damageQuantity = group.items.reduce(
+                          (total, item) => total + item.damageQty,
+                          0,
+                        );
+
+                        const dispatchCapacity = group.items.reduce(
+                          (total, item) => total + maxFor(item),
+                          0,
+                        );
+
+                        const selectedQuantity = group.items.reduce(
+                          (total, item) => total + selectedFor(item),
+                          0,
+                        );
+
+                        const availableQuantity = Math.max(
+                          dispatchCapacity - selectedQuantity,
+                          0,
+                        );
+
+                        return (
+                          <TableRow key={group.key}>
+                            <TableCell className="px-2">
+                              <p className="break-all text-xs font-semibold leading-4">
+                                {group.lrNumber}
+                              </p>
+                            </TableCell>
+
+                            <TableCell>
+                              <VpListPopover labels={group.vpLabels} />
+                            </TableCell>
+                            <TableCell>
+                              <AddressPopover
+                                consignee={group.consigneeName}
+                                address={group.destinationAddress}
+                              />
+                            </TableCell>
+
+                            <TableCell className="px-2">
+                              <p
+                                className="line-clamp-2 break-words text-sm"
+                                title={group.goodsLabels.join(", ")}
+                              >
+                                {group.goodsLabels.join(", ")}
+                              </p>
+                            </TableCell>
+
+                            <TableCell className="px-2">
+                              <div className="grid grid-cols-3 gap-1 text-center">
+                                <div>
+                                  <p className="text-[10px] uppercase text-muted-foreground">
+                                    Received
+                                  </p>
+                                  <p className="text-sm font-medium">
+                                    {receivedQuantity}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] uppercase text-muted-foreground">
+                                    Damage
+                                  </p>
+                                  <p
+                                    className={
+                                      damageQuantity > 0
+                                        ? "text-sm font-medium text-destructive"
+                                        : "text-sm font-medium"
+                                    }
+                                  >
+                                    {damageQuantity}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] uppercase text-muted-foreground">
+                                    Available
+                                  </p>
+                                  <p className="text-sm font-semibold text-primary">
+                                    {availableQuantity}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="px-2">
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={availableQuantity}
+                                  value={selectedQuantity || ""}
+                                  placeholder="0"
+                                  className="h-8 w-20 shrink-0 text-right font-semibold"
+                                  onChange={(event) =>
+                                    setLrQuantity(group, event.target.value)
+                                  }
+                                />
+
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="shrink-0"
+                                  disabled={
+                                    availableQuantity === 0 ||
+                                    selectedQuantity === availableQuantity
+                                  }
+                                  onClick={() =>
+                                    setLrQuantity(group, String(availableQuantity))
+                                  }
+                                >
+                                  All
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={8}
+                          className="h-24 text-center text-muted-foreground"
                         >
-                          All
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          No pending LR goods are available.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">
+                Selected truck load
+              </h3>
+
+              {selectedLrGroups.length ? (
+                <div className="overflow-hidden rounded-md border">
+                  <Table className="w-full table-fixed">
+                    <TableHeader>
+                      <TableRow className="bg-muted/40">
+                        <TableHead className="w-[24%]">LR number</TableHead>
+                        <TableHead className="w-[28%]">Goods</TableHead>
+                        <TableHead className="w-[20%]">Source VP</TableHead>
+                        <TableHead className="w-[16%] text-right">
+                          Dispatch qty
+                        </TableHead>
+                        <TableHead className="w-[12%]" />
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {selectedLrGroups.map(({ group, quantity, vpLabels }) => (
+                        <TableRow key={group.key}>
+                          <TableCell className="px-2">
+                            <p className="break-all text-xs font-semibold leading-4">
+                              {group.lrNumber}
+                            </p>
+                          </TableCell>
+
+                          <TableCell className="px-2">
+                            <p
+                              className="line-clamp-2 break-words text-sm"
+                              title={group.goodsLabels.join(", ")}
+                            >
+                              {group.goodsLabels.join(", ")}
+                            </p>
+                          </TableCell>
+
+                          <TableCell className="px-2">
+                            <VpListPopover labels={vpLabels} />
+                          </TableCell>
+
+                          <TableCell className="px-2 text-right">
+                            <span className="inline-flex min-w-14 justify-center rounded-md bg-primary/10 px-2 py-1 text-sm font-semibold text-primary">
+                              {quantity}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="px-2 text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setLrQuantity(group, "0")}
+                            >
+                              Remove
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  Enter a full or partial LR goods quantity to add it to this truck.
+                </div>
+              )}
+            </div>
           </div>
         )}
+
         <div className="mt-3 text-right text-sm font-medium">
           Total dispatch quantity:{" "}
-          {selectedItems.reduce((total, item) => total + item.quantity, 0)}
+          {selectedItems.reduce(
+            (total, item) => total + item.quantity,
+            0,
+          )}
         </div>
       </Section>
 
@@ -807,7 +1278,18 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
               </div>
             ) : null}
             <div>
-              <FieldLabel required>Vehicle number</FieldLabel>
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel required>Vehicle number</FieldLabel>
+                {canCreateVehicle ? (
+                  <button
+                    type="button"
+                    onClick={() => setVehicleFormOpen(true)}
+                    className="mb-1.5 text-xs font-medium text-primary hover:underline"
+                  >
+                    + Add vehicle
+                  </button>
+                ) : null}
+              </div>
               {vehicleMode === "MARKET" ? (
                 <SuggestInput
                   value={vehicleNumber}
@@ -853,7 +1335,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                     {(vehiclesQuery.data ?? []).map((vehicle) => (
                       <SelectItem key={vehicle.id} value={vehicle.id}>
                         {vehicle.vehicleNumber} · {vehicle.vehicleTypeRef.name}
-                        {vehicle.status === "ON_TRIP" ? " · On trip" : ""}
+                        {vehicle.status === "ON_TRIP" ? " · Assigned" : " · Available"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -862,7 +1344,18 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
             </div>
 
             <div>
-              <FieldLabel>Driver name</FieldLabel>
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel>Driver name</FieldLabel>
+                {canCreateDriver ? (
+                  <button
+                    type="button"
+                    onClick={() => setDriverFormOpen(true)}
+                    className="mb-1.5 text-xs font-medium text-primary hover:underline"
+                  >
+                    + Add driver
+                  </button>
+                ) : null}
+              </div>
               <SuggestInput
                 value={driverName}
                 onChange={(value) => {
@@ -931,14 +1424,23 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
           </div>
           <div>
             <FieldLabel>Total weight</FieldLabel>
-            <Input
-              type="number"
-              placeholder="Enter Weight"
-              min={0}
-              step="0.001"
-              value={totalWeight}
-              onChange={(event) => setTotalWeight(event.target.value)}
-            />
+
+            <div className="relative">
+              <Input
+                type="number"
+                placeholder="Enter weight"
+                min={0}
+                step="0.001"
+                value={totalWeight}
+                className="pr-12"
+                onChange={(event) => setTotalWeight(event.target.value)}
+              />
+
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-muted-foreground">
+                MT
+              </span>
+            </div>
+
           </div>
           <div>
             <FieldLabel>Payment by</FieldLabel>
@@ -998,6 +1500,47 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
           </div>
         </div>
       </Section>
+
+      <VehicleForm
+        open={vehicleFormOpen}
+        onOpenChange={setVehicleFormOpen}
+        onSaved={async (vehicle) => {
+          await queryClient.invalidateQueries({
+            queryKey: ["delivery-challans", "options", "vehicles"],
+          });
+
+          const matchesMode =
+            (vehicleMode === "OWN" &&
+              vehicle.ownershipType === "Own_Vehicle") ||
+            (vehicleMode === "MARKET" &&
+              vehicle.ownershipType === "Market_Vehicle");
+
+          if (!matchesMode) return;
+
+          if (
+            vehicleMode === "MARKET" &&
+            vehicle.transportId &&
+            vehicle.transportId !== transportId
+          ) {
+            setTransportId(vehicle.transportId);
+          }
+
+          setVehicleId(vehicle.id);
+          setVehicleNumber(vehicle.vehicleNumber.toUpperCase());
+        }}
+      />
+
+      <DriverForm
+        open={driverFormOpen}
+        onOpenChange={setDriverFormOpen}
+        onSaved={async (driver) => {
+          await queryClient.invalidateQueries({
+            queryKey: ["delivery-challans", "options", "drivers"],
+          });
+          setDriverName(driver.name);
+          setDriverMobile(driver.mobile ?? "");
+        }}
+      />
     </form>
   );
 }

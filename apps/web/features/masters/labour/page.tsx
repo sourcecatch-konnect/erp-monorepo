@@ -38,8 +38,6 @@ type LabourCsvRow = Record<
   | "refContactNo"
   | "startDate"
   | "pan"
-  | "tdsAmount"
-  | "tdsRate"
   | "type"
   | "branchId",
   string

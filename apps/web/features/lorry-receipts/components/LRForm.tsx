@@ -83,6 +83,11 @@ const TRANSPORT_OPTIONS = [
   { value: "RoadAndRail", label: "Road & Rail" },
 ] as const;
 
+const PAYMENT_MODE_OPTIONS = [
+  { value: "TO_BE_BILLED", label: "To be Billed" },
+  { value: "TO_PAY", label: "To Pay" },
+] as const;
+
 const PRIORITY_OPTIONS = [
   { value: "Normal", label: "Normal" },
   { value: "Express", label: "Express" },
@@ -102,7 +107,7 @@ function ReadOnlyAmount({
     <div className="space-y-1.5">
       <FieldLabel>{label}</FieldLabel>
 
-      <div className="  px-3 py-2">
+      <div className="px-3 py-2">
         <div
           className={`text-sm ${strong
             ? "font-semibold text-foreground"
@@ -441,6 +446,7 @@ export default function LRForm({ orderId, tripId }: Props) {
           orderId,
           truckIndex: 1,
           transportType: "Road",
+          paymentMode: "TO_BE_BILLED",
           tripLegType: "DIRECT",
           priority: "Normal",
           isMarketVehicle: false,
@@ -448,6 +454,7 @@ export default function LRForm({ orderId, tripId }: Props) {
         }
         : {
           source: "INSTANT",
+          paymentMode: "TO_BE_BILLED",
           priority: "Normal",
           isMarketVehicle: false,
           primaryTripId: tripId,
@@ -602,9 +609,19 @@ export default function LRForm({ orderId, tripId }: Props) {
     marketVehicles.data ?? []
   ).map((vehicle) => ({
     value: vehicle.vehicleNumber,
-    hint: vehicle.vehicleTypeRef.name,
-    badge: "Registered",
-    badgeTone: "muted",
+
+    hint: vehicle.isAssigned
+      ? `${vehicle.vehicleTypeRef.name} · ${vehicle.activeGroupNumber ?? "Active LR group"
+      }`
+      : vehicle.vehicleTypeRef.name,
+
+    badge: vehicle.isAssigned
+      ? "Assigned"
+      : "Available",
+
+    badgeTone: vehicle.isAssigned
+      ? "warning"
+      : "success",
   }));
   const loadingOptions = (consignorLocations.data ?? []).map((l) => ({
     value: l.value,
@@ -870,6 +887,25 @@ export default function LRForm({ orderId, tripId }: Props) {
                   </div>
                 )}
               />
+              <Controller
+                name="paymentMode"
+                control={form.control}
+                render={({ field }) => (
+                  <div>
+                    <FieldLabel>Payment mode</FieldLabel>
+                    <Segmented
+                      value={(field.value as string) ?? "TO_BE_BILLED"}
+                      onChange={field.onChange}
+                      options={PAYMENT_MODE_OPTIONS}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {(field.value as string) === "TO_PAY"
+                        ? "To Pay — billed under the Road bill head, no GST."
+                        : "To be Billed — GST invoice under Road GTA / Road & Rail."}
+                    </p>
+                  </div>
+                )}
+              />
               {showRailhead && (
                 <>
                   <ComboboxField
@@ -938,6 +974,25 @@ export default function LRForm({ orderId, tripId }: Props) {
                 label="Destination branch"
                 required
                 options={branchOptions}
+              />
+              <Controller
+                name="paymentMode"
+                control={form.control}
+                render={({ field }) => (
+                  <div>
+                    <FieldLabel>Payment mode</FieldLabel>
+                    <Segmented
+                      value={(field.value as string) ?? "TO_BE_BILLED"}
+                      onChange={field.onChange}
+                      options={PAYMENT_MODE_OPTIONS}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {(field.value as string) === "TO_PAY"
+                        ? "To Pay — billed under the Road bill head, no GST."
+                        : "To be Billed — GST invoice under Road GTA / Road & Rail."}
+                    </p>
+                  </div>
+                )}
               />
             </FormSection>
           )}
