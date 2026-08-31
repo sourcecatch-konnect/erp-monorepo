@@ -2,7 +2,7 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import type { State } from "@skerp/types";
-import { IconMapPin, IconBuildingSkyscraper } from "@tabler/icons-react";
+import { IconMapPin } from "@tabler/icons-react";
 
 export const stateColumns: ColumnDef<State>[] = [
   {

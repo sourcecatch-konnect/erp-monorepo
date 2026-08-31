@@ -69,16 +69,7 @@ const money = (paise: bigint | number | null | undefined) =>
     maximumFractionDigits: 2,
   });
 
-const weightText = (
-  weight: Prisma.Decimal | number | null | undefined,
-  unit?: string | null,
-) => {
-  if (weight === null || weight === undefined) return "-";
-  const numeric = Number(weight);
-  if (Number.isNaN(numeric)) return "-";
-  const value = numeric.toLocaleString("en-IN", { maximumFractionDigits: 3 });
-  return unit ? `${value} ${esc(unit)}` : value;
-};
+
 const quantityOf = (lr: BillLR): number =>
   lr.goods.reduce((total, goods) => total + goods.quantity, 0);
 /* ------------------------------------------------------------------ */

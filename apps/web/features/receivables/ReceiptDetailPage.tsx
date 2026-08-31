@@ -30,14 +30,7 @@ import {
   CardTitle,
 } from "@skerp/ui/components/Card";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@skerp/ui/components/table";
+
 import { useCan } from "@/features/auth";
 import { receiptApi } from "./receipt.service";
 import {

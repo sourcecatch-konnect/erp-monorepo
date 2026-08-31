@@ -195,7 +195,10 @@ export function LRToBillWorkbench() {
         setInlineCharges({});
     }, [customerId]);
 
-    const availableLRs = eligible.data ?? [];
+    const availableLRs = React.useMemo(
+        () => eligible.data ?? [],
+        [eligible.data],
+    );
     const normalizedSearch = lrSearch.trim().toLowerCase();
 
     const visibleLRs = React.useMemo(() => {
@@ -256,11 +259,7 @@ export function LRToBillWorkbench() {
         });
     };
 
-    const toggleAll = (checked: boolean) => {
-        setSelectedLRIds(
-            checked ? new Set(availableLRs.map((lr) => lr.id)) : new Set(),
-        );
-    };
+
 
     const existingTotals = selectedLRs.reduce(
         (result, lr) => {
@@ -469,7 +468,7 @@ export function LRToBillWorkbench() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
     const [customerSearch, setCustomerSearch] = React.useState("");
-    const [customerLabel, setCustomerLabel] = React.useState("");
+    const [, setCustomerLabel] = React.useState("");
     const [stateSearch, setStateSearch] = React.useState("");
     const stateOptions = React.useMemo(
         () =>
@@ -1303,7 +1302,7 @@ export function LRToBillWorkbench() {
                                         </div>
                                     ) : taxTreatment === "NO_GST" ? (
                                         <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
-                                            No GST — this is a "to pay" (Road) bill.
+                                            No GST — this is a &quot;to pay&quot; (Road) bill.
                                         </div>
                                     ) : (
                                         <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">
