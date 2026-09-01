@@ -15,7 +15,12 @@ import {
     IconUsers,
 } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
-
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@skerp/ui/components/accordion";
 import { Button } from "@skerp/ui/components/button";
 import { Checkbox } from "@skerp/ui/components/checkbox";
 import { Input } from "@skerp/ui/components/input";
@@ -61,6 +66,28 @@ type InlineChargeDraft = {
     freightAdd: string;
     deduction: string;
 };
+type AdditionalChargeType =
+    | "UNLOADING"
+    | "TOLL"
+    | "MULTIPOINT"
+    | "DAMAGE_DEDUCTION"
+    | "OTHER";
+
+type AdditionalChargeDraft = {
+    id: string;
+    type: AdditionalChargeType;
+    effect: "ADDITION" | "DEDUCTION";
+    amount: string;
+    reason: string;
+};
+
+const additionalChargeTypes: AdditionalChargeType[] = [
+    "UNLOADING",
+    "TOLL",
+    "MULTIPOINT",
+    "DAMAGE_DEDUCTION",
+    "OTHER",
+];
 const emptyInlineCharge = (): InlineChargeDraft => ({
     detention: "",
     hamali: "",
@@ -126,6 +153,23 @@ export function LRToBillWorkbench() {
     const [inlineCharges, setInlineCharges] = React.useState<
         Record<string, InlineChargeDraft>
     >({});
+    const [additionalCharges, setAdditionalCharges] = React.useState<
+        Record<string, AdditionalChargeDraft[]>
+    >({});
+
+    const [additionalChargeLRId, setAdditionalChargeLRId] =
+        React.useState<string | null>(null);
+
+    const [additionalType, setAdditionalType] =
+        React.useState<AdditionalChargeType>("UNLOADING");
+
+    const [additionalEffect, setAdditionalEffect] =
+        React.useState<"ADDITION" | "DEDUCTION">("ADDITION");
+
+    const [additionalAmount, setAdditionalAmount] = React.useState("");
+    const [additionalReason, setAdditionalReason] = React.useState("");
+    const [expandedAdditionalLRId, setExpandedAdditionalLRId] =
+        React.useState<string | null>(null);
     // Operator-chosen GST Place of Supply. Defaults to the client's registered
     // state; only relevant for GST bill types (not ROAD).
     const [placeOfSupplyStateId, setPlaceOfSupplyStateId] = React.useState("");
@@ -243,7 +287,53 @@ export function LRToBillWorkbench() {
             },
         }));
     };
+    const closeAdditionalChargeDialog = () => {
+        setAdditionalChargeLRId(null);
+        setAdditionalType("UNLOADING");
+        setAdditionalEffect("ADDITION");
+        setAdditionalAmount("");
+        setAdditionalReason("");
+    };
 
+    const addAdditionalCharge = () => {
+        if (!additionalChargeLRId) return;
+
+        if (paiseFromInput(additionalAmount) <= 0n) {
+            toast.error("Enter a valid charge amount");
+            return;
+        }
+
+
+        const charge: AdditionalChargeDraft = {
+            id: crypto.randomUUID(),
+            type: additionalType,
+            effect: additionalEffect,
+            amount: additionalAmount,
+            reason: additionalReason.trim(),
+        };
+
+        setAdditionalCharges((current) => ({
+            ...current,
+            [additionalChargeLRId]: [
+                ...(current[additionalChargeLRId] ?? []),
+                charge,
+            ],
+        }));
+
+        setAdditionalType("UNLOADING");
+        setAdditionalEffect("ADDITION");
+        setAdditionalAmount("");
+        setAdditionalReason("");
+    };
+
+    const removeAdditionalCharge = (lrId: string, chargeId: string) => {
+        setAdditionalCharges((current) => ({
+            ...current,
+            [lrId]: (current[lrId] ?? []).filter(
+                (charge) => charge.id !== chargeId,
+            ),
+        }));
+    };
     const toggleTruckload = (lrId: string, checked: boolean) => {
         const lr = availableLRs.find((item) => item.id === lrId);
         if (!lr) return;
@@ -285,13 +375,35 @@ export function LRToBillWorkbench() {
         },
         { detention: 0n, hamali: 0n, freightAdd: 0n, deductions: 0n },
     );
+    const additionalTotals = selectedLRs.reduce(
+        (result, lr) => {
+            for (const charge of additionalCharges[lr.id] ?? []) {
+                const amount = paiseFromInput(charge.amount);
 
+                if (charge.effect === "DEDUCTION") {
+                    result.deductions += amount;
+                } else {
+                    result.additions += amount;
+                }
+            }
+
+            return result;
+        },
+        {
+            additions: 0n,
+            deductions: 0n,
+        },
+    );
     const totalAdditions =
         existingTotals.additions +
         inlineTotals.detention +
         inlineTotals.hamali +
-        inlineTotals.freightAdd;
-    const totalDeductions = existingTotals.deductions + inlineTotals.deductions;
+        inlineTotals.freightAdd +
+        additionalTotals.additions;
+    const totalDeductions =
+        existingTotals.deductions +
+        inlineTotals.deductions +
+        additionalTotals.deductions;
     const taxableAmount =
         existingTotals.freight + totalAdditions > totalDeductions
             ? existingTotals.freight + totalAdditions - totalDeductions
@@ -397,7 +509,25 @@ export function LRToBillWorkbench() {
                         label: "Billing deduction",
                     },
                 ];
+            for (const lr of selectedLRs) {
+                for (const draft of additionalCharges[lr.id] ?? []) {
+                    const amountPaise = paiseFromInput(draft.amount);
 
+                    if (amountPaise <= 0n) continue;
+
+                    const charge = await billingApi.createManualCharge(lr.id, {
+                        type: draft.type,
+                        effect: draft.effect,
+                        amountPaise: String(amountPaise),
+                        reason: draft.reason,
+                        description: draft.reason,
+                        isTaxable: true,
+                    });
+
+                    await billingApi.approveCharge(charge.id);
+                    chargeIds.add(charge.id);
+                }
+            }
             for (const lr of selectedLRs) {
                 const row = inlineCharges[lr.id] ?? emptyInlineCharge();
                 for (const definition of adjustmentDefinitions) {
@@ -780,12 +910,7 @@ export function LRToBillWorkbench() {
                                         <strong>{client.name}</strong>
                                     </span>
 
-                                    <span>
-                                        <span className="text-muted-foreground">
-                                            Branch:
-                                        </span>{" "}
-                                        {branch?.name ?? "—"}
-                                    </span>
+
 
                                     <span>
                                         <span className="text-muted-foreground">
@@ -918,37 +1043,26 @@ export function LRToBillWorkbench() {
                                                             (item) =>
                                                                 item.groupId === lr.groupId,
                                                         ).length;
-
                                                     return (
                                                         <TableRow
                                                             key={lr.id}
-                                                            className={
-                                                                checked
-                                                                    ? "bg-primary/5"
-                                                                    : undefined
-                                                            }
+                                                            className={checked ? "bg-primary/5" : undefined}
                                                         >
                                                             <TableCell>
                                                                 <Checkbox
                                                                     checked={checked}
                                                                     onCheckedChange={(value) =>
-                                                                        toggleTruckload(
-                                                                            lr.id,
-                                                                            value === true,
-                                                                        )
+                                                                        toggleTruckload(lr.id, value === true)
                                                                     }
                                                                 />
                                                             </TableCell>
 
                                                             <TableCell>
-                                                                <p className="font-semibold">
-                                                                    {lr.lrNumber}
-                                                                </p>
+                                                                <p className="font-semibold">{lr.lrNumber}</p>
 
                                                                 {sameTruckCount > 1 ? (
                                                                     <span className="mt-1 inline-flex rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
-                                                                        {lr.groupNumber} ·{" "}
-                                                                        {sameTruckCount} LRs
+                                                                        {lr.groupNumber} · {sameTruckCount} LRs
                                                                     </span>
                                                                 ) : null}
                                                             </TableCell>
@@ -957,9 +1071,7 @@ export function LRToBillWorkbench() {
                                                                 {lr.origin} → {lr.destination}
                                                             </TableCell>
 
-                                                            <TableCell>
-                                                                {invoiceDate(lr.lrDate)}
-                                                            </TableCell>
+                                                            <TableCell>{invoiceDate(lr.lrDate)}</TableCell>
 
                                                             <TableCell>
                                                                 {invoiceDate(lr.podReceivedAt)}
@@ -970,9 +1082,7 @@ export function LRToBillWorkbench() {
                                                             </TableCell>
 
                                                             <TableCell className="text-right font-medium">
-                                                                {lr.isCompanionOnly
-                                                                    ? "Included"
-                                                                    : money(freight)}
+                                                                {lr.isCompanionOnly ? "Included" : money(freight)}
                                                             </TableCell>
                                                         </TableRow>
                                                     );
@@ -1140,13 +1250,25 @@ export function LRToBillWorkbench() {
                                                         },
                                                         0n,
                                                     );
+                                                const rowAdditionalCharges = additionalCharges[lr.id] ?? [];
 
+                                                const rowAdditionalTotal = rowAdditionalCharges.reduce(
+                                                    (total, charge) => {
+                                                        const amount = paiseFromInput(charge.amount);
+
+                                                        return charge.effect === "DEDUCTION"
+                                                            ? total - amount
+                                                            : total + amount;
+                                                    },
+                                                    0n,
+                                                );
                                                 const rowTotal =
                                                     freight +
                                                     existingOther +
                                                     paiseFromInput(row.detention) +
                                                     paiseFromInput(row.hamali) +
-                                                    paiseFromInput(row.freightAdd) -
+                                                    paiseFromInput(row.freightAdd) +
+                                                    rowAdditionalTotal -
                                                     paiseFromInput(row.deduction);
 
                                                 const amountInput = (
@@ -1170,65 +1292,298 @@ export function LRToBillWorkbench() {
                                                 );
 
                                                 return (
-                                                    <TableRow key={lr.id}>
-                                                        <TableCell>
-                                                            <p className="font-semibold">
-                                                                {lr.lrNumber}
-                                                            </p>
+                                                    <React.Fragment key={lr.id}>
+                                                        <TableRow >
+                                                            <TableCell>
+                                                                <p className="font-semibold">
+                                                                    {lr.lrNumber}
+                                                                </p>
 
-                                                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                                                {lr.origin} → {lr.destination}
-                                                            </p>
-                                                        </TableCell>
+                                                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                                                    {lr.origin} → {lr.destination}
+                                                                </p>
+                                                            </TableCell>
 
-                                                        <TableCell className="text-right font-medium">
-                                                            {lr.isCompanionOnly
-                                                                ? "Included"
-                                                                : money(freight)}
-                                                        </TableCell>
+                                                            <TableCell className="text-right font-medium">
+                                                                {lr.isCompanionOnly
+                                                                    ? "Included"
+                                                                    : money(freight)}
+                                                            </TableCell>
 
-                                                        <TableCell>
-                                                            {amountInput(
-                                                                "detention",
-                                                                "Detention",
-                                                            )}
-                                                        </TableCell>
+                                                            <TableCell>
+                                                                {amountInput(
+                                                                    "detention",
+                                                                    "Detention",
+                                                                )}
+                                                            </TableCell>
 
-                                                        <TableCell>
-                                                            {amountInput("hamali", "Hamali")}
-                                                        </TableCell>
+                                                            <TableCell>
+                                                                {amountInput("hamali", "Hamali")}
+                                                            </TableCell>
 
-                                                        <TableCell>
-                                                            {amountInput(
-                                                                "freightAdd",
-                                                                "Freight addition",
-                                                            )}
-                                                        </TableCell>
+                                                            <TableCell>
+                                                                {amountInput(
+                                                                    "freightAdd",
+                                                                    "Freight addition",
+                                                                )}
+                                                            </TableCell>
 
-                                                        <TableCell>
-                                                            {amountInput(
-                                                                "deduction",
-                                                                "Deduction",
-                                                            )}
-                                                        </TableCell>
+                                                            <TableCell>
+                                                                {amountInput(
+                                                                    "deduction",
+                                                                    "Deduction",
+                                                                )}
+                                                            </TableCell>
 
-                                                        <TableCell className="text-right font-semibold">
-                                                            {money(rowTotal)}
-                                                        </TableCell>
+                                                            <TableCell className="text-right font-semibold">
+                                                                {money(rowTotal)}
+                                                            </TableCell>
 
-                                                        <TableCell>
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() =>
-                                                                    toggleTruckload(lr.id, false)
-                                                                }
-                                                            >
-                                                                Remove
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
+                                                            <TableCell>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={() =>
+                                                                        toggleTruckload(lr.id, false)
+                                                                    }
+                                                                >
+                                                                    Remove
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                        <TableRow className="border-t-0 bg-muted/20 hover:bg-muted/20">
+                                                            <TableCell colSpan={8} className="p-0">
+                                                                <Accordion
+                                                                    type="single"
+                                                                    collapsible
+                                                                    value={
+                                                                        expandedAdditionalLRId === lr.id
+                                                                            ? lr.id
+                                                                            : ""
+                                                                    }
+                                                                    onValueChange={(value) => {
+                                                                        const nextLRId = value || null;
+
+                                                                        setExpandedAdditionalLRId(nextLRId);
+                                                                        setAdditionalChargeLRId(nextLRId);
+
+                                                                        if (!nextLRId) {
+                                                                            setAdditionalType("UNLOADING");
+                                                                            setAdditionalEffect("ADDITION");
+                                                                            setAdditionalAmount("");
+                                                                            setAdditionalReason("");
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <AccordionItem
+                                                                        value={lr.id}
+                                                                        className="border-0"
+                                                                    >
+                                                                        <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                                                                            <div className="flex flex-1 items-center justify-between pr-3">
+                                                                                <div className="text-left">
+                                                                                    <p className="text-xs font-medium">
+                                                                                        Additional charges
+                                                                                    </p>
+
+                                                                                    <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                                                                                        {rowAdditionalCharges.length
+                                                                                            ? `${rowAdditionalCharges.length} charge${rowAdditionalCharges.length === 1 ? "" : "s"
+                                                                                            } added`
+                                                                                            : "No additional charges"}
+                                                                                    </p>
+                                                                                </div>
+
+                                                                                {rowAdditionalCharges.length > 0 ? (
+                                                                                    <span className="text-xs font-semibold">
+                                                                                        {money(rowAdditionalTotal)}
+                                                                                    </span>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </AccordionTrigger>
+
+                                                                        <AccordionContent className="border-t bg-background px-4 py-4">
+                                                                            <div className="space-y-4">
+                                                                                {/* Existing temporary additional charges */}
+                                                                                {rowAdditionalCharges.length > 0 ? (
+                                                                                    <div className="space-y-2">
+                                                                                        <p className="text-xs font-medium text-muted-foreground">
+                                                                                            Added charges
+                                                                                        </p>
+
+                                                                                        <div className="flex flex-wrap gap-2">
+                                                                                            {rowAdditionalCharges.map((charge) => (
+                                                                                                <div
+                                                                                                    key={charge.id}
+                                                                                                    className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"
+                                                                                                >
+                                                                                                    <span className="font-medium">
+                                                                                                        {formatLabel(charge.type)}
+                                                                                                    </span>
+
+                                                                                                    <span
+                                                                                                        className={
+                                                                                                            charge.effect === "DEDUCTION"
+                                                                                                                ? "font-semibold text-rose-600"
+                                                                                                                : "font-semibold text-emerald-600"
+                                                                                                        }
+                                                                                                    >
+                                                                                                        {charge.effect === "DEDUCTION"
+                                                                                                            ? "−"
+                                                                                                            : "+"}{" "}
+                                                                                                        {money(
+                                                                                                            paiseFromInput(charge.amount),
+                                                                                                        )}
+                                                                                                    </span>
+
+                                                                                                    <button
+                                                                                                        type="button"
+                                                                                                        className="text-muted-foreground hover:text-destructive"
+                                                                                                        onClick={() =>
+                                                                                                            removeAdditionalCharge(
+                                                                                                                lr.id,
+                                                                                                                charge.id,
+                                                                                                            )
+                                                                                                        }
+                                                                                                    >
+                                                                                                        Remove
+                                                                                                    </button>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ) : null}
+
+                                                                                {canApproveCharge ? (
+                                                                                    <>
+                                                                                        <div className="grid gap-3 md:grid-cols-3">
+                                                                                            <Field label="Charge type">
+                                                                                                <Select
+                                                                                                    value={additionalType}
+                                                                                                    onValueChange={(value) => {
+                                                                                                        const type =
+                                                                                                            value as AdditionalChargeType;
+
+                                                                                                        setAdditionalType(type);
+
+                                                                                                        if (
+                                                                                                            type === "DAMAGE_DEDUCTION"
+                                                                                                        ) {
+                                                                                                            setAdditionalEffect(
+                                                                                                                "DEDUCTION",
+                                                                                                            );
+                                                                                                        }
+                                                                                                    }}
+                                                                                                >
+                                                                                                    <SelectTrigger className="w-full">
+                                                                                                        <SelectValue placeholder="Select charge" />
+                                                                                                    </SelectTrigger>
+
+                                                                                                    <SelectContent>
+                                                                                                        {additionalChargeTypes.map(
+                                                                                                            (type) => (
+                                                                                                                <SelectItem
+                                                                                                                    key={type}
+                                                                                                                    value={type}
+                                                                                                                >
+                                                                                                                    {formatLabel(type)}
+                                                                                                                </SelectItem>
+                                                                                                            ),
+                                                                                                        )}
+                                                                                                    </SelectContent>
+                                                                                                </Select>
+                                                                                            </Field>
+
+                                                                                            <Field label="Effect">
+                                                                                                <Select
+                                                                                                    value={additionalEffect}
+                                                                                                    onValueChange={(value) =>
+                                                                                                        setAdditionalEffect(
+                                                                                                            value as
+                                                                                                            | "ADDITION"
+                                                                                                            | "DEDUCTION",
+                                                                                                        )
+                                                                                                    }
+                                                                                                >
+                                                                                                    <SelectTrigger className="w-full">
+                                                                                                        <SelectValue />
+                                                                                                    </SelectTrigger>
+
+                                                                                                    <SelectContent>
+                                                                                                        <SelectItem value="ADDITION">
+                                                                                                            Addition
+                                                                                                        </SelectItem>
+
+                                                                                                        <SelectItem value="DEDUCTION">
+                                                                                                            Deduction
+                                                                                                        </SelectItem>
+                                                                                                    </SelectContent>
+                                                                                                </Select>
+                                                                                            </Field>
+
+                                                                                            <Field label="Amount (₹)">
+                                                                                                <Input
+                                                                                                    inputMode="decimal"
+                                                                                                    value={additionalAmount}
+                                                                                                    onChange={(event) => {
+                                                                                                        const value =
+                                                                                                            event.target.value;
+
+                                                                                                        if (
+                                                                                                            value &&
+                                                                                                            !/^\d*\.?\d{0,2}$/.test(
+                                                                                                                value,
+                                                                                                            )
+                                                                                                        ) {
+                                                                                                            return;
+                                                                                                        }
+
+                                                                                                        setAdditionalAmount(value);
+                                                                                                    }}
+                                                                                                    placeholder="0.00"
+                                                                                                />
+                                                                                            </Field>
+                                                                                        </div>
+
+                                                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                                                                                            <div className="flex-1">
+                                                                                                <Field label="Reason">
+                                                                                                    <Textarea
+                                                                                                        value={additionalReason}
+                                                                                                        onChange={(event) =>
+                                                                                                            setAdditionalReason(
+                                                                                                                event.target.value,
+                                                                                                            )
+                                                                                                        }
+                                                                                                        placeholder="Enter the reason for this charge"
+                                                                                                        rows={2}
+                                                                                                        className="resize-none"
+                                                                                                    />
+                                                                                                </Field>
+                                                                                            </div>
+
+                                                                                            <Button
+                                                                                                type="button"
+                                                                                                onClick={addAdditionalCharge}
+                                                                                                disabled={!additionalAmount.trim()}
+                                                                                            >
+                                                                                                Add charge
+                                                                                            </Button>
+                                                                                        </div>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <p className="text-xs text-destructive">
+                                                                                        You do not have permission to add or approve charges.
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                        </AccordionContent>
+                                                                    </AccordionItem>
+                                                                </Accordion>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    </React.Fragment>
                                                 );
                                             })}
                                         </TableBody>

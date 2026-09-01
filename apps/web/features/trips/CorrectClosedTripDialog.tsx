@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 import type {
   CorrectClosedTripBody,
   CorrectClosedTripFormInput,
@@ -59,6 +60,7 @@ export default function CorrectClosedTripDialog({
     form.reset({
       onwardFreight: paiseToRupees(Number(trip.onwardFreight)),
       closingKm: trip.closingKm ?? trip.openingKm,
+      startDateTime: dateInput(trip.startDateTime),
       endDateTime: dateInput(trip.endDateTime),
       arrivalDateTime: dateInput(trip.arrivalDateTime),
       unloadingCompletedAt: dateInput(trip.unloadingCompletedAt),
@@ -69,6 +71,16 @@ export default function CorrectClosedTripDialog({
   }, [form, open, trip]);
 
   const errors = form.formState.errors;
+
+  // Surface a message when submit is blocked by validation on a field the user
+  // can't see — otherwise the button just does nothing.
+  const onInvalid = (formErrors: typeof errors) => {
+    const first = Object.values(formErrors)[0];
+    toast.error(
+      (first?.message as string | undefined) ??
+        "Please fix the highlighted fields before saving.",
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,7 +95,7 @@ export default function CorrectClosedTripDialog({
 
         <form
           className="grid gap-4 md:grid-cols-2"
-          onSubmit={form.handleSubmit(onConfirm)}
+          onSubmit={form.handleSubmit(onConfirm, onInvalid)}
         >
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">
@@ -119,6 +131,30 @@ export default function CorrectClosedTripDialog({
               </p>
             ) : null}
           </div>
+
+          <Controller
+            control={form.control}
+            name="startDateTime"
+            render={({ field }) => (
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Trip start date/time <span className="text-red-600">*</span>
+                </label>
+                <DateTimePicker
+                  selected={toValidDate(field.value)}
+                  onSelect={(date) =>
+                    field.onChange(date ? toLocalDateTimeValue(date) : "")
+                  }
+                  placeholder="Select start date and time"
+                />
+                {errors.startDateTime?.message ? (
+                  <p className="text-xs text-red-600">
+                    {String(errors.startDateTime.message)}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          />
 
           <Controller
             control={form.control}

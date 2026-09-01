@@ -5,6 +5,7 @@ import {
   closeTripSchema,
   correctClosedTripSchema,
   correctInTransitTripSchema,
+  rescheduleTripSchema,
   cancelTripSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
@@ -227,10 +228,12 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
         }
       : {}),
     // Trips an LR can attach to (for the LR trip picker). One trip = one LR
-    // (full load), so only Planned trips with no live LR are attachable.
+    // group (full load), so any trip with no live LR group is attachable —
+    // Planned (attaching dispatches it) or InTransit (truck already left; it
+    // was created back-dated and now the LR is being entered against it).
     ...(query.filter.unattached === "true"
       ? {
-          status: "Planned",
+          status: { in: ["Planned", "InTransit"] as TripStatus[] },
           primaryGroups: {
             none: { deletedAt: null, status: { not: "CANCELLED" } },
           },
@@ -377,6 +380,29 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   );
   const legType = legTypeFor(data);
 
+  // Dispatch intent (see createTripSchema.tripDispatchRefinement):
+  //   bornInTransit -> the truck already left; `startDateTime` is the real,
+  //   possibly back-dated, dispatch moment and the trip skips Planned.
+  //   Otherwise the trip is Planned and `plannedStartDateTime` is just a schedule.
+  const bornInTransit = data.alreadyDispatched === true;
+  const actualStart = bornInTransit ? data.startDateTime : undefined;
+  if (bornInTransit && !actualStart) {
+    throw new BadRequestError(
+      "Actual dispatch date and time is required for an already-dispatched trip",
+    );
+  }
+  const plannedStart = bornInTransit
+    ? null
+    : (data.plannedStartDateTime ?? null);
+  // Milestones already reached when an already-running trip is entered late.
+  // Status stays InTransit — these only back-fill the timestamps.
+  const backfillArrival = bornInTransit ? (data.arrivalDateTime ?? null) : null;
+  const backfillUnloading = bornInTransit
+    ? (data.unloadingCompletedAt ?? null)
+    : null;
+  const initialStatus: TripStatus = bornInTransit ? "InTransit" : "Planned";
+  const initialCreatedAs = bornInTransit ? "BACKFILLED_IN_TRANSIT" : "PLANNED";
+
   const activeJourney = await db.vehicleJourney.findFirst({
     where: { vehicleId: data.vehicleId, deletedAt: null, status: "ACTIVE" },
     select: {
@@ -432,6 +458,19 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
       );
     }
 
+    // A back-dated dispatch can't precede the previous leg's close (mirrors the
+    // /dispatch endpoint's check).
+    if (
+      bornInTransit &&
+      actualStart &&
+      prevLeg?.endDateTime &&
+      actualStart <= prevLeg.endDateTime
+    ) {
+      throw new BadRequestError(
+        "Dispatch time must be after the previous leg's close time",
+      );
+    }
+
     const violations = prevLeg
       ? chainViolations(
           {
@@ -473,7 +512,12 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         data: {
           tripNumber,
           tripName,
-          status: "Planned",
+          status: initialStatus,
+          startDateTime: actualStart ?? null,
+          plannedStartDateTime: plannedStart,
+          arrivalDateTime: backfillArrival,
+          unloadingCompletedAt: backfillUnloading,
+          createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
           journeyId: activeJourney.id,
@@ -499,12 +543,20 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         where: { id: activeJourney.id },
         data: { updatedById: me, version: { increment: 1 } },
       });
+      if (bornInTransit) {
+        await tx.vehicle.update({
+          where: { id: data.vehicleId },
+          data: { status: "ON_TRIP" },
+        });
+      }
       await writeTripStatus(
         tx,
         created.id,
         me,
-        "Planned",
-        `Journey leg ${sequenceNo} created`,
+        initialStatus,
+        bornInTransit
+          ? `Journey leg ${sequenceNo} created — already in transit`
+          : `Journey leg ${sequenceNo} created`,
       );
       return created.id;
     }, TX_BUDGET);
@@ -609,7 +661,12 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         data: {
           tripNumber,
           tripName,
-          status: "Planned",
+          status: initialStatus,
+          startDateTime: actualStart ?? null,
+          plannedStartDateTime: plannedStart,
+          arrivalDateTime: backfillArrival,
+          unloadingCompletedAt: backfillUnloading,
+          createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
           journeyId: journey.id,
@@ -644,8 +701,10 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         tx,
         created.id,
         me,
-        "Planned",
-        `Journey ${journeyNumber} opened — leg 1 created`,
+        initialStatus,
+        bornInTransit
+          ? `Journey ${journeyNumber} opened — leg 1 created, already in transit`
+          : `Journey ${journeyNumber} opened — leg 1 created`,
       );
       return created.id;
     }, TX_BUDGET);
@@ -894,6 +953,55 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
     await writeTripStatus(tx, id, me, "InTransit", "Trip dispatched");
     return row;
   }, TX_BUDGET);
+
+  return sendOk(res, updated);
+});
+
+/* ------------------------------------------------------------------ */
+/* Reschedule expected dispatch time (Planned only)                   */
+/*                                                                    */
+/* Lightweight update of `plannedStartDateTime` only — a schedule/ETA */
+/* field, not the journey chain — so journey legs are allowed here.   */
+/* ------------------------------------------------------------------ */
+router.post("/:id/reschedule", can(PERMS.TRIP.UPDATE), async (req, res) => {
+  const id = getParamId(req);
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, status: true, version: true },
+  });
+  if (!existing) throw new NotFoundError("Trip not found");
+  if (existing.status !== "Planned") {
+    throw new BadRequestError("Only a Planned trip can be rescheduled");
+  }
+
+  const parsed = rescheduleTripSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+  if (
+    parsed.data.version !== undefined &&
+    parsed.data.version !== existing.version
+  ) {
+    throw new ConflictError(
+      "This trip changed in another tab — reload and retry",
+    );
+  }
+
+  const me = actorId(req);
+  const updated = await db.vehicleTrip.update({
+    where: { id },
+    data: {
+      plannedStartDateTime: parsed.data.plannedStartDateTime ?? null,
+      updatedById: me,
+      version: { increment: 1 },
+    },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      plannedStartDateTime: true,
+    },
+  });
 
   return sendOk(res, updated);
 });

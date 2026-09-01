@@ -330,12 +330,22 @@ export default function TripTable(props: Props) {
         ),
         cell: ({ row }) => {
           const iso = row.original.startDateTime ?? row.original.createdAt;
+          const planned =
+            row.original.status === "Planned"
+              ? row.original.plannedStartDateTime
+              : null;
           return (
             <div>
               <span className="block text-sm">{formatDate(iso)}</span>
-              <span className="block text-xs text-muted-foreground">
-                {timeAgo(iso)}
-              </span>
+              {planned ? (
+                <span className="block text-xs text-muted-foreground">
+                  Planned {formatDate(planned)}
+                </span>
+              ) : (
+                <span className="block text-xs text-muted-foreground">
+                  {timeAgo(iso)}
+                </span>
+              )}
             </div>
           );
         },
@@ -352,6 +362,11 @@ export default function TripTable(props: Props) {
             <div className="flex flex-col items-start gap-0.5">
               <TripStatusBadge status={t.status} />
               <TripCargoLine trip={t} />
+              {t.createdAs === "BACKFILLED_IN_TRANSIT" ? (
+                <span className="pl-0.5 text-xs text-muted-foreground">
+                  Back-filled
+                </span>
+              ) : null}
               {t.status === "Closed" && km !== null ? (
                 <span className="pl-0.5 text-xs text-muted-foreground tabular-nums">
                   {km.toLocaleString("en-IN")} km

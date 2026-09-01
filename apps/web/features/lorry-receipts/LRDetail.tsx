@@ -883,32 +883,70 @@ export default function LRDetail({ id }: { id: string }) {
               </div>
             </div>
           ) : (
-            <>
-              <Field
-                label="Vehicle"
-                value={
-                  <span className="font-mono text-base uppercase">
-                    {vehicle}
-                  </span>
-                }
-              />
-              <Field label="Transport type" value={g.transportType} />
-              <Field
-                label="Payment mode"
-                value={
-                  g.paymentMode === "TO_PAY" ? "To Pay (no GST)" : "To be Billed"
-                }
-              />
-              <Field label="Transport by" value="Own Vehicle" />
-              <Field label="Primary trip" value={g.primaryTrip?.tripName} />
-              <Field label="Driver" value={g.primaryTrip?.driver?.name} />
-              {g.secondaryTrip && (
-                <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />
-              )}
-            </>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="col-span-2">
+                  <Field
+                    label="Vehicle"
+                    value={
+                      <span className="font-mono text-base uppercase">
+                        {vehicle}
+                      </span>
+                    }
+                  />
+                </div>
+
+                <Field label="Transport type" value={g.transportType} />
+
+                <Field
+                  label="Payment mode"
+                  value={
+                    g.paymentMode === "TO_PAY"
+                      ? "To Pay (no GST)"
+                      : "To be Billed"
+                  }
+                />
+
+                <Field label="Transport by" value="Own Vehicle" />
+
+                <Field label="Driver" value={g.primaryTrip?.driver?.name} />
+              </div>
+
+              {g.primaryTrip ? (
+                <div className="min-w-0 border-t pt-3">
+                  <Field
+                    label="Primary trip"
+                    value={
+                      <span
+                        className="block max-w-full whitespace-normal break-words text-xs font-medium leading-4"
+                        title={g.primaryTrip.tripName}
+                      >
+                        {g.primaryTrip.tripName}
+                      </span>
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {g.secondaryTrip ? (
+                <div className="min-w-0 border-t pt-3">
+                  <Field
+                    label="Leg 2 trip"
+                    value={
+                      <span
+                        className="block max-w-full whitespace-normal break-words text-xs font-medium leading-4"
+                        title={g.secondaryTrip.tripName}
+                      >
+                        {g.secondaryTrip.tripName}
+                      </span>
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
           )}
           {g.transportType === "RoadAndRail" ? (
-            <div className="col-span-full grid grid-cols-1 gap-3 border-t pt-3">
+            <div className="grid grid-cols-1 gap-3 border-t pt-3">
               <Field
                 label="Source railway branch"
                 value={g.railheadBranch?.name}

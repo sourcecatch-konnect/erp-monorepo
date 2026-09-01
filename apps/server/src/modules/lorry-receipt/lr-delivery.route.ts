@@ -59,7 +59,7 @@ const lrForAction = async (id: string) => {
         select: {
           id: true,
           deliveredAt: true,
-          reportedAt: true,
+
           unloadingAt: true,
         },
       },
@@ -290,7 +290,7 @@ router.get(
       .map((d) =>
         d.lr.group.finalisedAt
           ? (d.deliveredAt.getTime() - d.lr.group.finalisedAt.getTime()) /
-            86_400_000
+          86_400_000
           : null,
       )
       .filter((v): v is number => v != null && v >= 0);
@@ -341,34 +341,34 @@ router.get(
         ...(scope.group ? { group: scope.group } : {}),
         ...(search
           ? {
-              OR: [
-                { lrNumber: { contains: search, mode: "insensitive" } },
-                {
-                  group: {
-                    consignor: {
-                      name: { contains: search, mode: "insensitive" },
-                    },
+            OR: [
+              { lrNumber: { contains: search, mode: "insensitive" } },
+              {
+                group: {
+                  consignor: {
+                    name: { contains: search, mode: "insensitive" },
                   },
                 },
-                {
-                  group: {
-                    consignee: {
-                      name: { contains: search, mode: "insensitive" },
-                    },
+              },
+              {
+                group: {
+                  consignee: {
+                    name: { contains: search, mode: "insensitive" },
                   },
                 },
-              ],
-            }
+              },
+            ],
+          }
           : {}),
         delivery: {
           is: {
             ...(from || to
               ? {
-                  deliveredAt: {
-                    ...(from ? { gte: from } : {}),
-                    ...(to ? { lte: to } : {}),
-                  },
-                }
+                deliveredAt: {
+                  ...(from ? { gte: from } : {}),
+                  ...(to ? { lte: to } : {}),
+                },
+              }
               : {}),
           },
         },
@@ -410,15 +410,15 @@ router.get(
 
     const challanItems = lrs.length
       ? await db.deliveryChallanItem.findMany({
-          where: {
-            lrNumberSnapshot: { in: lrs.map((lr) => lr.lrNumber) },
-            deliveryChallan: { status: { not: "CANCELLED" } },
-          },
-          select: {
-            lrNumberSnapshot: true,
-            deliveryChallan: { select: { challanNumber: true } },
-          },
-        })
+        where: {
+          lrNumberSnapshot: { in: lrs.map((lr) => lr.lrNumber) },
+          deliveryChallan: { status: { not: "CANCELLED" } },
+        },
+        select: {
+          lrNumberSnapshot: true,
+          deliveryChallan: { select: { challanNumber: true } },
+        },
+      })
       : [];
     const challansByLr = new Map<string, Set<string>>();
     for (const item of challanItems) {
@@ -605,10 +605,10 @@ router.get(
     const location = (value: typeof lr.loadingLocation) =>
       value
         ? {
-            name: value.name,
-            address: value.address,
-            cityName: value.city.name,
-          }
+          name: value.name,
+          address: value.address,
+          cityName: value.city.name,
+        }
         : null;
     const railhead = (value: typeof lr.group.sourceRailheadArea) =>
       value ? { name: value.name, cityName: value.city.name } : null;
@@ -650,10 +650,10 @@ router.get(
       },
       acknowledgement: lr.acknowledgement
         ? {
-            ...lr.acknowledgement,
-            recordedBy: personName(lr.acknowledgement.createdBy),
-            createdBy: undefined,
-          }
+          ...lr.acknowledgement,
+          recordedBy: personName(lr.acknowledgement.createdBy),
+          createdBy: undefined,
+        }
         : null,
       goods: lr.goods,
       deliveryChallans: [...challans.values()].map((row) => ({
@@ -712,7 +712,7 @@ router.post(
         data: {
           lrId: id,
           deliveredAt: input.deliveredAt,
-          reportedAt: input.reportedAt ?? null,
+
           unloadingAt: input.unloadingAt ?? null,
           receiverName: input.receiverName ?? null,
           receiverPhone: input.receiverPhone ?? null,
@@ -766,21 +766,11 @@ router.patch(
     }
     const input = parsed.data;
     const deliveredAt = input.deliveredAt ?? lr.delivery.deliveredAt;
-    const reportedAt = input.reportedAt ?? lr.delivery.reportedAt;
     const unloadingAt = input.unloadingAt ?? lr.delivery.unloadingAt;
-    if (reportedAt && reportedAt > deliveredAt) {
+
+    if (unloadingAt && unloadingAt < deliveredAt) {
       throw new BadRequestError(
-        "Reporting time cannot be after the delivery time",
-      );
-    }
-    if (unloadingAt && reportedAt && unloadingAt < reportedAt) {
-      throw new BadRequestError(
-        "Unloading completion cannot be before reporting time",
-      );
-    }
-    if (unloadingAt && unloadingAt > deliveredAt) {
-      throw new BadRequestError(
-        "Unloading completion cannot be after receiver handover",
+        "Unloading completion cannot be before delivery time",
       );
     }
     const me = actorId(req);
@@ -791,9 +781,7 @@ router.patch(
         ...(input.deliveredAt !== undefined
           ? { deliveredAt: input.deliveredAt }
           : {}),
-        ...(input.reportedAt !== undefined
-          ? { reportedAt: input.reportedAt ?? null }
-          : {}),
+
         ...(input.unloadingAt !== undefined
           ? { unloadingAt: input.unloadingAt ?? null }
           : {}),
@@ -907,12 +895,12 @@ router.post(
           createdById: me,
           items: (input.items ?? []).length
             ? {
-                create: (input.items ?? []).map((item) => ({
-                  lrGoodsId: item.lrGoodsId,
-                  receivedQty: item.receivedQty ?? null,
-                  damagedQty: item.damagedQty ?? null,
-                })),
-              }
+              create: (input.items ?? []).map((item) => ({
+                lrGoodsId: item.lrGoodsId,
+                receivedQty: item.receivedQty ?? null,
+                damagedQty: item.damagedQty ?? null,
+              })),
+            }
             : undefined,
         },
         select: { id: true },
@@ -1015,14 +1003,14 @@ router.patch(
             : {}),
           ...(input.items
             ? {
-                items: {
-                  create: input.items.map((item) => ({
-                    lrGoodsId: item.lrGoodsId,
-                    receivedQty: item.receivedQty ?? null,
-                    damagedQty: item.damagedQty ?? null,
-                  })),
-                },
-              }
+              items: {
+                create: input.items.map((item) => ({
+                  lrGoodsId: item.lrGoodsId,
+                  receivedQty: item.receivedQty ?? null,
+                  damagedQty: item.damagedQty ?? null,
+                })),
+              },
+            }
             : {}),
           updatedById: me,
           version: { increment: 1 },

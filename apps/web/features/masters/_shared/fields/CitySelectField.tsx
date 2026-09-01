@@ -144,7 +144,15 @@ export default function CitySelectField<T extends FieldValues>({
 
   const errorMessage = errors[name]?.message as string | undefined;
 
+  // Notify the parent only when the resolved city id actually changes. The
+  // `selectedCity` object is recomputed every render (it comes out of a memo
+  // that depends on the `initialCity` prop), so firing on its identity would
+  // loop any parent whose handler calls setState.
+  const lastEmittedCityIdRef = React.useRef<string | null>(null);
   React.useEffect(() => {
+    const nextId = selectedCity?.id ?? null;
+    if (nextId === lastEmittedCityIdRef.current) return;
+    lastEmittedCityIdRef.current = nextId;
     onCityChange?.(selectedCity);
   }, [selectedCity, onCityChange]);
 
@@ -188,6 +196,7 @@ export default function CitySelectField<T extends FieldValues>({
             },
           );
 
+          lastEmittedCityIdRef.current = city?.id ?? null;
           onCityChange?.(city);
         }}
         onScrollEnd={() => {

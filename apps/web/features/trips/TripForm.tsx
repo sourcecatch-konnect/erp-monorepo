@@ -17,6 +17,7 @@ import type {
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { DatePicker } from "@skerp/ui/components/datepicker";
+import { DateTimePicker } from "@skerp/ui/components/datetimepicker";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   Dialog,
@@ -59,6 +60,7 @@ import {
 import { tripKeys } from "./trip.keys";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { useCan } from "@/features/auth";
+import { toLocalDateTimeValue, toValidDate } from "@/lib/date";
 
 type Props = {
   mode: "create" | "edit";
@@ -130,10 +132,12 @@ export default function TripForm({
           tripType: "lr",
           isTripEmpty: false,
           consignorId: defaultConsignorId,
+          alreadyDispatched: false,
         },
   });
 
   const tripType = form.watch("tripType");
+  const alreadyDispatched = form.watch("alreadyDispatched");
   const vehicleId = form.watch("vehicleId");
   const routeId = form.watch("routeId");
   const openingKmRaw = form.watch("openingKm");
@@ -229,6 +233,21 @@ export default function TripForm({
       form.setValue("driverId", journey.driverId, { shouldValidate: true });
     }
   }, [journey?.driverId, form]);
+
+  // Keep only the relevant dispatch-time field populated so a stale value in
+  // the hidden one doesn't fail the schema's dispatch refinement.
+  useEffect(() => {
+    if (mode !== "create") return;
+    if (alreadyDispatched) {
+      form.setValue("plannedStartDateTime", undefined, { shouldValidate: false });
+    } else {
+      form.setValue("startDateTime", undefined, { shouldValidate: false });
+      form.setValue("arrivalDateTime", undefined, { shouldValidate: false });
+      form.setValue("unloadingCompletedAt", undefined, {
+        shouldValidate: false,
+      });
+    }
+  }, [alreadyDispatched, mode, form]);
 
   // Clear the below-current-KM error as soon as the value becomes valid
   // (typing a higher number, picking another vehicle, journey context loading).
@@ -341,6 +360,54 @@ export default function TripForm({
   }, [actionButtonsVisible]);
 
   const showStickyActions = actionButtonsHaveBeenSeen && !actionButtonsVisible;
+
+  const renderDateTimeField = (
+    name:
+      | "startDateTime"
+      | "plannedStartDateTime"
+      | "arrivalDateTime"
+      | "unloadingCompletedAt",
+    label: string,
+    opts?: {
+      required?: boolean;
+      noFuture?: boolean;
+      help?: string;
+      placeholder?: string;
+    },
+  ) => (
+    <Controller
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <div className="grid gap-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            {label}{" "}
+            {opts?.required ? (
+              <span className="text-red-600">*</span>
+            ) : (
+              <span className="text-muted-foreground">(optional)</span>
+            )}
+          </label>
+          <DateTimePicker
+            selected={toValidDate(field.value)}
+            onSelect={(date) =>
+              field.onChange(date ? toLocalDateTimeValue(date) : "")
+            }
+            disabled={opts?.noFuture ? { after: new Date() } : undefined}
+            placeholder={opts?.placeholder ?? "Select date and time"}
+          />
+          {opts?.help ? (
+            <p className="text-xs text-muted-foreground">{opts.help}</p>
+          ) : null}
+          {form.formState.errors[name]?.message ? (
+            <p className="text-xs text-red-600">
+              {String(form.formState.errors[name]?.message)}
+            </p>
+          ) : null}
+        </div>
+      )}
+    />
+  );
 
   const renderActionButtons = () => (
     <>
@@ -648,6 +715,58 @@ export default function TripForm({
                 label="This is an empty trip (no goods)"
               />
             </div>
+
+            {mode === "create" ? (
+              <div className="col-span-full grid gap-3 rounded-lg border p-3">
+                <CheckboxField<CreateTripFormInput>
+                  control={form.control}
+                  name="alreadyDispatched"
+                  label="Truck already dispatched (trip has already started)"
+                />
+
+                {alreadyDispatched ? (
+                  <>
+                    {renderDateTimeField(
+                      "startDateTime",
+                      "Actual dispatch date/time",
+                      {
+                        required: true,
+                        noFuture: true,
+                        placeholder: "When did the truck actually leave?",
+                        help: "The trip is created In Transit from this time. It can't be in the future.",
+                      },
+                    )}
+                    {renderDateTimeField(
+                      "arrivalDateTime",
+                      "Arrival at destination",
+                      {
+                        noFuture: true,
+                        placeholder: "If the truck has already arrived",
+                        help: "Leave blank if it hasn't arrived yet.",
+                      },
+                    )}
+                    {renderDateTimeField(
+                      "unloadingCompletedAt",
+                      "Unloading completed",
+                      {
+                        noFuture: true,
+                        placeholder: "If unloading is already done",
+                        help: "Leave blank if not unloaded yet. The trip stays In Transit until it is closed.",
+                      },
+                    )}
+                  </>
+                ) : (
+                  renderDateTimeField(
+                    "plannedStartDateTime",
+                    "Planned dispatch date/time",
+                    {
+                      placeholder: "Scheduled start (optional)",
+                      help: "Schedule only — the trip stays Planned until it is dispatched.",
+                    },
+                  )
+                )}
+              </div>
+            ) : null}
 
             {/* Chain continuity warnings + exception reason */}
             {mode === "create" && chainWarnings.length > 0 ? (

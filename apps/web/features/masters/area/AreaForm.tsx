@@ -189,7 +189,16 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
     resolver: zodResolver(createAreaSchema),
     defaultValues,
   });
-
+  const initialCity = React.useMemo<Pick<City, "id" | "name"> | null>(
+    () =>
+      row?.city
+        ? {
+          id: row.city.id,
+          name: row.city.name,
+        }
+        : null,
+    [row?.city?.id, row?.city?.name],
+  );
   const { create, update } = useMasterMutations({
     api: areaApi,
     queryKey: areaKeys.all,
@@ -258,19 +267,18 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
       longitude: row?.longitude ?? null,
     });
 
-    const initialCity = row?.city
-      ? {
-        id: row.city.id,
-        name: row.city.name,
-      }
-      : null;
-
     setSelectedCity(initialCity);
     selectedCityRef.current = initialCity;
     previousCityIdRef.current = row?.cityId ?? "";
+
     setGoogleLoadError(null);
     setLocationWarning(null);
-  }, [form, open, row]);
+  }, [
+    open,
+    row?.id,
+    initialCity,
+    form,
+  ]);
 
   const handleCityChange = React.useCallback(
     (city: Pick<City, "id" | "name"> | null) => {
@@ -527,14 +535,7 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
           name="cityId"
           label="City"
           required
-          initialCity={
-            row?.city
-              ? {
-                id: row.city.id,
-                name: row.city.name,
-              }
-              : null
-          }
+          initialCity={initialCity}
           onCityChange={handleCityChange}
         />
         <TextField<CreateAreaFormInput>

@@ -7,6 +7,7 @@ import type {
   CloseTripBody,
   CorrectClosedTripBody,
   CorrectInTransitTripBody,
+  RescheduleTripBody,
   CancelTripBody,
   ActiveJourneyInfo,
   DispatchJourneyLegBody,
@@ -109,6 +110,17 @@ export const tripApi = {
   ): Promise<TripStatusResult> => {
     const res = await api.post<ApiResponse<TripStatusResult>>(
       `/trips/${id}/correct-in-transit`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  reschedule: async (
+    id: string,
+    body: RescheduleTripBody,
+  ): Promise<TripStatusResult> => {
+    const res = await api.post<ApiResponse<TripStatusResult>>(
+      `/trips/${id}/reschedule`,
       body,
     );
     return unwrapApiResponse(res);

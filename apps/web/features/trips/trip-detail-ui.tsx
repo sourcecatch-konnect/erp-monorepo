@@ -130,10 +130,15 @@ const firstAt = (
  */
 export function TripLifecycleStepper({ trip }: { trip: Trip }) {
   const history = trip.TripStatusHistory ?? [];
+  // Prefer the operational timestamps the operator sets in the dispatch /
+  // close / correction forms (and the back-dated start on an already-running
+  // trip). The status-history `changedAt` — when the record flipped, which for
+  // a back-filled or corrected trip isn't the real event time — is the
+  // fallback only.
   const dates: Record<string, string | null> = {
     Planned: firstAt(history, "Planned") ?? trip.createdAt,
-    InTransit: firstAt(history, "InTransit") ?? trip.startDateTime,
-    Closed: firstAt(history, "Closed") ?? trip.endDateTime,
+    InTransit: trip.startDateTime ?? firstAt(history, "InTransit"),
+    Closed: trip.endDateTime ?? firstAt(history, "Closed"),
     Cancelled: firstAt(history, "Cancelled"),
   };
   const labels: Record<string, string> = {

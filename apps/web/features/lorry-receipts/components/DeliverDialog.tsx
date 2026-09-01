@@ -56,9 +56,6 @@ const buildDefaults = (initial?: LRDelivery | null): DeliverLRFormInput => ({
   deliveredAt: initial
     ? toLocalInputValue(new Date(initial.deliveredAt))
     : toLocalInputValue(new Date()),
-  reportedAt: initial?.reportedAt
-    ? toLocalInputValue(new Date(initial.reportedAt))
-    : "",
   unloadingAt: initial?.unloadingAt
     ? toLocalInputValue(new Date(initial.unloadingAt))
     : "",
@@ -123,7 +120,7 @@ export default function DeliverDialog({
             )}
             className="space-y-3"
           >
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <FieldLabel required>Delivered at</FieldLabel>
                 <Controller
@@ -144,25 +141,7 @@ export default function DeliverDialog({
                   </p>
                 ) : null}
               </div>
-              <div>
-                <FieldLabel>Truck reported at</FieldLabel>
-                <Controller
-                  name="reportedAt"
-                  control={form.control}
-                  render={({ field }) => (
-                    <DateTimePicker
-                      selected={toDate(field.value)}
-                      onSelect={field.onChange}
-                      placeholder="Select reporting date and time"
-                    />
-                  )}
-                />
-                {errors.reportedAt?.message ? (
-                  <p className="mt-1 text-xs text-red-600">
-                    {String(errors.reportedAt.message)}
-                  </p>
-                ) : null}
-              </div>
+
               <div>
                 <FieldLabel>Unloading completed at</FieldLabel>
                 <Controller
