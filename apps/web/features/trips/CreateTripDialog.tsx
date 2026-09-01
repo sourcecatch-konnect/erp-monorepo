@@ -1,6 +1,5 @@
 "use client";
 
-import type { Trip } from "@skerp/types";
 import {
   Dialog,
   DialogContent,
@@ -10,11 +9,12 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import TripForm from "./TripForm";
+import type { TripCreateResult } from "./trip.service";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (trip: Trip) => void;
+  onCreated: (trip: TripCreateResult) => void;
   /** Prefills the client field — e.g. the consignor of the LR this trip is for. */
   defaultConsignorId?: string;
 };

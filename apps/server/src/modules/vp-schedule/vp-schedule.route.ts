@@ -174,37 +174,6 @@ router.get("/", can(PERMS.VP_SCHEDULE.VIEW), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Status Counts                                                      */
-/* ------------------------------------------------------------------ */
-
-router.get("/status-counts", can(PERMS.VP_SCHEDULE.VIEW), async (req, res) => {
-  const base: Prisma.VPScheduleWhereInput = {
-    deletedAt: null,
-    ...branchFilter(req, "fromBranchId"),
-  };
-
-  const grouped = await db.vPSchedule.groupBy({
-    by: ["status"],
-    where: base,
-    _count: {
-      _all: true,
-    },
-  });
-
-  const counts: Record<string, number> = {};
-  let all = 0;
-
-  for (const item of grouped) {
-    counts[item.status] = item._count._all;
-    all += item._count._all;
-  }
-
-  counts.ALL = all;
-
-  return sendOk(res, counts);
-});
-
-/* ------------------------------------------------------------------ */
 /* Detail                                                             */
 /* ------------------------------------------------------------------ */
 

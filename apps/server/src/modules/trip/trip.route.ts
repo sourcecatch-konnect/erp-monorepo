@@ -4,6 +4,8 @@ import {
   updateTripSchema,
   closeTripSchema,
   correctClosedTripSchema,
+  correctInTransitTripSchema,
+  rescheduleTripSchema,
   cancelTripSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
@@ -226,10 +228,12 @@ router.get("/", can(PERMS.TRIP.VIEW), async (req, res) => {
         }
       : {}),
     // Trips an LR can attach to (for the LR trip picker). One trip = one LR
-    // (full load), so only Planned trips with no live LR are attachable.
+    // group (full load), so any trip with no live LR group is attachable —
+    // Planned (attaching dispatches it) or InTransit (truck already left; it
+    // was created back-dated and now the LR is being entered against it).
     ...(query.filter.unattached === "true"
       ? {
-          status: "Planned",
+          status: { in: ["Planned", "InTransit"] as TripStatus[] },
           primaryGroups: {
             none: { deletedAt: null, status: { not: "CANCELLED" } },
           },
@@ -376,6 +380,29 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   );
   const legType = legTypeFor(data);
 
+  // Dispatch intent (see createTripSchema.tripDispatchRefinement):
+  //   bornInTransit -> the truck already left; `startDateTime` is the real,
+  //   possibly back-dated, dispatch moment and the trip skips Planned.
+  //   Otherwise the trip is Planned and `plannedStartDateTime` is just a schedule.
+  const bornInTransit = data.alreadyDispatched === true;
+  const actualStart = bornInTransit ? data.startDateTime : undefined;
+  if (bornInTransit && !actualStart) {
+    throw new BadRequestError(
+      "Actual dispatch date and time is required for an already-dispatched trip",
+    );
+  }
+  const plannedStart = bornInTransit
+    ? null
+    : (data.plannedStartDateTime ?? null);
+  // Milestones already reached when an already-running trip is entered late.
+  // Status stays InTransit — these only back-fill the timestamps.
+  const backfillArrival = bornInTransit ? (data.arrivalDateTime ?? null) : null;
+  const backfillUnloading = bornInTransit
+    ? (data.unloadingCompletedAt ?? null)
+    : null;
+  const initialStatus: TripStatus = bornInTransit ? "InTransit" : "Planned";
+  const initialCreatedAs = bornInTransit ? "BACKFILLED_IN_TRANSIT" : "PLANNED";
+
   const activeJourney = await db.vehicleJourney.findFirst({
     where: { vehicleId: data.vehicleId, deletedAt: null, status: "ACTIVE" },
     select: {
@@ -431,6 +458,19 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
       );
     }
 
+    // A back-dated dispatch can't precede the previous leg's close (mirrors the
+    // /dispatch endpoint's check).
+    if (
+      bornInTransit &&
+      actualStart &&
+      prevLeg?.endDateTime &&
+      actualStart <= prevLeg.endDateTime
+    ) {
+      throw new BadRequestError(
+        "Dispatch time must be after the previous leg's close time",
+      );
+    }
+
     const violations = prevLeg
       ? chainViolations(
           {
@@ -472,7 +512,12 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         data: {
           tripNumber,
           tripName,
-          status: "Planned",
+          status: initialStatus,
+          startDateTime: actualStart ?? null,
+          plannedStartDateTime: plannedStart,
+          arrivalDateTime: backfillArrival,
+          unloadingCompletedAt: backfillUnloading,
+          createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
           journeyId: activeJourney.id,
@@ -498,12 +543,20 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         where: { id: activeJourney.id },
         data: { updatedById: me, version: { increment: 1 } },
       });
+      if (bornInTransit) {
+        await tx.vehicle.update({
+          where: { id: data.vehicleId },
+          data: { status: "ON_TRIP" },
+        });
+      }
       await writeTripStatus(
         tx,
         created.id,
         me,
-        "Planned",
-        `Journey leg ${sequenceNo} created`,
+        initialStatus,
+        bornInTransit
+          ? `Journey leg ${sequenceNo} created — already in transit`
+          : `Journey leg ${sequenceNo} created`,
       );
       return created.id;
     }, TX_BUDGET);
@@ -608,7 +661,12 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         data: {
           tripNumber,
           tripName,
-          status: "Planned",
+          status: initialStatus,
+          startDateTime: actualStart ?? null,
+          plannedStartDateTime: plannedStart,
+          arrivalDateTime: backfillArrival,
+          unloadingCompletedAt: backfillUnloading,
+          createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
           journeyId: journey.id,
@@ -643,17 +701,25 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         tx,
         created.id,
         me,
-        "Planned",
-        `Journey ${journeyNumber} opened — leg 1 created`,
+        initialStatus,
+        bornInTransit
+          ? `Journey ${journeyNumber} opened — leg 1 created, already in transit`
+          : `Journey ${journeyNumber} opened — leg 1 created`,
       );
       return created.id;
     }, TX_BUDGET);
   }
 
+  // Every caller only reads `.id` and `.tripNumber` from the created trip
+  // (see TripForm.tsx / CreateTripDialog.tsx) — no need for the full
+  // tripInclude tree here.
   const trip = await db.vehicleTrip.findUnique({
     where: { id: tripId },
-    include: tripInclude,
+    select: { id: true, tripNumber: true },
   });
+  if (!trip) {
+    throw new NotFoundError("Trip was created but could not be loaded");
+  }
   return sendOk(res, trip, undefined, 201);
 });
 
@@ -796,7 +862,7 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
         updatedById: me,
         version: { increment: 1 },
       },
-      select: { id: true },
+      select: { id: true, status: true, version: true },
     });
 
     // Editing leg 1 moves the journey's starting point with it.
@@ -820,11 +886,7 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
     return row;
   }, TX_BUDGET);
 
-  const trip = await db.vehicleTrip.findUnique({
-    where: { id: updated.id },
-    include: tripInclude,
-  });
-  return sendOk(res, trip);
+  return sendOk(res, updated);
 });
 
 /* ------------------------------------------------------------------ */
@@ -834,7 +896,13 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const id = getParamId(req);
   const existing = await db.vehicleTrip.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, status: true, startDateTime: true, vehicleId: true },
+    select: {
+      id: true,
+      status: true,
+      vehicleId: true,
+      journeyId: true,
+      sequenceNo: true,
+    },
   });
   if (!existing) throw new NotFoundError("Trip not found");
   if (existing.status !== "Planned") {
@@ -847,17 +915,36 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
   }
   const me = actorId(req);
 
+  // Operator-entered start time must not precede the previous leg's close.
+  const prevLeg =
+    existing.journeyId && existing.sequenceNo && existing.sequenceNo > 1
+      ? await db.vehicleTrip.findFirst({
+          where: {
+            journeyId: existing.journeyId,
+            deletedAt: null,
+            status: { not: "Cancelled" },
+            sequenceNo: { lt: existing.sequenceNo },
+          },
+          orderBy: { sequenceNo: "desc" },
+          select: { endDateTime: true },
+        })
+      : null;
+  if (prevLeg?.endDateTime && parsed.data.startDateTime <= prevLeg.endDateTime) {
+    throw new BadRequestError(
+      "Start time must be after the previous leg's close time",
+    );
+  }
+
   const updated = await db.$transaction(async (tx) => {
     const row = await tx.vehicleTrip.update({
       where: { id },
       data: {
         status: "InTransit",
-        startDateTime:
-          parsed.data.startDateTime ?? existing.startDateTime ?? new Date(),
+        startDateTime: parsed.data.startDateTime,
         updatedById: me,
         version: { increment: 1 },
       },
-      select: { id: true },
+      select: { id: true, status: true, version: true },
     });
     await tx.vehicle.update({
       where: { id: existing.vehicleId },
@@ -867,12 +954,144 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
     return row;
   }, TX_BUDGET);
 
-  const trip = await db.vehicleTrip.findUnique({
-    where: { id: updated.id },
-    include: tripInclude,
-  });
-  return sendOk(res, trip);
+  return sendOk(res, updated);
 });
+
+/* ------------------------------------------------------------------ */
+/* Reschedule expected dispatch time (Planned only)                   */
+/*                                                                    */
+/* Lightweight update of `plannedStartDateTime` only — a schedule/ETA */
+/* field, not the journey chain — so journey legs are allowed here.   */
+/* ------------------------------------------------------------------ */
+router.post("/:id/reschedule", can(PERMS.TRIP.UPDATE), async (req, res) => {
+  const id = getParamId(req);
+  const existing = await db.vehicleTrip.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, status: true, version: true },
+  });
+  if (!existing) throw new NotFoundError("Trip not found");
+  if (existing.status !== "Planned") {
+    throw new BadRequestError("Only a Planned trip can be rescheduled");
+  }
+
+  const parsed = rescheduleTripSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+  if (
+    parsed.data.version !== undefined &&
+    parsed.data.version !== existing.version
+  ) {
+    throw new ConflictError(
+      "This trip changed in another tab — reload and retry",
+    );
+  }
+
+  const me = actorId(req);
+  const updated = await db.vehicleTrip.update({
+    where: { id },
+    data: {
+      plannedStartDateTime: parsed.data.plannedStartDateTime ?? null,
+      updatedById: me,
+      version: { increment: 1 },
+    },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      plannedStartDateTime: true,
+    },
+  });
+
+  return sendOk(res, updated);
+});
+
+/* ------------------------------------------------------------------ */
+/* Correct start time (InTransit only, audited)                       */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/:id/correct-in-transit",
+  can(PERMS.TRIP.CORRECT_IN_TRANSIT),
+  async (req, res) => {
+    const id = getParamId(req);
+    const me = actorId(req);
+    const parsed = correctInTransitTripSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const data = parsed.data;
+
+    const existing = await db.vehicleTrip.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        startDateTime: true,
+        journeyId: true,
+        sequenceNo: true,
+        version: true,
+      },
+    });
+    if (!existing) throw new NotFoundError("Trip not found");
+    if (existing.status !== "InTransit") {
+      throw new BadRequestError("Only an InTransit trip can be corrected here");
+    }
+    if (data.version !== undefined && data.version !== existing.version) {
+      throw new ConflictError(
+        "This trip changed in another tab — reload and retry",
+      );
+    }
+
+    const prevLeg =
+      existing.journeyId && existing.sequenceNo && existing.sequenceNo > 1
+        ? await db.vehicleTrip.findFirst({
+            where: {
+              journeyId: existing.journeyId,
+              deletedAt: null,
+              status: { not: "Cancelled" },
+              sequenceNo: { lt: existing.sequenceNo },
+            },
+            orderBy: { sequenceNo: "desc" },
+            select: { tripNumber: true, endDateTime: true },
+          })
+        : null;
+    if (prevLeg?.endDateTime && data.startDateTime <= prevLeg.endDateTime) {
+      throw new BadRequestError(
+        `Start time must be after the previous leg's (${prevLeg.tripNumber}) close time`,
+      );
+    }
+
+    const updated = await db.$transaction(async (tx) => {
+      const row = await tx.vehicleTrip.update({
+        where: { id },
+        data: {
+          startDateTime: data.startDateTime,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        select: { id: true, status: true, version: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: me,
+          action: "trip.correct_in_transit",
+          entity: "VehicleTrip",
+          entityId: id,
+          before: { startDateTime: existing.startDateTime?.toISOString() ?? null },
+          after: {
+            startDateTime: data.startDateTime.toISOString(),
+            correctionReason: data.correctionReason,
+          },
+        },
+      });
+
+      return row;
+    }, TX_BUDGET);
+
+    return sendOk(res, updated);
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Close -> Closed                                                    */
@@ -991,9 +1210,13 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
     });
   }
 
+  // Neither branch above returns the row directly to this scope (the
+  // journey-leg path updates it through closeLegAndUpdateJourney), so one
+  // lightweight re-fetch is unavoidable here — but nothing downstream reads
+  // more than id/status/version, so skip the heavy tripInclude tree.
   const trip = await db.vehicleTrip.findUnique({
     where: { id },
-    include: tripInclude,
+    select: { id: true, status: true, version: true },
   });
   return sendOk(res, trip);
 });
@@ -1062,14 +1285,33 @@ router.post(
         `Closing KM (${data.closingKm}) cannot be less than opening KM (${existing.openingKm})`,
       );
     }
-    if (existing.startDateTime && data.endDateTime <= existing.startDateTime) {
+    if (data.endDateTime <= data.startDateTime) {
       throw new BadRequestError(
         "Trip closing time must be after its start time",
       );
     }
 
+    const prevLeg =
+      existing.journeyId && existing.sequenceNo && existing.sequenceNo > 1
+        ? await db.vehicleTrip.findFirst({
+            where: {
+              journeyId: existing.journeyId,
+              deletedAt: null,
+              status: { not: "Cancelled" },
+              sequenceNo: { lt: existing.sequenceNo },
+            },
+            orderBy: { sequenceNo: "desc" },
+            select: { tripNumber: true, endDateTime: true },
+          })
+        : null;
+    if (prevLeg?.endDateTime && data.startDateTime <= prevLeg.endDateTime) {
+      throw new BadRequestError(
+        `Start time must be after the previous leg's (${prevLeg.tripNumber}) close time`,
+      );
+    }
+
     const arrivalDateTime = data.arrivalDateTime ?? data.endDateTime;
-    if (existing.startDateTime && arrivalDateTime < existing.startDateTime) {
+    if (arrivalDateTime < data.startDateTime) {
       throw new BadRequestError("Arrival time cannot be before the trip start");
     }
     if (arrivalDateTime > data.endDateTime) {
@@ -1118,6 +1360,7 @@ router.post(
     const snapshot = (values: {
       onwardFreight: bigint | number;
       closingKm: number | null;
+      startDateTime: Date | null;
       endDateTime: Date | null;
       arrivalDateTime: Date | null;
       unloadingCompletedAt: Date | null;
@@ -1125,6 +1368,7 @@ router.post(
     }) => ({
       onwardFreight: Number(values.onwardFreight),
       closingKm: values.closingKm,
+      startDateTime: values.startDateTime?.toISOString() ?? null,
       endDateTime: values.endDateTime?.toISOString() ?? null,
       arrivalDateTime: values.arrivalDateTime?.toISOString() ?? null,
       unloadingCompletedAt: values.unloadingCompletedAt?.toISOString() ?? null,
@@ -1135,6 +1379,7 @@ router.post(
     const afterValues = {
       onwardFreight: data.onwardFreight,
       closingKm: data.closingKm,
+      startDateTime: data.startDateTime,
       endDateTime: data.endDateTime,
       arrivalDateTime,
       unloadingCompletedAt: data.unloadingCompletedAt ?? null,
@@ -1143,15 +1388,15 @@ router.post(
     const after = snapshot(afterValues);
     const isCurrentLeg = !nextLeg;
 
-    await db.$transaction(async (tx) => {
-      await tx.vehicleTrip.update({
+    const updated = await db.$transaction(async (tx) => {
+      const row = await tx.vehicleTrip.update({
         where: { id },
         data: {
           ...afterValues,
           updatedById: me,
           version: { increment: 1 },
         },
-        select: { id: true },
+        select: { id: true, status: true, version: true },
       });
 
       if (existing.journey && isCurrentLeg) {
@@ -1187,13 +1432,11 @@ router.post(
           },
         },
       });
+
+      return row;
     }, TX_BUDGET);
 
-    const trip = await db.vehicleTrip.findUnique({
-      where: { id },
-      include: tripInclude,
-    });
-    return sendOk(res, trip);
+    return sendOk(res, updated);
   },
 );
 
@@ -1233,11 +1476,11 @@ router.delete("/:id", can(PERMS.TRIP.DELETE), async (req, res) => {
 
     return tx.vehicleTrip.delete({
       where: { id },
-      include: tripInclude,
+      select: { id: true },
     });
   });
 
-  return sendOk(res, deleted);
+  return sendOk(res, { id: deleted.id, deleted: true });
 });
 
 /* ------------------------------------------------------------------ */
@@ -1285,8 +1528,8 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
       })
     : 0;
 
-  await db.$transaction(async (tx) => {
-    await tx.vehicleTrip.update({
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.vehicleTrip.update({
       where: { id },
       data: {
         status: "Cancelled",
@@ -1294,7 +1537,7 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
         updatedById: me,
         version: { increment: 1 },
       },
-      select: { id: true },
+      select: { id: true, status: true, version: true },
     });
 
     if (journey && journey.status === "ACTIVE") {
@@ -1331,13 +1574,10 @@ router.post("/:id/cancel", can(PERMS.TRIP.CANCEL), async (req, res) => {
     }
 
     await writeTripStatus(tx, id, me, "Cancelled", parsed.data.reason);
+    return row;
   }, TX_BUDGET);
 
-  const trip = await db.vehicleTrip.findUnique({
-    where: { id },
-    include: tripInclude,
-  });
-  return sendOk(res, trip);
+  return sendOk(res, updated);
 });
 
 export default router;

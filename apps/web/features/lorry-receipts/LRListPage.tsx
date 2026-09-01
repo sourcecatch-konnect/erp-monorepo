@@ -27,7 +27,7 @@ export default function LRListPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = React.useState(0);
-  const [size, setSize] = React.useState(25);
+  const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [sort, setSort] = React.useState("createdAt:desc");

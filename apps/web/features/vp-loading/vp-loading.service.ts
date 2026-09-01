@@ -680,49 +680,6 @@ export type VPWagonLoadingListRow = {
     } | null;
   };
 };
-export type VPLoadingListRow = {
-  id: string;
-  loadingNumber: string;
-  status: VPLoadingStatus;
-  loadedQty: number;
-  remarks?: string | null;
-  cancelReason?: string | null;
-  cancelledAt?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  version: number;
-  grn: VPLoadingAllocation["grn"];
-  schedule: {
-    id: string;
-    scheduleNumber: string;
-    scheduleDate: string;
-    scheduleName?: string | null;
-    status: VPScheduleLoadingStatus;
-    fromBranch: BranchOption;
-    toBranch: BranchOption;
-    sourceArea: AreaOption;
-    destinationArea: AreaOption;
-  };
-  mrRr: {
-    id: string;
-    mrRrNumber?: string | null;
-    status: string;
-  };
-  mrRrRow: {
-    id: string;
-    rowNumber: number;
-    rowLabel?: string | null;
-    vpNo?: string | null;
-    mrRrNo?: string | null;
-    wagon?: {
-      id: string;
-      name: string;
-      totalCft?: number | null;
-      capacityMt?: number | null;
-    } | null;
-  };
-  vpWagonLoading: VPWagonLoadingSummary;
-};
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -733,13 +690,6 @@ const encodeIdentifier = (value: string) => encodeURIComponent(value);
 /* API                                                                */
 /* ------------------------------------------------------------------ */
 export const vpLoadingApi = {
-  allocations: async (): Promise<VPLoadingListRow[]> => {
-    const response = await api.get<ApiResponse<VPLoadingListRow[]>>(
-      "/vp-loading/allocations",
-    );
-
-    return unwrapApiResponse(response);
-  },
   wagons: async (): Promise<VPWagonLoadingListRow[]> => {
     const response =
       await api.get<ApiResponse<VPWagonLoadingListRow[]>>("/vp-loading/wagons");

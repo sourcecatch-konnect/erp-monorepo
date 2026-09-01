@@ -6,8 +6,6 @@ export const vpScheduleKeys = {
   list: (query: ListQuery) =>
     ["vp-schedules", "list", query] as const,
 
-  statusCounts: ["vp-schedules", "status-counts"] as const,
-
   detail: (id: string) =>
     ["vp-schedules", "detail", id] as const,
 

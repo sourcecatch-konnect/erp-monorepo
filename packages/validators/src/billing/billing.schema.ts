@@ -7,7 +7,12 @@ export const billChargeMechanismSchema = z.enum([
   "FORWARD_CHARGE",
   "REVERSE_CHARGE",
 ]);
-
+const optionalReason = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((value) => value || undefined);
 const id = z.string().trim().min(1);
 const isoDate = z.coerce.date();
 
@@ -41,18 +46,18 @@ export const createManualLRChargeSchema = z.object({
   effect: z.enum(["ADDITION", "DEDUCTION"]).default("ADDITION"),
   amountPaise: z.coerce.bigint().positive(),
   description: z.string().trim().max(240).optional(),
-  reason: z.string().trim().min(3).max(500).optional(),
+  reason: optionalReason,
   isTaxable: z.boolean().default(true),
   sacCode: z.string().trim().max(12).optional(),
 });
 
 export const approveLRChargeSchema = z.object({
   approvedAmountPaise: z.coerce.bigint().positive().optional(),
-  reason: z.string().trim().max(500).optional(),
+  reason: optionalReason,
 });
 
 export const cancelLRChargeSchema = z.object({
-  reason: z.string().trim().min(3).max(500),
+  reason: optionalReason,
 });
 
 const billDraftFieldsSchema = z.object({
@@ -90,7 +95,7 @@ export const addBillChargesSchema = z.object({
 
 export const returnBillToDraftSchema = z.object({
   version: z.number().int().positive(),
-  reason: z.string().trim().min(3).max(500),
+  reason: optionalReason,
 });
 
 export const updateBillDraftSchema = billDraftFieldsSchema
@@ -99,11 +104,11 @@ export const updateBillDraftSchema = billDraftFieldsSchema
   .extend({ version: z.number().int().positive() });
 
 export const transitionBillSchema = z.object({
-  reason: z.string().trim().max(500).optional(),
+  reason: optionalReason,
 });
 
 export const cancelBillSchema = z.object({
-  reason: z.string().trim().min(3).max(500),
+  reason: optionalReason,
 });
 
 export const billingTaxRuleSchema = z.object({

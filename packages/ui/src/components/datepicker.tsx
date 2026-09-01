@@ -227,8 +227,11 @@ export function DatePicker({
         </PopoverTrigger>
 
         <PopoverContent
+          side={withTime ? "right" : "bottom"}
           align="start"
-          sideOffset={6}
+          sideOffset={withTime ? 8 : 6}
+          collisionPadding={12}
+          avoidCollisions
           className="w-[min(264px,calc(100vw-12px))] rounded-lg border bg-popover p-1.5 shadow-lg"
         >
           {withTime ? (
