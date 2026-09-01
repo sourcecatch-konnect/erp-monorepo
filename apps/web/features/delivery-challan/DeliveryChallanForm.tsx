@@ -948,8 +948,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                           (total, item) => total + selectedFor(item),
                           0,
                         );
-
-                        const availableQuantity = Math.max(
+                        const remainingQuantity = Math.max(
                           dispatchCapacity - selectedQuantity,
                           0,
                         );
@@ -1012,7 +1011,7 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                                     Available
                                   </p>
                                   <p className="text-sm font-semibold text-primary">
-                                    {availableQuantity}
+                                    {remainingQuantity}
                                   </p>
                                 </div>
                               </div>
@@ -1023,7 +1022,8 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                                 <Input
                                   type="number"
                                   min={0}
-                                  max={availableQuantity}
+                                  max={dispatchCapacity}
+                                  step={1}
                                   value={selectedQuantity || ""}
                                   placeholder="0"
                                   className="h-8 w-20 shrink-0 text-right font-semibold"
@@ -1038,11 +1038,11 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
                                   variant="outline"
                                   className="shrink-0"
                                   disabled={
-                                    availableQuantity === 0 ||
-                                    selectedQuantity === availableQuantity
+                                    dispatchCapacity === 0 ||
+                                    selectedQuantity === dispatchCapacity
                                   }
                                   onClick={() =>
-                                    setLrQuantity(group, String(availableQuantity))
+                                    setLrQuantity(group, String(dispatchCapacity))
                                   }
                                 >
                                   All
