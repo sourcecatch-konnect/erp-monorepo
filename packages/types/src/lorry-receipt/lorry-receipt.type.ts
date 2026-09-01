@@ -75,7 +75,6 @@ export type LRDelivery = {
   id: string;
   lrId: string;
   deliveredAt: string;
-  reportedAt: string | null;
   unloadingAt: string | null;
   receiverName: string | null;
   receiverPhone: string | null;
@@ -235,7 +234,8 @@ export type LRUnloadingReportRow = {
   originBranchName: string | null;
   destinationBranchName: string | null;
   challanNumbers: string[];
-  reportedAt: string | null;
+
+
   unloadingAt: string | null;
   deliveredAt: string;
   receiverName: string | null;
@@ -267,6 +267,7 @@ export type LRUnloadingReportDetail = LRUnloadingReportRow & {
   sourceRailhead: { name: string; cityName: string } | null;
   destinationRailhead: { name: string; cityName: string } | null;
   delivery: {
+    /** Truck arrival at the consignee — start of the detention window. */
     reportedAt: string | null;
     unloadingAt: string | null;
     deliveredAt: string;

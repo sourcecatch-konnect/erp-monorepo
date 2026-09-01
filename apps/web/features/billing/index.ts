@@ -1,7 +1,10 @@
+
+
+
 export {
   default as BillingPage,
-  BillDetailPage,
-  BillingRegisterPage,
-  BillingSettingsPage,
   LRToBillPage,
 } from "./BillingPage";
+export { BillingRegisterPage } from "./billingRegisterPage"
+export { BillDetailPage } from "./billingDetailPage"
+export { BillingSettingsPage } from "./billingSettingPage"

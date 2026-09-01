@@ -216,6 +216,7 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
   const canCreate = useCan(PERMS.RAIL_BRANCH_GRN.CREATE);
   const canUpdate = useCan(PERMS.RAIL_BRANCH_GRN.UPDATE);
   const canSubmit = useCan(PERMS.RAIL_BRANCH_GRN.SUBMIT);
+  const canDeletePhoto = useCan(PERMS.ATTACHMENTS.DELETE);
   const [form, setForm] = React.useState<FormState>(EMPTY_FORM);
   const damagePhotoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [damagePhotoFiles, setDamagePhotoFiles] = React.useState<File[]>([]);
@@ -223,6 +224,9 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
     detailQuery.data?.damagePhotos ?? [],
   );
   const [isUploadingPhotos, setIsUploadingPhotos] = React.useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = React.useState<string | null>(
+    null,
+  );
 
   const rakesForDate = React.useMemo(
     () =>
@@ -321,25 +325,15 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
   );
   const hasDamage = totals.damage > 0;
 
-  React.useEffect(() => {
-    if (!hasDamage) {
-      setDamagePhotoFiles([]);
-      setForm((current) =>
-        current.damagesBy === "NONE"
-          ? current
-          : { ...current, damagesBy: "NONE" },
-      );
-    }
-  }, [hasDamage]);
-
   const setItem = (
     key: string,
     field: "receivedQty" | "damageQty" | "remarks",
     value: string,
   ) => {
-    setForm((current) => ({
-      ...current,
-      items: current.items.map((item) => {
+    let damageCleared = false;
+
+    setForm((current) => {
+      const items = current.items.map((item) => {
         if (item.key !== key) return item;
 
         if (field === "remarks") {
@@ -381,8 +375,25 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
           // Damage cannot be more than received.
           damageQty: Math.min(enteredQty, quantityValue(item.receivedQty)),
         };
-      }),
-    }));
+      });
+
+      const stillHasDamage = items.some((item) => item.damageQty > 0);
+      damageCleared = !stillHasDamage && current.damagesBy !== "NONE";
+
+      return {
+        ...current,
+        items,
+        damagesBy: stillHasDamage ? current.damagesBy : "NONE",
+      };
+    });
+
+    // Only clear pending (not-yet-uploaded) photo picks in direct response to
+    // this edit — resetting on a derived "hasDamage" effect instead raced the
+    // detail-hydration effect on load and clobbered a just-loaded damagesBy
+    // value back to "NONE".
+    if (damageCleared) {
+      setDamagePhotoFiles([]);
+    }
   };
   const handleDamagePhotosChange = (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -423,6 +434,21 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
     );
     if (damagePhotoInputRef.current) {
       damagePhotoInputRef.current.value = "";
+    }
+  };
+
+  const removeExistingDamagePhoto = async (photoId: string) => {
+    setDeletingPhotoId(photoId);
+    try {
+      await attachmentApi.remove(photoId);
+      setExistingDamagePhotos((current) =>
+        current.filter((photo) => photo.id !== photoId),
+      );
+      toast.success("Photo removed");
+    } catch (cause) {
+      toast.error(getErrorMessage(cause));
+    } finally {
+      setDeletingPhotoId(null);
     }
   };
 
@@ -1149,8 +1175,22 @@ export default function RailBranchGRNForm(props: RailBranchGRNFormProps) {
                       <span className="min-w-0 truncate">
                         {photo.originalName || "Damage photo"}
                       </span>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        Existing
+                      <span className="ml-2 flex shrink-0 items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          Existing
+                        </span>
+                        {isEditable && canDeletePhoto ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={busy || deletingPhotoId === photo.id}
+                            onClick={() => removeExistingDamagePhoto(photo.id)}
+                            aria-label={`Remove ${photo.originalName || "damage photo"}`}
+                          >
+                            <IconX size={14} />
+                          </Button>
+                        ) : null}
                       </span>
                     </div>
                   ))}

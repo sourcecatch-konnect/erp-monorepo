@@ -230,11 +230,23 @@ export default function DeliveryChallanList() {
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">
-                      {row.branchGrn.railRake.rakeNumber}
+                      {row.railRake.rakeNumber}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {row.branchGrn.vpWagonLoading.mrRrRow.vpNo ||
-                        row.branchGrn.vpWagonLoading.mrRrRow.rowLabel}
+                      {(() => {
+                        const vpCount = new Set(
+                          row.items.map(
+                            (item) =>
+                              item.branchGrnItem.railBranchGrn.vpWagonLoading
+                                .mrRrRow.vpNo ??
+                              item.branchGrnItem.railBranchGrn.vpWagonLoading
+                                .mrRrRow.rowLabel,
+                          ),
+                        ).size;
+                        return vpCount === 1
+                          ? "1 VP"
+                          : `${vpCount} VPs`;
+                      })()}
                     </div>
                   </TableCell>
                   <TableCell>

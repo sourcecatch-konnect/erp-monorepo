@@ -8,8 +8,6 @@ export const grnKeys = {
   list: (query: ListQuery) =>
     ["grn", "list", query] as const,
 
-  statusCounts: ["grn", "status-counts"] as const,
-
   detail: (id: string) =>
     ["grn", "detail", id] as const,
 

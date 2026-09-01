@@ -157,8 +157,8 @@ export type OrderQuickView = Pick<
   | "routeId"
 > & {
   customer: { id: string; name: string } | null;
-  fromBranch: { id: string; shortCode: string } | null;
-  toBranch: { id: string; shortCode: string } | null;
+  fromBranch: { id: string; name: string; shortCode: string } | null;
+  toBranch: { id: string; name: string; shortCode: string } | null;
   vehicleType: { id: string; name: string } | null;
   customerLocation: { id: string; name: string } | null;
   route?: OrderRouteDetail | null;

@@ -140,12 +140,7 @@ export default function DeliverySection({
             label="Delivered at"
             value={formatDateTime(delivery.deliveredAt)}
           />
-          <InfoField
-            label="Truck reported"
-            value={
-              delivery.reportedAt ? formatDateTime(delivery.reportedAt) : "—"
-            }
-          />
+
           <InfoField
             label="Unloading completed"
             value={

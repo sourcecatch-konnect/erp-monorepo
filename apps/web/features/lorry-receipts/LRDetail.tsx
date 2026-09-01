@@ -8,6 +8,14 @@ import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@skerp/ui/components/dropdown";
+import {
   IconArrowLeft,
   IconTruck,
   IconUsers,
@@ -18,10 +26,13 @@ import {
   IconTrash,
   IconAlertTriangle,
   IconCircleCheck,
+  IconChevronDown,
   IconDownload,
+  IconEye,
   IconFileDescription,
   IconLoader2,
   IconPackage,
+  IconPrinter,
   IconStack2,
 } from "@tabler/icons-react";
 
@@ -128,27 +139,65 @@ export default function LRDetail({ id }: { id: string }) {
     React.useState<LorryReceipt | null>(null);
   const [ackLr, setAckLr] = React.useState<LorryReceipt | null>(null);
   const [editAckLr, setEditAckLr] = React.useState<LorryReceipt | null>(null);
-  const [downloadingLrId, setDownloadingLrId] = React.useState<string | null>(
-    null,
-  );
+  const [pdfBusyId, setPdfBusyId] = React.useState<string | null>(null);
 
-  const downloadLrPdf = async (lr: { id: string; lrNumber: string }) => {
+  const handleLrPdf = async (
+    lr: { id: string; lrNumber: string },
+    action: "download" | "print",
+    withLetterhead: boolean,
+  ) => {
     try {
-      setDownloadingLrId(lr.id);
-      const blob = await lorryReceiptApi.downloadPdf(lr.id);
+      setPdfBusyId(lr.id);
+      const blob = await lorryReceiptApi.downloadPdf(lr.id, withLetterhead);
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${lr.lrNumber.replaceAll("/", "-")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+
+      if (action === "download") {
+        const suffix = withLetterhead ? "" : "-plain";
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${lr.lrNumber.replaceAll("/", "-")}${suffix}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+
+      // Print: load the PDF into a hidden iframe and invoke the browser's
+      // print dialog directly, instead of forcing a save-to-disk step.
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.src = url;
+      iframe.onload = () => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      };
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        iframe.remove();
+        window.URL.revokeObjectURL(url);
+      }, 60_000);
     } catch (e) {
       toast.error(getErrorMessage(e));
     } finally {
-      setDownloadingLrId(null);
+      setPdfBusyId(null);
     }
+  };
+
+  const openLrPreview = (
+    lr: { id: string },
+    withLetterhead: boolean,
+  ) => {
+    window.open(
+      `/api/lorry-receipts/${encodeURIComponent(lr.id)}/print-preview?letterhead=${withLetterhead}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   };
 
   const canApprove = useCan(PERMS.LORRY_RECEIPT.APPROVE);
@@ -468,7 +517,7 @@ export default function LRDetail({ id }: { id: string }) {
   // truckload holds several.
   const focusedLrNumber =
     !display.isSingleton &&
-    g.lorryReceipts.some((lr) => lr.lrNumber === requestedIdentifier)
+      g.lorryReceipts.some((lr) => lr.lrNumber === requestedIdentifier)
       ? requestedIdentifier
       : null;
 
@@ -486,8 +535,8 @@ export default function LRDetail({ id }: { id: string }) {
   const finaliseTitle = hasNoLrs
     ? "Add at least one consignment LR before finalising."
     : incompleteLrs
-        .map((lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`)
-        .join(" | ");
+      .map((lr) => `${lr.lrNumber}: ${lr.missingFields.join(", ")}`)
+      .join(" | ");
   const vehicle = g.isMarketVehicle
     ? (g.marketVehicle?.vehicleNumber ??
       g.marketVehicleNumber ??
@@ -511,11 +560,11 @@ export default function LRDetail({ id }: { id: string }) {
   const defaultFreightPaise =
     g.order?.bookingFreightAmount != null
       ? (() => {
-          const total = g.order!.bookingFreightAmount!;
-          const perTruck = Math.floor(total / orderTruckQuantity);
-          const remainder = total - perTruck * orderTruckQuantity;
-          return perTruck + (g.truckIndex === 1 ? remainder : 0);
-        })()
+        const total = g.order!.bookingFreightAmount!;
+        const perTruck = Math.floor(total / orderTruckQuantity);
+        const remainder = total - perTruck * orderTruckQuantity;
+        return perTruck + (g.truckIndex === 1 ? remainder : 0);
+      })()
       : null;
 
   const pendingLrs = g.lorryReceipts.filter((lr) => lr.status === "FINALISED");
@@ -563,8 +612,8 @@ export default function LRDetail({ id }: { id: string }) {
                 <span aria-hidden>·</span>
                 <span>{display.subtitle}</span>
                 {!display.isSingleton &&
-                deliveredCount > 0 &&
-                deliveredCount < display.lrCount ? (
+                  deliveredCount > 0 &&
+                  deliveredCount < display.lrCount ? (
                   <>
                     <span aria-hidden>·</span>
                     <span>
@@ -584,19 +633,71 @@ export default function LRDetail({ id }: { id: string }) {
 
           <div className="flex flex-wrap gap-2 lg:justify-end">
             {display.isSingleton && g.lorryReceipts.length === 1 && (
-              <Button
-                size="lg"
-                variant="outline"
-                disabled={downloadingLrId !== null}
-                onClick={() => downloadLrPdf(g.lorryReceipts[0]!)}
-              >
-                {downloadingLrId ? (
-                  <IconLoader2 size={16} className="animate-spin" />
-                ) : (
-                  <IconDownload size={16} />
-                )}
-                {downloadingLrId ? "Preparing…" : "Download PDF"}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    disabled={pdfBusyId !== null}
+                  >
+                    {pdfBusyId ? (
+                      <IconLoader2 size={16} className="animate-spin" />
+                    ) : (
+                      <IconDownload size={16} />
+                    )}
+                    {pdfBusyId ? "Preparing…" : "Print / PDF"}
+                    <IconChevronDown size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Download</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleLrPdf(g.lorryReceipts[0]!, "download", true)
+                    }
+                  >
+                    <IconDownload size={16} className="mr-2" /> With
+                    letterhead
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleLrPdf(g.lorryReceipts[0]!, "download", false)
+                    }
+                  >
+                    <IconDownload size={16} className="mr-2" /> Without
+                    letterhead
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Print</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleLrPdf(g.lorryReceipts[0]!, "print", true)
+                    }
+                  >
+                    <IconPrinter size={16} className="mr-2" /> With letterhead
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleLrPdf(g.lorryReceipts[0]!, "print", false)
+                    }
+                  >
+                    <IconPrinter size={16} className="mr-2" /> Without
+                    letterhead
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Preview</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => openLrPreview(g.lorryReceipts[0]!, true)}
+                  >
+                    <IconEye size={16} className="mr-2" /> With letterhead
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => openLrPreview(g.lorryReceipts[0]!, false)}
+                  >
+                    <IconEye size={16} className="mr-2" /> Without letterhead
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {g.status === "DRAFT" && canUpdate && (
               <Button
@@ -782,34 +883,80 @@ export default function LRDetail({ id }: { id: string }) {
               </div>
             </div>
           ) : (
-            <>
-              <Field
-                label="Vehicle"
-                value={
-                  <span className="font-mono text-base uppercase">
-                    {vehicle}
-                  </span>
-                }
-              />
-              <Field label="Transport type" value={g.transportType} />
-              <Field label="Transport by" value="Own Vehicle" />
-              <Field label="Primary trip" value={g.primaryTrip?.tripName} />
-              <Field label="Driver" value={g.primaryTrip?.driver?.name} />
-              {g.secondaryTrip && (
-                <Field label="Leg 2 trip" value={g.secondaryTrip.tripName} />
-              )}
-            </>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="col-span-2">
+                  <Field
+                    label="Vehicle"
+                    value={
+                      <span className="font-mono text-base uppercase">
+                        {vehicle}
+                      </span>
+                    }
+                  />
+                </div>
+
+                <Field label="Transport type" value={g.transportType} />
+
+                <Field
+                  label="Payment mode"
+                  value={
+                    g.paymentMode === "TO_PAY"
+                      ? "To Pay (no GST)"
+                      : "To be Billed"
+                  }
+                />
+
+                <Field label="Transport by" value="Own Vehicle" />
+
+                <Field label="Driver" value={g.primaryTrip?.driver?.name} />
+              </div>
+
+              {g.primaryTrip ? (
+                <div className="min-w-0 border-t pt-3">
+                  <Field
+                    label="Primary trip"
+                    value={
+                      <span
+                        className="block max-w-full whitespace-normal break-words text-xs font-medium leading-4"
+                        title={g.primaryTrip.tripName}
+                      >
+                        {g.primaryTrip.tripName}
+                      </span>
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {g.secondaryTrip ? (
+                <div className="min-w-0 border-t pt-3">
+                  <Field
+                    label="Leg 2 trip"
+                    value={
+                      <span
+                        className="block max-w-full whitespace-normal break-words text-xs font-medium leading-4"
+                        title={g.secondaryTrip.tripName}
+                      >
+                        {g.secondaryTrip.tripName}
+                      </span>
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
           )}
           {g.transportType === "RoadAndRail" ? (
-            <div className="col-span-full grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 border-t pt-3">
               <Field
                 label="Source railway branch"
                 value={g.railheadBranch?.name}
               />
+
               <Field
                 label="Source railhead"
                 value={g.sourceRailheadArea?.name}
               />
+
               <Field
                 label="Destination railhead"
                 value={g.destinationRailheadArea?.name}
@@ -921,7 +1068,7 @@ export default function LRDetail({ id }: { id: string }) {
             className={cn(
               "rounded-lg border border-border bg-card p-5 transition-colors",
               focusedLrNumber === lr.lrNumber &&
-                "border-primary ring-2 ring-primary/15",
+              "border-primary ring-2 ring-primary/15",
             )}
           >
             <div className="mb-5 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -958,21 +1105,67 @@ export default function LRDetail({ id }: { id: string }) {
                     </p>
                   ) : null}
                 </div>
+
                 <div className="flex gap-1">
                   {!display.isSingleton && (
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="Download LR PDF"
-                      disabled={downloadingLrId === lr.id}
-                      onClick={() => downloadLrPdf(lr)}
-                    >
-                      {downloadingLrId === lr.id ? (
-                        <IconLoader2 size={15} className="animate-spin" />
-                      ) : (
-                        <IconDownload size={15} />
-                      )}
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Download or print LR PDF"
+                          disabled={pdfBusyId === lr.id}
+                        >
+                          {pdfBusyId === lr.id ? (
+                            <IconLoader2 size={15} className="animate-spin" />
+                          ) : (
+                            <IconDownload size={15} />
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel>Download</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={() => handleLrPdf(lr, "download", true)}
+                        >
+                          <IconDownload size={16} className="mr-2" /> With
+                          letterhead
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleLrPdf(lr, "download", false)}
+                        >
+                          <IconDownload size={16} className="mr-2" /> Without
+                          letterhead
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Print</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={() => handleLrPdf(lr, "print", true)}
+                        >
+                          <IconPrinter size={16} className="mr-2" /> With
+                          letterhead
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleLrPdf(lr, "print", false)}
+                        >
+                          <IconPrinter size={16} className="mr-2" /> Without
+                          letterhead
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Preview</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={() => openLrPreview(lr, true)}
+                        >
+                          <IconEye size={16} className="mr-2" /> With letterhead
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => openLrPreview(lr, false)}
+                        >
+                          <IconEye size={16} className="mr-2" /> Without
+                          letterhead
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                   {g.status === "DRAFT" && canUpdate && (
                     <>
@@ -1020,16 +1213,16 @@ export default function LRDetail({ id }: { id: string }) {
               lr.goods.length === 0 ||
               lr.totalWeight == null ||
               !lr.unit) && (
-              <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-sm border border-warning/30 bg-warning/10 px-3 py-2 text-sm font-medium text-warning-foreground">
-                <IconAlertTriangle size={16} />
-                Complete before finalise:
-                {!lr.loadingLocationId ? " loading point" : ""}
-                {!lr.unloadingLocationId ? " unloading point" : ""}
-                {lr.goods.length === 0 ? " goods" : ""}
-                {lr.totalWeight == null ? " total weight" : ""}
-                {!lr.unit ? " unit" : ""}
-              </div>
-            )}
+                <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-sm border border-warning/30 bg-warning/10 px-3 py-2 text-sm font-medium text-warning-foreground">
+                  <IconAlertTriangle size={16} />
+                  Complete before finalise:
+                  {!lr.loadingLocationId ? " loading point" : ""}
+                  {!lr.unloadingLocationId ? " unloading point" : ""}
+                  {lr.goods.length === 0 ? " goods" : ""}
+                  {lr.totalWeight == null ? " total weight" : ""}
+                  {!lr.unit ? " unit" : ""}
+                </div>
+              )}
 
             <EwayBillSection
               lrId={lr.id}
@@ -1193,24 +1386,24 @@ export default function LRDetail({ id }: { id: string }) {
         initial={
           editLine
             ? {
-                loadingLocationId: editLine.loadingLocationId ?? undefined,
-                unloadingLocationId: editLine.unloadingLocationId ?? undefined,
-                totalWeight:
-                  editLine.totalWeight != null
-                    ? String(editLine.totalWeight)
-                    : "",
-                totalWeightUnit: editLine.unit ?? "MT",
-                goods: editLine.goods.map((goods) => ({
-                  name: goods.name,
-                  quantity:
-                    goods.quantity != null ? String(goods.quantity) : "",
-                })),
-                invoiceNumber: editLine.invoiceNumber ?? "",
-                invoiceAmount:
-                  editLine.invoiceAmount != null
-                    ? String(paiseToRupees(editLine.invoiceAmount))
-                    : "",
-              }
+              loadingLocationId: editLine.loadingLocationId ?? undefined,
+              unloadingLocationId: editLine.unloadingLocationId ?? undefined,
+              totalWeight:
+                editLine.totalWeight != null
+                  ? String(editLine.totalWeight)
+                  : "",
+              totalWeightUnit: editLine.unit ?? "MT",
+              goods: editLine.goods.map((goods) => ({
+                name: goods.name,
+                quantity:
+                  goods.quantity != null ? String(goods.quantity) : "",
+              })),
+              invoiceNumber: editLine.invoiceNumber ?? "",
+              invoiceAmount:
+                editLine.invoiceAmount != null
+                  ? String(paiseToRupees(editLine.invoiceAmount))
+                  : "",
+            }
             : undefined
         }
         isPending={updateLine.isPending}

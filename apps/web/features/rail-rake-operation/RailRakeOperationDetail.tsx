@@ -33,9 +33,9 @@ import { RailRakeOperationStatusBadge } from "./railRakeOperationStatusBadge";
 const date = (value?: string | null) =>
   value
     ? new Intl.DateTimeFormat("en-IN", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(new Date(value))
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value))
     : "—";
 const money = (value?: string | number | null) =>
   new Intl.NumberFormat("en-IN", {
@@ -124,26 +124,30 @@ export default function RailRakeOperationDetail({
             <IconRoute size={17} className="text-primary" />
             Route and responsibility
           </h2>
+
           <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-            <div>
+            <div className="col-span-2">
               <p className="text-xs text-muted-foreground">Rail route</p>
               <p className="font-medium">
                 {row.railRake.vpSchedule.sourceArea.name} →{" "}
                 {row.railRake.vpSchedule.destinationArea.name}
               </p>
             </div>
-            <div>
+
+            <div className="col-span-2">
               <p className="text-xs text-muted-foreground">Branches</p>
               <p className="font-medium">
                 {row.railRake.fromBranch.name} → {row.railRake.toBranch.name}
               </p>
             </div>
+
             <div>
               <p className="text-xs text-muted-foreground">
                 Responsible branch
               </p>
               <p className="font-medium">{row.branch.name}</p>
             </div>
+
             <div>
               <p className="text-xs text-muted-foreground">Operation area</p>
               <p className="font-medium">{row.area.name}</p>

@@ -30,10 +30,10 @@ function DetailLine({
   value: React.ReactNode;
 }) {
   return (
-<div className="space-y-1">
-  <p className="text-xs text-muted-foreground">{label}</p>
-  <p className="text-sm font-medium text-foreground">{value || "—"}</p>
-</div>
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium text-foreground">{value || "—"}</p>
+    </div>
   );
 }
 
@@ -48,11 +48,11 @@ export default function OrderQuickViewModal({
 }) {
   const router = useRouter();
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
-const { data: order, isLoading } = useQuery({
-  queryKey: orderId ? orderKeys.quickView(orderId) : ["order-quick-empty"],
-  queryFn: () => orderApi.quickView(orderId as string),
-  enabled: Boolean(open && orderId),
-});
+  const { data: order, isLoading } = useQuery({
+    queryKey: orderId ? orderKeys.quickView(orderId) : ["order-quick-empty"],
+    queryFn: () => orderApi.quickView(orderId as string),
+    enabled: Boolean(open && orderId),
+  });
   const hasLRGroup =
     Boolean(order?.hasLRGroup) || Number(order?.lrGroupCount ?? 0) > 0;
   return (
@@ -73,32 +73,32 @@ const { data: order, isLoading } = useQuery({
         ) : (
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4 border-b pb-4">
-        <div className="min-w-0">
-  <p className="text-xs font-medium uppercase text-muted-foreground">
-    Customer
-  </p>
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase text-muted-foreground">
+                  Customer
+                </p>
 
-  <p className="mt-1 truncate text-base font-semibold text-foreground">
-    {order.customer?.name ?? "—"}
-  </p>
+                <p className="mt-1 truncate text-base font-semibold text-foreground">
+                  {order.customer?.name ?? "—"}
+                </p>
 
-  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-    <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-background">
-      <IconBuildingWarehouse size={15} />
-    </div>
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md border bg-background">
+                    <IconBuildingWarehouse size={15} />
+                  </div>
 
-    <span className="font-medium text-foreground">
-      {order.route?.sourceCity?.name ?? "?"}
-    </span>
+                  <span className="font-medium text-foreground">
+                    {order.fromBranch?.name ?? "?"}
+                  </span>
 
-    <IconArrowRight size={14} className="text-muted-foreground" />
+                  <IconArrowRight size={14} className="text-muted-foreground" />
 
-    <span className="font-medium text-foreground">
-    
-      {order.route?.destinationCity?.name ?? "?"}
-    </span>
-  </div>
-</div>
+                  <span className="font-medium text-foreground">
+
+                    {order.toBranch?.name ?? "?"}
+                  </span>
+                </div>
+              </div>
 
               <div className="shrink-0">
                 <StatusBadge status={order.status} />
@@ -106,93 +106,92 @@ const { data: order, isLoading } = useQuery({
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-  <DetailLine
-    label="Pickup date"
-    value={formatDate(order.pickupDate)}
-  />
+              <DetailLine
+                label="Pickup date"
+                value={formatDate(order.pickupDate)}
+              />
 
-  <DetailLine
-    label="Order type"
-    value={
-      order.orderType === "Truck"
-        ? `${order.truckQuantity ?? 1} × ${
-            order.vehicleType?.name ?? "Truck"
-          }`
-        : "Item / Goods"
-    }
-  />
+              <DetailLine
+                label="Order type"
+                value={
+                  order.orderType === "Truck"
+                    ? `${order.truckQuantity ?? 1} × ${order.vehicleType?.name ?? "Truck"
+                    }`
+                    : "Item / Goods"
+                }
+              />
 
-  <DetailLine
-    label="Freight"
-    value={formatPaise(order.bookingFreightAmount)}
-  />
+              <DetailLine
+                label="Freight"
+                value={formatPaise(order.bookingFreightAmount)}
+              />
 
-  <DetailLine
-    label="Pickup"
-    value={
-      order.customerLocation?.name ??
-      order.pickupAddressOverride ??
-      "—"
-    }
-  />
-</div>
+              <DetailLine
+                label="Pickup"
+                value={
+                  order.customerLocation?.name ??
+                  order.pickupAddressOverride ??
+                  "—"
+                }
+              />
+            </div>
 
-{(order.contactPersonName || order.contactMobile || order.contactEmail) && (
-  <div className="border-t pt-4">
-    <p className="mb-3 text-sm font-semibold">Contact details</p>
+            {(order.contactPersonName || order.contactMobile || order.contactEmail) && (
+              <div className="border-t pt-4">
+                <p className="mb-3 text-sm font-semibold">Contact details</p>
 
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {order.contactPersonName && (
-        <DetailLine label="Person" value={order.contactPersonName} />
-      )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {order.contactPersonName && (
+                    <DetailLine label="Person" value={order.contactPersonName} />
+                  )}
 
-      {order.contactMobile && (
-        <DetailLine label="Mobile" value={order.contactMobile} />
-      )}
+                  {order.contactMobile && (
+                    <DetailLine label="Mobile" value={order.contactMobile} />
+                  )}
 
-      {order.contactEmail && (
-        <DetailLine label="Email" value={order.contactEmail} />
-      )}
-    </div>
-  </div>
-)}
+                  {order.contactEmail && (
+                    <DetailLine label="Email" value={order.contactEmail} />
+                  )}
+                </div>
+              </div>
+            )}
 
-         
 
-           <div className="flex items-center justify-between border-t pt-4">
-  <div>
-    {canCreateLR && order.orderType === "Truck" && hasLRGroup ? (
-      <Button size="sm" variant="outline" disabled>
-        <IconFileText size={14} className="mr-1.5" /> LR Already Created
-      </Button>
-    ) : canCreateLR &&
-      order.status === "Confirmed" &&
-      order.orderType === "Truck" ? (
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => {
-          onOpenChange(false);
-          router.push(`/lorry-receipts/new?orderId=${order.id}`);
-        }}
-      >
-        <IconFileText size={14} className="mr-1.5" /> Create LR
-      </Button>
-    ) : null}
-  </div>
-  <Button asChild size="sm">
-    <Link
-    href={`/orders/${encodeURIComponent(order.orderNumber)}`}
-      className="group flex items-center gap-2"
-    >
-      Open full detail
-      <IconArrowRight
-        size={16}
-        className="transition-transform group-hover:translate-x-1"
-      />
-    </Link>
-  </Button>
-</div>
+
+            <div className="flex items-center justify-between border-t pt-4">
+              <div>
+                {canCreateLR && order.orderType === "Truck" && hasLRGroup ? (
+                  <Button size="sm" variant="outline" disabled>
+                    <IconFileText size={14} className="mr-1.5" /> LR Already Created
+                  </Button>
+                ) : canCreateLR &&
+                  order.status === "Confirmed" &&
+                  order.orderType === "Truck" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      onOpenChange(false);
+                      router.push(`/lorry-receipts/new?orderId=${order.id}`);
+                    }}
+                  >
+                    <IconFileText size={14} className="mr-1.5" /> Create LR
+                  </Button>
+                ) : null}
+              </div>
+              <Button asChild size="sm">
+                <Link
+                  href={`/orders/${encodeURIComponent(order.orderNumber)}`}
+                  className="group flex items-center gap-2"
+                >
+                  Open full detail
+                  <IconArrowRight
+                    size={16}
+                    className="transition-transform group-hover:translate-x-1"
+                  />
+                </Link>
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>

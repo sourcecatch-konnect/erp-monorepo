@@ -504,8 +504,6 @@ model Vehicle {
   updatedAt          DateTime      @updatedAt
   bodyType           String?
   capacityMT         Float
-  chasisNumber       String        @unique
-  engineNumber       String        @unique
   insuranceCompany   String?
   insuranceDueDate   DateTime?
   insuranceIssueDate DateTime?
@@ -662,45 +660,36 @@ model RateMatrix {
 }
 
 model Driver {
-  id                     String           @id @default(cuid())
-  name                   String
-  photoPath              String?
-  type                   String
-  birthDate              DateTime?
-  anniversaryDate        DateTime?
-  mobile                 String
-  alternateMobile        String?
-  licenseNo              String
-  licenseDate            DateTime?
-  licenseExpiryDate      DateTime?
-  licenseCity            String?
-  permanentAddress       String?
-  permanentCountry       String?
-  permanentState         String?
-  permanentCity          String?
-  correspondenceAddress  String?
-  correspondenceCountry  String?
-  correspondenceState    String?
-  correspondenceCity     String?
-  correspondenceLandline String?
-  referencePerson        String?
-  referenceContactNo     String?
-  bloodGroup             String?
-  otherDetails           String?
-  salary                 BigInt?
-  panNo                  String?
-  aadharCardNo           String?
-  noTDSApplyAmount       Int?
-  tdsRate                Int?
-  onLeave                Boolean          @default(false)
-  blackListed            Boolean          @default(false)
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
-  status                 DriverStatus     @default(AVAILABLE)
-  VehicleTrip            VehicleTrip[]
-  journeys               VehicleJourney[]
-  advances               DriverAdvance[]
-  logSlips               LogSlip[]
+  id                 String           @id @default(cuid())
+  name               String
+  photoPath          String?
+  type               String
+  birthDate          DateTime?
+  anniversaryDate    DateTime?
+  mobile             String?
+  licenseNo          String?
+  licenseDate        DateTime?
+  licenseExpiryDate  DateTime?
+  licenseCity        String?
+  address            String?
+  country            String?
+  state              String?
+  city               String?
+  referencePerson    String?
+  referenceContactNo String?
+  otherDetails       String?
+  salary             BigInt?
+  panNo              String?
+  aadharCardNo       String?
+  onLeave            Boolean          @default(false)
+  blackListed        Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  status             DriverStatus     @default(AVAILABLE)
+  VehicleTrip        VehicleTrip[]
+  journeys           VehicleJourney[]
+  advances           DriverAdvance[]
+  logSlips           LogSlip[]
 
   @@index([name])
 }
@@ -737,8 +726,6 @@ model Labour {
   refContactNo               String?
   startDate                  DateTime?
   pan                        String?
-  tdsAmount                  BigInt?
-  tdsRate                    BigInt?
   type                       WorkerType
   branchId                   String
   createdAt                  DateTime          @default(now())
@@ -1189,6 +1176,11 @@ model LRGroup {
   consignorId               String
   consigneeId               String
   transportType             LRTransportType @default(Road)
+  // Freight billing basis, chosen at LR creation, locked once the group leaves
+  // DRAFT. TO_BE_BILLED -> GST invoice to a contracted client (Road GTA / Road
+  // & Rail). TO_PAY -> non-GST "to pay" freight to a transporter-as-customer
+  // (billed under the ROAD bill type), any transport mode.
+  paymentMode               LRPaymentMode   @default(TO_BE_BILLED)
   priority                  LRPriority      @default(Normal)
   isMarketVehicle           Boolean         @default(false)
   primaryTripId             String?
@@ -1253,6 +1245,7 @@ model LRGroup {
   @@index([fyCode])
   @@index([marketTransportId])
   @@index([marketVehicleId])
+  @@index([paymentMode])
 }
 
 model LorryReceipt {
@@ -1747,6 +1740,12 @@ model VehicleTrip {
   openingKm            Int
   rakeDate             DateTime?
   startDateTime        DateTime?
+  // Scheduled/expected dispatch time captured while the trip is still Planned.
+  // Never drives status — only `startDateTime` (the actual dispatch) does.
+  plannedStartDateTime DateTime?
+  // How the trip entered the system: the normal Planned flow, or back-filled
+  // as already in transit (truck left before the LR/trip was entered).
+  createdAs            TripCreatedAs        @default(PLANNED)
   tripNumber           String               @unique
   updatedAt            DateTime             @updatedAt
   updatedById          String?
@@ -1983,8 +1982,9 @@ model RailRake {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branchGrns RailBranchGRN[]
-  operations RailRakeOperation[]
+  branchGrns       RailBranchGRN[]
+  operations       RailRakeOperation[]
+  deliveryChallans DeliveryChallan[]
 
   @@index([fromBranchId, status])
   @@index([toBranchId, status])
@@ -2804,8 +2804,7 @@ model RailBranchGRN {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items            RailBranchGRNItem[]
-  deliveryChallans DeliveryChallan[]
+  items RailBranchGRNItem[]
 
   @@index([railRakeId, status])
   @@index([status])
@@ -2847,10 +2846,12 @@ model DeliveryChallan {
   challanNumber String @unique
   fyCode        String
 
-  // A challan belongs to exactly one received VP. Multiple challans are
-  // allowed for partial quantities or separate customer destinations.
-  branchGrnId String
-  branchGrn   RailBranchGRN @relation(fields: [branchGrnId], references: [id], onDelete: Restrict)
+  // A challan is scoped to one rake — its items can pool goods lines from
+  // any of that rake's SUBMITTED Branch GRNs (one per wagon), so a split LR
+  // can be reassembled onto a single vehicle. Multiple challans are allowed
+  // for partial quantities or separate customer destinations.
+  railRakeId String
+  railRake   RailRake @relation(fields: [railRakeId], references: [id], onDelete: Restrict)
 
   // The source is the branch that received the rake, not the rail journey's
   // original from-branch.
@@ -2914,7 +2915,7 @@ model DeliveryChallan {
 
   items DeliveryChallanItem[]
 
-  @@index([branchGrnId, status])
+  @@index([railRakeId, status])
   @@index([sourceBranchId, status])
   @@index([destinationAreaId])
   @@index([destinationLocationId])
@@ -3390,6 +3391,11 @@ enum LRGroupStatus {
   CANCELLED
 }
 
+enum LRPaymentMode {
+  TO_BE_BILLED
+  TO_PAY
+}
+
 enum LRSource {
   FROM_ORDER
   INSTANT
@@ -3418,6 +3424,11 @@ enum TripStatus {
   InTransit
   Closed
   Cancelled
+}
+
+enum TripCreatedAs {
+  PLANNED
+  BACKFILLED_IN_TRANSIT
 }
 
 enum TripType {

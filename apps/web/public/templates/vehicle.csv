@@ -1,2 +1,2 @@
-vehicleNumber,chasisNumber,engineNumber,ownershipType,vehicleType,capacityMT,wheels,bodyType,lengthFeet,openingKM,currentKM,purchaseDate,insuranceNumber,insuranceCompany,insuranceIssueDate,insuranceDueDate,status
-MH31AB1234,1HGCM82633A004352,ENG123456,Own_Vehicle,Container,10,6,Container,20,0,0,2026-01-01,POL12345,Example Insurance,2026-01-01,2027-01-01,AVAILABLE
+vehicleNumber,ownershipType,vehicleType,capacityMT,wheels,bodyType,lengthFeet,openingKM,currentKM,purchaseDate,insuranceNumber,insuranceCompany,insuranceIssueDate,insuranceDueDate,status
+MH31AB1234,Own_Vehicle,Container,10,6,Container,20,0,0,2026-01-01,POL12345,Example Insurance,2026-01-01,2027-01-01,AVAILABLE

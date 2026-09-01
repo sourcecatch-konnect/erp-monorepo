@@ -1,6 +1,5 @@
 import {
   Prisma,
-  type BillChargeMechanism,
   type BillTaxTreatment,
   type BillType,
   type LRChargeEffect,
@@ -470,7 +469,6 @@ export const evaluateBillingForLR = async (
 export const calculateBill = async (
   args: {
     billType: BillType;
-    chargeMechanism: BillChargeMechanism;
     billDate: Date;
     supplierStateId: string;
     placeOfSupplyStateId: string;
@@ -499,15 +497,15 @@ export const calculateBill = async (
     throw new BadRequestError("Bill deductions cannot exceed additions");
   }
 
-  let taxTreatment: BillTaxTreatment;
-  if (args.billType === "ROAD" || args.chargeMechanism === "NOT_APPLICABLE") {
-    taxTreatment = "NO_GST";
-  } else if (args.chargeMechanism === "REVERSE_CHARGE") {
-    taxTreatment = "REVERSE_CHARGE";
-  } else {
-    taxTreatment =
-      args.supplierStateId === args.placeOfSupplyStateId ? "INTRA_STATE" : "INTER_STATE";
-  }
+  // GST is charged forward on every non-ROAD bill. Intra vs inter state (so
+  // CGST+SGST vs IGST) is decided purely by the operator-picked Place of
+  // Supply against the billing branch's state.
+  const taxTreatment: BillTaxTreatment =
+    args.billType === "ROAD"
+      ? "NO_GST"
+      : args.supplierStateId === args.placeOfSupplyStateId
+        ? "INTRA_STATE"
+        : "INTER_STATE";
 
   let taxRule = null;
   const taxLines: Array<{
@@ -520,7 +518,6 @@ export const calculateBill = async (
     taxRule = await client.billingTaxRule.findFirst({
       where: {
         billType: args.billType,
-        chargeMechanism: args.chargeMechanism,
         isActive: true,
         effectiveFrom: { lte: args.billDate },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: args.billDate } }],

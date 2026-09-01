@@ -1,7 +1,7 @@
 import { fakeName, fakeAddress } from "../fake/identity";
 import { fakeIndianPhone } from "../fake/phone";
 import { fakePAN } from "../fake/pan";
-import { pick, randInt, randDigits, randAlpha } from "../fake/random";
+import { pick, randInt, randDigits } from "../fake/random";
 
 export type DriverPrefillOptions = {
   states: Array<{ id: string; name: string }>;
@@ -16,29 +16,20 @@ export type DriverFormPrefill = {
   birthDate: string;
   anniversaryDate: string;
   mobile: string;
-  alternateMobile: string;
   licenseNo: string;
   licenseDate: string;
   licenseExpiryDate: string;
   licenseCity: string;
-  permanentAddress: string;
-  permanentCountry: string;
-  permanentState: string;
-  permanentCity: string;
-  correspondenceAddress: string;
-  correspondenceCountry: string;
-  correspondenceState: string;
-  correspondenceCity: string;
-  correspondenceLandline: string;
+  address: string;
+  country: string;
+  state: string;
+  city: string;
   referencePerson: string;
   referenceContactNo: string;
-  bloodGroup: string;
   otherDetails: string;
   salary: string;
   panNo: string;
   aadharCardNo: string;
-  noTDSApplyAmount: string;
-  tdsRate: string;
   onLeave: boolean;
   blackListed: boolean;
 };
@@ -83,10 +74,7 @@ function pickStateCity(opts: DriverPrefillOptions) {
 export function prefillDriver(opts: DriverPrefillOptions): DriverFormPrefill {
   const name = fakeName();
   const referencePerson = fakeName();
-  const { state: permanentState, city: permanentCity } = pickStateCity(opts);
-  const { state: correspondenceState, city: correspondenceCity } = pickStateCity(
-    opts
-  );
+  const { state, city } = pickStateCity(opts);
 
   const birthDate = randomPastDate(16000);
   const anniversaryDate = randomPastDate(12000);
@@ -96,7 +84,6 @@ export function prefillDriver(opts: DriverPrefillOptions): DriverFormPrefill {
   );
 
   const salary = randInt(18000, 65000);
-  const tdsThreshold = randInt(10000, 50000);
 
   return {
     name,
@@ -106,29 +93,20 @@ export function prefillDriver(opts: DriverPrefillOptions): DriverFormPrefill {
     birthDate: dateInput(birthDate),
     anniversaryDate: dateInput(anniversaryDate),
     mobile: fakeIndianPhone(),
-    alternateMobile: fakeIndianPhone(),
     licenseNo: fakeLicenseNo(),
     licenseDate: dateInput(licenseDate),
     licenseExpiryDate: dateInput(licenseExpiryDate),
-    licenseCity: permanentCity?.name ?? correspondenceCity?.name ?? "",
-    permanentAddress: fakeAddress(),
-    permanentCountry: "India",
-    permanentState: permanentState?.name ?? "",
-    permanentCity: permanentCity?.name ?? "",
-    correspondenceAddress: fakeAddress(),
-    correspondenceCountry: "India",
-    correspondenceState: correspondenceState?.name ?? "",
-    correspondenceCity: correspondenceCity?.name ?? "",
-    correspondenceLandline: `020-${randDigits(7)}`,
+    licenseCity: city?.name ?? "",
+    address: fakeAddress(),
+    country: "India",
+    state: state?.name ?? "",
+    city: city?.name ?? "",
     referencePerson,
     referenceContactNo: fakeIndianPhone(),
-    bloodGroup: pick(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]),
     otherDetails: `Test driver profile for ${name}`,
     salary: String(salary),
     panNo: fakePAN(),
     aadharCardNo: fakeAadharNo(),
-    noTDSApplyAmount: String(tdsThreshold),
-    tdsRate: String(randInt(1, 10)),
     onLeave: false,
     blackListed: false,
   };

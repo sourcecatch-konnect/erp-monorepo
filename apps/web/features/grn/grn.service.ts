@@ -117,6 +117,13 @@ export type GRN = {
   [key: string]: unknown;
 };
 
+export type GRNStatusResult = {
+  id: string;
+  grnNumber: string;
+  status: GRNStatus;
+  version: number;
+};
+
 export type EligibleLR = {
   id: string;
   lrNumber: string;
@@ -214,12 +221,6 @@ export const grnApi = {
     return unwrapListResponse(res);
   },
 
-  statusCounts: async (): Promise<Record<string, number>> => {
-    const res =
-      await api.get<ApiResponse<Record<string, number>>>("/grn/status-counts");
-
-    return unwrapApiResponse(res);
-  },
   getDamagePhotoViewUrl: async (
     grnId: string,
     photoId: string,
@@ -263,6 +264,17 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
+  downloadPdf: async (
+    identifier: string,
+    withLetterhead: boolean = true,
+  ): Promise<Blob> => {
+    const res = await api.get(`/grn/${encodeGRNIdentifier(identifier)}/pdf`, {
+      params: { letterhead: withLetterhead },
+      responseType: "blob",
+    });
+    return res.data;
+  },
+
   create: async (body: CreateGRNBody): Promise<GRN> => {
     const res = await api.post<ApiResponse<GRN>>("/grn", {
       ...body,
@@ -284,8 +296,11 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
-  submit: async (identifier: string, body: SubmitGRNBody): Promise<GRN> => {
-    const res = await api.post<ApiResponse<GRN>>(
+  submit: async (
+    identifier: string,
+    body: SubmitGRNBody,
+  ): Promise<GRNStatusResult> => {
+    const res = await api.post<ApiResponse<GRNStatusResult>>(
       `/grn/${encodeGRNIdentifier(identifier)}/submit`,
       {
         ...body,
@@ -296,8 +311,11 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
-  cancel: async (identifier: string, body: CancelGRNBody): Promise<GRN> => {
-    const res = await api.post<ApiResponse<GRN>>(
+  cancel: async (
+    identifier: string,
+    body: CancelGRNBody,
+  ): Promise<GRNStatusResult> => {
+    const res = await api.post<ApiResponse<GRNStatusResult>>(
       `/grn/${encodeGRNIdentifier(identifier)}/cancel`,
       body,
     );

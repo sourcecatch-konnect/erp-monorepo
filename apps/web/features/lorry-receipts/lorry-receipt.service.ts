@@ -54,8 +54,12 @@ export const lorryReceiptApi = {
     return unwrapApiResponse(res);
   },
 
-  downloadPdf: async (id: string): Promise<Blob> => {
+  downloadPdf: async (
+    id: string,
+    withLetterhead: boolean = true,
+  ): Promise<Blob> => {
     const res = await api.get(`/lorry-receipts/${id}/pdf`, {
+      params: { letterhead: withLetterhead },
       responseType: "blob",
     });
     return res.data;
@@ -311,6 +315,7 @@ type OrderContextRow = {
   consignments?: {
     truckIndex: number;
     totalWeight?: string | number | null;
+    totalWeightUnit?: string;
     loadingLocation?: { id: string; name: string } | null;
     unloadingLocation?: { id: string; name: string } | null;
     goods?: {
@@ -367,13 +372,14 @@ export type LRMarketVehicleOption = {
   vehicleNumber: string;
   status: string;
   capacityMT?: number | string | null;
+  isAssigned: boolean;
+  activeGroupNumber?: string | null;
   vehicleTypeRef: {
     id: string;
     name: string;
     code: string;
   };
 };
-
 export const lrLookups = {
   vehicles: async (): Promise<(LROption & VehicleRow)[]> => {
     const res = await api.get<ApiResponse<VehicleRow[]>>("/vehicles", {
@@ -563,23 +569,23 @@ export const lrLookups = {
       consigneeId: order.consignee?.id ?? null,
       fromBranch: order.fromBranch
         ? {
-            id: order.fromBranch.id,
-            name: order.fromBranch.name,
-            branchCode: order.fromBranch.branchCode,
-          }
+          id: order.fromBranch.id,
+          name: order.fromBranch.name,
+          branchCode: order.fromBranch.branchCode,
+        }
         : null,
       toBranch: order.toBranch
         ? {
-            id: order.toBranch.id,
-            name: order.toBranch.name,
-            branchCode: order.toBranch.branchCode,
-          }
+          id: order.toBranch.id,
+          name: order.toBranch.name,
+          branchCode: order.toBranch.branchCode,
+        }
         : null,
       route: order.route
         ? {
-            source: order.route.sourceCity?.name ?? null,
-            destination: order.route.destinationCity?.name ?? null,
-          }
+          source: order.route.sourceCity?.name ?? null,
+          destination: order.route.destinationCity?.name ?? null,
+        }
         : null,
       trucks,
       lines,

@@ -52,7 +52,12 @@ export const publishNotificationEvent = async (
     update: {},
   });
 
-  await enqueueNotificationEvent(event.id).catch((error) => {
+  // Fire-and-forget: notification delivery is best-effort and must never block
+  // the caller's write path. Awaiting this can hang the whole request forever
+  // if Redis is unreachable (ioredis + maxRetriesPerRequest: null retries the
+  // connection indefinitely instead of rejecting), even though the caller's
+  // own DB write already committed successfully.
+  void enqueueNotificationEvent(event.id).catch((error) => {
     console.error("[notifications] Failed to enqueue event:", event.id, error);
   });
 

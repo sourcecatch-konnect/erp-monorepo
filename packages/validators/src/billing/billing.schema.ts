@@ -7,12 +7,17 @@ export const billChargeMechanismSchema = z.enum([
   "FORWARD_CHARGE",
   "REVERSE_CHARGE",
 ]);
-
+const optionalReason = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((value) => value || undefined);
 const id = z.string().trim().min(1);
 const isoDate = z.coerce.date();
 
 export const eligibleClientQuerySchema = z.object({
-  branchId: id,
+  branchId: id.optional(),
   billingPartyType: billPartyTypeSchema,
   billType: billTypeSchema,
   cutoffDate: isoDate.optional(),
@@ -41,18 +46,18 @@ export const createManualLRChargeSchema = z.object({
   effect: z.enum(["ADDITION", "DEDUCTION"]).default("ADDITION"),
   amountPaise: z.coerce.bigint().positive(),
   description: z.string().trim().max(240).optional(),
-  reason: z.string().trim().min(3).max(500).optional(),
+  reason: optionalReason,
   isTaxable: z.boolean().default(true),
   sacCode: z.string().trim().max(12).optional(),
 });
 
 export const approveLRChargeSchema = z.object({
   approvedAmountPaise: z.coerce.bigint().positive().optional(),
-  reason: z.string().trim().max(500).optional(),
+  reason: optionalReason,
 });
 
 export const cancelLRChargeSchema = z.object({
-  reason: z.string().trim().min(3).max(500),
+  reason: optionalReason,
 });
 
 const billDraftFieldsSchema = z.object({
@@ -60,7 +65,9 @@ const billDraftFieldsSchema = z.object({
   billType: billTypeSchema,
   billingPartyType: billPartyTypeSchema,
   customerId: id,
-  chargeMechanism: billChargeMechanismSchema.optional(),
+  // Operator-chosen GST Place of Supply state. Required for GST bill types
+  // (Road GTA / Road & Rail); not used for ROAD ("to pay", no GST).
+  placeOfSupplyStateId: id.optional(),
   billDate: isoDate,
   billingCutoffDate: isoDate.optional().nullable(),
   dueDate: isoDate.optional().nullable(),
@@ -70,14 +77,12 @@ const billDraftFieldsSchema = z.object({
 
 export const createBillDraftSchema = billDraftFieldsSchema.superRefine(
   (value, ctx) => {
-    if (
-      value.billType === "ROAD_GTA" &&
-      (!value.chargeMechanism || value.chargeMechanism === "NOT_APPLICABLE")
-    ) {
+    // GST bill types need a Place of Supply to split CGST+SGST vs IGST.
+    if (value.billType !== "ROAD" && !value.placeOfSupplyStateId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["chargeMechanism"],
-        message: "Road GTA requires forward charge or reverse charge",
+        path: ["placeOfSupplyStateId"],
+        message: "Select a Place of Supply state",
       });
     }
   },
@@ -90,7 +95,7 @@ export const addBillChargesSchema = z.object({
 
 export const returnBillToDraftSchema = z.object({
   version: z.number().int().positive(),
-  reason: z.string().trim().min(3).max(500),
+  reason: optionalReason,
 });
 
 export const updateBillDraftSchema = billDraftFieldsSchema
@@ -99,11 +104,11 @@ export const updateBillDraftSchema = billDraftFieldsSchema
   .extend({ version: z.number().int().positive() });
 
 export const transitionBillSchema = z.object({
-  reason: z.string().trim().max(500).optional(),
+  reason: optionalReason,
 });
 
 export const cancelBillSchema = z.object({
-  reason: z.string().trim().min(3).max(500),
+  reason: optionalReason,
 });
 
 export const billingTaxRuleSchema = z.object({

@@ -5,9 +5,6 @@ import { createLabourSchema, updateLabourSchema } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 
 import { createCrudRouter } from "../_shared/crud.factory.js";
-import { convertRupeeFieldsToPaise } from "../../lib/money.js";
-
-const moneyFields = ["tdsAmount"];
 
 const router: Router = createCrudRouter({
   model: db.labour,
@@ -17,11 +14,6 @@ const router: Router = createCrudRouter({
   updateSchema: updateLabourSchema,
 
   permissionKey: "masters.labour",
-
-  hooks: {
-    beforeCreate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
-    beforeUpdate: async (data) => convertRupeeFieldsToPaise(data, moneyFields),
-  },
 
   listOptions: {
     searchableFields: [

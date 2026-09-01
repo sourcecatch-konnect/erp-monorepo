@@ -36,6 +36,9 @@ export type JourneyLogSlipPreview = LogSlipPreview & {
   totalDieselAmountPaise: number;
 };
 
+export type JourneyCreateResult = Pick<VehicleJourney, "id" | "journeyNumber">;
+export type JourneyStatusResult = Pick<VehicleJourney, "id" | "status" | "version">;
+
 export const journeyApi = {
   list: async (query?: ListQuery): Promise<ListResult<VehicleJourney>> => {
     const params: Record<string, string | number> = {};
@@ -83,8 +86,8 @@ export const journeyApi = {
     return res.data;
   },
 
-  start: async (body: StartJourneyBody): Promise<VehicleJourney> => {
-    const res = await api.post<ApiResponse<VehicleJourney>>(
+  start: async (body: StartJourneyBody): Promise<JourneyCreateResult> => {
+    const res = await api.post<ApiResponse<JourneyCreateResult>>(
       "/vehicle-journeys",
       body,
     );
@@ -102,7 +105,7 @@ export const journeyApi = {
   dispatchLeg: async (
     id: string,
     tripId: string,
-    body: DispatchJourneyLegBody = {},
+    body: DispatchJourneyLegBody,
   ): Promise<JourneyLeg> => {
     const res = await api.post<ApiResponse<JourneyLeg>>(
       `/vehicle-journeys/${id}/dispatch-leg/${tripId}`,
@@ -115,16 +118,16 @@ export const journeyApi = {
     id: string,
     tripId: string,
     body: CloseJourneyLegBody,
-  ): Promise<VehicleJourney> => {
-    const res = await api.post<ApiResponse<VehicleJourney>>(
+  ): Promise<JourneyStatusResult> => {
+    const res = await api.post<ApiResponse<JourneyStatusResult>>(
       `/vehicle-journeys/${id}/close-leg/${tripId}`,
       body,
     );
     return unwrapApiResponse(res);
   },
 
-  markReady: async (id: string): Promise<VehicleJourney> => {
-    const res = await api.post<ApiResponse<VehicleJourney>>(
+  markReady: async (id: string): Promise<JourneyStatusResult> => {
+    const res = await api.post<ApiResponse<JourneyStatusResult>>(
       `/vehicle-journeys/${id}/mark-ready-for-log-slip`,
       {},
     );
@@ -134,8 +137,8 @@ export const journeyApi = {
   reopenSettlementReview: async (
     id: string,
     body: ReopenSettlementReviewBody,
-  ): Promise<VehicleJourney> => {
-    const res = await api.post<ApiResponse<VehicleJourney>>(
+  ): Promise<JourneyStatusResult> => {
+    const res = await api.post<ApiResponse<JourneyStatusResult>>(
       `/vehicle-journeys/${id}/reopen-settlement-review`,
       body,
     );
@@ -145,8 +148,8 @@ export const journeyApi = {
   forceClose: async (
     id: string,
     body: CloseJourneyBody,
-  ): Promise<VehicleJourney> => {
-    const res = await api.post<ApiResponse<VehicleJourney>>(
+  ): Promise<JourneyStatusResult> => {
+    const res = await api.post<ApiResponse<JourneyStatusResult>>(
       `/vehicle-journeys/${id}/close`,
       body,
     );
@@ -156,8 +159,8 @@ export const journeyApi = {
   cancel: async (
     id: string,
     body: CancelJourneyBody,
-  ): Promise<VehicleJourney> => {
-    const res = await api.post<ApiResponse<VehicleJourney>>(
+  ): Promise<JourneyStatusResult> => {
+    const res = await api.post<ApiResponse<JourneyStatusResult>>(
       `/vehicle-journeys/${id}/cancel`,
       body,
     );
@@ -334,15 +337,6 @@ export const journeyLookups = {
         label: v.vehicleNumber,
         currentKM: v.currentKM ?? null,
       }));
-  },
-  drivers: async (): Promise<JourneyOption[]> => {
-    const res = await api.get<ApiResponse<NamedRow[]>>("/drivers", {
-      params: { ...LOOKUP_QUERY, sort: "name:asc" },
-    });
-    return unwrapListResponse(res).data.map((d) => ({
-      value: d.id,
-      label: d.name,
-    }));
   },
   // Routes carry their city ids so dialogs can pre-check chain continuity.
   routes: async (): Promise<JourneyRouteOption[]> => {

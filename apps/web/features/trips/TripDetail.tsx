@@ -9,6 +9,8 @@ import {
   PERMS,
   type CloseTripBody,
   type CorrectClosedTripBody,
+  type CorrectInTransitTripBody,
+  type RescheduleTripBody,
   type Trip,
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -42,6 +44,7 @@ import {
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import CloseTripDialog from "@/components/feedback/CloseTripDialog";
+import DispatchTripDialog from "@/components/feedback/DispatchTripDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -51,6 +54,8 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import CorrectClosedTripDialog from "./CorrectClosedTripDialog";
+import CorrectInTransitTripDialog from "./CorrectInTransitTripDialog";
+import RescheduleTripDialog from "./RescheduleTripDialog";
 import {
   LegChip,
   timeAgo,
@@ -88,12 +93,16 @@ export default function TripDetail({ id }: { id: string }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [dispatchOpen, setDispatchOpen] = React.useState(false);
   const [correctOpen, setCorrectOpen] = React.useState(false);
+  const [correctInTransitOpen, setCorrectInTransitOpen] =
+    React.useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = React.useState(false);
 
   const canClose = useCan(PERMS.TRIP.CLOSE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
   const canCorrectClosed = useCan(PERMS.TRIP.CORRECT_CLOSED);
+  const canCorrectInTransit = useCan(PERMS.TRIP.CORRECT_IN_TRANSIT);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
   const canDispatch = canUpdate;
 
@@ -114,10 +123,31 @@ export default function TripDetail({ id }: { id: string }) {
   };
 
   const dispatch = useMutation({
-    mutationFn: () => tripApi.dispatch(id),
+    mutationFn: (body: { startDateTime: Date }) => tripApi.dispatch(id, body),
     onSuccess: () => {
       toast.success("Trip dispatched");
       setDispatchOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const correctInTransit = useMutation({
+    mutationFn: (body: CorrectInTransitTripBody) =>
+      tripApi.correctInTransit(id, body),
+    onSuccess: () => {
+      toast.success("Trip start time corrected");
+      setCorrectInTransitOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const reschedule = useMutation({
+    mutationFn: (body: RescheduleTripBody) => tripApi.reschedule(id, body),
+    onSuccess: () => {
+      toast.success("Planned dispatch time updated");
+      setRescheduleOpen(false);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -335,6 +365,18 @@ export default function TripDetail({ id }: { id: string }) {
                   </Link>
                 </DropdownMenuItem>
               ) : null}
+              {canUpdate && t.status === "Planned" ? (
+                <DropdownMenuItem onClick={() => setRescheduleOpen(true)}>
+                  <IconCalendar size={16} className="mr-2" /> Reschedule
+                </DropdownMenuItem>
+              ) : null}
+              {canCorrectInTransit && t.status === "InTransit" ? (
+                <DropdownMenuItem
+                  onClick={() => setCorrectInTransitOpen(true)}
+                >
+                  <IconEdit size={16} className="mr-2" /> Edit start time
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onClick={() => handleDownloadPdf(t)}>
                 <IconDownload size={16} className="mr-2" /> Download PDF
               </DropdownMenuItem>
@@ -437,6 +479,26 @@ export default function TripDetail({ id }: { id: string }) {
                 label="Started at"
                 value={formatDateTime(t.startDateTime)}
               />
+              {t.plannedStartDateTime ? (
+                <Field
+                  label="Planned dispatch"
+                  value={formatDateTime(t.plannedStartDateTime)}
+                />
+              ) : null}
+              {t.createdAs === "BACKFILLED_IN_TRANSIT" ? (
+                <Field
+                  label="Entered as"
+                  value="Back-filled (already in transit)"
+                />
+              ) : null}
+              <Field
+                label="Arrival at destination"
+                value={formatDateTime(t.arrivalDateTime)}
+              />
+              <Field
+                label="Unloading completed"
+                value={formatDateTime(t.unloadingCompletedAt)}
+              />
               <Field label="Ended at" value={formatDateTime(t.endDateTime)} />
               <Field
                 label="Opening KM"
@@ -498,15 +560,29 @@ export default function TripDetail({ id }: { id: string }) {
       </p>
 
       {/* ---- Dialogs ---- */}
-      <ConfirmDialog
+      <DispatchTripDialog
         open={dispatchOpen}
         onOpenChange={setDispatchOpen}
-        title={`Dispatch trip ${t.tripNumber}`}
-        description="The trip moves to In Transit without an LR — use this for empty or rake (DC) legs. LR trips are dispatched by attaching an LR."
-        confirmLabel="Dispatch"
-        pendingLabel="Dispatching..."
+        entity="trip"
+        reference={t.tripNumber}
         isPending={dispatch.isPending}
-        onConfirm={() => dispatch.mutate()}
+        onConfirm={(body) => dispatch.mutate(body)}
+      />
+
+      <CorrectInTransitTripDialog
+        open={correctInTransitOpen}
+        onOpenChange={setCorrectInTransitOpen}
+        trip={t}
+        isPending={correctInTransit.isPending}
+        onConfirm={(body) => correctInTransit.mutate(body)}
+      />
+
+      <RescheduleTripDialog
+        open={rescheduleOpen}
+        onOpenChange={setRescheduleOpen}
+        trip={t}
+        isPending={reschedule.isPending}
+        onConfirm={(body) => reschedule.mutate(body)}
       />
 
       <CloseTripDialog

@@ -63,6 +63,108 @@ const tripBaseShape = {
   // with the journey chain (from-city, opening KM, or a non-HO journey start)
   // the server requires this reason plus the chain-override permission.
   chainExceptionReason: optionalString,
+  // Dispatch state at creation:
+  //   alreadyDispatched = false -> trip is born Planned. `plannedStartDateTime`
+  //     is an optional schedule/ETA (future allowed) and never changes status.
+  //   alreadyDispatched = true  -> the truck already left. `startDateTime` is
+  //     the real (back-dated) dispatch moment and the trip is born InTransit.
+  alreadyDispatched: z.boolean().optional().default(false),
+  startDateTime: optionalDate,
+  plannedStartDateTime: optionalDate,
+  // Milestones already reached by the time an already-dispatched trip is
+  // entered. Optional, only meaningful when alreadyDispatched = true, and
+  // ordered startDateTime <= arrivalDateTime <= unloadingCompletedAt <= now.
+  // The trip stays InTransit — these only back-fill the timestamps.
+  arrivalDateTime: optionalDate,
+  unloadingCompletedAt: optionalDate,
+};
+
+/**
+ * Dispatch-state rules for trip creation. Kept separate from
+ * `tripTypeRefinement` so the update schema (Planned edits only) is unaffected.
+ */
+const tripDispatchRefinement = (
+  data: {
+    alreadyDispatched?: boolean;
+    startDateTime?: Date;
+    arrivalDateTime?: Date;
+    unloadingCompletedAt?: Date;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  const now = Date.now();
+  const notFuture = (value: Date | undefined, path: string, label: string) => {
+    if (value && value.getTime() > now) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${label} can't be in the future`,
+        path: [path],
+      });
+      return false;
+    }
+    return true;
+  };
+
+  if (data.alreadyDispatched) {
+    if (!data.startDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Actual dispatch date and time is required when the truck has already left",
+        path: ["startDateTime"],
+      });
+    } else {
+      notFuture(data.startDateTime, "startDateTime", "Dispatch time");
+    }
+
+    notFuture(data.arrivalDateTime, "arrivalDateTime", "Arrival time");
+    notFuture(
+      data.unloadingCompletedAt,
+      "unloadingCompletedAt",
+      "Unloading time",
+    );
+
+    if (
+      data.startDateTime &&
+      data.arrivalDateTime &&
+      data.arrivalDateTime < data.startDateTime
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Arrival can't be before dispatch",
+        path: ["arrivalDateTime"],
+      });
+    }
+    const unloadingFloor = data.arrivalDateTime ?? data.startDateTime;
+    if (
+      data.unloadingCompletedAt &&
+      unloadingFloor &&
+      data.unloadingCompletedAt < unloadingFloor
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unloading can't be before arrival / dispatch",
+        path: ["unloadingCompletedAt"],
+      });
+    }
+  } else {
+    if (data.startDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Remove the actual dispatch time, or tick 'Truck already dispatched'",
+        path: ["startDateTime"],
+      });
+    }
+    if (data.arrivalDateTime || data.unloadingCompletedAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Arrival / unloading times need 'Truck already dispatched' ticked",
+        path: [data.arrivalDateTime ? "arrivalDateTime" : "unloadingCompletedAt"],
+      });
+    }
+  }
 };
 
 // LR trips carry one client; DC trips are identified by their rake date.
@@ -88,7 +190,8 @@ const tripTypeRefinement = (
 
 export const createTripSchema = z
   .object(tripBaseShape)
-  .superRefine(tripTypeRefinement);
+  .superRefine(tripTypeRefinement)
+  .superRefine(tripDispatchRefinement);
 
 export const updateTripSchema = z
   .object(tripBaseShape)
@@ -106,21 +209,42 @@ export const closeTripSchema = z.object({
   closeReason: optionalString,
 });
 
+/**
+ * Reschedule the expected dispatch time on a Planned trip. Empty clears it.
+ * Any datetime allowed (a schedule, not an event).
+ */
+export const rescheduleTripSchema = z.object({
+  plannedStartDateTime: optionalDate,
+  version: z.number().int().positive().optional(),
+});
+
+const requiredDateField = (label: string) =>
+  z
+    .union([z.string(), z.date()])
+    .transform((value) => new Date(value))
+    .refine((value) => !Number.isNaN(value.getTime()), `Enter a valid ${label}`);
+
 /** Limited, audited correction of operational fields on a Closed trip. */
 export const correctClosedTripSchema = z.object({
   // Entered in rupees, stored as paise. Empty/return trips may legitimately be zero.
   onwardFreight: rupeesToPaise("Onward freight", { allowZero: true }),
   closingKm: positiveIntField("Closing KM"),
-  endDateTime: z
-    .union([z.string(), z.date()])
-    .transform((value) => new Date(value))
-    .refine(
-      (value) => !Number.isNaN(value.getTime()),
-      "Enter a valid trip closing date and time",
-    ),
+  startDateTime: requiredDateField("trip start date and time"),
+  endDateTime: requiredDateField("trip closing date and time"),
   arrivalDateTime: optionalDate,
   unloadingCompletedAt: optionalDate,
   closeReason: optionalString,
+  correctionReason: z
+    .string()
+    .trim()
+    .min(3, "Please give a correction reason (min 3 characters)")
+    .max(500, "Correction reason is too long"),
+  version: z.number().int().positive().optional(),
+});
+
+/** Limited, audited correction of the start time on an InTransit trip. */
+export const correctInTransitTripSchema = z.object({
+  startDateTime: requiredDateField("trip start date and time"),
   correctionReason: z
     .string()
     .trim()

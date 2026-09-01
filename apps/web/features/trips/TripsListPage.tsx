@@ -24,6 +24,7 @@ import { useCan } from "@/features/auth";
 import { useTablePrefs } from "@/features/table-prefs";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import CloseTripDialog from "@/components/feedback/CloseTripDialog";
+import DispatchTripDialog from "@/components/feedback/DispatchTripDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
@@ -164,7 +165,8 @@ export default function TripsListPage() {
   };
 
   const dispatch = useMutation({
-    mutationFn: (id: string) => tripApi.dispatch(id),
+    mutationFn: ({ id, startDateTime }: { id: string; startDateTime: Date }) =>
+      tripApi.dispatch(id, { startDateTime }),
     onSuccess: () => {
       toast.success("Trip dispatched");
       setDispatchTrip(null);
@@ -325,16 +327,14 @@ export default function TripsListPage() {
         }}
       />
 
-      <ConfirmDialog
+      <DispatchTripDialog
         open={Boolean(dispatchTrip)}
         onOpenChange={(open) => !open && setDispatchTrip(null)}
-        title={`Dispatch trip ${dispatchTrip?.tripNumber ?? ""}`}
-        description="The trip moves to In Transit without an LR — use this for empty or rake (DC) legs. LR trips are dispatched by attaching an LR."
-        confirmLabel="Dispatch"
-        pendingLabel="Dispatching..."
+        entity="trip"
+        reference={dispatchTrip?.tripNumber}
         isPending={dispatch.isPending}
-        onConfirm={() => {
-          if (dispatchTrip) dispatch.mutate(dispatchTrip.id);
+        onConfirm={({ startDateTime }) => {
+          if (dispatchTrip) dispatch.mutate({ id: dispatchTrip.id, startDateTime });
         }}
       />
 

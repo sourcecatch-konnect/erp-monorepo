@@ -42,6 +42,10 @@ export type DeliveryChallanVpOption = {
 
 export type DeliveryChallanPreviewItem = {
   branchGrnItemId: string;
+  branchGrnId: string;
+  vpNo: string | null;
+  grnGoodsId: string;
+  rowLabel: string;
   lrNumber: string;
   consigneeId: string;
   consigneeName: string | null;

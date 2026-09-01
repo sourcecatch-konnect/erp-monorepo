@@ -12,6 +12,12 @@ import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
 
 const requiredId = (label: string) => z.string().min(1, `${label} is required`);
 
+/** Freight billing basis — chosen at LR creation, locked once out of DRAFT. */
+export const lrPaymentModeSchema = z.enum(["TO_BE_BILLED", "TO_PAY"], {
+  errorMap: () => ({ message: "Select a payment mode" }),
+});
+export type LRPaymentMode = z.infer<typeof lrPaymentModeSchema>;
+
 const optionalString = z
   .string()
   .trim()
@@ -163,6 +169,7 @@ export const createGroupFromOrderSchema = z.object({
   orderId: requiredId("Order"),
   truckIndex: truckIndexField,
   transportType: lrTransportTypeSchema.default("Road"),
+  paymentMode: lrPaymentModeSchema,
   // Order groups can be marked direct, to-hub, or from-hub at creation.
   tripLegType: lrTripLegTypeSchema.default("DIRECT"),
   // Railhead branch (order + RoadAndRail only). Unrelated to the Jalgaon hub.
@@ -192,6 +199,7 @@ export const createInstantGroupSchema = z.object({
   originBranchId: requiredId("Origin branch"),
   destinationBranchId: requiredId("Destination branch"),
   transportType: lrTransportTypeSchema.default("Road"),
+  paymentMode: lrPaymentModeSchema,
   priority: lrPrioritySchema.default("Normal"),
   ...vehicleShape,
   // Instant groups declare their consignments inline (no order to read from).
@@ -306,6 +314,8 @@ export const updateLRGroupSchema = z
   .object({
     consigneeId: optionalId,
     transportType: lrTransportTypeSchema.optional(),
+    // Server rejects this unless the group is still DRAFT.
+    paymentMode: lrPaymentModeSchema.optional(),
     railheadBranchId: optionalId,
     sourceRailheadAreaId: optionalId,
     destinationRailheadAreaId: optionalId,

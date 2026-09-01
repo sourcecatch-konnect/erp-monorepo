@@ -65,6 +65,8 @@ export type MRRRVPScheduleOption = Pick<
   } | null;
 };
 
+export type MRRRStatusResult = Pick<MRRR, "id" | "status" | "version">;
+
 export type MRRRPreviewResponse = {
   vpSchedule: VPSchedule;
   rows: Array<{
@@ -170,8 +172,11 @@ export const mrrrApi = {
     return unwrapApiResponse(res);
   },
 
-  submit: async (identifier: string, body: SubmitMRRRBody): Promise<MRRR> => {
-    const res = await api.post<ApiResponse<MRRR>>(
+  submit: async (
+    identifier: string,
+    body: SubmitMRRRBody,
+  ): Promise<MRRRStatusResult> => {
+    const res = await api.post<ApiResponse<MRRRStatusResult>>(
       `/mrrr/${encodeMRRRIdentifier(identifier)}/submit`,
       body,
     );
@@ -179,8 +184,11 @@ export const mrrrApi = {
     return unwrapApiResponse(res);
   },
 
-  cancel: async (identifier: string, body: CancelMRRRBody): Promise<MRRR> => {
-    const res = await api.post<ApiResponse<MRRR>>(
+  cancel: async (
+    identifier: string,
+    body: CancelMRRRBody,
+  ): Promise<MRRRStatusResult> => {
+    const res = await api.post<ApiResponse<MRRRStatusResult>>(
       `/mrrr/${encodeMRRRIdentifier(identifier)}/cancel`,
       body,
     );
