@@ -37,6 +37,8 @@ import {
   evaluateBillingForLR,
   refreshLRBillingStatus,
 } from "./billing.service.js";
+import { buildBillPdfHtml, billPdfInclude } from "./billing.pdf.js";
+import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -69,31 +71,53 @@ const servicePartyWhere = (
     ? { consignorId: customerId }
     : { consigneeId: customerId };
 
+type BillLane = "ROAD" | "ROAD_RAIL" | "ROAD_GTA";
+
+// ROAD is the "to pay" / no-GST lane and accepts any transport mode, so it
+// applies no transportType filter (Prisma ignores `undefined`). ROAD_GTA is
+// road-only; ROAD_RAIL is rail / road+rail.
 const transportWhere = (
-  billType: "ROAD" | "ROAD_RAIL" | "ROAD_GTA",
+  billType: BillLane,
 ): Prisma.LRGroupWhereInput["transportType"] =>
-  billType === "ROAD_RAIL" ? { in: ["RoadAndRail", "Rail"] } : "Road";
+  billType === "ROAD_RAIL"
+    ? { in: ["RoadAndRail", "Rail"] }
+    : billType === "ROAD_GTA"
+      ? "Road"
+      : undefined;
+
+// The bill lane fixes the LR's freight basis: ROAD <-> TO_PAY (no GST),
+// ROAD_GTA / ROAD_RAIL <-> TO_BE_BILLED (GST).
+const paymentModeForBillType = (
+  billType: BillLane,
+): Prisma.LRGroupWhereInput["paymentMode"] =>
+  billType === "ROAD" ? "TO_PAY" : "TO_BE_BILLED";
 
 router.get("/options", can(PERMS.BILLING.VIEW), async (req, res) => {
-  const branches = await db.branch.findMany({
-    where: branchFilter(req, "id"),
-    select: {
-      id: true,
-      name: true,
-      branchCode: true,
-      gstNo: true,
-      companyId: true,
-      address: true,
-      city: { select: { id: true, name: true, state: true } },
-    },
-    orderBy: { name: "asc" },
-  });
-  return sendOk(res, { branches });
+  const [branches, states] = await Promise.all([
+    db.branch.findMany({
+      where: branchFilter(req, "id"),
+      select: {
+        id: true,
+        name: true,
+        branchCode: true,
+        gstNo: true,
+        companyId: true,
+        address: true,
+        city: { select: { id: true, name: true, state: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+    db.state.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  return sendOk(res, { branches, states });
 });
 
 router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
   const input = validate(eligibleClientQuerySchema.safeParse(req.query));
-  assertBranchAccess(req, input.branchId);
+  if (input.branchId) assertBranchAccess(req, input.branchId);
   const lrs = await db.lorryReceipt.findMany({
     where: {
       status: "ACKNOWLEDGED",
@@ -103,8 +127,11 @@ router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
       ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
       group: {
         is: {
-          originBranchId: input.branchId,
+          ...(input.branchId
+            ? { originBranchId: input.branchId }
+            : branchFilter(req, "originBranchId")),
           transportType: transportWhere(input.billType),
+          paymentMode: paymentModeForBillType(input.billType),
         },
       },
     },
@@ -136,10 +163,20 @@ router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
         select: {
           baseFreightAmount: true,
           consignor: {
-            select: { id: true, name: true, splitBillsByChargeType: true },
+            select: {
+              id: true,
+              name: true,
+              stateId: true,
+              splitBillsByChargeType: true,
+            },
           },
           consignee: {
-            select: { id: true, name: true, splitBillsByChargeType: true },
+            select: {
+              id: true,
+              name: true,
+              stateId: true,
+              splitBillsByChargeType: true,
+            },
           },
         },
       },
@@ -148,7 +185,12 @@ router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
   });
   const unique = new Map<
     string,
-    { id: string; name: string; splitBillsByChargeType: boolean }
+    {
+      id: string;
+      name: string;
+      stateId: string;
+      splitBillsByChargeType: boolean;
+    }
   >();
   for (const lr of lrs) {
     const hasRemainingCharge = lr.billableCharges.some((charge) => {
@@ -196,9 +238,25 @@ router.post(
       select: { id: true, group: { select: { originBranchId: true } } },
     });
     for (const lr of lrs) assertBranchAccess(req, lr.group.originBranchId);
+
+    const CONCURRENCY = 5;
     const results = [];
-    for (const lr of lrs) {
-      results.push(await evaluateBillingForLR(db, lr.id, actorId(req)));
+    const userId = actorId(req);
+
+    for (
+      let index = 0;
+      index < lrs.length;
+      index += CONCURRENCY
+    ) {
+      const batchResults = await Promise.all(
+        lrs
+          .slice(index, index + CONCURRENCY)
+          .map((lr) =>
+            evaluateBillingForLR(db, lr.id, userId),
+          ),
+      );
+
+      results.push(...batchResults);
     }
     return sendOk(res, results);
   },
@@ -208,40 +266,97 @@ router.post(
   "/readiness/evaluate-eligible",
   can(PERMS.BILLING.CREATE),
   async (req, res) => {
-    const input = validate(eligibleLRQuerySchema.safeParse(req.body));
-    assertBranchAccess(req, input.branchId);
+    const input = validate(
+      eligibleLRQuerySchema.safeParse(req.body),
+    );
+
+    if (input.branchId) assertBranchAccess(req, input.branchId);
+
     const groupWhere: Prisma.LRGroupWhereInput = {
-      originBranchId: input.branchId,
+      ...(input.branchId
+        ? { originBranchId: input.branchId }
+        : branchFilter(req, "originBranchId")),
       transportType: transportWhere(input.billType),
-      ...servicePartyWhere(input.billingPartyType, input.customerId),
+      paymentMode: paymentModeForBillType(input.billType),
+      ...servicePartyWhere(
+        input.billingPartyType,
+        input.customerId,
+      ),
     };
+
     const lrs = await db.lorryReceipt.findMany({
       where: {
         status: "ACKNOWLEDGED",
-        ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
-        group: { is: groupWhere },
+
+        billingStatus: {
+          in: [
+            "NOT_BILLABLE",
+            "READY_TO_BILL",
+            "PARTIALLY_BILLED",
+          ],
+        },
+
+        ...(input.cutoffDate
+          ? {
+            createdAt: {
+              lte: input.cutoffDate,
+            },
+          }
+          : {}),
+
+        group: {
+          is: groupWhere,
+        },
       },
-      select: { id: true },
+
+      select: {
+        id: true,
+      },
+
       take: 250,
     });
+
+    const CONCURRENCY = 5;
     const results = [];
-    for (const lr of lrs)
-      results.push(await evaluateBillingForLR(db, lr.id, actorId(req)));
+    const userId = actorId(req);
+
+    for (
+      let index = 0;
+      index < lrs.length;
+      index += CONCURRENCY
+    ) {
+      const batch = lrs.slice(
+        index,
+        index + CONCURRENCY,
+      );
+
+      const batchResults = await Promise.all(
+        batch.map((lr) =>
+          evaluateBillingForLR(db, lr.id, userId),
+        ),
+      );
+
+      results.push(...batchResults);
+    }
+
     return sendOk(res, results);
   },
 );
 
 router.get("/eligible-lrs", can(PERMS.BILLING.VIEW), async (req, res) => {
   const input = validate(eligibleLRQuerySchema.safeParse(req.query));
-  assertBranchAccess(req, input.branchId);
+  if (input.branchId) assertBranchAccess(req, input.branchId);
   const customer = await db.customer.findUnique({
     where: { id: input.customerId },
     select: { splitBillsByChargeType: true },
   });
   if (!customer) throw new NotFoundError("Billing client not found");
   const groupWhere: Prisma.LRGroupWhereInput = {
-    originBranchId: input.branchId,
+    ...(input.branchId
+      ? { originBranchId: input.branchId }
+      : branchFilter(req, "originBranchId")),
     transportType: transportWhere(input.billType),
+    paymentMode: paymentModeForBillType(input.billType),
     ...servicePartyWhere(input.billingPartyType, input.customerId),
   };
   const lrs = await db.lorryReceipt.findMany({
@@ -300,6 +415,7 @@ router.get("/eligible-lrs", can(PERMS.BILLING.VIEW), async (req, res) => {
     billingStatus: lr.billingStatus,
     transportType: lr.group.transportType,
     origin: lr.group.originBranch.name,
+    originBranchId: lr.group.originBranch.id,
     destination: lr.group.destinationBranch.name,
     placeOfSupply: lr.group.destinationBranch.city?.state ?? null,
     consignor: lr.group.consignor,
@@ -500,26 +616,15 @@ router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
   const input = validate(createBillDraftSchema.safeParse(req.body));
   assertBranchAccess(req, input.branchId);
   const context = await loadDraftContext(input.branchId, input.customerId);
+  // GST is always forward-charged on non-ROAD bills; ROAD carries no GST.
   const chargeMechanism =
     input.billType === "ROAD"
       ? ("NOT_APPLICABLE" as const)
-      : input.billType === "ROAD_RAIL"
-        ? ("FORWARD_CHARGE" as const)
-        : input.chargeMechanism!;
+      : ("FORWARD_CHARGE" as const);
   const charges = await db.lRCharge.findMany({
     where: { id: { in: input.lrChargeIds } },
     include: {
-      lr: {
-        include: {
-          group: {
-            include: {
-              destinationBranch: {
-                include: { city: { include: { state: true } } },
-              },
-            },
-          },
-        },
-      },
+      lr: { include: { group: true } },
       billLines: {
         where: { bill: { status: { not: "CANCELLED" } } },
         select: { amountPaise: true },
@@ -540,10 +645,20 @@ router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
     const transportMatches =
       input.billType === "ROAD_RAIL"
         ? ["RoadAndRail", "Rail"].includes(charge.lr.group.transportType)
-        : charge.lr.group.transportType === "Road";
+        : input.billType === "ROAD_GTA"
+          ? charge.lr.group.transportType === "Road"
+          : true; // ROAD (to pay) accepts any transport mode
     if (!transportMatches)
       throw new BadRequestError(
         "An LR does not match the selected transport type",
+      );
+    if (
+      charge.lr.group.paymentMode !== paymentModeForBillType(input.billType)
+    )
+      throw new BadRequestError(
+        input.billType === "ROAD"
+          ? "An LR is not a 'to pay' LR — bill it under Road GTA / Road & Rail"
+          : "A 'to pay' LR was selected — bill it under the Road bill type",
       );
     const partyMatches =
       input.billingPartyType === "CONSIGNOR"
@@ -553,8 +668,6 @@ router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
       throw new BadRequestError(
         "An LR does not match the selected client and bill head",
       );
-    if (!charge.lr.group.destinationBranch.city?.state)
-      throw new BadRequestError("An LR destination state is incomplete");
   }
   const selectedFreightGroups = new Set<string>();
   for (const charge of charges) {
@@ -578,18 +691,23 @@ router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
       );
     return { charge, remaining };
   });
-  const destinationStates = new Map(
-    charges.map((charge) => {
-      const state = charge.lr.group.destinationBranch.city!.state;
-      return [state.id, state] as const;
-    }),
-  );
-  if (destinationStates.size !== 1)
-    throw new BadRequestError(
-      "Selected LRs have different Places of Supply; create separate bills",
-    );
-  const placeOfSupply = [...destinationStates.values()][0]!;
   const supplierState = context.branch.city!.state;
+
+  // Place of Supply is operator-chosen on the bill form (defaulting to the
+  // client's registered state). A ROAD "to pay" bill carries no GST, so PoS
+  // is only informational there — fall back to the supplier state when the
+  // form omits it.
+  let placeOfSupply = supplierState;
+  if (input.placeOfSupplyStateId) {
+    const picked = await db.state.findUnique({
+      where: { id: input.placeOfSupplyStateId },
+    });
+    if (!picked) throw new NotFoundError("Place of Supply state not found");
+    placeOfSupply = picked;
+  } else if (input.billType !== "ROAD") {
+    throw new BadRequestError("Select a Place of Supply state");
+  }
+
   const allocationGroups = context.customer.splitBillsByChargeType
     ? [
       allocations.filter(({ charge }) => charge.type === "FREIGHT"),
@@ -601,7 +719,6 @@ router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
       allocations: group,
       calculation: await calculateBill({
         billType: input.billType,
-        chargeMechanism,
         billDate: input.billDate,
         supplierStateId: supplierState.id,
         placeOfSupplyStateId: placeOfSupply.id,
@@ -768,6 +885,39 @@ router.get("/bills/:id", can(PERMS.BILLING.VIEW), async (req, res) => {
   return sendOk(res, bill);
 });
 
+/* ------------------------------------------------------------------ */
+/* Bill PDF / print-preview (tax invoice)                              */
+/* ------------------------------------------------------------------ */
+const loadBillForPdf = async (req: Parameters<typeof assertBranchAccess>[0]) => {
+  const bill = await db.bill.findUnique({
+    where: { id: getParamId(req) },
+    include: billPdfInclude,
+  });
+  if (!bill) throw new NotFoundError("Bill not found");
+  assertBranchAccess(req, bill.branchId);
+  return bill;
+};
+
+router.get("/bills/:id/pdf", can(PERMS.BILLING.VIEW), async (req, res) => {
+  const bill = await loadBillForPdf(req);
+  const pdfBuffer = await generatePdfFromHtml(buildBillPdfHtml(bill));
+  const name = (bill.billNumber ?? bill.id).replaceAll("/", "-");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}.pdf"`);
+  return res.send(pdfBuffer);
+});
+
+router.get(
+  "/bills/:id/print-preview",
+  can(PERMS.BILLING.VIEW),
+  async (req, res) => {
+    const bill = await loadBillForPdf(req);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).send(buildBillPdfHtml(bill));
+  },
+);
+
 router.get(
   "/bills/:id/available-charges",
   can(PERMS.BILLING.VIEW),
@@ -918,7 +1068,6 @@ router.post(
       const calculation = await calculateBill(
         {
           billType: bill.billType,
-          chargeMechanism: bill.chargeMechanism,
           billDate: bill.billDate,
           supplierStateId: bill.supplierStateId,
           placeOfSupplyStateId: bill.placeOfSupplyStateId,
@@ -1143,7 +1292,6 @@ router.post(
     }
     const calculation = await calculateBill({
       billType: bill.billType,
-      chargeMechanism: bill.chargeMechanism,
       billDate: bill.billDate,
       supplierStateId: bill.supplierStateId,
       placeOfSupplyStateId: bill.placeOfSupplyStateId,

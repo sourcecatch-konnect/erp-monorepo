@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "../lib/util";
 import { Input } from "./input";
-
+import { createPortal } from "react-dom";
 export type SuggestOption = {
   value: string;
   /** Optional secondary text. */
@@ -47,21 +47,29 @@ export function SuggestInput({
 }: SuggestInputProps) {
   const [open, setOpen] = React.useState(false);
   const [active, setActive] = React.useState(-1);
+  const anchorRef = React.useRef<HTMLDivElement>(null);
 
-const filtered = React.useMemo(() => {
-  const q = value.trim().toLowerCase();
+  const [dropdownPosition, setDropdownPosition] = React.useState<{
+    left: number;
+    width: number;
+    top?: number;
+    bottom?: number;
+    maxHeight: number;
+  } | null>(null);
+  const filtered = React.useMemo(() => {
+    const q = value.trim().toLowerCase();
 
-  const list = q
-    ? suggestions.filter(
+    const list = q
+      ? suggestions.filter(
         (s) =>
           s.value.toLowerCase().includes(q) ||
           (s.hint ? s.hint.toLowerCase().includes(q) : false) ||
           (s.badge ? s.badge.toLowerCase().includes(q) : false),
       )
-    : suggestions;
+      : suggestions;
 
-  return list.slice(0, maxItems);
-}, [value, suggestions, maxItems]);
+    return list.slice(0, maxItems);
+  }, [value, suggestions, maxItems]);
 
   // Hide the list when the only match is exactly what's already typed.
   const showList =
@@ -72,7 +80,44 @@ const filtered = React.useMemo(() => {
       filtered.length === 1 &&
       filtered[0]!.value.trim().toLowerCase() === value.trim().toLowerCase()
     );
+  const updateDropdownPosition = React.useCallback(() => {
+    const anchor = anchorRef.current;
 
+    if (!anchor) return;
+
+    const rect = anchor.getBoundingClientRect();
+    const gap = 4;
+
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const spaceAbove = rect.top - gap;
+
+    const openAbove = spaceBelow < 160 && spaceAbove > spaceBelow;
+    const availableSpace = openAbove ? spaceAbove : spaceBelow;
+
+    setDropdownPosition({
+      left: rect.left,
+      width: rect.width,
+      top: openAbove ? undefined : rect.bottom + gap,
+      bottom: openAbove
+        ? window.innerHeight - rect.top + gap
+        : undefined,
+      maxHeight: Math.max(96, Math.min(240, availableSpace)),
+    });
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!showList) return;
+
+    updateDropdownPosition();
+
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [showList, updateDropdownPosition]);
   const select = (v: string) => {
     onChange(v);
     setOpen(false);
@@ -97,17 +142,17 @@ const filtered = React.useMemo(() => {
       setActive(-1);
     }
   };
-const badgeToneClass: Record<
-  NonNullable<SuggestOption["badgeTone"]>,
-  string
-> = {
-  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-700",
-  danger: "border-red-200 bg-red-50 text-red-700",
-  muted: "border-border bg-muted text-muted-foreground",
-};
+  const badgeToneClass: Record<
+    NonNullable<SuggestOption["badgeTone"]>,
+    string
+  > = {
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-700",
+    danger: "border-red-200 bg-red-50 text-red-700",
+    muted: "border-border bg-muted text-muted-foreground",
+  };
   return (
-    <div className={cn("relative", className)}>
+    <div ref={anchorRef} className={cn("relative", className)}>
       <Input
         id={id}
         value={value}
@@ -131,47 +176,68 @@ const badgeToneClass: Record<
         }}
         onKeyDown={handleKeyDown}
       />
-      {showList ? (
-        <ul className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-          {filtered.map((s, i) => (
-     <li
-  key={s.value}
-  role="option"
-  aria-selected={i === active}
-  onMouseDown={(e) => {
-    e.preventDefault();
-    select(s.value);
-  }}
-  onMouseEnter={() => setActive(i)}
-  className={cn(
-    "flex cursor-pointer items-center justify-between gap-2 rounded-[5px] px-2 py-1.5 text-sm transition-colors",
-    i === active && "bg-accent text-accent-foreground",
-  )}
->
-  <span className="min-w-0">
-    <span className="block truncate font-medium">{s.value}</span>
+      {showList &&
+        dropdownPosition &&
+        typeof document !== "undefined"
+        ? createPortal(
+          <ul
+            role="listbox"
+            style={{
+              position: "fixed",
+              left: dropdownPosition.left,
+              width: dropdownPosition.width,
+              top: dropdownPosition.top,
+              bottom: dropdownPosition.bottom,
+              maxHeight: dropdownPosition.maxHeight,
+            }}
+            className="z-[10000] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          >
+            {filtered.map((suggestion, index) => (
+              <li
+                key={suggestion.value}
+                role="option"
+                aria-selected={index === active}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  select(suggestion.value);
+                }}
+                onMouseEnter={() => setActive(index)}
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-2 rounded-[5px] px-2 py-1.5 text-sm transition-colors",
+                  index === active &&
+                  "bg-accent text-accent-foreground",
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">
+                    {suggestion.value}
+                  </span>
 
-    {s.hint ? (
-      <span className="block truncate text-xs text-muted-foreground">
-        {s.hint}
-      </span>
-    ) : null}
-  </span>
+                  {suggestion.hint ? (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {suggestion.hint}
+                    </span>
+                  ) : null}
+                </span>
 
-  {s.badge ? (
-    <span
-      className={cn(
-        "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-        badgeToneClass[s.badgeTone ?? "muted"],
-      )}
-    >
-      {s.badge}
-    </span>
-  ) : null}
-</li>
-          ))}
-        </ul>
-      ) : null}
+                {suggestion.badge ? (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                      badgeToneClass[
+                      suggestion.badgeTone ?? "muted"
+                      ],
+                    )}
+                  >
+                    {suggestion.badge}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>,
+          document.body,
+        )
+        : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   splitGroupAtHubSchema,
   cancelGroupSchema,
   lrGroupLineSchema,
+  type LRPaymentMode as LRPaymentModeValue,
 } from "@skerp/validators";
 import type {
   LRSource,
@@ -20,6 +21,7 @@ import type {
 } from "../lorry-receipt/lorry-receipt.type.js";
 
 export type LRGroupStatus = "DRAFT" | "FINALISED" | "DELIVERED" | "CANCELLED";
+export type LRPaymentMode = LRPaymentModeValue;
 
 export type CreateLRGroupBody = z.input<typeof createLRGroupSchema>;
 export type CreateLRGroupFormInput = z.input<typeof createLRGroupSchema>;
@@ -86,6 +88,7 @@ export type LRGroupListItem = {
   status: LRGroupStatus;
   source: LRSource;
   transportType: LRTransportType;
+  paymentMode: LRPaymentMode;
   tripLegType: LRTripLegType;
   priority: LRPriority;
   truckIndex: number;

@@ -31,7 +31,6 @@ import {
   IconIdBadge2,
   IconNotes,
   IconHome,
-  IconMail,
   IconBeach,
   IconCircleCheck,
 } from "@tabler/icons-react";
@@ -207,17 +206,6 @@ export default function DriverDetailDialog({
     {display(data?.mobile)}
   </span>
 
-  {data?.alternateMobile ? (
-    <>
-      <span className="text-muted-foreground">,</span>
-
-      <span className="flex items-center gap-1 font-semibold text-slate-900">
-        <IconPhone size={12} className="text-muted-foreground" />
-        {display(data.alternateMobile)}
-      </span>
-    </>
-  ) : null}
-
   <span className="text-muted-foreground">,</span>
 
   <DriverStatusBadge
@@ -232,13 +220,6 @@ export default function DriverDetailDialog({
     <p className="text-muted-foreground">License No</p>
     <p className="font-medium">{display(data?.licenseNo)}</p>
   </div>
-
-  <div className="rounded-lg bg-white p-2">
-    <p className="text-muted-foreground">Blood Group</p>
-    <p className="font-medium">{display(data?.bloodGroup)}</p>
-  </div>
-
-
 
   <div className="rounded-lg bg-white p-2">
     <p className="text-muted-foreground">Driver Type</p>
@@ -307,30 +288,15 @@ export default function DriverDetailDialog({
 
             <div className="mx-5 border-t" />
 
-            {/* Permanent Address */}
+            {/* Address */}
             <div className="px-5 py-5">
-              <SectionLabel>Permanent Address</SectionLabel>
+              <SectionLabel>Address</SectionLabel>
 
               <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
-                <Field label="Address" value={display(data?.permanentAddress)} icon={<IconHome size={12} />} />
-                <Field label="Country" value={display(data?.permanentCountry)} icon={<IconMapPin size={12} />} />
-                <Field label="State" value={display(data?.permanentState)} icon={<IconMapPin size={12} />} />
-                <Field label="City" value={display(data?.permanentCity)} icon={<IconMapPin size={12} />} />
-              </div>
-            </div>
-
-            <div className="mx-5 border-t" />
-
-            {/* Correspondence Address */}
-            <div className="px-5 py-5">
-              <SectionLabel>Correspondence Address</SectionLabel>
-
-              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
-                <Field label="Address" value={display(data?.correspondenceAddress)} icon={<IconMail size={12} />} />
-                <Field label="Country" value={display(data?.correspondenceCountry)} icon={<IconMapPin size={12} />} />
-                <Field label="State" value={display(data?.correspondenceState)} icon={<IconMapPin size={12} />} />
-                <Field label="City" value={display(data?.correspondenceCity)} icon={<IconMapPin size={12} />} />
-                <Field label="Landline" value={display(data?.correspondenceLandline)} icon={<IconPhone size={12} />} />
+                <Field label="Address" value={display(data?.address)} icon={<IconHome size={12} />} />
+                <Field label="Country" value={display(data?.country)} icon={<IconMapPin size={12} />} />
+                <Field label="State" value={display(data?.state)} icon={<IconMapPin size={12} />} />
+                <Field label="City" value={display(data?.city)} icon={<IconMapPin size={12} />} />
               </div>
             </div>
 
@@ -344,8 +310,6 @@ export default function DriverDetailDialog({
                 <Field label="PAN Number" value={display(data?.panNo)} icon={<IconIdBadge2 size={12} />} />
                 <Field label="Aadhar Number" value={display(data?.aadharCardNo)} icon={<IconId size={12} />} />
                 <Field label="Monthly Salary" value={formatCurrency(data?.salary)} icon={<IconCurrencyRupee size={12} />} />
-                <Field label="No-TDS Threshold" value={formatCurrency(data?.noTDSApplyAmount)} icon={<IconCurrencyRupee size={12} />} />
-                <Field label="TDS Rate" value={data?.tdsRate != null ? `${data.tdsRate}%` : "-"} icon={<IconCurrencyRupee size={12} />} />
               </div>
             </div>
 

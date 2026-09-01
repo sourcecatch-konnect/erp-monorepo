@@ -14,17 +14,14 @@ const optionalDateString = z
     return new Date(value).toISOString();
   });
 
-const numberField = (message: string) =>
+const optionalPositiveNumber = (message: string) =>
   z
     .union([z.string(), z.number()])
     .transform((value) => (value === "" ? undefined : Number(value)))
     .refine(
       (value) => value === undefined || !Number.isNaN(value),
       message
-    );
-
-const optionalPositiveNumber = (message: string) =>
-  numberField(message)
+    )
     .refine(
       (value) => value === undefined || value >= 0,
       `${message.split(" ")[0]} cannot be negative`
@@ -54,17 +51,6 @@ export const driverStatusSchema = z.enum(["AVAILABLE", "ON_TRIP"]);
 
 export const driverTypeSchema = z.enum(["Permanent", "Contract", "Owner"]);
 
-export const bloodGroupSchema = z.enum([
-  "A+",
-  "A-",
-  "B+",
-  "B-",
-  "AB+",
-  "AB-",
-  "O+",
-  "O-",
-]);
-
 const mobileRegex = /^[6-9][0-9]{9}$/;
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const aadharRegex = /^[2-9][0-9]{11}$/;
@@ -72,7 +58,10 @@ const licenseRegex = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
 const licenseNoSchema = z
   .string()
   .trim()
-  .transform((value) => value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+  .optional()
+  .transform((value) =>
+    value ? value.toUpperCase().replace(/[^A-Z0-9]/g, "") : undefined
+  )
   .pipe(
     z
       .string()
@@ -81,6 +70,7 @@ const licenseNoSchema = z
         licenseRegex,
         "Enter valid license number. Example: MH1420110012345"
       )
+      .optional()
   );
 
 const aadharNoSchema = z
@@ -102,202 +92,135 @@ export const driverSchema = z.object({
   type: z.string(),
   birthDate: z.string().nullable().optional(),
   anniversaryDate: z.string().nullable().optional(),
-  mobile: z.string(),
-  alternateMobile: z.string().nullable().optional(),
-  licenseNo: z.string(),
+  mobile: z.string().nullable().optional(),
+  licenseNo: z.string().nullable().optional(),
   licenseDate: z.string().nullable().optional(),
   licenseExpiryDate: z.string().nullable().optional(),
   licenseCity: z.string().nullable().optional(),
-  permanentAddress: z.string().nullable().optional(),
-  permanentCountry: z.string().nullable().optional(),
-  permanentState: z.string().nullable().optional(),
-  permanentCity: z.string().nullable().optional(),
-  correspondenceAddress: z.string().nullable().optional(),
-  correspondenceCountry: z.string().nullable().optional(),
-  correspondenceState: z.string().nullable().optional(),
-  correspondenceCity: z.string().nullable().optional(),
-  correspondenceLandline: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
   referencePerson: z.string().nullable().optional(),
   referenceContactNo: z.string().nullable().optional(),
-  bloodGroup: z.string().nullable().optional(),
   otherDetails: z.string().nullable().optional(),
   salary: z.number().nullable().optional(),
   panNo: z.string().nullable().optional(),
   aadharCardNo: z.string().nullable().optional(),
-  noTDSApplyAmount: z.number().nullable().optional(),
-  tdsRate: z.number().nullable().optional(),
   onLeave: z.boolean(),
   blackListed: z.boolean(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
 
-export const createDriverSchema = z
-  .object({
-    name: z
-      .string()
-      .trim()
-      .min(2, "Name must be at least 2 characters")
-      .max(80, "Name cannot exceed 80 characters")
-      .regex(
-        /^[A-Za-z][A-Za-z .'-]*$/,
-        "Name can only contain letters, spaces, dots, apostrophes and hyphens"
-      ),
+export const createDriverSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Name must be at least 2 characters")
+    .max(80, "Name cannot exceed 80 characters")
+    .regex(
+      /^[A-Za-z][A-Za-z .'-]*$/,
+      "Name can only contain letters, spaces, dots, apostrophes and hyphens"
+    ),
 
-    photoPath: optionalNullableString,
+  photoPath: optionalNullableString,
 
-    status: driverStatusSchema,
+  status: driverStatusSchema,
 
-    type: z
-      .string()
-      .trim()
-      .min(1, "Driver type is required")
-      .max(40, "Driver type cannot exceed 40 characters"),
+  type: z
+    .string()
+    .trim()
+    .min(1, "Driver type is required")
+    .max(40, "Driver type cannot exceed 40 characters"),
 
-    birthDate: optionalDateString,
-    anniversaryDate: optionalDateString,
+  birthDate: optionalDateString,
+  anniversaryDate: optionalDateString,
 
-    mobile: z
-      .string()
-      .trim()
-      .transform((value) => value.replace(/\s+/g, ""))
-      .pipe(
-        z
-          .string()
-          .min(1, "Mobile number is required")
-          .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
-      ),
+  mobile: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? value.replace(/\s+/g, "") : undefined))
+    .pipe(
+      z
+        .string()
+        .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
+        .optional()
+    ),
 
-    alternateMobile: z
-      .string()
-      .trim()
-      .optional()
-      .transform((value) => (value ? value.replace(/\s+/g, "") : undefined))
-      .pipe(
-        z
-          .string()
-          .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
-          .optional()
-      ),
-licenseNo: licenseNoSchema,
+  licenseNo: licenseNoSchema,
 
-    licenseDate: optionalDateString,
-    licenseExpiryDate: optionalDateString,
-    licenseCity: optionalString,
+  licenseDate: optionalDateString,
+  licenseExpiryDate: optionalDateString,
+  licenseCity: optionalString,
 
-    permanentAddress: z
-      .string()
-      .trim()
-      .max(250, "Address cannot exceed 250 characters")
-      .optional()
-      .transform((value) => (value ? value : undefined)),
-    permanentCountry: optionalString,
-    permanentState: optionalString,
-    permanentCity: optionalString,
+  address: z
+    .string()
+    .trim()
+    .max(250, "Address cannot exceed 250 characters")
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  country: optionalString,
+  state: optionalString,
+  city: optionalString,
 
-    correspondenceAddress: z
-      .string()
-      .trim()
-      .max(250, "Address cannot exceed 250 characters")
-      .optional()
-      .transform((value) => (value ? value : undefined)),
-    correspondenceCountry: optionalString,
-    correspondenceState: optionalString,
-    correspondenceCity: optionalString,
-    correspondenceLandline: z
-      .string()
-      .trim()
-      .optional()
-      .transform((value) => (value ? value.replace(/\s+/g, "") : undefined))
-      .pipe(
-        z
-          .string()
-          .regex(
-            /^[0-9+\-()]{6,15}$/,
-            "Enter a valid landline number"
-          )
-          .optional()
-      ),
+  referencePerson: z
+    .string()
+    .trim()
+    .max(80, "Reference name cannot exceed 80 characters")
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  referenceContactNo: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? value.replace(/\s+/g, "") : undefined))
+    .pipe(
+      z
+        .string()
+        .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
+        .optional()
+    ),
 
-    referencePerson: z
-      .string()
-      .trim()
-      .max(80, "Reference name cannot exceed 80 characters")
-      .optional()
-      .transform((value) => (value ? value : undefined)),
-    referenceContactNo: z
-      .string()
-      .trim()
-      .optional()
-      .transform((value) => (value ? value.replace(/\s+/g, "") : undefined))
-      .pipe(
-        z
-          .string()
-          .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
-          .optional()
-      ),
+  otherDetails: z
+    .string()
+    .trim()
+    .max(500, "Details cannot exceed 500 characters")
+    .optional()
+    .transform((value) => (value ? value : undefined)),
 
-    bloodGroup: optionalString,
-    otherDetails: z
-      .string()
-      .trim()
-      .max(500, "Details cannot exceed 500 characters")
-      .optional()
-      .transform((value) => (value ? value : undefined)),
+  salary: optionalPositiveNumber("Salary must be a valid number"),
 
-    salary: optionalPositiveNumber("Salary must be a valid number"),
+  panNo: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? value.toUpperCase() : undefined))
+    .pipe(
+      z
+        .string()
+        .regex(panRegex, "Enter valid PAN, e.g. ABCDE1234F")
+        .optional()
+    ),
 
-    panNo: z
-      .string()
-      .trim()
-      .optional()
-      .transform((value) => (value ? value.toUpperCase() : undefined))
-      .pipe(
-        z
-          .string()
-          .regex(panRegex, "Enter valid PAN, e.g. ABCDE1234F")
-          .optional()
-      ),
+  aadharCardNo: aadharNoSchema,
 
-    aadharCardNo: aadharNoSchema,
-
-    noTDSApplyAmount: optionalPositiveNumber("TDS threshold must be a number"),
-
-    tdsRate: numberField("TDS rate must be a number")
-      .refine(
-        (value) => value === undefined || (value >= 0 && value <= 100),
-        "TDS rate must be between 0 and 100"
-      )
-      .optional(),
-
-    onLeave: optionalBoolean,
-    blackListed: optionalBoolean,
-  })
-  .superRefine((data, ctx) => {
-    if (
-      data.licenseDate &&
-      data.licenseExpiryDate &&
-      new Date(String(data.licenseExpiryDate)) <= new Date(String(data.licenseDate))
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["licenseExpiryDate"],
-        message: "License expiry must be after license issue date",
-      });
-    }
-
-    if (
-      data.alternateMobile &&
-      data.mobile &&
-      data.alternateMobile === data.mobile
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["alternateMobile"],
-        message: "Alternate mobile cannot be same as primary mobile",
-      });
-    }
-  });
+  onLeave: optionalBoolean,
+  blackListed: optionalBoolean,
+}).superRefine((data, ctx) => {
+  if (
+    data.licenseDate &&
+    data.licenseExpiryDate &&
+    new Date(String(data.licenseExpiryDate)) <= new Date(String(data.licenseDate))
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["licenseExpiryDate"],
+      message: "License expiry must be after license issue date",
+    });
+  }
+});
 
 export const updateDriverSchema = z
   .object({
@@ -312,29 +235,20 @@ export const updateDriverSchema = z
       .trim()
       .regex(mobileRegex, "Enter a valid 10-digit mobile starting 6-9")
       .optional(),
-    alternateMobile: optionalString,
     licenseNo: licenseNoSchema,
     licenseDate: optionalDateString,
     licenseExpiryDate: optionalDateString,
     licenseCity: optionalString,
-    permanentAddress: optionalString,
-    permanentCountry: optionalString,
-    permanentState: optionalString,
-    permanentCity: optionalString,
-    correspondenceAddress: optionalString,
-    correspondenceCountry: optionalString,
-    correspondenceState: optionalString,
-    correspondenceCity: optionalString,
-    correspondenceLandline: optionalString,
+    address: optionalString,
+    country: optionalString,
+    state: optionalString,
+    city: optionalString,
     referencePerson: optionalString,
     referenceContactNo: optionalString,
-    bloodGroup: optionalString,
     otherDetails: optionalString,
     salary: optionalPositiveNumber("Salary must be a valid number"),
     panNo: optionalString,
     aadharCardNo: aadharNoSchema,
-    noTDSApplyAmount: optionalPositiveNumber("TDS threshold must be a number"),
-    tdsRate: numberField("TDS rate must be a number").optional(),
     onLeave: optionalBoolean,
     blackListed: optionalBoolean,
   })

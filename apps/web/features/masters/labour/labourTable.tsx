@@ -13,16 +13,6 @@ import {
   IconTool,
   IconUser,
 } from "@tabler/icons-react";
-import { formatCurrencyFromPaise } from "../_shared/dialog-parts";
-
-
-const formatPercent = (
-  value?: number | null
-) => {
-  if (value == null) return "-";
-
-  return `${value}%`;
-};
 const formatDate = (
   value?: Date | string | null
 ) => {
@@ -160,34 +150,6 @@ export const labourColumns: ColumnDef<LabourWithRelations>[] = [
           "-"}
       </span>
     ),
-  },
-
-  {
-    accessorKey:
-      "tdsAmount",
-
-    header:
-      "TDS Amount",
-
-    cell: ({ row }) =>
-      formatCurrencyFromPaise(
-        row.original
-          .tdsAmount
-      ),
-  },
-
-  {
-    accessorKey:
-      "tdsRate",
-
-    header:
-      "TDS Rate",
-
-    cell: ({ row }) =>
-      formatPercent(
-        row.original
-          .tdsRate
-      ),
   },
 
   {

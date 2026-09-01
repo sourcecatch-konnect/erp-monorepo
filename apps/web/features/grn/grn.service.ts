@@ -264,6 +264,17 @@ export const grnApi = {
     return unwrapApiResponse(res);
   },
 
+  downloadPdf: async (
+    identifier: string,
+    withLetterhead: boolean = true,
+  ): Promise<Blob> => {
+    const res = await api.get(`/grn/${encodeGRNIdentifier(identifier)}/pdf`, {
+      params: { letterhead: withLetterhead },
+      responseType: "blob",
+    });
+    return res.data;
+  },
+
   create: async (body: CreateGRNBody): Promise<GRN> => {
     const res = await api.post<ApiResponse<GRN>>("/grn", {
       ...body,

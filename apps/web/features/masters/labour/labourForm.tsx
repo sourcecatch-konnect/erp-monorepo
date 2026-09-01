@@ -11,17 +11,14 @@ import type {
 } from "@skerp/types";
 
 import { createLabourSchema } from "@skerp/validators";
-import { paiseToRupees } from "@/lib/money";
 
 import {
   IconUser,
   IconPhone,
   IconMapPin,
   IconBuilding,
-  IconCash,
   IconCalendar,
   IconFileDescription,
-  IconPercentage,
 } from "@tabler/icons-react";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
@@ -59,9 +56,6 @@ const defaultValues: CreateLabourFormInput = {
   startDate: "",
 
   pan: "",
-
-  tdsAmount: "",
-  tdsRate: "",
 
   type: "Hamal",
   branchId: "",
@@ -148,20 +142,6 @@ const isSubmitting = create.isPending || update.isPending;
           : "",
 
       pan: row?.pan ?? "",
-
-      tdsAmount:
-        row?.tdsAmount != null
-          ? String(
-              paiseToRupees(row.tdsAmount)
-            )
-          : "",
-
-      tdsRate:
-        row?.tdsRate != null
-          ? String(
-              row.tdsRate
-            )
-          : "",
 
       type:
         row?.type ??
@@ -356,12 +336,12 @@ const branchOptions = (branches.data?.data ?? []).map((branch) => ({
 
       <FormSection
         icon={
-          <IconCash
+          <IconFileDescription
             size={18}
           />
         }
         title="Finance Details"
-        description="PAN and TDS details"
+        description="PAN details"
       >
         <IconTextField<CreateLabourFormInput>
           name="pan"
@@ -376,25 +356,6 @@ const branchOptions = (branches.data?.data ?? []).map((branch) => ({
           }
           hint="10-character PAN"
         />
-          
-      
-
-       <IconTextField<CreateLabourFormInput>
-  name="tdsAmount"
-  label="TDS Amount"
-  type="number"
-  placeholder="Enter TDS amount"
-  icon={<IconCash size={16} />}
-/>
-
-<IconTextField<CreateLabourFormInput>
-  name="tdsRate"
-  label="TDS Rate"
-  type="number"
-  placeholder="Enter TDS rate"
-  suffix="%"
-  icon={<IconPercentage size={16} />}
-/>
       </FormSection>
 
       <FormSection

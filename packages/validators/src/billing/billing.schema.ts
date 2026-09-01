@@ -12,7 +12,7 @@ const id = z.string().trim().min(1);
 const isoDate = z.coerce.date();
 
 export const eligibleClientQuerySchema = z.object({
-  branchId: id,
+  branchId: id.optional(),
   billingPartyType: billPartyTypeSchema,
   billType: billTypeSchema,
   cutoffDate: isoDate.optional(),
@@ -60,7 +60,9 @@ const billDraftFieldsSchema = z.object({
   billType: billTypeSchema,
   billingPartyType: billPartyTypeSchema,
   customerId: id,
-  chargeMechanism: billChargeMechanismSchema.optional(),
+  // Operator-chosen GST Place of Supply state. Required for GST bill types
+  // (Road GTA / Road & Rail); not used for ROAD ("to pay", no GST).
+  placeOfSupplyStateId: id.optional(),
   billDate: isoDate,
   billingCutoffDate: isoDate.optional().nullable(),
   dueDate: isoDate.optional().nullable(),
@@ -70,14 +72,12 @@ const billDraftFieldsSchema = z.object({
 
 export const createBillDraftSchema = billDraftFieldsSchema.superRefine(
   (value, ctx) => {
-    if (
-      value.billType === "ROAD_GTA" &&
-      (!value.chargeMechanism || value.chargeMechanism === "NOT_APPLICABLE")
-    ) {
+    // GST bill types need a Place of Supply to split CGST+SGST vs IGST.
+    if (value.billType !== "ROAD" && !value.placeOfSupplyStateId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["chargeMechanism"],
-        message: "Road GTA requires forward charge or reverse charge",
+        path: ["placeOfSupplyStateId"],
+        message: "Select a Place of Supply state",
       });
     }
   },

@@ -30,14 +30,7 @@ import {
   CardTitle,
 } from "@skerp/ui/components/Card";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@skerp/ui/components/table";
+
 import { useCan } from "@/features/auth";
 import { receiptApi } from "./receipt.service";
 import {
@@ -79,8 +72,8 @@ export function ReceiptDetailPage({ receiptId }: { receiptId: string }) {
       toast.success(
         accountName
           ? `Receipt approved and posted — ${money(
-              receipt.data!.amountPaise,
-            )} credited to ${accountName}`
+            receipt.data!.amountPaise,
+          )} credited to ${accountName}`
           : "Receipt approved and posted",
       );
     },
@@ -140,67 +133,74 @@ export function ReceiptDetailPage({ receiptId }: { receiptId: string }) {
                 <CardTitle>Allocations</CardTitle>
                 <ReceiptStatusBadge status={data.status} />
               </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Bill</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Received</TableHead>
-                        <TableHead className="text-right">TDS</TableHead>
-                        <TableHead className="text-right">Damage</TableHead>
-                        <TableHead className="text-right">Rate diff</TableHead>
-                        <TableHead className="text-right">
-                          Bill outstanding
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.allocations.map((allocation) => (
-                        <TableRow
-                          key={allocation.id}
-                          className="cursor-pointer"
-                          onClick={() =>
-                            router.push(
-                              `/accounts/bills/${allocation.bill.id}`,
-                            )
-                          }
-                        >
-                          <TableCell className="font-medium">
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {data.allocations.map((allocation) => (
+                    <button
+                      type="button"
+                      key={allocation.id}
+                      onClick={() => router.push(`/accounts/bills/${allocation.bill.id}`)}
+                      className="flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-muted/40"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium">
                             {allocation.bill.billNumber ?? "Draft"}
-                          </TableCell>
-                          <TableCell>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
                             {formatDate(allocation.bill.billDate)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {money(allocation.amountAppliedPaise)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {money(allocation.tdsAmountPaise)}
-                            {allocation.tdsSection ? (
-                              <span className="ml-1 text-xs text-muted-foreground">
-                                ({allocation.tdsSection})
-                              </span>
-                            ) : null}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {money(allocation.damageAmountPaise)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {money(allocation.rateDiffAmountPaise)}
-                          </TableCell>
-                          <TableCell className="text-right">
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Bill outstanding</p>
+                          <p className="font-medium tabular-nums">
                             {money(allocation.bill.outstandingAmountPaise)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-4">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Received
+                          </p>
+                          <p className="text-sm font-medium tabular-nums">
+                            {money(allocation.amountAppliedPaise)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            TDS{allocation.tdsSection ? ` (${allocation.tdsSection})` : ""}
+                          </p>
+                          <p className="text-sm font-medium tabular-nums">
+                            {money(allocation.tdsAmountPaise)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Damage
+                          </p>
+                          <p className="text-sm font-medium tabular-nums">
+                            {money(allocation.damageAmountPaise)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Rate diff
+                          </p>
+                          <p className="text-sm font-medium tabular-nums">
+                            {money(allocation.rateDiffAmountPaise)}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="border-b bg-muted/20">
                 <CardTitle>Status history</CardTitle>

@@ -10,16 +10,14 @@ export const deliveryChallanKeys = {
       "rakes",
       scheduleDate ?? "",
     ] as const,
-  vps: (rakeId?: string) =>
-    [...deliveryChallanKeys.all, "options", "vps", rakeId ?? ""] as const,
-  preview: (branchGrnId?: string) =>
-    [...deliveryChallanKeys.all, "preview", branchGrnId ?? ""] as const,
-  supervisors: (branchGrnId?: string) =>
+  preview: (railRakeId?: string) =>
+    [...deliveryChallanKeys.all, "preview", railRakeId ?? ""] as const,
+  supervisors: (railRakeId?: string) =>
     [
       ...deliveryChallanKeys.all,
       "options",
       "supervisors",
-      branchGrnId ?? "",
+      railRakeId ?? "",
     ] as const,
   transports: () =>
     [...deliveryChallanKeys.all, "options", "transports"] as const,

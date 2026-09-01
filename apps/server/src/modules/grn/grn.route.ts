@@ -33,6 +33,8 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
+import { buildGrnPdfHtml, grnPdfInclude } from "./grn.pdf.js";
+import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
 const router: Router = Router();
 
@@ -712,6 +714,48 @@ router.get("/:id", can(PERMS.GRN.VIEW), async (req, res) => {
   if (!grn) throw new NotFoundError("GRN not found");
 
   return sendOk(res, await withDamagePhotos(grn));
+});
+
+/* ------------------------------------------------------------------ */
+/* PDF / print (with or without letterhead)                           */
+/* ------------------------------------------------------------------ */
+const loadGrnForPdf = async (
+  req: Parameters<typeof grnWhereByIdentifier>[1],
+  identifier: string,
+) =>
+  db.gRN.findFirst({
+    where: grnWhereByIdentifier(identifier, req),
+    include: grnPdfInclude,
+  });
+
+router.get("/:id/pdf", can(PERMS.GRN.VIEW), async (req, res) => {
+  const identifier = getIdParam(req.params.id, "GRN identifier");
+  const grn = await loadGrnForPdf(req, identifier);
+  if (!grn) throw new NotFoundError("GRN not found");
+
+  const withLetterhead = req.query.letterhead !== "false";
+  const pdfBuffer = await generatePdfFromHtml(
+    buildGrnPdfHtml(grn, { withLetterhead }),
+  );
+
+  const suffix = withLetterhead ? "" : "-plain";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${grn.grnNumber.replaceAll("/", "-")}${suffix}.pdf"`,
+  );
+  return res.send(pdfBuffer);
+});
+
+router.get("/:id/print-preview", can(PERMS.GRN.VIEW), async (req, res) => {
+  const identifier = getIdParam(req.params.id, "GRN identifier");
+  const grn = await loadGrnForPdf(req, identifier);
+  if (!grn) throw new NotFoundError("GRN not found");
+
+  const withLetterhead = req.query.letterhead !== "false";
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(200).send(buildGrnPdfHtml(grn, { withLetterhead }));
 });
 
 /* ------------------------------------------------------------------ */

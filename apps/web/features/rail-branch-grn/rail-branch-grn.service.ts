@@ -266,6 +266,20 @@ export const railBranchGrnApi = {
     return unwrapApiResponse(response);
   },
 
+  downloadPdf: async (
+    id: string,
+    withLetterhead: boolean = true,
+  ): Promise<Blob> => {
+    const response = await api.get(
+      `/rail-branch-grns/${encodeURIComponent(id)}/pdf`,
+      {
+        params: { letterhead: withLetterhead },
+        responseType: "blob",
+      },
+    );
+    return response.data;
+  },
+
   update: async (id: string, body: UpdateRailBranchGRNBody) => {
     const response = await api.patch<ApiResponse<RailBranchGRNDetail>>(
       `/rail-branch-grns/${encodeURIComponent(id)}`,

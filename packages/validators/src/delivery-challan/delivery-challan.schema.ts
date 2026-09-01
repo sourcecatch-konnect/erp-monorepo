@@ -101,7 +101,7 @@ const withVehicleRules = <T extends z.infer<typeof dispatchFields>>(
 
 export const createDeliveryChallanSchema = dispatchFields
   .extend({
-    branchGrnId: z.string().trim().min(1),
+    railRakeId: z.string().trim().min(1),
   })
   .superRefine(withVehicleRules);
 

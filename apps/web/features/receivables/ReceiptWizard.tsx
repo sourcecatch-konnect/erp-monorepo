@@ -35,8 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from "@skerp/ui/components/table";
-import { useAuth } from "@/features/auth";
-import { branchApi } from "@/features/masters/branch/branch.service";
 import { customerApi } from "@/features/masters/Customer/customer.service";
 import { cashAccountApi } from "@/features/masters/cash-account/cash-account.service";
 import {
@@ -102,9 +100,7 @@ function AmountInput({
 
 export function ReceiptWizard() {
   const router = useRouter();
-  const { user } = useAuth();
 
-  const [branchId, setBranchId] = React.useState(user?.branchId ?? "");
   const [customerId, setCustomerId] = React.useState("");
   const [customerLabel, setCustomerLabel] = React.useState("");
   const [customerSearch, setCustomerSearch] = React.useState("");
@@ -127,21 +123,10 @@ export function ReceiptWizard() {
   const [referenceNumber, setReferenceNumber] = React.useState("");
   const [remarks, setRemarks] = React.useState("");
 
-  const branches = useQuery({
-    queryKey: ["receivables", "branches"],
-    queryFn: () => branchApi.list({ page: 0, size: 200 }),
-  });
-
   const cashAccounts = useQuery({
     queryKey: ["receivables", "cash-accounts"],
     queryFn: () => cashAccountApi.list({ page: 0, size: 200 }),
   });
-  const accessibleBranches = React.useMemo(() => {
-    const all = branches.data?.data ?? [];
-    if (!user?.branchIds || user.branchScope !== "ASSIGNED") return all;
-    const allowed = new Set(user.branchIds);
-    return all.filter((branch) => allowed.has(branch.id));
-  }, [branches.data, user?.branchIds, user?.branchScope]);
 
   const customers = useQuery({
     queryKey: ["receivables", "customers", debouncedCustomerSearch],
@@ -160,7 +145,6 @@ export function ReceiptWizard() {
     queryKey: [
       "receivables",
       "outstanding-bills",
-      branchId,
       customerId,
       truckNumber,
       lrNumber,
@@ -169,14 +153,13 @@ export function ReceiptWizard() {
     ],
     queryFn: () =>
       receiptApi.outstandingBills({
-        branchId,
         customerId,
         truckNumber: truckNumber.trim() || undefined,
         lrNumber: lrNumber.trim() || undefined,
         uptoDate: uptoDate || undefined,
         billNumber: billNumber.trim() || undefined,
       }),
-    enabled: searched && Boolean(branchId) && Boolean(customerId),
+    enabled: searched && Boolean(customerId),
   });
   const toggleBill = (bill: OutstandingBill, checked: boolean) => {
     setSelected((prev) => {
@@ -272,18 +255,29 @@ export function ReceiptWizard() {
     const a = allocations[billId];
     return !a || settledPaise(a) <= 0n;
   });
+  const selectedBranchIds = new Set(
+    [...selected]
+      .map((billId) => billById.get(billId)?.branchId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const derivedBranchId =
+    selectedBranchIds.size === 1 ? [...selectedBranchIds][0] : undefined;
 
   const canSubmit =
     selected.size > 0 &&
     Boolean(receivedAt) &&
     Boolean(receivedIntoAccountId) &&
     overAllocatedBillIds.length === 0 &&
-    zeroAllocationBillIds.length === 0;
+    zeroAllocationBillIds.length === 0 &&
+    Boolean(derivedBranchId);
 
   const createReceipt = useMutation({
-    mutationFn: () =>
-      receiptApi.create({
-        branchId,
+    mutationFn: () => {
+      if (!derivedBranchId) {
+        throw new Error("Selected bills must belong to one branch");
+      }
+      return receiptApi.create({
+        branchId: derivedBranchId,
         customerId,
         receivedAt,
         paymentMode,
@@ -301,7 +295,8 @@ export function ReceiptWizard() {
             rateDiffAmountPaise: rupeesToPaise(a.rateDiff || "0"),
           };
         }),
-      }),
+      });
+    },
     onSuccess: (receipt) => {
       const accountName = (cashAccounts.data?.data ?? []).find(
         (account) => account.id === receivedIntoAccountId,
@@ -332,20 +327,6 @@ export function ReceiptWizard() {
           />
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <Field label="Branch">
-            <Select value={branchId} onValueChange={setBranchId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select branch" />
-              </SelectTrigger>
-              <SelectContent>
-                {accessibleBranches.map((branch) => (
-                  <SelectItem key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
           <Field label="Client" className="xl:col-span-2">
             <Combobox
               options={customerOptions}
@@ -394,7 +375,7 @@ export function ReceiptWizard() {
             <Button
               type="button"
               className="w-full"
-              disabled={!branchId || !customerId}
+              disabled={!customerId}
               onClick={() => setSearched(true)}
             >
               Search outstanding bills
@@ -429,8 +410,7 @@ export function ReceiptWizard() {
                 </span>
                 <p className="mt-3 font-medium">No outstanding bills</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  This client has nothing pending for the selected branch and
-                  filters.
+                  This client has nothing pending for the selected filters.
                 </p>
               </div>
             ) : (
@@ -440,6 +420,7 @@ export function ReceiptWizard() {
                     <TableRow>
                       <TableHead className="w-10">Select</TableHead>
                       <TableHead>Bill / LR</TableHead>
+                      <TableHead>Branch</TableHead>
                       <TableHead>Truck</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Outstanding</TableHead>
@@ -477,6 +458,9 @@ export function ReceiptWizard() {
                                 ? ` +${bill.additionalLRCount} more`
                                 : ""}
                             </p>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {bill.branchName}
                           </TableCell>
                           <TableCell className="text-xs">
                             <span className="inline-flex items-center gap-1">
@@ -552,6 +536,15 @@ export function ReceiptWizard() {
             />
           </CardHeader>
           <CardContent className="space-y-5">
+            {selectedBranchIds.size > 1 ? (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
+                <p>
+                  Selected bills belong to different branches — settle them in
+                  separate receipts.
+                </p>
+              </div>
+            ) : null}
             {hasDeduction ? (
               <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
                 <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />

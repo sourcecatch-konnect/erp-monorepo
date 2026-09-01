@@ -515,10 +515,7 @@ export default function VPLoadingDetail({
     (sum, row) => sum + Number(row.vpWagonLoading?.totalLoadedQty ?? 0),
     0,
   );
-  const totalAttachedLrs = rows.reduce(
-    (sum, row) => sum + Number(row.vpWagonLoading?.activeLrCount ?? 0),
-    0,
-  );
+
   const selectedLoadedQty = activeAllocations.reduce(
     (sum, allocation) => sum + Number(allocation.loadedQty ?? 0),
     0,
@@ -859,7 +856,7 @@ export default function VPLoadingDetail({
         hostVpNo={selectedRow?.vpNo}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="VP wagons"
           value={formatNumber(rows.length)}
@@ -875,11 +872,7 @@ export default function VPLoadingDetail({
           value={formatNumber(readyCount)}
           icon={<IconCircleCheck size={18} />}
         />
-        <MetricCard
-          label="Attached LRs"
-          value={formatNumber(totalAttachedLrs)}
-          icon={<IconClipboardList size={18} />}
-        />
+
         <MetricCard
           label="Loaded qty"
           value={formatNumber(totalLoadedQty)}
@@ -1125,8 +1118,8 @@ export default function VPLoadingDetail({
                           <th className="px-3 py-2 font-medium">
                             VP No. / MR-RR No.
                           </th>
-                          <th className="px-3 py-2 font-medium">Consignor</th>
-                          <th className="px-3 py-2 font-medium">LR No.</th>
+                          <th className="px-1 py-2 font-medium">Consignor</th>
+                          <th className="px-1 py-2 font-medium">LR No.</th>
                           <th className="px-3 py-2 font-medium">LR Date</th>
                           <th className="px-3 py-2 text-right font-medium">
                             Loaded Qty

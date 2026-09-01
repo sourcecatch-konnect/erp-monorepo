@@ -70,15 +70,28 @@ function Row({
   );
 }
 
-function Pair({ from, to }: { from: React.ReactNode; to: React.ReactNode }) {
+function Pair({
+  from,
+  to,
+}: {
+  from: React.ReactNode;
+  to: React.ReactNode;
+}) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5">
-      <span className="min-w-0 truncate">{from ?? DASH}</span>
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <span className="w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]">
+        {from ?? DASH}
+      </span>
 
-      <IconArrowRight size={13} className="shrink-0 text-muted-foreground" />
+      <IconArrowRight
+        size={13}
+        className="ml-1 rotate-90 text-muted-foreground"
+      />
 
-      <span className="min-w-0 truncate">{to ?? DASH}</span>
-    </span>
+      <span className="w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]">
+        {to ?? DASH}
+      </span>
+    </div>
   );
 }
 
@@ -132,7 +145,12 @@ export default function LRCreateSummary({
     loadingLocationId?: string;
     unloadingLocationId?: string;
     totalWeight?: number;
-    goods?: { name?: string; quantity?: number; unit?: string }[];
+    totalWeightUnit?: string;
+    goods?: {
+      name?: string;
+      quantity?: number;
+      unit?: string;
+    }[];
   }[];
 
   const lrCount = currentLines.length;
@@ -215,29 +233,29 @@ export default function LRCreateSummary({
 
                 <Section icon={<IconUsers size={14} />} title="Parties">
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
-                      <span className="text-muted-foreground">Consignor</span>
-                      <span className="line-clamp-2 break-words font-medium text-foreground">
-                        {order.consignor || "—"}
+                    <p className="whitespace-normal break-words text-sm font-semibold leading-5 text-foreground">
+                      <span className="font-normal text-muted-foreground">
+                        Consignor:{" "}
                       </span>
-                    </div>
+                      {order.consignor || "Not selected"}
+                    </p>
 
-                    <div className="grid grid-cols-[90px_1fr] gap-3 text-xs">
-                      <span className="text-muted-foreground">Consignee</span>
-                      <span className="line-clamp-2 break-words font-medium text-foreground">
-                        {order.consignee || "Consignee not selected"}
+                    <p className="whitespace-normal break-words text-sm font-semibold leading-5 text-foreground">
+                      <span className="font-normal text-muted-foreground">
+                        Consignee:{" "}
                       </span>
-                    </div>
+                      {order.consignee || "Not selected"}
+                    </p>
 
-                    {!order.consignee && (
-                      <p className="flex items-start gap-1.5 pt-1 text-xs leading-snug text-amber-600">
+                    {(!order.consignor || !order.consignee) && (
+                      <p className="flex items-start gap-1.5 text-xs leading-snug text-amber-600">
                         <IconAlertTriangle
                           size={13}
                           className="mt-0.5 shrink-0"
                         />
+
                         <span>
-                          Set the order&apos;s consignee before creating the
-                          LR.
+                          Set the order&apos;s consignor and consignee before creating the LR.
                         </span>
                       </p>
                     )}
@@ -299,19 +317,21 @@ export default function LRCreateSummary({
               title={`Consignments (${lrCount} LR${lrCount === 1 ? "" : "s"})`}
             >
               {lrCount === 0 ? (
-                <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center">
-                  <IconPackage className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
-                  <p className="text-xs font-medium text-muted-foreground">
+                <div className="py-2 text-center">
+                  <IconPackage className="mx-auto mb-1.5 h-5 w-5 text-muted-foreground" />
+
+                  <p className="text-xs text-muted-foreground">
                     No consignment lines yet.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="divide-y">
                   {currentLines.map((line, i) => {
                     const loading = labelOf(
                       locationOptions,
                       line.loadingLocationId,
                     );
+
                     const unloading = labelOf(
                       locationOptions,
                       line.unloadingLocationId,
@@ -333,20 +353,77 @@ export default function LRCreateSummary({
                       .filter(Boolean);
 
                     return (
-                      <ConsignmentCard
+                      <div
                         key={i}
-                        index={i}
-                        loading={loading}
-                        unloading={unloading}
-                        totalWeight={line.totalWeight}
-                        goods={goods}
-                      />
+                        className="py-3 first:pt-0 last:pb-0"
+                      >
+                        <p className="mb-2 text-sm font-semibold text-foreground">
+                          LR {i + 1}
+                        </p>
+
+                        <div className="space-y-1.5 text-xs">
+                          <p className="whitespace-normal break-words">
+                            <span className="text-muted-foreground">
+                              Loading point:{" "}
+                            </span>
+
+                            <span className="font-medium text-foreground">
+                              {loading || "Not selected"}
+                            </span>
+                          </p>
+
+                          <p className="whitespace-normal break-words">
+                            <span className="text-muted-foreground">
+                              Unloading point:{" "}
+                            </span>
+
+                            <span className="font-medium text-foreground">
+                              {unloading || "Not selected"}
+                            </span>
+                          </p>
+
+                          <p>
+                            <span className="text-muted-foreground">
+                              Total weight:{" "}
+                            </span>
+
+                            <span className="font-medium text-foreground">
+                              {line.totalWeight
+                                ? `${line.totalWeight} ${line.totalWeightUnit || ""
+                                }`
+                                : "Not entered"}
+                            </span>
+                          </p>
+
+                          <div>
+                            <span className="text-muted-foreground">
+                              Goods:{" "}
+                            </span>
+
+                            {goods.length ? (
+                              <div className="mt-1 space-y-0.5">
+                                {goods.map((item, goodsIndex) => (
+                                  <p
+                                    key={goodsIndex}
+                                    className="whitespace-normal break-words font-medium text-foreground"
+                                  >
+                                    {item}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="font-medium text-foreground">
+                                No goods added
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               )}
             </Section>
-
             <Section icon={<IconTruck size={14} />} title="Vehicle">
               {VehicleRows}
             </Section>
@@ -374,84 +451,5 @@ export default function LRCreateSummary({
         )}
       </div>
     </aside>
-  );
-}
-
-function ConsignmentCard({
-  index,
-  loading,
-  unloading,
-  totalWeight,
-  goods,
-}: {
-  index: number;
-  loading?: string | null;
-  unloading?: string | null;
-  totalWeight?: number | null;
-  goods: string[];
-}) {
-  return (
-    <div className="max-w-full rounded-lg border bg-background p-3 shadow-sm">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-foreground">
-          Consignment Line {index + 1}
-        </p>
-
-        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-          LR {index + 1}
-        </span>
-      </div>
-
-      <div className="space-y-2 text-xs">
-        <div className="rounded-md bg-muted/30 p-2">
-          <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
-            Route
-          </p>
-
-          <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2">
-            <span className="min-w-0 break-words line-clamp-2 font-medium">
-              {loading || "Loading not selected"}
-            </span>
-
-            <span className="shrink-0 text-muted-foreground">→</span>
-
-            <span className="min-w-0 break-words line-clamp-2 font-medium">
-              {unloading || "Unloading not selected"}
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-md border p-2">
-          <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
-            Total weight
-          </p>
-          <p className="text-xs font-medium">
-            {totalWeight != null ? totalWeight.toLocaleString() : "Not set"}
-          </p>
-        </div>
-
-        <div className="rounded-md border p-2">
-          <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
-            Goods
-          </p>
-
-          {goods.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {goods.map((item, idx) => (
-                <span
-                  key={idx}
-                  className="max-w-[220px] rounded-md bg-muted px-2 py-1 text-[11px] font-medium leading-snug break-words line-clamp-2"
-                  title={item}
-                >
-                  {item}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">No goods added</p>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }

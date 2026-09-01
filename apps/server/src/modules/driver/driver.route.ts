@@ -6,7 +6,7 @@ import { createCrudRouter } from "../_shared/crud.factory.js";
 import { convertRupeeFieldsToPaise } from "../../lib/money.js";
 import { presignDownload, presignUpload } from "../../lib/s3.js";
 
-const moneyFields = ["salary", "noTDSApplyAmount"];
+const moneyFields = ["salary"];
 
 const normalizeDriverName = (value: string) => value.trim().toLowerCase();
 
@@ -158,7 +158,6 @@ const crudRouter: Router = createCrudRouter({
     searchableFields: [
       "name",
       "mobile",
-      "alternateMobile",
       "licenseNo",
       "panNo",
       "aadharCardNo",

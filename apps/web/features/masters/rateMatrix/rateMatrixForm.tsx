@@ -122,9 +122,8 @@ export default function RateMatrixForm({
 
   const routeOptions = (routesQuery.data?.data ?? []).map((route) => ({
     id: route.id,
-    name: `${route.sourceCity?.name ?? "-"} to ${
-      route.destinationCity?.name ?? "-"
-    }`,
+    name: `${route.sourceCity?.name ?? "-"} to ${route.destinationCity?.name ?? "-"
+      }`,
   }));
 
   const vehicleTypeOptions = React.useMemo(
@@ -325,36 +324,41 @@ export default function RateMatrixForm({
           title="Agreement & Route"
           description="Link rate to agreement and route"
         >
-          <SelectField
-            name="agreementId"
-            label="Agreement"
-            required
-            options={agreements.map((a) => ({
-              label: a.name ?? a.id,
-              value: a.id,
-            }))}
-          />
+          <div className="col-span-full">
+            <SelectField
+              name="agreementId"
+              label="Agreement"
+              required
+              options={agreements.map((a) => ({
+                label: a.name ?? a.id,
+                value: a.id,
+              }))}
+            />
+          </div>
 
-          <SelectField
-            name="routeId"
-            label="Route"
-            options={routeOptions.map((r) => ({
-              label: r.name,
-              value: r.id,
-            }))}
-            required
-            labelAction={
-              <Button
-                type="button"
-                variant="link"
-                size="xs"
-                className="h-auto px-0"
-                onClick={() => setRouteFormOpen(true)}
-              >
-                <IconPlus size={13} /> Add route
-              </Button>
-            }
-          />
+          <div className="col-span-full">
+            <SelectField
+              name="routeId"
+              label="Route"
+              required
+              options={routeOptions.map((r) => ({
+                label: r.name,
+                value: r.id,
+              }))}
+              labelAction={
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="h-auto px-0"
+                  onClick={() => setRouteFormOpen(true)}
+                >
+                  <IconPlus size={13} />
+                  Add route
+                </Button>
+              }
+            />
+          </div>
         </FormSection>
 
         <FormSection

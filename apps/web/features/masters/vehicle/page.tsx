@@ -21,8 +21,6 @@ import VehicleDetailDialog from "./vehicleDialog";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 type VehicleCsvRow = Record<
   | "vehicleNumber"
-  | "chasisNumber"
-  | "engineNumber"
   | "ownershipType"
   | "vehicleTypeId"
   | "capacityMT"
@@ -109,8 +107,6 @@ const [detailId, setDetailId] = React.useState<string | null>(null);
       isLoading={vehicles.isLoading}
       defaultHiddenColumns={[
     "currentKM",
-    "chasisNumber",
-    "engineNumber",
     "wheels",
     "bodyType",
     "lengthFeet",

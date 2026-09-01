@@ -28,6 +28,11 @@ import {
   userSelect,
 } from "../vp-loading/vp-loading.service.js";
 import { releaseActiveTrackerInTransaction } from "../one-lap-tracker/one-lap-tracker.assignment.service.js";
+import {
+  buildRailBranchGrnPdfHtml,
+  railBranchGrnPdfInclude,
+} from "./rail-branch-grn.pdf.js";
+import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -1125,6 +1130,58 @@ router.post(
     );
   },
 );
+/* ------------------------------------------------------------------ */
+/* PDF / print (with or without letterhead)                           */
+/* ------------------------------------------------------------------ */
+const loadBranchGrnForPdf = async (req: Request, id: string) => {
+  const grn = await db.railBranchGRN.findFirst({
+    where: { id, ...branchGrnFilter(req) },
+    include: railBranchGrnPdfInclude,
+  });
+  if (!grn) throw new NotFoundError("Rail Branch GRN not found");
+  return grn;
+};
+
+const branchGrnPdfFilename = (grn: { railRake: { rakeNumber: string }; id: string }) =>
+  `branch-grn-${grn.railRake.rakeNumber}-${grn.id.slice(-6)}`.replaceAll(
+    "/",
+    "-",
+  );
+
+router.get("/:id/pdf", can(PERMS.RAIL_BRANCH_GRN.VIEW), async (req, res) => {
+  const id = getIdParam(req.params.id, "Rail Branch GRN");
+  const grn = await loadBranchGrnForPdf(req, id);
+
+  const withLetterhead = req.query.letterhead !== "false";
+  const pdfBuffer = await generatePdfFromHtml(
+    buildRailBranchGrnPdfHtml(grn, { withLetterhead }),
+  );
+
+  const suffix = withLetterhead ? "" : "-plain";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${branchGrnPdfFilename(grn)}${suffix}.pdf"`,
+  );
+  return res.send(pdfBuffer);
+});
+
+router.get(
+  "/:id/print-preview",
+  can(PERMS.RAIL_BRANCH_GRN.VIEW),
+  async (req, res) => {
+    const id = getIdParam(req.params.id, "Rail Branch GRN");
+    const grn = await loadBranchGrnForPdf(req, id);
+
+    const withLetterhead = req.query.letterhead !== "false";
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    return res
+      .status(200)
+      .send(buildRailBranchGrnPdfHtml(grn, { withLetterhead }));
+  },
+);
+
 router.get("/:id", can(PERMS.RAIL_BRANCH_GRN.VIEW), async (req, res) => {
   const id = getIdParam(req.params.id, "Rail Branch GRN");
   return sendOk(res, await getBranchGrn(req, id));
@@ -1472,10 +1529,13 @@ router.post(
         include: branchGrnDetailInclude,
       });
 
-      const [verifiedWagonCount, submittedGrnCount] = await Promise.all([
+      const [eligibleWagonCount, submittedGrnCount] = await Promise.all([
+        // Same eligibility window used everywhere else a wagon is offered up
+        // for a Branch GRN (preview / create / available-vps) — a wagon does
+        // not have to reach VERIFIED to be received against.
         tx.vPWagonLoading.count({
           where: {
-            status: "VERIFIED",
+            status: { in: ["COMPLETED", "VERIFIED"] },
             mrRrRow: {
               mrRr: { vpScheduleId: grn.railRake.vpScheduleId },
             },
@@ -1490,7 +1550,7 @@ router.post(
       ]);
 
       const allReceived =
-        verifiedWagonCount > 0 && submittedGrnCount === verifiedWagonCount;
+        eligibleWagonCount > 0 && submittedGrnCount === eligibleWagonCount;
       const rake = await tx.railRake.update({
         where: { id: grn.railRake.id },
         data: allReceived
@@ -1532,7 +1592,7 @@ router.post(
         branchGrn: submitted,
         railRake: rake,
         progress: {
-          verifiedWagonCount,
+          verifiedWagonCount: eligibleWagonCount,
           submittedGrnCount,
           allReceived,
         },
