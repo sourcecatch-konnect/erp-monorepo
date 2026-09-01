@@ -79,7 +79,7 @@ router.get(
   can(PERMS.RECEIPT.VIEW),
   async (req, res) => {
     const input = validate(outstandingBillsQuerySchema.safeParse(req.query));
-    assertBranchAccess(req, input.branchId);
+    if (input.branchId) assertBranchAccess(req, input.branchId);
 
     // lrNumber and truckNumber both narrow the same "lines.some.lr" relation —
     // they must be merged into one filter object. Two separate `lines: {...}`
@@ -122,7 +122,9 @@ router.get(
 
     const bills = await db.bill.findMany({
       where: {
-        branchId: input.branchId,
+        ...(input.branchId
+          ? { branchId: input.branchId }
+          : branchFilter(req, "branchId")),
         billingCustomerId: input.customerId,
         status: { in: RECEIVABLE_BILL_STATUSES },
         outstandingAmountPaise: { gt: 0n },
@@ -142,6 +144,7 @@ router.get(
           : {}),
       },
       include: {
+        branch: { select: { name: true } },
         lines: {
           take: 1,
           orderBy: { lineNumber: "asc" },
@@ -180,6 +183,8 @@ router.get(
         id: bill.id,
         billNumber: bill.billNumber,
         billDate: bill.billDate,
+        branchId: bill.branchId,
+        branchName: bill.branch.name,
         lrNumber: firstLine?.lr.lrNumber ?? null,
         additionalLRCount: Math.max(0, bill._count.lines - 1),
         truckNumber: vehicle,

@@ -43,8 +43,6 @@ export const vehicleStatusSchema = z.enum(["AVAILABLE", "ON_TRIP"]);
 export const vehicleSchema = z.object({
   id: z.string(),
   vehicleNumber: z.string(),
-  chasisNumber: z.string(),
-  engineNumber: z.string(),
   ownershipType: ownershipTypeSchema,
   transportId: z.string().nullable().optional(),
   transport: z
@@ -86,28 +84,6 @@ const vehicleInputSchema = z.object({
           "Enter valid vehicle number, e.g. MH31AB1234"
         )
     ),
-  chasisNumber: z
-    .string()
-    .trim()
-    .transform((value) => value.toUpperCase())
-    .pipe(
-      z
-        .string()
-        .length(17, "Chasis number must be exactly 17 characters")
-        .regex(/^[A-Z0-9]+$/, "Chasis number can only contain letters and numbers")
-    ),
-  engineNumber: z
-    .string()
-    .trim()
-    .transform((value) => value.toUpperCase())
-    .pipe(
-      z
-        .string()
-        .min(6, "Engine number must be at least 6 characters")
-        .max(20, "Engine number cannot exceed 20 characters")
-        .regex(/^[A-Z0-9]+$/, "Engine number can only contain letters and numbers")
-    ),
-
   ownershipType: ownershipTypeSchema,
   transportId: optionalString,
   vehicleTypeId: z.string().min(1, "Vehicle type is required"),
@@ -124,11 +100,9 @@ lengthFeet: optionalString.refine(
   "Length must be between 1 and 100 feet"
 ),
 
-wheels: z
-  .string()
-  .trim()
-  .min(1, "Wheels is required")
-  .refine((value) => {
+wheels: optionalString.refine((value) => {
+    if (value === undefined) return true;
+
     const num = Number(value);
 
     return Number.isInteger(num) && num > 0 && num % 2 === 0;
@@ -163,7 +137,7 @@ currentKM: intField("Current KM is required")
   insuranceIssueDate: optionalDateString,
   insuranceDueDate: optionalDateString,
 
-  status: vehicleStatusSchema,
+  status: vehicleStatusSchema.optional().default("AVAILABLE"),
 });
 
 export const createVehicleSchema = vehicleInputSchema.superRefine(

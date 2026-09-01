@@ -123,42 +123,42 @@ router.get("/", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
   // fragments, so they must be AND-ed rather than spread into `where`.
   const searchFilter = query.search
     ? {
-        OR: [
-          {
-            groupNumber: {
-              contains: query.search,
-              mode: "insensitive" as const,
-            },
+      OR: [
+        {
+          groupNumber: {
+            contains: query.search,
+            mode: "insensitive" as const,
           },
-          {
-            marketVehicleNumber: {
-              contains: query.search,
-              mode: "insensitive" as const,
-            },
+        },
+        {
+          marketVehicleNumber: {
+            contains: query.search,
+            mode: "insensitive" as const,
           },
-          {
-            lorryReceipts: {
-              some: {
-                deletedAt: null,
-                OR: [
-                  {
-                    lrNumber: {
-                      contains: query.search,
-                      mode: "insensitive" as const,
-                    },
+        },
+        {
+          lorryReceipts: {
+            some: {
+              deletedAt: null,
+              OR: [
+                {
+                  lrNumber: {
+                    contains: query.search,
+                    mode: "insensitive" as const,
                   },
-                  {
-                    invoiceNumber: {
-                      contains: query.search,
-                      mode: "insensitive" as const,
-                    },
+                },
+                {
+                  invoiceNumber: {
+                    contains: query.search,
+                    mode: "insensitive" as const,
                   },
-                ],
-              },
+                },
+              ],
             },
           },
-        ],
-      }
+        },
+      ],
+    }
     : {};
   const where = {
     deletedAt: null,
@@ -272,8 +272,11 @@ router.get(
       typeof req.query.transportId === "string"
         ? req.query.transportId.trim()
         : "";
+
     if (!transportId) {
-      throw new BadRequestError("Transporter is required for market vehicles");
+      throw new BadRequestError(
+        "Transporter is required for market vehicles",
+      );
     }
 
     const vehicles = await db.vehicle.findMany({
@@ -281,17 +284,63 @@ router.get(
         ownershipType: "Market_Vehicle",
         transportId,
       },
+
       select: {
         id: true,
         vehicleNumber: true,
         status: true,
         capacityMT: true,
-        vehicleTypeRef: { select: { id: true, name: true, code: true } },
+
+        vehicleTypeRef: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+
+        marketLRGroups: {
+          where: {
+            deletedAt: null,
+            status: {
+              in: ["DRAFT", "FINALISED"],
+            },
+          },
+          select: {
+            groupNumber: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
       },
-      orderBy: { vehicleNumber: "asc" },
+
+      orderBy: {
+        vehicleNumber: "asc",
+      },
+
       take: 1000,
     });
-    return sendOk(res, vehicles);
+
+    const result = vehicles.map((vehicle) => {
+      const activeGroup = vehicle.marketLRGroups[0];
+
+      return {
+        id: vehicle.id,
+        vehicleNumber: vehicle.vehicleNumber,
+        status: vehicle.status,
+        capacityMT: vehicle.capacityMT,
+        vehicleTypeRef: vehicle.vehicleTypeRef,
+
+        isAssigned: Boolean(activeGroup),
+
+        activeGroupNumber:
+          activeGroup?.groupNumber ?? null,
+      };
+    });
+
+    return sendOk(res, result);
   },
 );
 
@@ -361,22 +410,22 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   const marketVehicle =
     isMarketVehicle && (input.marketVehicleId || enteredMarketVehicleNumber)
       ? await db.vehicle.findFirst({
-          where: input.marketVehicleId
-            ? { id: input.marketVehicleId }
-            : {
-                vehicleNumber: {
-                  equals: enteredMarketVehicleNumber,
-                  mode: "insensitive",
-                },
-              },
-          select: {
-            id: true,
-            vehicleNumber: true,
-            ownershipType: true,
-            transportId: true,
-            status: true,
+        where: input.marketVehicleId
+          ? { id: input.marketVehicleId }
+          : {
+            vehicleNumber: {
+              equals: enteredMarketVehicleNumber,
+              mode: "insensitive",
+            },
           },
-        })
+        select: {
+          id: true,
+          vehicleNumber: true,
+          ownershipType: true,
+          transportId: true,
+          status: true,
+        },
+      })
       : null;
 
   if (isMarketVehicle && input.marketVehicleId && !marketVehicle) {
@@ -676,6 +725,7 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
           consignorId,
           consigneeId,
           transportType,
+          paymentMode: input.paymentMode,
           priority: input.priority ?? "Normal",
           tripLegType,
           hubId,
@@ -710,18 +760,18 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
           createdById: me,
           lorryReceipts: lines.length
             ? {
-                create: lines.map((line, i) => ({
-                  lrNumber: lrNumbers[i]!,
-                  fyCode,
-                  loadingLocationId: line.loadingLocationId,
-                  unloadingLocationId: line.unloadingLocationId,
-                  totalWeight: line.totalWeight,
-                  unit: line.unit,
-                  status: "DRAFT",
-                  createdById: me,
-                  goods: line.goods.length ? { create: line.goods } : undefined,
-                })),
-              }
+              create: lines.map((line, i) => ({
+                lrNumber: lrNumbers[i]!,
+                fyCode,
+                loadingLocationId: line.loadingLocationId,
+                unloadingLocationId: line.unloadingLocationId,
+                totalWeight: line.totalWeight,
+                unit: line.unit,
+                status: "DRAFT",
+                createdById: me,
+                goods: line.goods.length ? { create: line.goods } : undefined,
+              })),
+            }
             : undefined,
         },
         select: { id: true, groupNumber: true },
@@ -802,6 +852,12 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
   }
   const input = parsed.data;
   const me = actorId(req);
+
+  if (input.paymentMode !== undefined && existing.status !== "DRAFT") {
+    throw new BadRequestError(
+      "Payment mode can only be changed while the LR group is DRAFT",
+    );
+  }
 
   const nextTransportType = input.transportType ?? existing.transportType;
   const nextRailheadBranchId =
@@ -892,23 +948,23 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
     : undefined;
   const nextMarketVehicle =
     nextIsMarketVehicle &&
-    (requestedMarketVehicleId || requestedMarketVehicleNumber)
+      (requestedMarketVehicleId || requestedMarketVehicleNumber)
       ? await db.vehicle.findFirst({
-          where: requestedMarketVehicleId
-            ? { id: requestedMarketVehicleId }
-            : {
-                vehicleNumber: {
-                  equals: requestedMarketVehicleNumber,
-                  mode: "insensitive",
-                },
-              },
-          select: {
-            id: true,
-            vehicleNumber: true,
-            ownershipType: true,
-            transportId: true,
+        where: requestedMarketVehicleId
+          ? { id: requestedMarketVehicleId }
+          : {
+            vehicleNumber: {
+              equals: requestedMarketVehicleNumber,
+              mode: "insensitive",
+            },
           },
-        })
+        select: {
+          id: true,
+          vehicleNumber: true,
+          ownershipType: true,
+          transportId: true,
+        },
+      })
       : null;
 
   if (requestedMarketVehicleId && !nextMarketVehicle) {
@@ -967,6 +1023,9 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
         ? { consigneeId: input.consigneeId }
         : {}),
       transportType: nextTransportType,
+      ...(input.paymentMode !== undefined
+        ? { paymentMode: input.paymentMode }
+        : {}),
       railheadBranchId: nextRailheadBranchId,
       sourceRailheadAreaId: nextSourceRailheadAreaId,
       destinationRailheadAreaId: nextDestinationRailheadAreaId,
@@ -1555,15 +1614,15 @@ router.post(
           createdById: me,
           goods: (line.goods ?? []).length
             ? {
-                create: (line.goods ?? []).map((g) => ({
-                  name: g.name,
-                  description: g.description ?? null,
-                  quantity: g.quantity,
-                  length: g.length ?? null,
-                  width: g.width ?? null,
-                  height: g.height ?? null,
-                })),
-              }
+              create: (line.goods ?? []).map((g) => ({
+                name: g.name,
+                description: g.description ?? null,
+                quantity: g.quantity,
+                length: g.length ?? null,
+                width: g.width ?? null,
+                height: g.height ?? null,
+              })),
+            }
             : undefined,
         },
       });

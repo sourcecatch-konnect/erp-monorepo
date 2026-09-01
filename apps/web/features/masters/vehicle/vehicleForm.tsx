@@ -28,8 +28,6 @@ import {
   IconId,
   IconCalendar,
   IconGasStation,
-  IconBarcode,
-  IconEngine,
   IconScale,
   IconRuler,
   IconGauge,
@@ -50,6 +48,7 @@ type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Vehicle | null;
+  onSaved?: (vehicle: Vehicle) => void | Promise<void>;
 };
 
 const ownershipOptions = [
@@ -66,8 +65,6 @@ const vehicleStatusOptions = [
 
 const defaultValues: CreateVehicleFormInput = {
   vehicleNumber: "",
-  chasisNumber: "",
-  engineNumber: "",
   ownershipType: "Own_Vehicle",
   transportId: "",
   vehicleTypeId: "",
@@ -92,6 +89,7 @@ export default function VehicleForm({
   open,
   onOpenChange,
   row,
+  onSaved,
 }: Props) {
 
 
@@ -101,12 +99,11 @@ const { create, update } = useMasterMutations({
 });
 
 const handleSubmit = async (data: CreateVehicleBody) => {
-  if (row) {
-    await update.mutateAsync({ id: row.id, data });
-  } else {
-    await create.mutateAsync(data);
-  }
+  const saved = row
+    ? await update.mutateAsync({ id: row.id, data })
+    : await create.mutateAsync(data);
 
+  await onSaved?.(saved);
   onOpenChange(false);
 };
   const form = useForm<CreateVehicleFormInput, unknown, CreateVehicleBody>({
@@ -147,8 +144,6 @@ const isSubmitting = create.isPending || update.isPending;
 
     form.reset({
       vehicleNumber: row?.vehicleNumber ?? "",
-      chasisNumber: row?.chasisNumber ?? "",
-      engineNumber: row?.engineNumber ?? "",
       ownershipType: row?.ownershipType ?? "Own_Vehicle",
       transportId: row?.transportId ?? "",
       vehicleTypeId: row?.vehicleTypeId ?? "",
@@ -226,22 +221,6 @@ const isSubmitting = create.isPending || update.isPending;
           name="vehicleNumber"
           required
         />
-
-       <IconTextField<CreateVehicleFormInput>
-  name="chasisNumber"
-  label="Chasis Number"
-  placeholder="Enter the chasis number"
-  icon={<IconBarcode size={16} />}
-  required
-/>
-
-       <IconTextField<CreateVehicleFormInput>
-  name="engineNumber"
-  label="Engine Number"
-    placeholder="Enter engine number"
-  icon={<IconEngine size={16} />}
-  required
-/>
       </FormSection>
 
       {/* SPECIFICATIONS */}

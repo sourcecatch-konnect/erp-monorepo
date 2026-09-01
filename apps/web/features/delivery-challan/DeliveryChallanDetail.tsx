@@ -123,6 +123,15 @@ export default function DeliveryChallanDetail({
     );
   }
 
+  const vpLabels = [
+    ...new Set(
+      row.items.map((item) => {
+        const mrRrRow = item.branchGrnItem.railBranchGrn.vpWagonLoading.mrRrRow;
+        return mrRrRow.vpNo || mrRrRow.rowLabel;
+      }),
+    ),
+  ];
+
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
@@ -179,19 +188,16 @@ export default function DeliveryChallanDetail({
           <div className="grid grid-cols-2 gap-4">
             <DetailField
               label="Rake ID"
-              value={row.branchGrn.railRake.rakeNumber}
+              value={row.railRake.rakeNumber}
             />
             <DetailField
-              label="VP number"
-              value={
-                row.branchGrn.vpWagonLoading.mrRrRow.vpNo ||
-                row.branchGrn.vpWagonLoading.mrRrRow.rowLabel
-              }
+              label="Wagons"
+              value={vpLabels.length ? vpLabels.join(", ") : null}
             />
             <DetailField label="Source branch" value={row.sourceBranch.name} />
             <DetailField
               label="Schedule"
-              value={row.branchGrn.railRake.vpSchedule.scheduleNumber}
+              value={row.railRake.vpSchedule.scheduleNumber}
             />
             <DetailField label="Loading at" value={formatDate(row.loadingAt)} />
             <DetailField
@@ -240,6 +246,7 @@ export default function DeliveryChallanDetail({
             <TableHeader>
               <TableRow>
                 <TableHead>LR number</TableHead>
+                <TableHead>VP</TableHead>
                 <TableHead>Consignee</TableHead>
                 <TableHead>Goods</TableHead>
 
@@ -247,19 +254,26 @@ export default function DeliveryChallanDetail({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {row.items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">
-                    {item.lrNumberSnapshot}
-                  </TableCell>
-                  <TableCell>{item.consigneeNameSnapshot || "—"}</TableCell>
-                  <TableCell>{item.goodsNameSnapshot}</TableCell>
+              {row.items.map((item) => {
+                const mrRrRow =
+                  item.branchGrnItem.railBranchGrn.vpWagonLoading.mrRrRow;
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">
+                      {item.lrNumberSnapshot}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {mrRrRow.vpNo || mrRrRow.rowLabel}
+                    </TableCell>
+                    <TableCell>{item.consigneeNameSnapshot || "—"}</TableCell>
+                    <TableCell>{item.goodsNameSnapshot}</TableCell>
 
-                  <TableCell className="text-right font-medium">
-                    {item.quantity}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    <TableCell className="text-right font-medium">
+                      {item.quantity}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

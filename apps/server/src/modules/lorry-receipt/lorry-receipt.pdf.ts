@@ -4,13 +4,11 @@ import { imageToBase64Src } from "../_shared/pdf.helper.js";
 import { paiseToRupees } from "../../lib/money.js";
 
 const logoSrc = imageToBase64Src(
-  path.resolve(process.cwd(), "public/skt_logo.svg"),
+  path.resolve(process.cwd(), "public/skt_logo.jpg"),
 );
-
-/* ------------------------------------------------------------------ */
-/* Data shape                                                          */
-/* ------------------------------------------------------------------ */
-
+const watermarkSrc = imageToBase64Src(
+  path.resolve(process.cwd(), "public/watermark.jpg"),
+);
 const tripSelect = {
   tripName: true,
   tripNumber: true,
@@ -31,6 +29,9 @@ const partySelect = {
 const locationSelect = {
   name: true,
   address: true,
+  contactName: true,
+  contactPhone: true,
+  gstNo: true,
   city: { select: { name: true } },
 } satisfies Prisma.CustomerLocationSelect;
 
@@ -46,15 +47,37 @@ export const lrPdfInclude = {
           address: true,
           contactPhone: true,
           gstNo: true,
+          company: {
+            select: {
+              name: true,
+              address: true,
+              companyPAN: true,
+              contactPhone: true,
+              branches: {
+                select: {
+                  name: true,
+                  branchCode: true,
+                  contactPhone: true,
+                },
+                orderBy: { name: "asc" },
+              },
+            },
+          },
         },
       },
       destinationBranch: {
-        select: { name: true, branchCode: true, address: true, contactPhone: true },
+        select: {
+          name: true,
+          branchCode: true,
+          address: true,
+          contactPhone: true,
+        },
       },
       hub: { select: { name: true } },
-      order: { select: { orderNumber: true } },
+      order: { select: { orderNumber: true, orderType: true } },
       primaryTrip: { select: tripSelect },
       secondaryTrip: { select: tripSelect },
+      finalisedBy: { select: { firstName: true, lastName: true } },
     },
   },
   loadingLocation: { select: locationSelect },
@@ -62,7 +85,11 @@ export const lrPdfInclude = {
   goods: true,
   ewayBill: true,
   delivery: true,
-  acknowledgement: true,
+  acknowledgement: {
+    include: {
+      items: true,
+    },
+  },
   createdBy: { select: { firstName: true, lastName: true } },
 } satisfies Prisma.LorryReceiptInclude;
 
@@ -70,9 +97,13 @@ export type LrPdfData = Prisma.LorryReceiptGetPayload<{
   include: typeof lrPdfInclude;
 }>;
 
-/* ------------------------------------------------------------------ */
-/* Formatting helpers                                                  */
-/* ------------------------------------------------------------------ */
+type LrCopy = "CONSIGNOR COPY" | "CONSIGNEE COPY" | "OFFICE COPY";
+
+const DEFAULT_COPIES: LrCopy[] = [
+  "CONSIGNOR COPY",
+  "CONSIGNEE COPY",
+  "OFFICE COPY",
+];
 
 const esc = (value: unknown) =>
   String(value ?? "")
@@ -82,7 +113,7 @@ const esc = (value: unknown) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
-const text = (value: unknown): string => {
+const display = (value: unknown): string => {
   if (value === null || value === undefined || value === "") return "—";
   return esc(value);
 };
@@ -91,7 +122,7 @@ const fmtDate = (date: Date | string | null | undefined) => {
   if (!date) return "—";
   return new Date(date).toLocaleDateString("en-IN", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
   });
 };
@@ -110,7 +141,10 @@ const fmtDateTime = (date: Date | string | null | undefined) => {
 
 const fmtMoney = (paise: bigint | number | null | undefined) => {
   if (paise === null || paise === undefined) return "—";
-  return `₹ ${paiseToRupees(paise).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return paiseToRupees(paise).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 };
 
 const fmtWeight = (
@@ -118,523 +152,570 @@ const fmtWeight = (
   unit?: string | null,
 ) => {
   if (weight === null || weight === undefined) return "—";
-  const n = Number(weight);
-  if (Number.isNaN(n)) return "—";
-  const value = n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+  const numeric = Number(weight);
+  if (Number.isNaN(numeric)) return "—";
+  const value = numeric.toLocaleString("en-IN", { maximumFractionDigits: 3 });
   return unit ? `${value} ${esc(unit)}` : value;
 };
 
+const personName = (
+  person: { firstName?: string | null; lastName?: string | null } | null | undefined,
+) => display([person?.firstName, person?.lastName].filter(Boolean).join(" "));
+
 const TRANSPORT_LABELS: Record<string, string> = {
   Road: "By Road",
-  Rail: "By Rail",
-  RoadAndRail: "Road & Rail",
+  Rail: "By Railway",
+  RoadAndRail: "By Road & Railway",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "DRAFT — NOT FINALISED",
-  FINALISED: "FINALISED",
-  DELIVERED: "DELIVERED",
-  ACKNOWLEDGED: "DELIVERED — POD RECEIVED",
-  CANCELLED: "CANCELLED",
+/* Code 39 supports the characters used by SKT LR numbers, including '/'. */
+const CODE39: Record<string, string> = {
+  "0": "nnnwwnwnn", "1": "wnnwnnnnw", "2": "nnwwnnnnw",
+  "3": "wnwwnnnnn", "4": "nnnwwnnnw", "5": "wnnwwnnnn",
+  "6": "nnwwwnnnn", "7": "nnnwnnwnw", "8": "wnnwnnwnn",
+  "9": "nnwwnnwnn", A: "wnnnnwnnw", B: "nnwnnwnnw",
+  C: "wnwnnwnnn", D: "nnnnwwnnw", E: "wnnnwwnnn",
+  F: "nnwnwwnnn", G: "nnnnnwwnw", H: "wnnnnwwnn",
+  I: "nnwnnwwnn", J: "nnnnwwwnn", K: "wnnnnnnww",
+  L: "nnwnnnnww", M: "wnwnnnnwn", N: "nnnnwnnww",
+  O: "wnnnwnnwn", P: "nnwnwnnwn", Q: "nnnnnnwww",
+  R: "wnnnnnwwn", S: "nnwnnnwwn", T: "nnnnwnwwn",
+  U: "wwnnnnnnw", V: "nwwnnnnnw", W: "wwwnnnnnn",
+  X: "nwnnwnnnw", Y: "wwnnwnnnn", Z: "nwwnwnnnn",
+  "-": "nwnnnnwnw", ".": "wwnnnnwnn", " ": "nwwnnnwnn",
+  "$": "nwnwnwnnn", "/": "nwnwnnnwn", "+": "nwnnnwnwn",
+  "%": "nnnwnwnwn", "*": "nwnnwnwnn",
 };
 
-/* ------------------------------------------------------------------ */
-/* Fragment builders                                                   */
-/* ------------------------------------------------------------------ */
+const code39Svg = (raw: string) => {
+  const value = raw.toUpperCase().replace(/[^0-9A-Z.\- $/+%]/g, "-");
+  const encoded = `*${value}*`;
+  const narrow = 1.25;
+  const wide = 3.25;
+  let x = 2;
+  const bars: string[] = [];
 
-const cell = (label: string, value: string, extraStyle = "") => `
-  <div class="cell" style="${extraStyle}">
-    <div class="cell-label">${esc(label)}</div>
-    <div class="cell-value">${value}</div>
-  </div>`;
-
-const partyBox = (
-  role: string,
-  party: LrPdfData["group"]["consignor"] | null | undefined,
-  point: LrPdfData["loadingLocation"],
-  pointLabel: string,
-) => {
-  const cityState = [party?.city?.name, party?.state?.name]
-    .filter(Boolean)
-    .join(", ");
-  const phone = party?.mobileNo || party?.contactPhone;
-  return `
-  <div class="party">
-    <div class="party-role">${esc(role)}</div>
-    <div class="party-body">
-      <div class="party-name">${text(party?.name)}</div>
-      ${
-        party?.address || cityState
-          ? `<div class="party-line">${[party?.address, cityState].filter(Boolean).map(esc).join(", ")}</div>`
-          : ""
+  for (const character of encoded) {
+    const pattern = CODE39[character] ?? CODE39["-"]!;
+    pattern.split("").forEach((widthType, index) => {
+      const width = widthType === "w" ? wide : narrow;
+      if (index % 2 === 0) {
+        bars.push(`<rect x="${x}" y="1" width="${width}" height="26" />`);
       }
-      <div class="party-line"><span class="inline-label">GSTIN:</span> ${text(party?.gstNo)}${phone ? ` &nbsp;&nbsp;<span class="inline-label">Phone:</span> ${esc(phone)}` : ""}</div>
-      <div class="party-line"><span class="inline-label">${esc(pointLabel)}:</span> ${
-        point
-          ? [point.name, point.address, point.city?.name]
-              .filter(Boolean)
-              .map(esc)
-              .join(", ")
-          : "—"
-      }</div>
-    </div>
-  </div>`;
+      x += width;
+    });
+    x += narrow;
+  }
+
+  return `<svg class="barcode" viewBox="0 0 ${x + 2} 34" role="img" aria-label="${esc(value)}" preserveAspectRatio="none">
+    <g fill="#000">${bars.join("")}</g>
+    <text x="${x / 2}" y="33" text-anchor="middle" font-size="4.4" font-family="monospace">${esc(value)}</text>
+  </svg>`;
 };
 
-/* ------------------------------------------------------------------ */
-/* Template                                                            */
-/* ------------------------------------------------------------------ */
+const partyAddress = (
+  party: LrPdfData["group"]["consignor"] | null | undefined,
+) =>
+  [party?.address, party?.city?.name, party?.state?.name]
+    .filter(Boolean)
+    .map(esc)
+    .join(", ");
 
-export const buildLrPdfHtml = (lr: LrPdfData): string => {
-  const g = lr.group;
-  const isMarket = g.isMarketVehicle;
+const locationText = (location: LrPdfData["loadingLocation"]) =>
+  location
+    ? [location.name, location.address, location.city?.name]
+      .filter(Boolean)
+      .map(esc)
+      .join(", ")
+    : "—";
 
+const TERMS = [
+  "Goods are carried at the declared risk shown on this LR. The owner should arrange suitable transit insurance.",
+  "The carrier is not responsible for loss or damage caused by accident, fire, theft, leakage, natural events or circumstances beyond reasonable control, except where imposed by law.",
+  "The consignor is responsible for the accuracy of the goods description, quantity, invoice, challan and e-way bill particulars.",
+  "Delivery will be made to the named consignee or its authorised representative against this LR or valid authorisation.",
+  "Detention and other applicable charges may be levied when a vehicle is held beyond the agreed free period at loading or unloading.",
+  "Shortage or damage must be recorded at delivery and acknowledged by the driver and consignee representative.",
+  "All disputes are subject to Jalgaon jurisdiction.",
+  "An acknowledgement must be given on the original copy.",
+];
+
+const buildCopy = (
+  lr: LrPdfData,
+  copyLabel: LrCopy,
+  copyIndex: number,
+  totalCopies: number,
+  withLetterhead: boolean,
+) => {
+  const group = lr.group;
+  const paymentModeLabel =
+    group.paymentMode === "TO_PAY"
+      ? "TO PAY"
+      : "TO BE BILLED";
+  const company = group.originBranch.company;
+  const isMarket = group.isMarketVehicle;
+  const driver = isMarket ? null : group.primaryTrip?.driver;
   const vehicleNumber = isMarket
-    ? g.marketVehicleNumber
-    : g.primaryTrip?.vehicle?.vehicleNumber;
-  const driver = isMarket ? null : g.primaryTrip?.driver;
-  const driverName = isMarket ? g.marketDriverName : driver?.name;
-
-  const goodsRows = lr.goods.map(
-    (item, i) => `
-      <tr>
-        <td class="c">${i + 1}</td>
-        <td class="c">${item.quantity.toLocaleString("en-IN")}</td>
-        <td class="c">${text(item.unit)}</td>
-        <td>${esc(item.name)}${item.description ? ` <span class="soft">— ${esc(item.description)}</span>` : ""}</td>
-        <td class="r">${fmtWeight(item.weight)}</td>
-      </tr>`,
+    ? group.marketVehicleNumber
+    : group.primaryTrip?.vehicle?.vehicleNumber;
+  const driverName = isMarket ? group.marketDriverName : driver?.name;
+  const totalPackages = lr.goods.reduce((sum, item) => sum + item.quantity, 0);
+  const receivedByGoods = new Map(
+    (lr.acknowledgement?.items ?? []).map((item) => [
+      item.lrGoodsId,
+      item.receivedQty == null ? null : Number(item.receivedQty),
+    ]),
   );
-  // Pad so the printed form always leaves handwriting room.
-  const minRows = 5;
-  for (let i = goodsRows.length; i < minRows; i++) {
-    goodsRows.push(
-      `<tr class="filler"><td class="c">&nbsp;</td><td></td><td></td><td></td><td></td></tr>`,
-    );
-  }
-  const totalQty = lr.goods.reduce((sum, item) => sum + item.quantity, 0);
+  const printedBy = group.finalisedBy ?? lr.createdBy;
+  const routeVia = group.hub?.name && group.tripLegType !== "DIRECT"
+    ? group.hub.name
+    : null;
+  const loadType = group.order?.orderType === "Item" ? "PTL" : "FTL";
 
-  const routeVia = g.hub?.name && g.tripLegType !== "DIRECT" ? g.hub.name : null;
+  const goodsDescription = lr.goods.length
+    ? lr.goods
+      .map((item) => `${esc(item.name)}${item.description ? ` – ${esc(item.description)}` : ""}`)
+      .join("<br />")
+    : "—";
 
-  const watermark =
-    lr.status === "CANCELLED"
-      ? `<div class="watermark">CANCELLED</div>`
-      : lr.status === "DRAFT"
-        ? `<div class="watermark" style="color:rgba(0,0,0,0.055);">DRAFT</div>`
-        : "";
+  const acknowledgementRows = lr.goods.length
+    ? lr.goods.map((item) => `
+        <tr>
+          <td>${esc(item.name)}</td>
+          <td class="number">${item.quantity.toLocaleString("en-IN")}</td>
+          <td class="number">${receivedByGoods.get(item.id)?.toLocaleString("en-IN") ?? ""}</td>
+        </tr>`).join("")
+    : `<tr><td>&nbsp;</td><td></td><td></td></tr>`;
 
-  const delivery = lr.delivery;
-  const ack = lr.acknowledgement;
+  const contacts = company.branches
+    .filter((branch) => branch.contactPhone)
+    .map((branch) => `${esc(branch.name)}: ${esc(branch.contactPhone)}`)
+    .join(" &nbsp;◇&nbsp; ");
+
+  const statusWatermark = lr.status === "CANCELLED"
+    ? `<div class="status-watermark cancelled">CANCELLED</div>`
+    : lr.status === "DRAFT"
+      ? `<div class="status-watermark">DRAFT</div>`
+      : "";
+
+  return `
+  <section class="lr-page${copyIndex < totalCopies - 1 ? " page-break" : ""}">
+    ${withLetterhead ? `<img class="stationery-watermark" src="${watermarkSrc}" alt="" />` : ""}
+    ${statusWatermark}
+
+    <header class="letterhead">
+      ${withLetterhead
+      ? `<div class="letterhead-top">
+             <span>Subject to Jalgaon Junction</span>
+             <span>CIN: U63000MH2004PTC148258</span>
+           </div>
+           <div class="brand-row">
+             <img class="brand-logo" src="${logoSrc}" alt="${esc(company.name)}" />
+        
+           </div>
+           <div class="company-line"><strong>Corporate Office:</strong> ${display("S K Tower, A-52, Ayodhya Nagar Road, Old MIDC, Jalgaon - 425003")}</div>
+           <div class="company-line">
+             Tel.: ${display(company.contactPhone ?? "0257-2270651, 2270010")} &nbsp;•&nbsp;
+             Web: www.sktranslines.com
+           </div>`
+      : `<div class="blank-letterhead"></div>`}
+    </header>
+
+${withLetterhead
+      ? `<div class="title-row">
+       <div class="doc-title">
+         <span>LORRY RECEIPT</span>
+       </div>
+     </div>`
+      : `<div class="title-row title-row-empty"></div>`}
+
+<div class="copy-row">
+  <div class="copy-label">${copyLabel}</div>
+
+  <div class="lr-info-box">
+    <div>
+      <strong>LR No.:</strong>
+      <span class="mono">${esc(lr.lrNumber)}</span>
+    </div>
+
+    <div>
+      <strong>Date:</strong>
+      ${esc(fmtDate(lr.createdAt))}
+    </div>
+  </div>
+</div>
+
+    <div class="party-grid ruled">
+      <div class="party-box">
+        <div><strong>CONSIGNOR:</strong> <span class="party-name">${display(group.consignor?.name)}</span></div>
+        <div class="small">${partyAddress(group.consignor) || "—"}</div>
+        <div><strong>GST No:</strong> ${display(group.consignor?.gstNo)}</div>
+      </div>
+      <div class="party-box">
+        <div><strong>CONSIGNEE:</strong> <span class="party-name">${display(group.consignee?.name)}</span></div>
+        <div class="small">${partyAddress(group.consignee) || "—"}</div>
+        <div><strong>GST No:</strong> ${display(group.consignee?.gstNo)}</div>
+      </div>
+    </div>
+
+    <div class="route-grid">
+      <div><strong>FROM:</strong> ${display(group.originBranch.name)}</div>
+      <div><strong>TO:</strong> ${display(group.destinationBranch.name)}</div>
+    </div>
+    <div class="line-row"><strong>Delivery At:</strong> ${locationText(lr.unloadingLocation)}</div>
+   <div class="line-row split-four">
+  <span><strong>Driver:</strong> ${display(driverName)}</span>
+  <span><strong>Truck No:</strong> ${display(vehicleNumber)}</span>
+  <span><strong>By:</strong> ${display(
+        TRANSPORT_LABELS[group.transportType] ?? group.transportType,
+      )}</span>
+  <span>
+    <strong>Payment Mode:</strong>
+    ${esc(paymentModeLabel)}
+  </span>
+</div>
+    <div class="line-row split-two">
+      <span><strong>E-Way Bill No:</strong> ${display(lr.ewayBill?.ewayBillNo)}</span>
+      <span><strong>Valid Till:</strong> ${lr.ewayBill ? esc(fmtDate(lr.ewayBill.expiresAt)) : "—"}</span>
+    </div>
+
+    <table class="details-table">
+      <tbody>
+        <tr>
+          <th>Goods Description</th>
+          <th>Challan / Invoice No.</th>
+          <th>Total Weight</th>
+          <th>Load Type</th>
+        </tr>
+        <tr>
+          <td rowspan="3" class="goods-description">${goodsDescription}</td>
+          <td>${display(lr.invoiceNumber)}</td>
+          <td>${fmtWeight(lr.totalWeight, lr.unit)}</td>
+          <td>${loadType}</td>
+        </tr>
+        <tr>
+          <td><strong>Invoice No:</strong> ${display(lr.invoiceNumber)}</td>
+          <td><strong>No. of Packages:</strong></td>
+          <td>${totalPackages.toLocaleString("en-IN")}</td>
+        </tr>
+        <tr>
+          <td><strong>Invoice Rs:</strong> ${fmtMoney(lr.invoiceAmount)}</td>
+          <td><strong>Delivery Point:</strong></td>
+          <td>${display(lr.unloadingLocation?.name ?? lr.unloadingLocation?.city?.name)}</td>
+        </tr>
+        <tr>
+          <td><strong>RISK:</strong> Owner</td>
+          <td><strong>Seal No:</strong> ${display(group.sealNumber)}</td>
+          <td><strong>Via:</strong></td>
+          <td>${display(routeVia)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="legal-grid">
+      <div>
+        <div><strong>PAN No:</strong> ${display(company.companyPAN)}</div>
+        <div><strong>GSTIN:</strong> ${display(group.originBranch.gstNo)}</div>
+        <div><strong>GST:</strong> Payable under RCM as applicable</div>
+      </div>
+      <div class="jurisdiction">
+        <strong>Subject to Jalgaon Jurisdiction</strong>
+        <div>For <strong>${esc(company.name)}</strong></div>
+        <div class="sign-line"></div>
+      </div>
+    </div>
+
+    <div class="generated-row">
+      <div>${code39Svg(lr.lrNumber)}</div>
+      <div>Printed: ${esc(fmtDateTime(new Date()))} &nbsp; By: ${personName(printedBy)} &nbsp; (${esc(lr.status)})</div>
+    </div>
+
+    <section class="terms">
+      <h2>Terms &amp; Conditions</h2>
+      <ol>${TERMS.map((term) => `<li>${esc(term)}</li>`).join("")}</ol>
+    </section>
+
+    <section class="acknowledgement">
+      <h2>Acknowledgement</h2>
+      <div class="ack-meta">
+        <span><strong>LR No.:</strong> ${esc(lr.lrNumber)}</span>
+        <span><strong>LR Date:</strong> ${esc(fmtDate(lr.createdAt))}</span>
+        <span><strong>From:</strong> ${display(group.originBranch.name)}</span>
+        <span><strong>To:</strong> ${display(group.destinationBranch.name)}</span>
+        <span><strong>Invoice No:</strong> ${display(lr.invoiceNumber)}</span>
+      </div>
+      <div class="ack-dates">
+        <span><strong>In Date/Time:</strong> ${lr.delivery?.reportedAt ? esc(fmtDateTime(lr.delivery.reportedAt)) : "____________________"}</span>
+        <span><strong>Out Date/Time:</strong> ${lr.delivery?.unloadingAt || lr.delivery?.deliveredAt ? esc(fmtDateTime(lr.delivery.unloadingAt ?? lr.delivery.deliveredAt)) : "____________________"}</span>
+      </div>
+      <table class="ack-table">
+        <thead><tr><th>Goods Name</th><th>Total Qty</th><th>Received Qty</th></tr></thead>
+        <tbody>${acknowledgementRows}</tbody>
+      </table>
+      <div class="remark"><strong>Remark:</strong> ${display(lr.acknowledgement?.remark ?? lr.delivery?.remark)}</div>
+      <div class="authority-sign"><span>Seal &amp; Sign. of Authority</span></div>
+    </section>
+
+    <footer class="${withLetterhead ? "" : "preprinted-footer"}">
+      ${withLetterhead ? `<div>${contacts}</div><strong>This LR is online system generated, no signature required</strong>` : ""}
+      <span>${copyIndex + 1}/${totalCopies}</span>
+    </footer>
+  </section>`;
+};
+
+export const buildLrPdfHtml = (
+  lr: LrPdfData,
+  options?: {
+    withLetterhead?: boolean;
+    copies?: LrCopy[];
+  },
+): string => {
+  const withLetterhead = options?.withLetterhead ?? true;
+  const copies = options?.copies?.length ? options.copies : DEFAULT_COPIES;
 
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
 <style>
-  @page { size: A4; margin: 8mm; }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 9px;
-    line-height: 1.35;
-    color: #000;
+    color: #111;
+    background: #fff;
+    font-size: 11px;
+    line-height: 1.3;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .lr-page {
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    padding: 5mm 1mm 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background: #fff;
   }
-  b { font-weight: 700; }
-  .soft { color: #444; }
-  .inline-label { font-size: 7.5px; font-weight: 700; text-transform: uppercase; color: #555; letter-spacing: 0.3px; }
+    .title-row-empty {
+  min-height: 8mm;
+}
+  .page-break { break-after: page; page-break-after: always; }
+ .stationery-watermark {
+  position: absolute;
+  z-index: 0;
 
-  .watermark {
-    position: fixed;
-    top: 40%;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-size: 88px;
-    font-weight: 800;
-    letter-spacing: 14px;
-    transform: rotate(-22deg);
-    color: rgba(150, 0, 0, 0.07);
-    z-index: 0;
+  top: 105mm;
+  left: 50%;
+
+  width: 115mm;
+  height: 115mm;
+
+  object-fit: contain;
+  transform: translateX(-50%);
+  opacity: 0.08;
+}
+  
+  .status-watermark {
+    position: absolute; top: 126mm; left: 6mm; right: 6mm; z-index: 2;
+    text-align: center; transform: rotate(-22deg);
+    color: rgba(0,0,0,.055); font-size: 82px; font-weight: 800;
+    letter-spacing: 12px;
+  }
+  .status-watermark.cancelled { color: rgba(150,0,0,.08); }
+  .lr-page > *:not(.stationery-watermark):not(.status-watermark) { position: relative; z-index: 1; }
+  .letterhead { text-align: center; min-height: 31mm; height: auto; border-bottom: 1.5px solid #111; padding: 0 0 1.5mm; overflow: visible; }
+  .letterhead-top { position: relative; height: 3mm; padding: 0 2mm; font-size: 6.5px; }
+  .letterhead-top span:first-child { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+  .letterhead-top span:last-child { position: absolute; right: 0; white-space: nowrap; }
+ .brand-row {
+  width: calc(100% + 2mm);
+  margin: 0 -1mm;
+  line-height: 0;
   }
 
-  /* The whole document sits inside one ruled frame — classic LR form. */
-  .frame {
-    position: relative;
-    z-index: 1;
-    border: 1.6px solid #000;
+  .brand-logo {
+    display: block;
+    width: 100%;
+    height: auto;
   }
-  .rule-b { border-bottom: 1px solid #000; }
+  .certifications { width: 31mm; display: grid; grid-template-columns: 1fr 1fr; gap: 1mm; }
+  .cert-box { min-height: 12mm; border: 1px solid #777; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 6px; line-height: 1.05; }
+  .cert-box strong { font-size: 7px; }
+  .cert-box small { margin-top: 1mm; font-size: 5px; text-transform: uppercase; }
+  .company-line {  padding: 0 1mm; font-size: 9px; line-height: 0.85; }
+  .blank-letterhead { height: 29mm; }
+.title-row {
+  position: relative;
+  min-height: 11mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-  /* ── Masthead ───────────────────────────────────────────────────── */
-  .masthead { display: flex; align-items: stretch; }
-  .masthead-brand { flex: 1; padding: 8px 10px 6px; }
-  .brand-logo { height: 38px; max-width: 220px; object-fit: contain; object-position: left center; display: block; }
-  .brand-sub { margin-top: 4px; font-size: 7.5px; color: #333; line-height: 1.45; }
-  .masthead-doc {
-    width: 200px;
-    border-left: 1px solid #000;
-    display: flex;
-    flex-direction: column;
-  }
-  .doc-title {
-    padding: 5px 8px 4px;
-    text-align: center;
-    font-size: 12.5px;
-    font-weight: 800;
-    letter-spacing: 2px;
-    border-bottom: 1px solid #000;
-  }
-  .doc-title small { display: block; font-size: 7px; font-weight: 700; letter-spacing: 2.2px; color: #444; margin-top: 1px; }
-  .doc-no-row { display: flex; flex: 1; }
-  .doc-no-row > div { flex: 1; padding: 4px 8px; }
-  .doc-no-row > div + div { border-left: 1px solid #000; }
-  .doc-no { font-family: "Courier New", monospace; font-size: 10.5px; font-weight: 700; margin-top: 1px; white-space: nowrap; }
+.doc-title {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+}
+.doc-title span {
+  display: inline-block;
+  padding: 2px 14px;
+  background: #f4d43f;
+  box-shadow: 0 0 9px rgba(244, 212, 63, 0.65);
+}
 
-  .caution-band {
-    display: flex;
-    justify-content: space-between;
-    padding: 2.5px 10px;
-    font-size: 7px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    background: #efefef;
-  }
+.copy-row {
+  position: relative;
+  min-height: 11mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid #111;
+  border-bottom: 1px solid #111;
+}
 
-  /* ── Generic ruled cell strips ──────────────────────────────────── */
-  .strip { display: flex; }
-  .cell { flex: 1; padding: 4px 8px; min-width: 0; }
-  .cell + .cell { border-left: 1px solid #000; }
-  .cell-label { font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #555; }
-  .cell-value { font-size: 9.5px; font-weight: 700; margin-top: 1px; word-break: break-word; }
-  .mono { font-family: "Courier New", monospace; font-size: 8.5px; white-space: nowrap; letter-spacing: -0.2px; }
+.copy-label {
+  width: 100%;
+  padding: 3px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+}
 
-  /* ── Section heading band ───────────────────────────────────────── */
-  .band {
-    padding: 2.5px 10px;
-    background: #efefef;
-    font-size: 7.5px;
-    font-weight: 800;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-  }
+.lr-info-box {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 52mm;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  border-left: 1px solid #111;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
 
-  /* ── Parties ────────────────────────────────────────────────────── */
-  .parties { display: flex; }
-  .party { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .party + .party { border-left: 1px solid #000; }
-  .party-role {
-    padding: 2.5px 8px;
-    background: #efefef;
-    border-bottom: 1px solid #000;
-    font-size: 7.5px;
-    font-weight: 800;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-  }
-  .party-body { padding: 5px 8px 6px; }
-  .party-name { font-size: 11px; font-weight: 800; }
-  .party-line { margin-top: 2px; }
+.lr-info-box > div {
+  display: flex;
+  align-items: center;
+  padding: 2px 5px;
+  white-space: nowrap;
+}
 
-  /* ── Tables ─────────────────────────────────────────────────────── */
+.lr-info-box > div + div {
+  border-top: 1px solid #111;
+}
+  .doc-title span { display: inline-block; padding: 2px 14px; background: #f4d43f; box-shadow: 0 0 9px rgba(244,212,63,.65); }
+  .lr-meta { border-left: 1px solid #111; font-size: 10px; font-weight: 700; }
+  .lr-meta > div { padding: 3px 5px; }
+  .lr-meta > div + div { border-top: 1px solid #111; }
+  .mono { font-family: "Courier New", monospace; white-space: nowrap; }
+ 
+  .party-grid { display: grid; grid-template-columns: 1fr 1fr; }
+  .party-box { min-height: 21mm; padding: 4px 6px; }
+  .party-box + .party-box { border-left: 1px solid #111; }
+  .party-name { font-size: 12px; font-weight: 800; }
+  .small { min-height: 8mm; margin: 2px 0; font-size: 10px; }
+  .ruled { border-bottom: 1px solid #111; }
+  .line-row { min-height: 6mm; padding: 3px 5px; border-bottom: 1px solid #111; font-size: 11px; }
+  .route-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid #111; }
+  .route-grid > div { min-height: 6mm; padding: 3px 5px; min-width: 0; overflow-wrap: anywhere; }
+  .route-grid > div + div { border-left: 1px solid #111; }
+.split-two,
+.split-three,
+.split-four {
+  display: grid;
+  gap: 6px;
+}
+
+.split-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.split-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.lr-info-row {
+  width: 100%;
+  min-height: 6mm;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  margin: 0;
+  border-bottom: 1px solid #111;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lr-info-row > div {
+  padding: 3px 5px;
+}
+
+.lr-info-row > div:first-child {
+  text-align: left;
+}
+
+.lr-info-row > div:last-child {
+  text-align: right;
+  border-left: 1px solid #111;
+}
+.split-four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
   table { width: 100%; border-collapse: collapse; }
-  th {
-    padding: 3px 7px;
-    background: #efefef;
-    border-bottom: 1px solid #000;
-    border-left: 1px solid #000;
-    font-size: 7px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    text-align: left;
+  th, td { border: 1px solid #111; padding: 3px 4px; vertical-align: top; }
+  th { background: #f0f0f0; text-align: left; font-size: 9px; }
+  .details-table { border-left: 0; border-right: 0; }
+  .details-table th:first-child, .details-table td:first-child { border-left: 0; }
+  .details-table th:last-child, .details-table td:last-child { border-right: 0; }
+  .details-table td {
+  font-size: 9.5px;
+  line-height: 1.3;
+}
+  .goods-description { width: 38%; }
+  .legal-grid { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #111; }
+  .legal-grid > div { min-height: 18mm; padding: 4px 6px; }
+  .legal-grid > div + div { border-left: 1px solid #111; }
+  .jurisdiction { font-size: 9px; }
+  .jurisdiction > div { margin-top: 5px; }
+  .sign-line { width: 42mm; border-bottom: 1px solid #111; }
+  .generated-row { display: grid; grid-template-columns: 50mm 1fr; gap: 8px; align-items: end; min-height: 12mm; padding: 3px 5px; font-size: 6.5px; text-align: right; }
+  .barcode { display: block; width: 45mm; height: 10mm; }
+  .terms { border-top: 1px solid #111; padding: 3px 6px; }
+  h2 { margin: 0 0 3px; text-align: center; text-decoration: underline; font-size: 12px; }
+  .terms ol { margin: 0; padding-left: 15px; font-size: 6.3px; line-height: 1.25; }
+  .acknowledgement { margin-top: 3px; border-top: 1.5px solid #111; padding: 3px 5px 0; }
+  .ack-meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px 22px; font-size: 11px; }
+  .ack-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 5px 0 3px; }
+  .ack-table th:nth-child(2), .ack-table th:nth-child(3),
+  .ack-table td:nth-child(2), .ack-table td:nth-child(3) { width: 23mm; }
+  .number { text-align: right; font-weight: 700; }
+  .remark { min-height: 8mm; padding-top: 3px; border-bottom: 1px solid #777; }
+  .authority-sign { height: 16mm; display: flex; justify-content: flex-end; align-items: flex-end; }
+  .authority-sign span { width: 58mm; padding-top: 2px; border-top: 1px dotted #333; text-align: center; font-weight: 700; }
+  footer { margin-top: auto; margin-left: -1mm; margin-right: -1mm; min-height: 12mm; position: relative; padding: 3px 18mm 3px 4px; background: #bfe5f3; text-align: center; font-size: 6.5px; }
+  footer strong { display: block; margin-top: 2px; font-size: 9px; }
+  footer > span { position: absolute; right: 4px; bottom: 3px; font-weight: 700; }
+  footer.preprinted-footer { background: transparent; }
+  @media screen {
+    body { background: #e5e7eb; padding: 18px; }
+    .lr-page { margin: 0 auto 18px; box-shadow: 0 2px 14px rgba(0,0,0,.18); }
   }
-  td {
-    padding: 3.5px 7px;
-    border-bottom: 1px solid #999;
-    border-left: 1px solid #000;
-    vertical-align: top;
-    font-size: 9px;
-  }
-  th:first-child, td:first-child { border-left: none; }
-  tbody tr:last-child td { border-bottom: none; }
-  td.c, th.c { text-align: center; }
-  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
-  tr.filler td { height: 13px; border-bottom: 1px dotted #bbb; }
-  tfoot td { border-top: 1.2px solid #000; border-bottom: none; font-weight: 800; background: #f7f7f7; }
-
-  /* ── Freight / payment block ────────────────────────────────────── */
-  .commercial { display: flex; }
-  .commercial-left { flex: 1.35; border-right: 1px solid #000; }
-  .commercial-right { flex: 1; display: flex; flex-direction: column; }
-  .charge-row { display: flex; justify-content: space-between; padding: 3px 8px; border-bottom: 1px solid #ccc; }
-  .charge-row:last-child { border-bottom: none; }
-  .charge-row .write { flex: 0 0 90px; border-bottom: 1px dotted #888; text-align: right; font-weight: 700; }
-  .charge-row.total { border-top: 1.2px solid #000; font-weight: 800; background: #f7f7f7; }
-  .paymode { display: flex; gap: 14px; padding: 4px 8px; border-bottom: 1px solid #000; }
-  .paymode-opt { display: flex; align-items: center; gap: 4px; font-size: 8.5px; font-weight: 700; }
-  .tick { width: 9px; height: 9px; border: 1.2px solid #000; display: inline-block; }
-  .gst-note { padding: 4px 8px; font-size: 7.5px; color: #333; line-height: 1.45; }
-
-  /* ── POD block ──────────────────────────────────────────────────── */
-  .pod-body { display: flex; }
-  .pod-lines { flex: 1; padding: 6px 10px 7px; }
-  .pod-declaration { font-size: 8px; color: #222; font-style: italic; }
-  .write-line { display: flex; gap: 6px; margin-top: 9px; align-items: flex-end; }
-  .write-label { font-size: 7.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #555; white-space: nowrap; }
-  .write-slot { flex: 1; border-bottom: 1px dotted #777; min-height: 11px; font-size: 9px; font-weight: 700; padding: 0 3px; }
-  .stamp-box {
-    width: 125px;
-    border-left: 1px solid #000;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 5px;
-    text-align: center;
-  }
-  .stamp-hint { font-size: 6.5px; text-transform: uppercase; letter-spacing: 0.7px; color: #666; }
-
-  /* ── Signature strip ────────────────────────────────────────────── */
-  .signs { display: flex; }
-  .sign { flex: 1; min-height: 52px; padding: 5px 8px; display: flex; flex-direction: column; justify-content: space-between; }
-  .sign + .sign { border-left: 1px solid #000; }
-  .sign-info { font-size: 7.5px; color: #333; }
-  .sign-role { font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; text-align: center; border-top: 1px solid #999; padding-top: 2px; }
-
-  /* ── Terms + footer ─────────────────────────────────────────────── */
-  .terms { padding: 4px 10px 5px; }
-  .terms-title { font-size: 6.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #444; }
-  .terms ol { padding-left: 11px; columns: 2; column-gap: 18px; font-size: 6.5px; color: #444; line-height: 1.45; margin-top: 1px; }
-  .footer {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 3px 10px;
-    border-top: 1px solid #000;
-    font-size: 6.8px;
-    color: #333;
-    background: #efefef;
+  @media print {
+    html, body { width: 210mm; }
+    body { background: #fff; }
   }
 </style>
 </head>
 <body>
-${watermark}
-<div class="frame">
-
-  <!-- Masthead -->
-  <div class="masthead rule-b">
-    <div class="masthead-brand">
-      <img class="brand-logo" src="${logoSrc}" alt="S K Trans Lines Pvt. Ltd." />
-      <div class="brand-sub">
-        Corporate Off.: S K TOWER, A-52, Ground Floor, Ayodhya Nagar Road, OLD MIDC, Jalgaon - 425003<br />
-        CIN: U63000MH2004PTC148258 &nbsp;•&nbsp; E-mail: customercare@sktranslines.com &nbsp;•&nbsp; www.sktranslines.com
-        ${g.originBranch?.gstNo ? `<br />GSTIN (${esc(g.originBranch.branchCode ?? "")}): ${esc(g.originBranch.gstNo)}` : ""}
-      </div>
-    </div>
-    <div class="masthead-doc">
-      <div class="doc-title">LORRY RECEIPT<small>CONSIGNMENT NOTE</small></div>
-      <div class="doc-no-row">
-        <div>
-          <div class="cell-label">LR Number</div>
-          <div class="doc-no">${esc(lr.lrNumber)}</div>
-        </div>
-      </div>
-      <div class="doc-no-row" style="border-top:1px solid #000;">
-        <div>
-          <div class="cell-label">LR Date</div>
-          <div class="cell-value">${esc(fmtDate(lr.createdAt))}</div>
-        </div>
-        <div>
-          <div class="cell-label">Status</div>
-          <div class="cell-value">${esc(STATUS_LABELS[lr.status] ?? lr.status)}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="caution-band rule-b">
-    <span>At Owner's Risk</span>
-    <span>Insurance not arranged by the carrier</span>
-    <span>Subject to Jalgaon Jurisdiction</span>
-  </div>
-
-  ${
-    lr.status === "CANCELLED"
-      ? `<div class="band rule-b" style="background:#000;color:#fff;">Cancelled — ${esc(g.cancelReason ?? lr.cancelReason ?? "reason not recorded")}</div>`
-      : ""
-  }
-
-  <!-- Booking references -->
-  <div class="strip rule-b">
-    ${cell("Booking Branch", text(g.originBranch?.name))}
-    ${cell("Delivery Branch", text(g.destinationBranch?.name))}
-    ${routeVia ? cell("Via (Hub)", esc(routeVia)) : ""}
-    ${cell("Mode", text(TRANSPORT_LABELS[g.transportType] ?? g.transportType))}
-    ${cell("Order No", `<span class="mono">${text(g.order?.orderNumber)}</span>`)}
-    ${cell("Truckload No", `<span class="mono">${text(g.groupNumber)}</span>`)}
-  </div>
-
-  <!-- Parties -->
-  <div class="parties rule-b">
-    ${partyBox("Consignor (From)", g.consignor, lr.loadingLocation, "Pickup point")}
-    ${partyBox("Consignee (To)", g.consignee, lr.unloadingLocation, "Delivery point")}
-  </div>
-
-  <!-- Vehicle -->
-  <div class="strip rule-b">
-    ${cell("Vehicle No", `<span class="mono" style="font-size:10.5px;">${text(vehicleNumber)}</span>`)}
-    ${cell("Driver", text(driverName))}
-    ${cell("Driver Mobile", text(driver?.mobile))}
-    ${cell("Licence No", text(driver?.licenseNo))}
-    ${cell("Seal No", text(g.sealNumber))}
-    ${cell("Trip No", text(isMarket ? "Market vehicle" : g.primaryTrip?.tripNumber))}
-  </div>
-
-  <!-- Goods -->
-  <div class="band rule-b">Particulars of Goods (said to contain)</div>
-  <table class="rule-b">
-    <thead>
-      <tr>
-        <th class="c" style="width:24px;">Sr</th>
-        <th class="c" style="width:58px;">Packages</th>
-        <th class="c" style="width:52px;">Unit</th>
-        <th>Description of Goods</th>
-        <th class="r" style="width:78px;">Weight</th>
-      </tr>
-    </thead>
-    <tbody>${goodsRows.join("")}</tbody>
-    <tfoot>
-      <tr>
-        <td></td>
-        <td class="c">${totalQty ? totalQty.toLocaleString("en-IN") : "—"}</td>
-        <td></td>
-        <td>Total</td>
-        <td class="r">${fmtWeight(lr.totalWeight, lr.unit)}</td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <!-- Invoice / e-way references + freight -->
-  <div class="commercial rule-b">
-    <div class="commercial-left">
-      <div class="band" style="border-bottom:1px solid #000;">Invoice &amp; E-Way Bill</div>
-      <div class="strip" style="border-bottom:1px solid #000;">
-        ${cell("Invoice No", `<span class="mono">${text(lr.invoiceNumber)}</span>`)}
-        ${cell("Invoice Value", text(lr.invoiceAmount != null ? fmtMoney(lr.invoiceAmount) : null))}
-      </div>
-      <div class="strip">
-        ${cell("E-Way Bill No", `<span class="mono">${text(lr.ewayBill?.ewayBillNo)}</span>`)}
-        ${cell("Valid Till", text(lr.ewayBill ? fmtDate(lr.ewayBill.expiresAt) : null))}
-      </div>
-      <div class="gst-note" style="border-top:1px solid #000;">
-        GST on freight payable under <b>Reverse Charge Mechanism (RCM)</b> by the
-        consignor / consignee as applicable — SAC 9965 (Goods Transport Agency).
-        The carrier does not collect GST on this consignment unless agreed otherwise.
-      </div>
-    </div>
-    <div class="commercial-right">
-      <div class="band" style="border-bottom:1px solid #000;">Freight Particulars</div>
-      <div class="paymode">
-        <span class="paymode-opt"><span class="tick"></span> Paid</span>
-        <span class="paymode-opt"><span class="tick"></span> To Pay</span>
-        <span class="paymode-opt"><span class="tick"></span> To Be Billed</span>
-      </div>
-      <div class="charge-row"><span>Base Freight</span><span class="write">${g.baseFreightAmount != null ? esc(fmtMoney(g.baseFreightAmount)) : ""}</span></div>
-      <div class="charge-row"><span>Hamali / Loading</span><span class="write"></span></div>
-      <div class="charge-row"><span>Detention</span><span class="write"></span></div>
-      <div class="charge-row"><span>Other Charges</span><span class="write"></span></div>
-      <div class="charge-row total"><span>Total</span><span class="write">${g.baseFreightAmount != null ? esc(fmtMoney(g.baseFreightAmount)) : ""}</span></div>
-    </div>
-  </div>
-
-  ${
-    delivery
-      ? `<div class="band rule-b">Delivery Record</div>
-        <div class="strip rule-b">
-          ${cell("Delivered On", esc(fmtDateTime(delivery.deliveredAt)))}
-          ${cell("Vehicle Reported", esc(fmtDateTime(delivery.reportedAt)))}
-          ${cell("Received By", `${text(delivery.receiverName)}${delivery.receiverPhone ? ` (${esc(delivery.receiverPhone)})` : ""}`)}
-          ${cell("POD Received", text(ack ? fmtDate(ack.receivedAt) : null))}
-          ${cell("Remark", text(delivery.remark))}
-        </div>`
-      : ""
-  }
-
-  <!-- Consignee acknowledgement -->
-  <div class="band rule-b">Consignee Acknowledgement — Proof of Delivery</div>
-  <div class="pod-body rule-b">
-    <div class="pod-lines">
-      <div class="pod-declaration">
-        Received the above-described consignment in good order and condition, complete
-        as per this Lorry Receipt.
-      </div>
-      <div class="write-line">
-        <span class="write-label">Received by (name)</span>
-        <span class="write-slot">${delivery?.receiverName ? esc(delivery.receiverName) : ""}</span>
-        <span class="write-label">Mobile</span>
-        <span class="write-slot" style="max-width:110px;">${delivery?.receiverPhone ? esc(delivery.receiverPhone) : ""}</span>
-      </div>
-      <div class="write-line">
-        <span class="write-label">Date</span>
-        <span class="write-slot" style="max-width:100px;">${delivery ? esc(fmtDate(delivery.deliveredAt)) : ""}</span>
-        <span class="write-label">Time</span>
-        <span class="write-slot" style="max-width:80px;"></span>
-        <span class="write-label">Condition of goods</span>
-        <span class="write-slot"></span>
-      </div>
-      <div class="write-line">
-        <span class="write-label">Shortage / damage remarks</span>
-        <span class="write-slot"></span>
-      </div>
-    </div>
-    <div class="stamp-box">
-      <div style="flex:1;"></div>
-      <div class="stamp-hint">Consignee Seal &amp; Stamp</div>
-    </div>
-    <div class="stamp-box">
-      <div style="flex:1;"></div>
-      <div class="stamp-hint">Consignee Signature</div>
-    </div>
-  </div>
-
-  <!-- Signatures -->
-  <div class="signs rule-b">
-    <div class="sign">
-      <div class="sign-info">Prepared by: <b>${text([lr.createdBy?.firstName, lr.createdBy?.lastName].filter(Boolean).join(" "))}</b><br />Branch: ${text(g.originBranch?.name)}</div>
-      <div class="sign-role">Booking Clerk</div>
-    </div>
-    <div class="sign">
-      <div class="sign-info">Name: ${text(driverName)}</div>
-      <div class="sign-role">Driver's Signature</div>
-    </div>
-    <div class="sign">
-      <div class="sign-info">For <b>S K Trans Lines Pvt. Ltd.</b></div>
-      <div class="sign-role">Authorised Signatory</div>
-    </div>
-  </div>
-
-  <!-- Terms -->
-  <div class="terms">
-    <div class="terms-title">Terms &amp; Conditions of Carriage</div>
-    <ol>
-      <li>Goods are transported entirely at the owner's risk. The carrier is not responsible for leakage, breakage, evaporation or damage arising from causes beyond its control.</li>
-      <li>Delivery is made only against this consignment note or written authorisation from the consignee named herein.</li>
-      <li>The consignor is responsible for the correctness of the description of goods, invoice and e-way bill particulars declared on this receipt.</li>
-      <li>Detention will be charged if the vehicle is held beyond the free period at loading or unloading points.</li>
-      <li>Claims for shortage or damage must be noted on this receipt at the time of delivery; claims raised afterwards will not be entertained.</li>
-      <li>All disputes are subject to Jalgaon jurisdiction only.</li>
-    </ol>
-  </div>
-
-  <!-- Footer -->
-  <div class="footer">
-    <span>Guwahati: 9435568914 | Kolkata: 8336925540 | Mumbai: 91+2572270651 | Nashik: 9422770142 | Pondicherry: 9626709983 | Pune: 9373770144</span>
-    <span style="white-space:nowrap;">System-generated &nbsp;•&nbsp; ${esc(fmtDateTime(new Date()))}</span>
-  </div>
-
-</div>
+${copies.map((copy, index) => buildCopy(lr, copy, index, copies.length, withLetterhead)).join("\n")}
 </body>
 </html>`;
 };

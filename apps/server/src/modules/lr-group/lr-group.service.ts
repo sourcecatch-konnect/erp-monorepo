@@ -144,6 +144,7 @@ export const groupListSelect = {
   status: true,
   source: true,
   transportType: true,
+  paymentMode: true,
   tripLegType: true,
   priority: true,
   truckIndex: true,

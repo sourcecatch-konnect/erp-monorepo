@@ -23,11 +23,13 @@ export type BillingOptions = {
       state: { id: string; name: string };
     } | null;
   }>;
+  states: Array<{ id: string; name: string }>;
 };
 
 export type EligibleClient = {
   id: string;
   name: string;
+  stateId: string;
   splitBillsByChargeType: boolean;
 };
 
@@ -40,6 +42,7 @@ export type EligibleLR = {
   billingStatus: string;
   transportType: string;
   origin: string;
+  originBranchId: string;
   destination: string;
   placeOfSupply: { id: string; name: string } | null;
   consignor: { id: string; name: string; gstNo: string | null };
@@ -265,7 +268,7 @@ export type AvailableBillCharge = {
 };
 
 export type EligibilityFilters = {
-  branchId: string;
+  branchId?: string;
   billingPartyType: BillPartyType;
   customerId: string;
   billType: BillType;
@@ -280,6 +283,7 @@ export type CreateBillDraft = {
   billType: BillType;
   billingPartyType: BillPartyType;
   customerId: string;
+  placeOfSupplyStateId?: string;
   chargeMechanism?: ChargeMechanism;
   billDate: string;
   billingCutoffDate?: string | null;
@@ -356,4 +360,13 @@ export const billingApi = {
     ),
   createTaxRule: (body: Record<string, string | number | boolean | null>) =>
     post<Record<string, unknown>>("/billing/tax-rules", body),
+  // Tax-invoice PDF. Layout (regular / split-charge) is chosen server-side from
+  // the service customer's splitBillsByChargeType flag — no params here.
+  downloadPdf: async (id: string): Promise<Blob> => {
+    const response = await api.get(
+      `/billing/bills/${encodeURIComponent(id)}/pdf`,
+      { responseType: "blob" },
+    );
+    return response.data as Blob;
+  },
 };

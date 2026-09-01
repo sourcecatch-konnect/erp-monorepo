@@ -20,15 +20,15 @@ export type DeliveryChallanStatus = "DRAFT" | "ISSUED" | "CANCELLED";
 export type DeliveryVehicleMode = "OWN" | "MARKET";
 
 export type DeliveryChallanPreview = {
-  branchGrnId: string;
+  railRakeId: string;
   rake: {
     id: string;
     rakeNumber: string;
     scheduleNumber: string;
     scheduleDate: string;
   };
-  vp: { id: string; vpNo?: string | null; rowLabel: string };
   sourceBranch: { id: string; name: string; branchCode: string };
+  vps: DeliveryChallanVpOption[];
   destinationOptions: DeliveryChallanDestinationOption[];
   items: DeliveryChallanPreviewItem[];
 };
@@ -42,12 +42,19 @@ export type DeliveryChallanItem = {
   goodsNameSnapshot: string;
   unitSnapshot?: string | null;
   deliveryAddressSnapshot?: string | null;
+  branchGrnItem: {
+    railBranchGrn: {
+      vpWagonLoading: {
+        mrRrRow: { vpNo?: string | null; rowLabel: string };
+      };
+    };
+  };
 };
 
 export type DeliveryChallanDetail = {
   id: string;
   challanNumber: string;
-  branchGrnId: string;
+  railRakeId: string;
   sourceBranchId: string;
   destinationAreaId?: string | null;
   destinationLocationId?: string | null;
@@ -76,22 +83,16 @@ export type DeliveryChallanDetail = {
   version: number;
   createdAt: string;
   updatedAt: string;
-  branchGrn: {
-    railRake: {
-      id: string;
-      rakeNumber: string;
-      fromBranch: { id: string; name: string; branchCode: string };
-      toBranch: { id: string; name: string; branchCode: string };
-      vpSchedule: {
-        scheduleNumber: string;
-        scheduleDate: string;
-        sourceArea: { id: string; name: string };
-        destinationArea: { id: string; name: string };
-      };
-    };
-    vpWagonLoading: {
-      id: string;
-      mrRrRow: { vpNo?: string | null; rowLabel: string };
+  railRake: {
+    id: string;
+    rakeNumber: string;
+    fromBranch: { id: string; name: string; branchCode: string };
+    toBranch: { id: string; name: string; branchCode: string };
+    vpSchedule: {
+      scheduleNumber: string;
+      scheduleDate: string;
+      sourceArea: { id: string; name: string };
+      destinationArea: { id: string; name: string };
     };
   };
   sourceBranch: { id: string; name: string; branchCode: string };
@@ -167,26 +168,18 @@ export const deliveryChallanApi = {
     return unwrapApiResponse(response);
   },
 
-  vps: async (rakeId: string) => {
-    const response = await api.get<ApiResponse<DeliveryChallanVpOption[]>>(
-      "/delivery-challans/options/vps",
-      { params: { rakeId } },
-    );
-    return unwrapApiResponse(response);
-  },
-
-  preview: async (branchGrnId: string) => {
+  preview: async (railRakeId: string) => {
     const response = await api.get<ApiResponse<DeliveryChallanPreview>>(
-      `/delivery-challans/preview/${encode(branchGrnId)}`,
+      `/delivery-challans/preview/${encode(railRakeId)}`,
     );
     return unwrapApiResponse(response);
   },
 
-  supervisors: async (branchGrnId: string) => {
+  supervisors: async (railRakeId: string) => {
     const response = await api.get<
       ApiResponse<DeliveryChallanSupervisorOption[]>
     >("/delivery-challans/options/supervisors", {
-      params: { branchGrnId },
+      params: { railRakeId },
     });
     return unwrapApiResponse(response);
   },

@@ -111,14 +111,10 @@ const router: Router = createCrudRouter({
   permissionKey: "masters.vehicle",
   uniqueErrorMessages: {
   vehicleNumber: "This vehicle number already exists.",
-  chasisNumber: "This chassis number already exists.",
-  engineNumber: "This engine number already exists.",
 },
   listOptions: {
     searchableFields: [
       "vehicleNumber",
-      "chasisNumber",
-      "engineNumber",
       "insuranceNumber",
       "insuranceCompany",
     ],

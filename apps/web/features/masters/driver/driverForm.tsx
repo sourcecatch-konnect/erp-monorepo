@@ -16,15 +16,12 @@ import {
   IconBeach,
   IconCamera,
   IconCurrencyRupee,
-  IconDeviceLandlinePhone,
   IconFileDescription,
   IconHome,
   IconId,
   IconLicense,
-  IconMail,
   IconMapPin,
   IconNotes,
-  IconPercentage,
   IconTrash,
   IconUser,
   IconUserCheck,
@@ -56,6 +53,7 @@ type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   row?: Driver | null;
+  onSaved?: (driver: Driver) => void | Promise<void>;
 };
 
 const driverStatusOptions = [
@@ -69,16 +67,6 @@ const driverTypeOptions = [
   { label: "Owner Driver", value: "Owner" },
 ];
 
-const bloodGroupOptions = [
-  { label: "A+", value: "A+" },
-  { label: "A-", value: "A-" },
-  { label: "B+", value: "B+" },
-  { label: "B-", value: "B-" },
-  { label: "AB+", value: "AB+" },
-  { label: "AB-", value: "AB-" },
-  { label: "O+", value: "O+" },
-  { label: "O-", value: "O-" },
-];
 const normalizeLicenseNo = (value: string) =>
   value
     .toUpperCase()
@@ -101,34 +89,30 @@ const defaultValues: CreateDriverFormInput = {
   birthDate: "",
   anniversaryDate: "",
   mobile: "",
-  alternateMobile: "",
   licenseNo: "",
   licenseDate: "",
   licenseExpiryDate: "",
   licenseCity: "",
-  permanentAddress: "",
-  permanentCountry: "India",
-  permanentState: "",
-  permanentCity: "",
-  correspondenceAddress: "",
-  correspondenceCountry: "India",
-  correspondenceState: "",
-  correspondenceCity: "",
-  correspondenceLandline: "",
+  address: "",
+  country: "India",
+  state: "",
+  city: "",
   referencePerson: "",
   referenceContactNo: "",
-  bloodGroup: "",
   otherDetails: "",
   salary: "",
   panNo: "",
   aadharCardNo: "",
-  noTDSApplyAmount: "",
-  tdsRate: "",
   onLeave: false,
   blackListed: false,
 };
 
-export default function DriverForm({ open, onOpenChange, row }: Props) {
+export default function DriverForm({
+  open,
+  onOpenChange,
+  row,
+  onSaved,
+}: Props) {
   const { data: statesData } = useQuery({
     queryKey: stateKeys.list({ page: 0, size: 35 }),
     queryFn: () => stateApi.list({ page: 0, size: 35 }),
@@ -156,12 +140,11 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
   });
 
   const handleSubmit = async (data: CreateDriverBody) => {
-    if (row) {
-      await update.mutateAsync({ id: row.id, data });
-    } else {
-      await create.mutateAsync(data);
-    }
+    const saved = row
+      ? await update.mutateAsync({ id: row.id, data })
+      : await create.mutateAsync(data);
 
+    await onSaved?.(saved);
     onOpenChange(false);
   };
   const form = useForm<CreateDriverFormInput, unknown, CreateDriverBody>({
@@ -170,50 +153,27 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
     mode: "onChange",
     reValidateMode: "onChange",
   });
-  const permanentState = form.watch("permanentState");
-  const correspondenceState = form.watch("correspondenceState");
+  const addressState = form.watch("state");
 
-  const permanentStateId = React.useMemo(() => {
-    return states.find((state) => state.name === permanentState)?.id ?? "";
-  }, [states, permanentState]);
+  const addressStateId = React.useMemo(() => {
+    return states.find((state) => state.name === addressState)?.id ?? "";
+  }, [states, addressState]);
 
-  const correspondenceStateId = React.useMemo(() => {
-    return states.find((state) => state.name === correspondenceState)?.id ?? "";
-  }, [states, correspondenceState]);
-
-  const previousPermanentState = React.useRef<string | undefined>(undefined);
+  const previousAddressState = React.useRef<string | undefined>(undefined);
 
   React.useEffect(() => {
     if (!open) return;
 
     if (
-      previousPermanentState.current &&
-      previousPermanentState.current !== permanentState
+      previousAddressState.current &&
+      previousAddressState.current !== addressState
     ) {
-      form.setValue("permanentCity", "");
+      form.setValue("city", "");
     }
 
-    previousPermanentState.current = permanentState;
-  }, [open, permanentState, form]);
+    previousAddressState.current = addressState;
+  }, [open, addressState, form]);
 
-  const previousCorrespondenceState = React.useRef<string | undefined>(
-    undefined,
-  );
-
-  React.useEffect(() => {
-    if (!open) return;
-
-    if (
-      previousCorrespondenceState.current &&
-      previousCorrespondenceState.current !== correspondenceState
-    ) {
-      form.setValue("correspondenceCity", "");
-    }
-
-    previousCorrespondenceState.current = correspondenceState;
-  }, [open, correspondenceState, form]);
-
-  const [copyAddress, setCopyAddress] = React.useState(false);
   const [hasReference, setHasReference] = React.useState(false);
   const [photoPreviewUrl, setPhotoPreviewUrl] = React.useState("");
   const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
@@ -224,7 +184,6 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
     const next = prefillDriver();
 
     form.reset(next);
-    setCopyAddress(false);
     setHasReference(true);
     setPhotoPreviewUrl("");
 
@@ -233,8 +192,7 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
       localPhotoPreviewRef.current = null;
     }
 
-    previousPermanentState.current = next.permanentState;
-    previousCorrespondenceState.current = next.correspondenceState;
+    previousAddressState.current = next.state;
   };
   React.useEffect(() => {
     if (!open) return;
@@ -247,37 +205,24 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
       birthDate: toDateInput(row?.birthDate),
       anniversaryDate: toDateInput(row?.anniversaryDate),
       mobile: row?.mobile ?? "",
-      alternateMobile: row?.alternateMobile ?? "",
       licenseNo: row?.licenseNo ?? "",
       licenseDate: toDateInput(row?.licenseDate),
       licenseExpiryDate: toDateInput(row?.licenseExpiryDate),
       licenseCity: row?.licenseCity ?? "",
-      permanentAddress: row?.permanentAddress ?? "",
-      permanentCountry: row?.permanentCountry ?? "India",
-      permanentState: row?.permanentState ?? "",
-      permanentCity: row?.permanentCity ?? "",
-      correspondenceAddress: row?.correspondenceAddress ?? "",
-      correspondenceCountry: row?.correspondenceCountry ?? "India",
-      correspondenceState: row?.correspondenceState ?? "",
-      correspondenceCity: row?.correspondenceCity ?? "",
-      correspondenceLandline: row?.correspondenceLandline ?? "",
+      address: row?.address ?? "",
+      country: row?.country ?? "India",
+      state: row?.state ?? "",
+      city: row?.city ?? "",
       referencePerson: row?.referencePerson ?? "",
       referenceContactNo: row?.referenceContactNo ?? "",
-      bloodGroup: row?.bloodGroup ?? "",
       otherDetails: row?.otherDetails ?? "",
       salary: row?.salary != null ? String(paiseToRupees(row.salary)) : "",
       panNo: row?.panNo ?? "",
       aadharCardNo: row?.aadharCardNo ?? "",
-      noTDSApplyAmount:
-        row?.noTDSApplyAmount != null
-          ? String(paiseToRupees(row.noTDSApplyAmount))
-          : "",
-      tdsRate: row?.tdsRate != null ? String(row.tdsRate) : "",
       onLeave: row?.onLeave ?? false,
       blackListed: row?.blackListed ?? false,
     });
 
-    setCopyAddress(false);
     setHasReference(Boolean(row?.referencePerson || row?.referenceContactNo));
   }, [form, open, row]);
   React.useEffect(() => {
@@ -309,28 +254,6 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
       active = false;
     };
   }, [open, row?.photoPath]);
-  const handleCopyAddressToggle = (checked: boolean) => {
-    setCopyAddress(checked);
-
-    if (checked) {
-      form.setValue(
-        "correspondenceAddress",
-        form.getValues("permanentAddress") ?? "",
-      );
-      form.setValue(
-        "correspondenceCountry",
-        form.getValues("permanentCountry") ?? "",
-      );
-      form.setValue(
-        "correspondenceState",
-        form.getValues("permanentState") ?? "",
-      );
-      form.setValue(
-        "correspondenceCity",
-        form.getValues("permanentCity") ?? "",
-      );
-    }
-  };
 
   const handleHasReferenceToggle = (checked: boolean) => {
     setHasReference(checked);
@@ -542,29 +465,13 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
           required
         />
 
-        <SelectField<CreateDriverFormInput>
-          name="bloodGroup"
-          label="Blood Group"
-          placeholder="Select blood group"
-          options={bloodGroupOptions}
-        />
-
         <IconTextField<CreateDriverFormInput>
           name="mobile"
-          label="Primary Mobile"
+          label="Mobile Number"
           placeholder="10-digit mobile"
           prefix="+91"
-          required
           maxLength={10}
           hint="Used for trip & emergency contact"
-        />
-
-        <IconTextField<CreateDriverFormInput>
-          name="alternateMobile"
-          label="Alternate Mobile"
-          placeholder="10-digit mobile"
-          prefix="+91"
-          maxLength={10}
         />
 
         <Controller
@@ -613,7 +520,6 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
           label="License Number"
           placeholder="e.g. MH1420110012345"
           icon={<IconLicense size={16} />}
-          required
           maxLength={15}
           transformValue={normalizeLicenseNo}
         />
@@ -663,12 +569,12 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
 
       <FormSection
         icon={<IconHome size={18} />}
-        title="Permanent Address"
-        description="Where the driver is permanently based"
+        title="Address"
+        description="Where the driver is based"
       >
         <div className="md:col-span-2 xl:col-span-3">
           <TextAreaField<CreateDriverFormInput>
-            name="permanentAddress"
+            name="address"
             label="Address Line"
             placeholder="House / Street / Locality"
             maxLength={250}
@@ -677,13 +583,13 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
         </div>
 
         <IconTextField<CreateDriverFormInput>
-          name="permanentCountry"
+          name="country"
           label="Country"
           icon={<IconMapPin size={16} />}
         />
 
         <SelectField<CreateDriverFormInput>
-          name="permanentState"
+          name="state"
           label="State"
           placeholder="Select state"
           options={states.map((state) => ({
@@ -693,97 +599,21 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
         />
 
         <CitySelectField<CreateDriverFormInput>
-          name="permanentCity"
+          name="city"
           label="City"
-          placeholder={permanentState ? "Select city" : "Select state first"}
-          disabled={!permanentStateId}
-          stateId={permanentStateId}
+          placeholder={addressState ? "Select city" : "Select state first"}
+          disabled={!addressStateId}
+          stateId={addressStateId}
           valueMode="name"
           initialCity={
-            row?.permanentCity
+            row?.city
               ? {
-                  id: row.permanentCity,
-                  name: row.permanentCity,
+                  id: row.city,
+                  name: row.city,
                 }
               : null
           }
         />
-      </FormSection>
-
-      <FormSection
-        icon={<IconMail size={18} />}
-        title="Correspondence Address"
-        description="Where official communication is sent"
-      >
-        <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-md border border-dashed bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5 accent-primary"
-            checked={copyAddress}
-            onChange={(event) => handleCopyAddressToggle(event.target.checked)}
-          />
-          Same as permanent address
-        </label>
-
-        {copyAddress ? (
-          <p className="col-span-full text-xs text-muted-foreground">
-            Correspondence address will use the permanent address values.
-          </p>
-        ) : (
-          <>
-            <div className="md:col-span-2 xl:col-span-3">
-              <TextAreaField<CreateDriverFormInput>
-                name="correspondenceAddress"
-                label="Address Line"
-                placeholder="House / Street / Locality"
-                maxLength={250}
-                rows={2}
-              />
-            </div>
-
-            <IconTextField<CreateDriverFormInput>
-              name="correspondenceCountry"
-              label="Country"
-              icon={<IconMapPin size={16} />}
-            />
-
-            <SelectField<CreateDriverFormInput>
-              name="correspondenceState"
-              label="State"
-              placeholder="Select state"
-              options={states.map((state) => ({
-                label: state.name,
-                value: state.name,
-              }))}
-            />
-
-            <CitySelectField<CreateDriverFormInput>
-              name="correspondenceCity"
-              label="City"
-              placeholder={
-                correspondenceState ? "Select city" : "Select state first"
-              }
-              disabled={!correspondenceStateId}
-              stateId={correspondenceStateId}
-              valueMode="name"
-              initialCity={
-                row?.correspondenceCity
-                  ? {
-                      id: row.correspondenceCity,
-                      name: row.correspondenceCity,
-                    }
-                  : null
-              }
-            />
-
-            <IconTextField<CreateDriverFormInput>
-              name="correspondenceLandline"
-              label="Landline"
-              placeholder="e.g. 020-1234567"
-              icon={<IconDeviceLandlinePhone size={16} />}
-            />
-          </>
-        )}
       </FormSection>
 
       <FormSection
@@ -824,7 +654,7 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
       <FormSection
         icon={<IconId size={18} />}
         title="Identification & Payroll"
-        description="PAN, Aadhar, salary and TDS settings"
+        description="PAN, Aadhar and salary details"
       >
         <IconTextField<CreateDriverFormInput>
           name="panNo"
@@ -851,24 +681,6 @@ export default function DriverForm({ open, onOpenChange, row }: Props) {
           placeholder="0.00"
           icon={<IconCurrencyRupee size={16} />}
           type="number"
-        />
-
-        <IconTextField<CreateDriverFormInput>
-          name="noTDSApplyAmount"
-          label="No-TDS Threshold"
-          placeholder="0.00"
-          icon={<IconCurrencyRupee size={16} />}
-          type="number"
-          hint="Skip TDS below this amount"
-        />
-
-        <IconTextField<CreateDriverFormInput>
-          name="tdsRate"
-          label="TDS Rate"
-          placeholder="0"
-          icon={<IconPercentage size={16} />}
-          type="number"
-          hint="In percentage (0-100)"
         />
       </FormSection>
 

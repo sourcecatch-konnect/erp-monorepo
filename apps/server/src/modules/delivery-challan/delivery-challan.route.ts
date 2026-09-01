@@ -73,13 +73,50 @@ const calculateTransportCharges = (
   if (balancePayable < 0n) {
     throw new BadRequestError("Advance amount cannot exceed freight amount");
   }
-
   return {
     freightPaise,
     advancePaise,
     balancePayable,
   };
 };
+/* ------------------------------------------------------------------ */
+const grnItemsInclude = {
+  deliveryChallanItems: {
+    include: {
+      deliveryChallan: {
+        select: { id: true, status: true },
+      },
+    },
+  },
+  vpLoadingGoods: {
+    include: {
+      grnGoods: {
+        include: {
+          grn: {
+            include: {
+              lorryReceipt: {
+                include: {
+                  unloadingLocation: {
+                    include: {
+                      area: true,
+                      city: true,
+                    },
+                  },
+                  group: {
+                    include: {
+                      consignee: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.RailBranchGRNItemInclude;
+
 const branchGrnDispatchInclude = {
   railRake: {
     include: {
@@ -117,50 +154,61 @@ const branchGrnDispatchInclude = {
     },
   },
   items: {
-    include: {
-      deliveryChallanItems: {
-        include: {
-          deliveryChallan: {
-            select: { id: true, status: true },
-          },
-        },
-      },
-      vpLoadingGoods: {
-        include: {
-          grnGoods: {
-            include: {
-              grn: {
-                include: {
-                  lorryReceipt: {
-                    include: {
-                      unloadingLocation: {
-                        include: {
-                          area: true,
-                          city: true,
-                        },
-                      },
-                      group: {
-                        include: {
-                          consignee: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    include: grnItemsInclude,
     orderBy: { createdAt: "asc" },
   },
 } satisfies Prisma.RailBranchGRNInclude;
 
-type DispatchBranchGrn = Prisma.RailBranchGRNGetPayload<{
-  include: typeof branchGrnDispatchInclude;
+const rakeDispatchInclude = {
+  fromBranch: {
+    select: { id: true, name: true, branchCode: true },
+  },
+  toBranch: {
+    select: { id: true, name: true, branchCode: true },
+  },
+  vpSchedule: {
+    select: {
+      id: true,
+      scheduleNumber: true,
+      scheduleDate: true,
+      sourceArea: {
+        select: { id: true, name: true },
+      },
+      destinationArea: {
+        select: { id: true, name: true },
+      },
+    },
+  },
+  branchGrns: {
+    where: { status: "SUBMITTED" },
+    include: {
+      vpWagonLoading: {
+        include: {
+          mrRrRow: {
+            select: {
+              id: true,
+              vpNo: true,
+              rowLabel: true,
+              rowNumber: true,
+            },
+          },
+        },
+      },
+      items: {
+        include: grnItemsInclude,
+        orderBy: { createdAt: "asc" },
+      },
+    },
+    orderBy: { vpWagonLoading: { mrRrRow: { rowNumber: "asc" } } },
+  },
+} satisfies Prisma.RailRakeInclude;
+
+type DispatchRake = Prisma.RailRakeGetPayload<{
+  include: typeof rakeDispatchInclude;
 }>;
-type DispatchItem = DispatchBranchGrn["items"][number];
+type DispatchItem = Prisma.RailBranchGRNItemGetPayload<{
+  include: typeof grnItemsInclude;
+}>;
 
 const activeAllocatedQty = (item: DispatchItem, excludeChallanId?: string) =>
   item.deliveryChallanItems.reduce((total, allocation) => {
@@ -169,17 +217,26 @@ const activeAllocatedQty = (item: DispatchItem, excludeChallanId?: string) =>
     return total + allocation.quantity;
   }, 0);
 
-const previewItem = (item: DispatchItem, excludeChallanId?: string) => {
+const previewItem = (
+  item: DispatchItem,
+  excludeChallanId?: string,
+  wagon?: { vpNo: string | null; rowLabel: string },
+) => {
   const lr = item.vpLoadingGoods.grnGoods.grn.lorryReceipt;
   const location = lr.unloadingLocation;
-  const dispatchableQty = Math.max(item.receivedQty - item.damageQty, 0);
+  const dispatchableQty = Math.max(item.receivedQty, 0);
   const challanedQty = activeAllocatedQty(item, excludeChallanId);
 
   return {
     branchGrnItemId: item.id,
+    branchGrnId: item.railBranchGrnId,
+    grnGoodsId: item.vpLoadingGoods.grnGoods.id,
+    vpNo: wagon?.vpNo ?? null,
+    rowLabel: wagon?.rowLabel ?? "",
     lrNumber: item.lrNumberSnapshot,
     consigneeId: lr.group.consignee.id,
-    consigneeName: item.consigneeNameSnapshot ?? lr.group.consignee.name,
+    consigneeName:
+      item.consigneeNameSnapshot ?? lr.group.consignee.name,
     goodsName: item.goodsNameSnapshot,
     unit: item.unitSnapshot,
     receivedQty: item.receivedQty,
@@ -196,21 +253,20 @@ const previewItem = (item: DispatchItem, excludeChallanId?: string) => {
       null,
   };
 };
-
-const getDispatchBranchGrn = async (
+const getDispatchRake = async (
   client: Prisma.TransactionClient | typeof db,
-  branchGrnId: string,
+  railRakeId: string,
 ) =>
-  client.railBranchGRN.findUnique({
-    where: { id: branchGrnId },
-    include: branchGrnDispatchInclude,
+  client.railRake.findUnique({
+    where: { id: railRakeId },
+    include: rakeDispatchInclude,
   });
 
-const validateBranchGrnAccess = (req: Request, grn: DispatchBranchGrn) => {
-  assertBranchAccess(req, grn.railRake.toBranchId);
-  if (grn.status !== "SUBMITTED") {
+const validateRakeAccess = (req: Request, rake: DispatchRake) => {
+  assertBranchAccess(req, rake.toBranchId);
+  if (!rake.branchGrns.length) {
     throw new BadRequestError(
-      "Only a submitted Branch GRN can be used for a Delivery Challan",
+      "This Rail Rake has no submitted Branch GRN yet",
     );
   }
 };
@@ -221,7 +277,7 @@ const validateDispatchResources = async (
   client: Prisma.TransactionClient | typeof db,
   branchId: string,
   input: DispatchFields,
-  grn: DispatchBranchGrn,
+  sourceItems: DispatchItem[],
 ) => {
   const supervisor = await client.labour.findFirst({
     where: {
@@ -239,15 +295,15 @@ const validateDispatchResources = async (
 
   const destinationLocation = input.destinationLocationId
     ? await client.customerLocation.findUnique({
-        where: { id: input.destinationLocationId },
-        select: {
-          id: true,
-          customerId: true,
-          address: true,
-          areaId: true,
-          area: { select: { name: true, formattedAddress: true } },
-        },
-      })
+      where: { id: input.destinationLocationId },
+      select: {
+        id: true,
+        customerId: true,
+        address: true,
+        areaId: true,
+        area: { select: { name: true, formattedAddress: true } },
+      },
+    })
     : null;
   if (input.destinationLocationId && !destinationLocation) {
     throw new BadRequestError("Selected delivery location was not found");
@@ -257,7 +313,7 @@ const validateDispatchResources = async (
     input.items.map((item) => item.branchGrnItemId),
   );
   const consigneeIds = new Set(
-    grn.items
+    sourceItems
       .filter((item) => selectedItemIds.has(item.id))
       .map(
         (item) =>
@@ -293,9 +349,9 @@ const validateDispatchResources = async (
 
   const vehicle = input.vehicleId
     ? await client.vehicle.findUnique({
-        where: { id: input.vehicleId },
-        include: vehicleInclude,
-      })
+      where: { id: input.vehicleId },
+      include: vehicleInclude,
+    })
     : null;
   if (input.vehicleId && !vehicle) {
     throw new BadRequestError("Selected vehicle was not found");
@@ -337,11 +393,11 @@ const validateDispatchResources = async (
     vehicle ??
     (manualVehicleNumber
       ? await client.vehicle.findFirst({
-          where: {
-            vehicleNumber: { equals: manualVehicleNumber, mode: "insensitive" },
-          },
-          include: vehicleInclude,
-        })
+        where: {
+          vehicleNumber: { equals: manualVehicleNumber, mode: "insensitive" },
+        },
+        include: vehicleInclude,
+      })
       : null);
 
   if (
@@ -365,7 +421,7 @@ const validateDispatchResources = async (
 };
 
 const buildAllocations = (
-  grn: DispatchBranchGrn,
+  sourceItems: DispatchItem[],
   input: DispatchFields,
   excludeChallanId?: string,
 ) => {
@@ -374,7 +430,7 @@ const buildAllocations = (
     throw new BadRequestError("Each Branch GRN goods line can be added once");
   }
 
-  const sourceById = new Map(grn.items.map((item) => [item.id, item]));
+  const sourceById = new Map(sourceItems.map((item) => [item.id, item]));
   return input.items.map((requested) => {
     const source = sourceById.get(requested.branchGrnItemId);
     if (!source) {
@@ -403,22 +459,15 @@ const buildAllocations = (
 };
 
 const challanInclude = {
-  branchGrn: {
+  railRake: {
     include: {
-      railRake: {
+      fromBranch: true,
+      toBranch: true,
+      vpSchedule: {
         include: {
-          fromBranch: true,
-          toBranch: true,
-          vpSchedule: {
-            include: {
-              sourceArea: true,
-              destinationArea: true,
-            },
-          },
+          sourceArea: true,
+          destinationArea: true,
         },
-      },
-      vpWagonLoading: {
-        include: { mrRrRow: true },
       },
     },
   },
@@ -426,7 +475,11 @@ const challanInclude = {
   destinationArea: true,
   destinationLocation: true,
   transport: true,
-  vehicle: { include: { vehicleTypeRef: true } },
+  vehicle: {
+    include: {
+      vehicleTypeRef: true,
+    },
+  },
   supervisor: {
     select: {
       id: true,
@@ -435,8 +488,24 @@ const challanInclude = {
     },
   },
   items: {
-    include: { branchGrnItem: true },
-    orderBy: { createdAt: "asc" },
+    include: {
+      branchGrnItem: {
+        include: {
+          railBranchGrn: {
+            include: {
+              vpWagonLoading: {
+                include: {
+                  mrRrRow: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
   },
 } satisfies Prisma.DeliveryChallanInclude;
 const withBalancePayable = <
@@ -470,10 +539,10 @@ router.get(
           : { toBranchId: { in: req.ctx?.branchIds ?? [] } }),
         ...(start && end
           ? {
-              vpSchedule: {
-                scheduleDate: { gte: start, lt: end },
-              },
-            }
+            vpSchedule: {
+              scheduleDate: { gte: start, lt: end },
+            },
+          }
           : {}),
         branchGrns: { some: { status: "SUBMITTED" } },
       },
@@ -576,24 +645,24 @@ router.get(
   "/options/supervisors",
   can(PERMS.DELIVERY_CHALLAN.VIEW),
   async (req, res) => {
-    const branchGrnId =
-      typeof req.query.branchGrnId === "string"
-        ? req.query.branchGrnId.trim()
+    const railRakeId =
+      typeof req.query.railRakeId === "string"
+        ? req.query.railRakeId.trim()
         : "";
-    if (!branchGrnId) {
-      throw new BadRequestError("Branch GRN ID is required");
+    if (!railRakeId) {
+      throw new BadRequestError("Rake ID is required");
     }
 
-    const grn = await db.railBranchGRN.findUnique({
-      where: { id: branchGrnId },
-      select: { status: true, railRake: { select: { toBranchId: true } } },
+    const rake = await db.railRake.findUnique({
+      where: { id: railRakeId },
+      select: { toBranchId: true },
     });
-    if (!grn) throw new NotFoundError("Branch GRN not found");
-    assertBranchAccess(req, grn.railRake.toBranchId);
+    if (!rake) throw new NotFoundError("Rail Rake not found");
+    assertBranchAccess(req, rake.toBranchId);
 
     const supervisors = await db.labour.findMany({
       where: {
-        branchId: grn.railRake.toBranchId,
+        branchId: rake.toBranchId,
         type: "Supervisor",
       },
       select: {
@@ -670,15 +739,17 @@ router.get(
   "/preview/:id",
   can(PERMS.DELIVERY_CHALLAN.VIEW),
   async (req, res) => {
-    const grn = await getDispatchBranchGrn(db, getParamId(req));
-    if (!grn) throw new NotFoundError("Branch GRN not found");
-    validateBranchGrnAccess(req, grn);
+    const rake = await getDispatchRake(db, getParamId(req));
+    if (!rake) throw new NotFoundError("Rail Rake not found");
+    validateRakeAccess(req, rake);
 
     const consigneeIds = [
       ...new Set(
-        grn.items.map(
-          (item) =>
-            item.vpLoadingGoods.grnGoods.grn.lorryReceipt.group.consignee.id,
+        rake.branchGrns.flatMap((grn) =>
+          grn.items.map(
+            (item) =>
+              item.vpLoadingGoods.grnGoods.grn.lorryReceipt.group.consignee.id,
+          ),
         ),
       ),
     ];
@@ -707,22 +778,46 @@ router.get(
       orderBy: [{ customerId: "asc" }, { name: "asc" }],
     });
 
-    return sendOk(res, {
-      branchGrnId: grn.id,
-      rake: {
-        id: grn.railRake.id,
-        rakeNumber: grn.railRake.rakeNumber,
-        scheduleNumber: grn.railRake.vpSchedule.scheduleNumber,
-        scheduleDate: grn.railRake.vpSchedule.scheduleDate,
-      },
-      vp: {
-        id: grn.vpWagonLoadingId,
+    const vps = rake.branchGrns.map((grn) => {
+      const wagon = {
         vpNo: grn.vpWagonLoading.mrRrRow.vpNo,
         rowLabel: grn.vpWagonLoading.mrRrRow.rowLabel,
+      };
+      const pendingQty = grn.items.reduce(
+        (total, item) => total + previewItem(item, undefined, wagon).pendingQty,
+        0,
+      );
+      return {
+        branchGrnId: grn.id,
+        vpWagonLoadingId: grn.vpWagonLoadingId,
+        vpNo: wagon.vpNo,
+        rowLabel: wagon.rowLabel,
+        receivedQty: grn.totalReceivedQty,
+        pendingQty,
+      };
+    });
+
+    const items = rake.branchGrns.flatMap((grn) =>
+      grn.items.map((item) =>
+        previewItem(item, undefined, {
+          vpNo: grn.vpWagonLoading.mrRrRow.vpNo,
+          rowLabel: grn.vpWagonLoading.mrRrRow.rowLabel,
+        }),
+      ),
+    );
+
+    return sendOk(res, {
+      railRakeId: rake.id,
+      rake: {
+        id: rake.id,
+        rakeNumber: rake.rakeNumber,
+        scheduleNumber: rake.vpSchedule.scheduleNumber,
+        scheduleDate: rake.vpSchedule.scheduleDate,
       },
-      sourceBranch: grn.railRake.toBranch,
+      sourceBranch: rake.toBranch,
+      vps,
       destinationOptions,
-      items: grn.items.map((item) => previewItem(item)),
+      items,
     });
   },
 );
@@ -736,32 +831,32 @@ router.get("/", can(PERMS.DELIVERY_CHALLAN.VIEW), async (req, res) => {
       : { sourceBranchId: { in: req.ctx?.branchIds ?? [] } }),
     ...(status
       ? {
-          status: status as Prisma.EnumDeliveryChallanStatusFilter["equals"],
-        }
+        status: status as Prisma.EnumDeliveryChallanStatusFilter["equals"],
+      }
       : {}),
     ...(query.search
       ? {
-          OR: [
-            {
-              challanNumber: {
-                contains: query.search,
-                mode: "insensitive",
-              },
+        OR: [
+          {
+            challanNumber: {
+              contains: query.search,
+              mode: "insensitive",
             },
-            {
-              vehicleNumberSnapshot: {
-                contains: query.search,
-                mode: "insensitive",
-              },
+          },
+          {
+            vehicleNumberSnapshot: {
+              contains: query.search,
+              mode: "insensitive",
             },
-            {
-              transporterNameSnapshot: {
-                contains: query.search,
-                mode: "insensitive",
-              },
+          },
+          {
+            transporterNameSnapshot: {
+              contains: query.search,
+              mode: "insensitive",
             },
-          ],
-        }
+          },
+        ],
+      }
       : {}),
   };
 
@@ -799,19 +894,21 @@ router.post("/", can(PERMS.DELIVERY_CHALLAN.CREATE), async (req, res) => {
    * STEP 1:
    * Load and validate normal data outside the transaction.
    */
-  const accessible = await getDispatchBranchGrn(db, input.branchGrnId);
+  const accessible = await getDispatchRake(db, input.railRakeId);
 
   if (!accessible) {
-    throw new NotFoundError("Branch GRN not found");
+    throw new NotFoundError("Rail Rake not found");
   }
 
-  validateBranchGrnAccess(req, accessible);
+  validateRakeAccess(req, accessible);
+
+  const rakeItems = accessible.branchGrns.flatMap((grn) => grn.items);
 
   const resources = await validateDispatchResources(
     db,
-    accessible.railRake.toBranchId,
+    accessible.toBranchId,
     input,
-    accessible,
+    rakeItems,
   );
 
   /*
@@ -819,10 +916,10 @@ router.post("/", can(PERMS.DELIVERY_CHALLAN.CREATE), async (req, res) => {
    * It must still be checked again inside the transaction
    * because another challan may be created concurrently.
    */
-  buildAllocations(accessible, input);
+  buildAllocations(rakeItems, input);
 
   const fyCode = fyCodeFor(input.loadingAt);
-  const branchCode = accessible.railRake.toBranch.branchCode;
+  const branchCode = accessible.toBranch.branchCode;
 
   /*
    * STEP 2:
@@ -830,31 +927,28 @@ router.post("/", can(PERMS.DELIVERY_CHALLAN.CREATE), async (req, res) => {
    */
   const createdId = await db.$transaction(async (tx) => {
     await tx.$queryRaw`
-      SELECT "id"
-      FROM "RailBranchGRN"
-      WHERE "id" = ${input.branchGrnId}
-      FOR UPDATE
-    `;
+  SELECT "id"
+  FROM "RailRake"
+  WHERE "id" = ${input.railRakeId}
+  FOR UPDATE
+`;
 
-    /*
-     * Re-fetch only the information required to validate allocation.
-     * Avoid loading the complete challan response include here.
-     */
-    const grn = await getDispatchBranchGrn(tx, input.branchGrnId);
+    const rake = await getDispatchRake(tx, input.railRakeId);
 
-    if (!grn) {
-      throw new NotFoundError("Branch GRN not found");
+    if (!rake) {
+      throw new NotFoundError("Rail Rake not found");
     }
 
-    if (grn.status !== "SUBMITTED") {
-      throw new BadRequestError("Branch GRN is not submitted");
+    if (!rake.branchGrns.length) {
+      throw new BadRequestError(
+        "This Rail Rake has no submitted Branch GRN yet",
+      );
     }
 
-    /*
-     * Important:
-     * Recalculate pending quantities after acquiring the lock.
-     */
-    const items = buildAllocations(grn, input);
+    const items = buildAllocations(
+      rake.branchGrns.flatMap((grn) => grn.items),
+      input,
+    );
     const charges = calculateTransportCharges(
       input.freightAmount,
       input.advanceAmount,
@@ -866,8 +960,8 @@ router.post("/", can(PERMS.DELIVERY_CHALLAN.CREATE), async (req, res) => {
         challanNumber: formatDocNumber(branchCode, fyCode, seq, "SKDC"),
 
         fyCode,
-        branchGrnId: grn.id,
-        sourceBranchId: grn.railRake.toBranchId,
+        railRakeId: rake.id,
+        sourceBranchId: rake.toBranchId,
 
         destinationAreaId:
           input.destinationAreaId ??
@@ -974,7 +1068,7 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
       id: true,
       status: true,
       version: true,
-      branchGrnId: true,
+      railRakeId: true,
       sourceBranchId: true,
     },
   });
@@ -995,13 +1089,15 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
     );
   }
 
-  const accessible = await getDispatchBranchGrn(db, existing.branchGrnId);
+  const accessible = await getDispatchRake(db, existing.railRakeId);
 
   if (!accessible) {
-    throw new NotFoundError("Branch GRN not found");
+    throw new NotFoundError("Rail Rake not found");
   }
 
-  validateBranchGrnAccess(req, accessible);
+  validateRakeAccess(req, accessible);
+
+  const accessibleItems = accessible.branchGrns.flatMap((grn) => grn.items);
 
   /*
    * Validate destination, supervisor, transporter and vehicle
@@ -1009,16 +1105,16 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
    */
   const resources = await validateDispatchResources(
     db,
-    accessible.railRake.toBranchId,
+    accessible.toBranchId,
     input,
-    accessible,
+    accessibleItems,
   );
 
   /*
    * Initial allocation validation for an early error response.
    * Existing challan quantities are excluded.
    */
-  buildAllocations(accessible, input, existing.id);
+  buildAllocations(accessibleItems, input, existing.id);
 
   const charges = calculateTransportCharges(
     input.freightAmount,
@@ -1032,13 +1128,13 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
   const updatedId = await db.$transaction(async (tx) => {
     /*
      * Use the same lock order as the Issue API:
-     * 1. RailBranchGRN
+     * 1. RailRake
      * 2. DeliveryChallan
      */
     await tx.$queryRaw`
           SELECT "id"
-          FROM "RailBranchGRN"
-          WHERE "id" = ${existing.branchGrnId}
+          FROM "RailRake"
+          WHERE "id" = ${existing.railRakeId}
           FOR UPDATE
         `;
 
@@ -1060,7 +1156,7 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
         id: true,
         status: true,
         version: true,
-        branchGrnId: true,
+        railRakeId: true,
       },
     });
 
@@ -1078,28 +1174,34 @@ router.patch("/:id", can(PERMS.DELIVERY_CHALLAN.UPDATE), async (req, res) => {
       );
     }
 
-    if (current.branchGrnId !== existing.branchGrnId) {
-      throw new ConflictError("Delivery Challan Branch GRN has changed");
+    if (current.railRakeId !== existing.railRakeId) {
+      throw new ConflictError("Delivery Challan Rail Rake has changed");
     }
 
     /*
      * Reload after locking so pending quantities are current.
      */
-    const grn = await getDispatchBranchGrn(tx, current.branchGrnId);
+    const rake = await getDispatchRake(tx, current.railRakeId);
 
-    if (!grn) {
-      throw new NotFoundError("Branch GRN not found");
+    if (!rake) {
+      throw new NotFoundError("Rail Rake not found");
     }
 
-    if (grn.status !== "SUBMITTED") {
-      throw new BadRequestError("Branch GRN is not submitted");
+    if (!rake.branchGrns.length) {
+      throw new BadRequestError(
+        "This Rail Rake has no submitted Branch GRN yet",
+      );
     }
 
     /*
      * Recalculate allocations after acquiring the lock.
      * Exclude this challan's existing allocations.
      */
-    const items = buildAllocations(grn, input, current.id);
+    const items = buildAllocations(
+      rake.branchGrns.flatMap((grn) => grn.items),
+      input,
+      current.id,
+    );
 
     /*
      * Delete existing allocations explicitly.
@@ -1218,7 +1320,7 @@ router.post(
       where: { id },
       select: {
         id: true,
-        branchGrnId: true,
+        railRakeId: true,
         sourceBranchId: true,
       },
     });
@@ -1230,12 +1332,12 @@ router.post(
     assertBranchAccess(req, existing.sourceBranchId);
 
     const issuedId = await db.$transaction(async (tx) => {
-      // Lock the shared Branch GRN first.
+      // Lock the shared Rail Rake first.
       // Create/update routes should use the same lock order.
       await tx.$queryRaw`
         SELECT "id"
-        FROM "RailBranchGRN"
-        WHERE "id" = ${existing.branchGrnId}
+        FROM "RailRake"
+        WHERE "id" = ${existing.railRakeId}
         FOR UPDATE
       `;
 
@@ -1251,7 +1353,6 @@ router.post(
         where: { id: existing.id },
         select: {
           id: true,
-          branchGrnId: true,
           sourceBranchId: true,
           status: true,
           version: true,
@@ -1288,43 +1389,35 @@ router.post(
 
       const sourceItemIds = challan.items.map((item) => item.branchGrnItemId);
 
-      // Load only quantity information needed for validation
-      const branchGrn = await tx.railBranchGRN.findUnique({
-        where: { id: challan.branchGrnId },
+      /*
+       * A challan pools goods lines from several of the rake's Branch GRNs,
+       * so validate against the goods lines directly, not a single GRN.
+       */
+      const sourceItems = await tx.railBranchGRNItem.findMany({
+        where: { id: { in: sourceItemIds } },
         select: {
-          items: {
+          id: true,
+          receivedQty: true,
+          damageQty: true,
+          goodsNameSnapshot: true,
+          deliveryChallanItems: {
             where: {
-              id: { in: sourceItemIds },
-            },
-            select: {
-              id: true,
-              receivedQty: true,
-              damageQty: true,
-              goodsNameSnapshot: true,
-              deliveryChallanItems: {
-                where: {
-                  deliveryChallan: {
-                    is: {
-                      id: { not: challan.id },
-                      status: { not: "CANCELLED" },
-                    },
-                  },
-                },
-                select: {
-                  quantity: true,
+              deliveryChallan: {
+                is: {
+                  id: { not: challan.id },
+                  status: { not: "CANCELLED" },
                 },
               },
+            },
+            select: {
+              quantity: true,
             },
           },
         },
       });
 
-      if (!branchGrn) {
-        throw new ConflictError("Branch GRN no longer exists");
-      }
-
       const sourceItemsById = new Map(
-        branchGrn.items.map((item) => [item.id, item]),
+        sourceItems.map((item) => [item.id, item]),
       );
 
       for (const allocation of challan.items) {
@@ -1335,7 +1428,7 @@ router.post(
         }
 
         const dispatchableQty = Math.max(
-          source.receivedQty - source.damageQty,
+          source.receivedQty,
           0,
         );
 

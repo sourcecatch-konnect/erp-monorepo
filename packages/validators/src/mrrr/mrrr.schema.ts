@@ -13,6 +13,16 @@ const optionalLimitedString = (max: number, message: string) =>
     .max(max, message)
     .optional()
     .transform((value) => (value ? value : undefined));
+const mrRrNoSchema = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .transform((value) => (value ? value : undefined))
+  .refine(
+    (value) => !value || /^\d{10}$/.test(value),
+    "MR/RR No. must be exactly 10 digits",
+  );
 const wagonNumberSchema = z
   .string()
   .trim()
@@ -108,7 +118,7 @@ export const mrrrFormSchema = z.object({
       rowLabel: z.string().optional(),
       sequenceNo: optionalString,
       vpNo: wagonNumberSchema,
-      mrRrNo: wagonNumberSchema,
+      mrRrNo: mrRrNoSchema,
       sealNo: optionalString,
     }),
   ),
@@ -179,7 +189,7 @@ export const createMRRRSchema = z.object({
 
         sequenceNo: optionalString,
         vpNo: wagonNumberSchema,
-        mrRrNo: wagonNumberSchema,
+        mrRrNo: mrRrNoSchema,
         sealNo: optionalString,
       }),
     )
@@ -203,7 +213,7 @@ export const updateMRRRRowsSchema = z.object({
 
         sequenceNo: optionalString,
         vpNo: wagonNumberSchema,
-        mrRrNo: wagonNumberSchema,
+        mrRrNo: mrRrNoSchema,
         sealNo: optionalString,
       }),
     )
