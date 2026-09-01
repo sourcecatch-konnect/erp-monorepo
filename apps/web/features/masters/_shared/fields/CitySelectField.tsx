@@ -196,7 +196,7 @@ export default function CitySelectField<T extends FieldValues>({
             },
           );
 
-          lastEmittedCityIdRef.current = city?.id ?? null;
+          lastNotifiedCityIdRef.current = city?.id ?? null;
           onCityChange?.(city);
         }}
         onScrollEnd={() => {
