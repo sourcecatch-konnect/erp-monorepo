@@ -287,13 +287,7 @@ export function LRToBillWorkbench() {
             },
         }));
     };
-    const closeAdditionalChargeDialog = () => {
-        setAdditionalChargeLRId(null);
-        setAdditionalType("UNLOADING");
-        setAdditionalEffect("ADDITION");
-        setAdditionalAmount("");
-        setAdditionalReason("");
-    };
+
 
     const addAdditionalCharge = () => {
         if (!additionalChargeLRId) return;

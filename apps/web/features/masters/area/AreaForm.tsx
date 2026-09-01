@@ -189,16 +189,26 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
     resolver: zodResolver(createAreaSchema),
     defaultValues,
   });
-  const initialCity = React.useMemo<Pick<City, "id" | "name"> | null>(
-    () =>
-      row?.city
-        ? {
-          id: row.city.id,
-          name: row.city.name,
-        }
-        : null,
-    [row?.city?.id, row?.city?.name],
-  );
+  const { reset } = form;
+  const rowName = row?.name ?? "";
+  const rowCityId = row?.cityId ?? "";
+  const rowIsRailHead = row?.isRailHead ?? false;
+  const rowGooglePlaceId = row?.googlePlaceId ?? null;
+  const rowFormattedAddress = row?.formattedAddress ?? null;
+  const rowLatitude = row?.latitude ?? null;
+  const rowLongitude = row?.longitude ?? null;
+
+  const initialCityId = row?.city?.id;
+  const initialCityName = row?.city?.name;
+
+  const initialCity = React.useMemo<Pick<City, "id" | "name"> | null>(() => {
+    if (!initialCityId || !initialCityName) return null;
+
+    return {
+      id: initialCityId,
+      name: initialCityName,
+    };
+  }, [initialCityId, initialCityName]);
   const { create, update } = useMasterMutations({
     api: areaApi,
     queryKey: areaKeys.all,
@@ -257,27 +267,33 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
   React.useEffect(() => {
     if (!open) return;
 
-    form.reset({
-      name: row?.name ?? "",
-      cityId: row?.cityId ?? "",
-      isRailHead: row?.isRailHead ?? false,
-      googlePlaceId: row?.googlePlaceId ?? null,
-      formattedAddress: row?.formattedAddress ?? null,
-      latitude: row?.latitude ?? null,
-      longitude: row?.longitude ?? null,
+    reset({
+      name: rowName,
+      cityId: rowCityId,
+      isRailHead: rowIsRailHead,
+      googlePlaceId: rowGooglePlaceId,
+      formattedAddress: rowFormattedAddress,
+      latitude: rowLatitude,
+      longitude: rowLongitude,
     });
 
     setSelectedCity(initialCity);
     selectedCityRef.current = initialCity;
-    previousCityIdRef.current = row?.cityId ?? "";
+    previousCityIdRef.current = rowCityId;
 
     setGoogleLoadError(null);
     setLocationWarning(null);
   }, [
     open,
-    row?.id,
+    reset,
     initialCity,
-    form,
+    rowName,
+    rowCityId,
+    rowIsRailHead,
+    rowGooglePlaceId,
+    rowFormattedAddress,
+    rowLatitude,
+    rowLongitude,
   ]);
 
   const handleCityChange = React.useCallback(
