@@ -6,8 +6,10 @@ import type {
   UpdateTripBody,
   CloseTripBody,
   CorrectClosedTripBody,
+  CorrectInTransitTripBody,
   CancelTripBody,
   ActiveJourneyInfo,
+  DispatchJourneyLegBody,
 } from "@skerp/types";
 import {
   ListQuery,
@@ -71,10 +73,13 @@ export const tripApi = {
     return unwrapApiResponse(res);
   },
 
-  dispatch: async (id: string): Promise<TripStatusResult> => {
+  dispatch: async (
+    id: string,
+    body: DispatchJourneyLegBody,
+  ): Promise<TripStatusResult> => {
     const res = await api.post<ApiResponse<TripStatusResult>>(
       `/trips/${id}/dispatch`,
-      {},
+      body,
     );
     return unwrapApiResponse(res);
   },
@@ -93,6 +98,17 @@ export const tripApi = {
   ): Promise<TripStatusResult> => {
     const res = await api.post<ApiResponse<TripStatusResult>>(
       `/trips/${id}/correct-closed`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  correctInTransit: async (
+    id: string,
+    body: CorrectInTransitTripBody,
+  ): Promise<TripStatusResult> => {
+    const res = await api.post<ApiResponse<TripStatusResult>>(
+      `/trips/${id}/correct-in-transit`,
       body,
     );
     return unwrapApiResponse(res);

@@ -4,6 +4,7 @@ import {
   updateTripSchema,
   closeTripSchema,
   correctClosedTripSchema,
+  correctInTransitTripSchema,
   cancelTripSchema,
   tripTypeSchema,
   tripStatusSchema,
@@ -23,6 +24,12 @@ export type CorrectClosedTripFormInput = z.input<
   typeof correctClosedTripSchema
 >;
 export type CorrectClosedTripBody = z.output<typeof correctClosedTripSchema>;
+export type CorrectInTransitTripFormInput = z.input<
+  typeof correctInTransitTripSchema
+>;
+export type CorrectInTransitTripBody = z.output<
+  typeof correctInTransitTripSchema
+>;
 export type CancelTripBody = z.output<typeof cancelTripSchema>;
 
 export type TripStatusHistoryRow = {

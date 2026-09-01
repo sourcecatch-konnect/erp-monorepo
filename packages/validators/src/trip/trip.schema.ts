@@ -106,21 +106,33 @@ export const closeTripSchema = z.object({
   closeReason: optionalString,
 });
 
+const requiredDateField = (label: string) =>
+  z
+    .union([z.string(), z.date()])
+    .transform((value) => new Date(value))
+    .refine((value) => !Number.isNaN(value.getTime()), `Enter a valid ${label}`);
+
 /** Limited, audited correction of operational fields on a Closed trip. */
 export const correctClosedTripSchema = z.object({
   // Entered in rupees, stored as paise. Empty/return trips may legitimately be zero.
   onwardFreight: rupeesToPaise("Onward freight", { allowZero: true }),
   closingKm: positiveIntField("Closing KM"),
-  endDateTime: z
-    .union([z.string(), z.date()])
-    .transform((value) => new Date(value))
-    .refine(
-      (value) => !Number.isNaN(value.getTime()),
-      "Enter a valid trip closing date and time",
-    ),
+  startDateTime: requiredDateField("trip start date and time"),
+  endDateTime: requiredDateField("trip closing date and time"),
   arrivalDateTime: optionalDate,
   unloadingCompletedAt: optionalDate,
   closeReason: optionalString,
+  correctionReason: z
+    .string()
+    .trim()
+    .min(3, "Please give a correction reason (min 3 characters)")
+    .max(500, "Correction reason is too long"),
+  version: z.number().int().positive().optional(),
+});
+
+/** Limited, audited correction of the start time on an InTransit trip. */
+export const correctInTransitTripSchema = z.object({
+  startDateTime: requiredDateField("trip start date and time"),
   correctionReason: z
     .string()
     .trim()

@@ -105,7 +105,7 @@ export const journeyApi = {
   dispatchLeg: async (
     id: string,
     tripId: string,
-    body: DispatchJourneyLegBody = {},
+    body: DispatchJourneyLegBody,
   ): Promise<JourneyLeg> => {
     const res = await api.post<ApiResponse<JourneyLeg>>(
       `/vehicle-journeys/${id}/dispatch-leg/${tripId}`,

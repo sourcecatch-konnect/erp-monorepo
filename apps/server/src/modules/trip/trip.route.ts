@@ -4,6 +4,7 @@ import {
   updateTripSchema,
   closeTripSchema,
   correctClosedTripSchema,
+  correctInTransitTripSchema,
   cancelTripSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
@@ -836,7 +837,13 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
   const id = getParamId(req);
   const existing = await db.vehicleTrip.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, status: true, startDateTime: true, vehicleId: true },
+    select: {
+      id: true,
+      status: true,
+      vehicleId: true,
+      journeyId: true,
+      sequenceNo: true,
+    },
   });
   if (!existing) throw new NotFoundError("Trip not found");
   if (existing.status !== "Planned") {
@@ -849,13 +856,32 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
   }
   const me = actorId(req);
 
+  // Operator-entered start time must not precede the previous leg's close.
+  const prevLeg =
+    existing.journeyId && existing.sequenceNo && existing.sequenceNo > 1
+      ? await db.vehicleTrip.findFirst({
+          where: {
+            journeyId: existing.journeyId,
+            deletedAt: null,
+            status: { not: "Cancelled" },
+            sequenceNo: { lt: existing.sequenceNo },
+          },
+          orderBy: { sequenceNo: "desc" },
+          select: { endDateTime: true },
+        })
+      : null;
+  if (prevLeg?.endDateTime && parsed.data.startDateTime <= prevLeg.endDateTime) {
+    throw new BadRequestError(
+      "Start time must be after the previous leg's close time",
+    );
+  }
+
   const updated = await db.$transaction(async (tx) => {
     const row = await tx.vehicleTrip.update({
       where: { id },
       data: {
         status: "InTransit",
-        startDateTime:
-          parsed.data.startDateTime ?? existing.startDateTime ?? new Date(),
+        startDateTime: parsed.data.startDateTime,
         updatedById: me,
         version: { increment: 1 },
       },
@@ -871,6 +897,93 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
 
   return sendOk(res, updated);
 });
+
+/* ------------------------------------------------------------------ */
+/* Correct start time (InTransit only, audited)                       */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/:id/correct-in-transit",
+  can(PERMS.TRIP.CORRECT_IN_TRANSIT),
+  async (req, res) => {
+    const id = getParamId(req);
+    const me = actorId(req);
+    const parsed = correctInTransitTripSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.flatten().fieldErrors);
+    }
+    const data = parsed.data;
+
+    const existing = await db.vehicleTrip.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        startDateTime: true,
+        journeyId: true,
+        sequenceNo: true,
+        version: true,
+      },
+    });
+    if (!existing) throw new NotFoundError("Trip not found");
+    if (existing.status !== "InTransit") {
+      throw new BadRequestError("Only an InTransit trip can be corrected here");
+    }
+    if (data.version !== undefined && data.version !== existing.version) {
+      throw new ConflictError(
+        "This trip changed in another tab — reload and retry",
+      );
+    }
+
+    const prevLeg =
+      existing.journeyId && existing.sequenceNo && existing.sequenceNo > 1
+        ? await db.vehicleTrip.findFirst({
+            where: {
+              journeyId: existing.journeyId,
+              deletedAt: null,
+              status: { not: "Cancelled" },
+              sequenceNo: { lt: existing.sequenceNo },
+            },
+            orderBy: { sequenceNo: "desc" },
+            select: { tripNumber: true, endDateTime: true },
+          })
+        : null;
+    if (prevLeg?.endDateTime && data.startDateTime <= prevLeg.endDateTime) {
+      throw new BadRequestError(
+        `Start time must be after the previous leg's (${prevLeg.tripNumber}) close time`,
+      );
+    }
+
+    const updated = await db.$transaction(async (tx) => {
+      const row = await tx.vehicleTrip.update({
+        where: { id },
+        data: {
+          startDateTime: data.startDateTime,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        select: { id: true, status: true, version: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: me,
+          action: "trip.correct_in_transit",
+          entity: "VehicleTrip",
+          entityId: id,
+          before: { startDateTime: existing.startDateTime?.toISOString() ?? null },
+          after: {
+            startDateTime: data.startDateTime.toISOString(),
+            correctionReason: data.correctionReason,
+          },
+        },
+      });
+
+      return row;
+    }, TX_BUDGET);
+
+    return sendOk(res, updated);
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Close -> Closed                                                    */
@@ -1064,14 +1177,33 @@ router.post(
         `Closing KM (${data.closingKm}) cannot be less than opening KM (${existing.openingKm})`,
       );
     }
-    if (existing.startDateTime && data.endDateTime <= existing.startDateTime) {
+    if (data.endDateTime <= data.startDateTime) {
       throw new BadRequestError(
         "Trip closing time must be after its start time",
       );
     }
 
+    const prevLeg =
+      existing.journeyId && existing.sequenceNo && existing.sequenceNo > 1
+        ? await db.vehicleTrip.findFirst({
+            where: {
+              journeyId: existing.journeyId,
+              deletedAt: null,
+              status: { not: "Cancelled" },
+              sequenceNo: { lt: existing.sequenceNo },
+            },
+            orderBy: { sequenceNo: "desc" },
+            select: { tripNumber: true, endDateTime: true },
+          })
+        : null;
+    if (prevLeg?.endDateTime && data.startDateTime <= prevLeg.endDateTime) {
+      throw new BadRequestError(
+        `Start time must be after the previous leg's (${prevLeg.tripNumber}) close time`,
+      );
+    }
+
     const arrivalDateTime = data.arrivalDateTime ?? data.endDateTime;
-    if (existing.startDateTime && arrivalDateTime < existing.startDateTime) {
+    if (arrivalDateTime < data.startDateTime) {
       throw new BadRequestError("Arrival time cannot be before the trip start");
     }
     if (arrivalDateTime > data.endDateTime) {
@@ -1120,6 +1252,7 @@ router.post(
     const snapshot = (values: {
       onwardFreight: bigint | number;
       closingKm: number | null;
+      startDateTime: Date | null;
       endDateTime: Date | null;
       arrivalDateTime: Date | null;
       unloadingCompletedAt: Date | null;
@@ -1127,6 +1260,7 @@ router.post(
     }) => ({
       onwardFreight: Number(values.onwardFreight),
       closingKm: values.closingKm,
+      startDateTime: values.startDateTime?.toISOString() ?? null,
       endDateTime: values.endDateTime?.toISOString() ?? null,
       arrivalDateTime: values.arrivalDateTime?.toISOString() ?? null,
       unloadingCompletedAt: values.unloadingCompletedAt?.toISOString() ?? null,
@@ -1137,6 +1271,7 @@ router.post(
     const afterValues = {
       onwardFreight: data.onwardFreight,
       closingKm: data.closingKm,
+      startDateTime: data.startDateTime,
       endDateTime: data.endDateTime,
       arrivalDateTime,
       unloadingCompletedAt: data.unloadingCompletedAt ?? null,

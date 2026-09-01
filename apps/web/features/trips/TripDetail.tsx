@@ -9,6 +9,7 @@ import {
   PERMS,
   type CloseTripBody,
   type CorrectClosedTripBody,
+  type CorrectInTransitTripBody,
   type Trip,
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -42,6 +43,7 @@ import {
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import CloseTripDialog from "@/components/feedback/CloseTripDialog";
+import DispatchTripDialog from "@/components/feedback/DispatchTripDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -51,6 +53,7 @@ import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { tripApi } from "./trip.service";
 import { tripKeys } from "./trip.keys";
 import CorrectClosedTripDialog from "./CorrectClosedTripDialog";
+import CorrectInTransitTripDialog from "./CorrectInTransitTripDialog";
 import {
   LegChip,
   timeAgo,
@@ -88,12 +91,15 @@ export default function TripDetail({ id }: { id: string }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [dispatchOpen, setDispatchOpen] = React.useState(false);
   const [correctOpen, setCorrectOpen] = React.useState(false);
+  const [correctInTransitOpen, setCorrectInTransitOpen] =
+    React.useState(false);
 
   const canClose = useCan(PERMS.TRIP.CLOSE);
   const canCancel = useCan(PERMS.TRIP.CANCEL);
   const canDelete = useCan(PERMS.TRIP.DELETE);
   const canUpdate = useCan(PERMS.TRIP.UPDATE);
   const canCorrectClosed = useCan(PERMS.TRIP.CORRECT_CLOSED);
+  const canCorrectInTransit = useCan(PERMS.TRIP.CORRECT_IN_TRANSIT);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
   const canDispatch = canUpdate;
 
@@ -114,10 +120,21 @@ export default function TripDetail({ id }: { id: string }) {
   };
 
   const dispatch = useMutation({
-    mutationFn: () => tripApi.dispatch(id),
+    mutationFn: (body: { startDateTime: Date }) => tripApi.dispatch(id, body),
     onSuccess: () => {
       toast.success("Trip dispatched");
       setDispatchOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  });
+
+  const correctInTransit = useMutation({
+    mutationFn: (body: CorrectInTransitTripBody) =>
+      tripApi.correctInTransit(id, body),
+    onSuccess: () => {
+      toast.success("Trip start time corrected");
+      setCorrectInTransitOpen(false);
       invalidate();
     },
     onError: (e) => toast.error(getErrorMessage(e)),
@@ -335,6 +352,13 @@ export default function TripDetail({ id }: { id: string }) {
                   </Link>
                 </DropdownMenuItem>
               ) : null}
+              {canCorrectInTransit && t.status === "InTransit" ? (
+                <DropdownMenuItem
+                  onClick={() => setCorrectInTransitOpen(true)}
+                >
+                  <IconEdit size={16} className="mr-2" /> Edit start time
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onClick={() => handleDownloadPdf(t)}>
                 <IconDownload size={16} className="mr-2" /> Download PDF
               </DropdownMenuItem>
@@ -498,15 +522,21 @@ export default function TripDetail({ id }: { id: string }) {
       </p>
 
       {/* ---- Dialogs ---- */}
-      <ConfirmDialog
+      <DispatchTripDialog
         open={dispatchOpen}
         onOpenChange={setDispatchOpen}
-        title={`Dispatch trip ${t.tripNumber}`}
-        description="The trip moves to In Transit without an LR — use this for empty or rake (DC) legs. LR trips are dispatched by attaching an LR."
-        confirmLabel="Dispatch"
-        pendingLabel="Dispatching..."
+        entity="trip"
+        reference={t.tripNumber}
         isPending={dispatch.isPending}
-        onConfirm={() => dispatch.mutate()}
+        onConfirm={(body) => dispatch.mutate(body)}
+      />
+
+      <CorrectInTransitTripDialog
+        open={correctInTransitOpen}
+        onOpenChange={setCorrectInTransitOpen}
+        trip={t}
+        isPending={correctInTransit.isPending}
+        onConfirm={(body) => correctInTransit.mutate(body)}
       />
 
       <CloseTripDialog

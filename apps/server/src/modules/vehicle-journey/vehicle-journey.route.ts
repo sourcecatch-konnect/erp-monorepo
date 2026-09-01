@@ -948,7 +948,7 @@ router.post(
 
     const trip = await db.vehicleTrip.findFirst({
       where: { id: tripId, journeyId: id, deletedAt: null },
-      select: { id: true, status: true, startDateTime: true },
+      select: { id: true, status: true, sequenceNo: true },
     });
     if (!trip) throw new NotFoundError("Journey leg not found");
     if (trip.status !== "Planned") {
@@ -960,13 +960,35 @@ router.post(
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
 
+    // Operator-entered start time must not precede the previous leg's close.
+    const prevLeg =
+      trip.sequenceNo && trip.sequenceNo > 1
+        ? await db.vehicleTrip.findFirst({
+            where: {
+              journeyId: id,
+              deletedAt: null,
+              status: { not: "Cancelled" },
+              sequenceNo: { lt: trip.sequenceNo },
+            },
+            orderBy: { sequenceNo: "desc" },
+            select: { endDateTime: true },
+          })
+        : null;
+    if (
+      prevLeg?.endDateTime &&
+      parsed.data.startDateTime <= prevLeg.endDateTime
+    ) {
+      throw new BadRequestError(
+        "Start time must be after the previous leg's close time",
+      );
+    }
+
     const updated = await db.$transaction(async (tx) => {
       const row = await tx.vehicleTrip.update({
         where: { id: tripId },
         data: {
           status: "InTransit",
-          startDateTime:
-            parsed.data.startDateTime ?? trip.startDateTime ?? new Date(),
+          startDateTime: parsed.data.startDateTime,
           updatedById: me,
           version: { increment: 1 },
         },
