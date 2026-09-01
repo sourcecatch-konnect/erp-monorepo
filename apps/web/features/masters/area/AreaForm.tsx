@@ -222,6 +222,14 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
     null,
   );
   const previousCityIdRef = React.useRef<string>("");
+
+  // Stable reference — a fresh object literal here would re-run CitySelectField's
+  // memoised option list every render (and, with onCityChange, loop).
+  const initialCity = React.useMemo<Pick<City, "id" | "name"> | null>(
+    () => (row?.city ? { id: row.city.id, name: row.city.name } : null),
+    [row?.city],
+  );
+
   const areaName = form.watch("name");
   const googlePlaceId = form.watch("googlePlaceId");
   const formattedAddress = form.watch("formattedAddress");
@@ -258,19 +266,12 @@ export default function AreaForm({ open, onOpenChange, row }: Props) {
       longitude: row?.longitude ?? null,
     });
 
-    const initialCity = row?.city
-      ? {
-        id: row.city.id,
-        name: row.city.name,
-      }
-      : null;
-
     setSelectedCity(initialCity);
     selectedCityRef.current = initialCity;
     previousCityIdRef.current = row?.cityId ?? "";
     setGoogleLoadError(null);
     setLocationWarning(null);
-  }, [form, open, row]);
+  }, [form, open, row, initialCity]);
 
   const handleCityChange = React.useCallback(
     (city: Pick<City, "id" | "name"> | null) => {

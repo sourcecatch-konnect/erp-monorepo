@@ -369,10 +369,10 @@ export const orderQuickViewSelect = {
     select: { id: true, name: true },
   },
   fromBranch: {
-    select: { id: true, branchCode: true },
+    select: { id: true, name: true, branchCode: true },
   },
   toBranch: {
-    select: { id: true, branchCode: true },
+    select: { id: true, name: true, branchCode: true },
   },
   vehicleType: {
     select: { id: true, name: true },

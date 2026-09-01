@@ -144,7 +144,15 @@ export default function CitySelectField<T extends FieldValues>({
 
   const errorMessage = errors[name]?.message as string | undefined;
 
+  // Notify the parent only when the resolved city *id* actually changes (e.g.
+  // an edit form's saved id resolving async on first open). Firing on every
+  // `selectedCity` object-identity change lets a parent that calls setState in
+  // its handler spin into "Maximum update depth exceeded".
+  const lastNotifiedCityIdRef = React.useRef<string | null>(null);
   React.useEffect(() => {
+    const nextId = selectedCity?.id ?? null;
+    if (lastNotifiedCityIdRef.current === nextId) return;
+    lastNotifiedCityIdRef.current = nextId;
     onCityChange?.(selectedCity);
   }, [selectedCity, onCityChange]);
 
