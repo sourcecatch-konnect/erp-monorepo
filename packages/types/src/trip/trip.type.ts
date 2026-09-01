@@ -4,6 +4,8 @@ import {
   updateTripSchema,
   closeTripSchema,
   correctClosedTripSchema,
+  correctInTransitTripSchema,
+  rescheduleTripSchema,
   cancelTripSchema,
   tripTypeSchema,
   tripStatusSchema,
@@ -23,6 +25,14 @@ export type CorrectClosedTripFormInput = z.input<
   typeof correctClosedTripSchema
 >;
 export type CorrectClosedTripBody = z.output<typeof correctClosedTripSchema>;
+export type CorrectInTransitTripFormInput = z.input<
+  typeof correctInTransitTripSchema
+>;
+export type CorrectInTransitTripBody = z.output<
+  typeof correctInTransitTripSchema
+>;
+export type RescheduleTripFormInput = z.input<typeof rescheduleTripSchema>;
+export type RescheduleTripBody = z.output<typeof rescheduleTripSchema>;
 export type CancelTripBody = z.output<typeof cancelTripSchema>;
 
 export type TripStatusHistoryRow = {
@@ -122,6 +132,10 @@ export type Trip = {
   rakeDate: string | null;
   openingKm: number;
   startDateTime: string | null;
+  /** Scheduled/expected dispatch time while Planned — does not drive status. */
+  plannedStartDateTime: string | null;
+  /** `PLANNED` = normal flow; `BACKFILLED_IN_TRANSIT` = born already in transit. */
+  createdAs: "PLANNED" | "BACKFILLED_IN_TRANSIT";
   endDateTime: string | null;
   arrivalDateTime: string | null;
   unloadingCompletedAt: string | null;

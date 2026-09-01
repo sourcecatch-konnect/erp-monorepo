@@ -118,6 +118,12 @@ export type DeliveryChallanDetail = {
 
 export type DeliveryChallanListItem = DeliveryChallanDetail;
 
+export type DeliveryChallanStatusResult = {
+  id: string;
+  status: DeliveryChallanStatus;
+  version: number;
+};
+
 export type DeliveryChallanSupervisorOption = {
   id: string;
   name: string;
@@ -212,7 +218,7 @@ export const deliveryChallanApi = {
   },
 
   create: async (body: CreateDeliveryChallanBody) => {
-    const response = await api.post<ApiResponse<DeliveryChallanDetail>>(
+    const response = await api.post<ApiResponse<DeliveryChallanStatusResult>>(
       "/delivery-challans",
       body,
     );
@@ -220,7 +226,7 @@ export const deliveryChallanApi = {
   },
 
   update: async (id: string, body: UpdateDeliveryChallanBody) => {
-    const response = await api.patch<ApiResponse<DeliveryChallanDetail>>(
+    const response = await api.patch<ApiResponse<DeliveryChallanStatusResult>>(
       `/delivery-challans/${encode(id)}`,
       body,
     );
@@ -228,7 +234,7 @@ export const deliveryChallanApi = {
   },
 
   issue: async (id: string, version: number) => {
-    const response = await api.post<ApiResponse<DeliveryChallanDetail>>(
+    const response = await api.post<ApiResponse<DeliveryChallanStatusResult>>(
       `/delivery-challans/${encode(id)}/issue`,
       { version },
     );
@@ -236,7 +242,7 @@ export const deliveryChallanApi = {
   },
 
   cancel: async (id: string, version: number, reason: string) => {
-    const response = await api.post<ApiResponse<DeliveryChallanDetail>>(
+    const response = await api.post<ApiResponse<DeliveryChallanStatusResult>>(
       `/delivery-challans/${encode(id)}/cancel`,
       { version, reason },
     );

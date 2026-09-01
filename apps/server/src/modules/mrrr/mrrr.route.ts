@@ -599,21 +599,24 @@ router.patch(
         }
       }
 
-      await Promise.all(
-        body.rows.map((row) =>
-          tx.mRRRRow.update({
-            where: {
-              id: row.id,
-            },
-            data: {
-              sequenceNo: row.sequenceNo ?? null,
-              vpNo: row.vpNo ?? null,
-              mrRrNo: row.mrRrNo ?? null,
-              sealNo: row.sealNo ?? null,
-            },
-          }),
+      const rowValues = Prisma.join(
+        body.rows.map(
+          (row) =>
+            Prisma.sql`(${row.id}::text, ${row.sequenceNo ?? null}::text, ${row.vpNo ?? null}::text, ${row.mrRrNo ?? null}::text, ${row.sealNo ?? null}::text)`,
         ),
       );
+
+      await tx.$executeRaw`
+        UPDATE "MRRRRow" AS t
+        SET
+          "sequenceNo" = v."sequenceNo",
+          "vpNo" = v."vpNo",
+          "mrRrNo" = v."mrRrNo",
+          "sealNo" = v."sealNo",
+          "updatedAt" = now()
+        FROM (VALUES ${rowValues}) AS v(id, "sequenceNo", "vpNo", "mrRrNo", "sealNo")
+        WHERE t.id = v.id AND t."mrRrId" = ${existing.id}
+      `;
 
       await tx.mRRR.update({
         where: {
@@ -753,7 +756,11 @@ router.post(
             increment: 1,
           },
         },
-        include: mrrrInclude,
+        select: {
+          id: true,
+          status: true,
+          version: true,
+        },
       });
     });
 
@@ -854,7 +861,11 @@ router.post(
             increment: 1,
           },
         },
-        include: mrrrInclude,
+        select: {
+          id: true,
+          status: true,
+          version: true,
+        },
       });
     });
 

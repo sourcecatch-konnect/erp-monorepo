@@ -28,13 +28,6 @@ export const useGRNs = (query: ListQuery) => {
   });
 };
 
-export const useGRNStatusCounts = () => {
-  return useQuery({
-    queryKey: grnKeys.statusCounts,
-    queryFn: grnApi.statusCounts,
-  });
-};
-
 export const useGRNDetail = (id: string) => {
   return useQuery({
     queryKey: grnKeys.detail(id),

@@ -25,8 +25,8 @@ import { createLRGroupSchema } from "@skerp/validators/lr-group";
 import type {
   CreateLRGroupFormInput,
   CreateLRGroupBody,
-  Trip,
 } from "@skerp/types";
+import type { TripCreateResult } from "@/features/trips/trip.service";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
@@ -704,7 +704,7 @@ export default function LRForm({ orderId, tripId }: Props) {
       setSubmitting(false);
     }
   };
-  const handleTripCreated = async (created: Trip) => {
+  const handleTripCreated = async (created: TripCreateResult) => {
     await queryClient.invalidateQueries({
       queryKey: lrLookupKeys.attachableTrips(activeConsignorId),
     });

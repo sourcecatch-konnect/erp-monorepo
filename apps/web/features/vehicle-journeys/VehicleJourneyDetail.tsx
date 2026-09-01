@@ -46,6 +46,7 @@ import {
 
 import { useCan } from "@/features/auth";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import DispatchTripDialog from "@/components/feedback/DispatchTripDialog";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { formatPaise } from "@/lib/money";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -115,7 +116,13 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
     queryClient.invalidateQueries({ queryKey: journeyKeys.all });
 
   const dispatch = useMutation({
-    mutationFn: (tripId: string) => journeyApi.dispatchLeg(id, tripId),
+    mutationFn: ({
+      tripId,
+      startDateTime,
+    }: {
+      tripId: string;
+      startDateTime: Date;
+    }) => journeyApi.dispatchLeg(id, tripId, { startDateTime }),
     onSuccess: () => {
       toast.success("Leg dispatched");
       setDispatchLeg(null);
@@ -764,16 +771,14 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
         journey={journey}
       />
 
-      <ConfirmDialog
+      <DispatchTripDialog
         open={Boolean(dispatchLeg)}
         onOpenChange={(open) => !open && setDispatchLeg(null)}
-        title={`Dispatch leg ${dispatchLeg?.sequenceNo ?? ""}`}
-        description="The leg moves to In Transit."
-        confirmLabel="Dispatch"
-        pendingLabel="Dispatching..."
+        entity="leg"
+        reference={dispatchLeg ? `${dispatchLeg.sequenceNo ?? ""}` : undefined}
         isPending={dispatch.isPending}
-        onConfirm={() => {
-          if (dispatchLeg) dispatch.mutate(dispatchLeg.id);
+        onConfirm={({ startDateTime }) => {
+          if (dispatchLeg) dispatch.mutate({ tripId: dispatchLeg.id, startDateTime });
         }}
       />
 

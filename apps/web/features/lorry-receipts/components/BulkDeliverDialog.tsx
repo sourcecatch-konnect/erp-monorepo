@@ -49,7 +49,7 @@ const toLocalInputValue = (date: Date): string => {
 
 const buildDefaults = (lrs: PendingLr[]): DeliverGroupFormInput => ({
   deliveredAt: toLocalInputValue(new Date()),
-  reportedAt: "",
+
   unloadingAt: "",
   receiverName: "",
   receiverPhone: "",
@@ -145,22 +145,10 @@ export default function BulkDeliverDialog({
                   </p>
                 ) : null}
               </div>
-              <div>
-                <FieldLabel>Truck reported at</FieldLabel>
-                <Controller
-                  name="reportedAt"
-                  control={form.control}
-                  render={({ field }) => (
-                    <DateTimePicker
-                      selected={toDate(field.value)}
-                      onSelect={field.onChange}
-                      placeholder="Select reporting date and time"
-                    />
-                  )}
-                />
-              </div>
+
               <div>
                 <FieldLabel>Unloading completed at</FieldLabel>
+
                 <Controller
                   name="unloadingAt"
                   control={form.control}
@@ -172,6 +160,12 @@ export default function BulkDeliverDialog({
                     />
                   )}
                 />
+
+                {errors.unloadingAt?.message ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    {String(errors.unloadingAt.message)}
+                  </p>
+                ) : null}
               </div>
               <div>
                 <FieldLabel>Receiver name</FieldLabel>

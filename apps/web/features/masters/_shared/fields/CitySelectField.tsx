@@ -90,9 +90,9 @@ export default function CitySelectField<T extends FieldValues>({
 
   const initialCityMatchesValue = Boolean(
     initialCity &&
-      (valueMode === "name"
-        ? initialCity.name === value
-        : initialCity.id === value),
+    (valueMode === "name"
+      ? initialCity.name === value
+      : initialCity.id === value),
   );
 
   const listContainsValue = listedCities.some((city) =>
@@ -196,6 +196,7 @@ export default function CitySelectField<T extends FieldValues>({
             },
           );
 
+          lastEmittedCityIdRef.current = city?.id ?? null;
           onCityChange?.(city);
         }}
         onScrollEnd={() => {

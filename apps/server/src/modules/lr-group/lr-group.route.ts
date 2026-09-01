@@ -51,6 +51,9 @@ router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
+/** Group statuses that still hold a live trip assignment. */
+const activeStatuses: LRGroupStatus[] = ["DRAFT", "FINALISED"];
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -564,7 +567,6 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
   const lrNumbers = lines.length
     ? await generateLRNumbers(db, originBranch.branchCode, fyCode, lines.length)
     : [];
-  const activeStatuses: LRGroupStatus[] = ["DRAFT", "FINALISED"];
   const marketVehicleNumber = isMarketVehicle
     ? (marketVehicle?.vehicleNumber ?? enteredMarketVehicleNumber ?? null)
     : null;
@@ -680,7 +682,10 @@ router.post("/", can(PERMS.LORRY_RECEIPT.CREATE), async (req, res) => {
       throw new BadRequestError("Trip not found");
     }
 
-    if (trip.status !== "Planned") {
+    // Planned -> attaching dispatches it. InTransit -> the truck already left
+    // (trip was created back-dated); attaching just links the group, the trip
+    // keeps its existing start time. Closed/Cancelled trips can't take an LR.
+    if (trip.status !== "Planned" && trip.status !== "InTransit") {
       throw new BadRequestError(
         `Trip ${trip.tripName} is not available. Current status is ${trip.status}`,
       );
@@ -913,15 +918,43 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
       ? (input.primaryTripId ?? null)
       : existing.primaryTripId;
 
-  if (nextPrimaryTripId && nextPrimaryTripId !== existing.primaryTripId) {
+  const attachingNewTrip = Boolean(
+    nextPrimaryTripId && nextPrimaryTripId !== existing.primaryTripId,
+  );
+  if (attachingNewTrip) {
     const trip = await db.vehicleTrip.findUnique({
-      where: { id: nextPrimaryTripId },
-      select: { id: true, tripName: true, consignorId: true },
+      where: { id: nextPrimaryTripId! },
+      select: { id: true, status: true, tripName: true, consignorId: true },
     });
     if (!trip) throw new BadRequestError("Trip not found");
+    // Same gate as the create path: Planned (attaching dispatches it) or
+    // InTransit (already-running truck, just linked). Closed/Cancelled can't
+    // take an LR.
+    if (trip.status !== "Planned" && trip.status !== "InTransit") {
+      throw new BadRequestError(
+        `Trip ${trip.tripName} is not available. Current status is ${trip.status}`,
+      );
+    }
     if (trip.consignorId !== existing.consignorId) {
       throw new BadRequestError(
         `Trip ${trip.tripName} belongs to a different consignor and cannot be attached to this LR.`,
+      );
+    }
+    const busyGroup = await db.lRGroup.findFirst({
+      where: {
+        id: { not: id },
+        deletedAt: null,
+        status: { in: activeStatuses },
+        OR: [
+          { primaryTripId: nextPrimaryTripId },
+          { secondaryTripId: nextPrimaryTripId },
+        ],
+      },
+      select: { groupNumber: true },
+    });
+    if (busyGroup) {
+      throw new BadRequestError(
+        `Trip ${trip.tripName} is already assigned to LR group ${busyGroup.groupNumber}`,
       );
     }
   }
@@ -1085,6 +1118,14 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
     },
     include: groupDetailInclude,
   });
+
+  // Mirror the create path: a Planned trip attached here is dispatched, an
+  // already-running one is just linked (dispatchTripOnAttach no-ops the
+  // re-stamp). Runs against `db` (accepts the base client) — the group row is
+  // already committed above.
+  if (attachingNewTrip) {
+    await dispatchTripOnAttach(db, nextPrimaryTripId!, existing.groupNumber, me);
+  }
 
   return sendOk(res, updated);
 });
@@ -1407,8 +1448,13 @@ router.post(
     if (secondaryTripId === existing.primaryTripId) {
       throw new BadRequestError("Leg 2 trip must differ from the leg 1 trip");
     }
-    if (leg2.status !== "Planned") {
-      throw new BadRequestError("Leg 2 trip must be a Planned trip");
+    // Planned -> attaching dispatches it. InTransit -> the hub->destination
+    // truck already left; attaching just links it (dispatchTripOnAttach keeps
+    // its existing start time).
+    if (leg2.status !== "Planned" && leg2.status !== "InTransit") {
+      throw new BadRequestError(
+        "Leg 2 trip must be a Planned or In Transit trip",
+      );
     }
     if (leg2.consignorId !== existing.consignorId) {
       throw new BadRequestError(
@@ -1513,7 +1559,6 @@ router.post(
           data: {
             lrId: line.lrId,
             deliveredAt: input.deliveredAt,
-            reportedAt: input.reportedAt ?? null,
             unloadingAt: input.unloadingAt ?? null,
             receiverName: input.receiverName ?? null,
             receiverPhone: input.receiverPhone ?? null,

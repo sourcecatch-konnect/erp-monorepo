@@ -121,7 +121,14 @@ export const closeJourneyLegSchema = z.object({
 });
 
 export const dispatchJourneyLegSchema = z.object({
-  startDateTime: optionalDate,
+  // Operator-entered — the server no longer defaults this to "now".
+  startDateTime: z
+    .union([z.string(), z.date()])
+    .transform((value) => new Date(value))
+    .refine(
+      (value) => !Number.isNaN(value.getTime()),
+      "Enter a valid start date and time",
+    ),
 });
 
 /* ------------------------------------------------------------------ */

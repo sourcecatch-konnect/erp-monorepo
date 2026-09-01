@@ -86,7 +86,27 @@ export const dispatchTripOnAttach = async (
     where: { id: vehicleTripId },
     select: { id: true, status: true, vehicleId: true },
   });
-  if (!trip || trip.status !== "Planned") return;
+  if (!trip) return;
+
+  // Trip already running (created back-dated as InTransit): just link the
+  // group — keep its existing start time, don't re-stamp or re-dispatch.
+  if (trip.status === "InTransit") {
+    await tx.vehicle.update({
+      where: { id: trip.vehicleId },
+      data: { status: "ON_TRIP" },
+    });
+    await tx.tripStatusHistory.create({
+      data: {
+        vehicleTripId: trip.id,
+        userId,
+        status: "InTransit",
+        note: `Group ${groupNumber} attached to running trip`,
+      },
+    });
+    return;
+  }
+
+  if (trip.status !== "Planned") return;
 
   await tx.vehicleTrip.update({
     where: { id: trip.id },

@@ -57,7 +57,8 @@ type TripPermissionKey =
   | `trip.${CrudAction}`
   | "trip.close"
   | "trip.cancel"
-  | "trip.correct_closed";
+  | "trip.correct_closed"
+  | "trip.correct_in_transit";
 
 type VehicleJourneyPermissionKey =
   | "vehicle_journey.view"
@@ -292,6 +293,7 @@ export const PERMS = {
     CLOSE: "trip.close",
     CANCEL: "trip.cancel",
     CORRECT_CLOSED: "trip.correct_closed",
+    CORRECT_IN_TRANSIT: "trip.correct_in_transit",
   },
   VEHICLE_JOURNEY: {
     VIEW: "vehicle_journey.view",

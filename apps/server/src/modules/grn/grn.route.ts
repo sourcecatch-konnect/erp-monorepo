@@ -441,29 +441,6 @@ router.get("/", can(PERMS.GRN.VIEW), async (req, res) => {
   });
 });
 
-/* ------------------------------------------------------------------ */
-/* Status counts                                                      */
-/* ------------------------------------------------------------------ */
-router.get("/status-counts", can(PERMS.GRN.VIEW), async (req, res) => {
-  const grouped = await db.gRN.groupBy({
-    by: ["status"],
-    where: {
-      deletedAt: null,
-      ...grnBranchFilter(req),
-    },
-    _count: { _all: true },
-  });
-
-  const counts: Record<string, number> = {};
-  let all = 0;
-
-  for (const group of grouped) {
-    counts[group.status] = group._count._all;
-    all += group._count._all;
-  }
-
-  return sendOk(res, { all, ...counts });
-});
 // Labour-master supervisors available to the current user's branch scope.
 router.get("/supervisors", can(PERMS.GRN.CREATE), async (req, res) => {
   const supervisors = await db.labour.findMany({
@@ -852,11 +829,24 @@ router.post("/", can(PERMS.GRN.CREATE), async (req, res) => {
         remarks: writeData.remarks,
         goods: { create: writeData.goods },
       },
-      include: grnDetailInclude,
+      select: {
+        id: true,
+      },
     });
   });
 
-  return sendOk(res, await withDamagePhotos(grn), undefined, 201);
+  const created = await db.gRN.findUnique({
+    where: {
+      id: grn.id,
+    },
+    include: grnDetailInclude,
+  });
+
+  if (!created) {
+    throw new NotFoundError("GRN not found after create");
+  }
+
+  return sendOk(res, await withDamagePhotos(created), undefined, 201);
 });
 
 /* ------------------------------------------------------------------ */
@@ -1048,10 +1038,15 @@ router.post("/:id/submit", can(PERMS.GRN.SUBMIT), async (req, res) => {
       updatedById: actorId(req),
       version: { increment: 1 },
     },
-    include: grnDetailInclude,
+    select: {
+      id: true,
+      grnNumber: true,
+      status: true,
+      version: true,
+    },
   });
 
-  return sendOk(res, await withDamagePhotos(grn));
+  return sendOk(res, grn);
 });
 
 /* ------------------------------------------------------------------ */
@@ -1091,10 +1086,15 @@ router.post("/:id/cancel", can(PERMS.GRN.CANCEL), async (req, res) => {
       updatedById: actorId(req),
       version: { increment: 1 },
     },
-    include: grnDetailInclude,
+    select: {
+      id: true,
+      grnNumber: true,
+      status: true,
+      version: true,
+    },
   });
 
-  return sendOk(res, await withDamagePhotos(grn));
+  return sendOk(res, grn);
 });
 
 export default router;

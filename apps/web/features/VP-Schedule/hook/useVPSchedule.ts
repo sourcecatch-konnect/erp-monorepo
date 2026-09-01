@@ -18,13 +18,6 @@ export const useVPSchedules = (query: ListQuery) => {
   });
 };
 
-export const useVPScheduleStatusCounts = () => {
-  return useQuery({
-    queryKey: vpScheduleKeys.statusCounts,
-    queryFn: vpScheduleApi.statusCounts,
-  });
-};
-
 export const useVPScheduleDetail = (id: string) => {
   return useQuery({
     queryKey: vpScheduleKeys.detail(id),

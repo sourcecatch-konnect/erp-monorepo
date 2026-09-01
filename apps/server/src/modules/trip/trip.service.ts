@@ -64,6 +64,8 @@ export const tripListBaseSelect = {
   openingKm: true,
   closingKm: true,
   startDateTime: true,
+  plannedStartDateTime: true,
+  createdAs: true,
   endDateTime: true,
   arrivalDateTime: true,
   unloadingCompletedAt: true,

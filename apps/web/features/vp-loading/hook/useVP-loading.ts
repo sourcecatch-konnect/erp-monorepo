@@ -34,12 +34,6 @@ export const useVPWagonLoadings = () => {
     queryFn: () => vpLoadingApi.wagons(),
   });
 };
-export const useVPLoadingAllocations = () => {
-  return useQuery({
-    queryKey: [...vpLoadingKeys.all, "allocations"],
-    queryFn: () => vpLoadingApi.allocations(),
-  });
-};
 
 export const useVPLoadingSchedulePreview = (vpScheduleId?: string) => {
   return useQuery({

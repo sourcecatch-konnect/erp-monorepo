@@ -653,7 +653,11 @@ router.post(
         createdBy: { connect: { id: userId } },
         ...nestedOperationData(input, userId),
       },
-      include: operationInclude,
+      select: {
+        id: true,
+        status: true,
+        version: true,
+      },
     });
 
     return sendOk(res, created, undefined, 201);
@@ -707,7 +711,11 @@ router.patch(
           version: { increment: 1 },
           ...nestedOperationData(input, userId),
         },
-        include: operationInclude,
+        select: {
+          id: true,
+          status: true,
+          version: true,
+        },
       });
     });
 
@@ -725,7 +733,13 @@ router.post(
     }
     const existing = await getOperation(req, getParamId(req));
     assertOperationPermission(req, existing.stage, "SUBMIT");
-    if (existing.status === "SUBMITTED") return sendOk(res, existing);
+    if (existing.status === "SUBMITTED") {
+      return sendOk(res, {
+        id: existing.id,
+        status: existing.status,
+        version: existing.version,
+      });
+    }
     if (existing.status !== "DRAFT") {
       throw new BadRequestError("Only a draft Rake operation can be submitted");
     }
@@ -762,7 +776,11 @@ router.post(
         updatedById: actorId(req),
         version: { increment: 1 },
       },
-      include: operationInclude,
+      select: {
+        id: true,
+        status: true,
+        version: true,
+      },
     });
 
     return sendOk(res, submitted);
