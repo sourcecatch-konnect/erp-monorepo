@@ -463,6 +463,7 @@ export default function LRDetail({ id }: { id: string }) {
         goods: vars.payload.goods,
         invoiceNumber: vars.payload.invoiceNumber,
         invoiceAmount: vars.payload.invoiceAmount,
+        invoiceRemark: vars.payload.invoiceRemark,
       }),
     onSuccess: () => {
       toast.success("LR updated");
@@ -586,7 +587,7 @@ export default function LRDetail({ id }: { id: string }) {
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
       {/* Document header */}
       <header className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-3 p-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <Button
               size="icon-lg"
@@ -1104,69 +1105,15 @@ export default function LRDetail({ id }: { id: string }) {
                       {formatPaise(lr.invoiceAmount)}
                     </p>
                   ) : null}
+                  {lr.invoiceRemark ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {lr.invoiceRemark}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex gap-1">
-                  {!display.isSingleton && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="Download or print LR PDF"
-                          disabled={pdfBusyId === lr.id}
-                        >
-                          {pdfBusyId === lr.id ? (
-                            <IconLoader2 size={15} className="animate-spin" />
-                          ) : (
-                            <IconDownload size={15} />
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuLabel>Download</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onClick={() => handleLrPdf(lr, "download", true)}
-                        >
-                          <IconDownload size={16} className="mr-2" /> With
-                          letterhead
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleLrPdf(lr, "download", false)}
-                        >
-                          <IconDownload size={16} className="mr-2" /> Without
-                          letterhead
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Print</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onClick={() => handleLrPdf(lr, "print", true)}
-                        >
-                          <IconPrinter size={16} className="mr-2" /> With
-                          letterhead
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleLrPdf(lr, "print", false)}
-                        >
-                          <IconPrinter size={16} className="mr-2" /> Without
-                          letterhead
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Preview</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onClick={() => openLrPreview(lr, true)}
-                        >
-                          <IconEye size={16} className="mr-2" /> With letterhead
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => openLrPreview(lr, false)}
-                        >
-                          <IconEye size={16} className="mr-2" /> Without
-                          letterhead
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+
                   {g.status === "DRAFT" && canUpdate && (
                     <>
                       <Button
@@ -1403,6 +1350,7 @@ export default function LRDetail({ id }: { id: string }) {
                 editLine.invoiceAmount != null
                   ? String(paiseToRupees(editLine.invoiceAmount))
                   : "",
+              invoiceRemark: editLine.invoiceRemark ?? "",
             }
             : undefined
         }

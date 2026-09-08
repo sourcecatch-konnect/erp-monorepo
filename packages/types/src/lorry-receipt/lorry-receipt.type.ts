@@ -165,6 +165,7 @@ export type LRListItem = {
   unloadingLocation: LocationRef | null;
   invoiceNumber: string | null;
   invoiceAmount: number | null;
+  invoiceRemark: string | null;
   group?: LRGroupRef | null;
   delivery?: { deliveredAt: string } | null;
   acknowledgement?: { receivedAt: string } | null;

@@ -159,7 +159,11 @@ type ReceiptPermissionKey =
   | "receipt.approve"
   | "receipt.cancel";
 
-type LedgerPermissionKey = "ledger.view";
+type LedgerPermissionKey =
+  | "ledger.view"
+  | "ledger.voucher_view"
+  | "ledger.manage"
+  | "ledger.journal_create";
 
 type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
 
@@ -429,6 +433,9 @@ export const PERMS = {
   },
   LEDGER: {
     VIEW: "ledger.view",
+    VOUCHER_VIEW: "ledger.voucher_view",
+    MANAGE: "ledger.manage",
+    JOURNAL_CREATE: "ledger.journal_create",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",

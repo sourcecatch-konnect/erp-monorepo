@@ -7,6 +7,7 @@ import {
   type PermissionKey,
 } from "@skerp/types";
 import { db } from "./prisma.js";
+import { seedLedger } from "./seed-ledger.js";
 
 /**
  * Idempotent admin + RBAC seed.
@@ -177,6 +178,9 @@ const CANONICAL_ROLES: {
       PERMS.RECEIPT.APPROVE,
       PERMS.RECEIPT.CANCEL,
       PERMS.LEDGER.VIEW,
+      PERMS.LEDGER.VOUCHER_VIEW,
+      PERMS.LEDGER.MANAGE,
+      PERMS.LEDGER.JOURNAL_CREATE,
     ],
   },
   {
@@ -198,6 +202,7 @@ const CANONICAL_ROLES: {
       PERMS.BILLING.VIEW,
       PERMS.RECEIPT.VIEW,
       PERMS.LEDGER.VIEW,
+      PERMS.LEDGER.VOUCHER_VIEW,
     ],
   },
 ];
@@ -391,6 +396,9 @@ async function main() {
 
   // 5. UserBranch backfill
   await backfillUserBranches();
+
+  // 6. Chart of accounts (GL + bank/cash ledgers) for the double-entry ledger
+  await seedLedger(db);
 
   console.log("\n=== Admin credentials ===");
   console.log("  Email:    " + ADMIN_EMAIL);

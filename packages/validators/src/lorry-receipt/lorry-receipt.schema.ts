@@ -69,6 +69,7 @@ export const updateLRSchema = z.object({
   totalWeightUnit: optionalString,
   invoiceNumber: optionalString,
   invoiceAmount: optionalRupeesToPaise("Invoice amount"),
+  invoiceRemark: optionalString,
   goods: z
     .array(lrGoodsLineSchema)
     .min(1, "Add at least one goods line")

@@ -1,6 +1,13 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
 import { unwrapApiResponse } from "@/features/masters/_shared/master-api";
+import type {
+  VoucherType,
+  JournalStatus,
+  TallySyncStatus,
+  JournalLine,
+  Voucher,
+} from "@/features/ledger/voucher.types";
 
 export type BillType = "ROAD" | "ROAD_RAIL" | "ROAD_GTA";
 export type BillPartyType = "CONSIGNOR" | "CONSIGNEE";
@@ -170,11 +177,32 @@ export type BillLRDetail = {
   };
 };
 
+// Voucher types are shared with Receivables (both view the same JournalEntry
+// shape) — defined once in features/ledger and re-exported here so every
+// existing `import { Voucher, ... } from "./billing.service"` keeps working.
+export type {
+  VoucherType,
+  JournalStatus,
+  TallySyncStatus,
+  JournalLine,
+  JournalAllocation,
+  Voucher,
+} from "@/features/ledger/voucher.types";
+
 export type Bill = {
   id: string;
   version: number;
   billNumber: string | null;
   status: string;
+  journalEntryId?: string | null;
+  journalEntry?: {
+    id: string;
+    voucherType?: VoucherType;
+    voucherNumber: string;
+    status: JournalStatus;
+    tallySyncStatus?: TallySyncStatus;
+    lines?: JournalLine[];
+  } | null;
   billType: BillType;
   billingPartyType: BillPartyType;
   chargeMechanism: ChargeMechanism;
@@ -333,6 +361,7 @@ export const billingApi = {
   createBill: (body: CreateBillDraft) => post<Bill[]>("/billing/bills", body),
   listBills: () => get<Bill[]>("/billing/bills"),
   bill: (id: string) => get<Bill>(`/billing/bills/${id}`),
+  voucher: (id: string) => get<Voucher>(`/billing/bills/${id}/voucher`),
   availableBillCharges: (id: string) =>
     get<AvailableBillCharge[]>(`/billing/bills/${id}/available-charges`),
   addBillCharges: (id: string, lrChargeIds: string[], version: number) =>

@@ -251,6 +251,7 @@ export const groupListSelect = {
       status: true,
       invoiceNumber: true,
       invoiceAmount: true,
+      invoiceRemark: true,
       loadingLocation: { select: locationSelect },
       unloadingLocation: { select: locationSelect },
       goods: { select: { id: true } },

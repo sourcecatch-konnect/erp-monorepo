@@ -22,3 +22,19 @@ export const getMe = async (): Promise<AuthUser> => {
 export const webLogout = async (): Promise<void> => {
   await api.post("/auth/logout");
 };
+
+/**
+ * POST /auth/forgot-password - emails a reset link if the address is known.
+ * Always resolves (the server never reveals whether the account exists).
+ */
+export const requestPasswordReset = async (email: string): Promise<void> => {
+  await api.post("/auth/forgot-password", { email });
+};
+
+/** POST /auth/reset-password - sets a new password from an emailed token. */
+export const resetPassword = async (
+  token: string,
+  password: string,
+): Promise<void> => {
+  await api.post("/auth/reset-password", { token, password });
+};

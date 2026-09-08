@@ -67,6 +67,23 @@ export type ResetEmployeePasswordInput = z.infer<
 export type UpdateEmployeeStatusInput = z.infer<
   typeof updateEmployeeStatusSchema
 >;
+
+/* ------------------------------------------------------------------ */
+/* Password reset (forgot password)                                   */
+/* ------------------------------------------------------------------ */
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().min(1, "Email is required").email("Invalid email format"),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: employeePasswordSchema,
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
 export * from "./master/state.schema.js";
 export * from "./master/city.schema.js";
 export * from "./master/area.schema.js";

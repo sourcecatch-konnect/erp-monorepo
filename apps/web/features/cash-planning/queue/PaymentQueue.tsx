@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -30,8 +30,10 @@ import {
   IconBolt,
   IconInbox,
   IconClock,
+  IconFileInvoice,
 } from "@tabler/icons-react";
 
+import { PERMS } from "@skerp/types";
 import type {
   CashPlanDayView,
   CashPaymentWithCreditor,
@@ -40,6 +42,9 @@ import type {
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { formatPaise, formatPaiseCompact } from "@/lib/money";
+import { useCan } from "@/features/auth";
+import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
+import { ledgerApi } from "@/features/ledger/api/ledger.service";
 
 import { cashPlanningApi } from "../api/cash-planning.service";
 import { cashPlanningKeys } from "../api/cash-planning.keys";
@@ -80,9 +85,11 @@ const PaymentRow = React.memo(function PaymentRow({
   accountShort,
   editable,
   approvable,
+  canViewVoucher,
   pending,
   onStatus,
   onDelete,
+  onViewVoucher,
 }: {
   p: CashPaymentWithCreditor;
   index: number;
@@ -91,9 +98,11 @@ const PaymentRow = React.memo(function PaymentRow({
   accountShort: boolean;
   editable: boolean;
   approvable: boolean;
+  canViewVoucher: boolean;
   pending: boolean;
   onStatus: (id: string, next: PaymentStatus) => void;
   onDelete: (id: string) => void;
+  onViewVoucher: (journalEntryId: string) => void;
 }) {
   const {
     attributes,
@@ -210,6 +219,18 @@ const PaymentRow = React.memo(function PaymentRow({
           {labelOf(p.status)}
         </span>
 
+        {canViewVoucher && p.status === "APPROVED" && p.journalEntryId ? (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            title="View voucher"
+            className="text-muted-foreground hover:bg-muted"
+            onClick={() => onViewVoucher(p.journalEntryId!)}
+          >
+            <IconFileInvoice size={15} />
+          </Button>
+        ) : null}
+
         {approvable ? (
           <>
             <Button
@@ -268,6 +289,18 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
   const queryClient = useQueryClient();
   const editable = canEnter && day.status === "OPEN";
   const approvable = canApprove && day.status === "OPEN";
+  const canViewVoucher = useCan(PERMS.LEDGER.VOUCHER_VIEW);
+
+  const [voucherJeId, setVoucherJeId] = React.useState<string | null>(null);
+  const voucherQuery = useQuery({
+    queryKey: ["ledger", "voucher", voucherJeId],
+    queryFn: () => ledgerApi.voucher(voucherJeId!),
+    enabled: Boolean(voucherJeId),
+  });
+  const onViewVoucher = React.useCallback(
+    (journalEntryId: string) => setVoucherJeId(journalEntryId),
+    [],
+  );
 
   const dayKey = cashPlanningKeys.day(date);
   const setDay = (view: CashPlanDayView) =>
@@ -551,9 +584,11 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
                     accountShort={accountShort}
                     editable={editable}
                     approvable={approvable}
+                    canViewVoucher={canViewVoucher}
                     pending={pendingIds.has(p.id)}
                     onStatus={onStatus}
                     onDelete={onDelete}
+                    onViewVoucher={onViewVoucher}
                   />
                 </React.Fragment>
               ))}
@@ -561,6 +596,19 @@ export default function PaymentQueue({ day, date, canEnter, canApprove }: Props)
           </SortableContext>
         </DndContext>
       )}
+
+      <VoucherDialog
+        open={Boolean(voucherJeId)}
+        onOpenChange={(open) => !open && setVoucherJeId(null)}
+        voucher={voucherQuery.data}
+        isLoading={voucherQuery.isLoading}
+        isError={voucherQuery.isError}
+        errorMessage={
+          voucherQuery.error instanceof Error
+            ? voucherQuery.error.message
+            : undefined
+        }
+      />
     </div>
   );
 }

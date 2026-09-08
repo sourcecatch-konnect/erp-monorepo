@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Input } from "@skerp/ui/components/input";
 import { Button } from "@skerp/ui/components/button";
@@ -118,6 +119,14 @@ export function LoginForm() {
                 {errors.password.message}
               </p>
             )}
+            <div className="flex justify-end pt-1">
+              <Link
+                href={ROUTES.forgotPassword}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <Button
