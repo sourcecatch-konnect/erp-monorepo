@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import {  useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { finaliseGroupSchema } from "@skerp/validators/lr-group";
-import type { EwayBill,  FinaliseGroupFormInput, FinaliseGroupBody} from "@skerp/types";
+import type { EwayBill, FinaliseGroupFormInput, FinaliseGroupBody } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 
@@ -26,9 +26,9 @@ function getMissingLrFields(lr?: LrRow) {
     missing.add("invoiceNumber");
   }
 
-  if (lr.invoiceAmount == null) {
-    missing.add("invoiceAmount");
-  }
+  // if (lr.invoiceAmount == null) {
+  //   missing.add("invoiceAmount");
+  // }
 
   if (!lr.ewayBill) {
     missing.add("ewayBill");
@@ -39,7 +39,7 @@ function getMissingLrFields(lr?: LrRow) {
 function getMissingMessage(missingFields: string[]) {
   const labels: Record<string, string> = {
     invoiceNumber: "Invoice required",
-    invoiceAmount: "Invoice amount required",
+    // invoiceAmount: "Invoice amount",
     ewayBill: "E-way bill required",
   };
 
@@ -93,15 +93,15 @@ export default function FinaliseDialog({
 
 
   const form = useForm<FinaliseGroupFormInput, unknown, FinaliseGroupBody>({
-  resolver: zodResolver(finaliseGroupSchema, undefined, { raw: true }),
-  mode: "onChange",
-  reValidateMode: "onChange",
-  defaultValues: {
-    baseFreightAmount: (defaultFreight ?? "") as unknown as number,
-    sealNumber: "",
-    lrs: buildRows(lrs),
-  },
-});
+    resolver: zodResolver(finaliseGroupSchema, undefined, { raw: true }),
+    mode: "onChange",
+    reValidateMode: "onChange",
+    defaultValues: {
+      baseFreightAmount: (defaultFreight ?? "") as unknown as number,
+      sealNumber: "",
+      lrs: buildRows(lrs),
+    },
+  });
   React.useEffect(() => {
     if (!open) return;
     form.reset({
@@ -113,19 +113,19 @@ export default function FinaliseDialog({
 
   const { fields } = useFieldArray({ control: form.control, name: "lrs" });
   const errors = form.formState.errors;
-const incompleteLrs = lrs.filter(
-  (lr) => getMissingLrFields(lr).length > 0,
-);
+  const incompleteLrs = lrs.filter(
+    (lr) => getMissingLrFields(lr).length > 0,
+  );
 
-const hasIncompleteLr = incompleteLrs.length > 0;
- const onSubmit = (values: FinaliseGroupFormInput) => {
-  console.log("Valid finalise values:", values);
-  onConfirm(values);
-};
+  const hasIncompleteLr = incompleteLrs.length > 0;
+  const onSubmit = (values: FinaliseGroupFormInput) => {
+    console.log("Valid finalise values:", values);
+    onConfirm(values);
+  };
 
-const onInvalid = (formErrors: typeof form.formState.errors) => {
-  console.error("Finalise validation errors:", formErrors);
-};
+  const onInvalid = (formErrors: typeof form.formState.errors) => {
+    console.error("Finalise validation errors:", formErrors);
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -146,11 +146,11 @@ const onInvalid = (formErrors: typeof form.formState.errors) => {
           </SheetDescription>
         </SheetHeader>
 
-       <form
-  id="finalise-group-form"
-  onSubmit={form.handleSubmit(onSubmit, onInvalid)}
-  className="min-h-0 flex-1 overflow-y-auto p-4"
->
+        <form
+          id="finalise-group-form"
+          onSubmit={form.handleSubmit(onSubmit, onInvalid)}
+          className="min-h-0 flex-1 overflow-y-auto p-4"
+        >
           <div className="space-y-4">
             <section className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
               <div>
@@ -184,77 +184,77 @@ const onInvalid = (formErrors: typeof form.formState.errors) => {
 
             <div className="space-y-3">
               {fields.map((field, idx) => {
-  const lr = lrs[idx];
-  const base = `lrs.${idx}` as const;
+                const lr = lrs[idx];
+                const base = `lrs.${idx}` as const;
 
-  const missingFields = getMissingLrFields(lr);
-  const isReadyToFinalise = missingFields.length === 0;
+                const missingFields = getMissingLrFields(lr);
+                const isReadyToFinalise = missingFields.length === 0;
 
-  return (
-    <section
-      key={field.id}
-      className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3"
-    >
-      <input
-        type="hidden"
-        {...form.register(`${base}.lrId`)}
-      />
+                return (
+                  <section
+                    key={field.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3"
+                  >
+                    <input
+                      type="hidden"
+                      {...form.register(`${base}.lrId`)}
+                    />
 
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">
-          {lr?.lrNumber}
-        </p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">
+                        {lr?.lrNumber}
+                      </p>
 
-        <p className="truncate text-xs text-muted-foreground">
-          {lr?.loadingLocation?.name ?? "-"} →{" "}
-          {lr?.unloadingLocation?.name ?? "-"}
-        </p>
-      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {lr?.loadingLocation?.name ?? "-"} →{" "}
+                        {lr?.unloadingLocation?.name ?? "-"}
+                      </p>
+                    </div>
 
-      <span
-        title={
-          isReadyToFinalise
-            ? undefined
-            : `Missing: ${missingFields.join(", ")}`
-        }
-        className={
-          isReadyToFinalise
-            ? "shrink-0 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
-            : "shrink-0 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
-        }
-      >
-        {getMissingMessage(missingFields)}
-      </span>
-    </section>
-  );
-})}
+                    <span
+                      title={
+                        isReadyToFinalise
+                          ? undefined
+                          : `Missing: ${missingFields.join(", ")}`
+                      }
+                      className={
+                        isReadyToFinalise
+                          ? "shrink-0 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
+                          : "shrink-0 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
+                      }
+                    >
+                      {getMissingMessage(missingFields)}
+                    </span>
+                  </section>
+                );
+              })}
             </div>
           </div>
         </form>
 
-   <SheetFooter className="shrink-0 border-t bg-background sm:flex-row sm:justify-end">
-  <Button
-    type="button"
-    variant="outline"
-    onClick={() => onOpenChange(false)}
-  >
-    Cancel
-  </Button>
+        <SheetFooter className="shrink-0 border-t bg-background sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
 
-  <Button
-    type="submit"
-    form="finalise-group-form"
-    disabled={isPending || hasIncompleteLr}
-  >
-    {isPending
-      ? "Finalising..."
-      : hasIncompleteLr
-        ? "LR details required"
-        : lrs.length === 1
-          ? "Finalise LR"
-          : `Finalise ${lrs.length} LRs`}
-  </Button>
-</SheetFooter>
+          <Button
+            type="submit"
+            form="finalise-group-form"
+            disabled={isPending || hasIncompleteLr}
+          >
+            {isPending
+              ? "Finalising..."
+              : hasIncompleteLr
+                ? "LR details required"
+                : lrs.length === 1
+                  ? "Finalise LR"
+                  : `Finalise ${lrs.length} LRs`}
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

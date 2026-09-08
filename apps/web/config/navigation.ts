@@ -13,6 +13,9 @@ import {
   IconWallet,
   IconCashBanknote,
   IconBook2,
+  IconBooks,
+  IconCalendarWeek,
+  IconEdit,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -343,6 +346,24 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/accounts/receipts",
         icon: IconReceipt2,
         permission: PERMS.RECEIPT.VIEW,
+      },
+      {
+        title: "Chart of Accounts",
+        href: "/accounts/chart-of-accounts",
+        icon: IconBooks,
+        permission: PERMS.LEDGER.VIEW,
+      },
+      {
+        title: "Day Book",
+        href: "/accounts/day-book",
+        icon: IconCalendarWeek,
+        permission: PERMS.LEDGER.VOUCHER_VIEW,
+      },
+      {
+        title: "Manual Journal",
+        href: "/accounts/journal",
+        icon: IconEdit,
+        permission: PERMS.LEDGER.JOURNAL_CREATE,
       },
     ],
   },

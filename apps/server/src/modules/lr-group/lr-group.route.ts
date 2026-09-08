@@ -1250,9 +1250,6 @@ router.post(
         missingFields.push("invoice number");
       }
 
-      if (lr.invoiceAmount == null) {
-        missingFields.push("invoice amount");
-      }
 
       if (!lr.ewayBill) {
         missingFields.push("e-way bill");

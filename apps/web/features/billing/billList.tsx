@@ -96,6 +96,7 @@ export function BillsList() {
                                 <TableHead>Customer</TableHead>
                                 <TableHead>Place of Supply</TableHead>
                                 <TableHead>Status</TableHead>
+                                <TableHead>Accounting</TableHead>
                                 <TableHead className="text-right">Total</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -123,6 +124,15 @@ export function BillsList() {
                                     <TableCell>
                                         <BillStatusBadge status={bill.status as BillStatus} />
 
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {bill.journalEntry
+                                            ? bill.journalEntry.status === "REVERSED"
+                                                ? "Reversed"
+                                                : bill.journalEntry.tallySyncStatus === "SYNCED"
+                                                    ? "Synced"
+                                                    : "Posted"
+                                            : "—"}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {money(bill.totalAmountPaise)}

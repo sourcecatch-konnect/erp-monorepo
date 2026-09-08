@@ -162,8 +162,28 @@ model User {
   receiptStatusChanges          ReceiptStatusHistory[]
   createdCashAccountAdjustments CashAccountAdjustment[] @relation("CreatedCashAccountAdjustments")
   createdLedgerEntries          LedgerEntry[]           @relation("CreatedLedgerEntries")
+  createdJournalEntries         JournalEntry[]          @relation("CreatedJournalEntries")
+  postedJournalEntries          JournalEntry[]          @relation("PostedJournalEntries")
 
   tablePrefs UserTablePref[]
+
+  passwordResetTokens PasswordResetToken[]
+}
+
+/// Single-use, time-limited tokens for the "forgot password" flow. Only the
+/// SHA-256 hash of the token is stored; the raw token lives only in the email
+/// link. A row is spent by setting `usedAt`.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 /// Per-user UI table layout (column order + visibility), keyed per table.
@@ -258,6 +278,8 @@ model Branch {
   cashPayments       CashPayment[]        @relation("BranchCashPayment")
   bills              Bill[]
   receipts           Receipt[]
+  ledgers            Ledger[]
+  journalEntries     JournalEntry[]
 
   @@index([name])
   @@index([cityId])
@@ -567,6 +589,7 @@ model Customer {
   receipts                Receipt[]
   cashReceivables         CashReceivable[]
   ledgerEntries           LedgerEntry[]
+  ledger                  Ledger?
 
   @@index([name])
   @@index([cityId])
@@ -740,6 +763,7 @@ model Labour {
   ledRailBranchGRNs          RailBranchGRN[]   @relation("RailBranchGRNLabourLeader")
   supervisedRailBranchGRNs   RailBranchGRN[]   @relation("RailBranchGRNUnloadingSupervisor")
   supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
+  ledger                     Ledger?
 
   @@index([name])
   @@index([branchId])
@@ -851,6 +875,7 @@ model Transport {
   vehicles         Vehicle[]
   deliveryChallans DeliveryChallan[]
   lrgroups         LRGroup[]
+  ledger           Ledger?
 
   @@index([name])
   @@index([cityId])
@@ -924,6 +949,7 @@ model Pump {
   state State @relation(fields: [stateId], references: [id])
 
   tripExpenses TripExpense[]
+  ledger       Ledger?
 
   @@index([name])
   @@index([cityId])
@@ -1263,6 +1289,7 @@ model LorryReceipt {
   version             Int             @default(1)
   invoiceAmount       BigInt?
   invoiceNumber       String?
+  invoiceRemark       String?
   groupId             String
   loadingLocationId   String?
   unloadingLocationId String?
@@ -1521,6 +1548,9 @@ model Bill {
   lrLinks            BillLorryReceipt[]
   receiptAllocations ReceiptAllocation[]
   cashReceivable     CashReceivable?
+  journalEntryId     String?             @unique
+  journalEntry       JournalEntry?       @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  ledgerAllocations  LedgerAllocation[]
 
   @@index([branchId, status])
   @@index([serviceCustomerId, status])
@@ -1633,6 +1663,8 @@ model Receipt {
   allocations         ReceiptAllocation[]
   statusHistory       ReceiptStatusHistory[]
   accountAdjustments  CashAccountAdjustment[]
+  journalEntryId      String?                 @unique
+  journalEntry        JournalEntry?           @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
 
   @@index([branchId, status])
   @@index([customerId, status])
@@ -2238,6 +2270,7 @@ model Creditor {
   branch        Branch?       @relation("BranchCreditor", fields: [branchId], references: [id])
   payments      CashPayment[]
   ledgerEntries LedgerEntry[]
+  ledger        Ledger?
 
   @@index([deletedAt, name])
   @@index([branchId])
@@ -2260,6 +2293,7 @@ model CashAccount {
   adjustments    CashAccountAdjustment[]
   receipts       Receipt[]
   ledgerEntries  LedgerEntry[]
+  ledger         Ledger?
 
   @@index([deletedAt, name])
 }
@@ -2350,6 +2384,140 @@ model LedgerEntry {
   @@index([category, occurredAt])
 }
 
+/// Chart of accounts. One row per account a JournalLine can hit.
+/// kind = PARTY -> exactly one party FK set (customer/transport/creditor/labour/
+/// pump), or cashAccountId for a bank/cash ledger that mirrors a CashAccount.
+/// kind = GL    -> a named head, looked up by `code`.
+model Ledger {
+  id       String             @id @default(cuid())
+  kind     LedgerKind
+  name     String
+  group    LedgerAccountGroup
+  code     String?            @unique
+  isActive Boolean            @default(true)
+  branchId String?
+  // Opening balances are NOT stored here — they come from a balanced
+  // "Opening Balance" JOURNAL voucher so every figure stays auditable.
+
+  customerId    String? @unique
+  transportId   String? @unique
+  creditorId    String? @unique
+  labourId      String? @unique
+  pumpId        String? @unique
+  cashAccountId String? @unique
+
+  branch      Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  transport   Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
+  creditor    Creditor?     @relation(fields: [creditorId], references: [id], onDelete: Restrict)
+  labour      Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  pump        Pump?         @relation(fields: [pumpId], references: [id], onDelete: Restrict)
+  cashAccount CashAccount?  @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  lines       JournalLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // No unique on (kind, name): two real-world parties can share a name.
+  // GL uniqueness is `code`; party uniqueness is the party FK. Display-name
+  // clashes are a Chart-of-Accounts / Tally-sync concern, handled there.
+  @@index([kind, name])
+  @@index([group])
+}
+
+/// Voucher header. A voucher is N balanced JournalLine rows sharing this row.
+model JournalEntry {
+  id            String        @id @default(cuid())
+  voucherType   VoucherType
+  voucherNumber String
+  voucherDate   DateTime
+  fyCode        String
+  branchId      String
+  narration     String?
+  // Born DRAFT; the posting service flips it to POSTED only after it has
+  // validated total debit == total credit, inside one transaction.
+  status        JournalStatus @default(DRAFT)
+
+  sourceType   JournalSourceType
+  sourceId     String
+  sourceNumber String?
+
+  // At most one contra entry may point at a given original -> a voucher can
+  // be reversed at most once (DB-enforced, not just app-level).
+  reversesId String? @unique
+
+  // Tally sync is its own state machine, separate from the posting lifecycle.
+  tallyMasterId     String?
+  tallySyncStatus   TallySyncStatus @default(NOT_SYNCED)
+  tallySyncedAt     DateTime?
+  tallySyncError    String?
+  tallySyncAttempts Int             @default(0)
+
+  createdById String
+  postedById  String?
+  postedAt    DateTime?
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  branch      Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy   User               @relation("CreatedJournalEntries", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy    User?              @relation("PostedJournalEntries", fields: [postedById], references: [id], onDelete: SetNull)
+  reverses    JournalEntry?      @relation("JournalReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy  JournalEntry?      @relation("JournalReversal")
+  lines       JournalLine[]
+  allocations LedgerAllocation[]
+  bill        Bill?
+  receipt     Receipt?
+  cashPayment CashPayment?
+
+  @@unique([voucherType, sourceType, sourceId])
+  @@unique([voucherType, voucherNumber])
+  @@index([branchId, voucherDate])
+  @@index([sourceType, sourceId])
+  @@index([status])
+  @@index([tallySyncStatus])
+  @@index([voucherType, fyCode])
+}
+
+/// One debit OR one credit line. Exactly one of debitPaise / creditPaise is > 0.
+model JournalLine {
+  id             String  @id @default(cuid())
+  journalEntryId String
+  ledgerId       String
+  lineNumber     Int
+  debitPaise     BigInt  @default(0)
+  creditPaise    BigInt  @default(0)
+  narration      String?
+
+  journalEntry JournalEntry       @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  ledger       Ledger             @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  allocations  LedgerAllocation[]
+
+  @@unique([journalEntryId, lineNumber])
+  @@index([ledgerId])
+}
+
+/// Bill-wise settlement trail. NEW_REF opens an outstanding reference (a sale),
+/// AGAINST_REF consumes it (a receipt / credit note).
+/// Outstanding(bill) = sum(NEW_REF.amountPaise) - sum(AGAINST_REF.amountPaise).
+model LedgerAllocation {
+  id             String            @id @default(cuid())
+  journalEntryId String
+  journalLineId  String
+  billId         String
+  refType        AllocationRefType
+  amountPaise    BigInt
+  createdAt      DateTime          @default(now())
+
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  journalLine  JournalLine  @relation(fields: [journalLineId], references: [id], onDelete: Cascade)
+  bill         Bill         @relation(fields: [billId], references: [id], onDelete: Restrict)
+
+  @@index([billId])
+  @@index([journalEntryId])
+}
+
 model CashAccountBalance {
   id             String  @id @default(cuid())
   dayId          String
@@ -2385,10 +2553,13 @@ model CashPayment {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  day         CashPlanDay  @relation(fields: [dayId], references: [id], onDelete: Cascade)
-  creditor    Creditor?    @relation(fields: [creditorId], references: [id])
-  fromAccount CashAccount? @relation(fields: [fromAccountId], references: [id])
-  branch      Branch?      @relation("BranchCashPayment", fields: [branchId], references: [id])
+  journalEntryId String? @unique
+
+  day          CashPlanDay   @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  creditor     Creditor?     @relation(fields: [creditorId], references: [id])
+  fromAccount  CashAccount?  @relation(fields: [fromAccountId], references: [id])
+  branch       Branch?       @relation("BranchCashPayment", fields: [branchId], references: [id])
+  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
 
   @@index([dayId])
   @@index([status])
@@ -3368,6 +3539,60 @@ enum BillStatus {
   PARTIALLY_PAID
   PAID
   CANCELLED
+}
+
+enum LedgerKind {
+  PARTY
+  GL
+}
+
+enum LedgerAccountGroup {
+  SUNDRY_DEBTOR
+  SUNDRY_CREDITOR
+  DIRECT_INCOME
+  INDIRECT_INCOME
+  DIRECT_EXPENSE
+  INDIRECT_EXPENSE
+  DUTIES_AND_TAXES
+  BANK
+  CASH
+  CURRENT_ASSET
+  CURRENT_LIABILITY
+}
+
+enum VoucherType {
+  SALES
+  RECEIPT
+  PAYMENT
+  JOURNAL
+  CONTRA
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+enum JournalStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+enum TallySyncStatus {
+  NOT_SYNCED
+  SYNCED
+  FAILED
+}
+
+enum JournalSourceType {
+  BILL
+  RECEIPT
+  VENDOR_PAYMENT
+  MANUAL
+  CREDIT_NOTE
+}
+
+enum AllocationRefType {
+  NEW_REF
+  AGAINST_REF
 }
 
 enum ReceiptPaymentMode {

@@ -1,6 +1,11 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
 import { unwrapApiResponse } from "@/features/masters/_shared/master-api";
+import type {
+  JournalStatus,
+  TallySyncStatus,
+  Voucher,
+} from "@/features/ledger/voucher.types";
 
 export type ReceiptPaymentMode = "CASH" | "CHEQUE" | "BANK" | "UPI";
 export type ReceiptStatus =
@@ -107,6 +112,13 @@ export type Receipt = {
   cancelledBy: NamedUser;
   allocations: ReceiptAllocation[];
   statusHistory: ReceiptStatusHistoryEntry[];
+  journalEntryId?: string | null;
+  journalEntry?: {
+    id: string;
+    voucherNumber: string;
+    status: JournalStatus;
+    tallySyncStatus?: TallySyncStatus;
+  } | null;
 };
 
 /**
@@ -126,6 +138,12 @@ export type ReceiptListItem = {
   customer: { id: string; name: string };
   branch: { name: string; branchCode: string };
   _count: { allocations: number };
+  journalEntry?: {
+    id: string;
+    voucherNumber: string;
+    status: JournalStatus;
+    tallySyncStatus?: TallySyncStatus;
+  } | null;
 };
 
 const get = async <T>(
@@ -156,4 +174,5 @@ export const receiptApi = {
     ),
   cancel: (id: string, reason: string) =>
     post<ReceiptStatusPatch>(`/receipt/${id}/cancel`, { reason }),
+  voucher: (id: string) => get<Voucher>(`/receipt/${id}/voucher`),
 };

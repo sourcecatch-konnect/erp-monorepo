@@ -96,3 +96,77 @@ export const sendEmployeeCredentialsEmail = async (
     return false;
   }
 };
+
+type PasswordResetEmail = {
+  to: string;
+  name: string;
+  resetUrl: string;
+  /** Human-readable link lifetime, e.g. "30 minutes". */
+  expiresIn: string;
+};
+
+/**
+ * Sends a password-reset link via Amazon SES.
+ *
+ * Best-effort, exactly like {@link sendEmployeeCredentialsEmail}: returns
+ * `false` (and logs the would-be email) when SES is not configured or the send
+ * fails, so the forgot-password endpoint never leaks whether an address exists
+ * by succeeding/failing differently.
+ */
+export const sendPasswordResetEmail = async (
+  args: PasswordResetEmail
+): Promise<boolean> => {
+  const subject = "Reset your SK Translines ERP password";
+  const text = [
+    `Hi ${args.name},`,
+    ``,
+    `We received a request to reset the password for your SK Translines ERP`,
+    `account.`,
+    ``,
+    `Reset your password (link valid for ${args.expiresIn}):`,
+    args.resetUrl,
+    ``,
+    `If you didn't request this, you can ignore this email — your password`,
+    `will not change.`,
+  ].join("\n");
+
+  if (!sesConfigured()) {
+    console.info(
+      `[email] Amazon SES not configured (AWS_REGION unset) — ` +
+        `password reset email NOT sent.\n` +
+        `--- would send to ${args.to} ---\n${subject}\n${text}\n---`
+    );
+    return false;
+  }
+
+  const from = process.env.MAIL_FROM;
+  if (!from) {
+    console.error(
+      "[email] MAIL_FROM is not set — cannot send password reset email."
+    );
+    return false;
+  }
+
+  try {
+    const client = buildClient();
+    await client.send(
+      new SendEmailCommand({
+        FromEmailAddress: from,
+        Destination: { ToAddresses: [args.to] },
+        Content: {
+          Simple: {
+            Subject: { Data: subject, Charset: "UTF-8" },
+            Body: { Text: { Data: text, Charset: "UTF-8" } },
+          },
+        },
+      })
+    );
+    return true;
+  } catch (err) {
+    console.error(
+      "[email] Failed to send password reset email via SES:",
+      err
+    );
+    return false;
+  }
+};

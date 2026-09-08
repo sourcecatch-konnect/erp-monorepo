@@ -17,7 +17,7 @@ import {
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
-import { Prisma } from "../../../generated/prisma/index.js";
+import { Prisma, type CreditorCategory } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
@@ -39,6 +39,8 @@ import {
   priorClosings,
 } from "./cash-planning.service.js";
 import { recordLedgerEntry } from "../ledger/ledger.service.js";
+import { postPaymentVoucher, reverseJournal } from "../ledger/posting.service.js";
+import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
 
 const parseReceivableDate = (value?: string): Date | null =>
   value ? new Date(`${value}T00:00:00.000Z`) : null;
@@ -47,6 +49,77 @@ const router: Router = Router();
 router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
+
+/**
+ * Post the double-entry PAYMENT voucher for a just-approved CashPayment and
+ * return its JournalEntry id (to store on `payment.journalEntryId`).
+ *
+ * Returns null — no voucher — when the payment has no branch or no source
+ * account: `JournalEntry.branchId` is required and there's nothing to credit,
+ * so those stay on the legacy `LedgerEntry` log only, same as before 8a.
+ *
+ * `sourceId` is suffixed on re-approval (`<id>#2`, `#3`, …) so a payment that
+ * bounces APPROVED → HOLD → APPROVED doesn't collide on
+ * `@@unique([voucherType, sourceType, sourceId])` with its earlier, now
+ * REVERSED voucher.
+ */
+async function postPaymentVoucherFor(
+  tx: Prisma.TransactionClient,
+  payment: {
+    id: string;
+    branchId: string | null;
+    fromAccountId: string | null;
+    amount: bigint;
+    creditorId: string | null;
+    category: CreditorCategory;
+    payeeName: string;
+    note: string | null;
+  },
+  occurredAt: Date,
+  createdById: string,
+): Promise<string | null> {
+  if (!payment.branchId || !payment.fromAccountId) return null;
+
+  const branch = await tx.branch.findUnique({
+    where: { id: payment.branchId },
+    select: { branchCode: true },
+  });
+  if (!branch) return null;
+
+  const fyCode = fyCodeFor(occurredAt);
+  const seq = await nextSequence(tx, branch.branchCode, fyCode, "PV");
+  const paymentNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/PV");
+
+  const priorVouchers = await tx.journalEntry.count({
+    where: {
+      voucherType: "PAYMENT",
+      sourceType: "VENDOR_PAYMENT",
+      OR: [
+        { sourceId: payment.id },
+        { sourceId: { startsWith: `${payment.id}#` } },
+      ],
+    },
+  });
+  const sourceId =
+    priorVouchers === 0 ? payment.id : `${payment.id}#${priorVouchers + 1}`;
+
+  const voucher = await postPaymentVoucher(tx, {
+    paymentId: payment.id,
+    sourceId,
+    paymentNumber,
+    paymentDate: occurredAt,
+    branchId: payment.branchId,
+    fyCode,
+    cashAccountId: payment.fromAccountId,
+    amountPaise: payment.amount,
+    creditorId: payment.creditorId,
+    category: payment.category,
+    payeeName: payment.payeeName,
+    narration: payment.note,
+    createdById,
+  });
+  return voucher.id;
+}
 
 /** Parse a YYYY-MM-DD path/body value into a UTC-midnight Date. */
 const parseDate = (value: string): Date => {
@@ -327,6 +400,17 @@ router.delete(
           description: `Reversal: payment to ${payment.payeeName} deleted`,
           createdById: actorId(req),
         });
+        // Reverse the double-entry voucher too. It survives the row delete
+        // (CashPayment has no cascade onto JournalEntry), keeping the audit
+        // trail: original POSTED -> REVERSED, plus its contra.
+        if (payment.journalEntryId) {
+          await reverseJournal(
+            tx,
+            payment.journalEntryId,
+            `Payment to ${payment.payeeName} deleted`,
+            actorId(req),
+          );
+        }
       }
       await tx.cashPayment.delete({ where: { id } });
     });
@@ -399,6 +483,26 @@ router.post(
         }
       }
 
+      // Post / reverse the double-entry PAYMENT voucher on the same edges.
+      // `undefined` = leave journalEntryId untouched (no approval-state change).
+      let nextJournalEntryId: string | null | undefined = undefined;
+      if (willApprove && !wasApproved) {
+        nextJournalEntryId = await postPaymentVoucherFor(
+          tx,
+          payment,
+          new Date(),
+          actorId(req),
+        );
+      } else if (!willApprove && wasApproved && payment.journalEntryId) {
+        await reverseJournal(
+          tx,
+          payment.journalEntryId,
+          `Payment ${status.toLowerCase()}`,
+          actorId(req),
+        );
+        nextJournalEntryId = null;
+      }
+
       await tx.cashPayment.update({
         where: { id },
         data: {
@@ -406,6 +510,9 @@ router.post(
           note: note ?? payment.note,
           approvedById: willApprove ? actorId(req) : null,
           approvedAt: willApprove ? new Date() : null,
+          ...(nextJournalEntryId !== undefined
+            ? { journalEntryId: nextJournalEntryId }
+            : {}),
         },
       });
 
@@ -528,9 +635,15 @@ router.post(
               data: { outstandingBalance: { decrement: p.amount } },
             });
           }
+          const journalEntryId = await postPaymentVoucherFor(
+            tx,
+            p,
+            approvedAt,
+            approvedById,
+          );
           await tx.cashPayment.update({
             where: { id: p.id },
-            data: { status: "APPROVED", approvedById, approvedAt },
+            data: { status: "APPROVED", approvedById, approvedAt, journalEntryId },
           });
           await recordLedgerEntry(tx, {
             direction: "OUT",

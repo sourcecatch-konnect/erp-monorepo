@@ -239,6 +239,17 @@ export const billDetailInclude = {
   },
   taxLines: { orderBy: { taxType: "asc" as const } },
   statusHistory: { orderBy: { changedAt: "asc" as const } },
+  journalEntry: {
+    include: {
+      lines: {
+        orderBy: { lineNumber: "asc" as const },
+        include: {
+          ledger: { select: { id: true, name: true, code: true, kind: true } },
+        },
+      },
+      allocations: true,
+    },
+  },
 } satisfies Prisma.BillInclude;
 
 const signed = (amount: bigint, effect: LRChargeEffect) =>
