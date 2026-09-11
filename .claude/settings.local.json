@@ -16,7 +16,20 @@
       "Bash(pnpm --filter @skerp/notifications-web check-types)",
       "Bash(pnpm --filter @skerp/validators build)",
       "Bash(ls \"/d/Work/SK_Logistics code/SK_Logistics\" | head -50)",
-      "Read(//d/Work/SK_Logistics code/SK_Logistics/**)"
+      "Read(//d/Work/SK_Logistics code/SK_Logistics/**)",
+      "Bash(pnpm --filter @skerp/server lint)",
+      "Bash(node -e \"const p=require\\('./apps/web/package.json'\\);console.log\\(Object.keys\\(p.dependencies\\).filter\\(d=>/icon|lucide/i.test\\(d\\)\\)\\)\")",
+      "Bash(pnpm --filter @skerp/web check-types)",
+      "Bash(pnpm --filter @skerp/web lint)",
+      "Bash(pnpm --filter @skerp/server add exceljs)",
+      "Bash(pnpm --filter @skerp/server add -D vitest)",
+      "Bash(pnpm --filter @skerp/server test)",
+      "Bash(pnpm check-types *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm --filter @skerp/server build)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(echo \"exit $?\")"
     ]
   }
 }

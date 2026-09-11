@@ -1,10 +1,12 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { Prisma } from "../../../generated/prisma/index.js";
 
 import {
+  ageingQuerySchema,
   chartOfAccountsQuerySchema,
   createGLLedgerSchema,
   createManualJournalSchema,
+  customerStatementQuerySchema,
   dayBookQuerySchema,
   ledgerQuerySchema,
   updateLedgerSchema,
@@ -25,6 +27,16 @@ import {
   ledgerForCustomer,
   ledgerForExpenseCategory,
 } from "./ledger.service.js";
+import {
+  buildCustomerStatement,
+  perBillOutstanding,
+} from "./customer-statement.service.js";
+import { buildAgeingReport } from "./ageing.service.js";
+import {
+  buildStatementHtml,
+  buildStatementXlsx,
+} from "./statement-export.js";
+import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 import { postJournal } from "./posting.service.js";
 
 const router: Router = Router();
@@ -78,6 +90,135 @@ router.get("/expenses", can(PERMS.LEDGER.VIEW), async (req, res) => {
   const view = await ledgerForExpenseCategory(parseRange(req.query));
   return sendOk(res, view);
 });
+
+/* ------------------------------------------------------------------ */
+/* Customer Statement / bill-wise outstanding / Ageing — ACCT-R2/R4/R5 */
+/* Read straight from Bill / Receipt / ReceiptAllocation (+ CN/DN/JV   */
+/* journal lines on the customer's party ledger). Not from LedgerEntry.*/
+/* ------------------------------------------------------------------ */
+
+/** `{ branchId }` when the caller picked a branch (access-checked), else the
+ *  caller's own branch scope. Both branchId-scoped models (Bill/Receipt/
+ *  JournalEntry) accept this fragment directly. */
+const branchWhereFor = (
+  req: Parameters<typeof branchFilter>[0],
+  branchId?: string,
+): Record<string, unknown> => {
+  if (branchId) {
+    assertBranchAccess(req, branchId);
+    return { branchId };
+  }
+  return branchFilter(req);
+};
+
+// Debtor statement — opening balance, every bill/receipt/CN/DN/JV line in date
+// order with a running balance, closing balance + totals.
+router.get("/customers/:id/statement", can(PERMS.LEDGER.VIEW), async (req, res) => {
+  const id = getParamId(req);
+  const q = validate(customerStatementQuerySchema.safeParse(req.query));
+  const view = await buildCustomerStatement(id, {
+    branchWhere: branchWhereFor(req, q.branchId),
+    fyCode: q.fyCode,
+    from: q.from,
+    to: q.to,
+  });
+  return sendOk(res, view);
+});
+
+// Bill-wise outstanding for one customer — feeds the Ageing tab (R5) and any
+// per-bill drill-down.
+router.get(
+  "/customers/:id/bills-outstanding",
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const q = validate(customerStatementQuerySchema.safeParse(req.query));
+    const rows = await perBillOutstanding(id, {
+      branchWhere: branchWhereFor(req, q.branchId),
+      fyCode: q.fyCode,
+      asOf: q.to ? new Date(`${q.to}T23:59:59.999Z`) : undefined,
+    });
+    return sendOk(res, rows);
+  },
+);
+
+// Ageing — one row per customer, unpaid bills bucketed by days overdue.
+router.get("/ageing", can(PERMS.LEDGER.VIEW), async (req, res) => {
+  const q = validate(ageingQuerySchema.safeParse(req.query));
+  const view = await buildAgeingReport({
+    branchWhere: branchWhereFor(req, q.branchId),
+    fyCode: q.fyCode,
+    asOf: q.asOf ? new Date(`${q.asOf}T23:59:59.999Z`) : undefined,
+  });
+  return sendOk(res, view);
+});
+
+/* Statement export (ACCT-R6) — PDF for printing/emailing, Excel for the
+ * accounts team. Same filters as the statement itself; content matches the
+ * on-screen figures exactly. */
+async function loadStatementForExport(req: Request) {
+  const id = getParamId(req);
+  const q = validate(customerStatementQuerySchema.safeParse(req.query));
+  const branchWhere = branchWhereFor(req, q.branchId);
+  const [view, branch] = await Promise.all([
+    buildCustomerStatement(id, {
+      branchWhere,
+      fyCode: q.fyCode,
+      from: q.from,
+      to: q.to,
+    }),
+    q.branchId
+      ? db.branch.findUnique({ where: { id: q.branchId }, select: { name: true } })
+      : Promise.resolve(null),
+  ]);
+  return {
+    id,
+    view,
+    meta: {
+      branchName: branch?.name ?? null,
+      fyCode: q.fyCode ?? null,
+      from: q.from ?? null,
+      to: q.to ?? null,
+      generatedAt: new Date(),
+    },
+  };
+}
+
+const exportFileName = (view: { customerName: string }, ext: string) =>
+  `Statement-${view.customerName.replace(/[^\w.-]+/g, "_")}.${ext}`;
+
+router.get(
+  "/customers/:id/statement/pdf",
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const { view, meta } = await loadStatementForExport(req);
+    const pdf = await generatePdfFromHtml(buildStatementHtml(view, meta));
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${exportFileName(view, "pdf")}"`,
+    );
+    return res.send(pdf);
+  },
+);
+
+router.get(
+  "/customers/:id/statement/xlsx",
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const { view, meta } = await loadStatementForExport(req);
+    const xlsx = await buildStatementXlsx(view, meta);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${exportFileName(view, "xlsx")}"`,
+    );
+    return res.send(xlsx);
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Chart of accounts — Phase 4                                        */

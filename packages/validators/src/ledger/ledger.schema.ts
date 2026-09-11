@@ -137,8 +137,36 @@ export const dayBookQuerySchema = z.object({
   voucherType: voucherTypeSchema.optional(),
 });
 
+/* -----------------------------
+   CUSTOMER STATEMENT / AGEING (ACCT-R2 / R4 / R5)
+   Read-only report filters. `fyCode` is the "YY-YY" financial-year code
+   used across billing (e.g. "26-27").
+------------------------------ */
+const fyCode = z
+  .string()
+  .trim()
+  .regex(/^\d{2}-\d{2}$/, 'fyCode must be "YY-YY", e.g. "26-27"');
+
+/** Filters for GET /ledger/customers/:id/statement and .../bills-outstanding. */
+export const customerStatementQuerySchema = z.object({
+  branchId: z.string().trim().min(1).optional(),
+  fyCode: fyCode.optional(),
+  from: dateOnly.optional(),
+  to: dateOnly.optional(),
+});
+
+/** Filters for GET /ledger/ageing (all customers). */
+export const ageingQuerySchema = z.object({
+  branchId: z.string().trim().min(1).optional(),
+  fyCode: fyCode.optional(),
+  /** Defaults to today on the server when omitted. */
+  asOf: dateOnly.optional(),
+});
+
 export type ChartOfAccountsQuery = z.infer<typeof chartOfAccountsQuerySchema>;
 export type CreateGLLedgerInput = z.infer<typeof createGLLedgerSchema>;
 export type UpdateLedgerInput = z.infer<typeof updateLedgerSchema>;
 export type CreateManualJournalInput = z.infer<typeof createManualJournalSchema>;
 export type DayBookQuery = z.infer<typeof dayBookQuerySchema>;
+export type CustomerStatementQuery = z.infer<typeof customerStatementQuerySchema>;
+export type AgeingQuery = z.infer<typeof ageingQuerySchema>;

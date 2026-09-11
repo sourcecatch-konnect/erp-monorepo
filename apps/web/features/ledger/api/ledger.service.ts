@@ -1,5 +1,11 @@
 import { api } from "@/lib/api";
-import type { ApiResponse, LedgerView } from "@skerp/types";
+import type {
+  ApiResponse,
+  AgeingReportView,
+  BillOutstandingRow,
+  CustomerStatementView,
+  LedgerView,
+} from "@skerp/types";
 import { unwrapApiResponse } from "../../masters/_shared/master-api";
 import type { LedgerRange } from "./ledger.keys";
 import type {
@@ -90,6 +96,19 @@ export type DayBookEntry = {
   lineCount: number;
 };
 
+export type StatementFilters = {
+  branchId?: string;
+  fyCode?: string;
+  from?: string;
+  to?: string;
+};
+
+export type AgeingFilters = {
+  branchId?: string;
+  fyCode?: string;
+  asOf?: string;
+};
+
 const get = async <T>(url: string, params?: Record<string, string | undefined>) => {
   const response = await api.get<ApiResponse<T>>(url, { params });
   return unwrapApiResponse(response);
@@ -132,6 +151,51 @@ export const ledgerApi = {
       params: range,
     });
     return unwrapApiResponse(res);
+  },
+
+  // --- ACCT-R: customer statement / bill-wise outstanding / ageing ---
+
+  customerStatement: async (
+    id: string,
+    filters: StatementFilters = {},
+  ): Promise<CustomerStatementView> => {
+    const res = await api.get<ApiResponse<CustomerStatementView>>(
+      `/ledger/customers/${id}/statement`,
+      { params: filters },
+    );
+    return unwrapApiResponse(res);
+  },
+
+  billsOutstanding: async (
+    id: string,
+    filters: StatementFilters = {},
+  ): Promise<BillOutstandingRow[]> => {
+    const res = await api.get<ApiResponse<BillOutstandingRow[]>>(
+      `/ledger/customers/${id}/bills-outstanding`,
+      { params: filters },
+    );
+    return unwrapApiResponse(res);
+  },
+
+  ageing: async (filters: AgeingFilters = {}): Promise<AgeingReportView> => {
+    const res = await api.get<ApiResponse<AgeingReportView>>("/ledger/ageing", {
+      params: filters,
+    });
+    return unwrapApiResponse(res);
+  },
+
+  /** Server-generated statement export (ACCT-R6) — PDF or Excel, as a Blob so
+   *  it goes through the same cookie auth as every other API call. */
+  downloadStatement: async (
+    id: string,
+    filters: StatementFilters,
+    format: "pdf" | "xlsx",
+  ): Promise<Blob> => {
+    const res = await api.get(`/ledger/customers/${id}/statement/${format}`, {
+      params: filters,
+      responseType: "blob",
+    });
+    return res.data as Blob;
   },
 
   // --- Phase 4: chart of accounts / manual journal / day book ---
