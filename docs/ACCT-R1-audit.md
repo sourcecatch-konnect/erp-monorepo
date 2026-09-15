@@ -405,6 +405,16 @@ _(free text — what the team knows that the data alone doesn't say; not yet fil
 
 - [x] Queries run against the dev/staging DB on 2026-09-11 (via Prisma script, `psql` unavailable)
 - [x] Findings section completed
-- [ ] G1–G5 filed as their own bug tickets and linked here
-- [ ] Accounts reviewer: ______________  — agrees R2 can start (recommended: yes, given the
-      reconciliation holds exactly and no gap found touches this epic's calculations)
+- [ ] G1–G5 filed as their own bug tickets and linked here — ticket text drafted in
+      [`ACCT-R1-gaps.md`](./ACCT-R1-gaps.md); no external tracker was specified for this repo,
+      so file each block there into whichever tracker the team uses and paste the links below:
+      - G1 (bill-cancel doesn't zero outstanding): ______________
+      - G2 (TDS section not captured): ______________
+      - G3 (no bill has a real due date): ______________
+      - G4 (paidAmountPaise semantics doc): ______________
+      - G5 (no live multi-bill receipt to verify against): ______________
+- [x] Accounts reviewer: **Kumud Waykole** (project owner sign-off — not an independent
+      Accounts-department review; note this if one is obtained later) — **2026-09-12** — agrees
+      R2 can start: reconciliation holds exactly (Σ statement closing = Σ bill-wise outstanding
+      = Σ ageing = Σ `CashReceivable`, all ₹3,74,825) and none of G1–G5 touches this epic's
+      calculations.
