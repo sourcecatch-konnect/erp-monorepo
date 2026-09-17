@@ -49,6 +49,20 @@ const pdfValue = (value: unknown): string | number | null | undefined => {
   return String(value);
 };
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Whole transit days between dispatch and close, same convention as the
+ * vehicle-journey log slip's "Total Days" (ceil, minimum 1).
+ */
+const totalDays = (
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): number | null =>
+  start && end
+    ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY))
+    : null;
+
 export const buildTripPdfDocument = (trip: TripPdfData): PdfDocument => {
   const routeLabel =
     trip.route?.sourceCity?.name && trip.route?.destinationCity?.name
@@ -64,6 +78,8 @@ export const buildTripPdfDocument = (trip: TripPdfData): PdfDocument => {
 
   const shouldShowStartedAt =
     trip.status === "InTransit" || trip.status === "Closed";
+  const isClosed = trip.status === "Closed";
+  const tripTotalDays = totalDays(trip.startDateTime, trip.endDateTime);
   const pdfAmount = (value: unknown): string | undefined => {
     if (value === null || value === undefined || value === "") return undefined;
 
@@ -129,6 +145,9 @@ export const buildTripPdfDocument = (trip: TripPdfData): PdfDocument => {
           { label: "Vehicle", value: pdfValue(trip.vehicle?.vehicleNumber) },
           { label: "Driver", value: pdfValue(trip.driver?.name) },
           { label: "Opening KM", value: pdfValue(trip.openingKm) },
+          ...(isClosed
+            ? [{ label: "Closing KM", value: pdfValue(trip.closingKm) }]
+            : []),
           { label: "Onward Freight", value: pdfAmount(trip.onwardFreight) },
         ],
       },
@@ -143,6 +162,15 @@ export const buildTripPdfDocument = (trip: TripPdfData): PdfDocument => {
                 {
                   label: "Started At",
                   value: formatDateTime(trip.startDateTime),
+                },
+              ]
+            : []),
+          ...(isClosed
+            ? [
+                { label: "Ended At", value: formatDateTime(trip.endDateTime) },
+                {
+                  label: "Total Days",
+                  value: tripTotalDays !== null ? String(tripTotalDays) : "-",
                 },
               ]
             : []),

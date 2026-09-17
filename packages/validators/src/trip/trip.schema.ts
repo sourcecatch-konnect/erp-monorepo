@@ -71,12 +71,6 @@ const tripBaseShape = {
   alreadyDispatched: z.boolean().optional().default(false),
   startDateTime: optionalDate,
   plannedStartDateTime: optionalDate,
-  // Milestones already reached by the time an already-dispatched trip is
-  // entered. Optional, only meaningful when alreadyDispatched = true, and
-  // ordered startDateTime <= arrivalDateTime <= unloadingCompletedAt <= now.
-  // The trip stays InTransit — these only back-fill the timestamps.
-  arrivalDateTime: optionalDate,
-  unloadingCompletedAt: optionalDate,
 };
 
 /**
@@ -87,8 +81,6 @@ const tripDispatchRefinement = (
   data: {
     alreadyDispatched?: boolean;
     startDateTime?: Date;
-    arrivalDateTime?: Date;
-    unloadingCompletedAt?: Date;
   },
   ctx: z.RefinementCtx,
 ) => {
@@ -116,54 +108,13 @@ const tripDispatchRefinement = (
     } else {
       notFuture(data.startDateTime, "startDateTime", "Dispatch time");
     }
-
-    notFuture(data.arrivalDateTime, "arrivalDateTime", "Arrival time");
-    notFuture(
-      data.unloadingCompletedAt,
-      "unloadingCompletedAt",
-      "Unloading time",
-    );
-
-    if (
-      data.startDateTime &&
-      data.arrivalDateTime &&
-      data.arrivalDateTime < data.startDateTime
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Arrival can't be before dispatch",
-        path: ["arrivalDateTime"],
-      });
-    }
-    const unloadingFloor = data.arrivalDateTime ?? data.startDateTime;
-    if (
-      data.unloadingCompletedAt &&
-      unloadingFloor &&
-      data.unloadingCompletedAt < unloadingFloor
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Unloading can't be before arrival / dispatch",
-        path: ["unloadingCompletedAt"],
-      });
-    }
-  } else {
-    if (data.startDateTime) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Remove the actual dispatch time, or tick 'Truck already dispatched'",
-        path: ["startDateTime"],
-      });
-    }
-    if (data.arrivalDateTime || data.unloadingCompletedAt) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Arrival / unloading times need 'Truck already dispatched' ticked",
-        path: [data.arrivalDateTime ? "arrivalDateTime" : "unloadingCompletedAt"],
-      });
-    }
+  } else if (data.startDateTime) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Remove the actual dispatch time, or tick 'Truck already dispatched'",
+      path: ["startDateTime"],
+    });
   }
 };
 

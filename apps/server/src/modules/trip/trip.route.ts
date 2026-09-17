@@ -394,12 +394,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   const plannedStart = bornInTransit
     ? null
     : (data.plannedStartDateTime ?? null);
-  // Milestones already reached when an already-running trip is entered late.
-  // Status stays InTransit — these only back-fill the timestamps.
-  const backfillArrival = bornInTransit ? (data.arrivalDateTime ?? null) : null;
-  const backfillUnloading = bornInTransit
-    ? (data.unloadingCompletedAt ?? null)
-    : null;
   const initialStatus: TripStatus = bornInTransit ? "InTransit" : "Planned";
   const initialCreatedAs = bornInTransit ? "BACKFILLED_IN_TRANSIT" : "PLANNED";
 
@@ -515,8 +509,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           status: initialStatus,
           startDateTime: actualStart ?? null,
           plannedStartDateTime: plannedStart,
-          arrivalDateTime: backfillArrival,
-          unloadingCompletedAt: backfillUnloading,
           createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
@@ -649,7 +641,10 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           returnCityId: ho.cityId,
           currentCityId: route.sourceCityId,
           openingKm: data.openingKm,
-          startedAt: now,
+          // A back-dated (already-dispatched) leg 1 means the journey really
+          // began at that dispatch moment, not at the time this record was
+          // entered — mirrors the dedicated /vehicle-journeys start endpoint.
+          startedAt: actualStart ?? now,
           status: "ACTIVE",
           settlementStatus: "NOT_READY",
           createdById: me,
@@ -664,8 +659,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           status: initialStatus,
           startDateTime: actualStart ?? null,
           plannedStartDateTime: plannedStart,
-          arrivalDateTime: backfillArrival,
-          unloadingCompletedAt: backfillUnloading,
           createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
