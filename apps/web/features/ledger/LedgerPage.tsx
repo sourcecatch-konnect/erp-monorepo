@@ -34,9 +34,11 @@ type CashTabConfig = {
   balanceConvention: BalanceConvention;
 };
 
-/** Bank / Cash / Creditor / Expense — plain IN/OUT ledger reads of the
- *  LedgerEntry table. (Debtor + Ageing are handled separately: they read the
- *  real Bill/Receipt statement, not LedgerEntry.) */
+/** Bank / Cash — plain IN/OUT ledger reads of the legacy LedgerEntry table.
+ *  Creditor / Expense now read the real JournalLine/Ledger postings (so
+ *  Workshop PO/Inward/Job Card/Service Bill vouchers show up), same as
+ *  Debtor + Ageing reading the real Bill/Receipt statement instead of
+ *  LedgerEntry. */
 const cashTabs: Record<"bank" | "cash" | "creditor" | "expense", CashTabConfig> = {
   bank: { label: "Bank", description: "Every entry into/out of one bank account", partyKind: "account-bank", balanceConvention: "asset" },
   cash: { label: "Cash", description: "Every entry into/out of one cash account", partyKind: "account-cash", balanceConvention: "asset" },
@@ -78,7 +80,7 @@ export function LedgerPage() {
     queryFn: () => branchApi.list({ page: 0, size: 200 }),
   });
 
-  // Bank / Cash / Creditor / Expense — the legacy LedgerEntry reads.
+  // Bank / Cash (legacy LedgerEntry) and Creditor / Expense (JournalLine).
   const cashQuery = useQuery({
     queryKey:
       tab === "expense"
@@ -289,7 +291,7 @@ export function LedgerPage() {
           />
         </TabsContent>
 
-        {/* ---- Bank / Cash / Creditor / Expense (unchanged) ---- */}
+        {/* ---- Bank / Cash / Creditor / Expense ---- */}
         {(["bank", "cash", "creditor", "expense"] as const).map((key) => {
           const cfg = cashTabs[key];
           return (

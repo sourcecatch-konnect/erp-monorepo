@@ -152,6 +152,32 @@ model User {
   cancelledBills    Bill[]              @relation("CancelledBills")
   billStatusChanges BillStatusHistory[]
 
+  createdPurchaseOrders   PurchaseOrder[] @relation("CreatedPurchaseOrders")
+  updatedPurchaseOrders   PurchaseOrder[] @relation("UpdatedPurchaseOrders")
+  approvedPurchaseOrders  PurchaseOrder[] @relation("ApprovedPurchaseOrders")
+  cancelledPurchaseOrders PurchaseOrder[] @relation("CancelledPurchaseOrders")
+
+  createdSpareInwards   SpareInward[]   @relation("CreatedSpareInwards")
+  postedSpareInwards    SpareInward[]   @relation("PostedSpareInwards")
+  cancelledSpareInwards SpareInward[]   @relation("CancelledSpareInwards")
+  createdStockMovements StockMovement[] @relation("CreatedStockMovements")
+
+  createdJobCards            JobCard[]            @relation("CreatedJobCards")
+  finalisedJobCards          JobCard[]            @relation("FinalisedJobCards")
+  cancelledJobCards          JobCard[]            @relation("CancelledJobCards")
+  createdJobCardRemovedParts JobCardRemovedPart[] @relation("CreatedJobCardRemovedParts")
+
+  createdServiceBills        ServiceBill[]        @relation("CreatedServiceBills")
+  postedServiceBills         ServiceBill[]        @relation("PostedServiceBills")
+  cancelledServiceBills      ServiceBill[]        @relation("CancelledServiceBills")
+  createdServiceBillPayments ServiceBillPayment[] @relation("CreatedServiceBillPayments")
+
+  createdReplacementLists     ReplacementList[]   @relation("CreatedReplacementLists")
+  cancelledReplacementLists   ReplacementList[]   @relation("CancelledReplacementLists")
+  createdReplacementInwards   ReplacementInward[] @relation("CreatedReplacementInwards")
+  postedReplacementInwards    ReplacementInward[] @relation("PostedReplacementInwards")
+  cancelledReplacementInwards ReplacementInward[] @relation("CancelledReplacementInwards")
+
   createdBillingTaxRules BillingTaxRule[] @relation("CreatedBillingTaxRules")
   updatedBillingTaxRules BillingTaxRule[] @relation("UpdatedBillingTaxRules")
 
@@ -280,6 +306,15 @@ model Branch {
   receipts           Receipt[]
   ledgers            Ledger[]
   journalEntries     JournalEntry[]
+  purchaseOrders     PurchaseOrder[]
+  spareInwards       SpareInward[]
+  spareBatches       SpareBatch[]
+  stockLedgers       StockLedger[]
+  stockMovements     StockMovement[]
+  jobCards           JobCard[]
+  serviceBills       ServiceBill[]
+  replacementLists   ReplacementList[]
+  replacementInwards ReplacementInward[]
 
   @@index([name])
   @@index([cityId])
@@ -548,6 +583,7 @@ model Vehicle {
   driverAdvances   DriverAdvance[]
   logSlips         LogSlip[]
   deliveryChallans DeliveryChallan[]
+  jobCards         JobCard[]
 
   @@index([transportId, ownershipType])
   @@index([vehicleTypeId])
@@ -713,6 +749,7 @@ model Driver {
   journeys           VehicleJourney[]
   advances           DriverAdvance[]
   logSlips           LogSlip[]
+  jobCards           JobCard[]
 
   @@index([name])
 }
@@ -738,7 +775,7 @@ model Goods {
 }
 
 model Labour {
-  id                         String            @id @default(cuid())
+  id                         String               @id @default(cuid())
   name                       String
   photoPath                  String?
   address                    String?
@@ -751,18 +788,20 @@ model Labour {
   pan                        String?
   type                       WorkerType
   branchId                   String
-  createdAt                  DateTime          @default(now())
-  updatedAt                  DateTime          @updatedAt
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
   cityId                     String
-  branch                     Branch            @relation("WorkerBranch", fields: [branchId], references: [id])
-  city                       City              @relation(fields: [cityId], references: [id])
-  grnLabours                 GRN[]             @relation("GRNLabour")
-  supervisedGRNs             GRN[]             @relation("GRNUnloadingSupervisor")
-  vpWagonLoadings            VPWagonLoading[]  @relation("VPWagonLoadingLabour")
-  supervisedVPWagonLoadings  VPWagonLoading[]  @relation("VPWagonLoadingSupervisor")
-  ledRailBranchGRNs          RailBranchGRN[]   @relation("RailBranchGRNLabourLeader")
-  supervisedRailBranchGRNs   RailBranchGRN[]   @relation("RailBranchGRNUnloadingSupervisor")
-  supervisedDeliveryChallans DeliveryChallan[] @relation("DeliveryChallanSupervisor")
+  branch                     Branch               @relation("WorkerBranch", fields: [branchId], references: [id])
+  city                       City                 @relation(fields: [cityId], references: [id])
+  grnLabours                 GRN[]                @relation("GRNLabour")
+  supervisedGRNs             GRN[]                @relation("GRNUnloadingSupervisor")
+  vpWagonLoadings            VPWagonLoading[]     @relation("VPWagonLoadingLabour")
+  supervisedVPWagonLoadings  VPWagonLoading[]     @relation("VPWagonLoadingSupervisor")
+  ledRailBranchGRNs          RailBranchGRN[]      @relation("RailBranchGRNLabourLeader")
+  supervisedRailBranchGRNs   RailBranchGRN[]      @relation("RailBranchGRNUnloadingSupervisor")
+  supervisedDeliveryChallans DeliveryChallan[]    @relation("DeliveryChallanSupervisor")
+  jobCardPartLines           JobCardPartLine[]
+  jobCardServiceLines        JobCardServiceLine[]
   ledger                     Ledger?
 
   @@index([name])
@@ -969,47 +1008,667 @@ model SpareCategory {
 }
 
 model SparePartSupplier {
-  id            String      @id @default(cuid())
-  name          String
-  type          String
-  shopName      String?
-  address       String?
-  cityId        String
-  contactPerson String?
-  contactPhone  String?
-  mobileNo      String?
-  email         String?
-  panNo         String?
-  gstin         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  spareparts    SparePart[] @relation("PartSupplier")
-  city          City        @relation("SparePartySupplierCity", fields: [cityId], references: [id])
+  id                     String               @id @default(cuid())
+  name                   String
+  type                   String
+  shopName               String?
+  address                String?
+  cityId                 String
+  contactPerson          String?
+  contactPhone           String?
+  mobileNo               String?
+  email                  String?
+  panNo                  String?
+  gstin                  String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  spareparts             SparePart[]          @relation("PartSupplier")
+  city                   City                 @relation("SparePartySupplierCity", fields: [cityId], references: [id])
+  purchaseOrders         PurchaseOrder[]
+  spareInwards           SpareInward[]
+  spareBatches           SpareBatch[]
+  jobCardServiceLines    JobCardServiceLine[]
+  serviceBillsAsProvider ServiceBill[]        @relation("ServiceBillProvider")
+  replacementLists       ReplacementList[]
+  replacementInwards     ReplacementInward[]
+  ledger                 Ledger?
 
   @@index([name])
   @@index([cityId])
 }
 
 model SparePart {
-  id             String            @id @default(cuid())
-  name           String
-  type           PartType
-  categoryId     String
-  supplierId     String
-  rate           BigInt
-  minimumStock   Int
-  unit           String
-  isRecyclable   Boolean           @default(false)
-  isBatchTracked Boolean           @default(false)
-  description    String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  category       SpareCategory     @relation("PartCategory", fields: [categoryId], references: [id])
-  supplier       SparePartSupplier @relation("PartSupplier", fields: [supplierId], references: [id])
+  id                     String                    @id @default(cuid())
+  name                   String
+  type                   PartType
+  categoryId             String
+  supplierId             String
+  rate                   BigInt
+  minimumStock           Int
+  unit                   String
+  isRecyclable           Boolean                   @default(false)
+  isBatchTracked         Boolean                   @default(false)
+  description            String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  category               SpareCategory             @relation("PartCategory", fields: [categoryId], references: [id])
+  supplier               SparePartSupplier         @relation("PartSupplier", fields: [supplierId], references: [id])
+  purchaseOrderLines     PurchaseOrderLine[]
+  inwardLines            PurchaseOrderInwardLine[]
+  batches                SpareBatch[]
+  stockLedgers           StockLedger[]
+  stockMovements         StockMovement[]
+  jobCardPartLines       JobCardPartLine[]
+  jobCardServiceLines    JobCardServiceLine[]
+  jobCardRemovedParts    JobCardRemovedPart[]
+  replacementListLines   ReplacementListLine[]
+  replacementInwardLines ReplacementInwardLine[]
 
   @@index([name])
   @@index([categoryId])
   @@index([supplierId])
+}
+
+/// Commitment to buy spare parts from a supplier. Creating/approving a PO
+/// never moves stock — only SpareInward posted against it does.
+model PurchaseOrder {
+  id             String              @id @default(cuid())
+  poNumber       String?             @unique
+  fyCode         String
+  branchId       String
+  supplierId     String
+  status         PurchaseOrderStatus @default(DRAFT)
+  poDate         DateTime
+  expectedDate   DateTime?
+  remarks        String?
+  estimatedPaise BigInt              @default(0)
+
+  createdById   String
+  updatedById   String?
+  approvedById  String?
+  approvedAt    DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  branch      Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  supplier    SparePartSupplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy   User              @relation("CreatedPurchaseOrders", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy   User?             @relation("UpdatedPurchaseOrders", fields: [updatedById], references: [id], onDelete: SetNull)
+  approvedBy  User?             @relation("ApprovedPurchaseOrders", fields: [approvedById], references: [id], onDelete: SetNull)
+  cancelledBy User?             @relation("CancelledPurchaseOrders", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  lines   PurchaseOrderLine[]
+  inwards SpareInward[]
+
+  @@index([branchId, status])
+  @@index([supplierId, status])
+  @@index([fyCode])
+}
+
+model PurchaseOrderLine {
+  id          String @id @default(cuid())
+  poId        String
+  sparePartId String
+  lineNumber  Int
+  qtyOrdered  Int
+  qtyReceived Int    @default(0)
+  ratePaise   BigInt
+  amountPaise BigInt
+
+  po          PurchaseOrder             @relation(fields: [poId], references: [id], onDelete: Cascade)
+  sparePart   SparePart                 @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  inwardLines PurchaseOrderInwardLine[]
+
+  @@unique([poId, lineNumber])
+  @@index([sparePartId])
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+/// Goods receipt against a PurchaseOrder. Partial receipt is normal — a PO
+/// can have many SpareInward rows until fully received. Posting an inward
+/// increases stock (StockMovement + StockLedger) and books the supplier
+/// payable (Dr Spare Inventory / Cr Supplier Payable).
+model SpareInward {
+  id                  String            @id @default(cuid())
+  inwardNumber        String?           @unique
+  fyCode              String
+  branchId            String
+  poId                String
+  supplierId          String
+  status              SpareInwardStatus @default(DRAFT)
+  inwardDate          DateTime
+  supplierInvoiceNo   String
+  supplierInvoiceDate DateTime?
+  grossAmountPaise    BigInt            @default(0)
+  discountPaise       BigInt            @default(0)
+  payableAmountPaise  BigInt            @default(0)
+  remarks             String?
+
+  journalEntryId String? @unique
+
+  createdById   String
+  postedById    String?
+  postedAt      DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  branch       Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  po           PurchaseOrder     @relation(fields: [poId], references: [id], onDelete: Restrict)
+  supplier     SparePartSupplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy    User              @relation("CreatedSpareInwards", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy     User?             @relation("PostedSpareInwards", fields: [postedById], references: [id], onDelete: SetNull)
+  cancelledBy  User?             @relation("CancelledSpareInwards", fields: [cancelledById], references: [id], onDelete: SetNull)
+  journalEntry JournalEntry?     @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+
+  lines            PurchaseOrderInwardLine[]
+  replacementLists ReplacementList[]
+
+  @@index([branchId, status])
+  @@index([poId])
+  @@index([supplierId])
+  @@index([fyCode])
+}
+
+model PurchaseOrderInwardLine {
+  id              String    @id @default(cuid())
+  inwardId        String
+  poLineId        String
+  sparePartId     String
+  qtyReceived     Int
+  qtyRejected     Int       @default(0)
+  ratePaise       BigInt
+  amountPaise     BigInt
+  batchNo         String?
+  warrantyExpiry  DateTime?
+  guaranteeExpiry DateTime?
+
+  inward               SpareInward           @relation(fields: [inwardId], references: [id], onDelete: Cascade)
+  poLine               PurchaseOrderLine     @relation(fields: [poLineId], references: [id], onDelete: Restrict)
+  sparePart            SparePart             @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  batch                SpareBatch?
+  replacementListLines ReplacementListLine[]
+
+  @@index([inwardId])
+  @@index([poLineId])
+  @@index([sparePartId])
+}
+
+enum SpareInwardStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+/// One received lot of a part — the unit "batch/invoice-wise" old ERP tracks
+/// warranty/guarantee against. Created 1:1 with a posted inward line.
+model SpareBatch {
+  id              String    @id @default(cuid())
+  sparePartId     String
+  supplierId      String
+  branchId        String
+  inwardLineId    String?   @unique
+  batchNo         String?
+  qtyReceived     Int
+  qtyRemaining    Int
+  unitCostPaise   BigInt
+  warrantyExpiry  DateTime?
+  guaranteeExpiry DateTime?
+  createdAt       DateTime  @default(now())
+
+  sparePart                SparePart                @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  supplier                 SparePartSupplier        @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  branch                   Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  inwardLine               PurchaseOrderInwardLine? @relation(fields: [inwardLineId], references: [id], onDelete: Restrict)
+  jobCardPartLines         JobCardPartLine[]
+  removedPartOrigin        JobCardRemovedPart?
+  replacementOriginalLines ReplacementListLine[]    @relation("ReplacementOriginalBatch")
+  replacementNewLine       ReplacementInwardLine?   @relation("ReplacementNewBatch")
+
+  @@index([sparePartId, branchId])
+  @@index([qtyRemaining])
+}
+
+/// Denormalised current stock per (part, branch) — always the sum of its
+/// StockMovement rows. Moving-average cost recomputed on every INWARD.
+model StockLedger {
+  id                 String   @id @default(cuid())
+  sparePartId        String
+  branchId           String
+  currentQty         Int      @default(0)
+  movingAvgCostPaise BigInt   @default(0)
+  updatedAt          DateTime @updatedAt
+
+  sparePart SparePart @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  branch    Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([sparePartId, branchId])
+}
+
+/// Append-only stock audit trail. `qtyDelta` is signed: + for INWARD/RETURN,
+/// − for ISSUE. `balanceQtyAfter` is a point-in-time snapshot for audit —
+/// StockLedger.currentQty is the live figure.
+model StockMovement {
+  id              String            @id @default(cuid())
+  sparePartId     String
+  branchId        String
+  movementType    StockMovementType
+  qtyDelta        Int
+  unitCostPaise   BigInt
+  balanceQtyAfter Int
+  refType         String
+  refId           String
+  createdById     String
+  createdAt       DateTime          @default(now())
+
+  sparePart SparePart @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  branch    Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy User      @relation("CreatedStockMovements", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([sparePartId, branchId, createdAt])
+  @@index([refType, refId])
+}
+
+enum StockMovementType {
+  INWARD
+  ISSUE
+  RETURN
+  ADJUSTMENT
+}
+
+/// A truck's workshop visit. Parts issued at Finalise decrement stock
+/// (specific-batch costing, not blended average) and post one expense
+/// voucher; external/sublet services are recorded here but billed later by
+/// a separate Service Bill (they carry no ledger entry of their own yet).
+model JobCard {
+  id            String              @id @default(cuid())
+  jobCardNumber String?             @unique
+  fyCode        String
+  branchId      String
+  vehicleId     String
+  driverId      String
+  truckStatus   TruckLocationStatus
+  inDateTime    DateTime
+  outDateTime   DateTime?
+  openingKm     Int
+  closingKm     Int?
+  status        JobCardStatus       @default(DRAFT)
+  remarks       String?
+
+  totalPartsAmountPaise   BigInt @default(0)
+  totalServiceAmountPaise BigInt @default(0)
+  totalAmountPaise        BigInt @default(0)
+
+  journalEntryId String? @unique
+
+  createdById   String
+  finalisedById String?
+  finalisedAt   DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  vehicle      Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driver       Driver        @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  createdBy    User          @relation("CreatedJobCards", fields: [createdById], references: [id], onDelete: Restrict)
+  finalisedBy  User?         @relation("FinalisedJobCards", fields: [finalisedById], references: [id], onDelete: SetNull)
+  cancelledBy  User?         @relation("CancelledJobCards", fields: [cancelledById], references: [id], onDelete: SetNull)
+  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+
+  partLines    JobCardPartLine[]
+  serviceLines JobCardServiceLine[]
+  removedParts JobCardRemovedPart[]
+
+  @@index([branchId, status])
+  @@index([vehicleId])
+  @@index([fyCode])
+}
+
+model JobCardPartLine {
+  id            String  @id @default(cuid())
+  jobCardId     String
+  sparePartId   String
+  batchId       String
+  mechanicId    String?
+  qty           Int
+  unitCostPaise BigInt
+  amountPaise   BigInt
+  description   String?
+
+  jobCard         JobCard              @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  sparePart       SparePart            @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  batch           SpareBatch           @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  mechanic        Labour?              @relation(fields: [mechanicId], references: [id], onDelete: SetNull)
+  removedPartRefs JobCardRemovedPart[]
+
+  @@index([jobCardId])
+  @@index([sparePartId])
+  @@index([batchId])
+}
+
+/// External / sublet work performed on the job. Carries no ledger entry at
+/// Job Card Finalise — a future Service Bill batches unbilled lines from one
+/// provider and posts the accrual then (billedInServiceBillId marks it done).
+model JobCardServiceLine {
+  id                    String  @id @default(cuid())
+  jobCardId             String
+  serviceProviderId     String
+  sparePartId           String
+  mechanicId            String?
+  qty                   Int
+  ratePaise             BigInt
+  amountPaise           BigInt
+  description           String?
+  billedInServiceBillId String?
+
+  jobCard         JobCard           @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  serviceProvider SparePartSupplier @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
+  sparePart       SparePart         @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  mechanic        Labour?           @relation(fields: [mechanicId], references: [id], onDelete: SetNull)
+  serviceBillLine ServiceBillLine?
+
+  @@index([jobCardId])
+  @@index([serviceProviderId])
+  @@index([billedInServiceBillId])
+}
+
+enum JobCardStatus {
+  DRAFT
+  FINALISED
+  CANCELLED
+}
+
+enum TruckLocationStatus {
+  AT_HO
+  IN_TRANSIT
+}
+
+/// A part taken off a truck during a Job Card — distinct from Supplier
+/// Replacement (that's keyed off the original purchase bill, not a truck
+/// visit). REUSABLE re-enters stock as a new batch at its original issue
+/// cost with a reversing entry; REPAIRABLE/SCRAP are logged only in v1.
+model JobCardRemovedPart {
+  id                String               @id @default(cuid())
+  jobCardId         String
+  sparePartId       String
+  relatedPartLineId String?
+  qty               Int
+  condition         RemovedPartCondition
+  unitCostPaise     BigInt?
+  newBatchId        String?              @unique
+  journalEntryId    String?              @unique
+  remarks           String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  jobCard         JobCard          @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  sparePart       SparePart        @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  relatedPartLine JobCardPartLine? @relation(fields: [relatedPartLineId], references: [id], onDelete: SetNull)
+  newBatch        SpareBatch?      @relation(fields: [newBatchId], references: [id], onDelete: SetNull)
+  journalEntry    JournalEntry?    @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy       User             @relation("CreatedJobCardRemovedParts", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([jobCardId])
+  @@index([sparePartId])
+}
+
+enum RemovedPartCondition {
+  REUSABLE
+  REPAIRABLE
+  SCRAP
+}
+
+/// Bills a provider's completed-but-unbilled JobCardServiceLine rows in one
+/// batch. Posts the accrual (Dr Repair Expense / Cr Provider Payable) —
+/// Job Card Finalise deliberately does NOT post for service lines, so this
+/// is the only place the expense is booked once.
+model ServiceBill {
+  id                  String            @id @default(cuid())
+  serviceBillNumber   String?           @unique
+  fyCode              String
+  branchId            String
+  serviceProviderId   String
+  status              ServiceBillStatus @default(DRAFT)
+  billDate            DateTime
+  providerInvoiceNo   String
+  providerInvoiceDate DateTime?
+  grossAmountPaise    BigInt            @default(0)
+  discountPaise       BigInt            @default(0)
+  netAmountPaise      BigInt            @default(0)
+  paidAmountPaise     BigInt            @default(0)
+  remarks             String?
+
+  journalEntryId String? @unique
+
+  createdById   String
+  postedById    String?
+  postedAt      DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  branch          Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  serviceProvider SparePartSupplier @relation("ServiceBillProvider", fields: [serviceProviderId], references: [id], onDelete: Restrict)
+  createdBy       User              @relation("CreatedServiceBills", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy        User?             @relation("PostedServiceBills", fields: [postedById], references: [id], onDelete: SetNull)
+  cancelledBy     User?             @relation("CancelledServiceBills", fields: [cancelledById], references: [id], onDelete: SetNull)
+  journalEntry    JournalEntry?     @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+
+  lines    ServiceBillLine[]
+  payments ServiceBillPayment[]
+
+  @@index([branchId, status])
+  @@index([serviceProviderId, status])
+  @@index([fyCode])
+}
+
+model ServiceBillLine {
+  id                   String @id @default(cuid())
+  serviceBillId        String
+  jobCardServiceLineId String @unique
+  amountPaise          BigInt
+
+  serviceBill        ServiceBill        @relation(fields: [serviceBillId], references: [id], onDelete: Cascade)
+  jobCardServiceLine JobCardServiceLine @relation(fields: [jobCardServiceLineId], references: [id], onDelete: Restrict)
+
+  @@index([serviceBillId])
+}
+
+enum ServiceBillStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+/// A defective part sent back to a supplier — keyed off the ORIGINAL
+/// purchase inward, not a truck/Job Card (that's JobCardRemovedPart, a
+/// different flow). Creating a line moves the part's original batch qty
+/// out of stock immediately (it has physically left); ReplacementInward
+/// brings the replacement back.
+model ReplacementList {
+  id                String                @id @default(cuid())
+  replacementNumber String?               @unique
+  fyCode            String
+  branchId          String
+  supplierId        String
+  originalInwardId  String
+  status            ReplacementListStatus @default(PENDING)
+  requestDate       DateTime
+  remarks           String?
+
+  createdById   String
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  branch         Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  supplier       SparePartSupplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  originalInward SpareInward       @relation(fields: [originalInwardId], references: [id], onDelete: Restrict)
+  createdBy      User              @relation("CreatedReplacementLists", fields: [createdById], references: [id], onDelete: Restrict)
+  cancelledBy    User?             @relation("CancelledReplacementLists", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  lines              ReplacementListLine[]
+  replacementInwards ReplacementInward[]
+
+  @@index([branchId, status])
+  @@index([supplierId, status])
+  @@index([fyCode])
+}
+
+model ReplacementListLine {
+  id                   String          @id @default(cuid())
+  replacementListId    String
+  sparePartId          String
+  originalInwardLineId String
+  originalBatchId      String
+  qtyRequested         Int
+  qtyReceived          Int             @default(0)
+  replacementType      ReplacementType
+  remarks              String?
+
+  replacementList    ReplacementList         @relation(fields: [replacementListId], references: [id], onDelete: Cascade)
+  sparePart          SparePart               @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  originalInwardLine PurchaseOrderInwardLine @relation(fields: [originalInwardLineId], references: [id], onDelete: Restrict)
+  originalBatch      SpareBatch              @relation("ReplacementOriginalBatch", fields: [originalBatchId], references: [id], onDelete: Restrict)
+  inwardLines        ReplacementInwardLine[]
+
+  @@index([replacementListId])
+  @@index([originalInwardLineId])
+  @@index([originalBatchId])
+}
+
+enum ReplacementListStatus {
+  PENDING
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum ReplacementType {
+  FREE
+  PAYABLE
+  CREDIT_NOTE
+}
+
+/// The replacement part(s) coming back from the supplier — partial receipt
+/// normal. A PAYABLE line posts only the DIFFERENTIAL amount (the original
+/// value is already on the books from the first purchase); FREE posts
+/// nothing.
+model ReplacementInward {
+  id                      String            @id @default(cuid())
+  replacementInwardNumber String?           @unique
+  fyCode                  String
+  branchId                String
+  replacementListId       String
+  supplierId              String
+  status                  SpareInwardStatus @default(POSTED)
+  inwardDate              DateTime
+  supplierChallanNo       String?
+  supplierChallanDate     DateTime?
+  differentialAmountPaise BigInt            @default(0)
+  remarks                 String?
+
+  journalEntryId String? @unique
+
+  createdById   String
+  postedById    String?
+  postedAt      DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  branch          Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  replacementList ReplacementList   @relation(fields: [replacementListId], references: [id], onDelete: Restrict)
+  supplier        SparePartSupplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy       User              @relation("CreatedReplacementInwards", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy        User?             @relation("PostedReplacementInwards", fields: [postedById], references: [id], onDelete: SetNull)
+  cancelledBy     User?             @relation("CancelledReplacementInwards", fields: [cancelledById], references: [id], onDelete: SetNull)
+  journalEntry    JournalEntry?     @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+
+  lines ReplacementInwardLine[]
+
+  @@index([branchId, status])
+  @@index([replacementListId])
+  @@index([fyCode])
+}
+
+model ReplacementInwardLine {
+  id                      String    @id @default(cuid())
+  replacementInwardId     String
+  replacementListLineId   String
+  sparePartId             String
+  qtyReceived             Int
+  differentialRatePaise   BigInt    @default(0)
+  differentialAmountPaise BigInt    @default(0)
+  batchNo                 String?
+  warrantyExpiry          DateTime?
+  guaranteeExpiry         DateTime?
+  newBatchId              String?   @unique
+
+  replacementInward   ReplacementInward   @relation(fields: [replacementInwardId], references: [id], onDelete: Cascade)
+  replacementListLine ReplacementListLine @relation(fields: [replacementListLineId], references: [id], onDelete: Restrict)
+  sparePart           SparePart           @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  newBatch            SpareBatch?         @relation("ReplacementNewBatch", fields: [newBatchId], references: [id], onDelete: SetNull)
+
+  @@index([replacementInwardId])
+  @@index([replacementListLineId])
+}
+
+/// One disbursement against a POSTED ServiceBill. Partial-pay aware — a bill
+/// accumulates payments until ServiceBill.paidAmountPaise == netAmountPaise.
+/// Independent of the Vendor Payment 3-stage engine for now (a dedicated,
+/// quick path); may later be superseded by a `type = JOBCARD` slip there.
+model ServiceBillPayment {
+  id              String      @id @default(cuid())
+  serviceBillId   String
+  paidPaise       BigInt
+  tdsPaise        BigInt      @default(0)
+  paymentMode     PaymentMode
+  paymentDate     DateTime
+  referenceNumber String?
+  fromAccountId   String
+  journalEntryId  String?     @unique
+  remarks         String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  serviceBill  ServiceBill   @relation(fields: [serviceBillId], references: [id], onDelete: Restrict)
+  fromAccount  CashAccount   @relation(fields: [fromAccountId], references: [id], onDelete: Restrict)
+  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy    User          @relation("CreatedServiceBillPayments", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([serviceBillId])
 }
 
 model Order {
@@ -2287,13 +2946,14 @@ model CashAccount {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  balances       CashAccountBalance[]
-  payments       CashPayment[]
-  driverAdvances DriverAdvance[]
-  adjustments    CashAccountAdjustment[]
-  receipts       Receipt[]
-  ledgerEntries  LedgerEntry[]
-  ledger         Ledger?
+  balances            CashAccountBalance[]
+  payments            CashPayment[]
+  driverAdvances      DriverAdvance[]
+  adjustments         CashAccountAdjustment[]
+  receipts            Receipt[]
+  ledgerEntries       LedgerEntry[]
+  ledger              Ledger?
+  serviceBillPayments ServiceBillPayment[]
 
   @@index([deletedAt, name])
 }
@@ -2399,21 +3059,23 @@ model Ledger {
   // Opening balances are NOT stored here — they come from a balanced
   // "Opening Balance" JOURNAL voucher so every figure stays auditable.
 
-  customerId    String? @unique
-  transportId   String? @unique
-  creditorId    String? @unique
-  labourId      String? @unique
-  pumpId        String? @unique
-  cashAccountId String? @unique
+  customerId          String? @unique
+  transportId         String? @unique
+  creditorId          String? @unique
+  labourId            String? @unique
+  pumpId              String? @unique
+  cashAccountId       String? @unique
+  sparePartSupplierId String? @unique
 
-  branch      Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  transport   Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
-  creditor    Creditor?     @relation(fields: [creditorId], references: [id], onDelete: Restrict)
-  labour      Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
-  pump        Pump?         @relation(fields: [pumpId], references: [id], onDelete: Restrict)
-  cashAccount CashAccount?  @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
-  lines       JournalLine[]
+  branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  transport         Transport?         @relation(fields: [transportId], references: [id], onDelete: Restrict)
+  creditor          Creditor?          @relation(fields: [creditorId], references: [id], onDelete: Restrict)
+  labour            Labour?            @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  pump              Pump?              @relation(fields: [pumpId], references: [id], onDelete: Restrict)
+  cashAccount       CashAccount?       @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  sparePartSupplier SparePartSupplier? @relation(fields: [sparePartSupplierId], references: [id], onDelete: Restrict)
+  lines             JournalLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2460,16 +3122,22 @@ model JournalEntry {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  branch      Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  createdBy   User               @relation("CreatedJournalEntries", fields: [createdById], references: [id], onDelete: Restrict)
-  postedBy    User?              @relation("PostedJournalEntries", fields: [postedById], references: [id], onDelete: SetNull)
-  reverses    JournalEntry?      @relation("JournalReversal", fields: [reversesId], references: [id], onDelete: SetNull)
-  reversedBy  JournalEntry?      @relation("JournalReversal")
-  lines       JournalLine[]
-  allocations LedgerAllocation[]
-  bill        Bill?
-  receipt     Receipt?
-  cashPayment CashPayment?
+  branch             Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy          User                @relation("CreatedJournalEntries", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy           User?               @relation("PostedJournalEntries", fields: [postedById], references: [id], onDelete: SetNull)
+  reverses           JournalEntry?       @relation("JournalReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy         JournalEntry?       @relation("JournalReversal")
+  lines              JournalLine[]
+  allocations        LedgerAllocation[]
+  bill               Bill?
+  receipt            Receipt?
+  cashPayment        CashPayment?
+  spareInward        SpareInward?
+  jobCard            JobCard?
+  jobCardRemovedPart JobCardRemovedPart?
+  serviceBill        ServiceBill?
+  replacementInward  ReplacementInward?
+  serviceBillPayment ServiceBillPayment?
 
   @@unique([voucherType, sourceType, sourceId])
   @@unique([voucherType, voucherNumber])
@@ -3588,6 +4256,10 @@ enum JournalSourceType {
   VENDOR_PAYMENT
   MANUAL
   CREDIT_NOTE
+  PURCHASE_INWARD
+  JOB_CARD
+  SERVICE_BILL
+  SUPPLIER_REPLACEMENT
 }
 
 enum AllocationRefType {

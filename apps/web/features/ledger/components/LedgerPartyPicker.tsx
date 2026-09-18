@@ -6,9 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
 
 import { customerApi } from "../../masters/Customer/customer.service";
-import { creditorApi } from "../../masters/creditor/creditor.service";
 import { cashAccountApi } from "../../masters/cash-account/cash-account.service";
 import { useDebouncedValue } from "../../masters/_shared/hooks/useDebouncedValue";
+import { ledgerApi } from "../api/ledger.service";
 
 export type LedgerPartyKind = "account-bank" | "account-cash" | "customer" | "creditor";
 
@@ -39,7 +39,17 @@ export function LedgerPartyPicker({ kind, value, onChange }: Props) {
         return data.map((row) => ({ label: row.name, value: row.id }));
       }
       if (kind === "creditor") {
-        const { data } = await creditorApi.list({ page: 0, size: 20, search: debouncedSearch || undefined });
+        // Every SUNDRY_CREDITOR party ledger — Creditor master rows AND
+        // SparePartSupplier rows (getOrCreatePartyLedger lazily creates one
+        // PARTY ledger per party the first time a voucher posts to them), so
+        // Workshop's PO/Inward/Job Card/Service Bill postings to a supplier
+        // show up here too, not just old-style Creditor payments.
+        const data = await ledgerApi.chartOfAccounts({
+          kind: "PARTY",
+          group: "SUNDRY_CREDITOR",
+          isActive: true,
+          search: debouncedSearch || undefined,
+        });
         return data.map((row) => ({ label: row.name, value: row.id }));
       }
       const { data } = await cashAccountApi.list({

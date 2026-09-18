@@ -165,6 +165,21 @@ type LedgerPermissionKey =
   | "ledger.manage"
   | "ledger.journal_create";
 
+type WorkshopPermissionKey =
+  | "workshop.po.view"
+  | "workshop.po.manage"
+  | "workshop.po.approve"
+  | "workshop.inward.view"
+  | "workshop.inward.manage"
+  | "workshop.jobcard.view"
+  | "workshop.jobcard.manage"
+  | "workshop.jobcard.finalise"
+  | "workshop.servicebill.view"
+  | "workshop.servicebill.manage"
+  | "workshop.servicebill.pay"
+  | "workshop.replacement.view"
+  | "workshop.replacement.manage";
+
 type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
 
 type NotificationPermissionKey =
@@ -199,6 +214,7 @@ export type PermissionKey =
   | BillingPermissionKey
   | ReceiptPermissionKey
   | LedgerPermissionKey
+  | WorkshopPermissionKey
   | GRNPermissionKey
   | RailBranchGRNPermissionKey
   | DeliveryChallanPermissionKey
@@ -436,6 +452,21 @@ export const PERMS = {
     VOUCHER_VIEW: "ledger.voucher_view",
     MANAGE: "ledger.manage",
     JOURNAL_CREATE: "ledger.journal_create",
+  },
+  WORKSHOP: {
+    PO_VIEW: "workshop.po.view",
+    PO_MANAGE: "workshop.po.manage",
+    PO_APPROVE: "workshop.po.approve",
+    INWARD_VIEW: "workshop.inward.view",
+    INWARD_MANAGE: "workshop.inward.manage",
+    JOBCARD_VIEW: "workshop.jobcard.view",
+    JOBCARD_MANAGE: "workshop.jobcard.manage",
+    JOBCARD_FINALISE: "workshop.jobcard.finalise",
+    SERVICEBILL_VIEW: "workshop.servicebill.view",
+    SERVICEBILL_MANAGE: "workshop.servicebill.manage",
+    SERVICEBILL_PAY: "workshop.servicebill.pay",
+    REPLACEMENT_VIEW: "workshop.replacement.view",
+    REPLACEMENT_MANAGE: "workshop.replacement.manage",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",

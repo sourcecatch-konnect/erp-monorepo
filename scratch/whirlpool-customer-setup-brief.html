@@ -1,0 +1,448 @@
+<title>Customer Master Briefing</title>
+<meta name="description" content="How Whirlpool's Pune, Kolkata and Guwahati sites should be set up in the new ERP, and how that feeds an Order.">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #eef1f0;
+    --bg-raised: #ffffff;
+    --bg-sunken: #e3e8e6;
+    --ink: #16231f;
+    --ink-soft: #3f524c;
+    --ink-faint: #6f8580;
+    --line: #c7d2ce;
+    --line-strong: #9fb0aa;
+    --accent: #1d4e5c;
+    --accent-ink: #ffffff;
+    --accent-soft: #dde8e8;
+    --old: #a25b34;
+    --old-soft: #f3e4d9;
+    --new: #1d4e5c;
+    --new-soft: #dde8e8;
+    --warn-bg: #fbeee0;
+    --warn-ink: #8a5a1f;
+    --warn-line: #e3c69a;
+    --shadow: 0 1px 2px rgba(22,35,31,0.06), 0 8px 24px -12px rgba(22,35,31,0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1917;
+      --bg-raised: #16221f;
+      --bg-sunken: #0a1211;
+      --ink: #e9f1ee;
+      --ink-soft: #adc2bc;
+      --ink-faint: #6f8580;
+      --line: #253531;
+      --line-strong: #354c46;
+      --accent: #5fb3ac;
+      --accent-ink: #06201d;
+      --accent-soft: #16302d;
+      --old: #d99464;
+      --old-soft: #2b1f16;
+      --new: #5fb3ac;
+      --new-soft: #16302d;
+      --warn-bg: #2b2213;
+      --warn-ink: #e3b26a;
+      --warn-line: #4a3c1e;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1917;
+    --bg-raised: #16221f;
+    --bg-sunken: #0a1211;
+    --ink: #e9f1ee;
+    --ink-soft: #adc2bc;
+    --ink-faint: #6f8580;
+    --line: #253531;
+    --line-strong: #354c46;
+    --accent: #5fb3ac;
+    --accent-ink: #06201d;
+    --accent-soft: #16302d;
+    --old: #d99464;
+    --old-soft: #2b1f16;
+    --new: #5fb3ac;
+    --new-soft: #16302d;
+    --warn-bg: #2b2213;
+    --warn-ink: #e3b26a;
+    --warn-line: #4a3c1e;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    line-height: 1.55;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+  h1, h2, h3 { font-family: 'Source Serif 4', Georgia, serif; text-wrap: balance; margin: 0; }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    padding-bottom: 22px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  .masthead .ref {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    text-align: right;
+  }
+  .masthead .ref div + div { margin-top: 3px; }
+  .masthead h1 { font-size: clamp(28px, 4.2vw, 40px); font-weight: 600; letter-spacing: -0.01em; }
+  .kicker {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .dek {
+    color: var(--ink-soft);
+    font-size: 16px;
+    max-width: 62ch;
+    margin-top: 14px;
+  }
+
+  section { margin-top: 54px; }
+  .section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .section-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-faint);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    padding: 2px 7px;
+    flex-shrink: 0;
+  }
+  .section-head h2 { font-size: 22px; font-weight: 600; }
+  .lede { color: var(--ink-soft); max-width: 68ch; font-size: 15px; margin-bottom: 22px; }
+
+  /* ---------- old vs new comparison ---------- */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 680px) { .compare { grid-template-columns: 1fr; } }
+  .compare-col {
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .compare-col .tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 10px 16px;
+  }
+  .compare-col.old .tag { background: var(--old-soft); color: var(--old); }
+  .compare-col.new .tag { background: var(--new-soft); color: var(--new); }
+  .compare-col .body { padding: 16px; }
+  .flat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--line);
+    color: var(--ink-soft);
+  }
+  .flat-row:last-child { border-bottom: none; }
+  .flat-row .city { color: var(--ink-faint); font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; }
+  .flat-row.ghost { opacity: 0.45; }
+  .compare-verdict { font-size: 12.5px; color: var(--ink-faint); padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+
+  /* ---------- tree diagram ---------- */
+  .tree-wrap {
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 28px 24px 22px;
+  }
+  .root-card {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-radius: 6px;
+    padding: 12px 18px;
+    box-shadow: var(--shadow);
+  }
+  .root-card .k { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.75; }
+  .root-card .v { font-family: 'Source Serif 4', serif; font-size: 18px; font-weight: 600; }
+  .branch-line { height: 22px; width: 2px; background: var(--line-strong); margin-left: 20px; }
+  .locations {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 720px) { .locations { grid-template-columns: 1fr; } }
+  .loc-card {
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--accent);
+    border-radius: 4px;
+    background: var(--bg-sunken);
+    padding: 12px 14px;
+    position: relative;
+  }
+  .loc-card::before {
+    content: "";
+    position: absolute;
+    top: -14px; left: -1px;
+    width: 1px; height: 14px;
+    background: var(--line-strong);
+  }
+  .loc-card .name { font-weight: 600; font-size: 14.5px; margin-bottom: 6px; }
+  .loc-card .field { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-top: 1px solid var(--line); color: var(--ink-soft); }
+  .loc-card .field:first-of-type { border-top: none; }
+  .loc-card .field span:first-child { color: var(--ink-faint); }
+  .loc-card .field span:last-child { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-align: right; }
+
+  /* ---------- prerequisite chain ---------- */
+  .chain { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .chain-step {
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 18px;
+    min-width: 140px;
+    flex: 1;
+  }
+  .chain-step .num { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--accent); font-weight: 600; }
+  .chain-step .label { font-weight: 600; font-size: 15px; margin-top: 4px; }
+  .chain-step .ex { font-size: 12px; color: var(--ink-faint); margin-top: 4px; }
+  .chain-arrow { display: flex; align-items: center; padding: 0 10px; color: var(--line-strong); font-size: 18px; }
+  @media (max-width: 680px) { .chain { flex-direction: column; } .chain-arrow { transform: rotate(90deg); padding: 4px 0; align-self: center; } }
+
+  /* ---------- route diagram ---------- */
+  .route-wrap {
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 30px 26px 26px;
+  }
+  .route-line {
+    position: relative;
+    height: 2px;
+    background: repeating-linear-gradient(to right, var(--line-strong) 0 8px, transparent 8px 14px);
+    margin: 0 6px 30px;
+  }
+  .route-stops { display: flex; justify-content: space-between; margin-top: -11px; }
+  .stop { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 30%; }
+  .stop .dot { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 3px solid var(--bg-raised); box-shadow: 0 0 0 1px var(--line-strong); }
+  .stop.mid .dot { background: var(--bg-sunken); border-color: var(--bg-raised); box-shadow: 0 0 0 1px var(--line-strong); width: 14px; height: 14px; }
+  .stop .stop-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
+  .stop .stop-name { font-weight: 600; font-size: 14px; text-align: center; }
+  .route-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 4px; }
+  @media (max-width: 680px) { .route-fields { grid-template-columns: 1fr; } }
+  .route-fields .col { font-size: 12.5px; color: var(--ink-soft); }
+  .route-fields .col .pick {
+    display: inline-block;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-bottom: 5px;
+  }
+
+  /* ---------- next steps ---------- */
+  .next {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-line);
+    border-radius: 6px;
+    padding: 20px 22px;
+  }
+  .next .head { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--warn-ink); font-size: 14.5px; margin-bottom: 10px; }
+  .next ol { margin: 0; padding-left: 20px; color: var(--ink); font-size: 14px; }
+  .next li { padding: 4px 0; }
+  .next li b { color: var(--warn-ink); }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--ink-faint);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+</style>
+
+<div class="page">
+
+  <div class="masthead">
+    <div>
+      <div class="kicker">Master Data Briefing</div>
+      <h1>Setting up Whirlpool<br>in the new ERP</h1>
+    </div>
+    <div class="ref">
+      <div>REF&nbsp; MASTER&#8209;SETUP&#8209;01</div>
+      <div id="today-date"></div>
+      <div>For owner review</div>
+    </div>
+  </div>
+  <p class="dek">One customer, many sites. This page walks through how Whirlpool's Pune, Kolkata and Guwahati locations should be entered — and why that's a better structure than the old system's separate record per city.</p>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>The old way vs. the new way</h2>
+    </div>
+    <p class="lede">In the previous ERP, every Whirlpool site was its own, unrelated customer record — 20 rows, 20 credit limits, no shared history. The new ERP separates <em>who we bill</em> from <em>where we pick up</em>, so all 20 sites roll up under one company.</p>
+    <div class="compare">
+      <div class="compare-col old">
+        <div class="tag">Old ERP — flat list</div>
+        <div class="body">
+          <div class="flat-row"><span>Whirlpool of India Ltd Bhiwandi</span><span class="city">Bhiwandi</span></div>
+          <div class="flat-row"><span>Whirlpool Of India Limited</span><span class="city">Salem</span></div>
+          <div class="flat-row"><span>Whirlpool of India Ltd Pune Indospace</span><span class="city">Ranjangaon</span></div>
+          <div class="flat-row"><span>Whirlpool of India Ltd&#8209;Kolkata</span><span class="city">Kolkata</span></div>
+          <div class="flat-row ghost"><span>… 16 more, each separate</span><span class="city">—</span></div>
+        </div>
+        <div class="compare-verdict">Every site has its own credit limit and balance — the owner can't see Whirlpool's total exposure in one place.</div>
+      </div>
+      <div class="compare-col new">
+        <div class="tag">New ERP — one company, many sites</div>
+        <div class="body">
+          <div class="flat-row"><span><b>Whirlpool of India Limited</b></span><span class="city">Customer</span></div>
+          <div class="flat-row"><span>&nbsp;&nbsp;↳ Pune</span><span class="city">Location</span></div>
+          <div class="flat-row"><span>&nbsp;&nbsp;↳ Kolkata</span><span class="city">Location</span></div>
+          <div class="flat-row"><span>&nbsp;&nbsp;↳ Guwahati</span><span class="city">Location</span></div>
+          <div class="flat-row ghost"><span>&nbsp;&nbsp;↳ … 17 more sites, same company</span><span class="city">—</span></div>
+        </div>
+        <div class="compare-verdict">One credit limit, one TDS rate, one running balance for all of Whirlpool — each site still keeps its own address and contact.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>What has to exist first</h2>
+    </div>
+    <p class="lede">A Customer Location always sits under a City. So the chain gets built in this order:</p>
+    <div class="chain">
+      <div class="chain-step"><div class="num">STEP 1</div><div class="label">State</div><div class="ex">e.g. Maharashtra, West Bengal</div></div>
+      <div class="chain-arrow">→</div>
+      <div class="chain-step"><div class="num">STEP 2</div><div class="label">City</div><div class="ex">Ranjangaon, Kolkata</div></div>
+      <div class="chain-arrow">→</div>
+      <div class="chain-step"><div class="num">STEP 3</div><div class="label">Customer</div><div class="ex">Whirlpool of India Ltd</div></div>
+      <div class="chain-arrow">→</div>
+      <div class="chain-step"><div class="num">STEP 4</div><div class="label">Customer Location</div><div class="ex">Pune, Kolkata, Guwahati</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <h2>Whirlpool, set up correctly</h2>
+    </div>
+    <p class="lede">One customer record at the top. Each site underneath carries its own address, city and contact — exactly what's needed to pick up or deliver there.</p>
+    <div class="tree-wrap">
+      <div class="root-card">
+        <span class="k">Customer</span>
+        <span class="v">Whirlpool of India Limited</span>
+      </div>
+      <div class="branch-line"></div>
+      <div class="locations">
+        <div class="loc-card">
+          <div class="name">Pune</div>
+          <div class="field"><span>City</span><span>Ranjangaon, MH</span></div>
+          <div class="field"><span>Contact</span><span>Santosh Bhandari</span></div>
+          <div class="field"><span>Phone</span><span>9850934463</span></div>
+        </div>
+        <div class="loc-card">
+          <div class="name">Kolkata</div>
+          <div class="field"><span>City</span><span>Kolkata, WB</span></div>
+          <div class="field"><span>Contact</span><span>Sukumar Halder</span></div>
+          <div class="field"><span>Phone</span><span>9681422035</span></div>
+        </div>
+        <div class="loc-card">
+          <div class="name">Guwahati</div>
+          <div class="field"><span>City</span><span>Guwahati, AS</span></div>
+          <div class="field"><span>Contact</span><span>Dipeek Mehta</span></div>
+          <div class="field"><span>Phone</span><span>3435304715</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <h2>How it's used when booking an order</h2>
+    </div>
+    <p class="lede">Example: Whirlpool wants a truck from their Pune plant to their Kolkata warehouse. Both ends are the same customer — just two different locations.</p>
+    <div class="route-wrap">
+      <div class="route-line"></div>
+      <div class="route-stops">
+        <div class="stop">
+          <div class="dot"></div>
+          <div class="stop-label">Pickup</div>
+          <div class="stop-name">Whirlpool — Pune</div>
+        </div>
+        <div class="stop mid">
+          <div class="dot"></div>
+          <div class="stop-label">In transit</div>
+          <div class="stop-name">LR issued</div>
+        </div>
+        <div class="stop">
+          <div class="dot"></div>
+          <div class="stop-label">Drop</div>
+          <div class="stop-name">Whirlpool — Kolkata</div>
+        </div>
+      </div>
+      <div class="route-fields">
+        <div class="col"><span class="pick">Order</span><br>Customer = Whirlpool<br>Pickup Location = Pune</div>
+        <div class="col"><span class="pick">Branch</span><br>From = your Pune branch<br>To = your Kolkata branch</div>
+        <div class="col"><span class="pick">Consignment</span><br>Loading = Pune<br>Unloading = Kolkata</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="next">
+      <div class="head">Before entering real data</div>
+      <ol>
+        <li>Confirm this structure with the owner in the presentation — <b>1 Whirlpool customer, 20 locations underneath.</b></li>
+        <li>After sign-off: create/verify States and Cities for all 20 sites.</li>
+        <li>Create the single Whirlpool customer record (PAN, GST, credit limit, TDS rate).</li>
+        <li>Add all 20 sites as Customer Locations under it, matching the old ERP's addresses.</li>
+        <li>Test one Order end-to-end: Pune → Kolkata, before rolling out the rest.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    <span>SK Translines — ERP transition notes</span>
+    <span>Prepared for internal presentation, not final data</span>
+  </footer>
+
+</div>
+
+<script>
+  document.getElementById('today-date').textContent = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+</script>

@@ -71,6 +71,11 @@ import tablePrefRoute from "./modules/user-pref/table-pref.route.js";
 import oneLapTrackerRoute from "./modules/one-lap-tracker/one-lap-tracker.route.js";
 import billingRoute from "./modules/billing/billing.route.js";
 import receiptRoute from "./modules/receipt/receipt.route.js";
+import purchaseOrderRoute from "./modules/purchase-order/purchase-order.route.js";
+import spareInwardRoute from "./modules/spare-inward/spare-inward.route.js";
+import jobCardRoute from "./modules/job-card/job-card.route.js";
+import serviceBillRoute from "./modules/service-bill/service-bill.route.js";
+import supplierReplacementRoute from "./modules/supplier-replacement/supplier-replacement.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -151,6 +156,11 @@ app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use("/one-lap-trackers", oneLapTrackerRoute);
 app.use("/billing", billingRoute);
 app.use("/receipt", receiptRoute);
+app.use("/purchase-order", purchaseOrderRoute);
+app.use("/spare-inward", spareInwardRoute);
+app.use("/job-card", jobCardRoute);
+app.use("/service-bill", serviceBillRoute);
+app.use("/supplier-replacement", supplierReplacementRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>

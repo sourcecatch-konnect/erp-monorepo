@@ -1,0 +1,1 @@
+ALTER TABLE "ServiceBillPayment" ADD COLUMN "tdsPaise" BIGINT NOT NULL DEFAULT 0;
