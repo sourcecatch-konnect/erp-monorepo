@@ -1001,6 +1001,18 @@ router.post(
         },
         select: journeyLegSelect,
       });
+      if (trip.sequenceNo === 1) {
+        // Leg 1's actual dispatch IS the journey's own start moment — keep
+        // startedAt (Total Days, journey PDF/detail) from drifting away from it.
+        await tx.vehicleJourney.update({
+          where: { id },
+          data: {
+            startedAt: parsed.data.startDateTime,
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
+      }
       await writeTripStatus(tx, tripId, me, "InTransit", "Leg dispatched");
       return row;
     }, TX_BUDGET);

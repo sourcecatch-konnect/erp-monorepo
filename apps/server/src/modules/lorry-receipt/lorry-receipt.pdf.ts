@@ -401,7 +401,7 @@ ${withLetterhead
       <span><strong>E-Way Bill No:</strong> ${display(lr.ewayBill?.ewayBillNo)}</span>
       <span><strong>Valid Till:</strong> ${lr.ewayBill ? esc(fmtDate(lr.ewayBill.expiresAt)) : "—"}</span>
     </div>
-    <div class="line-row split-three">
+    <div class="line-row-compact split-three">
       <span><strong>Dispatched:</strong> ${dispatchedAt ? esc(fmtDateTime(dispatchedAt)) : "—"}</span>
       <span><strong>Delivered:</strong> ${deliveredAt ? esc(fmtDateTime(deliveredAt)) : "—"}</span>
       <span><strong>Transit:</strong> ${transitDayCount !== null ? `${transitDayCount} day${transitDayCount > 1 ? "s" : ""}` : "—"}</span>
@@ -653,6 +653,7 @@ export const buildLrPdfHtml = (
   .small { min-height: 8mm; margin: 2px 0; font-size: 10px; }
   .ruled { border-bottom: 1px solid #111; }
   .line-row { min-height: 6mm; padding: 3px 5px; border-bottom: 1px solid #111; font-size: 11px; }
+  .line-row-compact { min-height: 4mm; padding: 1.5px 5px; border-bottom: 1px solid #111; font-size: 9px; }
   .route-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid #111; }
   .route-grid > div { min-height: 6mm; padding: 3px 5px; min-width: 0; overflow-wrap: anywhere; }
   .route-grid > div + div { border-left: 1px solid #111; }
