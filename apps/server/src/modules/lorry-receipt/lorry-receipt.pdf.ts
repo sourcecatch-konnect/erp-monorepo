@@ -12,6 +12,7 @@ const watermarkSrc = imageToBase64Src(
 const tripSelect = {
   tripName: true,
   tripNumber: true,
+  startDateTime: true,
   vehicle: { select: { vehicleNumber: true } },
   driver: { select: { name: true, mobile: true, licenseNo: true } },
 } satisfies Prisma.VehicleTripSelect;
@@ -158,6 +159,23 @@ const fmtWeight = (
   return unit ? `${value} ${esc(unit)}` : value;
 };
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Whole transit days from dispatch to delivery, same convention as the
+ * vehicle-journey log slip's "Total Days" (ceil, minimum 1).
+ */
+const transitDays = (
+  start: Date | string | null | undefined,
+  end: Date | string | null | undefined,
+): number | null => {
+  if (!start || !end) return null;
+  const days = Math.ceil(
+    (new Date(end).getTime() - new Date(start).getTime()) / MS_PER_DAY,
+  );
+  return Math.max(1, days);
+};
+
 const personName = (
   person: { firstName?: string | null; lastName?: string | null } | null | undefined,
 ) => display([person?.firstName, person?.lastName].filter(Boolean).join(" "));
@@ -271,6 +289,11 @@ const buildCopy = (
     ? group.hub.name
     : null;
   const loadType = group.order?.orderType === "Item" ? "PTL" : "FTL";
+  // Door-to-door transit: primary trip's actual dispatch to the LR's own
+  // delivery moment — the same span whether the goods went via hub or not.
+  const dispatchedAt = isMarket ? null : (group.primaryTrip?.startDateTime ?? null);
+  const deliveredAt = lr.delivery?.deliveredAt ?? null;
+  const transitDayCount = transitDays(dispatchedAt, deliveredAt);
 
   const goodsDescription = lr.goods.length
     ? lr.goods
@@ -377,6 +400,11 @@ ${withLetterhead
     <div class="line-row split-two">
       <span><strong>E-Way Bill No:</strong> ${display(lr.ewayBill?.ewayBillNo)}</span>
       <span><strong>Valid Till:</strong> ${lr.ewayBill ? esc(fmtDate(lr.ewayBill.expiresAt)) : "—"}</span>
+    </div>
+    <div class="line-row-compact split-three">
+      <span><strong>Dispatched:</strong> ${dispatchedAt ? esc(fmtDateTime(dispatchedAt)) : "—"}</span>
+      <span><strong>Delivered:</strong> ${deliveredAt ? esc(fmtDateTime(deliveredAt)) : "—"}</span>
+      <span><strong>Transit:</strong> ${transitDayCount !== null ? `${transitDayCount} day${transitDayCount > 1 ? "s" : ""}` : "—"}</span>
     </div>
 
     <table class="details-table">
@@ -625,6 +653,7 @@ export const buildLrPdfHtml = (
   .small { min-height: 8mm; margin: 2px 0; font-size: 10px; }
   .ruled { border-bottom: 1px solid #111; }
   .line-row { min-height: 6mm; padding: 3px 5px; border-bottom: 1px solid #111; font-size: 11px; }
+  .line-row-compact { min-height: 4mm; padding: 1.5px 5px; border-bottom: 1px solid #111; font-size: 9px; }
   .route-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid #111; }
   .route-grid > div { min-height: 6mm; padding: 3px 5px; min-width: 0; overflow-wrap: anywhere; }
   .route-grid > div + div { border-left: 1px solid #111; }

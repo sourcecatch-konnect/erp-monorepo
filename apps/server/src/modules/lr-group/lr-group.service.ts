@@ -84,7 +84,13 @@ export const dispatchTripOnAttach = async (
 ): Promise<void> => {
   const trip = await tx.vehicleTrip.findUnique({
     where: { id: vehicleTripId },
-    select: { id: true, status: true, vehicleId: true },
+    select: {
+      id: true,
+      status: true,
+      vehicleId: true,
+      journeyId: true,
+      sequenceNo: true,
+    },
   });
   if (!trip) return;
 
@@ -108,15 +114,29 @@ export const dispatchTripOnAttach = async (
 
   if (trip.status !== "Planned") return;
 
+  const dispatchedAt = new Date();
   await tx.vehicleTrip.update({
     where: { id: trip.id },
     data: {
       status: "InTransit",
-      startDateTime: new Date(),
+      startDateTime: dispatchedAt,
       updatedById: userId,
       version: { increment: 1 },
     },
   });
+  if (trip.journeyId && trip.sequenceNo === 1) {
+    // Leg 1's actual dispatch IS the journey's own start moment — this is
+    // the most common dispatch path (an LR attach), so keep startedAt
+    // (Total Days, journey PDF/detail) from drifting away from it.
+    await tx.vehicleJourney.update({
+      where: { id: trip.journeyId },
+      data: {
+        startedAt: dispatchedAt,
+        updatedById: userId,
+        version: { increment: 1 },
+      },
+    });
+  }
   await tx.vehicle.update({
     where: { id: trip.vehicleId },
     data: { status: "ON_TRIP" },

@@ -55,6 +55,7 @@ export const journeyLegSelect = {
   openingKm: true,
   closingKm: true,
   startDateTime: true,
+  plannedStartDateTime: true,
   endDateTime: true,
   arrivalDateTime: true,
   unloadingCompletedAt: true,
