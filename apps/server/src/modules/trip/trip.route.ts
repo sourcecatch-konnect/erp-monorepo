@@ -60,11 +60,14 @@ router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
-/** Journey legs are lifecycle-managed by their journey, not the trips module. */
+// A journey leg's fields (freight, route, KM, etc.) ARE editable via
+// PATCH /:id while Planned — see that handler. Only delete/cancel are
+// blocked here, since removing a leg directly would corrupt the journey's
+// leg sequence; use the vehicle journey's own leg controls instead.
 const assertNotJourneyLeg = (trip: { journeyId: string | null }) => {
   if (trip.journeyId) {
     throw new BadRequestError(
-      "This trip is a journey leg — manage it from its vehicle journey",
+      "This trip is a journey leg and can't be deleted or cancelled directly — manage it from its vehicle journey",
       "TRIP_IS_JOURNEY_LEG",
     );
   }
@@ -571,6 +574,26 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
     if (vehicle.status !== "AVAILABLE") {
       throw new BadRequestError("Vehicle is not available (already on trip)");
     }
+    // vehicle.status only flips to ON_TRIP at actual dispatch — a Planned
+    // trip leaves it "AVAILABLE" by design. The activeJourney branch above
+    // already blocks re-picking this vehicle via the previous-leg check, but
+    // that only fires when the vehicle's open trip sits on a journey whose
+    // status is exactly "ACTIVE". Check directly for any open trip on this
+    // vehicle so a journey stuck in another open state can't let it be
+    // double-booked onto a second trip here.
+    const openTripOnVehicle = await db.vehicleTrip.findFirst({
+      where: {
+        vehicleId: data.vehicleId,
+        deletedAt: null,
+        status: { in: ["Planned", "InTransit"] },
+      },
+      select: { tripNumber: true, status: true },
+    });
+    if (openTripOnVehicle) {
+      throw new BadRequestError(
+        `Vehicle already has an open trip (${openTripOnVehicle.tripNumber}, ${openTripOnVehicle.status}) — close or dispatch it first`,
+      );
+    }
     if (vehicle.insuranceDueDate && vehicle.insuranceDueDate < now) {
       throw new BadRequestError(
         `Vehicle insurance expired on ${vehicle.insuranceDueDate.toISOString().slice(0, 10)}`,
@@ -739,8 +762,10 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
     );
   }
 
-  assertNotJourneyLeg(existing);
-
+  // Journey legs ARE editable here while Planned — everything below already
+  // re-validates chain continuity and keeps the journey in sync (see
+  // isFirstLeg / existing.journeyId branches). Only delete/cancel are
+  // blocked for legs, since those affect the journey's leg sequence.
   if (existing.status !== "Planned") {
     throw new BadRequestError("Only a Planned trip can be edited");
   }
@@ -1032,6 +1057,7 @@ router.post(
         id: true,
         status: true,
         startDateTime: true,
+        onwardFreight: true,
         journeyId: true,
         sequenceNo: true,
         version: true,
@@ -1071,6 +1097,9 @@ router.post(
         where: { id },
         data: {
           startDateTime: data.startDateTime,
+          ...(data.onwardFreight !== undefined
+            ? { onwardFreight: data.onwardFreight }
+            : {}),
           updatedById: me,
           version: { increment: 1 },
         },
@@ -1096,9 +1125,15 @@ router.post(
           action: "trip.correct_in_transit",
           entity: "VehicleTrip",
           entityId: id,
-          before: { startDateTime: existing.startDateTime?.toISOString() ?? null },
+          before: {
+            startDateTime: existing.startDateTime?.toISOString() ?? null,
+            onwardFreight: existing.onwardFreight?.toString() ?? null,
+          },
           after: {
             startDateTime: data.startDateTime.toISOString(),
+            ...(data.onwardFreight !== undefined
+              ? { onwardFreight: data.onwardFreight.toString() }
+              : {}),
             correctionReason: data.correctionReason,
           },
         },
@@ -1123,6 +1158,26 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
 
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
+  }
+
+  // An LR trip that was born In Transit (the "already dispatched" path, or a
+  // raw dispatch call) can otherwise reach Closed having never gone through
+  // the LR form — no consignment record, no proof of what was shipped. Gate
+  // it here rather than at dispatch, since "dispatch now, attach the LR
+  // while In Transit" is a legitimate, already-supported order of steps.
+  if (existing.tripType === "lr" && !existing.isTripEmpty) {
+    const lrGroupCount = await db.lRGroup.count({
+      where: {
+        deletedAt: null,
+        OR: [{ primaryTripId: id }, { secondaryTripId: id }],
+      },
+    });
+    if (lrGroupCount === 0) {
+      throw new BadRequestError(
+        "This LR trip has no LR attached — create/attach an LR before closing it",
+        "TRIP_CLOSE_NO_LR",
+      );
+    }
   }
 
   // Delivery gate ("Way 1", docs/LR_DELIVERY_ACK_PLAN.md §4): a trip that is

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rupeesToPaise } from "../_shared/money.js";
+import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -193,9 +193,13 @@ export const correctClosedTripSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 
-/** Limited, audited correction of the start time on an InTransit trip. */
+/** Limited, audited correction of the start time and freight on an InTransit trip. */
 export const correctInTransitTripSchema = z.object({
   startDateTime: requiredDateField("trip start date and time"),
+  // Entered in rupees, stored as paise. Optional — most corrections are just
+  // the start time; freight is included so an entry mistake doesn't have to
+  // wait until the trip closes to be fixed.
+  onwardFreight: optionalRupeesToPaise("Onward freight", { allowZero: true }),
   correctionReason: z
     .string()
     .trim()

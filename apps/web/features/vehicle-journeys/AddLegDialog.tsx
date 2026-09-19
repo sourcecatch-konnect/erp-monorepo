@@ -81,8 +81,12 @@ export default function AddLegDialog({ open, onOpenChange, journey }: Props) {
   });
 
   const form = useForm<AddJourneyLegFormInput, unknown, AddJourneyLegBody>({
-    resolver: zodResolver(addJourneyLegSchema),
-    defaultValues: { legType: "LR", isTripEmpty: false },
+    resolver: zodResolver(addJourneyLegSchema, undefined, { raw: true }),
+    defaultValues: {
+      legType: "LR",
+      isTripEmpty: false,
+      alreadyDispatched: false,
+    },
   });
 
   React.useEffect(() => {
@@ -90,6 +94,7 @@ export default function AddLegDialog({ open, onOpenChange, journey }: Props) {
       form.reset({
         legType: "LR",
         isTripEmpty: false,
+        alreadyDispatched: false,
         openingKm: suggestedOpeningKm,
       });
     }
@@ -99,6 +104,7 @@ export default function AddLegDialog({ open, onOpenChange, journey }: Props) {
   const legType = form.watch("legType");
   const routeId = form.watch("routeId");
   const openingKm = form.watch("openingKm");
+  const alreadyDispatched = form.watch("alreadyDispatched");
 
   const selectedRoute = (routes.data ?? []).find((r) => r.value === routeId);
   const breaksCity =
@@ -217,15 +223,37 @@ export default function AddLegDialog({ open, onOpenChange, journey }: Props) {
                 <Controller
                   name="startDateTime"
                   control={form.control}
-                  render={({ field }) => (
-                    <DateTimePicker
-                      label="Planned start"
-                      selected={toValidDate(field.value)}
-                      onSelect={field.onChange}
-                      placeholder="Select planned start date and time"
-                    />
+                  render={({ field, fieldState }) => (
+                    <div className="grid gap-1.5">
+                      <DateTimePicker
+                        label={
+                          alreadyDispatched
+                            ? "Actual dispatch date/time"
+                            : "Planned start"
+                        }
+                        selected={toValidDate(field.value)}
+                        onSelect={field.onChange}
+                        placeholder={
+                          alreadyDispatched
+                            ? "Select the actual dispatch date and time"
+                            : "Select planned start date and time"
+                        }
+                      />
+                      {fieldState.error?.message ? (
+                        <p className="text-xs text-red-600">
+                          {fieldState.error.message}
+                        </p>
+                      ) : null}
+                    </div>
                   )}
                 />
+                <div className="md:col-span-2">
+                  <CheckboxField<AddJourneyLegFormInput>
+                    control={form.control}
+                    name="alreadyDispatched"
+                    label="This leg's truck has already dispatched"
+                  />
+                </div>
                 <div className="md:col-span-2">
                   <CheckboxField<AddJourneyLegFormInput>
                     control={form.control}

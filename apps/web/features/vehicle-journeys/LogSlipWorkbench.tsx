@@ -137,9 +137,9 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
 
   const frozenSlipId =
     journey?.logSlip &&
-    ["GENERATED", "POSTED_TO_ACCOUNTS", "TALLY_SYNCED"].includes(
-      journey.logSlip.status,
-    )
+      ["GENERATED", "POSTED_TO_ACCOUNTS", "TALLY_SYNCED"].includes(
+        journey.logSlip.status,
+      )
       ? journey.logSlip.id
       : null;
 
@@ -156,7 +156,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
   });
 
   const form = useForm<GenerateLogSlipFormInput, unknown, GenerateLogSlipBody>({
-    resolver: zodResolver(generateLogSlipSchema),
+    resolver: zodResolver(generateLogSlipSchema, undefined, { raw: true }),
     defaultValues: { previousDieselQty: 0 },
   });
 
@@ -424,13 +424,12 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
             <div key={item.label} className="rounded-lg border bg-card p-3">
               <p className="text-xs text-muted-foreground">{item.label}</p>
               <p
-                className={`mt-1 text-base font-semibold ${
-                  item.accent === undefined
+                className={`mt-1 text-base font-semibold ${item.accent === undefined
                     ? ""
                     : item.accent
                       ? "text-green-700"
                       : "text-destructive"
-                }`}
+                  }`}
               >
                 {item.value}
               </p>

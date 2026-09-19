@@ -110,7 +110,6 @@ export default function VehicleJourneyListPage() {
         onColumnOrderChange={setColumnOrder}
         counts={counts.data ?? {}}
         isLoading={journeys.isLoading}
-        onRowClick={(j) => router.push(`/vehicle-journeys/${j.id}`)}
       />
 
       <StartJourneyDialog open={startOpen} onOpenChange={setStartOpen} />

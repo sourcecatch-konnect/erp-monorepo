@@ -88,19 +88,34 @@ export function SuggestInput({
     const rect = anchor.getBoundingClientRect();
     const gap = 4;
 
-    const spaceBelow = window.innerHeight - rect.bottom - gap;
-    const spaceAbove = rect.top - gap;
+    // A dialog's own content box is `transform`-ed (see dialog.tsx's
+    // -translate-x/y centering) — any CSS transform on an ancestor becomes
+    // the containing block for `position: fixed` descendants. So a dropdown
+    // portaled inside a dialog is positioned relative to the DIALOG's box,
+    // not the viewport, even though getBoundingClientRect() always returns
+    // viewport-relative numbers. Compute everything relative to whichever
+    // box is the actual containing block — the dialog's rect when present,
+    // the viewport itself otherwise — so the math lines up either way.
+    const container = anchor.closest('[role="dialog"]') as HTMLElement | null;
+    const containerRect = container
+      ? container.getBoundingClientRect()
+      : { left: 0, top: 0, height: window.innerHeight };
+
+    const relLeft = rect.left - containerRect.left;
+    const relTop = rect.top - containerRect.top;
+    const relBottom = rect.bottom - containerRect.top;
+
+    const spaceBelow = containerRect.height - relBottom - gap;
+    const spaceAbove = relTop - gap;
 
     const openAbove = spaceBelow < 160 && spaceAbove > spaceBelow;
     const availableSpace = openAbove ? spaceAbove : spaceBelow;
 
     setDropdownPosition({
-      left: rect.left,
+      left: relLeft,
       width: rect.width,
-      top: openAbove ? undefined : rect.bottom + gap,
-      bottom: openAbove
-        ? window.innerHeight - rect.top + gap
-        : undefined,
+      top: openAbove ? undefined : relBottom + gap,
+      bottom: openAbove ? containerRect.height - relTop + gap : undefined,
       maxHeight: Math.max(96, Math.min(240, availableSpace)),
     });
   }, []);
@@ -151,6 +166,11 @@ export function SuggestInput({
     danger: "border-red-200 bg-red-50 text-red-700",
     muted: "border-border bg-muted text-muted-foreground",
   };
+  const portalContainer =
+    typeof document !== "undefined"
+      ? ((anchorRef.current?.closest('[role="dialog"]') as HTMLElement | null) ??
+        document.body)
+      : null;
   return (
     <div ref={anchorRef} className={cn("relative", className)}>
       <Input
@@ -176,9 +196,7 @@ export function SuggestInput({
         }}
         onKeyDown={handleKeyDown}
       />
-      {showList &&
-        dropdownPosition &&
-        typeof document !== "undefined"
+      {showList && dropdownPosition && portalContainer
         ? createPortal(
           <ul
             role="listbox"
@@ -190,22 +208,22 @@ export function SuggestInput({
               bottom: dropdownPosition.bottom,
               maxHeight: dropdownPosition.maxHeight,
             }}
-            className="z-[10000] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+            className="pointer-events-auto z-[10000] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
           >
             {filtered.map((suggestion, index) => (
               <li
-                key={suggestion.value}
+                key={`${suggestion.value}-${index}`}
                 role="option"
                 aria-selected={index === active}
-                onMouseDown={(event) => {
+                onPointerDown={(event) => {
                   event.preventDefault();
+                  event.stopPropagation();
                   select(suggestion.value);
                 }}
-                onMouseEnter={() => setActive(index)}
+                onPointerEnter={() => setActive(index)}
                 className={cn(
                   "flex cursor-pointer items-center justify-between gap-2 rounded-[5px] px-2 py-1.5 text-sm transition-colors",
-                  index === active &&
-                  "bg-accent text-accent-foreground",
+                  index === active && "bg-accent text-accent-foreground",
                 )}
               >
                 <span className="min-w-0">
@@ -224,9 +242,7 @@ export function SuggestInput({
                   <span
                     className={cn(
                       "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-                      badgeToneClass[
-                      suggestion.badgeTone ?? "muted"
-                      ],
+                      badgeToneClass[suggestion.badgeTone ?? "muted"],
                     )}
                   >
                     {suggestion.badge}
@@ -235,7 +251,7 @@ export function SuggestInput({
               </li>
             ))}
           </ul>,
-          document.body,
+          portalContainer,
         )
         : null}
     </div>

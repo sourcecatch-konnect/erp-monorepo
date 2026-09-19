@@ -24,11 +24,18 @@ export type CloseTripBody = z.output<typeof closeTripSchema>;
 export type CorrectClosedTripFormInput = z.input<
   typeof correctClosedTripSchema
 >;
-export type CorrectClosedTripBody = z.output<typeof correctClosedTripSchema>;
+// z.input, not z.output: the dialog's `raw: true` resolver submits the
+// untransformed (rupees) shape — see the CreateTripBody note above. Using
+// z.output here previously masked a real bug: the client sent an
+// already-paise-converted freight amount and the server converted it again.
+export type CorrectClosedTripBody = z.input<typeof correctClosedTripSchema>;
 export type CorrectInTransitTripFormInput = z.input<
   typeof correctInTransitTripSchema
 >;
-export type CorrectInTransitTripBody = z.output<
+// z.input, not z.output — see the CorrectClosedTripBody note above; this
+// dialog now also uses a `raw: true` resolver (added alongside the optional
+// freight-correction field).
+export type CorrectInTransitTripBody = z.input<
   typeof correctInTransitTripSchema
 >;
 export type RescheduleTripFormInput = z.input<typeof rescheduleTripSchema>;

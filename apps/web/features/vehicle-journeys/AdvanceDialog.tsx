@@ -74,7 +74,9 @@ export default function AdvanceDialog({ open, onOpenChange, journey }: Props) {
     unknown,
     CreateDriverAdvanceBody
   >({
-    resolver: zodResolver(createDriverAdvanceSchema),
+    resolver: zodResolver(createDriverAdvanceSchema, undefined, {
+      raw: true,
+    }),
     defaultValues: { journeyId: journey.id, paymentMode: "CASH" },
   });
 
