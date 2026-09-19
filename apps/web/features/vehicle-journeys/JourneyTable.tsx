@@ -256,13 +256,7 @@ const SKELETON_WIDTHS: Record<string, string> = {
 };
 
 /** "Jalgaon → Pune → Howrah" built from the journey's ordered legs. */
-const routeChain = (j: VehicleJourney) => {
-  const cities: string[] = [j.startCity?.name ?? "?"];
-  for (const leg of j.trips ?? []) {
-    if (leg.toCity?.name) cities.push(leg.toCity.name);
-  }
-  return cities.join(" → ");
-};
+
 
 const lastClosingKm = (j: VehicleJourney) => {
   const closed = (j.trips ?? []).filter((l) => l.closingKm !== null);
