@@ -480,7 +480,15 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                         {leg.closingKm !== null ? ` → ${leg.closingKm}` : ""}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
-                        {formatDateTime(leg.startDateTime)}
+                        {leg.startDateTime ? (
+                          formatDateTime(leg.startDateTime)
+                        ) : leg.plannedStartDateTime ? (
+                          <span className="text-muted-foreground">
+                            Planned {formatDateTime(leg.plannedStartDateTime)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
                         {formatDateTime(leg.endDateTime)}

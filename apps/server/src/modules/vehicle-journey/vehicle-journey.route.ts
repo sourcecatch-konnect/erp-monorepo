@@ -741,7 +741,12 @@ router.post("/", can(PERMS.VEHICLE_JOURNEY.CREATE), async (req, res) => {
         openingKm: data.openingKm,
         isTripEmpty: leg.legType === "EMPTY" ? true : leg.isTripEmpty,
         rakeDate: leg.legType === "DC" ? (leg.rakeDate ?? null) : null,
-        startDateTime: leg.startDateTime ?? startedAt,
+        // Leg 1 is born Planned like any other leg — it's dispatched
+        // explicitly via /dispatch-leg, which is what actually stamps
+        // startDateTime. An operator-entered time here is a schedule, not a
+        // dispatch, so it belongs in plannedStartDateTime (mirrors the Trips
+        // module's own Planned-vs-InTransit convention).
+        plannedStartDateTime: leg.startDateTime ?? null,
         fyCode,
         createdById: me,
       },
@@ -905,7 +910,9 @@ router.post(
           openingKm: leg.openingKm,
           isTripEmpty: leg.legType === "EMPTY" ? true : leg.isTripEmpty,
           rakeDate: leg.legType === "DC" ? (leg.rakeDate ?? null) : null,
-          startDateTime: leg.startDateTime ?? null,
+          // Same reasoning as the first-leg path above: this leg is born
+          // Planned and only /dispatch-leg sets the real startDateTime.
+          plannedStartDateTime: leg.startDateTime ?? null,
           chainExceptionReason:
             violations.length > 0 ? (leg.chainExceptionReason ?? null) : null,
           fyCode: journey.fyCode,
@@ -994,6 +1001,18 @@ router.post(
         },
         select: journeyLegSelect,
       });
+      if (trip.sequenceNo === 1) {
+        // Leg 1's actual dispatch IS the journey's own start moment — keep
+        // startedAt (Total Days, journey PDF/detail) from drifting away from it.
+        await tx.vehicleJourney.update({
+          where: { id },
+          data: {
+            startedAt: parsed.data.startDateTime,
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
+      }
       await writeTripStatus(tx, tripId, me, "InTransit", "Leg dispatched");
       return row;
     }, TX_BUDGET);

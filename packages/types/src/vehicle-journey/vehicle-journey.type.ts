@@ -93,6 +93,7 @@ export type JourneyLeg = {
   openingKm: number;
   closingKm: number | null;
   startDateTime: string | null;
+  plannedStartDateTime: string | null;
   endDateTime: string | null;
   arrivalDateTime: string | null;
   unloadingCompletedAt: string | null;

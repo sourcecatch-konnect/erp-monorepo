@@ -242,10 +242,6 @@ export default function TripForm({
       form.setValue("plannedStartDateTime", undefined, { shouldValidate: false });
     } else {
       form.setValue("startDateTime", undefined, { shouldValidate: false });
-      form.setValue("arrivalDateTime", undefined, { shouldValidate: false });
-      form.setValue("unloadingCompletedAt", undefined, {
-        shouldValidate: false,
-      });
     }
   }, [alreadyDispatched, mode, form]);
 
@@ -362,11 +358,7 @@ export default function TripForm({
   const showStickyActions = actionButtonsHaveBeenSeen && !actionButtonsVisible;
 
   const renderDateTimeField = (
-    name:
-      | "startDateTime"
-      | "plannedStartDateTime"
-      | "arrivalDateTime"
-      | "unloadingCompletedAt",
+    name: "startDateTime" | "plannedStartDateTime",
     label: string,
     opts?: {
       required?: boolean;
@@ -725,36 +717,16 @@ export default function TripForm({
                 />
 
                 {alreadyDispatched ? (
-                  <>
-                    {renderDateTimeField(
-                      "startDateTime",
-                      "Actual dispatch date/time",
-                      {
-                        required: true,
-                        noFuture: true,
-                        placeholder: "When did the truck actually leave?",
-                        help: "The trip is created In Transit from this time. It can't be in the future.",
-                      },
-                    )}
-                    {renderDateTimeField(
-                      "arrivalDateTime",
-                      "Arrival at destination",
-                      {
-                        noFuture: true,
-                        placeholder: "If the truck has already arrived",
-                        help: "Leave blank if it hasn't arrived yet.",
-                      },
-                    )}
-                    {renderDateTimeField(
-                      "unloadingCompletedAt",
-                      "Unloading completed",
-                      {
-                        noFuture: true,
-                        placeholder: "If unloading is already done",
-                        help: "Leave blank if not unloaded yet. The trip stays In Transit until it is closed.",
-                      },
-                    )}
-                  </>
+                  renderDateTimeField(
+                    "startDateTime",
+                    "Actual dispatch date/time",
+                    {
+                      required: true,
+                      noFuture: true,
+                      placeholder: "When did the truck actually leave?",
+                      help: "The trip is created In Transit from this time. It can't be in the future.",
+                    },
+                  )
                 ) : (
                   renderDateTimeField(
                     "plannedStartDateTime",

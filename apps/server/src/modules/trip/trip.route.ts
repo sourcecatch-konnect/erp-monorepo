@@ -394,12 +394,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   const plannedStart = bornInTransit
     ? null
     : (data.plannedStartDateTime ?? null);
-  // Milestones already reached when an already-running trip is entered late.
-  // Status stays InTransit — these only back-fill the timestamps.
-  const backfillArrival = bornInTransit ? (data.arrivalDateTime ?? null) : null;
-  const backfillUnloading = bornInTransit
-    ? (data.unloadingCompletedAt ?? null)
-    : null;
   const initialStatus: TripStatus = bornInTransit ? "InTransit" : "Planned";
   const initialCreatedAs = bornInTransit ? "BACKFILLED_IN_TRANSIT" : "PLANNED";
 
@@ -515,8 +509,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           status: initialStatus,
           startDateTime: actualStart ?? null,
           plannedStartDateTime: plannedStart,
-          arrivalDateTime: backfillArrival,
-          unloadingCompletedAt: backfillUnloading,
           createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
@@ -649,7 +641,10 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           returnCityId: ho.cityId,
           currentCityId: route.sourceCityId,
           openingKm: data.openingKm,
-          startedAt: now,
+          // A back-dated (already-dispatched) leg 1 means the journey really
+          // began at that dispatch moment, not at the time this record was
+          // entered — mirrors the dedicated /vehicle-journeys start endpoint.
+          startedAt: actualStart ?? now,
           status: "ACTIVE",
           settlementStatus: "NOT_READY",
           createdById: me,
@@ -664,8 +659,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           status: initialStatus,
           startDateTime: actualStart ?? null,
           plannedStartDateTime: plannedStart,
-          arrivalDateTime: backfillArrival,
-          unloadingCompletedAt: backfillUnloading,
           createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
@@ -946,6 +939,18 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
       },
       select: { id: true, status: true, version: true },
     });
+    if (existing.journeyId && existing.sequenceNo === 1) {
+      // Leg 1's actual dispatch IS the journey's own start moment — keep
+      // startedAt (Total Days, journey PDF/detail) from drifting away from it.
+      await tx.vehicleJourney.update({
+        where: { id: existing.journeyId },
+        data: {
+          startedAt: parsed.data.startDateTime,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+      });
+    }
     await tx.vehicle.update({
       where: { id: existing.vehicleId },
       data: { status: "ON_TRIP" },
@@ -1071,6 +1076,19 @@ router.post(
         },
         select: { id: true, status: true, version: true },
       });
+
+      if (existing.journeyId && existing.sequenceNo === 1) {
+        // Leg 1's dispatch time IS the journey's own start moment — keep
+        // startedAt (Total Days, journey PDF/detail) from drifting away from it.
+        await tx.vehicleJourney.update({
+          where: { id: existing.journeyId },
+          data: {
+            startedAt: data.startDateTime,
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -1404,15 +1422,25 @@ router.post(
           where: { id: existing.vehicleId },
           data: { currentKM: data.closingKm },
         });
+      }
+
+      // Leg 1's dispatch time IS the journey's own start moment — keep
+      // startedAt (Total Days, journey PDF/detail) from drifting away from
+      // it even when the correction is to a Closed leg 1. Folded into one
+      // update alongside the return-to-base fields so a leg that is both
+      // leg 1 and the current leg doesn't get written twice.
+      const isFirstLeg = existing.sequenceNo === 1;
+      if (existing.journey && (isCurrentLeg || isFirstLeg)) {
         await tx.vehicleJourney.update({
           where: { id: existing.journey.id },
           data: {
-            ...(existing.isReturnLeg
+            ...(isCurrentLeg && existing.isReturnLeg
               ? {
                   closingKm: data.closingKm,
                   closedAt: data.endDateTime,
                 }
               : {}),
+            ...(isFirstLeg ? { startedAt: data.startDateTime } : {}),
             updatedById: me,
             version: { increment: 1 },
           },
