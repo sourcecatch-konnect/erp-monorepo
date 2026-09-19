@@ -26,6 +26,7 @@ import {
 } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
+import { parseListQuery } from "../_shared/list.query.js";
 import {
   fyCodeFor,
   formatDocNumber,
@@ -899,26 +900,32 @@ router.get("/bills", can(PERMS.BILLING.VIEW), async (req, res) => {
     typeof req.query.status === "string"
       ? (req.query.status as BillStatus)
       : undefined;
-  const data = await db.bill.findMany({
-    where: { ...branchFilter(req), ...(status ? { status } : {}) },
-    include: {
-      branch: { select: { name: true, branchCode: true } },
-      billingCustomer: { select: { id: true, name: true } },
-      placeOfSupplyState: true,
-      journalEntry: {
-        select: {
-          id: true,
-          voucherNumber: true,
-          status: true,
-          tallySyncStatus: true,
+  const query = parseListQuery(req);
+  const where = { ...branchFilter(req), ...(status ? { status } : {}) };
+  const [data, total] = await Promise.all([
+    db.bill.findMany({
+      where,
+      include: {
+        branch: { select: { name: true, branchCode: true } },
+        billingCustomer: { select: { id: true, name: true } },
+        placeOfSupplyState: true,
+        journalEntry: {
+          select: {
+            id: true,
+            voucherNumber: true,
+            status: true,
+            tallySyncStatus: true,
+          },
         },
+        _count: { select: { lines: true } },
       },
-      _count: { select: { lines: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  return sendOk(res, data);
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.bill.count({ where }),
+  ]);
+  return sendOk(res, data, { page: query.page, size: query.size, total });
 });
 
 router.get("/bills/:id", can(PERMS.BILLING.VIEW), async (req, res) => {

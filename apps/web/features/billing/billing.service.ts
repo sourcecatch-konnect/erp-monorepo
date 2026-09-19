@@ -1,6 +1,11 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListQuery,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
 import type {
   VoucherType,
   JournalStatus,
@@ -327,6 +332,25 @@ const get = async <T>(
   return unwrapApiResponse(response);
 };
 
+export type BillListQuery = ListQuery & { status?: string };
+
+const listBills = async (
+  query?: BillListQuery,
+): Promise<ListResult<Bill>> => {
+  const { status, ...listQuery } = query ?? {};
+  const response = await api.get<ApiResponse<Bill[]>>("/billing/bills", {
+    params: {
+      ...(status ? { status } : {}),
+      ...(listQuery.page !== undefined ? { page: listQuery.page } : {}),
+      ...(listQuery.size !== undefined ? { size: listQuery.size } : {}),
+      ...(listQuery.search ? { search: listQuery.search } : {}),
+      ...(listQuery.sort ? { sort: listQuery.sort } : {}),
+      ...(listQuery.filter ? { filter: listQuery.filter } : {}),
+    },
+  });
+  return unwrapListResponse(response);
+};
+
 const post = async <T>(url: string, body?: unknown) => {
   const response = await api.post<ApiResponse<T>>(url, body ?? {});
   return unwrapApiResponse(response);
@@ -359,7 +383,7 @@ export const billingApi = {
   cancelCharge: (id: string, reason: string) =>
     post<{ id: string }>(`/billing/charges/${id}/cancel`, { reason }),
   createBill: (body: CreateBillDraft) => post<Bill[]>("/billing/bills", body),
-  listBills: () => get<Bill[]>("/billing/bills"),
+  listBills,
   bill: (id: string) => get<Bill>(`/billing/bills/${id}`),
   voucher: (id: string) => get<Voucher>(`/billing/bills/${id}/voucher`),
   availableBillCharges: (id: string) =>

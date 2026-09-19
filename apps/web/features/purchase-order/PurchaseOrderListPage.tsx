@@ -9,13 +9,8 @@ import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@skerp/ui/components/select";
+
+import { Combobox } from "@skerp/ui/components/combobox";
 import {
   Table,
   TableBody,
@@ -32,15 +27,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 
 import { useCan } from "@/features/auth";
+import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import { formatPaise, rupeesToPaise, paiseToRupees } from "@/lib/money";
 import {
   purchaseOrderApi,
   type PurchaseOrder,
-  type PurchaseOrderStatus,
 } from "./api/purchase-order.service";
 import { purchaseOrderKeys } from "./api/purchase-order.keys";
+import { PurchaseOrderStatusBadge } from "./purchaseOrderStatusBadge";
 
 type LineDraft = {
   key: string;
@@ -58,26 +55,8 @@ const newLine = (): LineDraft => ({
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
-  DRAFT: "border-muted-foreground/30 bg-muted text-muted-foreground",
-  APPROVED: "border-primary/20 bg-primary/10 text-primary",
-  SENT: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  PARTIALLY_RECEIVED:
-    "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  RECEIVED: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  CLOSED: "border-muted-foreground/30 bg-muted text-muted-foreground",
-  CANCELLED: "border-destructive/20 bg-destructive/10 text-destructive",
-};
 
-function StatusBadge({ status }: { status: PurchaseOrderStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}
-    >
-      {status.replaceAll("_", " ")}
-    </span>
-  );
-}
+
 
 /** Purchase Order — commitment-only document (never moves stock or posts to
  *  the ledger). Header + a line-item grid, one page, matching the "search
@@ -96,31 +75,52 @@ export function PurchaseOrderListPage() {
   const [expectedDate, setExpectedDate] = React.useState("");
   const [remarks, setRemarks] = React.useState("");
   const [lines, setLines] = React.useState<LineDraft[]>([newLine()]);
+  const [supplierSearch, setSupplierSearch] = React.useState("");
+  const [partSearch, setPartSearch] = React.useState("");
+  const debouncedSupplierSearch = useDebouncedValue(supplierSearch, 300);
+  const debouncedPartSearch = useDebouncedValue(partSearch, 300);
+
+  const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
+
+  const handleSizeChange = (nextSize: number) => {
+    setSize(nextSize);
+    setPage(0);
+  };
 
   const list = useQuery({
-    queryKey: purchaseOrderKeys.list(),
-    queryFn: () => purchaseOrderApi.list(),
+    queryKey: purchaseOrderKeys.list({ page, size }),
+    queryFn: () => purchaseOrderApi.list({ page, size }),
   });
+  const orders = list.data?.data ?? [];
+  const total = list.data?.meta?.total ?? 0;
+  // Single-workshop-at-HO: this is always the same one branch, so cache it
+  // indefinitely instead of refetching on every screen open.
   const headOfficeBranch = useQuery({
     queryKey: purchaseOrderKeys.branches,
     queryFn: purchaseOrderApi.headOfficeBranch,
+    staleTime: Infinity,
   });
   React.useEffect(() => {
     if (headOfficeBranch.data && !branchId) setBranchId(headOfficeBranch.data.id);
   }, [headOfficeBranch.data, branchId]);
   const suppliers = useQuery({
-    queryKey: purchaseOrderKeys.suppliers,
-    queryFn: purchaseOrderApi.suppliers,
+    queryKey: purchaseOrderKeys.suppliers(debouncedSupplierSearch),
+    queryFn: () => purchaseOrderApi.suppliers(debouncedSupplierSearch),
+    enabled: createOpen,
   });
   const spareParts = useQuery({
-    queryKey: purchaseOrderKeys.spareParts(branchId),
-    queryFn: () => purchaseOrderApi.spareParts(branchId),
+    queryKey: purchaseOrderKeys.spareParts(branchId, debouncedPartSearch),
+    queryFn: () => purchaseOrderApi.spareParts(branchId, debouncedPartSearch),
+    enabled: createOpen,
   });
 
   const resetForm = () => {
     setEditTarget(null);
     setBranchId(headOfficeBranch.data?.id ?? "");
     setSupplierId("");
+    setSupplierSearch("");
+    setPartSearch("");
     setPoDate(today());
     setExpectedDate("");
     setRemarks("");
@@ -132,13 +132,13 @@ export function PurchaseOrderListPage() {
   const editParamId = searchParams.get("edit");
   React.useEffect(() => {
     if (!editParamId) return;
-    const target = list.data?.find((p) => p.id === editParamId);
+    const target = orders.find((p) => p.id === editParamId);
     if (target) {
       openEdit(target);
       router.replace("/workshop/purchase-orders");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editParamId, list.data]);
+  }, [editParamId, orders]);
 
   const openEdit = (po: PurchaseOrder) => {
     setEditTarget(po);
@@ -240,14 +240,14 @@ export function PurchaseOrderListPage() {
                   ))}
                 </TableRow>
               ))}
-            {!list.isLoading && (list.data?.length ?? 0) === 0 && (
+            {!list.isLoading && orders.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                   No purchase orders yet.
                 </TableCell>
               </TableRow>
             )}
-            {list.data?.map((po) => (
+            {orders.map((po) => (
               <TableRow
                 key={po.id}
                 className="cursor-pointer"
@@ -258,7 +258,7 @@ export function PurchaseOrderListPage() {
                 <TableCell>{po.branch.name}</TableCell>
                 <TableCell>{new Date(po.poDate).toLocaleDateString("en-IN")}</TableCell>
                 <TableCell>
-                  <StatusBadge status={po.status} />
+                  <PurchaseOrderStatusBadge status={po.status} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatPaise(po.estimatedPaise)}
@@ -279,6 +279,13 @@ export function PurchaseOrderListPage() {
             ))}
           </TableBody>
         </Table>
+        <TablePaginationFooter
+          total={total}
+          page={page}
+          size={size}
+          onPageChange={setPage}
+          onSizeChange={handleSizeChange}
+        />
       </div>
 
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
@@ -297,18 +304,16 @@ export function PurchaseOrderListPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Supplier</label>
-              <Select value={supplierId} onValueChange={setSupplierId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.data?.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={suppliers.data ?? []}
+                value={supplierId}
+                onChange={setSupplierId}
+                searchValue={supplierSearch}
+                onSearchChange={setSupplierSearch}
+                placeholder="Search supplier..."
+                searchPlaceholder="Type to search..."
+                emptyText={suppliers.isLoading ? "Loading suppliers..." : "No suppliers found"}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">PO date</label>
@@ -354,9 +359,10 @@ export function PurchaseOrderListPage() {
                   <div key={line.key} className="space-y-1.5 p-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <div className="sm:w-64">
-                        <Select
+                        <Combobox
+                          options={spareParts.data ?? []}
                           value={line.sparePartId}
-                          onValueChange={(v) => {
+                          onChange={(v) => {
                             const picked = spareParts.data?.find((p) => p.value === v);
                             updateLine(line.key, {
                               sparePartId: v,
@@ -364,19 +370,13 @@ export function PurchaseOrderListPage() {
                               rate: picked ? String(paiseToRupees(Number(picked.ratePaise))) : line.rate,
                             });
                           }}
+                          searchValue={partSearch}
+                          onSearchChange={setPartSearch}
                           disabled={!branchId}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder={branchId ? "Spare part" : "Pick a branch first"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {spareParts.data?.map((p) => (
-                              <SelectItem key={p.value} value={p.value}>
-                                {p.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder={branchId ? "Search spare part..." : "Pick a branch first"}
+                          searchPlaceholder="Type to search..."
+                          emptyText={spareParts.isLoading ? "Loading parts..." : "No parts found"}
+                        />
                       </div>
                       <Input
                         inputMode="numeric"

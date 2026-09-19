@@ -1,6 +1,10 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse, unwrapListResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
 import type { PurchaseOrder } from "@/features/purchase-order/api/purchase-order.service";
 
 export type SpareInwardStatus = "DRAFT" | "POSTED" | "CANCELLED";
@@ -70,9 +74,11 @@ export const spareInwardApi = {
     poId?: string;
     supplierId?: string;
     status?: SpareInwardStatus;
-  }) => {
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<SpareInward>> => {
     const res = await api.get<ApiResponse<SpareInward[]>>("/spare-inward", { params });
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   get: async (id: string) => {

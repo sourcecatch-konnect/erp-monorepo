@@ -18,6 +18,7 @@ import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
 import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
+import { parseListQuery } from "../_shared/list.query.js";
 import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
 import {
   creditAccountForReceipt,
@@ -462,23 +463,29 @@ router.get("/", can(PERMS.RECEIPT.VIEW), async (req, res) => {
     typeof req.query.status === "string"
       ? (req.query.status as ReceiptStatus)
       : undefined;
-  const data = await db.receipt.findMany({
-    where: {
-      ...branchFilter(req),
-      ...(status ? { status } : {}),
-    },
-    include: {
-      customer: { select: { id: true, name: true } },
-      branch: { select: { name: true, branchCode: true } },
-      _count: { select: { allocations: true } },
-      journalEntry: {
-        select: { id: true, voucherNumber: true, status: true, tallySyncStatus: true },
+  const query = parseListQuery(req);
+  const where = {
+    ...branchFilter(req),
+    ...(status ? { status } : {}),
+  };
+  const [data, total] = await Promise.all([
+    db.receipt.findMany({
+      where,
+      include: {
+        customer: { select: { id: true, name: true } },
+        branch: { select: { name: true, branchCode: true } },
+        _count: { select: { allocations: true } },
+        journalEntry: {
+          select: { id: true, voucherNumber: true, status: true, tallySyncStatus: true },
+        },
       },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  return sendOk(res, data);
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.receipt.count({ where }),
+  ]);
+  return sendOk(res, data, { page: query.page, size: query.size, total });
 });
 
 router.get("/:id", can(PERMS.RECEIPT.VIEW), async (req, res) => {

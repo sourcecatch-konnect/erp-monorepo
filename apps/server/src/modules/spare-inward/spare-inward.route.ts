@@ -46,13 +46,17 @@ router.get("/", can(PERMS.WORKSHOP.INWARD_VIEW), async (req, res) => {
     ...(query.supplierId ? { supplierId: query.supplierId } : {}),
     ...(query.status ? { status: query.status } : {}),
   };
-  const inwards = await db.spareInward.findMany({
-    where,
-    include: inwardDetailInclude,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  sendOk(res, inwards);
+  const [inwards, total] = await Promise.all([
+    db.spareInward.findMany({
+      where,
+      include: inwardDetailInclude,
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.spareInward.count({ where }),
+  ]);
+  sendOk(res, inwards, { page: query.page, size: query.size, total });
 });
 
 // Stock browse (Task 3) — read-only, no page today shows current qty/branch
@@ -67,16 +71,20 @@ router.get("/stock", can(PERMS.WORKSHOP.INWARD_VIEW), async (req, res) => {
       ? { sparePart: { name: { contains: query.search, mode: "insensitive" as const } } }
       : {}),
   };
-  const rows = await db.stockLedger.findMany({
-    where,
-    include: {
-      sparePart: { select: { id: true, name: true, unit: true, minimumStock: true } },
-      branch: { select: { id: true, name: true, branchCode: true } },
-    },
-    orderBy: [{ branch: { name: "asc" } }, { sparePart: { name: "asc" } }],
-    take: 500,
-  });
-  sendOk(res, rows);
+  const [rows, total] = await Promise.all([
+    db.stockLedger.findMany({
+      where,
+      include: {
+        sparePart: { select: { id: true, name: true, unit: true, minimumStock: true } },
+        branch: { select: { id: true, name: true, branchCode: true } },
+      },
+      orderBy: [{ branch: { name: "asc" } }, { sparePart: { name: "asc" } }],
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.stockLedger.count({ where }),
+  ]);
+  sendOk(res, rows, { page: query.page, size: query.size, total });
 });
 
 // Cheap count for the sidebar "Stock" badge — same below-minimum rule the
@@ -287,7 +295,7 @@ router.post("/", can(PERMS.WORKSHOP.INWARD_MANAGE), async (req, res) => {
 
       return created;
     },
-    { timeout: 20000, maxWait: 10000 },
+
   );
 
   const result = await db.spareInward.findUnique({
@@ -372,7 +380,6 @@ router.post("/:id/cancel", can(PERMS.WORKSHOP.INWARD_MANAGE), async (req, res) =
         },
       });
     },
-    { timeout: 20000, maxWait: 10000 },
   );
 
   const updated = await db.spareInward.findUnique({

@@ -1,6 +1,10 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse, unwrapListResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
 
 export type StockLedgerRow = {
   id: string;
@@ -16,14 +20,16 @@ export type StockLedgerRow = {
 export type StockListFilters = {
   branchId?: string;
   search?: string;
+  page?: number;
+  size?: number;
 };
 
 export const stockApi = {
-  list: async (filters: StockListFilters = {}): Promise<StockLedgerRow[]> => {
+  list: async (filters: StockListFilters = {}): Promise<ListResult<StockLedgerRow>> => {
     const res = await api.get<ApiResponse<StockLedgerRow[]>>("/spare-inward/stock", {
       params: filters,
     });
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   lowCount: async (): Promise<number> => {

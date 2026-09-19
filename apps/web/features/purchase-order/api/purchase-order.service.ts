@@ -1,8 +1,13 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse, unwrapListResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
 
 const LOOKUP_SIZE = { size: 1000 } as const;
+const LOOKUP_PAGE_SIZE = 20;
 
 export type PurchaseOrderStatus =
   | "DRAFT"
@@ -66,9 +71,11 @@ export const purchaseOrderApi = {
     supplierId?: string;
     status?: PurchaseOrderStatus;
     search?: string;
-  }) => {
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<PurchaseOrder>> => {
     const res = await api.get<ApiResponse<PurchaseOrder[]>>("/purchase-order", { params });
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   get: async (id: string) => {
@@ -120,10 +127,12 @@ export const purchaseOrderApi = {
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
 
-  suppliers: async (): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list, so search server-side instead of
+  // pulling all of them for the picker.
+  suppliers: async (search?: string): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: LOOKUP_SIZE },
+      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined } },
     );
     return unwrapListResponse(res).data.map((s) => ({
       value: s.id,
@@ -133,9 +142,11 @@ export const purchaseOrderApi = {
 
   /** Parts with current stock at one branch + reorder threshold + the
    *  master's default rate — feeds the PO line picker. currentStock is null
-   *  until a branch is picked. */
+   *  until a branch is picked. Search server-side instead of pulling the
+   *  whole catalogue. */
   spareParts: async (
     branchId?: string,
+    search?: string,
   ): Promise<
     (LookupOption & {
       unit: string;
@@ -155,7 +166,9 @@ export const purchaseOrderApi = {
           ratePaise: string;
         }[]
       >
-    >("/purchase-order/lookup/spare-parts", { params: branchId ? { branchId } : undefined });
+    >("/purchase-order/lookup/spare-parts", {
+      params: { ...(branchId ? { branchId } : {}), ...(search ? { search } : {}) },
+    });
     return unwrapListResponse(res).data.map((p) => ({
       value: p.id,
       label: p.name,

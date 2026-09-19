@@ -1,8 +1,13 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse, unwrapListResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
 
 const LOOKUP_SIZE = { size: 1000 } as const;
+const LOOKUP_PAGE_SIZE = 20;
 
 export type ServiceBillStatus = "DRAFT" | "POSTED" | "CANCELLED";
 export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE";
@@ -68,9 +73,11 @@ export const serviceBillApi = {
     branchId?: string;
     serviceProviderId?: string;
     status?: ServiceBillStatus;
-  }) => {
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<ServiceBill>> => {
     const res = await api.get<ApiResponse<ServiceBill[]>>("/service-bill", { params });
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   get: async (id: string) => {
@@ -141,10 +148,12 @@ export const serviceBillApi = {
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
 
-  serviceProviders: async (): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list, so search server-side instead of
+  // pulling all of them for the picker.
+  serviceProviders: async (search?: string): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: LOOKUP_SIZE },
+      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined } },
     );
     return unwrapListResponse(res).data.map((s) => ({
       value: s.id,

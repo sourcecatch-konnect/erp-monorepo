@@ -1,8 +1,13 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse, unwrapListResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
 
 const LOOKUP_SIZE = { size: 1000 } as const;
+const LOOKUP_PAGE_SIZE = 20;
 
 export type JobCardStatus = "DRAFT" | "FINALISED" | "CANCELLED";
 export type TruckLocationStatus = "AT_HO" | "IN_TRANSIT";
@@ -121,9 +126,15 @@ export type BatchOption = {
 export type LookupOption = { value: string; label: string };
 
 export const jobCardApi = {
-  list: async (params?: { branchId?: string; vehicleId?: string; status?: JobCardStatus }) => {
+  list: async (params?: {
+    branchId?: string;
+    vehicleId?: string;
+    status?: JobCardStatus;
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<JobCard>> => {
     const res = await api.get<ApiResponse<JobCard[]>>("/job-card", { params });
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   get: async (id: string) => {
@@ -218,6 +229,8 @@ export const jobCardApi = {
     return unwrapListResponse(res).data.map((d) => ({ value: d.id, label: d.name }));
   },
 
+  // Labours are a small, workshop-owned staff list — a plain cached list is
+  // fine, no need for search-as-you-type.
   mechanics: async (): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/labours", {
       params: { ...LOOKUP_SIZE, "filter[type]": "Mechanic" },
@@ -225,15 +238,19 @@ export const jobCardApi = {
     return unwrapListResponse(res).data.map((l) => ({ value: l.id, label: l.name }));
   },
 
+  // Spare parts can grow into thousands of rows, so search server-side
+  // instead of pulling the whole catalogue for the picker.
   spareParts: async (
     type: "Item" | "Service",
     categoryId?: string,
+    search?: string,
   ): Promise<(LookupOption & { categoryId: string; ratePaise: string })[]> => {
     const res = await api.get<
       ApiResponse<{ id: string; name: string; categoryId: string; rate: string }[]>
     >("/spare-parts", {
       params: {
-        ...LOOKUP_SIZE,
+        size: LOOKUP_PAGE_SIZE,
+        search: search || undefined,
         "filter[type]": type,
         ...(categoryId ? { "filter[categoryId]": categoryId } : {}),
       },
@@ -246,6 +263,8 @@ export const jobCardApi = {
     }));
   },
 
+  // Spare categories are a small, fixed master — a plain cached list is
+  // fine, no need for search-as-you-type.
   categories: async (type: "Item" | "Service"): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/spare-category", {
       params: { ...LOOKUP_SIZE, "filter[type]": type },
@@ -253,14 +272,16 @@ export const jobCardApi = {
     return unwrapListResponse(res).data.map((c) => ({ value: c.id, label: c.name }));
   },
 
-  serviceProviders: async (): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list, so search server-side instead of
+  // pulling all of them for the picker.
+  serviceProviders: async (search?: string): Promise<LookupOption[]> => {
     // SparePartSupplier.type is free text but the master form only ever
     // writes "Item" or "Service" (spare-partSupplierForm.tsx's
     // supplierTypeOptions) — filter to "Service" so a pure parts supplier
     // (no labour/service capability) can't be picked as a Job Card provider.
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: { ...LOOKUP_SIZE, "filter[type]": "Service" } },
+      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined, "filter[type]": "Service" } },
     );
     return unwrapListResponse(res).data.map((s) => ({
       value: s.id,

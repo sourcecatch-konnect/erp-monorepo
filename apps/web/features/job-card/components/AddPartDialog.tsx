@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
+import { Combobox } from "@skerp/ui/components/combobox";
 import {
   Table,
   TableBody,
@@ -29,6 +30,7 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { formatPaise } from "@/lib/money";
+import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import { jobCardApi, type LookupOption } from "../api/job-card.service";
 import { jobCardKeys } from "../api/job-card.keys";
 import { newPartLine, type PartLineDraft } from "../line-drafts";
@@ -49,17 +51,20 @@ type Props = {
 export function AddPartDialog({ open, onOpenChange, branchId, mechanics, onAdd }: Props) {
   const [categoryId, setCategoryId] = React.useState("");
   const [sparePartId, setSparePartId] = React.useState("");
+  const [partSearch, setPartSearch] = React.useState("");
   const [mechanicId, setMechanicId] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [qtyByBatch, setQtyByBatch] = React.useState<Record<string, string>>({});
+
+  const debouncedPartSearch = useDebouncedValue(partSearch, 300);
 
   const categories = useQuery({
     queryKey: jobCardKeys.categories("Item"),
     queryFn: () => jobCardApi.categories("Item"),
   });
   const parts = useQuery({
-    queryKey: jobCardKeys.spareParts("Item", categoryId),
-    queryFn: () => jobCardApi.spareParts("Item", categoryId),
+    queryKey: jobCardKeys.spareParts("Item", categoryId, debouncedPartSearch),
+    queryFn: () => jobCardApi.spareParts("Item", categoryId, debouncedPartSearch),
     enabled: Boolean(categoryId),
   });
   const batches = useQuery({
@@ -71,6 +76,7 @@ export function AddPartDialog({ open, onOpenChange, branchId, mechanics, onAdd }
   const reset = () => {
     setCategoryId("");
     setSparePartId("");
+    setPartSearch("");
     setMechanicId("");
     setDescription("");
     setQtyByBatch({});
@@ -131,22 +137,17 @@ export function AddPartDialog({ open, onOpenChange, branchId, mechanics, onAdd }
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Part Name</label>
-            <Select
+            <Combobox
+              options={parts.data ?? []}
               value={sparePartId}
-              onValueChange={(v) => { setSparePartId(v); setQtyByBatch({}); }}
+              onChange={(v) => { setSparePartId(v); setQtyByBatch({}); }}
+              searchValue={partSearch}
+              onSearchChange={setPartSearch}
               disabled={!categoryId}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={categoryId ? "Select part" : "Pick a category first"} />
-              </SelectTrigger>
-              <SelectContent>
-                {parts.data?.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder={categoryId ? "Search part..." : "Pick a category first"}
+              searchPlaceholder="Type to search..."
+              emptyText={parts.isLoading ? "Loading parts..." : "No parts found"}
+            />
           </div>
         </div>
 

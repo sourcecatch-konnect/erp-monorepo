@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
+import { Combobox } from "@skerp/ui/components/combobox";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { paiseToRupees } from "@/lib/money";
+import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import { jobCardApi, type LookupOption } from "../api/job-card.service";
 import { jobCardKeys } from "../api/job-card.keys";
 import { newServiceLine, type ServiceLineDraft } from "../line-drafts";
@@ -29,43 +31,54 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mechanics: LookupOption[];
-  serviceProviders: LookupOption[];
   onAdd: (line: ServiceLineDraft) => void;
 };
 
 /** Old-ERP-style: Provider → Service Category → Service, with the rate
  *  auto-filled from that service's master rate (still editable) —
  *  mirrors how the PO screen prefills a part's rate. */
-export function AddServiceDialog({ open, onOpenChange, mechanics, serviceProviders, onAdd }: Props) {
+export function AddServiceDialog({ open, onOpenChange, mechanics, onAdd }: Props) {
   const [serviceProviderId, setServiceProviderId] = React.useState("");
+  const [providerSearch, setProviderSearch] = React.useState("");
   const [categoryId, setCategoryId] = React.useState("");
   const [sparePartId, setSparePartId] = React.useState("");
+  const [serviceSearch, setServiceSearch] = React.useState("");
   const [qty, setQty] = React.useState("1");
   const [rate, setRate] = React.useState("");
   const [mechanicId, setMechanicId] = React.useState("");
   const [description, setDescription] = React.useState("");
 
+  const debouncedProviderSearch = useDebouncedValue(providerSearch, 300);
+  const debouncedServiceSearch = useDebouncedValue(serviceSearch, 300);
+
   const categories = useQuery({
     queryKey: jobCardKeys.categories("Service"),
     queryFn: () => jobCardApi.categories("Service"),
   });
+  const serviceProviders = useQuery({
+    queryKey: jobCardKeys.serviceProviders(debouncedProviderSearch),
+    queryFn: () => jobCardApi.serviceProviders(debouncedProviderSearch),
+    enabled: open,
+  });
   const services = useQuery({
-    queryKey: jobCardKeys.spareParts("Service", categoryId),
-    queryFn: () => jobCardApi.spareParts("Service", categoryId),
+    queryKey: jobCardKeys.spareParts("Service", categoryId, debouncedServiceSearch),
+    queryFn: () => jobCardApi.spareParts("Service", categoryId, debouncedServiceSearch),
     enabled: Boolean(categoryId),
   });
 
   const reset = () => {
     setServiceProviderId("");
+    setProviderSearch("");
     setCategoryId("");
     setSparePartId("");
+    setServiceSearch("");
     setQty("1");
     setRate("");
     setMechanicId("");
     setDescription("");
   };
 
-  const selectedProvider = serviceProviders.find((p) => p.value === serviceProviderId);
+  const selectedProvider = serviceProviders.data?.find((p) => p.value === serviceProviderId);
   const selectedService = services.data?.find((s) => s.value === sparePartId);
 
   const canSave =
@@ -97,18 +110,16 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, serviceProvide
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Service Provider</label>
-            <Select value={serviceProviderId} onValueChange={setServiceProviderId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select provider" />
-              </SelectTrigger>
-              <SelectContent>
-                {serviceProviders.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              options={serviceProviders.data ?? []}
+              value={serviceProviderId}
+              onChange={setServiceProviderId}
+              searchValue={providerSearch}
+              onSearchChange={setProviderSearch}
+              placeholder="Search provider..."
+              searchPlaceholder="Type to search..."
+              emptyText={serviceProviders.isLoading ? "Loading providers..." : "No providers found"}
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Service Category</label>
@@ -134,26 +145,21 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, serviceProvide
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <label className="text-sm font-medium">Service</label>
-            <Select
+            <Combobox
+              options={services.data ?? []}
               value={sparePartId}
-              onValueChange={(v) => {
+              onChange={(v) => {
                 setSparePartId(v);
                 const picked = services.data?.find((s) => s.value === v);
                 if (picked) setRate(String(paiseToRupees(Number(picked.ratePaise))));
               }}
+              searchValue={serviceSearch}
+              onSearchChange={setServiceSearch}
               disabled={!categoryId}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={categoryId ? "Select service" : "Pick a category first"} />
-              </SelectTrigger>
-              <SelectContent>
-                {services.data?.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder={categoryId ? "Search service..." : "Pick a category first"}
+              searchPlaceholder="Type to search..."
+              emptyText={services.isLoading ? "Loading services..." : "No services found"}
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Qty</label>

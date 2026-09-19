@@ -40,25 +40,29 @@ router.get("/", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) => {
     ...(query.status ? { status: query.status } : {}),
     ...(query.search
       ? {
-          OR: [
-            { poNumber: { contains: query.search, mode: "insensitive" as const } },
-            {
-              supplier: {
-                name: { contains: query.search, mode: "insensitive" as const },
-              },
+        OR: [
+          { poNumber: { contains: query.search, mode: "insensitive" as const } },
+          {
+            supplier: {
+              name: { contains: query.search, mode: "insensitive" as const },
             },
-          ],
-        }
+          },
+        ],
+      }
       : {}),
   };
 
-  const orders = await db.purchaseOrder.findMany({
-    where,
-    include: poDetailInclude,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  sendOk(res, orders);
+  const [orders, total] = await Promise.all([
+    db.purchaseOrder.findMany({
+      where,
+      include: poDetailInclude,
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.purchaseOrder.count({ where }),
+  ]);
+  sendOk(res, orders, { page: query.page, size: query.size, total });
 });
 
 /**
@@ -69,17 +73,20 @@ router.get("/", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) => {
  */
 router.get("/lookup/spare-parts", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) => {
   const branchId = String(req.query.branchId ?? "");
+  const search = req.query.search ? String(req.query.search) : undefined;
 
   const parts = await db.sparePart.findMany({
+    where: search ? { name: { contains: search, mode: "insensitive" as const } } : undefined,
     select: { id: true, name: true, unit: true, minimumStock: true, rate: true },
     orderBy: { name: "asc" },
+    take: 20,
   });
 
   const stockLedgers = branchId
     ? await db.stockLedger.findMany({
-        where: { branchId, sparePartId: { in: parts.map((p) => p.id) } },
-        select: { sparePartId: true, currentQty: true },
-      })
+      where: { branchId, sparePartId: { in: parts.map((p) => p.id) } },
+      select: { sparePartId: true, currentQty: true },
+    })
     : [];
   const stockByPart = new Map(stockLedgers.map((s) => [s.sparePartId, s.currentQty]));
 
@@ -165,7 +172,7 @@ router.post("/", can(PERMS.WORKSHOP.PO_MANAGE), async (req, res) => {
         select: { id: true },
       });
     },
-    { timeout: 15000, maxWait: 10000 },
+
   );
 
   const created = await db.purchaseOrder.findUnique({
@@ -213,21 +220,20 @@ router.patch("/:id", can(PERMS.WORKSHOP.PO_MANAGE), async (req, res) => {
           version: { increment: 1 },
           ...(lines
             ? {
-                lines: {
-                  create: lines.map((line, index) => ({
-                    lineNumber: index + 1,
-                    sparePartId: line.sparePartId,
-                    qtyOrdered: line.qtyOrdered,
-                    ratePaise: line.ratePaise,
-                    amountPaise: line.amountPaise,
-                  })),
-                },
-              }
+              lines: {
+                create: lines.map((line, index) => ({
+                  lineNumber: index + 1,
+                  sparePartId: line.sparePartId,
+                  qtyOrdered: line.qtyOrdered,
+                  ratePaise: line.ratePaise,
+                  amountPaise: line.amountPaise,
+                })),
+              },
+            }
             : {}),
         },
       });
     },
-    { timeout: 15000, maxWait: 10000 },
   );
 
   const updated = await db.purchaseOrder.findUnique({

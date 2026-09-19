@@ -6,6 +6,6 @@ export const serviceBillKeys = {
   unbilledLines: (serviceProviderId: string, uptoDate?: string) =>
     [...serviceBillKeys.all, "unbilled", serviceProviderId, uptoDate] as const,
   branches: ["service-bill", "branches"] as const,
-  serviceProviders: ["service-bill", "service-providers"] as const,
+  serviceProviders: (search?: string) => ["service-bill", "service-providers", search] as const,
   cashAccounts: ["service-bill", "cash-accounts"] as const,
 };

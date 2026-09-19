@@ -25,6 +25,7 @@ import { useCan } from "@/features/auth";
 import { formatPaise } from "@/lib/money";
 import { branchApi } from "@/features/masters/branch/branch.service";
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 import { stockApi } from "./api/stock.service";
 
 /** Current stock levels per spare part per branch — read-only, no create/edit.
@@ -35,6 +36,8 @@ export function StockListPage() {
   const [branchId, setBranchId] = React.useState("ALL");
   const [search, setSearch] = React.useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
+  const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
 
   const branches = useQuery({
     queryKey: ["stock", "branches"],
@@ -42,16 +45,19 @@ export function StockListPage() {
   });
 
   const stock = useQuery({
-    queryKey: ["stock", "list", branchId, debouncedSearch],
+    queryKey: ["stock", "list", branchId, debouncedSearch, page, size],
     queryFn: () =>
       stockApi.list({
         branchId: branchId === "ALL" ? undefined : branchId,
         search: debouncedSearch || undefined,
+        page,
+        size,
       }),
     enabled: canView,
   });
 
   const branchOptions = branches.data?.data ?? [];
+  const rows = stock.data?.data ?? [];
 
   return (
     <div className="space-y-4">
@@ -69,13 +75,13 @@ export function StockListPage() {
           <Input
             placeholder="Search part name..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             className="h-9"
           />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium text-muted-foreground">Branch</label>
-          <Select value={branchId} onValueChange={setBranchId}>
+          <Select value={branchId} onValueChange={(v) => { setBranchId(v); setPage(0); }}>
             <SelectTrigger className="h-9 w-48">
               <SelectValue />
             </SelectTrigger>
@@ -114,14 +120,14 @@ export function StockListPage() {
                   ))}
                 </TableRow>
               ))}
-            {!stock.isLoading && (stock.data?.length ?? 0) === 0 && (
+            {!stock.isLoading && rows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No stock rows found.
                 </TableCell>
               </TableRow>
             )}
-            {stock.data?.map((row) => {
+            {rows.map((row) => {
               const belowMinimum = row.currentQty < row.sparePart.minimumStock;
               return (
                 <TableRow key={row.id}>
@@ -149,6 +155,13 @@ export function StockListPage() {
             })}
           </TableBody>
         </Table>
+        <TablePaginationFooter
+          total={stock.data?.meta?.total ?? 0}
+          page={page}
+          size={size}
+          onPageChange={setPage}
+          onSizeChange={(next) => { setSize(next); setPage(0); }}
+        />
       </div>
     </div>
   );

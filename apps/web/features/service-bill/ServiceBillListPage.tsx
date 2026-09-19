@@ -10,13 +10,7 @@ import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
 import { Checkbox } from "@skerp/ui/components/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@skerp/ui/components/select";
+import { Combobox } from "@skerp/ui/components/combobox";
 import {
   Table,
   TableBody,
@@ -35,30 +29,17 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { useCan } from "@/features/auth";
+import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import { formatPaise, rupeesToPaise } from "@/lib/money";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
-import {
-  serviceBillApi,
-  type ServiceBillStatus,
-} from "./api/service-bill.service";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
+import { serviceBillApi } from "./api/service-bill.service";
 import { serviceBillKeys } from "./api/service-bill.keys";
+import { ServiceBillStatusBadge } from "./serviceBillStatusBadge";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const STATUS_STYLE: Record<ServiceBillStatus, string> = {
-  DRAFT: "border-muted-foreground/30 bg-muted text-muted-foreground",
-  POSTED: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  CANCELLED: "border-destructive/20 bg-destructive/10 text-destructive",
-};
-
-function StatusBadge({ status }: { status: ServiceBillStatus }) {
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
-      {status}
-    </span>
-  );
-}
 
 export function ServiceBillListPage() {
   const router = useRouter();
@@ -75,21 +56,35 @@ export function ServiceBillListPage() {
   const [discount, setDiscount] = React.useState("");
   const [remarks, setRemarks] = React.useState("");
   const [selectedLineIds, setSelectedLineIds] = React.useState<Set<string>>(new Set());
+  const [providerSearch, setProviderSearch] = React.useState("");
+  const debouncedProviderSearch = useDebouncedValue(providerSearch, 300);
 
   const [voucherOpen, setVoucherOpen] = React.useState(false);
   const [voucherId, setVoucherId] = React.useState<string | null>(null);
 
-  const list = useQuery({ queryKey: serviceBillKeys.list(), queryFn: () => serviceBillApi.list() });
+  const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
+
+  const listQuery = React.useMemo(() => ({ page, size }), [page, size]);
+
+  const list = useQuery({
+    queryKey: serviceBillKeys.list(listQuery),
+    queryFn: () => serviceBillApi.list(listQuery),
+  });
+  // Single-workshop-at-HO: this is always the same one branch, so cache it
+  // indefinitely instead of refetching on every screen open.
   const headOfficeBranch = useQuery({
     queryKey: serviceBillKeys.branches,
     queryFn: serviceBillApi.headOfficeBranch,
+    staleTime: Infinity,
   });
   React.useEffect(() => {
     if (headOfficeBranch.data && !branchId) setBranchId(headOfficeBranch.data.id);
   }, [headOfficeBranch.data, branchId]);
   const providers = useQuery({
-    queryKey: serviceBillKeys.serviceProviders,
-    queryFn: serviceBillApi.serviceProviders,
+    queryKey: serviceBillKeys.serviceProviders(debouncedProviderSearch),
+    queryFn: () => serviceBillApi.serviceProviders(debouncedProviderSearch),
+    enabled: createOpen,
   });
   const unbilled = useQuery({
     queryKey: serviceBillKeys.unbilledLines(serviceProviderId, uptoDate),
@@ -105,6 +100,7 @@ export function ServiceBillListPage() {
   const resetForm = () => {
     setBranchId("");
     setServiceProviderId("");
+    setProviderSearch("");
     setUptoDate(today());
     setBillDate(today());
     setProviderInvoiceNo("");
@@ -199,14 +195,14 @@ export function ServiceBillListPage() {
                   ))}
                 </TableRow>
               ))}
-            {!list.isLoading && (list.data?.length ?? 0) === 0 && (
+            {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
               <TableRow>
                 <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                   No service bills yet.
                 </TableCell>
               </TableRow>
             )}
-            {list.data?.map((bill) => {
+            {list.data?.data.map((bill) => {
               const pending = Number(bill.netAmountPaise) - Number(bill.paidAmountPaise);
               return (
                 <TableRow
@@ -218,7 +214,7 @@ export function ServiceBillListPage() {
                   <TableCell>{bill.serviceProvider.name}</TableCell>
                   <TableCell>{new Date(bill.billDate).toLocaleDateString("en-IN")}</TableCell>
                   <TableCell>
-                    <StatusBadge status={bill.status} />
+                    <ServiceBillStatusBadge status={bill.status} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatPaise(bill.netAmountPaise)}
@@ -259,6 +255,13 @@ export function ServiceBillListPage() {
             })}
           </TableBody>
         </Table>
+        <TablePaginationFooter
+          total={list.data?.meta?.total ?? 0}
+          page={page}
+          size={size}
+          onPageChange={setPage}
+          onSizeChange={(next) => { setSize(next); setPage(0); }}
+        />
       </div>
 
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
@@ -277,21 +280,16 @@ export function ServiceBillListPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Service Provider</label>
-              <Select
+              <Combobox
+                options={providers.data ?? []}
                 value={serviceProviderId}
-                onValueChange={(v) => { setServiceProviderId(v); setSelectedLineIds(new Set()); }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.data?.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(v) => { setServiceProviderId(v); setSelectedLineIds(new Set()); }}
+                searchValue={providerSearch}
+                onSearchChange={setProviderSearch}
+                placeholder="Search provider..."
+                searchPlaceholder="Type to search..."
+                emptyText={providers.isLoading ? "Loading providers..." : "No providers found"}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Up to date</label>

@@ -48,13 +48,17 @@ router.get("/replacement-list", can(PERMS.WORKSHOP.REPLACEMENT_VIEW), async (req
     ...(query.supplierId ? { supplierId: query.supplierId } : {}),
     ...(query.status ? { status: query.status } : {}),
   };
-  const lists = await db.replacementList.findMany({
-    where,
-    include: listDetailInclude,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  sendOk(res, lists);
+  const [lists, total] = await Promise.all([
+    db.replacementList.findMany({
+      where,
+      include: listDetailInclude,
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.replacementList.count({ where }),
+  ]);
+  sendOk(res, lists, { page: query.page, size: query.size, total });
 });
 
 router.get("/replacement-list/:id", can(PERMS.WORKSHOP.REPLACEMENT_VIEW), async (req, res) => {
@@ -197,7 +201,7 @@ router.post("/replacement-list", can(PERMS.WORKSHOP.REPLACEMENT_MANAGE), async (
     );
 
     return created;
-  }, { timeout: 8000, maxWait: 5000 });
+  });
 
   const result = await db.replacementList.findUnique({
     where: { id: list.id },
@@ -267,7 +271,7 @@ router.post(
           cancelReason: input.reason,
         },
       });
-    }, { timeout: 15000, maxWait: 10000 });
+    });
 
     const updated = await db.replacementList.findUnique({
       where: { id: existing.id },
@@ -304,13 +308,17 @@ router.get("/replacement-inward", can(PERMS.WORKSHOP.REPLACEMENT_VIEW), async (r
     ...(query.branchId ? { branchId: query.branchId } : {}),
     ...(query.replacementListId ? { replacementListId: query.replacementListId } : {}),
   };
-  const inwards = await db.replacementInward.findMany({
-    where,
-    include: inwardDetailInclude,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  sendOk(res, inwards);
+  const [inwards, total] = await Promise.all([
+    db.replacementInward.findMany({
+      where,
+      include: inwardDetailInclude,
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.replacementInward.count({ where }),
+  ]);
+  sendOk(res, inwards, { page: query.page, size: query.size, total });
 });
 
 router.get("/replacement-inward/:id", can(PERMS.WORKSHOP.REPLACEMENT_VIEW), async (req, res) => {
@@ -514,7 +522,7 @@ router.post("/replacement-inward", can(PERMS.WORKSHOP.REPLACEMENT_MANAGE), async
       data: { differentialAmountPaise, journalEntryId },
       select: { id: true },
     });
-  }, { timeout: 8000, maxWait: 5000 });
+  });
 
   const result = await db.replacementInward.findUnique({
     where: { id: inward.id },
@@ -613,7 +621,7 @@ router.post(
         where: { id: list.id },
         data: { status: fullyReceived ? "RECEIVED" : "PARTIALLY_RECEIVED" },
       });
-    }, { timeout: 8000, maxWait: 5000 });
+    });
 
     const result = await db.replacementList.findUnique({
       where: { id: list.id },

@@ -27,33 +27,22 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { useCan } from "@/features/auth";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 import { formatPaise, rupeesToPaise } from "@/lib/money";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
+import { DetailSection } from "@/features/masters/_shared/DetailSection";
 import {
   supplierReplacementApi,
   type ReplacementInward,
-  type ReplacementListStatus,
   type ReplacementType,
 } from "./api/supplier-replacement.service";
 import { supplierReplacementKeys } from "./api/supplier-replacement.keys";
+import { ReplacementListStatusBadge } from "./supplierReplaceStatusBadge";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const STATUS_STYLE: Record<ReplacementListStatus, string> = {
-  PENDING: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  PARTIALLY_RECEIVED: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  RECEIVED: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  CANCELLED: "border-destructive/20 bg-destructive/10 text-destructive",
-};
 
-function StatusBadge({ status }: { status: ReplacementListStatus }) {
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
-      {status.replaceAll("_", " ")}
-    </span>
-  );
-}
 
 type ReceiveLineDraft = {
   replacementListLineId: string;
@@ -85,9 +74,20 @@ export function SupplierReplacementDetailPage({ replacementListId }: { replaceme
     queryFn: () => supplierReplacementApi.get(replacementListId),
   });
 
+  const [inwardsPage, setInwardsPage] = React.useState(0);
+  const [inwardsSize, setInwardsSize] = React.useState(10);
+  const handleInwardsSizeChange = (nextSize: number) => {
+    setInwardsSize(nextSize);
+    setInwardsPage(0);
+  };
+
   const inwards = useQuery({
-    queryKey: supplierReplacementKeys.inwards(replacementListId),
-    queryFn: () => supplierReplacementApi.listReplacementInwards(replacementListId),
+    queryKey: supplierReplacementKeys.inwards(replacementListId, { page: inwardsPage, size: inwardsSize }),
+    queryFn: () =>
+      supplierReplacementApi.listReplacementInwards(replacementListId, {
+        page: inwardsPage,
+        size: inwardsSize,
+      }),
   });
 
   const [cancelOpen, setCancelOpen] = React.useState(false);
@@ -212,7 +212,19 @@ export function SupplierReplacementDetailPage({ replacementListId }: { replaceme
   });
 
   if (list.isLoading) {
-    return <Skeleton className="h-64 w-full" />;
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-7 w-48" />
+          </div>
+          <Skeleton className="h-9 w-24" />
+        </div>
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   if (!list.data) {
@@ -236,20 +248,28 @@ export function SupplierReplacementDetailPage({ replacementListId }: { replaceme
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <Button variant="ghost" size="sm" className="-ml-2 mb-1" onClick={() => router.push("/workshop/supplier-replacement")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2 h-7 text-muted-foreground hover:text-foreground"
+            onClick={() => router.push("/workshop/supplier-replacement")}
+          >
             <IconArrowLeft size={15} className="mr-1" /> Back to list
           </Button>
-          <h1 className="text-lg font-semibold">{rl.replacementNumber ?? "Replacement Request"}</h1>
-          <div className="mt-1 flex items-center gap-2">
-            <StatusBadge status={rl.status} />
-            <span className="text-sm text-muted-foreground">
-              Requested {new Date(rl.requestDate).toLocaleDateString("en-IN")}
-            </span>
+          <p className="text-xs font-medium text-muted-foreground">Supplier Replacement</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {rl.replacementNumber ?? "Replacement Request"}
+            </h1>
+            <ReplacementListStatusBadge status={rl.status} />
           </div>
+          <p className="text-sm text-muted-foreground">
+            Requested {new Date(rl.requestDate).toLocaleDateString("en-IN")}
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canReceiveNow && (
             <Button onClick={openReceive}>
               <IconTruckDelivery size={15} className="mr-1" /> Receive
@@ -272,7 +292,7 @@ export function SupplierReplacementDetailPage({ replacementListId }: { replaceme
         </div>
       </div>
 
-      <div className="grid gap-4 rounded-md border p-4 sm:grid-cols-4">
+      <DetailSection title="Request Details" contentClassName="grid gap-4 p-4 sm:grid-cols-4">
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Supplier</p>
           <p className="text-sm">{rl.supplier.name}</p>
@@ -292,98 +312,107 @@ export function SupplierReplacementDetailPage({ replacementListId }: { replaceme
         {rl.remarks && (
           <div className="space-y-1 sm:col-span-4">
             <p className="text-xs font-medium text-muted-foreground">Remarks</p>
-            <p className="text-sm">{rl.remarks}</p>
+            <p className="text-sm text-muted-foreground">{rl.remarks}</p>
           </div>
         )}
-      </div>
+      </DetailSection>
 
-      <div className="rounded-md border">
-        <div className="border-b bg-muted/30 px-3 py-2 text-sm font-semibold">Lines sent to supplier</div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Part</TableHead>
-              <TableHead>Original batch</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Requested</TableHead>
-              <TableHead className="text-right">Received</TableHead>
-              <TableHead className="text-right">Pending</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rl.lines.map((line) => (
-              <TableRow key={line.id}>
-                <TableCell>{line.sparePart.name}</TableCell>
-                <TableCell>{line.originalBatch.batchNo ?? line.originalBatch.id.slice(0, 6)}</TableCell>
-                <TableCell>{line.replacementType}</TableCell>
-                <TableCell className="text-right tabular-nums">{line.qtyRequested}</TableCell>
-                <TableCell className="text-right tabular-nums">{line.qtyReceived}</TableCell>
-                <TableCell className="text-right tabular-nums">{line.qtyRequested - line.qtyReceived}</TableCell>
-              </TableRow>
-            ))}
-            {rl.lines.length === 0 && (
+      <DetailSection title="Lines sent to supplier">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                  No lines.
-                </TableCell>
+                <TableHead>Part</TableHead>
+                <TableHead>Original batch</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Requested</TableHead>
+                <TableHead className="text-right">Received</TableHead>
+                <TableHead className="text-right">Pending</TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="rounded-md border">
-        <div className="border-b bg-muted/30 px-3 py-2 text-sm font-semibold">Receiving history</div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Inward #</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Challan #</TableHead>
-              <TableHead className="text-right">Differential</TableHead>
-              <TableHead className="text-right">Voucher</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {inwards.isLoading &&
-              Array.from({ length: 2 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((__, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
+            </TableHeader>
+            <TableBody>
+              {rl.lines.map((line) => (
+                <TableRow key={line.id}>
+                  <TableCell>{line.sparePart.name}</TableCell>
+                  <TableCell>{line.originalBatch.batchNo ?? line.originalBatch.id.slice(0, 6)}</TableCell>
+                  <TableCell>{line.replacementType}</TableCell>
+                  <TableCell className="text-right tabular-nums">{line.qtyRequested}</TableCell>
+                  <TableCell className="text-right tabular-nums">{line.qtyReceived}</TableCell>
+                  <TableCell className="text-right tabular-nums">{line.qtyRequested - line.qtyReceived}</TableCell>
                 </TableRow>
               ))}
-            {!inwards.isLoading && (inwards.data?.length ?? 0) === 0 && (
+              {rl.lines.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                    No lines.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </DetailSection>
+
+      <DetailSection title="Receiving history">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                  Nothing received yet.
-                </TableCell>
+                <TableHead>Inward #</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Challan #</TableHead>
+                <TableHead className="text-right">Differential</TableHead>
+                <TableHead className="text-right">Voucher</TableHead>
               </TableRow>
-            )}
-            {inwards.data?.map((inward) => (
-              <TableRow key={inward.id}>
-                <TableCell className="font-medium">{inward.replacementInwardNumber ?? "—"}</TableCell>
-                <TableCell>{new Date(inward.inwardDate).toLocaleDateString("en-IN")}</TableCell>
-                <TableCell>{inward.supplierChallanNo ?? "—"}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatPaise(inward.differentialAmountPaise)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {inward.journalEntry ? (
-                    <Button size="sm" variant="outline" onClick={() => setVoucherFor(inward)}>
-                      <IconFileInvoice size={15} className="mr-1" /> Voucher
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {inwards.isLoading &&
+                Array.from({ length: 2 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 5 }).map((__, j) => (
+                      <TableCell key={j}>
+                        <Skeleton className="h-4 w-full" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              {!inwards.isLoading && (inwards.data?.data.length ?? 0) === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                    Nothing received yet — receipts against this request will show up here.
+                  </TableCell>
+                </TableRow>
+              )}
+              {inwards.data?.data.map((inward) => (
+                <TableRow key={inward.id}>
+                  <TableCell className="font-medium">{inward.replacementInwardNumber ?? "—"}</TableCell>
+                  <TableCell>{new Date(inward.inwardDate).toLocaleDateString("en-IN")}</TableCell>
+                  <TableCell>{inward.supplierChallanNo ?? "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPaise(inward.differentialAmountPaise)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {inward.journalEntry ? (
+                      <Button size="sm" variant="outline" onClick={() => setVoucherFor(inward)}>
+                        <IconFileInvoice size={15} className="mr-1" /> Voucher
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <TablePaginationFooter
+          total={inwards.data?.meta?.total ?? 0}
+          page={inwardsPage}
+          size={inwardsSize}
+          onPageChange={setInwardsPage}
+          onSizeChange={handleInwardsSizeChange}
+        />
+      </DetailSection>
 
       <VoucherDialog
         open={Boolean(voucherFor)}

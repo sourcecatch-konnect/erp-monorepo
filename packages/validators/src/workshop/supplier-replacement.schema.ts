@@ -33,6 +33,8 @@ export const replacementListQuerySchema = z.object({
   branchId: id.optional(),
   supplierId: id.optional(),
   status: replacementListStatusSchema.optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(10),
 });
 
 export const cancelReplacementListSchema = z.object({
@@ -60,6 +62,8 @@ export const createReplacementInwardSchema = z.object({
 export const replacementInwardQuerySchema = z.object({
   branchId: id.optional(),
   replacementListId: id.optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(10),
 });
 
 /** A CREDIT_NOTE line never gets a physical batch back — this posts a

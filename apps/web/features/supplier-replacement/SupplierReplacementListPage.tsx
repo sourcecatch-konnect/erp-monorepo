@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
+import { Combobox } from "@skerp/ui/components/combobox";
 import {
   Table,
   TableBody,
@@ -34,29 +35,17 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { useCan } from "@/features/auth";
+import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 import {
   supplierReplacementApi,
-  type ReplacementListStatus,
   type ReplacementType,
 } from "./api/supplier-replacement.service";
 import { supplierReplacementKeys } from "./api/supplier-replacement.keys";
+import { ReplacementListStatusBadge } from "./supplierReplaceStatusBadge";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const STATUS_STYLE: Record<ReplacementListStatus, string> = {
-  PENDING: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  PARTIALLY_RECEIVED: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  RECEIVED: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  CANCELLED: "border-destructive/20 bg-destructive/10 text-destructive",
-};
-
-function StatusBadge({ status }: { status: ReplacementListStatus }) {
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
-      {status.replaceAll("_", " ")}
-    </span>
-  );
-}
 
 type NewLineDraft = {
   sparePartId: string;
@@ -85,18 +74,31 @@ export function SupplierReplacementListPage() {
   const [requestDate, setRequestDate] = React.useState(today());
   const [remarks, setRemarks] = React.useState("");
   const [newLines, setNewLines] = React.useState<NewLineDraft[]>([]);
+  const [supplierSearch, setSupplierSearch] = React.useState("");
+  const debouncedSupplierSearch = useDebouncedValue(supplierSearch, 300);
+
+  const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
+  const handleSizeChange = (nextSize: number) => {
+    setSize(nextSize);
+    setPage(0);
+  };
 
   const lists = useQuery({
-    queryKey: supplierReplacementKeys.lists(),
-    queryFn: () => supplierReplacementApi.listReplacementLists(),
+    queryKey: supplierReplacementKeys.lists({ page, size }),
+    queryFn: () => supplierReplacementApi.listReplacementLists({ page, size }),
   });
   const suppliers = useQuery({
-    queryKey: supplierReplacementKeys.suppliers,
-    queryFn: supplierReplacementApi.suppliers,
+    queryKey: supplierReplacementKeys.suppliers(debouncedSupplierSearch),
+    queryFn: () => supplierReplacementApi.suppliers(debouncedSupplierSearch),
+    enabled: createOpen,
   });
+  // Single-workshop-at-HO: this is always the same one branch, so cache it
+  // indefinitely instead of refetching on every screen open.
   const headOfficeBranch = useQuery({
     queryKey: supplierReplacementKeys.headOfficeBranch,
     queryFn: supplierReplacementApi.headOfficeBranch,
+    staleTime: Infinity,
   });
   const postedInwards = useQuery({
     queryKey: supplierReplacementKeys.postedInwards(supplierId),
@@ -135,6 +137,7 @@ export function SupplierReplacementListPage() {
 
   const resetCreateForm = () => {
     setSupplierId("");
+    setSupplierSearch("");
     setOriginalInwardId("");
     setRequestDate(today());
     setRemarks("");
@@ -216,14 +219,14 @@ export function SupplierReplacementListPage() {
                   ))}
                 </TableRow>
               ))}
-            {!lists.isLoading && (lists.data?.length ?? 0) === 0 && (
+            {!lists.isLoading && (lists.data?.data.length ?? 0) === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No replacement requests yet.
                 </TableCell>
               </TableRow>
             )}
-            {lists.data?.map((list) => (
+            {lists.data?.data.map((list) => (
               <TableRow
                 key={list.id}
                 className="cursor-pointer"
@@ -234,7 +237,8 @@ export function SupplierReplacementListPage() {
                 <TableCell>{list.originalInward.inwardNumber ?? "—"}</TableCell>
                 <TableCell>{new Date(list.requestDate).toLocaleDateString("en-IN")}</TableCell>
                 <TableCell>
-                  <StatusBadge status={list.status} />
+                  <ReplacementListStatusBadge status={list.status} />
+
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end">
@@ -254,6 +258,13 @@ export function SupplierReplacementListPage() {
             ))}
           </TableBody>
         </Table>
+        <TablePaginationFooter
+          total={lists.data?.meta?.total ?? 0}
+          page={page}
+          size={size}
+          onPageChange={setPage}
+          onSizeChange={handleSizeChange}
+        />
       </div>
 
       {/* New replacement request */}
@@ -266,18 +277,16 @@ export function SupplierReplacementListPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-1">
               <label className="text-sm font-medium">Supplier</label>
-              <Select value={supplierId} onValueChange={(v) => { setSupplierId(v); setOriginalInwardId(""); }}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.data?.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={suppliers.data ?? []}
+                value={supplierId}
+                onChange={(v) => { setSupplierId(v); setOriginalInwardId(""); }}
+                searchValue={supplierSearch}
+                onSearchChange={setSupplierSearch}
+                placeholder="Search supplier..."
+                searchPlaceholder="Type to search..."
+                emptyText={suppliers.isLoading ? "Loading suppliers..." : "No suppliers found"}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Original Inward</label>

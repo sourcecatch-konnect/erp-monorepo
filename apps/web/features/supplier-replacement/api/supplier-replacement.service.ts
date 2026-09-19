@@ -1,8 +1,13 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse, unwrapListResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
 
 const LOOKUP_SIZE = { size: 1000 } as const;
+const LOOKUP_PAGE_SIZE = 20;
 
 export type ReplacementListStatus = "PENDING" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
 export type ReplacementType = "FREE" | "PAYABLE" | "CREDIT_NOTE";
@@ -84,11 +89,16 @@ export type OriginalInwardDetail = {
 export type LookupOption = { value: string; label: string };
 
 export const supplierReplacementApi = {
-  listReplacementLists: async (params?: { supplierId?: string; status?: ReplacementListStatus }) => {
+  listReplacementLists: async (params?: {
+    supplierId?: string;
+    status?: ReplacementListStatus;
+    page?: number;
+    size?: number;
+  }): Promise<ListResult<ReplacementList>> => {
     const res = await api.get<ApiResponse<ReplacementList[]>>("/supplier-replacement/replacement-list", {
       params,
     });
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   createReplacementList: async (body: {
@@ -127,12 +137,15 @@ export const supplierReplacementApi = {
     return unwrapApiResponse(res);
   },
 
-  listReplacementInwards: async (replacementListId: string) => {
+  listReplacementInwards: async (
+    replacementListId: string,
+    params?: { page?: number; size?: number },
+  ): Promise<ListResult<ReplacementInward>> => {
     const res = await api.get<ApiResponse<ReplacementInward[]>>(
       "/supplier-replacement/replacement-inward",
-      { params: { replacementListId } },
+      { params: { replacementListId, ...params } },
     );
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   createReplacementInward: async (body: {
@@ -199,10 +212,12 @@ export const supplierReplacementApi = {
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
 
-  suppliers: async (): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list, so search server-side instead of
+  // pulling all of them for the picker.
+  suppliers: async (search?: string): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: LOOKUP_SIZE },
+      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined } },
     );
     return unwrapListResponse(res).data.map((s) => ({
       value: s.id,

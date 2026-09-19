@@ -94,13 +94,17 @@ router.get("/", can(PERMS.WORKSHOP.SERVICEBILL_VIEW), async (req, res) => {
     ...(query.serviceProviderId ? { serviceProviderId: query.serviceProviderId } : {}),
     ...(query.status ? { status: query.status } : {}),
   };
-  const bills = await db.serviceBill.findMany({
-    where,
-    include: serviceBillDetailInclude,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  sendOk(res, bills);
+  const [bills, total] = await Promise.all([
+    db.serviceBill.findMany({
+      where,
+      include: serviceBillDetailInclude,
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.serviceBill.count({ where }),
+  ]);
+  sendOk(res, bills, { page: query.page, size: query.size, total });
 });
 
 router.get("/:id", can(PERMS.WORKSHOP.SERVICEBILL_VIEW), async (req, res) => {
@@ -213,7 +217,7 @@ router.post("/", can(PERMS.WORKSHOP.SERVICEBILL_MANAGE), async (req, res) => {
       data: { journalEntryId: voucher.id },
       select: { id: true },
     });
-  }, { timeout: 20000, maxWait: 10000 });
+  });
 
   const result = await db.serviceBill.findUnique({
     where: { id: bill.id },
@@ -256,7 +260,7 @@ router.post("/:id/cancel", can(PERMS.WORKSHOP.SERVICEBILL_MANAGE), async (req, r
         cancelReason: input.reason,
       },
     });
-  }, { timeout: 15000, maxWait: 10000 });
+  });
 
   const updated = await db.serviceBill.findUnique({
     where: { id: existing.id },
@@ -377,7 +381,7 @@ router.post("/:id/pay", can(PERMS.WORKSHOP.SERVICEBILL_PAY), async (req, res) =>
     });
 
     return created;
-  }, { timeout: 15000, maxWait: 10000 });
+  });
 
   const result = await db.serviceBillPayment.findUnique({
     where: { id: payment.id },

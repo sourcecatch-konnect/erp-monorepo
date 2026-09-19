@@ -9,8 +9,8 @@ export const jobCardKeys = {
   vehicles: ["job-card", "vehicles"] as const,
   drivers: ["job-card", "drivers"] as const,
   mechanics: ["job-card", "mechanics"] as const,
-  spareParts: (type: "Item" | "Service", categoryId?: string) =>
-    ["job-card", "spare-parts", type, categoryId] as const,
+  spareParts: (type: "Item" | "Service", categoryId?: string, search?: string) =>
+    ["job-card", "spare-parts", type, categoryId, search] as const,
   categories: (type: "Item" | "Service") => ["job-card", "categories", type] as const,
-  serviceProviders: ["job-card", "service-providers"] as const,
+  serviceProviders: (search?: string) => ["job-card", "service-providers", search] as const,
 };

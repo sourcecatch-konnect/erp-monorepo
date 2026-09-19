@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { IconPlus, IconFileInvoice, IconEye } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
+import { SpareInwardStatusBadge } from "./spareInwardStatusBadge";
 import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
 import {
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
+import { Combobox } from "@skerp/ui/components/combobox";
 import {
   Table,
   TableBody,
@@ -34,11 +36,13 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { useCan } from "@/features/auth";
+import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import { formatPaise, rupeesToPaise, paiseToRupees } from "@/lib/money";
 import { purchaseOrderApi } from "@/features/purchase-order/api/purchase-order.service";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
-import { spareInwardApi, type SpareInward, type SpareInwardStatus } from "./api/spare-inward.service";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
+import { spareInwardApi, type SpareInward } from "./api/spare-inward.service";
 import { spareInwardKeys } from "./api/spare-inward.keys";
 
 type LineDraft = {
@@ -57,19 +61,7 @@ type LineDraft = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const STATUS_STYLE: Record<SpareInwardStatus, string> = {
-  DRAFT: "border-muted-foreground/30 bg-muted text-muted-foreground",
-  POSTED: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  CANCELLED: "border-destructive/20 bg-destructive/10 text-destructive",
-};
 
-function StatusBadge({ status }: { status: SpareInwardStatus }) {
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
-      {status}
-    </span>
-  );
-}
 
 /** Inward Stock — receives goods against an approved/sent Purchase Order.
  *  Single-step submit (matches old ERP: "On Submit, Inventory stock
@@ -82,6 +74,8 @@ export function SpareInwardListPage() {
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [supplierId, setSupplierId] = React.useState("");
+  const [supplierSearch, setSupplierSearch] = React.useState("");
+  const debouncedSupplierSearch = useDebouncedValue(supplierSearch, 300);
   const [poId, setPoId] = React.useState("");
   const [inwardDate, setInwardDate] = React.useState(today());
   const [supplierInvoiceNo, setSupplierInvoiceNo] = React.useState("");
@@ -95,13 +89,19 @@ export function SpareInwardListPage() {
   const [voucherOpen, setVoucherOpen] = React.useState(false);
   const [voucherId, setVoucherId] = React.useState<string | null>(null);
 
+  const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
+
+  const listQuery = React.useMemo(() => ({ page, size }), [page, size]);
+
   const list = useQuery({
-    queryKey: spareInwardKeys.list(),
-    queryFn: () => spareInwardApi.list(),
+    queryKey: spareInwardKeys.list(listQuery),
+    queryFn: () => spareInwardApi.list(listQuery),
   });
   const suppliers = useQuery({
-    queryKey: ["purchase-order", "suppliers"],
-    queryFn: purchaseOrderApi.suppliers,
+    queryKey: ["purchase-order", "suppliers", debouncedSupplierSearch],
+    queryFn: () => purchaseOrderApi.suppliers(debouncedSupplierSearch),
+    enabled: createOpen,
   });
   const openPOs = useQuery({
     queryKey: spareInwardKeys.openPOs(supplierId),
@@ -145,6 +145,7 @@ export function SpareInwardListPage() {
 
   const resetForm = () => {
     setSupplierId("");
+    setSupplierSearch("");
     setPoId("");
     setInwardDate(today());
     setSupplierInvoiceNo("");
@@ -264,14 +265,14 @@ export function SpareInwardListPage() {
                   ))}
                 </TableRow>
               ))}
-            {!list.isLoading && (list.data?.length ?? 0) === 0 && (
+            {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                   No inwards yet.
                 </TableCell>
               </TableRow>
             )}
-            {list.data?.map((inward) => (
+            {list.data?.data.map((inward) => (
               <TableRow
                 key={inward.id}
                 className="cursor-pointer"
@@ -282,7 +283,7 @@ export function SpareInwardListPage() {
                 <TableCell>{inward.supplier.name}</TableCell>
                 <TableCell>{new Date(inward.inwardDate).toLocaleDateString("en-IN")}</TableCell>
                 <TableCell>
-                  <StatusBadge status={inward.status} />
+                  <SpareInwardStatusBadge status={inward.status} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatPaise(inward.payableAmountPaise)}
@@ -324,6 +325,13 @@ export function SpareInwardListPage() {
             ))}
           </TableBody>
         </Table>
+        <TablePaginationFooter
+          total={list.data?.meta?.total ?? 0}
+          page={page}
+          size={size}
+          onPageChange={setPage}
+          onSizeChange={(next) => { setSize(next); setPage(0); }}
+        />
       </div>
 
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
@@ -339,25 +347,19 @@ export function SpareInwardListPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Supplier</label>
 
-                <Select
+                <Combobox
+                  options={suppliers.data ?? []}
                   value={supplierId}
-                  onValueChange={(v) => {
+                  onChange={(v) => {
                     setSupplierId(v);
                     setPoId("");
                   }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select supplier" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {suppliers.data?.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  searchValue={supplierSearch}
+                  onSearchChange={setSupplierSearch}
+                  placeholder="Search supplier..."
+                  searchPlaceholder="Type to search..."
+                  emptyText={suppliers.isLoading ? "Loading suppliers..." : "No suppliers found"}
+                />
               </div>
 
               {/* Purchase Order - 2 columns */}

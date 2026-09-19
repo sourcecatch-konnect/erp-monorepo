@@ -40,6 +40,8 @@ export const spareInwardListQuerySchema = z.object({
   poId: id.optional(),
   supplierId: id.optional(),
   status: spareInwardStatusSchema.optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(10),
 });
 
 export const cancelSpareInwardSchema = z.object({
@@ -50,4 +52,6 @@ export const cancelSpareInwardSchema = z.object({
 export const stockListQuerySchema = z.object({
   branchId: id.optional(),
   search: z.string().trim().max(200).optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(10),
 });

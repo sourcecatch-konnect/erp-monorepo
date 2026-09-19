@@ -56,13 +56,17 @@ router.get("/", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
     ...(query.vehicleId ? { vehicleId: query.vehicleId } : {}),
     ...(query.status ? { status: query.status } : {}),
   };
-  const jobCards = await db.jobCard.findMany({
-    where,
-    include: jobCardDetailInclude,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  sendOk(res, jobCards);
+  const [jobCards, total] = await Promise.all([
+    db.jobCard.findMany({
+      where,
+      include: jobCardDetailInclude,
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.jobCard.count({ where }),
+  ]);
+  sendOk(res, jobCards, { page: query.page, size: query.size, total });
 });
 
 /**
@@ -169,7 +173,7 @@ router.post("/", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
       },
       select: { id: true },
     });
-  }, { timeout: 15000, maxWait: 10000 });
+  });
 
   const created = await db.jobCard.findUnique({
     where: { id: jobCard.id },
@@ -207,37 +211,37 @@ router.patch("/:id", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
         version: { increment: 1 },
         ...(input.partLines
           ? {
-              partLines: {
-                create: input.partLines.map((line) => ({
-                  sparePartId: line.sparePartId,
-                  batchId: line.batchId,
-                  mechanicId: line.mechanicId,
-                  qty: line.qty,
-                  unitCostPaise: 0n,
-                  amountPaise: 0n,
-                  description: line.description,
-                })),
-              },
-            }
+            partLines: {
+              create: input.partLines.map((line) => ({
+                sparePartId: line.sparePartId,
+                batchId: line.batchId,
+                mechanicId: line.mechanicId,
+                qty: line.qty,
+                unitCostPaise: 0n,
+                amountPaise: 0n,
+                description: line.description,
+              })),
+            },
+          }
           : {}),
         ...(input.serviceLines
           ? {
-              serviceLines: {
-                create: input.serviceLines.map((line) => ({
-                  serviceProviderId: line.serviceProviderId,
-                  sparePartId: line.sparePartId,
-                  mechanicId: line.mechanicId,
-                  qty: line.qty,
-                  ratePaise: line.ratePaise,
-                  amountPaise: line.ratePaise * BigInt(line.qty),
-                  description: line.description,
-                })),
-              },
-            }
+            serviceLines: {
+              create: input.serviceLines.map((line) => ({
+                serviceProviderId: line.serviceProviderId,
+                sparePartId: line.sparePartId,
+                mechanicId: line.mechanicId,
+                qty: line.qty,
+                ratePaise: line.ratePaise,
+                amountPaise: line.ratePaise * BigInt(line.qty),
+                description: line.description,
+              })),
+            },
+          }
           : {}),
       },
     });
-  }, { timeout: 15000, maxWait: 10000 });
+  });
 
   const updated = await db.jobCard.findUnique({
     where: { id: existing.id },
@@ -352,7 +356,7 @@ router.post("/:id/finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (req, r
       },
       select: { id: true },
     });
-  }, { timeout: 20000, maxWait: 10000 });
+  });
 
   const result = await db.jobCard.findUnique({
     where: { id: finalised.id },
@@ -445,7 +449,7 @@ router.post("/:id/undo-finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (r
       },
       select: { id: true },
     });
-  }, { timeout: 10000, maxWait: 5000 });
+  });
 
   const result = await db.jobCard.findUnique({
     where: { id: undone.id },
@@ -551,9 +555,9 @@ router.post("/:id/removed-parts", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req
 
     const supplierId = relatedLine
       ? (await db.spareBatch.findUnique({ where: { id: relatedLine.batchId }, select: { supplierId: true } }))
-          ?.supplierId
+        ?.supplierId
       : (await db.sparePart.findUnique({ where: { id: input.sparePartId }, select: { supplierId: true } }))
-          ?.supplierId;
+        ?.supplierId;
     if (!supplierId) throw new BadRequestError("Could not determine a supplier for the returned stock");
 
     const fyCode = fyCodeFor(new Date());
@@ -637,7 +641,7 @@ router.post("/:id/removed-parts", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req
         data: { journalEntryId: voucher.id },
         select: { id: true },
       });
-    }, { timeout: 15000, maxWait: 10000 });
+    });
 
     const result = await db.jobCardRemovedPart.findUnique({
       where: { id: removedPart.id },

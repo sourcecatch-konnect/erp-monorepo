@@ -62,4 +62,6 @@ export const jobCardListQuerySchema = z.object({
   branchId: id.optional(),
   vehicleId: id.optional(),
   status: jobCardStatusSchema.optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(10),
 });

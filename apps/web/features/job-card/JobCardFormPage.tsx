@@ -52,16 +52,21 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
     enabled: Boolean(jobCardId),
   });
 
+  // Single-workshop-at-HO: this is always the same one branch, so cache it
+  // indefinitely instead of refetching on every screen open.
   const headOfficeBranch = useQuery({
     queryKey: jobCardKeys.branches,
     queryFn: jobCardApi.headOfficeBranch,
+    staleTime: Infinity,
   });
   const vehicles = useQuery({ queryKey: jobCardKeys.vehicles, queryFn: jobCardApi.vehicles });
   const drivers = useQuery({ queryKey: jobCardKeys.drivers, queryFn: jobCardApi.drivers });
-  const mechanics = useQuery({ queryKey: jobCardKeys.mechanics, queryFn: jobCardApi.mechanics });
-  const serviceProviders = useQuery({
-    queryKey: jobCardKeys.serviceProviders,
-    queryFn: jobCardApi.serviceProviders,
+  // Mechanics are a small, workshop-owned staff list — cache generously
+  // instead of refetching on every screen open.
+  const mechanics = useQuery({
+    queryKey: jobCardKeys.mechanics,
+    queryFn: jobCardApi.mechanics,
+    staleTime: 5 * 60 * 1000,
   });
 
   const [branchId, setBranchId] = React.useState("");
@@ -501,7 +506,6 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
           open={addServiceOpen}
           onOpenChange={setAddServiceOpen}
           mechanics={mechanics.data ?? []}
-          serviceProviders={serviceProviders.data ?? []}
           onAdd={(line) => setServiceLines((prev) => [...prev, line])}
         />
 
