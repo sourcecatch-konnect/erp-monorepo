@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -24,18 +25,28 @@ import {
     TableHeader,
     TableRow,
 } from "@skerp/ui/components/table";
+import { TablePaginationFooter } from "@/components/data-table";
 import { money } from "./billing.util";
 import { billingApi } from "./billing.service";
 import { BillStatus, BillStatusBadge } from "./components/billingStatusBadge";
 
 export function BillsList() {
     const router = useRouter();
+    const [page, setPage] = React.useState(0);
+    const [size, setSize] = React.useState(10);
+
+    const handleSizeChange = (nextSize: number) => {
+        setSize(nextSize);
+        setPage(0);
+    };
+
     const query = useQuery({
-        queryKey: ["billing", "bills"],
-        queryFn: billingApi.listBills,
+        queryKey: ["billing", "bills", page, size],
+        queryFn: () => billingApi.listBills({ page, size }),
     });
     if (query.isLoading) return <Skeleton className="h-72" />;
-    const bills = query.data ?? [];
+    const bills = query.data?.data ?? [];
+    const total = query.data?.meta?.total ?? 0;
     const draftCount = bills.filter((bill) => bill.status === "DRAFT").length;
     const reviewCount = bills.filter(
         (bill) => bill.status === "PENDING_REVIEW",
@@ -141,6 +152,13 @@ export function BillsList() {
                             ))}
                         </TableBody>
                     </Table>
+                    <TablePaginationFooter
+                        total={total}
+                        page={page}
+                        size={size}
+                        onPageChange={setPage}
+                        onSizeChange={handleSizeChange}
+                    />
                 </CardContent>
             </Card>
         </div>

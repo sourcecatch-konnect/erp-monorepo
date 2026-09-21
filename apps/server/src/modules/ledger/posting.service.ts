@@ -54,7 +54,8 @@ export type PartyRef =
   | { transportId: string }
   | { creditorId: string }
   | { labourId: string }
-  | { pumpId: string };
+  | { pumpId: string }
+  | { sparePartSupplierId: string };
 
 /** The single party FK for this ref, as a plain object usable in both
  *  `findUnique({ where })` and `create({ data })`. */
@@ -67,7 +68,9 @@ const partyFk = (ref: PartyRef) =>
         ? { creditorId: ref.creditorId }
         : "labourId" in ref
           ? { labourId: ref.labourId }
-          : { pumpId: ref.pumpId };
+          : "pumpId" in ref
+            ? { pumpId: ref.pumpId }
+            : { sparePartSupplierId: ref.sparePartSupplierId };
 
 /**
  * Get the party ledger for a customer / vendor, creating it on first use.
@@ -114,12 +117,20 @@ export async function getOrCreatePartyLedger(tx: Tx, ref: PartyRef) {
     if (!row) throw new BadRequestError("Labour not found");
     name = row.name;
     group = "SUNDRY_CREDITOR";
-  } else {
+  } else if ("pumpId" in ref) {
     const row = await tx.pump.findUnique({
       where: { id: ref.pumpId },
       select: { name: true },
     });
     if (!row) throw new BadRequestError("Pump not found");
+    name = row.name;
+    group = "SUNDRY_CREDITOR";
+  } else {
+    const row = await tx.sparePartSupplier.findUnique({
+      where: { id: ref.sparePartSupplierId },
+      select: { name: true },
+    });
+    if (!row) throw new BadRequestError("Spare part supplier not found");
     name = row.name;
     group = "SUNDRY_CREDITOR";
   }
@@ -551,6 +562,406 @@ export async function postPaymentVoucher(tx: Tx, args: PaymentVoucherArgs) {
       },
       {
         ledgerId: cashLedger.id,
+        debitPaise: 0n,
+        creditPaise: args.amountPaise,
+        narration: lineNarration,
+      },
+    ],
+  });
+}
+
+export type SpareInwardVoucherArgs = {
+  inwardId: string;
+  inwardNumber: string;
+  inwardDate: Date;
+  branchId: string;
+  fyCode: string;
+  supplierId: string;
+  payableAmountPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * Post the accrual voucher for a posted SpareInward:
+ *   Dr  Spare Parts Inventory (GL)
+ *   Cr  supplier party ledger      = payable amount (net of discount)
+ * Voucher number is the inward number — a SpareInward is billed 1:1, like a
+ * SALES voucher reuses the bill number.
+ */
+export async function postSpareInwardVoucher(tx: Tx, args: SpareInwardVoucherArgs) {
+  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
+  const supplierLedger = await getOrCreatePartyLedger(tx, {
+    sparePartSupplierId: args.supplierId,
+  });
+
+  const lineNarration = `Inward ${args.inwardNumber}`;
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.inwardNumber,
+    voucherDate: args.inwardDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "PURCHASE_INWARD",
+    sourceId: args.inwardId,
+    sourceNumber: args.inwardNumber,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: inventoryLedger.id,
+        debitPaise: args.payableAmountPaise,
+        creditPaise: 0n,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: supplierLedger.id,
+        debitPaise: 0n,
+        creditPaise: args.payableAmountPaise,
+        narration: lineNarration,
+      },
+    ],
+  });
+}
+
+export type JobCardVoucherArgs = {
+  jobCardId: string;
+  jobCardNumber: string;
+  finaliseDate: Date;
+  branchId: string;
+  fyCode: string;
+  totalPartsAmountPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * Post the parts-consumption voucher when a Job Card is finalised:
+ *   Dr  Vehicle Repair & Maintenance Expense
+ *   Cr  Spare Parts Inventory        = Σ part line amounts (batch cost)
+ * Service lines carry no entry here — they're billed later by Service Bill.
+ */
+export async function postJobCardPartsVoucher(tx: Tx, args: JobCardVoucherArgs) {
+  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
+  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
+
+  const lineNarration = `Job Card ${args.jobCardNumber} — parts consumed`;
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.jobCardNumber,
+    voucherDate: args.finaliseDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "JOB_CARD",
+    sourceId: args.jobCardId,
+    sourceNumber: args.jobCardNumber,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: expenseLedger.id,
+        debitPaise: args.totalPartsAmountPaise,
+        creditPaise: 0n,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: inventoryLedger.id,
+        debitPaise: 0n,
+        creditPaise: args.totalPartsAmountPaise,
+        narration: lineNarration,
+      },
+    ],
+  });
+}
+
+export type PartReturnVoucherArgs = {
+  removedPartId: string;
+  voucherNumber: string;
+  voucherDate: Date;
+  branchId: string;
+  fyCode: string;
+  amountPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * A REUSABLE removed part re-entering stock un-does the expense it caused
+ * when originally issued — the mirror image of postJobCardPartsVoucher:
+ *   Dr  Spare Parts Inventory
+ *   Cr  Vehicle Repair & Maintenance Expense
+ * A fresh voucher, not reverseJournal — the original Job Card voucher may
+ * cover several parts and this only credits back one of them.
+ */
+export async function postPartReturnVoucher(tx: Tx, args: PartReturnVoucherArgs) {
+  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
+  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
+
+  const lineNarration = `Reusable part returned to stock`;
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.voucherDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "JOB_CARD",
+    sourceId: args.removedPartId,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: inventoryLedger.id,
+        debitPaise: args.amountPaise,
+        creditPaise: 0n,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: expenseLedger.id,
+        debitPaise: 0n,
+        creditPaise: args.amountPaise,
+        narration: lineNarration,
+      },
+    ],
+  });
+}
+
+export type ServiceBillVoucherArgs = {
+  serviceBillId: string;
+  serviceBillNumber: string;
+  billDate: Date;
+  branchId: string;
+  fyCode: string;
+  serviceProviderId: string;
+  netAmountPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * Post the accrual voucher when a ServiceBill is posted:
+ *   Dr  Vehicle Repair & Maintenance Expense
+ *   Cr  service provider party ledger  = net amount (net of discount)
+ * This is the ONLY place a JobCardServiceLine's cost hits the ledger — Job
+ * Card Finalise deliberately skips it (see JobCard flow doc).
+ */
+export async function postServiceBillVoucher(tx: Tx, args: ServiceBillVoucherArgs) {
+  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
+  const providerLedger = await getOrCreatePartyLedger(tx, {
+    sparePartSupplierId: args.serviceProviderId,
+  });
+
+  const lineNarration = `Service Bill ${args.serviceBillNumber}`;
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.serviceBillNumber,
+    voucherDate: args.billDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "SERVICE_BILL",
+    sourceId: args.serviceBillId,
+    sourceNumber: args.serviceBillNumber,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: expenseLedger.id,
+        debitPaise: args.netAmountPaise,
+        creditPaise: 0n,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: providerLedger.id,
+        debitPaise: 0n,
+        creditPaise: args.netAmountPaise,
+        narration: lineNarration,
+      },
+    ],
+  });
+}
+
+export type ServiceBillPaymentVoucherArgs = {
+  paymentId: string;
+  voucherNumber: string;
+  paymentDate: Date;
+  branchId: string;
+  fyCode: string;
+  serviceProviderId: string;
+  cashAccountId: string;
+  paidPaise: bigint;
+  tdsPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * Settle a ServiceBillPayment:
+ *   Dr  service provider party ledger
+ *   Cr  Bank/Cash account          = paid amount
+ * Partial-pay aware at the call site (ServiceBill.paidAmountPaise tracks
+ * the running total) — each disbursement gets its own voucher.
+ */
+/**
+ * Settle a ServiceBillPayment. When TDS is withheld it's a 3-line voucher —
+ * the provider is credited (settled) for paid+TDS combined, but only the
+ * cash portion actually leaves the bank; the TDS portion moves to a
+ * liability (owed to the tax department, not the provider) instead:
+ *   Dr  service provider party ledger   = paidPaise + tdsPaise
+ *   Cr  Bank/Cash account               = paidPaise
+ *   Cr  TDS Payable (Contractor)        = tdsPaise
+ */
+export async function postServiceBillPaymentVoucher(tx: Tx, args: ServiceBillPaymentVoucherArgs) {
+  const cashLedger = await getCashLedger(tx, args.cashAccountId);
+  const providerLedger = await getOrCreatePartyLedger(tx, {
+    sparePartSupplierId: args.serviceProviderId,
+  });
+
+  const lineNarration = `Service bill payment ${args.voucherNumber}`;
+  const settledPaise = args.paidPaise + args.tdsPaise;
+
+  const lines = [
+    {
+      ledgerId: providerLedger.id,
+      debitPaise: settledPaise,
+      creditPaise: 0n,
+      narration: lineNarration,
+    },
+    {
+      ledgerId: cashLedger.id,
+      debitPaise: 0n,
+      creditPaise: args.paidPaise,
+      narration: lineNarration,
+    },
+  ];
+
+  if (args.tdsPaise > 0n) {
+    const tdsLedger = await getGLLedger(tx, "TDS_PAYABLE");
+    lines.push({
+      ledgerId: tdsLedger.id,
+      debitPaise: 0n,
+      creditPaise: args.tdsPaise,
+      narration: lineNarration,
+    });
+  }
+
+  return postJournal(tx, {
+    voucherType: "PAYMENT",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.paymentDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "SERVICE_BILL",
+    sourceId: args.paymentId,
+    createdById: args.createdById,
+    lines,
+  });
+}
+
+export type ReplacementInwardVoucherArgs = {
+  replacementInwardId: string;
+  replacementInwardNumber: string;
+  inwardDate: Date;
+  branchId: string;
+  fyCode: string;
+  supplierId: string;
+  differentialAmountPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * A PAYABLE replacement receipt posts only the DIFFERENTIAL — the base
+ * value of the part was already booked at the original purchase, and the
+ * outward/inward StockMovements at that same base cost net to zero for the
+ * quantity swapped. FREE replacements never call this.
+ *   Dr  Spare Parts Inventory
+ *   Cr  supplier party ledger
+ */
+export async function postReplacementInwardVoucher(tx: Tx, args: ReplacementInwardVoucherArgs) {
+  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
+  const supplierLedger = await getOrCreatePartyLedger(tx, {
+    sparePartSupplierId: args.supplierId,
+  });
+
+  const lineNarration = `Replacement Inward ${args.replacementInwardNumber} (differential)`;
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.replacementInwardNumber,
+    voucherDate: args.inwardDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "SUPPLIER_REPLACEMENT",
+    sourceId: args.replacementInwardId,
+    sourceNumber: args.replacementInwardNumber,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: inventoryLedger.id,
+        debitPaise: args.differentialAmountPaise,
+        creditPaise: 0n,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: supplierLedger.id,
+        debitPaise: 0n,
+        creditPaise: args.differentialAmountPaise,
+        narration: lineNarration,
+      },
+    ],
+  });
+}
+
+export type ReplacementCreditNoteVoucherArgs = {
+  replacementListId: string;
+  voucherNumber: string;
+  creditNoteDate: Date;
+  branchId: string;
+  fyCode: string;
+  supplierId: string;
+  amountPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * A CREDIT_NOTE replacement line — the supplier can't physically replace the
+ * part, so instead of a batch coming back they credit our account. Unlike
+ * `postReplacementInwardVoucher` this never touches `SPARE_PARTS_INVENTORY`:
+ * no part is moving. The failed part was already expensed once, at Job Card
+ * time (Dr REPAIR_EXPENSE / Cr SPARE_PARTS_INVENTORY — see
+ * `postJobCardPartsVoucher`), so the credit note is booked as a reduction of
+ * that same REPAIR_EXPENSE head rather than a fresh GL account — the net
+ * repair cost comes back down by what the supplier is refunding.
+ *   Dr  supplier party ledger (reduces what we owe them)
+ *   Cr  Repair Expense
+ */
+export async function postReplacementCreditNoteVoucher(tx: Tx, args: ReplacementCreditNoteVoucherArgs) {
+  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
+  const supplierLedger = await getOrCreatePartyLedger(tx, {
+    sparePartSupplierId: args.supplierId,
+  });
+
+  const lineNarration = `Replacement Credit Note ${args.voucherNumber}`;
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.creditNoteDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "SUPPLIER_REPLACEMENT",
+    sourceId: args.replacementListId,
+    sourceNumber: args.voucherNumber,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: supplierLedger.id,
+        debitPaise: args.amountPaise,
+        creditPaise: 0n,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: expenseLedger.id,
         debitPaise: 0n,
         creditPaise: args.amountPaise,
         narration: lineNarration,

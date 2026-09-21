@@ -16,6 +16,7 @@ import {
   IconBooks,
   IconCalendarWeek,
   IconEdit,
+  IconBoxSeam,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -27,6 +28,9 @@ export type NavLeaf = {
   href: string;
   permission?: PermissionKey;
   disabled?: boolean;
+  /** Opt-in key a nav-badge hook can key off of (e.g. "stockLow") — kept
+   *  generic so the nav config stays free of feature-specific fetch logic. */
+  badgeKey?: string;
 };
 
 export type NavLink = NavLeaf & { icon: NavIcon };
@@ -364,6 +368,48 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/accounts/journal",
         icon: IconEdit,
         permission: PERMS.LEDGER.JOURNAL_CREATE,
+      },
+    ],
+  },
+  {
+    label: "Workshop",
+    items: [
+      {
+        title: "Purchase Orders",
+        href: "/workshop/purchase-orders",
+        icon: IconClipboardList,
+        permission: PERMS.WORKSHOP.PO_VIEW,
+      },
+      {
+        title: "Inward Stock",
+        href: "/workshop/inward",
+        icon: IconTruckDelivery,
+        permission: PERMS.WORKSHOP.INWARD_VIEW,
+      },
+      {
+        title: "Stock",
+        href: "/workshop/stock",
+        icon: IconBoxSeam,
+        permission: PERMS.WORKSHOP.INWARD_VIEW,
+        badgeKey: "stockLow",
+      },
+      {
+        title: "Job Cards",
+        href: "/workshop/job-cards",
+        icon: IconSettings,
+        permission: PERMS.WORKSHOP.JOBCARD_VIEW,
+      },
+      {
+        title: "Service Bills",
+        href: "/workshop/service-bills",
+        icon: IconReceipt2,
+        permission: PERMS.WORKSHOP.SERVICEBILL_VIEW,
+      },
+      {
+        title: "Supplier Replacement",
+        href: "/workshop/supplier-replacement",
+        icon: IconTruckDelivery,
+        permission: PERMS.WORKSHOP.REPLACEMENT_VIEW,
       },
     ],
   },

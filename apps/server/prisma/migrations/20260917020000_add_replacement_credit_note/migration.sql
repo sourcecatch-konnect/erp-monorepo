@@ -1,0 +1,1 @@
+ALTER TYPE "ReplacementType" ADD VALUE 'CREDIT_NOTE';

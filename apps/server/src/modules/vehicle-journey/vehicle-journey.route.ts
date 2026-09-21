@@ -293,6 +293,17 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
             },
           },
         },
+        // Journey-independent guard: the `journeys` lookup above only sees a
+        // Planned/InTransit trip if it belongs to a journey in the expected
+        // state. A standalone trip (no journey) or one on a journey outside
+        // that state would otherwise slip through and let this vehicle be
+        // double-booked onto a second trip while the first is still open.
+        VehicleTrip: {
+          where: { deletedAt: null, status: { in: ["Planned", "InTransit"] } },
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          select: { tripNumber: true, status: true },
+        },
       },
     }),
     db.vehicle.count({ where }),
@@ -301,6 +312,7 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
   const data = vehicles.map((vehicle) => {
     const journey = vehicle.journeys[0] ?? null;
     const lastTrip = journey?.trips[0] ?? null;
+    const openTrip = vehicle.VehicleTrip[0] ?? null;
 
     const selectionState =
       journey && lastTrip?.status === "Closed"
@@ -309,13 +321,17 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
           ? ("TRIP_PLANNED" as const)
           : journey && lastTrip?.status === "InTransit"
             ? ("IN_TRANSIT" as const)
-            : !journey &&
-                vehicle.insuranceDueDate &&
-                vehicle.insuranceDueDate < now
-              ? ("INSURANCE_EXPIRED" as const)
-              : !journey && vehicle.status === "AVAILABLE"
-                ? ("AVAILABLE_FOR_NEW_JOURNEY" as const)
-                : ("UNAVAILABLE" as const);
+            : openTrip?.status === "Planned"
+              ? ("TRIP_PLANNED" as const)
+              : openTrip?.status === "InTransit"
+                ? ("IN_TRANSIT" as const)
+                : !journey &&
+                    vehicle.insuranceDueDate &&
+                    vehicle.insuranceDueDate < now
+                  ? ("INSURANCE_EXPIRED" as const)
+                  : !journey && vehicle.status === "AVAILABLE"
+                    ? ("AVAILABLE_FOR_NEW_JOURNEY" as const)
+                    : ("UNAVAILABLE" as const);
 
     return {
       id: vehicle.id,
@@ -327,7 +343,7 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
         selectionState === "READY_FOR_NEXT_TRIP",
       currentCityName: journey?.currentCity.name ?? null,
       journeyNumber: journey?.journeyNumber ?? null,
-      lastTripNumber: lastTrip?.tripNumber ?? null,
+      lastTripNumber: lastTrip?.tripNumber ?? openTrip?.tripNumber ?? null,
       lastTripSequenceNo: lastTrip?.sequenceNo ?? null,
     };
   });
@@ -664,6 +680,22 @@ router.post("/", can(PERMS.VEHICLE_JOURNEY.CREATE), async (req, res) => {
       `Driver already has an open journey (${driverJourneyClash.journeyNumber})`,
     );
   }
+  // Belt-and-braces: the journey-clash check above only sees an open trip if
+  // its journey's status is in OPEN_JOURNEY_STATUSES. Also check directly for
+  // any open trip on this vehicle so it can't be double-booked here either.
+  const openTripOnVehicle = await db.vehicleTrip.findFirst({
+    where: {
+      vehicleId: data.vehicleId,
+      deletedAt: null,
+      status: { in: ["Planned", "InTransit"] },
+    },
+    select: { tripNumber: true, status: true },
+  });
+  if (openTripOnVehicle) {
+    throw new BadRequestError(
+      `Vehicle already has an open trip (${openTripOnVehicle.tripNumber}, ${openTripOnVehicle.status}) — close or dispatch it first`,
+    );
+  }
 
   const leg = data.firstLeg;
   const prepared = await prepareLeg(leg, now);
@@ -835,7 +867,28 @@ router.post(
 
     const prepared = await prepareLeg(leg, now);
 
+    // Dispatch intent (see addJourneyLegSchema.legDispatchRefinement):
+    //   bornInTransit -> the truck already left; `startDateTime` is the real,
+    //   possibly back-dated, dispatch moment and the leg skips Planned.
+    const bornInTransit = leg.alreadyDispatched === true;
+    if (
+      bornInTransit &&
+      leg.startDateTime &&
+      prevLeg.endDateTime &&
+      leg.startDateTime <= prevLeg.endDateTime
+    ) {
+      throw new BadRequestError(
+        "Dispatch time must be after the previous leg's close time",
+      );
+    }
+
     /* ---- backend-enforced chain rules ---- */
+    // startDateTime is deliberately left out here: the actual-dispatch case
+    // is already a hard, non-overridable block above (matches trip.route.ts's
+    // equivalent create-trip check). Passing it here too would let
+    // chainViolations' own time check fire for a merely-Planned schedule
+    // (startDateTime as an ETA guess, not a real event yet) and wrongly treat
+    // an early ETA guess as an overridable "continuity break".
     const violations = chainViolations(
       {
         sequenceNo: prevLeg.sequenceNo,
@@ -848,7 +901,6 @@ router.post(
         fromCityId: prepared.route.sourceCityId,
         fromCityName: prepared.route.sourceCity.name,
         openingKm: leg.openingKm,
-        startDateTime: leg.startDateTime,
       },
     );
     if (violations.length > 0) {
@@ -889,11 +941,12 @@ router.post(
     });
 
     const tripId = await db.$transaction(async (tx) => {
+      const initialStatus = bornInTransit ? "InTransit" : "Planned";
       const trip = await tx.vehicleTrip.create({
         data: {
           tripNumber,
           tripName,
-          status: "Planned",
+          status: initialStatus,
           tripType: tripTypeForLeg(leg.legType),
           legType: leg.legType,
           journeyId: id,
@@ -910,9 +963,13 @@ router.post(
           openingKm: leg.openingKm,
           isTripEmpty: leg.legType === "EMPTY" ? true : leg.isTripEmpty,
           rakeDate: leg.legType === "DC" ? (leg.rakeDate ?? null) : null,
-          // Same reasoning as the first-leg path above: this leg is born
-          // Planned and only /dispatch-leg sets the real startDateTime.
-          plannedStartDateTime: leg.startDateTime ?? null,
+          // Not dispatched yet: this leg is born Planned and only
+          // /dispatch-leg sets the real startDateTime. Already dispatched:
+          // startDateTime is the real (possibly back-dated) dispatch moment.
+          startDateTime: bornInTransit ? leg.startDateTime : null,
+          plannedStartDateTime: bornInTransit
+            ? null
+            : (leg.startDateTime ?? null),
           chainExceptionReason:
             violations.length > 0 ? (leg.chainExceptionReason ?? null) : null,
           fyCode: journey.fyCode,
@@ -924,12 +981,20 @@ router.post(
         where: { id },
         data: { updatedById: me, version: { increment: 1 } },
       });
+      if (bornInTransit) {
+        await tx.vehicle.update({
+          where: { id: journey.vehicleId },
+          data: { status: "ON_TRIP" },
+        });
+      }
       await writeTripStatus(
         tx,
         trip.id,
         me,
-        "Planned",
-        `Journey leg ${prevLeg.sequenceNo! + 1} created`,
+        initialStatus,
+        bornInTransit
+          ? `Journey leg ${prevLeg.sequenceNo! + 1} created — already in transit`
+          : `Journey leg ${prevLeg.sequenceNo! + 1} created`,
       );
       return trip.id;
     }, TX_BUDGET);

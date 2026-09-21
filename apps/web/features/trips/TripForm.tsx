@@ -715,6 +715,11 @@ export default function TripForm({
                   name="alreadyDispatched"
                   label="Truck already dispatched (trip has already started)"
                 />
+                <p className="-mt-1 text-xs text-muted-foreground">
+                  {alreadyDispatched
+                    ? "Checked: the trip is created with status In Transit, using the actual dispatch time below."
+                    : "Unchecked: the trip is created with status Planned. Only tick this once the truck has actually left."}
+                </p>
 
                 {alreadyDispatched ? (
                   renderDateTimeField(

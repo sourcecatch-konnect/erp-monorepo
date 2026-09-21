@@ -40,9 +40,14 @@ export type DriverAdvanceStatus = z.infer<typeof driverAdvanceStatusSchema>;
 /* Request bodies (inferred from validators)                          */
 /* ------------------------------------------------------------------ */
 
-export type StartJourneyBody = z.output<typeof startJourneySchema>;
+// z.input, not z.output: both dialogs use a `raw: true` resolver, which
+// submits the untransformed (rupees) shape to the API — the server is the
+// sole rupees -> paise boundary. Using z.output here previously masked a
+// real bug where the client double-converted freight amounts (see
+// CreateTripBody / CorrectClosedTripBody in trip.type.ts for the same fix).
+export type StartJourneyBody = z.input<typeof startJourneySchema>;
 export type StartJourneyFormInput = z.input<typeof startJourneySchema>;
-export type AddJourneyLegBody = z.output<typeof addJourneyLegSchema>;
+export type AddJourneyLegBody = z.input<typeof addJourneyLegSchema>;
 export type AddJourneyLegFormInput = z.input<typeof addJourneyLegSchema>;
 export type CloseJourneyLegBody = z.output<typeof closeJourneyLegSchema>;
 export type DispatchJourneyLegBody = z.output<typeof dispatchJourneyLegSchema>;
@@ -60,7 +65,12 @@ export type ReverseTripExpenseBody = z.output<typeof reverseTripExpenseSchema>;
 export type CreateTripExpenseTypeBody = z.output<
   typeof createTripExpenseTypeSchema
 >;
-export type CreateDriverAdvanceBody = z.output<
+// z.input, not z.output: AdvanceDialog uses a `raw: true` resolver, which
+// submits the untransformed (rupees) shape — the server is the sole
+// rupees -> paise boundary. Using z.output here previously masked a real
+// bug where the client double-converted the advance amount (10 -> 1000),
+// the same class of bug fixed for CreateTripBody/AddJourneyLegBody/etc.
+export type CreateDriverAdvanceBody = z.input<
   typeof createDriverAdvanceSchema
 >;
 export type DriverAdvanceFormInput = z.input<typeof createDriverAdvanceSchema>;

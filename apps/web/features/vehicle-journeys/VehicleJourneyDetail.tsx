@@ -9,6 +9,12 @@ import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@skerp/ui/components/tooltip";
+import {
   Table,
   TableBody,
   TableCell,
@@ -67,6 +73,37 @@ import CloseLegDialog from "./CloseLegDialog";
 import TripExpenseDrawer from "./TripExpenseDrawer";
 import AdvanceDialog from "./AdvanceDialog";
 
+function NarrationCell({
+  narration,
+}: {
+  narration?: string | null;
+}) {
+  if (!narration) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="block max-w-[220px] cursor-default truncate">
+            {narration}
+          </span>
+        </TooltipTrigger>
+
+        <TooltipContent
+          side="top"
+          align="start"
+          className="max-w-sm"
+        >
+          <p className="whitespace-normal break-words">
+            {narration}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 export default function VehicleJourneyDetail({ id }: { id: string }) {
   const queryClient = useQueryClient();
 
@@ -497,23 +534,47 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                         <LegStatusBadge status={leg.status} />
                       </TableCell>
                       <TableCell className="text-right">
-                        {canUpdate && journey.status === "ACTIVE" ? (
-                          leg.status === "Planned" ? (
+                        <div
+                          className="flex items-center justify-end gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {canUpdate && leg.status === "Planned" ? (
                             <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setDispatchLeg(leg)}
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label="Edit leg"
+                              title="Edit this leg's route, freight, KM, etc."
+                              asChild
                             >
-                              <IconTruckDelivery size={14} className="mr-1" />
-                              Dispatch
+                              <Link href={`/trips/${leg.id}/edit`}>
+                                <IconEdit size={14} />
+                              </Link>
                             </Button>
-                          ) : leg.status === "InTransit" ? (
-                            <Button size="sm" onClick={() => setCloseLeg(leg)}>
-                              <IconCircleCheck size={14} className="mr-1" />
-                              Close
-                            </Button>
-                          ) : null
-                        ) : null}
+                          ) : null}
+                          {canUpdate && journey.status === "ACTIVE" ? (
+                            leg.status === "Planned" ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDispatchLeg(leg)}
+                              >
+                                <IconTruckDelivery
+                                  size={14}
+                                  className="mr-1"
+                                />
+                                Dispatch
+                              </Button>
+                            ) : leg.status === "InTransit" ? (
+                              <Button
+                                size="sm"
+                                onClick={() => setCloseLeg(leg)}
+                              >
+                                <IconCircleCheck size={14} className="mr-1" />
+                                Close
+                              </Button>
+                            ) : null
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -717,8 +778,8 @@ export default function VehicleJourneyDetail({ id }: { id: string }) {
                       <TableCell className="text-xs">
                         {advance.cashAccount?.name ?? "—"}
                       </TableCell>
-                      <TableCell className="text-xs">
-                        {advance.narration ?? "—"}
+                      <TableCell className="max-w-[220px] text-xs">
+                        <NarrationCell narration={advance.narration} />
                       </TableCell>
                       <TableCell className="text-sm font-medium">
                         {formatPaise(advance.amountPaise)}

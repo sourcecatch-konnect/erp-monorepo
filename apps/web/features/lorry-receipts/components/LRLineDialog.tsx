@@ -19,6 +19,7 @@ import {
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
 import { SuggestInput } from "@skerp/ui/components/suggest-input";
 import { useUnitOfMeasureOptions } from "@/features/masters/unitOfMeasure/useUnitOfMeasureOptions";
+import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 
 export type LinePayload = {
   loadingLocationId?: string;
@@ -273,6 +274,15 @@ export default function LRLineDialog({
                 <IconPlus size={14} className="mr-1" /> Add goods row
               </Button>
             </div>
+            {goodsMaster.isError ? (
+              <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                Couldn&apos;t load the goods list ({getErrorMessage(
+                  goodsMaster.error,
+                )}
+                ) — you can still type a goods name directly below, or ask
+                your admin to check your Goods master permission.
+              </p>
+            ) : null}
             {fields.length === 0 ? (
               <div className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
                 No goods added yet. This LR can stay draft, but the group cannot
@@ -302,7 +312,9 @@ export default function LRLineDialog({
                               placeholder={
                                 goodsMaster.isLoading
                                   ? "Loading goods..."
-                                  : "Select or type goods"
+                                  : goodsMaster.isError
+                                    ? "Type goods name (list unavailable)"
+                                    : "Select or type goods"
                               }
                               invalid={Boolean(
                                 form.formState.errors.goods?.[index]?.name?.message,

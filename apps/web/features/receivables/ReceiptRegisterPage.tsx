@@ -25,17 +25,27 @@ import {
   TableHeader,
   TableRow,
 } from "@skerp/ui/components/table";
+import { TablePaginationFooter } from "@/components/data-table";
 import { receiptApi } from "./receipt.service";
 import { PageHeader, ReceiptStatusBadge, formatDate, money } from "./receipt.ui";
 
 export function ReceiptRegisterPage() {
   const router = useRouter();
+  const [page, setPage] = React.useState(0);
+  const [size, setSize] = React.useState(10);
+
+  const handleSizeChange = (nextSize: number) => {
+    setSize(nextSize);
+    setPage(0);
+  };
+
   const receipts = useQuery({
-    queryKey: ["receivables", "receipts"],
-    queryFn: () => receiptApi.list(),
+    queryKey: ["receivables", "receipts", page, size],
+    queryFn: () => receiptApi.list({ page, size }),
   });
 
-  const data = receipts.data ?? [];
+  const data = receipts.data?.data ?? [];
+  const total = receipts.data?.meta?.total ?? 0;
   const pendingCount = data.filter(
     (r) => r.status === "PENDING_APPROVAL",
   ).length;
@@ -156,6 +166,13 @@ export function ReceiptRegisterPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  <TablePaginationFooter
+                    total={total}
+                    page={page}
+                    size={size}
+                    onPageChange={setPage}
+                    onSizeChange={handleSizeChange}
+                  />
                 </div>
               )}
             </CardContent>

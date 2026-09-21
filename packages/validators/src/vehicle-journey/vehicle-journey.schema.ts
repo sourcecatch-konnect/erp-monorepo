@@ -77,6 +77,13 @@ const legBaseShape = {
   onwardFreight: rupeesToPaise("Onward freight", { allowZero: true }),
   isTripEmpty: z.boolean().optional().default(false),
   openingKm: positiveIntField("Opening KM"),
+  // Dispatch state at creation — mirrors createTripSchema's alreadyDispatched:
+  //   alreadyDispatched = false -> leg is born Planned. `startDateTime` here
+  //     is only a schedule/ETA and is stored as plannedStartDateTime.
+  //   alreadyDispatched = true  -> the truck already left. `startDateTime` is
+  //     the real (possibly back-dated) dispatch moment and the leg is born
+  //     InTransit, skipping Planned.
+  alreadyDispatched: z.boolean().optional().default(false),
   startDateTime: optionalDate,
   // Reason the operator broke city/KM/time continuity with the previous leg.
   // Required by the server whenever the chain check fails.
@@ -108,9 +115,32 @@ const legTypeRefinement = (
   }
 };
 
+const legDispatchRefinement = (
+  data: { alreadyDispatched?: boolean; startDateTime?: Date },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.alreadyDispatched) {
+    if (!data.startDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Actual dispatch date and time is required when the truck has already left",
+        path: ["startDateTime"],
+      });
+    } else if (data.startDateTime.getTime() > Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Dispatch time can't be in the future",
+        path: ["startDateTime"],
+      });
+    }
+  }
+};
+
 export const addJourneyLegSchema = z
   .object(legBaseShape)
-  .superRefine(legTypeRefinement);
+  .superRefine(legTypeRefinement)
+  .superRefine(legDispatchRefinement);
 
 export const closeJourneyLegSchema = z.object({
   closingKm: positiveIntField("Closing KM"),

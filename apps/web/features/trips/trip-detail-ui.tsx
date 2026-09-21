@@ -116,7 +116,13 @@ export function RouteHero({
 /* ------------------------------------------------------------------ */
 
 type StepState = "done" | "current" | "todo" | "cancelled";
-type Step = { key: string; label: string; date: string | null; state: StepState };
+type Step = {
+  key: string;
+  label: string;
+  date: string | null;
+  state: StepState;
+  caption?: string;
+};
 
 const firstAt = (
   history: TripStatusHistoryRow[],
@@ -141,6 +147,11 @@ export function TripLifecycleStepper({ trip }: { trip: Trip }) {
     Closed: trip.endDateTime ?? firstAt(history, "Closed"),
     Cancelled: firstAt(history, "Cancelled"),
   };
+  // A trip created as "already dispatched" never had a distinct planned
+  // stage — the Planned date above is really just the record's creation
+  // time, which can be later than the backdated In Transit time below it.
+  // Label it as such so the timeline doesn't read as an out-of-order bug.
+  const plannedIsRecordCreation = !firstAt(history, "Planned");
   const labels: Record<string, string> = {
     Planned: "Planned",
     InTransit: "In Transit",
@@ -157,6 +168,7 @@ export function TripLifecycleStepper({ trip }: { trip: Trip }) {
         label: labels[k]!,
         date: dates[k] ?? null,
         state: "done",
+        caption: k === "Planned" && plannedIsRecordCreation ? "created" : undefined,
       })),
       {
         key: "Cancelled",
@@ -178,6 +190,7 @@ export function TripLifecycleStepper({ trip }: { trip: Trip }) {
           : i === idx
             ? "current"
             : "todo",
+      caption: k === "Planned" && plannedIsRecordCreation ? "created" : undefined,
     }));
   }
 
@@ -224,6 +237,7 @@ export function TripLifecycleStepper({ trip }: { trip: Trip }) {
             </div>
             <div className="text-xs text-muted-foreground">
               {s.date ? formatDateTime(s.date) : "—"}
+              {s.caption ? ` (${s.caption})` : ""}
             </div>
           </div>
         </li>
@@ -326,6 +340,16 @@ export function tripBlockingLrNumbers(trip: Trip): string[] {
     for (const lr of g.lorryReceipts) if (openLR(lr.status)) out.push(lr.lrNumber);
   }
   return out;
+}
+
+/**
+ * True when an LR trip has never had any LR attached — the client-side
+ * mirror of the server's TRIP_CLOSE_NO_LR gate. DC and empty trips never
+ * carry an LR, so they're exempt.
+ */
+export function tripMissingLR(trip: Trip): boolean {
+  if (trip.tripType !== "lr" || trip.isTripEmpty) return false;
+  return (trip.primaryGroups?.length ?? 0) + (trip.secondaryGroups?.length ?? 0) === 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -570,10 +594,28 @@ export function CargoEmptyState({
         </Link>
       </Button>
     ) : null;
+  } else if (trip.status === "InTransit") {
+    // Reachable via the "already dispatched" / direct-dispatch paths, which
+    // skip the LR form entirely — see the TRIP_CLOSE_NO_LR close-time gate.
+    icon = IconAlertTriangle;
+    heading = "LR still missing — this trip can't close yet";
+    body =
+      "This trip was dispatched without going through the LR form. Attach an LR now, or this trip will be blocked when you try to close it.";
+    cta = canCreateLR ? (
+      <Button variant="outline" size="sm" asChild>
+        <Link href={`/lorry-receipts/new?tripId=${trip.id}`}>
+          <IconPlus size={15} className="mr-1" /> Attach LR now
+        </Link>
+      </Button>
+    ) : null;
   } else {
+    // Closed with no LR — shouldn't be reachable going forward (the close
+    // gate above blocks it), but older trips predating that gate may show
+    // this.
     icon = IconFileText;
-    heading = "No live LR on this trip";
-    body = "No LR group is currently attached to this trip.";
+    heading = "Closed with no LR on record";
+    body =
+      "This trip closed without ever having an LR attached — there's no consignment record for it.";
   }
 
   const Icon = icon;
@@ -812,7 +854,13 @@ export function CancelledBanner({ reason }: { reason: string | null }) {
   );
 }
 
-export function CloseBlockedBanner({ lrNumbers }: { lrNumbers: string[] }) {
+export function CloseBlockedBanner({
+  lrNumbers,
+  missingLR,
+}: {
+  lrNumbers: string[];
+  missingLR?: boolean;
+}) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
       <IconAlertTriangle
@@ -824,9 +872,16 @@ export function CloseBlockedBanner({ lrNumbers }: { lrNumbers: string[] }) {
           Trip can&apos;t close yet
         </p>
         <p className="text-sm text-muted-foreground">
-          {lrNumbers.length} LR{lrNumbers.length > 1 ? "s are" : " is"} not
-          delivered: <span className="font-mono">{lrNumbers.join(", ")}</span>.
-          Finalise and deliver them, or hold the group at hub.
+          {missingLR ? (
+            "This is an LR trip with no LR attached yet. Create and attach an LR before closing it."
+          ) : (
+            <>
+              {lrNumbers.length} LR{lrNumbers.length > 1 ? "s are" : " is"} not
+              delivered:{" "}
+              <span className="font-mono">{lrNumbers.join(", ")}</span>.
+              Finalise and deliver them, or hold the group at hub.
+            </>
+          )}
         </p>
       </div>
     </div>

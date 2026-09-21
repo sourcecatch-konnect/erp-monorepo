@@ -27,6 +27,14 @@ import {
   type NavLink,
 } from "@/config/navigation";
 import { useAppSelector } from "@/store/hooks";
+import { useLowStockCount } from "@/features/stock/hooks/useLowStockCount";
+
+/** Maps a nav item's `badgeKey` to the live count that feeds it — kept as a
+ *  small lookup so navigation.ts itself stays free of feature-specific hooks. */
+function useNavBadgeCounts(): Record<string, number> {
+  const stockLow = useLowStockCount();
+  return { stockLow };
+}
 
 const filterNavItem = (
   item: NavItem,
@@ -40,8 +48,25 @@ const filterNavItem = (
   return items.length ? { ...item, items } : null;
 };
 
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-md bg-amber-500/15 px-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 /** Top-level link item with an icon. */
-function NavLinkItem({ link, pathname }: { link: NavLink; pathname: string }) {
+function NavLinkItem({
+  link,
+  pathname,
+  badgeCount,
+}: {
+  link: NavLink;
+  pathname: string;
+  badgeCount: number;
+}) {
   const Icon = link.icon;
 
   if (link.disabled) {
@@ -65,6 +90,7 @@ function NavLinkItem({ link, pathname }: { link: NavLink; pathname: string }) {
         <Link href={link.href}>
           <Icon />
           <span>{link.title}</span>
+          {link.badgeKey && <NavBadge count={badgeCount} />}
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -130,6 +156,7 @@ function NavGroupItem({
 export function NavMain() {
   const pathname = usePathname();
   const permissions = useAppSelector((state) => state.auth.user?.permissions);
+  const badgeCounts = useNavBadgeCounts();
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items
@@ -155,6 +182,7 @@ export function NavMain() {
                   key={`link:${item.href}:${item.title}`}
                   link={item}
                   pathname={pathname}
+                  badgeCount={item.badgeKey ? (badgeCounts[item.badgeKey] ?? 0) : 0}
                 />
               ),
             )}

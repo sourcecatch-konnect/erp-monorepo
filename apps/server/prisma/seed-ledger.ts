@@ -74,6 +74,16 @@ const GL_LEDGERS: {
     name: "Miscellaneous Expense",
     group: "INDIRECT_EXPENSE",
   },
+  {
+    code: "SPARE_PARTS_INVENTORY",
+    name: "Spare Parts Inventory",
+    group: "CURRENT_ASSET",
+  },
+  {
+    code: "TDS_PAYABLE",
+    name: "TDS Payable (Contractor)",
+    group: "DUTIES_AND_TAXES",
+  },
 ];
 
 export async function seedLedger(client: typeof db = db) {

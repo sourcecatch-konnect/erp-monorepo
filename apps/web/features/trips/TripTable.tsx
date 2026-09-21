@@ -329,23 +329,24 @@ export default function TripTable(props: Props) {
           />
         ),
         cell: ({ row }) => {
-          const iso = row.original.startDateTime ?? row.original.createdAt;
-          const planned =
-            row.original.status === "Planned"
-              ? row.original.plannedStartDateTime
-              : null;
+          const isPlanned = row.original.status === "Planned";
+          // For a Planned trip, startDateTime isn't set yet — showing it
+          // would fall back to createdAt (today) and look like a bogus
+          // dispatch time. Show the actual planned time as primary instead.
+          const iso = isPlanned
+            ? (row.original.plannedStartDateTime ??
+              row.original.startDateTime ??
+              row.original.createdAt)
+            : (row.original.startDateTime ?? row.original.createdAt);
           return (
             <div>
-              <span className="block text-sm">{formatDate(iso)}</span>
-              {planned ? (
-                <span className="block text-xs text-muted-foreground">
-                  Planned {formatDate(planned)}
-                </span>
-              ) : (
-                <span className="block text-xs text-muted-foreground">
-                  {timeAgo(iso)}
-                </span>
-              )}
+              <span className="block text-sm">
+                {isPlanned ? "Planned " : ""}
+                {formatDate(iso)}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {isPlanned ? `Created ${timeAgo(row.original.createdAt)}` : timeAgo(iso)}
+              </span>
             </div>
           );
         },

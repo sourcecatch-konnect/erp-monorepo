@@ -126,25 +126,146 @@ export async function ledgerForCustomer(customerId: string, range: LedgerDateRan
   return buildLedgerView(rows, range);
 }
 
-/** Creditor ledger. */
-export async function ledgerForCreditor(creditorId: string, range: LedgerDateRange = {}) {
-  const rows = await db.ledgerEntry.findMany({
-    where: { creditorId },
-    orderBy: orderChronological,
+/**
+ * Creditor ledger — reads the real double-entry `JournalLine`s posted against
+ * this party's `Ledger` row (`kind: "PARTY"`, group `SUNDRY_CREDITOR`),
+ * exactly like the Debtor statement fix: `LedgerEntry` is a cash-movement
+ * mirror that Workshop postings (PO/Inward/Job Card/Service Bill — see
+ * `posting.service.ts`) never write to, so it silently hid that activity.
+ * `ledgerId` here is the `Ledger.id`, not a `Creditor.id` — the party picker
+ * now sources both `Creditor` and `SparePartSupplier` rows from
+ * `GET /ledger/accounts?group=SUNDRY_CREDITOR`, which already returns
+ * `Ledger.id`. A credit line increases what we owe (liability up, `IN`); a
+ * debit line (payment / credit note) reduces it (`OUT`).
+ */
+export async function ledgerForCreditor(ledgerId: string, range: LedgerDateRange = {}) {
+  const lines = await db.journalLine.findMany({
+    where: {
+      ledgerId,
+      journalEntry: { status: "POSTED" },
+    },
+    select: {
+      id: true,
+      debitPaise: true,
+      creditPaise: true,
+      narration: true,
+      lineNumber: true,
+      journalEntry: {
+        select: {
+          voucherDate: true,
+          voucherType: true,
+          voucherNumber: true,
+          narration: true,
+          sourceType: true,
+          sourceId: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: [
+      { journalEntry: { voucherDate: "asc" } },
+      { journalEntry: { createdAt: "asc" } },
+      { lineNumber: "asc" },
+    ],
   });
-  return buildLedgerView(rows, range);
+  return buildLedgerView(lines.map(journalLineToLedgerRow), range);
 }
 
 /**
- * Expense ledger — flat, not party-scoped: every PAYMENT-sourced entry whose
- * category snapshot is EXPENSE, across all creditors/payees. `runningBalance`
- * here reads as "net expense so far" (OUT entries minus any IN reversal rows
- * from an un-approved/deleted expense payment), not an account balance.
+ * Expense ledger — flat, not party-scoped: every `JournalLine` posted to a
+ * DIRECT_EXPENSE/INDIRECT_EXPENSE GL head (e.g. `REPAIR_EXPENSE`), across all
+ * sources. Reads `JournalLine`/`Ledger` for the same reason as the Creditor
+ * fix above — the old `LedgerEntry`-based read never saw Workshop's
+ * `REPAIR_EXPENSE` postings. `runningBalance` reads as "net expense so far":
+ * a debit (expense incurred) is `OUT`, a credit (reversal/return) is `IN`.
  */
 export async function ledgerForExpenseCategory(range: LedgerDateRange = {}) {
-  const rows = await db.ledgerEntry.findMany({
-    where: { sourceType: "PAYMENT", category: "EXPENSE" },
-    orderBy: orderChronological,
+  const lines = await db.journalLine.findMany({
+    where: {
+      journalEntry: { status: "POSTED" },
+      ledger: { group: { in: ["DIRECT_EXPENSE", "INDIRECT_EXPENSE"] } },
+    },
+    select: {
+      id: true,
+      debitPaise: true,
+      creditPaise: true,
+      narration: true,
+      lineNumber: true,
+      journalEntry: {
+        select: {
+          voucherDate: true,
+          voucherType: true,
+          voucherNumber: true,
+          narration: true,
+          sourceType: true,
+          sourceId: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: [
+      { journalEntry: { voucherDate: "asc" } },
+      { journalEntry: { createdAt: "asc" } },
+      { lineNumber: "asc" },
+    ],
   });
-  return buildLedgerView(rows, range);
+  return buildLedgerView(lines.map(journalLineToLedgerRow), range);
+}
+
+type JournalLineForLedger = {
+  id: string;
+  debitPaise: bigint;
+  creditPaise: bigint;
+  narration: string | null;
+  lineNumber: number;
+  journalEntry: {
+    voucherDate: Date;
+    voucherType: string;
+    voucherNumber: string;
+    narration: string | null;
+    sourceType: string;
+    sourceId: string;
+    createdAt: Date;
+  };
+};
+
+/**
+ * `LedgerEntryRow.sourceType` (shared @skerp/types) is the 3-value
+ * `LedgerSourceType` the Bank/Cash tabs' `LedgerEntry` rows use; a
+ * `JournalEntry` carries the richer `JournalSourceType` (BILL, PURCHASE_INWARD,
+ * JOB_CARD, SERVICE_BILL, ...). Rather than widen the shared UI type just for
+ * badge coloring, collapse to the closest bucket: an actual outgoing payment
+ * reads as PAYMENT, everything else posted here (bills/accruals — PO Inward,
+ * Job Card, Service Bill, Supplier Replacement, manual/credit-note journals)
+ * reads as ADJUSTMENT, same as non-cash entries already do on the legacy tabs.
+ */
+function journalSourceTypeToLedgerSourceType(sourceType: string): LedgerSourceType {
+  if (sourceType === "VENDOR_PAYMENT") return "PAYMENT";
+  if (sourceType === "RECEIPT") return "RECEIPT";
+  return "ADJUSTMENT";
+}
+
+/** Debit line -> "OUT" (paid / expense incurred), credit line -> "IN"
+ *  (owed / reversed) — matches the `LedgerRow` shape `buildLedgerView`
+ *  already knows how to run a balance over. */
+function journalLineToLedgerRow(l: JournalLineForLedger): LedgerRow {
+  const isDebit = Number(l.debitPaise) > 0;
+  return {
+    id: l.id,
+    occurredAt: l.journalEntry.voucherDate,
+    direction: isDebit ? "OUT" : "IN",
+    amountPaise: isDebit ? l.debitPaise : l.creditPaise,
+    cashAccountId: null,
+    customerId: null,
+    creditorId: null,
+    category: null,
+    sourceType: journalSourceTypeToLedgerSourceType(l.journalEntry.sourceType),
+    sourceId: l.journalEntry.sourceId,
+    description:
+      l.narration?.trim() ||
+      l.journalEntry.narration?.trim() ||
+      `${l.journalEntry.voucherType} · ${l.journalEntry.voucherNumber}`,
+    createdById: "",
+    createdAt: l.journalEntry.createdAt,
+  };
 }
