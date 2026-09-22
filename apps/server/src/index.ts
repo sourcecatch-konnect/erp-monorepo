@@ -76,6 +76,7 @@ import spareInwardRoute from "./modules/spare-inward/spare-inward.route.js";
 import jobCardRoute from "./modules/job-card/job-card.route.js";
 import serviceBillRoute from "./modules/service-bill/service-bill.route.js";
 import supplierReplacementRoute from "./modules/supplier-replacement/supplier-replacement.route.js";
+import vendorPaymentRoute from "./modules/vendor-payment/vendor-payment.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -161,6 +162,7 @@ app.use("/spare-inward", spareInwardRoute);
 app.use("/job-card", jobCardRoute);
 app.use("/service-bill", serviceBillRoute);
 app.use("/supplier-replacement", supplierReplacementRoute);
+app.use("/vendor-payment", vendorPaymentRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>

@@ -84,6 +84,45 @@ const GL_LEDGERS: {
     name: "TDS Payable (Contractor)",
     group: "DUTIES_AND_TAXES",
   },
+  // Vendor-payment accrual (VP-3) — PLACEHOLDER codes pending Accounts'
+  // written sign-off on names/groupings. Keep in sync with the
+  // VENDOR_*_CODE constants in modules/ledger/posting.service.ts. See that
+  // file's comment on VENDOR_ADVANCE_RECOVERY_CODE for a known open issue.
+  {
+    code: "DETENTION_EXPENSE",
+    name: "Detention Expense",
+    group: "DIRECT_EXPENSE",
+  },
+  {
+    code: "HAMALI_EXPENSE",
+    name: "Hamali / Labour Expense",
+    group: "DIRECT_EXPENSE",
+  },
+  {
+    code: "TRANSPORTER_ADVANCE_RECOVERY",
+    name: "Transporter Advance Recovery",
+    group: "CURRENT_ASSET",
+  },
+  {
+    code: "COMMISSION_RECOVERY",
+    name: "Commission Recovery",
+    group: "INDIRECT_INCOME",
+  },
+  {
+    code: "HAMALI_RECOVERY",
+    name: "Hamali Recovery",
+    group: "INDIRECT_INCOME",
+  },
+  {
+    code: "DAMAGE_RECOVERY",
+    name: "Damage Recovery",
+    group: "INDIRECT_INCOME",
+  },
+  {
+    code: "STATIONERY_RECOVERY",
+    name: "Stationery Recovery",
+    group: "INDIRECT_INCOME",
+  },
 ];
 
 export async function seedLedger(client: typeof db = db) {

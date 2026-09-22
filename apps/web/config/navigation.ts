@@ -352,6 +352,28 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.RECEIPT.VIEW,
       },
       {
+        title: "Payment Slips",
+        href: "/accounts/vendor-payments",
+        icon: IconWallet,
+        permission: PERMS.ACCOUNTS.PAYMENT.VIEW,
+      },
+      {
+        title: "Payment Approvals",
+        href: "/accounts/vendor-payments/approvals",
+        icon: IconClipboardList,
+        permission: PERMS.ACCOUNTS.PAYMENT.APPROVE,
+        // Flip off once the VP-6 approval queue screen ships.
+        disabled: true,
+      },
+      {
+        title: "Payment Disbursements",
+        href: "/accounts/vendor-payments/disbursements",
+        icon: IconCashBanknote,
+        permission: PERMS.ACCOUNTS.PAYMENT.DISBURSE,
+        // Flip off once the VP-7 disbursement screen ships.
+        disabled: true,
+      },
+      {
         title: "Chart of Accounts",
         href: "/accounts/chart-of-accounts",
         icon: IconBooks,

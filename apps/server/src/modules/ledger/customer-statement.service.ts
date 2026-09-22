@@ -313,7 +313,10 @@ export async function perBillOutstanding(
   }));
 
   const cnLites: CreditNoteLite[] = creditNotes.map((c) => ({
-    billId: c.billId,
+    // billId is non-null here — the query above filters `billId: { in: billIds } }`
+    // (a list of real bill ids), which a null-billId row (a vendor-payment
+    // allocation) can never match. Prisma just doesn't narrow the select type on it.
+    billId: c.billId!,
     amountPaise: n(c.amountPaise),
     at: c.journalEntry.voucherDate,
   }));

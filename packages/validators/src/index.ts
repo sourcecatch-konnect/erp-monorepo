@@ -141,3 +141,4 @@ export * from "./workshop/service-bill.schema.js";
 export * from "./workshop/supplier-replacement.schema.js";
 export * from "./master/one-lap-tracker.js";
 export * from "./ledger/ledger.schema.js";
+export * from "./accounts/vendor-payment.schema.js";

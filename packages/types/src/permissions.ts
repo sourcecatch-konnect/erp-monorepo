@@ -159,6 +159,13 @@ type ReceiptPermissionKey =
   | "receipt.approve"
   | "receipt.cancel";
 
+type AccountsPaymentPermissionKey =
+  | "accounts.payment.view"
+  | "accounts.payment.create"
+  | "accounts.payment.approve"
+  | "accounts.payment.disburse"
+  | "accounts.payment.cancel";
+
 type LedgerPermissionKey =
   | "ledger.view"
   | "ledger.voucher_view"
@@ -213,6 +220,7 @@ export type PermissionKey =
   | CashPlanningPermissionKey
   | BillingPermissionKey
   | ReceiptPermissionKey
+  | AccountsPaymentPermissionKey
   | LedgerPermissionKey
   | WorkshopPermissionKey
   | GRNPermissionKey
@@ -446,6 +454,15 @@ export const PERMS = {
     CREATE: "receipt.create",
     APPROVE: "receipt.approve",
     CANCEL: "receipt.cancel",
+  },
+  ACCOUNTS: {
+    PAYMENT: {
+      VIEW: "accounts.payment.view",
+      CREATE: "accounts.payment.create",
+      APPROVE: "accounts.payment.approve",
+      DISBURSE: "accounts.payment.disburse",
+      CANCEL: "accounts.payment.cancel",
+    },
   },
   LEDGER: {
     VIEW: "ledger.view",

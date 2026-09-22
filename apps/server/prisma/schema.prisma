@@ -191,6 +191,12 @@ model User {
   createdJournalEntries         JournalEntry[]          @relation("CreatedJournalEntries")
   postedJournalEntries          JournalEntry[]          @relation("PostedJournalEntries")
 
+  createdVendorPaymentSlips         VendorPaymentSlip[]         @relation("CreatedVendorPaymentSlips")
+  approvedVendorPaymentSlips        VendorPaymentSlip[]         @relation("ApprovedVendorPaymentSlips")
+  rejectedVendorPaymentSlips        VendorPaymentSlip[]         @relation("RejectedVendorPaymentSlips")
+  cancelledVendorPaymentSlips       VendorPaymentSlip[]         @relation("CancelledVendorPaymentSlips")
+  createdVendorPaymentDisbursements VendorPaymentDisbursement[] @relation("CreatedVendorPaymentDisbursements")
+
   tablePrefs UserTablePref[]
 
   passwordResetTokens PasswordResetToken[]
@@ -306,6 +312,7 @@ model Branch {
   receipts           Receipt[]
   ledgers            Ledger[]
   journalEntries     JournalEntry[]
+  vendorPaymentSlips VendorPaymentSlip[]
   purchaseOrders     PurchaseOrder[]
   spareInwards       SpareInward[]
   spareBatches       SpareBatch[]
@@ -803,6 +810,7 @@ model Labour {
   jobCardPartLines           JobCardPartLine[]
   jobCardServiceLines        JobCardServiceLine[]
   ledger                     Ledger?
+  vendorPaymentSlips         VendorPaymentSlip[]
 
   @@index([name])
   @@index([branchId])
@@ -902,19 +910,20 @@ model State {
 }
 
 model Transport {
-  id               String            @id @default(cuid())
-  name             String
-  country          String
-  phoneNo          String            @unique
-  cityId           String
-  stateId          String
-  city             City              @relation(fields: [cityId], references: [id])
-  state            State             @relation(fields: [stateId], references: [id])
-  marketLRGroups   LRGroup[]         @relation("LRGroupMarketTransport")
-  vehicles         Vehicle[]
-  deliveryChallans DeliveryChallan[]
-  lrgroups         LRGroup[]
-  ledger           Ledger?
+  id                 String              @id @default(cuid())
+  name               String
+  country            String
+  phoneNo            String              @unique
+  cityId             String
+  stateId            String
+  city               City                @relation(fields: [cityId], references: [id])
+  state              State               @relation(fields: [stateId], references: [id])
+  marketLRGroups     LRGroup[]           @relation("LRGroupMarketTransport")
+  vehicles           Vehicle[]
+  deliveryChallans   DeliveryChallan[]
+  lrgroups           LRGroup[]
+  ledger             Ledger?
+  vendorPaymentSlips VendorPaymentSlip[]
 
   @@index([name])
   @@index([cityId])
@@ -3067,15 +3076,16 @@ model Ledger {
   cashAccountId       String? @unique
   sparePartSupplierId String? @unique
 
-  branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  transport         Transport?         @relation(fields: [transportId], references: [id], onDelete: Restrict)
-  creditor          Creditor?          @relation(fields: [creditorId], references: [id], onDelete: Restrict)
-  labour            Labour?            @relation(fields: [labourId], references: [id], onDelete: Restrict)
-  pump              Pump?              @relation(fields: [pumpId], references: [id], onDelete: Restrict)
-  cashAccount       CashAccount?       @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
-  sparePartSupplier SparePartSupplier? @relation(fields: [sparePartSupplierId], references: [id], onDelete: Restrict)
-  lines             JournalLine[]
+  branch                     Branch?                     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer                   Customer?                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  transport                  Transport?                  @relation(fields: [transportId], references: [id], onDelete: Restrict)
+  creditor                   Creditor?                   @relation(fields: [creditorId], references: [id], onDelete: Restrict)
+  labour                     Labour?                     @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  pump                       Pump?                       @relation(fields: [pumpId], references: [id], onDelete: Restrict)
+  cashAccount                CashAccount?                @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  sparePartSupplier          SparePartSupplier?          @relation(fields: [sparePartSupplierId], references: [id], onDelete: Restrict)
+  lines                      JournalLine[]
+  vendorPaymentDisbursements VendorPaymentDisbursement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3085,6 +3095,130 @@ model Ledger {
   // clashes are a Chart-of-Accounts / Tally-sync concern, handled there.
   @@index([kind, name])
   @@index([group])
+}
+
+/// Vendor-payment engine: Slip -> Approval -> Disbursement. This phase covers
+/// TRANSPORTER and HAMALI; LDC_BROKER and JOBCARD reuse the same tables later.
+/// DRAFT / PENDING_APPROVAL never touch the ledger. Approval posts the accrual
+/// (Dr expense/detention, Cr recoveries + party payable) atomically with the
+/// status flip. Each disbursement is a separate settlement voucher against the
+/// same party-payable reference.
+model VendorPaymentSlip {
+  id         String            @id @default(cuid())
+  slipNumber String            @unique
+  type       VendorPaymentType
+  branchId   String
+  fyCode     String
+
+  // Exactly one of transportId / labourId is set for the current types
+  // (TRANSPORTER, HAMALI) — DB-enforced by VendorPaymentSlip_one_payee_chk
+  // (see the hand-authored migration).
+  transportId String?
+  labourId    String?
+
+  grossPayablePaise    BigInt @default(0)
+  totalDeductionsPaise BigInt @default(0)
+  netPayablePaise      BigInt @default(0)
+  paidPaise            BigInt @default(0)
+
+  status VendorPaymentStatus @default(DRAFT)
+
+  accrualJournalEntryId String? @unique
+
+  createdById String
+
+  approvedById String?
+  approvedAt   DateTime?
+
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch              Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  transport           Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
+  labour              Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  accrualJournalEntry JournalEntry? @relation(fields: [accrualJournalEntryId], references: [id], onDelete: SetNull)
+  createdBy           User          @relation("CreatedVendorPaymentSlips", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy          User?         @relation("ApprovedVendorPaymentSlips", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy          User?         @relation("RejectedVendorPaymentSlips", fields: [rejectedById], references: [id], onDelete: SetNull)
+  cancelledBy         User?         @relation("CancelledVendorPaymentSlips", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  lines         VendorPaymentSlipLine[]
+  disbursements VendorPaymentDisbursement[]
+  allocations   LedgerAllocation[]
+
+  @@index([branchId, status])
+  @@index([type, status])
+  @@index([transportId])
+  @@index([labourId])
+}
+
+/// One line per claimed source document (an LR's freight/detention, a GRN's
+/// hamali, ...). isActive=false releases the source back to the eligible pool
+/// — set on every line when a slip is cancelled, in the same transaction.
+model VendorPaymentSlipLine {
+  id         String                  @id @default(cuid())
+  slipId     String
+  sourceType VendorPaymentSourceType
+  sourceId   String
+
+  isActive Boolean @default(true)
+
+  freightPaise    BigInt @default(0)
+  detentionPaise  BigInt @default(0)
+  advancePaise    BigInt @default(0)
+  commissionPaise BigInt @default(0)
+  hamaliPaise     BigInt @default(0)
+  tdsPaise        BigInt @default(0)
+  damagePaise     BigInt @default(0)
+  stationeryPaise BigInt @default(0)
+  netPaise        BigInt @default(0)
+
+  createdAt DateTime @default(now())
+
+  slip VendorPaymentSlip @relation(fields: [slipId], references: [id], onDelete: Cascade)
+
+  // Partial UNIQUE INDEX on (sourceType, sourceId) WHERE "isActive" — hand
+  // authored in the migration (Prisma has no WHERE-clause index syntax);
+  // this plain index only covers lookup/query performance.
+  @@index([slipId])
+  @@index([sourceType, sourceId])
+}
+
+/// One settlement voucher per payment against a slip. clientRequestId makes a
+/// retried disbursement request a no-op instead of a duplicate payment.
+model VendorPaymentDisbursement {
+  id     String @id @default(cuid())
+  slipId String
+
+  paidPaise   BigInt
+  mode        PaymentMode
+  paidAt      DateTime
+  referenceNo String?
+
+  fundingLedgerId String
+
+  clientRequestId String @unique
+
+  settlementJournalEntryId String? @unique
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  slip                   VendorPaymentSlip @relation(fields: [slipId], references: [id], onDelete: Restrict)
+  fundingLedger          Ledger            @relation(fields: [fundingLedgerId], references: [id], onDelete: Restrict)
+  settlementJournalEntry JournalEntry?     @relation(fields: [settlementJournalEntryId], references: [id], onDelete: SetNull)
+  createdBy              User              @relation("CreatedVendorPaymentDisbursements", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([slipId])
 }
 
 /// Voucher header. A voucher is N balanced JournalLine rows sharing this row.
@@ -3122,22 +3256,24 @@ model JournalEntry {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  branch             Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  createdBy          User                @relation("CreatedJournalEntries", fields: [createdById], references: [id], onDelete: Restrict)
-  postedBy           User?               @relation("PostedJournalEntries", fields: [postedById], references: [id], onDelete: SetNull)
-  reverses           JournalEntry?       @relation("JournalReversal", fields: [reversesId], references: [id], onDelete: SetNull)
-  reversedBy         JournalEntry?       @relation("JournalReversal")
-  lines              JournalLine[]
-  allocations        LedgerAllocation[]
-  bill               Bill?
-  receipt            Receipt?
-  cashPayment        CashPayment?
-  spareInward        SpareInward?
-  jobCard            JobCard?
-  jobCardRemovedPart JobCardRemovedPart?
-  serviceBill        ServiceBill?
-  replacementInward  ReplacementInward?
-  serviceBillPayment ServiceBillPayment?
+  branch                    Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy                 User                       @relation("CreatedJournalEntries", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy                  User?                      @relation("PostedJournalEntries", fields: [postedById], references: [id], onDelete: SetNull)
+  reverses                  JournalEntry?              @relation("JournalReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy                JournalEntry?              @relation("JournalReversal")
+  lines                     JournalLine[]
+  allocations               LedgerAllocation[]
+  bill                      Bill?
+  receipt                   Receipt?
+  cashPayment               CashPayment?
+  spareInward               SpareInward?
+  jobCard                   JobCard?
+  jobCardRemovedPart        JobCardRemovedPart?
+  serviceBill               ServiceBill?
+  replacementInward         ReplacementInward?
+  serviceBillPayment        ServiceBillPayment?
+  vendorPaymentAccrualSlip  VendorPaymentSlip?
+  vendorPaymentDisbursement VendorPaymentDisbursement?
 
   @@unique([voucherType, sourceType, sourceId])
   @@unique([voucherType, voucherNumber])
@@ -3166,23 +3302,31 @@ model JournalLine {
   @@index([ledgerId])
 }
 
-/// Bill-wise settlement trail. NEW_REF opens an outstanding reference (a sale),
-/// AGAINST_REF consumes it (a receipt / credit note).
-/// Outstanding(bill) = sum(NEW_REF.amountPaise) - sum(AGAINST_REF.amountPaise).
+/// Bill-wise / slip-wise settlement trail. NEW_REF opens an outstanding
+/// reference (a sale, a vendor-payment accrual), AGAINST_REF consumes it (a
+/// receipt / credit note, a vendor disbursement).
+/// Outstanding(ref) = sum(NEW_REF.amountPaise) - sum(AGAINST_REF.amountPaise).
+/// Exactly one of billId / vendorPaymentSlipId is set — DB-enforced by
+/// LedgerAllocation_one_ref_chk (see the hand-authored migration). Nullable
+/// rather than a polymorphic refId/refType so each reference kind keeps its
+/// own FK-checked referential integrity (onDelete: Restrict).
 model LedgerAllocation {
-  id             String            @id @default(cuid())
-  journalEntryId String
-  journalLineId  String
-  billId         String
-  refType        AllocationRefType
-  amountPaise    BigInt
-  createdAt      DateTime          @default(now())
+  id                  String            @id @default(cuid())
+  journalEntryId      String
+  journalLineId       String
+  billId              String?
+  vendorPaymentSlipId String?
+  refType             AllocationRefType
+  amountPaise         BigInt
+  createdAt           DateTime          @default(now())
 
-  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  journalLine  JournalLine  @relation(fields: [journalLineId], references: [id], onDelete: Cascade)
-  bill         Bill         @relation(fields: [billId], references: [id], onDelete: Restrict)
+  journalEntry      JournalEntry       @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  journalLine       JournalLine        @relation(fields: [journalLineId], references: [id], onDelete: Cascade)
+  bill              Bill?              @relation(fields: [billId], references: [id], onDelete: Restrict)
+  vendorPaymentSlip VendorPaymentSlip? @relation(fields: [vendorPaymentSlipId], references: [id], onDelete: Restrict)
 
   @@index([billId])
+  @@index([vendorPaymentSlipId])
   @@index([journalEntryId])
 }
 
@@ -4254,6 +4398,7 @@ enum JournalSourceType {
   BILL
   RECEIPT
   VENDOR_PAYMENT
+  VENDOR_PAYMENT_ACCRUAL
   MANUAL
   CREDIT_NOTE
   PURCHASE_INWARD
@@ -4265,6 +4410,29 @@ enum JournalSourceType {
 enum AllocationRefType {
   NEW_REF
   AGAINST_REF
+}
+
+enum VendorPaymentType {
+  TRANSPORTER
+  HAMALI
+  LDC_BROKER
+  JOBCARD
+}
+
+enum VendorPaymentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum VendorPaymentSourceType {
+  LR
+  GRN_HAMALI
+  RAIL_BRANCH_GRN
+  VP_LOADING
 }
 
 enum ReceiptPaymentMode {
