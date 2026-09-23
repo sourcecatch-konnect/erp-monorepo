@@ -43,6 +43,17 @@ export type EligibleTransporterLR = {
   stationeryPaise: string;
 };
 
+export type HamaliSourceType = "GRN_HAMALI" | "RAIL_BRANCH_GRN" | "VP_LOADING";
+
+export type EligibleHamaliSource = {
+  sourceType: HamaliSourceType;
+  sourceId: string;
+  label: string;
+  branchId: string | null;
+  occurredAt: string | null;
+  hamaliPaise: string;
+};
+
 export type VendorPaymentSlipLineInput = {
   sourceType: VendorPaymentSourceType;
   sourceId: string;
@@ -99,6 +110,7 @@ export type VendorPaymentSlip = {
     mode: string;
     paidAt: string;
     referenceNo: string | null;
+    settlementJournalEntryId: string | null;
     createdAt: string;
   }>;
   _count?: { lines: number; disbursements: number };
@@ -109,12 +121,30 @@ export type CreateVendorPaymentSlipBody = {
   branchId: string;
   transportId?: string;
   labourId?: string;
+  /** Required for HAMALI — basis points (200 = 2%), applied per line via
+   *  roundPaiseByBps server-side. Unused for TRANSPORTER. */
+  tdsRateBps?: number;
   lines: VendorPaymentSlipLineInput[];
 };
 
 export type UpdateVendorPaymentSlipBody = {
   lines: VendorPaymentSlipLineInput[];
+  tdsRateBps?: number;
   version: number;
+};
+
+export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE";
+
+export type CreateVendorPaymentDisbursementBody = {
+  paidPaise: string;
+  mode: PaymentMode;
+  paidAt: string;
+  referenceNo?: string;
+  fundingLedgerId: string;
+  /** Generate once per disbursement attempt (e.g. crypto.randomUUID() on
+   *  page mount) and reuse it across retries of the *same* attempt — this
+   *  is what makes a retried request a no-op instead of a duplicate payment. */
+  clientRequestId: string;
 };
 
 const get = async <T>(url: string, params?: Record<string, string | undefined>) => {
@@ -157,6 +187,12 @@ export const vendorPaymentApi = {
     from?: string;
     to?: string;
   }) => get<EligibleTransporterLR[]>("/vendor-payment/calculators/transporter", filters),
+  eligibleHamaliSources: (filters: {
+    labourId: string;
+    branchId?: string;
+    from?: string;
+    to?: string;
+  }) => get<EligibleHamaliSource[]>("/vendor-payment/calculators/hamali", filters),
   createSlip: (body: CreateVendorPaymentSlipBody) =>
     post<VendorPaymentSlip>("/vendor-payment/slips", body),
   updateSlip: (id: string, body: UpdateVendorPaymentSlipBody) =>
@@ -165,6 +201,14 @@ export const vendorPaymentApi = {
       .then(unwrapApiResponse),
   submitSlip: (id: string, version: number) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/submit`, { version }),
+  approveSlip: (id: string, version: number) =>
+    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/approve`, { version }),
+  rejectSlip: (id: string, version: number, reason: string) =>
+    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/reject`, { version, reason }),
+  disburse: (id: string, body: CreateVendorPaymentDisbursementBody) =>
+    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/disburse`, body),
+  cancelSlip: (id: string, version: number, reason: string) =>
+    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/cancel`, { version, reason }),
   listSlips,
   slip: (id: string) => get<VendorPaymentSlip>(`/vendor-payment/slips/${id}`),
 };

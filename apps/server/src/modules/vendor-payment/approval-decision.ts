@@ -40,3 +40,15 @@ export function decideVendorPaymentApproval(
 
   return "REQUIRE_APPROVAL";
 }
+
+/**
+ * Maker-checker policy for vendor-payment approval: the creator of a slip
+ * cannot approve it themselves. Every slip reaching /approve already
+ * required approval by definition (an auto-approved slip never enters
+ * PENDING_APPROVAL), so there's no separate "above-threshold" check here —
+ * the block applies to any self-approval attempt while the policy is on.
+ * Defaults to enabled (fail closed) — an unset or malformed value never
+ * silently allows self-approval on a financial posting.
+ */
+export const vendorPaymentMakerCheckerEnabled = (): boolean =>
+  process.env.VENDOR_PAYMENT_MAKER_CHECKER !== "false";

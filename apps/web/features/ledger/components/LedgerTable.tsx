@@ -18,13 +18,16 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import { CompactMoney } from "./CompactMoney";
 
-const sourceBadge: Record<LedgerSourceType, string> = {
+// Exported so callers building a GenericStatementRow feed from a plain
+// LedgerView (e.g. LedgerPage's non-vendor Creditor rows) can reuse the same
+// badge/label set instead of redefining it.
+export const sourceBadge: Record<LedgerSourceType, string> = {
   RECEIPT: "bg-emerald-50 text-emerald-700",
   PAYMENT: "bg-red-50 text-red-700",
   ADJUSTMENT: "bg-muted text-muted-foreground",
 };
 
-const sourceLabel: Record<LedgerSourceType, string> = {
+export const sourceLabel: Record<LedgerSourceType, string> = {
   RECEIPT: "Receipt",
   PAYMENT: "Payment",
   ADJUSTMENT: "Adjustment",
@@ -44,6 +47,20 @@ const statementKindLabel: Record<StatementLine["kind"], string> = {
   CREDIT_NOTE: "Credit Note",
   DEBIT_NOTE: "Debit Note",
   JOURNAL: "Journal",
+};
+
+/** Any statement's row shape — StatementLine (Debtor) and VendorStatementLine
+ *  (VP-8) are both structurally this, just with different `kind` literals. */
+export type GenericStatementRow = {
+  id: string;
+  date: string;
+  kind: string;
+  particulars: string;
+  voucherNumber: string | null;
+  href: string | null;
+  debitPaise: number;
+  creditPaise: number;
+  runningBalancePaise: number;
 };
 
 /**
@@ -82,8 +99,18 @@ type Props = {
    * `entries` / `balanceConvention` are ignored.
    */
   variant?: "cash" | "statement";
-  statementRows?: StatementLine[];
+  statementRows?: GenericStatementRow[];
   statementOpeningPaise?: number;
+  /**
+   * "statement" variant only. Which side of `runningBalancePaise` reads as
+   * positive — Debtor (asset) is Dr-positive (default, matches every
+   * existing call site); Vendor (liability, VP-8) is Cr-positive. Also
+   * selects the kind badge/label maps: omit for the Debtor's BILL/RECEIPT/
+   * CREDIT_NOTE/DEBIT_NOTE/JOURNAL set, pass both for any other kind set.
+   */
+  statementBalanceConvention?: "asset" | "liability";
+  statementKindBadge?: Record<string, string>;
+  statementKindLabel?: Record<string, string>;
 };
 
 const dateFmt = (value: string) =>
@@ -107,10 +134,19 @@ export function LedgerTable(props: Props) {
 function StatementTable({
   statementRows = [],
   statementOpeningPaise = 0,
+  statementBalanceConvention = "asset",
+  statementKindBadge: kindBadge = statementKindBadge,
+  statementKindLabel: kindLabel = statementKindLabel,
   isLoading,
   emptyLabel,
   maxHeight = 480,
 }: Props) {
+  // Dr-positive (asset, e.g. Debtor) reads a positive balance as "Dr";
+  // Cr-positive (liability, e.g. Vendor/VP-8) reads it as "Cr" instead.
+  const positiveSuffix = statementBalanceConvention === "liability" ? "Cr" : "Dr";
+  const negativeSuffix = statementBalanceConvention === "liability" ? "Dr" : "Cr";
+  const suffixFor = (balance: number) => (balance >= 0 ? positiveSuffix : negativeSuffix);
+
   return (
     <div className="overflow-auto" style={{ maxHeight }}>
       <Table>
@@ -133,7 +169,7 @@ function StatementTable({
               <span className="inline-flex items-baseline gap-1">
                 <CompactMoney className="text-sm font-medium" value={statementOpeningPaise} />
                 <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                  {statementOpeningPaise >= 0 ? "Dr" : "Cr"}
+                  {suffixFor(statementOpeningPaise)}
                 </span>
               </span>
             </TableCell>
@@ -177,9 +213,9 @@ function StatementTable({
                 </TableCell>
                 <TableCell>
                   <span
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${statementKindBadge[r.kind]}`}
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${kindBadge[r.kind] ?? "bg-muted text-muted-foreground"}`}
                   >
-                    {statementKindLabel[r.kind]}
+                    {kindLabel[r.kind] ?? r.kind}
                   </span>
                 </TableCell>
                 <TableCell className="text-right text-red-600">
@@ -196,7 +232,7 @@ function StatementTable({
                   <span className="inline-flex items-baseline gap-1">
                     <CompactMoney className="text-sm font-semibold" value={r.runningBalancePaise} />
                     <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                      {r.runningBalancePaise >= 0 ? "Dr" : "Cr"}
+                      {suffixFor(r.runningBalancePaise)}
                     </span>
                   </span>
                 </TableCell>

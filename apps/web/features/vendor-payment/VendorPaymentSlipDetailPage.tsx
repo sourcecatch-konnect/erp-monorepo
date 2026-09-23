@@ -1,8 +1,10 @@
 "use client";
 
+import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { IconAlertTriangle } from "@tabler/icons-react";
 import { Button } from "@skerp/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@skerp/ui/components/Card";
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -15,17 +17,46 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 
+import { useCan } from "@/features/auth";
+import { PERMS } from "@skerp/types";
+import { ledgerApi } from "@/features/ledger/api/ledger.service";
+import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { vendorPaymentApi } from "./vendor-payment.service";
+import { RejectSlipDialog } from "./RejectSlipDialog";
+import { CancelSlipDialog } from "./CancelSlipDialog";
 import { PageHeader, VendorPaymentStatusBadge, formatDate, money } from "./vendor-payment.ui";
+
+const CANCELLABLE_STATUSES = new Set(["DRAFT", "PENDING_APPROVAL", "APPROVED"]);
 
 export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const canApprove = useCan(PERMS.ACCOUNTS.PAYMENT.APPROVE);
+  const canDisburse = useCan(PERMS.ACCOUNTS.PAYMENT.DISBURSE);
+  const canCancel = useCan(PERMS.ACCOUNTS.PAYMENT.CANCEL);
+  const [rejectOpen, setRejectOpen] = React.useState(false);
+  const [rejectReason, setRejectReason] = React.useState("");
+  const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [cancelReason, setCancelReason] = React.useState("");
+  const [voucherOpen, setVoucherOpen] = React.useState(false);
+  const [voucherId, setVoucherId] = React.useState<string | null>(null);
+  const voucher = useQuery({
+    queryKey: ["ledger", "voucher", voucherId],
+    queryFn: () => ledgerApi.voucher(voucherId!),
+    enabled: voucherOpen && Boolean(voucherId),
+  });
+  const openVoucher = (journalEntryId: string) => {
+    setVoucherId(journalEntryId);
+    setVoucherOpen(true);
+  };
 
   const query = useQuery({
     queryKey: ["vendor-payment", "slip", id],
     queryFn: () => vendorPaymentApi.slip(id),
   });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["vendor-payment", "slip", id] });
 
   const submit = useMutation({
     mutationFn: () => {
@@ -39,10 +70,56 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
           ? `${slip.slipNumber} auto-approved and posted`
           : `${slip.slipNumber} submitted — pending approval`,
       );
-      queryClient.invalidateQueries({ queryKey: ["vendor-payment", "slip", id] });
+      invalidate();
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Could not submit the slip"),
+  });
+
+  const approve = useMutation({
+    mutationFn: () => {
+      const slip = query.data;
+      if (!slip) throw new Error("Slip not loaded");
+      return vendorPaymentApi.approveSlip(slip.id, slip.version);
+    },
+    onSuccess: (slip) => {
+      toast.success(`${slip.slipNumber} approved and posted`);
+      invalidate();
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not approve the slip"),
+  });
+
+  const reject = useMutation({
+    mutationFn: () => {
+      const slip = query.data;
+      if (!slip) throw new Error("Slip not loaded");
+      return vendorPaymentApi.rejectSlip(slip.id, slip.version, rejectReason.trim());
+    },
+    onSuccess: (slip) => {
+      toast.success(`${slip.slipNumber} rejected — back to draft`);
+      setRejectOpen(false);
+      setRejectReason("");
+      invalidate();
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not reject the slip"),
+  });
+
+  const cancel = useMutation({
+    mutationFn: () => {
+      const slip = query.data;
+      if (!slip) throw new Error("Slip not loaded");
+      return vendorPaymentApi.cancelSlip(slip.id, slip.version, cancelReason.trim());
+    },
+    onSuccess: (slip) => {
+      toast.success(`${slip.slipNumber} cancelled`);
+      setCancelOpen(false);
+      setCancelReason("");
+      invalidate();
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not cancel the slip"),
   });
 
   if (query.isLoading) return <Skeleton className="h-96" />;
@@ -67,11 +144,87 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                 {submit.isPending ? "Submitting..." : "Submit"}
               </Button>
             ) : null}
+            {slip.status === "PENDING_APPROVAL" && canApprove ? (
+              <>
+                <Button variant="outline" onClick={() => setRejectOpen(true)}>
+                  Reject
+                </Button>
+                <Button onClick={() => approve.mutate()} disabled={approve.isPending}>
+                  {approve.isPending ? "Approving..." : "Approve"}
+                </Button>
+              </>
+            ) : null}
+            {(slip.status === "APPROVED" || slip.status === "PARTIALLY_PAID") && canDisburse ? (
+              <Button
+                onClick={() => router.push(`/accounts/vendor-payments/${slip.id}/disburse`)}
+              >
+                Disburse
+              </Button>
+            ) : null}
+            {CANCELLABLE_STATUSES.has(slip.status) && canCancel ? (
+              <Button variant="outline" onClick={() => setCancelOpen(true)}>
+                Cancel slip
+              </Button>
+            ) : null}
             <Button variant="outline" onClick={() => router.push("/accounts/vendor-payments")}>
               Back to register
             </Button>
           </>
         }
+      />
+
+      {slip.status === "DRAFT" && slip.rejectionReason ? (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+          <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <p>
+            <strong>Rejected:</strong> {slip.rejectionReason}
+          </p>
+        </div>
+      ) : null}
+
+      {slip.status === "CANCELLED" && slip.cancelReason ? (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+          <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <p>
+            <strong>Cancelled:</strong> {slip.cancelReason}
+          </p>
+        </div>
+      ) : null}
+
+      {slip.accrualJournalEntryId ? (
+        <Button variant="outline" size="sm" onClick={() => openVoucher(slip.accrualJournalEntryId!)}>
+          View accrual voucher
+        </Button>
+      ) : null}
+
+      <RejectSlipDialog
+        open={rejectOpen}
+        onOpenChange={setRejectOpen}
+        slipNumber={slip.slipNumber}
+        reason={rejectReason}
+        onReasonChange={setRejectReason}
+        onConfirm={() => reject.mutate()}
+        pending={reject.isPending}
+      />
+
+      <CancelSlipDialog
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        slipNumber={slip.slipNumber}
+        status={slip.status}
+        reason={cancelReason}
+        onReasonChange={setCancelReason}
+        onConfirm={() => cancel.mutate()}
+        pending={cancel.isPending}
+      />
+
+      <VoucherDialog
+        open={voucherOpen}
+        onOpenChange={setVoucherOpen}
+        voucher={voucher.data}
+        isLoading={voucher.isLoading}
+        isError={voucher.isError}
+        errorMessage={voucher.error instanceof Error ? voucher.error.message : undefined}
       />
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -145,6 +298,7 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                   <TableHead>Mode</TableHead>
                   <TableHead>Reference</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -154,6 +308,17 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                     <TableCell className="text-xs">{d.mode}</TableCell>
                     <TableCell className="text-xs">{d.referenceNo ?? "—"}</TableCell>
                     <TableCell className="text-right">{money(d.paidPaise)}</TableCell>
+                    <TableCell className="text-right">
+                      {d.settlementJournalEntryId ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openVoucher(d.settlementJournalEntryId!)}
+                        >
+                          Voucher
+                        </Button>
+                      ) : null}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

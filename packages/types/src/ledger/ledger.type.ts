@@ -140,3 +140,84 @@ export type AgeingReportView = {
   /** Column sums across all customers, plus the grand total */
   totals: AgeingBuckets & { totalPaise: number };
 };
+
+/* ------------------------------------------------------------------ */
+/* Vendor (Creditor) Statement (VP-8) — the Debtor statement's mirror  */
+/* for transporter/labour party ledgers. Read directly from            */
+/* VendorPaymentSlip / VendorPaymentDisbursement, NOT from a generic   */
+/* JournalLine sweep — same reasoning as the Debtor statement: only    */
+/* the domain-specific reader can set a correct per-row drill-through  */
+/* href (an accrual and a disbursement both belong to one slip, but a  */
+/* disbursement's own JournalEntry.sourceId is the disbursement id,    */
+/* not the slip id).                                                   */
+/* ------------------------------------------------------------------ */
+
+export type VendorStatementLineKind = "ACCRUAL" | "PAYMENT" | "REVERSAL";
+
+/** One row of a vendor statement. All money in paise; unlike the Debtor
+ *  statement (Dr-positive), this is Cr-positive: `creditPaise` (an accrual)
+ *  raises what we owe, `debitPaise` (a payment) lowers it — same convention
+ *  `ledgerForCreditor` already uses for every other creditor-side party. */
+export type VendorStatementLine = {
+  /** Source row id — VendorPaymentSlip.id (ACCRUAL) / VendorPaymentDisbursement.id (PAYMENT) */
+  id: string;
+  /** Business date: slip's approvedAt (ACCRUAL) / disbursement's paidAt (PAYMENT) */
+  date: string;
+  kind: VendorStatementLineKind;
+  /** Human label, e.g. "Accrual SKT/VPAY/JLG/26-27/0012" or "Payment — BANK" */
+  particulars: string;
+  voucherNumber: string | null;
+  /** Id to drill into — always the *slip* id, for both ACCRUAL and PAYMENT rows */
+  voucherId: string | null;
+  /** Web path to open the source slip, or null if none exists yet */
+  href: string | null;
+  debitPaise: number;
+  creditPaise: number;
+  /** Cr-positive running balance after this line (paise) */
+  runningBalancePaise: number;
+};
+
+export type VendorStatementTotals = {
+  /** Σ slip net payable accrued in range (paise) */
+  accruedPaise: number;
+  /** Σ disbursements paid in range (paise) */
+  paidPaise: number;
+  /** Σ accruals reversed (a cancelled, previously-approved-and-unpaid slip)
+   *  in range (paise) — reported for visibility; nets to zero against its
+   *  own ACCRUAL row so it never contributes to outstandingPaise. */
+  reversedPaise: number;
+  /** Closing balance — what we still owe as of `to` (paise, Cr-positive) */
+  outstandingPaise: number;
+};
+
+export type VendorPartyType = "TRANSPORTER" | "LABOUR";
+
+export type VendorStatementView = {
+  /** transportId or labourId, matching `partyType` */
+  partyId: string;
+  partyType: VendorPartyType;
+  partyName: string;
+  /** Balance carried into the first in-range line (paise, Cr-positive) */
+  openingBalancePaise: number;
+  /** Balance after the last in-range line (paise, Cr-positive) */
+  closingBalancePaise: number;
+  lines: VendorStatementLine[];
+  totals: VendorStatementTotals;
+};
+
+/* ------------------------------------------------------------------ */
+/* Slip-wise outstanding (VP-8) — per slip, how much is still unpaid.  */
+/* Mirrors BillOutstandingRow, sourced from LedgerAllocation           */
+/* (NEW_REF from the accrual, AGAINST_REF from each disbursement) on   */
+/* `vendorPaymentSlipId` exactly as that model's own doc comment says. */
+/* ------------------------------------------------------------------ */
+
+export type SlipOutstandingRow = {
+  slipId: string;
+  slipNumber: string;
+  slipDate: string;
+  totalPaise: number;
+  paidPaise: number;
+  /** totalPaise − paidPaise (never < 0) */
+  outstandingPaise: number;
+};

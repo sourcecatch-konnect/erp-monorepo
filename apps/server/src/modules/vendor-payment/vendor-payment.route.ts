@@ -1,7 +1,12 @@
 import { Router } from "express";
 import {
+  approveVendorPaymentSlipSchema,
+  cancelVendorPaymentSlipSchema,
+  createVendorPaymentDisbursementSchema,
   createVendorPaymentSlipSchema,
+  eligibleHamaliSourceQuerySchema,
   eligibleTransporterLRQuerySchema,
+  rejectVendorPaymentSlipSchema,
   submitVendorPaymentSlipSchema,
   updateVendorPaymentSlipSchema,
   type VendorPaymentSlipLineInput,
@@ -16,17 +21,36 @@ import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
-import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
+import { roundPaiseByBps } from "../../lib/money.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
-import { postVendorSlipAccrual } from "../ledger/posting.service.js";
-import { decideVendorPaymentApproval } from "./approval-decision.js";
+import {
+  postVendorDisbursement,
+  postVendorSlipAccrual,
+  reverseVendorSlipAccrual,
+} from "../ledger/posting.service.js";
+import { recordAuditEntry } from "../audit/audit.service.js";
+import {
+  decideVendorPaymentApproval,
+  vendorPaymentMakerCheckerEnabled,
+} from "./approval-decision.js";
 import {
   findEligibleTransporterLRs,
   reconcileTransporterLines,
 } from "./calculators/transporter.js";
+import {
+  findEligibleHamaliSources,
+  reconcileHamaliLines,
+  type HamaliSourceType,
+} from "./calculators/hamali.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -73,54 +97,101 @@ const loadSlipDetail = (id: string) =>
 /*     server-owned components.                                         */
 /* ------------------------------------------------------------------ */
 
+const ZERO_LINE_COMPONENTS = {
+  freightPaise: 0n,
+  detentionPaise: 0n,
+  advancePaise: 0n,
+  commissionPaise: 0n,
+  hamaliPaise: 0n,
+  tdsPaise: 0n,
+  damagePaise: 0n,
+  stationeryPaise: 0n,
+};
+
 /**
  * TRANSPORTER: re-fetches each LR and overwrites every component except
- * stationeryPaise with the server's own figures — a client cannot inflate
- * (or fabricate) a freight/advance/commission/hamali/TDS/damage amount by
- * sending a different number, and a stale/foreign/already-claimed sourceId
- * fails loudly instead of silently posting.
- * HAMALI: passthrough for now — VP-5's calculator (GRN/RailBranchGRN/
- * VPWagonLoading) doesn't exist yet, so there's nothing to reconcile
- * against yet. Wire the same reconciliation in when VP-5 lands.
+ * stationeryPaise with the server's own figures.
+ * HAMALI: re-fetches each source (GRN/RailBranchGRN/VPWagonLoading) for its
+ * gross hamaliPaise, then computes tdsPaise itself via roundPaiseByBps —
+ * `tdsRateBps` is the only client input actually used, and even that only
+ * feeds a server-side computation, never a submitted amount.
+ * Either way: a client cannot inflate/fabricate an amount by sending a
+ * different number, and a stale/foreign/already-claimed sourceId fails
+ * loudly instead of silently posting.
  */
 async function buildServerLines(
   client: typeof db | Prisma.TransactionClient,
   type: VendorPaymentType,
-  transportId: string | null,
+  payee: { transportId: string | null; labourId: string | null },
   lines: VendorPaymentSlipLineInput[],
+  tdsRateBps: number | undefined,
   excludeSlipId?: string,
 ): Promise<VendorPaymentSlipLineInput[]> {
-  if (type !== "TRANSPORTER") return lines;
-  if (!transportId) throw new BadRequestError("A transporter slip needs transportId");
+  if (type === "TRANSPORTER") {
+    if (!payee.transportId)
+      throw new BadRequestError("A transporter slip needs transportId");
 
-  const sourceIds = lines
-    .filter((l) => l.sourceType === "LR")
-    .map((l) => l.sourceId);
-  const reconciled = await reconcileTransporterLines(
-    client,
-    transportId,
-    sourceIds,
-    excludeSlipId,
-  );
+    const sourceIds = lines
+      .filter((l) => l.sourceType === "LR")
+      .map((l) => l.sourceId);
+    const reconciled = await reconcileTransporterLines(
+      client,
+      payee.transportId,
+      sourceIds,
+      excludeSlipId,
+    );
 
-  return lines.map((line) => {
-    const server = reconciled.get(line.sourceId);
-    if (!server)
-      throw new BadRequestError(`Source ${line.sourceId} is not a valid LR line`);
-    return {
-      sourceType: line.sourceType,
-      sourceId: line.sourceId,
-      freightPaise: server.freightPaise,
-      detentionPaise: server.detentionPaise,
-      advancePaise: server.advancePaise,
-      commissionPaise: server.commissionPaise,
-      hamaliPaise: server.hamaliPaise,
-      tdsPaise: server.tdsPaise,
-      damagePaise: server.damagePaise,
-      // The one client-owned amount — no stored source to check it against.
-      stationeryPaise: line.stationeryPaise,
-    };
-  });
+    return lines.map((line) => {
+      const server = reconciled.get(line.sourceId);
+      if (!server)
+        throw new BadRequestError(`Source ${line.sourceId} is not a valid LR line`);
+      return {
+        sourceType: line.sourceType,
+        sourceId: line.sourceId,
+        freightPaise: server.freightPaise,
+        detentionPaise: server.detentionPaise,
+        advancePaise: server.advancePaise,
+        commissionPaise: server.commissionPaise,
+        hamaliPaise: server.hamaliPaise,
+        tdsPaise: server.tdsPaise,
+        damagePaise: server.damagePaise,
+        // The one client-owned amount — no stored source to check it against.
+        stationeryPaise: line.stationeryPaise,
+      };
+    });
+  }
+
+  if (type === "HAMALI") {
+    if (!payee.labourId) throw new BadRequestError("A hamali slip needs labourId");
+    if (tdsRateBps === undefined)
+      throw new BadRequestError("A hamali slip needs a TDS percentage");
+
+    const refs = lines.map((l) => ({
+      sourceType: l.sourceType as HamaliSourceType,
+      sourceId: l.sourceId,
+    }));
+    const reconciled = await reconcileHamaliLines(
+      client,
+      payee.labourId,
+      refs,
+      excludeSlipId,
+    );
+
+    return lines.map((line) => {
+      const grossPaise = reconciled.get(line.sourceId);
+      if (grossPaise === undefined)
+        throw new BadRequestError(`Source ${line.sourceId} is not a valid hamali line`);
+      return {
+        sourceType: line.sourceType,
+        sourceId: line.sourceId,
+        ...ZERO_LINE_COMPONENTS,
+        hamaliPaise: grossPaise,
+        tdsPaise: roundPaiseByBps(grossPaise, tdsRateBps),
+      };
+    });
+  }
+
+  throw new BadRequestError("This vendor payment type is not available yet");
 }
 
 type RecalculatedLine = VendorPaymentSlipLineInput & { netPaise: bigint };
@@ -207,6 +278,34 @@ router.get(
   },
 );
 
+router.get(
+  "/calculators/hamali",
+  can(PERMS.ACCOUNTS.PAYMENT.CREATE),
+  async (req, res) => {
+    const input = validate(eligibleHamaliSourceQuerySchema.safeParse(req.query));
+    if (input.branchId) assertBranchAccess(req, input.branchId);
+
+    const eligible = await findEligibleHamaliSources(db, {
+      labourId: input.labourId,
+      branchId: input.branchId,
+      from: input.from,
+      to: input.to,
+    });
+    // The three hamali source types don't share one queryable branch field
+    // (unlike LRGroup for the transporter calculator), so a chosen branchId
+    // is pushed into each sub-query above but the caller's *scope* (when no
+    // branchId was chosen) is enforced here instead, post-fetch — same rule
+    // branchFilter() applies, just against the mapped branchId on each row.
+    const scoped = input.branchId
+      ? eligible
+      : eligible.filter((s) => {
+          if (!req.ctx || req.ctx.branchScope === "ALL") return true;
+          return s.branchId !== null && req.ctx.branchIds.includes(s.branchId);
+        });
+    return sendOk(res, scoped);
+  },
+);
+
 /* ------------------------------------------------------------------ */
 /* Slip CRUD (DRAFT) + submit                                          */
 /* ------------------------------------------------------------------ */
@@ -224,8 +323,9 @@ router.post("/slips", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) => {
   const serverLines = await buildServerLines(
     db,
     input.type,
-    input.transportId ?? null,
+    { transportId: input.transportId ?? null, labourId: input.labourId ?? null },
     input.lines,
+    input.tdsRateBps,
   );
   const totals = recalcSlipTotals(input.type, serverLines);
   const me = actorId(req);
@@ -240,7 +340,10 @@ router.post("/slips", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${sourceId}))`;
 
       const seq = await nextSequence(tx, branch.branchCode, fyCode, "VPAY");
-      const slipNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/VPAY");
+      // VP-2 spec's literal example is 4 digits (.../<0001>), unlike every
+      // other document number in this app (5 digits) — this is the one
+      // deliberate exception, not a copy-paste of the app-wide default.
+      const slipNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/VPAY", 4);
 
       try {
         const created = await tx.vendorPaymentSlip.create({
@@ -290,8 +393,9 @@ router.patch("/slips/:id", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) 
   const serverLines = await buildServerLines(
     db,
     existing.type,
-    existing.transportId,
+    { transportId: existing.transportId, labourId: existing.labourId },
     input.lines,
+    input.tdsRateBps,
     id,
   );
   const totals = recalcSlipTotals(existing.type, serverLines);
@@ -336,6 +440,69 @@ router.patch("/slips/:id", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) 
   return sendOk(res, await loadSlipDetail(id));
 });
 
+type ActiveLine = {
+  freightPaise: bigint;
+  detentionPaise: bigint;
+  advancePaise: bigint;
+  commissionPaise: bigint;
+  hamaliPaise: bigint;
+  tdsPaise: bigint;
+  damagePaise: bigint;
+  stationeryPaise: bigint;
+};
+
+/**
+ * Shared by submit's auto-approve path and the standalone /approve endpoint:
+ * version-guarded transition to APPROVED, post the accrual, link the
+ * resulting journal — all inside the caller's transaction. A version
+ * mismatch (concurrent transition) surfaces as a friendly conflict instead
+ * of a raw P2025.
+ */
+async function approveAndAccrue(
+  tx: Prisma.TransactionClient,
+  id: string,
+  version: number,
+  lines: ActiveLine[],
+  actorUserId: string,
+) {
+  let approved;
+  try {
+    approved = await tx.vendorPaymentSlip.update({
+      where: { id, version },
+      data: {
+        status: "APPROVED",
+        approvedById: actorUserId,
+        approvedAt: new Date(),
+        version: { increment: 1 },
+      },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025")
+      throw new BadRequestError("This changed in another session. Refresh and try again.");
+    throw err;
+  }
+
+  const journal = await postVendorSlipAccrual(tx, {
+    slipId: approved.id,
+    slipNumber: approved.slipNumber,
+    type: approved.type,
+    branchId: approved.branchId,
+    fyCode: approved.fyCode,
+    voucherDate: new Date(),
+    transportId: approved.transportId,
+    labourId: approved.labourId,
+    lines,
+    netPayablePaise: approved.netPayablePaise,
+    existingAccrualJournalEntryId: approved.accrualJournalEntryId,
+    createdById: actorUserId,
+  });
+
+  return tx.vendorPaymentSlip.update({
+    where: { id },
+    data: { accrualJournalEntryId: journal.id },
+  });
+}
+
 router.post("/slips/:id/submit", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) => {
   const id = getParamId(req);
   const input = validate(submitVendorPaymentSlipSchema.safeParse(req.body ?? {}));
@@ -377,61 +544,340 @@ router.post("/slips/:id/submit", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req,
         return id;
       }
 
-      // AUTO_APPROVE — approve and post the accrual atomically.
-      let approved;
-      try {
-        approved = await tx.vendorPaymentSlip.update({
-          where: { id, version: input.version },
-          data: {
-            status: "APPROVED",
-            approvedById: me,
-            approvedAt: new Date(),
-            version: { increment: 1 },
-          },
-        });
-      } catch (err) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === "P2025"
-        )
-          throw new BadRequestError("This draft changed in another session. Refresh and try again.");
-        throw err;
-      }
-
-      const journal = await postVendorSlipAccrual(tx, {
-        slipId: approved.id,
-        slipNumber: approved.slipNumber,
-        type: approved.type,
-        branchId: approved.branchId,
-        fyCode: approved.fyCode,
-        voucherDate: new Date(),
-        transportId: approved.transportId,
-        labourId: approved.labourId,
-        lines: existing.lines.map((l) => ({
-          freightPaise: l.freightPaise,
-          detentionPaise: l.detentionPaise,
-          advancePaise: l.advancePaise,
-          commissionPaise: l.commissionPaise,
-          hamaliPaise: l.hamaliPaise,
-          tdsPaise: l.tdsPaise,
-          damagePaise: l.damagePaise,
-          stationeryPaise: l.stationeryPaise,
-        })),
-        netPayablePaise: approved.netPayablePaise,
-        existingAccrualJournalEntryId: approved.accrualJournalEntryId,
-        createdById: me,
-      });
-
-      await tx.vendorPaymentSlip.update({
-        where: { id },
-        data: { accrualJournalEntryId: journal.id },
-      });
-      return id;
+      const approved = await approveAndAccrue(tx, id, input.version, existing.lines, me);
+      return approved.id;
     },
     { timeout: 15000, maxWait: 10000 },
   );
 
+  await recordAuditEntry({
+    actor: { id: me },
+    action: "vendor_payment.submit",
+    entity: "VendorPaymentSlip",
+    entityId: id,
+    after: { decision },
+  });
+
   return sendOk(res, await loadSlipDetail(slipId));
+});
+
+router.post("/slips/:id/approve", can(PERMS.ACCOUNTS.PAYMENT.APPROVE), async (req, res) => {
+  const id = getParamId(req);
+  const input = validate(approveVendorPaymentSlipSchema.safeParse(req.body ?? {}));
+
+  const existing = await db.vendorPaymentSlip.findUnique({
+    where: { id },
+    include: { lines: { where: { isActive: true } } },
+  });
+  if (!existing) throw new NotFoundError("Vendor payment slip not found");
+  assertBranchAccess(req, existing.branchId);
+  if (existing.status !== "PENDING_APPROVAL")
+    throw new BadRequestError("Only a slip pending approval can be approved");
+  if (existing.version !== input.version)
+    throw new BadRequestError("This slip changed in another session. Refresh and try again.");
+
+  const me = actorId(req);
+  if (vendorPaymentMakerCheckerEnabled() && existing.createdById === me)
+    throw new ForbiddenError(
+      "Maker-checker is enabled — you cannot approve a slip you submitted yourself",
+    );
+
+  const slipId = await db.$transaction(
+    (tx) => approveAndAccrue(tx, id, input.version, existing.lines, me).then((s) => s.id),
+    { timeout: 15000, maxWait: 10000 },
+  );
+
+  await recordAuditEntry({
+    actor: { id: me },
+    action: "vendor_payment.approve",
+    entity: "VendorPaymentSlip",
+    entityId: id,
+  });
+
+  return sendOk(res, await loadSlipDetail(slipId));
+});
+
+router.post("/slips/:id/reject", can(PERMS.ACCOUNTS.PAYMENT.APPROVE), async (req, res) => {
+  const id = getParamId(req);
+  const input = validate(rejectVendorPaymentSlipSchema.safeParse(req.body));
+
+  const existing = await db.vendorPaymentSlip.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError("Vendor payment slip not found");
+  assertBranchAccess(req, existing.branchId);
+  if (existing.status !== "PENDING_APPROVAL")
+    throw new BadRequestError("Only a slip pending approval can be rejected");
+  if (existing.version !== input.version)
+    throw new BadRequestError("This slip changed in another session. Refresh and try again.");
+
+  const me = actorId(req);
+
+  // Rejection returns the slip to DRAFT — no journal, no reversal needed
+  // (nothing was ever posted). Source reservations (the active lines) stay
+  // untouched, so the creator can correct and resubmit without re-claiming.
+  try {
+    await db.vendorPaymentSlip.update({
+      where: { id, version: input.version },
+      data: {
+        status: "DRAFT",
+        rejectedById: me,
+        rejectedAt: new Date(),
+        rejectionReason: input.reason,
+        version: { increment: 1 },
+      },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025")
+      throw new BadRequestError("This slip changed in another session. Refresh and try again.");
+    throw err;
+  }
+
+  await recordAuditEntry({
+    actor: { id: me },
+    action: "vendor_payment.reject",
+    entity: "VendorPaymentSlip",
+    entityId: id,
+    after: { reason: input.reason },
+  });
+
+  return sendOk(res, await loadSlipDetail(id));
+});
+
+/* ------------------------------------------------------------------ */
+/* Disbursement                                                        */
+/* ------------------------------------------------------------------ */
+
+// NOTE: the ticket also asks to validate "an open accounting period" —
+// there is no such concept anywhere in this codebase (no model, no
+// service, no config). Not building a whole period-close feature here;
+// flagging it as an explicit gap rather than silently skipping it or
+// fabricating a fake check.
+
+router.post(
+  "/slips/:id/disburse",
+  can(PERMS.ACCOUNTS.PAYMENT.DISBURSE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(createVendorPaymentDisbursementSchema.safeParse(req.body));
+
+    const forAccess = await db.vendorPaymentSlip.findUnique({
+      where: { id },
+      select: { branchId: true },
+    });
+    if (!forAccess) throw new NotFoundError("Vendor payment slip not found");
+    assertBranchAccess(req, forAccess.branchId);
+
+    // Idempotency fast path — a retried request with the same
+    // clientRequestId returns the prior result unchanged: no re-validation,
+    // no second disbursement row, no second journal.
+    const priorAttempt = await db.vendorPaymentDisbursement.findUnique({
+      where: { clientRequestId: input.clientRequestId },
+    });
+    if (priorAttempt) {
+      if (priorAttempt.slipId !== id)
+        throw new BadRequestError(
+          "This request id was already used for a different vendor payment slip",
+        );
+      return sendOk(res, await loadSlipDetail(priorAttempt.slipId));
+    }
+
+    const me = actorId(req);
+    const lockKey = `vendor-payment-slip:${id}`;
+
+    const slipId = await db.$transaction(
+      async (tx) => {
+        // Lock the slip so two concurrent disbursements against it can't
+        // both validate against the same stale "outstanding" figure.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+        const slip = await tx.vendorPaymentSlip.findUnique({ where: { id } });
+        if (!slip) throw new NotFoundError("Vendor payment slip not found");
+        if (slip.status !== "APPROVED" && slip.status !== "PARTIALLY_PAID")
+          throw new BadRequestError(
+            "Only an approved or partially paid slip can be disbursed",
+          );
+
+        const outstandingPaise = slip.netPayablePaise - slip.paidPaise;
+        if (input.paidPaise > outstandingPaise)
+          throw new BadRequestError(
+            `Amount exceeds outstanding (${outstandingPaise} paise)`,
+          );
+
+        const branch = await tx.branch.findUnique({
+          where: { id: slip.branchId },
+          select: { branchCode: true },
+        });
+        if (!branch) throw new NotFoundError("Branch not found");
+
+        const seq = await nextSequence(tx, branch.branchCode, slip.fyCode, "VPAY-PMT");
+        const voucherNumber = formatDocNumber(
+          branch.branchCode,
+          slip.fyCode,
+          seq,
+          "SKT/VPAY/PMT",
+        );
+
+        let disbursement;
+        try {
+          disbursement = await tx.vendorPaymentDisbursement.create({
+            data: {
+              slipId: id,
+              paidPaise: input.paidPaise,
+              mode: input.mode,
+              paidAt: input.paidAt,
+              referenceNo: input.referenceNo ?? null,
+              fundingLedgerId: input.fundingLedgerId,
+              clientRequestId: input.clientRequestId,
+              createdById: me,
+            },
+          });
+        } catch (err) {
+          // Race: a concurrent request with the same clientRequestId won
+          // first — fall back to its row instead of erroring or duplicating.
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+            const already = await tx.vendorPaymentDisbursement.findUnique({
+              where: { clientRequestId: input.clientRequestId },
+            });
+            if (already) return already.slipId;
+          }
+          throw err;
+        }
+
+        const journal = await postVendorDisbursement(tx, {
+          disbursementId: disbursement.id,
+          voucherNumber,
+          slipId: slip.id,
+          slipNumber: slip.slipNumber,
+          paidAt: input.paidAt,
+          branchId: slip.branchId,
+          fyCode: slip.fyCode,
+          transportId: slip.transportId,
+          labourId: slip.labourId,
+          fundingLedgerId: input.fundingLedgerId,
+          paidPaise: input.paidPaise,
+          existingSettlementJournalEntryId: disbursement.settlementJournalEntryId,
+          createdById: me,
+        });
+
+        await tx.vendorPaymentDisbursement.update({
+          where: { id: disbursement.id },
+          data: { settlementJournalEntryId: journal.id },
+        });
+
+        const newPaidPaise = slip.paidPaise + input.paidPaise;
+        await tx.vendorPaymentSlip.update({
+          where: { id },
+          data: {
+            paidPaise: newPaidPaise,
+            status: newPaidPaise >= slip.netPayablePaise ? "PAID" : "PARTIALLY_PAID",
+            version: { increment: 1 },
+          },
+        });
+
+        return id;
+      },
+      { timeout: 15000, maxWait: 10000 },
+    );
+
+    await recordAuditEntry({
+      actor: { id: me },
+      action: "vendor_payment.disburse",
+      entity: "VendorPaymentSlip",
+      entityId: id,
+      after: {
+        paidPaise: input.paidPaise.toString(),
+        clientRequestId: input.clientRequestId,
+      },
+    });
+
+    return sendOk(res, await loadSlipDetail(slipId));
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Cancellation                                                        */
+/* ------------------------------------------------------------------ */
+
+router.post("/slips/:id/cancel", can(PERMS.ACCOUNTS.PAYMENT.CANCEL), async (req, res) => {
+  const id = getParamId(req);
+  const input = validate(cancelVendorPaymentSlipSchema.safeParse(req.body));
+
+  const forAccess = await db.vendorPaymentSlip.findUnique({
+    where: { id },
+    select: { branchId: true },
+  });
+  if (!forAccess) throw new NotFoundError("Vendor payment slip not found");
+  assertBranchAccess(req, forAccess.branchId);
+
+  const me = actorId(req);
+  const lockKey = `vendor-payment-slip:${id}`;
+
+  const wasApproved = await db.$transaction(
+    async (tx) => {
+      // Same lock key disburse takes — cancel and disburse against the same
+      // slip can never interleave, so a cancel can't decide to reverse an
+      // accrual using paidPaise/status that a concurrent disbursement just
+      // changed. Re-read fresh after acquiring the lock, not the pre-tx read.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+      const slip = await tx.vendorPaymentSlip.findUnique({ where: { id } });
+      if (!slip) throw new NotFoundError("Vendor payment slip not found");
+      if (slip.version !== input.version)
+        throw new BadRequestError("This slip changed in another session. Refresh and try again.");
+      if (slip.status === "CANCELLED")
+        throw new BadRequestError("Slip is already cancelled");
+      if (slip.status === "PARTIALLY_PAID" || slip.status === "PAID")
+        throw new BadRequestError(
+          "A partially or fully paid slip cannot be cancelled here — use the separate refund/payment-reversal flow",
+        );
+
+      // Approved-and-unpaid reverses the accrual; DRAFT/PENDING_APPROVAL
+      // never touched the ledger, so there's nothing to reverse.
+      const wasApproved = slip.status === "APPROVED";
+      if (wasApproved) await reverseVendorSlipAccrual(tx, slip, input.reason, me);
+
+      // Re-guarded by version here too: nothing between the fresh read above
+      // and this write takes a row lock (a plain SELECT doesn't), so a
+      // concurrent transition that doesn't share this lock — e.g. approve,
+      // which only version-guards its own PENDING_APPROVAL -> APPROVED write
+      // — could still commit in between. This catches that cleanly instead
+      // of silently overwriting it.
+      try {
+        await tx.vendorPaymentSlip.update({
+          where: { id, version: input.version },
+          data: {
+            status: "CANCELLED",
+            cancelledById: me,
+            cancelledAt: new Date(),
+            cancelReason: input.reason,
+            version: { increment: 1 },
+          },
+        });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025")
+          throw new BadRequestError("This slip changed in another session. Refresh and try again.");
+        throw err;
+      }
+
+      // Release every claimed source back to the eligible pool.
+      await tx.vendorPaymentSlipLine.updateMany({
+        where: { slipId: id, isActive: true },
+        data: { isActive: false },
+      });
+
+      return wasApproved;
+    },
+    { timeout: 15000, maxWait: 10000 },
+  );
+
+  await recordAuditEntry({
+    actor: { id: me },
+    action: "vendor_payment.cancel",
+    entity: "VendorPaymentSlip",
+    entityId: id,
+    after: { reason: input.reason, wasApproved },
+  });
+
+  return sendOk(res, await loadSlipDetail(id));
 });
 
 router.get("/slips", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {

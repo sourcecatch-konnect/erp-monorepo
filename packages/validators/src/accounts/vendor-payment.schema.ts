@@ -60,11 +60,20 @@ export const vendorPaymentSlipLineInputSchema = z.object({
   stationeryPaise: moneyPaise,
 });
 
+// Basis points (1 bps = 0.01%, 10000 bps = 100%) — same convention as
+// BillingTaxRule's cgstRateBps/sgstRateBps/igstRateBps. Keeps the TDS % an
+// operator enters on a HAMALI slip as an integer, never a float, all the way
+// to the server's roundPaiseByBps.
+const rateBps = z.coerce.number().int().min(0).max(10000);
+
 const vendorPaymentSlipFieldsSchema = z.object({
   type: vendorPaymentTypeSchema,
   branchId: id,
   transportId: id.optional(),
   labourId: id.optional(),
+  // Required for HAMALI (see refinePayee) — applied uniformly to every
+  // line's hamaliPaise via roundPaiseByBps. Unused for TRANSPORTER.
+  tdsRateBps: rateBps.optional(),
   lines: z.array(vendorPaymentSlipLineInputSchema).min(1).max(200),
 });
 
@@ -98,6 +107,12 @@ const refinePayee = (
         path: ["transportId"],
         message: "A hamali slip cannot also set transportId",
       });
+    if (value.tdsRateBps === undefined)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tdsRateBps"],
+        message: "Enter a TDS percentage",
+      });
   } else {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -110,11 +125,11 @@ const refinePayee = (
 export const createVendorPaymentSlipSchema =
   vendorPaymentSlipFieldsSchema.superRefine(refinePayee);
 
-export const updateVendorPaymentSlipSchema = z
-  .object({
-    lines: z.array(vendorPaymentSlipLineInputSchema).min(1).max(200),
-    version: z.number().int().positive(),
-  });
+export const updateVendorPaymentSlipSchema = z.object({
+  lines: z.array(vendorPaymentSlipLineInputSchema).min(1).max(200),
+  tdsRateBps: rateBps.optional(),
+  version: z.number().int().positive(),
+});
 
 export const submitVendorPaymentSlipSchema = z.object({
   version: z.number().int().positive(),

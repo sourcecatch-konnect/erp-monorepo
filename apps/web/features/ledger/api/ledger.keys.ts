@@ -21,6 +21,10 @@ export const ledgerKeys = {
     [...ledgerKeys.all, "statement", id, filters] as const,
   billsOutstanding: (id: string, filters?: StatementFilters) =>
     [...ledgerKeys.all, "bills-outstanding", id, filters] as const,
+  vendorStatement: (ledgerId: string, filters?: StatementFilters) =>
+    [...ledgerKeys.all, "vendor-statement", ledgerId, filters] as const,
+  slipsOutstanding: (ledgerId: string, filters?: StatementFilters) =>
+    [...ledgerKeys.all, "slips-outstanding", ledgerId, filters] as const,
   ageing: (filters?: AgeingFilters) =>
     [...ledgerKeys.all, "ageing", filters] as const,
   chartOfAccounts: (filters?: ChartOfAccountsFilters) =>

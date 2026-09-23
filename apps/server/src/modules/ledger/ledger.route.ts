@@ -31,6 +31,10 @@ import {
   buildCustomerStatement,
   perBillOutstanding,
 } from "./customer-statement.service.js";
+import {
+  buildVendorStatement,
+  perSlipOutstanding,
+} from "./vendor-statement.service.js";
 import { buildAgeingReport } from "./ageing.service.js";
 import {
   buildStatementHtml,
@@ -137,6 +141,40 @@ router.get(
       branchWhere: branchWhereFor(req, q.branchId),
       fyCode: q.fyCode,
       asOf: q.to ? new Date(`${q.to}T23:59:59.999Z`) : undefined,
+    });
+    return sendOk(res, rows);
+  },
+);
+
+// Vendor statement (VP-8) — the Debtor statement's mirror for a transporter
+// or labour party ledger. Keyed by Ledger.id, same convention
+// GET /creditors/:id already uses (not Transport.id/Labour.id directly).
+router.get(
+  "/vendors/:id/statement",
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const q = validate(customerStatementQuerySchema.safeParse(req.query));
+    const view = await buildVendorStatement(id, {
+      branchWhere: branchWhereFor(req, q.branchId),
+      fyCode: q.fyCode,
+      from: q.from,
+      to: q.to,
+    });
+    return sendOk(res, view);
+  },
+);
+
+// Slip-wise outstanding for one vendor — mirrors bills-outstanding.
+router.get(
+  "/vendors/:id/slips-outstanding",
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const q = validate(customerStatementQuerySchema.safeParse(req.query));
+    const rows = await perSlipOutstanding(id, {
+      branchWhere: branchWhereFor(req, q.branchId),
+      fyCode: q.fyCode,
     });
     return sendOk(res, rows);
   },
