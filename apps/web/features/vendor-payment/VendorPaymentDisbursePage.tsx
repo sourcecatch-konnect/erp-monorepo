@@ -40,8 +40,8 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
 
   const fundingLedgers = useQuery({
     queryKey: ["vendor-payment", "funding-ledgers"],
-    queryFn: () => ledgerApi.chartOfAccounts({ kind: "GL", isActive: true }),
-    select: (accounts) => accounts.filter((a) => a.group === "CASH" || a.group === "BANK"),
+    queryFn: () =>
+      ledgerApi.chartOfAccounts({ kind: "GL", groups: ["CASH", "BANK"], isActive: true }),
   });
 
   const [amount, setAmount] = React.useState("");

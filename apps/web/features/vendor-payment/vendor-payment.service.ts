@@ -159,19 +159,23 @@ const post = async <T>(url: string, body?: unknown) => {
 
 export type VendorPaymentSlipListQuery = ListQuery & {
   type?: VendorPaymentType;
-  status?: VendorPaymentStatus;
+  /** One status, or several — sent as a comma-separated list. */
+  status?: VendorPaymentStatus | VendorPaymentStatus[];
 };
 
 const listSlips = async (
   query?: VendorPaymentSlipListQuery,
 ): Promise<ListResult<VendorPaymentSlip>> => {
   const { type, status, ...listQuery } = query ?? {};
+  const statuses = Array.isArray(status) ? status : status ? [status] : [];
+  const search = listQuery.search?.trim();
   const response = await api.get<ApiResponse<VendorPaymentSlip[]>>(
     "/vendor-payment/slips",
     {
       params: {
         ...(type ? { type } : {}),
-        ...(status ? { status } : {}),
+        ...(statuses.length ? { status: statuses.join(",") } : {}),
+        ...(search ? { search } : {}),
         ...(listQuery.page !== undefined ? { page: listQuery.page } : {}),
         ...(listQuery.size !== undefined ? { size: listQuery.size } : {}),
       },

@@ -266,7 +266,11 @@ router.get("/accounts", can(PERMS.LEDGER.VIEW), async (req, res) => {
   const input = validate(chartOfAccountsQuerySchema.safeParse(req.query));
   const where: Prisma.LedgerWhereInput = {
     ...(input.kind ? { kind: input.kind } : {}),
-    ...(input.group ? { group: input.group } : {}),
+    ...(input.groups?.length
+      ? { group: { in: input.groups } }
+      : input.group
+        ? { group: input.group }
+        : {}),
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     ...(input.search
       ? {

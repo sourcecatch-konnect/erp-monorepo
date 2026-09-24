@@ -65,6 +65,8 @@ export function vendorTypeOf(account: LedgerAccount): VendorType | null {
 export type ChartOfAccountsFilters = {
   kind?: LedgerKind;
   group?: LedgerAccountGroup;
+  /** Several groups in one request; wins over `group` when both are set. */
+  groups?: LedgerAccountGroup[];
   search?: string;
   isActive?: boolean;
 };
@@ -249,6 +251,7 @@ export const ledgerApi = {
     get<LedgerAccount[]>("/ledger/accounts", {
       kind: filters.kind,
       group: filters.group,
+      groups: filters.groups?.length ? filters.groups.join(",") : undefined,
       search: filters.search,
       isActive: filters.isActive === undefined ? undefined : String(filters.isActive),
     }),

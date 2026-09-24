@@ -3,6 +3,7 @@ import "./env.js";
 import express from "express";
 import { createServer } from "http";
 import cors from "cors";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import authRoute from "./router/auth/auth.route.js";
 import employeeRoute from "./router/employee/employee.route.js";
@@ -87,10 +88,17 @@ app.use(
     credentials: true, // IMPORTANT
   }),
 );
+// gzip/deflate JSON and CSV responses (list endpoints are the bulk of the
+// bytes); the middleware skips already-compressed types such as PDFs.
+app.use(compression());
 app.use(
   express.json({
     verify: (req, _res, buf) => {
-      (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      // Only the WhatsApp webhook needs the raw bytes (HMAC signature check);
+      // copying every request body — bulk imports can be MBs — is wasted work.
+      if (req.url?.startsWith("/notifications/whatsapp/webhook")) {
+        (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      }
     },
   }),
 );

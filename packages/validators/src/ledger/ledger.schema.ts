@@ -78,6 +78,20 @@ const dateOnly = z
 export const chartOfAccountsQuerySchema = z.object({
   kind: ledgerKindSchema.optional(),
   group: ledgerAccountGroupSchema.optional(),
+  // Comma-separated groups (e.g. "CASH,BANK") for callers that need several
+  // groups in one request instead of fetching every account and filtering in
+  // the browser. Takes precedence over `group` when both are sent.
+  groups: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const parts = (value ?? "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      return parts.length ? parts : undefined;
+    })
+    .pipe(z.array(ledgerAccountGroupSchema).optional()),
   search: z.string().trim().max(120).optional(),
   isActive: z
     .enum(["true", "false"])

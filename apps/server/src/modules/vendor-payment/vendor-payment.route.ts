@@ -9,12 +9,12 @@ import {
   rejectVendorPaymentSlipSchema,
   submitVendorPaymentSlipSchema,
   updateVendorPaymentSlipSchema,
+  vendorPaymentSlipListQuerySchema,
   type VendorPaymentSlipLineInput,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 import {
   Prisma,
-  type VendorPaymentStatus,
   type VendorPaymentType,
 } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
@@ -51,6 +51,7 @@ import {
   reconcileHamaliLines,
   type HamaliSourceType,
 } from "./calculators/hamali.js";
+import { SLIP_LIST_ORDER_BY, buildSlipListWhere } from "./slip-list.query.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -882,17 +883,8 @@ router.post("/slips/:id/cancel", can(PERMS.ACCOUNTS.PAYMENT.CANCEL), async (req,
 
 router.get("/slips", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {
   const query = parseListQuery(req);
-  const type =
-    typeof req.query.type === "string" ? (req.query.type as VendorPaymentType) : undefined;
-  const status =
-    typeof req.query.status === "string"
-      ? (req.query.status as VendorPaymentStatus)
-      : undefined;
-  const where: Prisma.VendorPaymentSlipWhereInput = {
-    ...branchFilter(req),
-    ...(type ? { type } : {}),
-    ...(status ? { status } : {}),
-  };
+  const filters = validate(vendorPaymentSlipListQuerySchema.safeParse(req.query));
+  const where = buildSlipListWhere(filters, branchFilter(req));
   const [data, total] = await Promise.all([
     db.vendorPaymentSlip.findMany({
       where,
@@ -902,7 +894,7 @@ router.get("/slips", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {
         labour: { select: { id: true, name: true } },
         _count: { select: { lines: true, disbursements: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: SLIP_LIST_ORDER_BY,
       skip: query.page * query.size,
       take: query.size,
     }),

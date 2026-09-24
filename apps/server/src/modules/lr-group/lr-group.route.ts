@@ -16,6 +16,8 @@ import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can, canAny } from "../../auth/can.middleware.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
+import { invalidateCacheOnWrite } from "../_shared/cache.js";
+import { LR_DELIVERY_STATS_CACHE } from "../lorry-receipt/lr-delivery.cache.js";
 import { getParamId } from "../_shared/param.js";
 import { fyCodeFor } from "../_shared/doc-number.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
@@ -48,6 +50,9 @@ import {
 
 const router: Router = Router();
 router.use(authMiddleware);
+// Finalising a group and delivering its LRs both move the dashboard's
+// delivery counts (GET /lorry-receipts/worklists/delivery-stats).
+router.use(invalidateCacheOnWrite(LR_DELIVERY_STATS_CACHE));
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
@@ -1263,15 +1268,19 @@ router.post(
     }
 
     await db.$transaction(async (tx) => {
-      for (const line of lrs) {
-        await tx.lorryReceipt.update({
-          where: { id: line.lrId },
-          data: {
-            status: "FINALISED",
-            updatedById: me,
-            version: { increment: 1 },
-          },
-        });
+      const lrIds = [...new Set(lrs.map((line) => line.lrId))];
+      const finalised = await tx.lorryReceipt.updateMany({
+        where: { id: { in: lrIds } },
+        data: {
+          status: "FINALISED",
+          updatedById: me,
+          version: { increment: 1 },
+        },
+      });
+      if (finalised.count !== lrIds.length) {
+        throw new BadRequestError(
+          "One or more LRs changed while finalising — please retry",
+        );
       }
 
       await tx.lRGroup.update({
@@ -1551,23 +1560,20 @@ router.post(
       for (const lrId of selectedLrIds) {
         assertLRDeliveryEligible(currentEligibility.get(lrId)!);
       }
-      for (const line of input.lrs) {
-        await tx.lRDelivery.create({
-          data: {
-            lrId: line.lrId,
-            deliveredAt: input.deliveredAt,
-            unloadingAt: input.unloadingAt ?? null,
-            receiverName: input.receiverName ?? null,
-            receiverPhone: input.receiverPhone ?? null,
-            unloadingCharges: existing.isMarketVehicle
-              ? (line.unloadingCharges ?? input.unloadingCharges ?? null)
-              : null,
-            remark: line.remark ?? input.remark ?? null,
-            createdById: me,
-          },
-          select: { id: true },
-        });
-      }
+      await tx.lRDelivery.createMany({
+        data: input.lrs.map((line) => ({
+          lrId: line.lrId,
+          deliveredAt: input.deliveredAt,
+          unloadingAt: input.unloadingAt ?? null,
+          receiverName: input.receiverName ?? null,
+          receiverPhone: input.receiverPhone ?? null,
+          unloadingCharges: existing.isMarketVehicle
+            ? (line.unloadingCharges ?? input.unloadingCharges ?? null)
+            : null,
+          remark: line.remark ?? input.remark ?? null,
+          createdById: me,
+        })),
+      });
       await tx.lorryReceipt.updateMany({
         where: { id: { in: input.lrs.map((line) => line.lrId) } },
         data: { status: "DELIVERED", updatedById: me },

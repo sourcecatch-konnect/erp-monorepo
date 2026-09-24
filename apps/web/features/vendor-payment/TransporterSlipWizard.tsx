@@ -29,6 +29,7 @@ import {
 } from "@skerp/ui/components/table";
 
 import { useAuth } from "@/features/auth";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { branchApi } from "@/features/masters/branch/branch.service";
 import { transportApi } from "@/features/masters/transport/transport.service";
 import {
@@ -36,15 +37,6 @@ import {
   type EligibleTransporterLR,
 } from "./vendor-payment.service";
 import { Field, StepHeading, money, rupeesToPaise, today } from "./vendor-payment.ui";
-
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debounced, setDebounced] = React.useState(value);
-  React.useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 type LineDraft = {
   freight: string;

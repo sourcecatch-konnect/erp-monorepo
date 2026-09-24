@@ -29,6 +29,7 @@ import {
 } from "@skerp/ui/components/table";
 
 import { useAuth } from "@/features/auth";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { branchApi } from "@/features/masters/branch/branch.service";
 import { labourApi } from "@/features/masters/labour/labour.service";
 import {
@@ -37,15 +38,6 @@ import {
   type HamaliSourceType,
 } from "./vendor-payment.service";
 import { Field, StepHeading, money, today } from "./vendor-payment.ui";
-
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debounced, setDebounced] = React.useState(value);
-  React.useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 const SOURCE_TYPE_LABELS: Record<HamaliSourceType, string> = {
   GRN_HAMALI: "Origin GRN",

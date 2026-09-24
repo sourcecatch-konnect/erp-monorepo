@@ -17,9 +17,43 @@ export const vendorPaymentSourceTypeSchema = z.enum([
   "VP_LOADING",
 ]);
 
+export const vendorPaymentStatusSchema = z.enum([
+  "DRAFT",
+  "PENDING_APPROVAL",
+  "APPROVED",
+  "PARTIALLY_PAID",
+  "PAID",
+  "CANCELLED",
+]);
+
 const id = z.string().trim().min(1);
 const isoDate = z.coerce.date();
 const moneyPaise = z.coerce.bigint().nonnegative().default(0n);
+
+/* ------------------------------------------------------------------ */
+/* Slip list — GET /vendor-payment/slips filters                       */
+/* ------------------------------------------------------------------ */
+
+// Paging (`page`/`size`) is parsed separately by the shared list-query
+// parser. `status` takes a comma-separated list so a queue spanning several
+// statuses (e.g. APPROVED + PARTIALLY_PAID) is one paged query instead of one
+// query per status merged in the browser. `search` is matched in the
+// database against the slip number and the vendor's name.
+export const vendorPaymentSlipListQuerySchema = z.object({
+  type: vendorPaymentTypeSchema.optional(),
+  status: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const parts = (value ?? "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      return parts.length ? parts : undefined;
+    })
+    .pipe(z.array(vendorPaymentStatusSchema).optional()),
+  search: z.string().trim().max(120).optional(),
+});
 
 /* ------------------------------------------------------------------ */
 /* Calculators — eligible source documents for a slip draft            */
@@ -174,4 +208,7 @@ export type UpdateVendorPaymentSlipInput = z.infer<
 >;
 export type CreateVendorPaymentDisbursementInput = z.infer<
   typeof createVendorPaymentDisbursementSchema
+>;
+export type VendorPaymentSlipListFilters = z.infer<
+  typeof vendorPaymentSlipListQuerySchema
 >;
