@@ -602,7 +602,7 @@ function toGenericStatementRows(
   if (!view) return [];
   return view.entries.map((e) => ({
     id: e.id,
-    date: e.occurredAt,
+    date: new Date(e.occurredAt).toISOString(),
     kind: e.sourceType,
     particulars: e.description,
     voucherNumber: null,

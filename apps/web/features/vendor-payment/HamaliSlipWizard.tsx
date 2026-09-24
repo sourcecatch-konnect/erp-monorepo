@@ -101,8 +101,11 @@ export function HamaliSlipWizard() {
       }),
     enabled: searched && Boolean(labourId),
   });
-  const sources = eligible.data ?? [];
-  const sourceByKey = new Map(sources.map((s) => [sourceKey(s), s]));
+  const sources = React.useMemo(() => eligible.data ?? [], [eligible.data]);
+  const sourceByKey = React.useMemo(
+    () => new Map(sources.map((s) => [sourceKey(s), s])),
+    [sources],
+  );
 
   const toggleSource = (s: EligibleHamaliSource, checked: boolean) => {
     setSelected((prev) => {

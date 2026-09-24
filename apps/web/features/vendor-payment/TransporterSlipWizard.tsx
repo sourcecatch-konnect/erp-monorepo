@@ -133,7 +133,6 @@ export function TransporterSlipWizard() {
     enabled: searched && Boolean(transportId),
   });
   const lrs = eligible.data ?? [];
-  const lrById = new Map(lrs.map((lr) => [lr.lrId, lr]));
 
   const toLineDraft = (lr: EligibleTransporterLR): LineDraft => ({
     freight: (Number(BigInt(lr.freightPaise)) / 100).toFixed(2),
