@@ -4,11 +4,13 @@ import {
   createJobCardSchema,
   updateJobCardSchema,
   finaliseJobCardSchema,
+  createAndFinaliseJobCardSchema,
   cancelJobCardSchema,
   jobCardListQuerySchema,
   createJobCardRemovedPartSchema,
   undoFinaliseJobCardSchema,
 } from "@skerp/validators";
+import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
@@ -250,38 +252,82 @@ router.patch("/:id", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
   sendOk(res, updated);
 });
 
-/**
- * Finalise: parts are actually issued here (not at Save) — batch-specific
- * cost is snapshotted, stock decrements, and one expense voucher posts.
- * Service lines are recorded for total but post nothing yet (Service Bill,
- * a later story, does that). A Job Card with zero part lines posts no
- * voucher. FINALISED is terminal for v1 — no reverse/reopen path yet.
- */
-router.post("/:id/finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (req, res) => {
-  const input = finaliseJobCardSchema.parse(req.body);
+type FinaliseInput = { outDateTime: Date; closingKm: number };
+type ExistingJobCardForFinalise = {
+  id: string;
+  jobCardNumber: string | null;
+  branchId: string;
+  fyCode: string;
+  openingKm: number;
+  partLines: { id: string; sparePartId: string; batchId: string; qty: number }[];
+  serviceLines: { amountPaise: bigint }[];
+};
 
-  const existing = await db.jobCard.findUnique({
-    where: { id: getParamId(req) },
-    include: { partLines: true, serviceLines: true },
-  });
-  if (!existing) throw new NotFoundError("Job card not found");
-  if (existing.status !== "DRAFT")
-    throw new BadRequestError("Only a DRAFT job card can be finalised");
+/**
+ * Shared by `/:id/finalise` and the create+finalise merge below. Parts are
+ * actually issued here (not at Save) — batch-specific cost is snapshotted,
+ * stock decrements, and one expense voucher posts. Service lines are
+ * recorded for total but post nothing yet (Service Bill, a later story,
+ * does that). A Job Card with zero part lines posts no voucher.
+ *
+ * Grouped by sparePartId and batched instead of a for-loop awaiting 6
+ * separate round trips per line — with N part lines that was up to 6N
+ * sequential round trips one after another.
+ */
+async function finaliseJobCardTx(
+  tx: Prisma.TransactionClient,
+  existing: ExistingJobCardForFinalise,
+  input: FinaliseInput,
+  actorUserId: string,
+) {
   if (existing.partLines.length === 0 && existing.serviceLines.length === 0)
     throw new BadRequestError("A job card needs at least one part or service line to finalise");
   if (input.closingKm < existing.openingKm)
     throw new BadRequestError("Closing KM cannot be less than opening KM");
-  assertBranchAccess(req, existing.branchId);
 
   const totalServiceAmountPaise = existing.serviceLines.reduce((s, l) => s + l.amountPaise, 0n);
 
-  const finalised = await db.$transaction(async (tx) => {
-    let totalPartsAmountPaise = 0n;
+  // Re-read every batch under the transaction in one query instead of one
+  // per line, closing the same race window the original per-line reads did.
+  const batchIds = existing.partLines.map((l) => l.batchId);
+  const batches = await tx.spareBatch.findMany({ where: { id: { in: batchIds } } });
+  const batchById = new Map(batches.map((b) => [b.id, b]));
 
-    for (const line of existing.partLines) {
-      // Re-read under the transaction to close the race window against a
-      // concurrent finalise/inward-cancel touching the same batch.
-      const batch = await tx.spareBatch.findUnique({ where: { id: line.batchId } });
+  // Group by sparePartId so the stock-ledger running balance stays correct
+  // when a part is drawn from more than one batch/line in the same finalise.
+  const linesBySparePart = new Map<string, typeof existing.partLines>();
+  for (const line of existing.partLines) {
+    const list = linesBySparePart.get(line.sparePartId) ?? [];
+    list.push(line);
+    linesBySparePart.set(line.sparePartId, list);
+  }
+
+  const existingLedgers = await tx.stockLedger.findMany({
+    where: { branchId: existing.branchId, sparePartId: { in: [...linesBySparePart.keys()] } },
+  });
+  const ledgerByPart = new Map(existingLedgers.map((l) => [l.sparePartId, l]));
+
+  let totalPartsAmountPaise = 0n;
+  const partLineUpdates: ReturnType<typeof tx.jobCardPartLine.update>[] = [];
+  const batchDecrements: ReturnType<typeof tx.spareBatch.update>[] = [];
+  const ledgerUpdates: ReturnType<typeof tx.stockLedger.update>[] = [];
+  const stockMovementsData: {
+    sparePartId: string;
+    branchId: string;
+    movementType: "ISSUE";
+    qtyDelta: number;
+    unitCostPaise: bigint;
+    balanceQtyAfter: number;
+    refType: "JOB_CARD";
+    refId: string;
+    createdById: string;
+  }[] = [];
+
+  for (const [sparePartId, partLines] of linesBySparePart) {
+    let qty = ledgerByPart.get(sparePartId)?.currentQty ?? 0;
+
+    for (const line of partLines) {
+      const batch = batchById.get(line.batchId);
       if (!batch || batch.sparePartId !== line.sparePartId)
         throw new BadRequestError("A part line's batch is no longer valid");
       if (batch.qtyRemaining < line.qty)
@@ -292,71 +338,195 @@ router.post("/:id/finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (req, r
       const amountPaise = batch.unitCostPaise * BigInt(line.qty);
       totalPartsAmountPaise += amountPaise;
 
-      await tx.jobCardPartLine.update({
-        where: { id: line.id },
-        data: { unitCostPaise: batch.unitCostPaise, amountPaise },
-      });
+      partLineUpdates.push(
+        tx.jobCardPartLine.update({
+          where: { id: line.id },
+          data: { unitCostPaise: batch.unitCostPaise, amountPaise },
+        }),
+      );
+      batchDecrements.push(
+        tx.spareBatch.update({
+          where: { id: batch.id },
+          data: { qtyRemaining: { decrement: line.qty } },
+        }),
+      );
 
-      await tx.spareBatch.update({
-        where: { id: batch.id },
-        data: { qtyRemaining: { decrement: line.qty } },
+      qty -= line.qty;
+      stockMovementsData.push({
+        sparePartId,
+        branchId: existing.branchId,
+        movementType: "ISSUE",
+        qtyDelta: -line.qty,
+        unitCostPaise: batch.unitCostPaise,
+        balanceQtyAfter: qty,
+        refType: "JOB_CARD",
+        refId: existing.id,
+        createdById: actorUserId,
       });
+    }
 
-      const stockLedger = await tx.stockLedger.findUnique({
-        where: { sparePartId_branchId: { sparePartId: line.sparePartId, branchId: existing.branchId } },
-      });
-      const newQty = (stockLedger?.currentQty ?? 0) - line.qty;
+    ledgerUpdates.push(
+      tx.stockLedger.update({
+        where: { sparePartId_branchId: { sparePartId, branchId: existing.branchId } },
+        data: { currentQty: qty },
+      }),
+    );
+  }
 
-      await tx.stockLedger.update({
-        where: { sparePartId_branchId: { sparePartId: line.sparePartId, branchId: existing.branchId } },
-        data: { currentQty: newQty },
-      });
+  await Promise.all([
+    ...partLineUpdates,
+    ...batchDecrements,
+    ...ledgerUpdates,
+    ...(stockMovementsData.length
+      ? [tx.stockMovement.createMany({ data: stockMovementsData })]
+      : []),
+  ]);
 
-      await tx.stockMovement.create({
+  let journalEntryId: string | null = null;
+  if (totalPartsAmountPaise > 0n) {
+    const voucher = await postJobCardPartsVoucher(tx, {
+      jobCardId: existing.id,
+      jobCardNumber: existing.jobCardNumber!,
+      finaliseDate: input.outDateTime,
+      branchId: existing.branchId,
+      fyCode: existing.fyCode,
+      totalPartsAmountPaise,
+      createdById: actorUserId,
+    });
+    journalEntryId = voucher.id;
+  }
+
+  const result = await tx.jobCard.update({
+    where: { id: existing.id },
+    data: {
+      status: "FINALISED",
+      outDateTime: input.outDateTime,
+      closingKm: input.closingKm,
+      totalPartsAmountPaise,
+      totalServiceAmountPaise,
+      totalAmountPaise: totalPartsAmountPaise + totalServiceAmountPaise,
+      journalEntryId,
+      finalisedById: actorUserId,
+      finalisedAt: new Date(),
+    },
+    select: { id: true },
+  });
+  return result;
+}
+
+/**
+ * Create a brand-new job card and finalise it immediately, in one request
+ * and one transaction — for the "job card is already done, just record it"
+ * case. Previously the client made two sequential HTTP calls (create, then
+ * finalise) for this; merged here so there's no in-between DRAFT state left
+ * behind if the second call had failed.
+ */
+router.post(
+  "/create-and-finalise",
+  can(PERMS.WORKSHOP.JOBCARD_FINALISE),
+  async (req, res) => {
+    const input = createAndFinaliseJobCardSchema.parse(req.body);
+    assertBranchAccess(req, input.branchId);
+
+    const branch = await db.branch.findUnique({
+      where: { id: input.branchId },
+      select: { branchCode: true },
+    });
+    if (!branch) throw new BadRequestError("Branch not found");
+
+    const fyCode = fyCodeFor(input.inDateTime);
+    const me = actorId(req);
+
+    const finalised = await db.$transaction(async (tx) => {
+      const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
+      const jobCardNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/JC");
+
+      // Job card row, then lines via createManyAndReturn — Prisma's nested
+      // `partLines: { create: [...] }` issues one INSERT per line instead
+      // of a single batched statement; with N+M lines that's up to N+M+1
+      // sequential round trips. createManyAndReturn does it in 2.
+      const jobCard = await tx.jobCard.create({
         data: {
-          sparePartId: line.sparePartId,
-          branchId: existing.branchId,
-          movementType: "ISSUE",
-          qtyDelta: -line.qty,
-          unitCostPaise: batch.unitCostPaise,
-          balanceQtyAfter: newQty,
-          refType: "JOB_CARD",
-          refId: existing.id,
-          createdById: actorId(req),
+          jobCardNumber,
+          fyCode,
+          branchId: input.branchId,
+          vehicleId: input.vehicleId,
+          driverId: input.driverId,
+          truckStatus: input.truckStatus,
+          inDateTime: input.inDateTime,
+          openingKm: input.openingKm,
+          remarks: input.remarks,
+          createdById: me,
         },
       });
-    }
 
-    let journalEntryId: string | null = null;
-    if (totalPartsAmountPaise > 0n) {
-      const voucher = await postJobCardPartsVoucher(tx, {
-        jobCardId: existing.id,
-        jobCardNumber: existing.jobCardNumber!,
-        finaliseDate: input.outDateTime,
-        branchId: existing.branchId,
-        fyCode: existing.fyCode,
-        totalPartsAmountPaise,
-        createdById: actorId(req),
-      });
-      journalEntryId = voucher.id;
-    }
+      const [createdPartLines, createdServiceLines] = await Promise.all([
+        input.partLines.length
+          ? tx.jobCardPartLine.createManyAndReturn({
+              data: input.partLines.map((line) => ({
+                jobCardId: jobCard.id,
+                sparePartId: line.sparePartId,
+                batchId: line.batchId,
+                mechanicId: line.mechanicId,
+                qty: line.qty,
+                unitCostPaise: 0n, // snapshotted below by finaliseJobCardTx
+                amountPaise: 0n,
+                description: line.description,
+              })),
+            })
+          : Promise.resolve([]),
+        input.serviceLines.length
+          ? tx.jobCardServiceLine.createManyAndReturn({
+              data: input.serviceLines.map((line) => ({
+                jobCardId: jobCard.id,
+                serviceProviderId: line.serviceProviderId,
+                sparePartId: line.sparePartId,
+                mechanicId: line.mechanicId,
+                qty: line.qty,
+                ratePaise: line.ratePaise,
+                amountPaise: line.ratePaise * BigInt(line.qty),
+                description: line.description,
+              })),
+            })
+          : Promise.resolve([]),
+      ]);
+      const created = {
+        ...jobCard,
+        partLines: createdPartLines,
+        serviceLines: createdServiceLines,
+      };
 
-    return tx.jobCard.update({
-      where: { id: existing.id },
-      data: {
-        status: "FINALISED",
-        outDateTime: input.outDateTime,
-        closingKm: input.closingKm,
-        totalPartsAmountPaise,
-        totalServiceAmountPaise,
-        totalAmountPaise: totalPartsAmountPaise + totalServiceAmountPaise,
-        journalEntryId,
-        finalisedById: actorId(req),
-        finalisedAt: new Date(),
-      },
-      select: { id: true },
+      return finaliseJobCardTx(
+        tx,
+        created,
+        { outDateTime: input.outDateTime, closingKm: input.closingKm },
+        me,
+      );
     });
+
+    const result = await db.jobCard.findUnique({
+      where: { id: finalised.id },
+      include: jobCardDetailInclude,
+    });
+    sendOk(res, result, undefined, 201);
+  },
+);
+
+router.post("/:id/finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (req, res) => {
+  const input = finaliseJobCardSchema.parse(req.body);
+
+  const existing = await db.jobCard.findUnique({
+    where: { id: getParamId(req) },
+    include: { partLines: true, serviceLines: true },
   });
+  if (!existing) throw new NotFoundError("Job card not found");
+  if (existing.status !== "DRAFT")
+    throw new BadRequestError("Only a DRAFT job card can be finalised");
+  assertBranchAccess(req, existing.branchId);
+
+  const finalised = await db.$transaction((tx) =>
+    finaliseJobCardTx(tx, existing, input, actorId(req)),
+  );
 
   const result = await db.jobCard.findUnique({
     where: { id: finalised.id },

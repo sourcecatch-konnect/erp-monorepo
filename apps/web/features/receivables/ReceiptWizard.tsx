@@ -65,6 +65,7 @@ type AllocationDraft = {
   amountApplied: string;
   tds: string;
   tdsSection: string;
+  tdsCertNumber: string;
   damage: string;
   rateDiff: string;
 };
@@ -184,6 +185,7 @@ export function ReceiptWizard() {
             amountApplied: (Number(receivedPaise) / 100).toFixed(2),
             tds: (Number(tdsPaise) / 100).toFixed(2),
             tdsSection: "",
+            tdsCertNumber: "",
             damage: "0",
             rateDiff: "0",
           },
@@ -255,6 +257,10 @@ export function ReceiptWizard() {
     const a = allocations[billId];
     return !a || settledPaise(a) <= 0n;
   });
+  const missingTdsSectionBillIds = [...selected].filter((billId) => {
+    const a = allocations[billId];
+    return a && Number(a.tds || "0") > 0 && !a.tdsSection.trim();
+  });
   const selectedBranchIds = new Set(
     [...selected]
       .map((billId) => billById.get(billId)?.branchId)
@@ -269,6 +275,7 @@ export function ReceiptWizard() {
     Boolean(receivedIntoAccountId) &&
     overAllocatedBillIds.length === 0 &&
     zeroAllocationBillIds.length === 0 &&
+    missingTdsSectionBillIds.length === 0 &&
     Boolean(derivedBranchId);
 
   const createReceipt = useMutation({
@@ -291,6 +298,7 @@ export function ReceiptWizard() {
             amountAppliedPaise: rupeesToPaise(a.amountApplied || "0"),
             tdsAmountPaise: rupeesToPaise(a.tds || "0"),
             tdsSection: a.tdsSection.trim() || undefined,
+            tdsCertNumber: a.tdsCertNumber.trim() || undefined,
             damageAmountPaise: rupeesToPaise(a.damage || "0"),
             rateDiffAmountPaise: rupeesToPaise(a.rateDiff || "0"),
           };
@@ -491,6 +499,39 @@ export function ReceiptWizard() {
                                 updateAllocation(bill.id, "tds", value)
                               }
                             />
+                            {checked && Number(a?.tds || "0") > 0 ? (
+                              <div className="mt-1 space-y-1">
+                                <Input
+                                  className="h-7 text-xs"
+                                  placeholder="TDS section (e.g. 194C)"
+                                  value={a?.tdsSection ?? ""}
+                                  onChange={(event) =>
+                                    updateAllocation(
+                                      bill.id,
+                                      "tdsSection",
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                                <Input
+                                  className="h-7 text-xs"
+                                  placeholder="Cert no. (optional)"
+                                  value={a?.tdsCertNumber ?? ""}
+                                  onChange={(event) =>
+                                    updateAllocation(
+                                      bill.id,
+                                      "tdsCertNumber",
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                                {!a?.tdsSection?.trim() ? (
+                                  <p className="text-[10px] font-medium text-destructive">
+                                    Section required
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             <AmountInput

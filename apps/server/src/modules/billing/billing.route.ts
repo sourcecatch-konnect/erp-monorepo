@@ -5,6 +5,7 @@ import {
   billingTaxRuleSchema,
   cancelBillSchema,
   cancelLRChargeSchema,
+  createBillCreditNoteSchema,
   createBillDraftSchema,
   createManualLRChargeSchema,
   eligibleClientQuerySchema,
@@ -39,9 +40,11 @@ import {
   refreshLRBillingStatus,
 } from "./billing.service.js";
 import {
+  postBillCreditNoteVoucher,
   postSalesVoucher,
   reverseJournal,
 } from "../ledger/posting.service.js";
+import { RECEIVABLE_BILL_STATUSES } from "../ledger/customer-statement.compute.js";
 import { buildBillPdfHtml, billPdfInclude } from "./billing.pdf.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
@@ -1370,6 +1373,14 @@ router.post(
     }
     if (bill.status !== "APPROVED")
       throw new BadRequestError("Only an approved bill can be finalised");
+    // Ageing buckets by dueDate, falling back to billDate when absent —
+    // a bill with no due date silently ages from its bill date instead of
+    // its real payment terms. Creation now requires it; this guard catches
+    // drafts started before that validation existed.
+    if (!bill.dueDate)
+      throw new BadRequestError(
+        "This bill has no due date and predates the required-due-date rule. Cancel it and recreate the draft with a due date before finalising.",
+      );
     for (const line of bill.lines) {
       const approved =
         line.lrCharge.approvedAmountPaise ?? line.lrCharge.amountPaise;
@@ -1524,6 +1535,12 @@ router.post(
           cancellationReason: input.reason,
           cancelledById: me,
           cancelledAt: new Date(),
+          // A cancelled bill owes nothing — the guard above already blocks
+          // cancelling a PARTIALLY_PAID/PAID bill, so this is always 0 -> 0
+          // in the valid case. Without this, outstandingAmountPaise keeps
+          // its pre-cancel value forever, so Ageing/Customer Statement keep
+          // counting cancelled bills as real debt.
+          outstandingAmountPaise: 0n,
           statusHistory: {
             create: {
               fromStatus: bill.status,
@@ -1558,6 +1575,133 @@ router.post(
         select: { id: true, version: true, status: true },
       }),
     );
+  },
+);
+
+router.get(
+  "/bills/:id/credit-notes",
+  can(PERMS.BILLING.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const bill = await db.bill.findUnique({
+      where: { id },
+      select: { branchId: true },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    return sendOk(
+      res,
+      await db.billCreditNote.findMany({
+        where: { billId: id },
+        orderBy: { createdAt: "desc" },
+        include: { createdBy: { select: { id: true, firstName: true, lastName: true } } },
+      }),
+    );
+  },
+);
+
+router.post(
+  "/bills/:id/credit-notes",
+  can(PERMS.BILLING.CREDIT_NOTE_CREATE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(createBillCreditNoteSchema.safeParse(req.body));
+    const bill = await db.bill.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        billNumber: true,
+        branchId: true,
+        billingCustomerId: true,
+        status: true,
+        outstandingAmountPaise: true,
+      },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    // GST freezes an invoice once issued — a note only makes sense against a
+    // bill that actually reached the customer as a real receivable.
+    if (!(RECEIVABLE_BILL_STATUSES as readonly BillStatus[]).includes(bill.status))
+      throw new BadRequestError(
+        `A ${bill.status} bill cannot carry a credit/debit note`,
+      );
+    // A credit note can only give back what's still outstanding — it never
+    // manufactures a negative debt. A debit note has no such ceiling.
+    if (input.noteType === "CREDIT_NOTE" && input.amountPaise > bill.outstandingAmountPaise)
+      throw new BadRequestError(
+        "Credit note amount exceeds the bill's outstanding amount",
+      );
+    const me = actorId(req);
+    const noteDate = new Date();
+    const fyCode = fyCodeFor(noteDate);
+    const branch = await db.branch.findUniqueOrThrow({
+      where: { id: bill.branchId },
+      select: { branchCode: true },
+    });
+
+    const note = await db.$transaction(async (tx) => {
+      const seq = await nextSequence(
+        tx,
+        branch.branchCode,
+        fyCode,
+        input.noteType === "CREDIT_NOTE" ? "CN" : "DN",
+      );
+      const noteNumber = formatDocNumber(
+        branch.branchCode,
+        fyCode,
+        seq,
+        input.noteType === "CREDIT_NOTE" ? "SKT/CN" : "SKT/DN",
+      );
+
+      const created = await tx.billCreditNote.create({
+        data: {
+          noteType: input.noteType,
+          noteNumber,
+          fyCode,
+          branchId: bill.branchId,
+          billId: id,
+          customerId: bill.billingCustomerId,
+          amountPaise: input.amountPaise,
+          reason: input.reason,
+          createdById: me,
+        },
+      });
+
+      const voucher = await postBillCreditNoteVoucher(tx, {
+        billCreditNoteId: created.id,
+        noteType: input.noteType,
+        noteNumber,
+        noteDate,
+        branchId: bill.branchId,
+        fyCode,
+        customerId: bill.billingCustomerId,
+        amountPaise: input.amountPaise,
+        createdById: me,
+      });
+      await tx.billCreditNote.update({
+        where: { id: created.id },
+        data: { journalEntryId: voucher.id },
+      });
+
+      const delta =
+        input.noteType === "CREDIT_NOTE" ? -input.amountPaise : input.amountPaise;
+      const newOutstanding = bill.outstandingAmountPaise + delta;
+      await tx.bill.update({
+        where: { id },
+        data: {
+          outstandingAmountPaise: newOutstanding,
+          status:
+            input.noteType === "CREDIT_NOTE" && newOutstanding <= 0n
+              ? "PAID"
+              : bill.status === "PAID" && newOutstanding > 0n
+                ? "PARTIALLY_PAID"
+                : bill.status,
+        },
+      });
+
+      return created;
+    });
+    return sendOk(res, note);
   },
 );
 

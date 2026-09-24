@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
@@ -23,7 +23,7 @@ import {
 
 import { paiseToRupees } from "@/lib/money";
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
-import { jobCardApi, type LookupOption } from "../api/job-card.service";
+import { jobCardApi, LOOKUP_PAGE_SIZE, type LookupOption } from "../api/job-card.service";
 import { jobCardKeys } from "../api/job-card.keys";
 import { newServiceLine, type ServiceLineDraft } from "../line-drafts";
 
@@ -55,16 +55,50 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, onAdd }: Props
     queryKey: jobCardKeys.categories("Service"),
     queryFn: () => jobCardApi.categories("Service"),
   });
-  const serviceProviders = useQuery({
+  const serviceProviders = useInfiniteQuery({
     queryKey: jobCardKeys.serviceProviders(debouncedProviderSearch),
-    queryFn: () => jobCardApi.serviceProviders(debouncedProviderSearch),
+    queryFn: ({ pageParam = 0 }) =>
+      jobCardApi.serviceProviders({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedProviderSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
     enabled: open,
   });
-  const services = useQuery({
+  const services = useInfiniteQuery({
     queryKey: jobCardKeys.spareParts("Service", categoryId, debouncedServiceSearch),
-    queryFn: () => jobCardApi.spareParts("Service", categoryId, debouncedServiceSearch),
+    queryFn: ({ pageParam = 0 }) =>
+      jobCardApi.spareParts({
+        type: "Service",
+        categoryId,
+        search: debouncedServiceSearch,
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
     enabled: Boolean(categoryId),
   });
+  const providerOptions = React.useMemo(
+    () => serviceProviders.data?.pages.flatMap((page) => page.data) ?? [],
+    [serviceProviders.data],
+  );
+  const serviceOptions = React.useMemo(
+    () => services.data?.pages.flatMap((page) => page.data) ?? [],
+    [services.data],
+  );
 
   const reset = () => {
     setServiceProviderId("");
@@ -78,8 +112,8 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, onAdd }: Props
     setDescription("");
   };
 
-  const selectedProvider = serviceProviders.data?.find((p) => p.value === serviceProviderId);
-  const selectedService = services.data?.find((s) => s.value === sparePartId);
+  const selectedProvider = providerOptions.find((p) => p.value === serviceProviderId);
+  const selectedService = serviceOptions.find((s) => s.value === sparePartId);
 
   const canSave =
     Boolean(serviceProviderId) && Boolean(sparePartId) && Number(qty) > 0 && Number(rate) > 0;
@@ -111,7 +145,7 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, onAdd }: Props
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Service Provider</label>
             <Combobox
-              options={serviceProviders.data ?? []}
+              options={providerOptions}
               value={serviceProviderId}
               onChange={setServiceProviderId}
               searchValue={providerSearch}
@@ -119,6 +153,13 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, onAdd }: Props
               placeholder="Search provider..."
               searchPlaceholder="Type to search..."
               emptyText={serviceProviders.isLoading ? "Loading providers..." : "No providers found"}
+              hasMore={Boolean(serviceProviders.hasNextPage)}
+              isLoadingMore={serviceProviders.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (serviceProviders.hasNextPage && !serviceProviders.isFetchingNextPage) {
+                  serviceProviders.fetchNextPage();
+                }
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -146,11 +187,11 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, onAdd }: Props
           <div className="space-y-1.5 sm:col-span-2">
             <label className="text-sm font-medium">Service</label>
             <Combobox
-              options={services.data ?? []}
+              options={serviceOptions}
               value={sparePartId}
               onChange={(v) => {
                 setSparePartId(v);
-                const picked = services.data?.find((s) => s.value === v);
+                const picked = serviceOptions.find((s) => s.value === v);
                 if (picked) setRate(String(paiseToRupees(Number(picked.ratePaise))));
               }}
               searchValue={serviceSearch}
@@ -158,6 +199,11 @@ export function AddServiceDialog({ open, onOpenChange, mechanics, onAdd }: Props
               disabled={!categoryId}
               placeholder={categoryId ? "Search service..." : "Pick a category first"}
               searchPlaceholder="Type to search..."
+              hasMore={Boolean(services.hasNextPage)}
+              isLoadingMore={services.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (services.hasNextPage && !services.isFetchingNextPage) services.fetchNextPage();
+              }}
               emptyText={services.isLoading ? "Loading services..." : "No services found"}
             />
           </div>

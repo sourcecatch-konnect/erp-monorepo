@@ -14,6 +14,7 @@ import { BadRequestError, NotFoundError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
+import { parseListQuery } from "../_shared/list.query.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -73,14 +74,21 @@ router.get("/", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) => {
  */
 router.get("/lookup/spare-parts", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) => {
   const branchId = String(req.query.branchId ?? "");
-  const search = req.query.search ? String(req.query.search) : undefined;
+  const query = parseListQuery(req);
+  const where = query.search
+    ? { name: { contains: query.search, mode: "insensitive" as const } }
+    : undefined;
 
-  const parts = await db.sparePart.findMany({
-    where: search ? { name: { contains: search, mode: "insensitive" as const } } : undefined,
-    select: { id: true, name: true, unit: true, minimumStock: true, rate: true },
-    orderBy: { name: "asc" },
-    take: 20,
-  });
+  const [parts, total] = await Promise.all([
+    db.sparePart.findMany({
+      where,
+      select: { id: true, name: true, unit: true, minimumStock: true, rate: true },
+      orderBy: { name: "asc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.sparePart.count({ where }),
+  ]);
 
   const stockLedgers = branchId
     ? await db.stockLedger.findMany({
@@ -100,7 +108,44 @@ router.get("/lookup/spare-parts", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) 
       ratePaise: p.rate,
       currentStock: branchId ? (stockByPart.get(p.id) ?? 0) : null,
     })),
+    { page: query.page, size: query.size, total },
   );
+});
+
+const OPEN_PO_STATUSES = ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] as const;
+
+/**
+ * Lightweight PO picker for the Spare Inward form — id/number/status/
+ * estimate only, filtered server-side to statuses that can still receive
+ * goods, instead of the caller fetching every PO for a supplier (any
+ * status, with the full poDetailInclude — branch, all lines, createdBy,
+ * approvedBy) and throwing most of it away client-side.
+ */
+router.get("/lookup/open", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) => {
+  const query = parseListQuery(req);
+  const supplierId = req.query.supplierId ? String(req.query.supplierId) : undefined;
+
+  const where = {
+    ...branchFilter(req),
+    status: { in: [...OPEN_PO_STATUSES] },
+    ...(supplierId ? { supplierId } : {}),
+    ...(query.search
+      ? { poNumber: { contains: query.search, mode: "insensitive" as const } }
+      : {}),
+  };
+
+  const [orders, total] = await Promise.all([
+    db.purchaseOrder.findMany({
+      where,
+      select: { id: true, poNumber: true, status: true, estimatedPaise: true },
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+    db.purchaseOrder.count({ where }),
+  ]);
+
+  sendOk(res, orders, { page: query.page, size: query.size, total });
 });
 
 router.get("/:id", can(PERMS.WORKSHOP.PO_VIEW), async (req, res) => {
@@ -116,24 +161,26 @@ router.post("/", can(PERMS.WORKSHOP.PO_MANAGE), async (req, res) => {
   const input = createPurchaseOrderSchema.parse(req.body);
   assertBranchAccess(req, input.branchId);
 
-  const supplier = await db.sparePartSupplier.findUnique({
-    where: { id: input.supplierId },
-    select: { id: true },
-  });
-  if (!supplier) throw new BadRequestError("Supplier not found");
-
+  // Independent lookups — run together instead of one round trip after
+  // another.
   const sparePartIds = input.lines.map((l) => l.sparePartId);
-  const parts = await db.sparePart.findMany({
-    where: { id: { in: sparePartIds } },
-    select: { id: true },
-  });
+  const [supplier, parts, branch] = await Promise.all([
+    db.sparePartSupplier.findUnique({
+      where: { id: input.supplierId },
+      select: { id: true },
+    }),
+    db.sparePart.findMany({
+      where: { id: { in: sparePartIds } },
+      select: { id: true },
+    }),
+    db.branch.findUnique({
+      where: { id: input.branchId },
+      select: { branchCode: true },
+    }),
+  ]);
+  if (!supplier) throw new BadRequestError("Supplier not found");
   if (parts.length !== new Set(sparePartIds).size)
     throw new BadRequestError("One or more spare parts not found");
-
-  const branch = await db.branch.findUnique({
-    where: { id: input.branchId },
-    select: { branchCode: true },
-  });
   if (!branch) throw new BadRequestError("Branch not found");
 
   const fyCode = fyCodeFor(input.poDate);

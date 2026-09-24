@@ -151,7 +151,8 @@ type BillingPermissionKey =
   | "billing.cancel"
   | "billing.print"
   | "billing.charge_approve"
-  | "billing.tax_rule_manage";
+  | "billing.tax_rule_manage"
+  | "billing.credit_note_create";
 
 type ReceiptPermissionKey =
   | "receipt.view"
@@ -440,6 +441,7 @@ export const PERMS = {
     PRINT: "billing.print",
     CHARGE_APPROVE: "billing.charge_approve",
     TAX_RULE_MANAGE: "billing.tax_rule_manage",
+    CREDIT_NOTE_CREATE: "billing.credit_note_create",
   },
   RECEIPT: {
     VIEW: "receipt.view",

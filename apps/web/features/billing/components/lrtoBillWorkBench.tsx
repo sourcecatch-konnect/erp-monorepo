@@ -59,7 +59,7 @@ import {
 } from "../billing.service";
 
 import { Field } from "../components/Field";
-import { formatLabel, invoiceDate, money, today } from "../billing.util";
+import { addDays, formatLabel, invoiceDate, money, today } from "../billing.util";
 type InlineChargeDraft = {
     detention: string;
     hamali: string;
@@ -139,6 +139,10 @@ export function LRToBillWorkbench() {
     const [billType, setBillType] = React.useState<BillType>("ROAD");
     const [billDate, setBillDate] = React.useState(today());
     const [cutoffDate, setCutoffDate] = React.useState(today());
+    // Required by the server — Ageing buckets by dueDate, falling back to
+    // billDate when absent, which made every bill age from creation instead
+    // of its real payment terms. Default to a common net-30 term.
+    const [dueDate, setDueDate] = React.useState(addDays(today(), 30));
     const [remarks, setRemarks] = React.useState("");
     const [filtersOpen, setFiltersOpen] = React.useState(false);
     const [selectedLRIds, setSelectedLRIds] = React.useState<Set<string>>(
@@ -555,6 +559,7 @@ export function LRToBillWorkbench() {
                     : {}),
                 billDate,
                 billingCutoffDate: cutoffDate,
+                dueDate,
                 remarks: remarks.trim() || null,
                 lrChargeIds: [...chargeIds],
             });
@@ -823,6 +828,16 @@ export function LRToBillWorkbench() {
                                         value={billDate}
                                         onChange={(event) =>
                                             setBillDate(event.target.value)
+                                        }
+                                    />
+                                </Field>
+
+                                <Field label="Due Date">
+                                    <Input
+                                        type="date"
+                                        value={dueDate}
+                                        onChange={(event) =>
+                                            setDueDate(event.target.value)
                                         }
                                     />
                                 </Field>

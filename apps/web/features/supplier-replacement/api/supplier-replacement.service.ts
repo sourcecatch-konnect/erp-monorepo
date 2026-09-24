@@ -6,8 +6,7 @@ import {
   type ListResult,
 } from "@/features/masters/_shared/master-api";
 
-const LOOKUP_SIZE = { size: 1000 } as const;
-const LOOKUP_PAGE_SIZE = 20;
+export const LOOKUP_PAGE_SIZE = 20;
 
 export type ReplacementListStatus = "PENDING" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
 export type ReplacementType = "FREE" | "PAYABLE" | "CREDIT_NOTE";
@@ -92,6 +91,7 @@ export const supplierReplacementApi = {
   listReplacementLists: async (params?: {
     supplierId?: string;
     status?: ReplacementListStatus;
+    search?: string;
     page?: number;
     size?: number;
   }): Promise<ListResult<ReplacementList>> => {
@@ -202,26 +202,35 @@ export const supplierReplacementApi = {
     return unwrapApiResponse(res);
   },
 
-  /** Single-workshop-at-HO: no branch picker — just the HO branch, fixed. */
+  /** Single-workshop-at-HO: no branch picker — just the HO branch, fixed.
+   *  Filtered to isHeadOffice=true, so at most one row regardless of size. */
   headOfficeBranch: async (): Promise<{ id: string; name: string } | null> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>>(
       "/branches",
-      { params: { ...LOOKUP_SIZE, "filter[isHeadOffice]": "true" } },
+      { params: { size: 1, "filter[isHeadOffice]": "true" } },
     );
     const data = unwrapListResponse(res).data;
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
 
-  // Suppliers can grow into a large list, so search server-side instead of
-  // pulling all of them for the picker.
-  suppliers: async (search?: string): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list — paged + infinite-scrollable in
+  // the combobox, instead of a single unconditional size:20 page.
+  suppliers: async (params: {
+    page: number;
+    size: number;
+    search?: string;
+  }): Promise<ListResult<LookupOption>> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined } },
+      { params: { page: params.page, size: params.size, search: params.search || undefined } },
     );
-    return unwrapListResponse(res).data.map((s) => ({
-      value: s.id,
-      label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
-    }));
+    const result = unwrapListResponse(res);
+    return {
+      ...result,
+      data: result.data.map((s) => ({
+        value: s.id,
+        label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
+      })),
+    };
   },
 };

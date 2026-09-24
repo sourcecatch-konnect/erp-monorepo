@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { Voucher } from "@/features/ledger/voucher.types";
 import type {
   ApiResponse,
   VehicleJourney,
@@ -275,6 +276,10 @@ export const logSlipApi = {
       `/log-slips/${id}/post-accounts`,
       {},
     );
+    return unwrapApiResponse(res);
+  },
+  voucher: async (id: string): Promise<Voucher> => {
+    const res = await api.get<ApiResponse<Voucher>>(`/log-slips/${id}/voucher`);
     return unwrapApiResponse(res);
   },
   reopen: async (id: string, reason: string): Promise<LogSlip> => {

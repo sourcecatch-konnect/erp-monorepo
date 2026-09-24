@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconPlus, IconFileInvoice, IconEye } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
@@ -38,12 +43,26 @@ import {
 import { useCan } from "@/features/auth";
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import { formatPaise, rupeesToPaise, paiseToRupees } from "@/lib/money";
-import { purchaseOrderApi } from "@/features/purchase-order/api/purchase-order.service";
+import {
+  purchaseOrderApi,
+  LOOKUP_PAGE_SIZE,
+} from "@/features/purchase-order/api/purchase-order.service";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
-import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
-import { spareInwardApi, type SpareInward } from "./api/spare-inward.service";
+import { StatusTabs, TablePaginationFooter, TableSearchInput } from "@/components/data-table";
+import {
+  spareInwardApi,
+  type SpareInward,
+  type SpareInwardStatus,
+} from "./api/spare-inward.service";
 import { spareInwardKeys } from "./api/spare-inward.keys";
+
+const STATUS_TABS = [
+  { key: "ALL", label: "All" },
+  { key: "DRAFT", label: "Draft" },
+  { key: "POSTED", label: "Posted" },
+  { key: "CANCELLED", label: "Cancelled" },
+] as const;
 
 type LineDraft = {
   poLineId: string;
@@ -91,18 +110,74 @@ export function SpareInwardListPage() {
 
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
+  const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
+  const [supplierFilterId, setSupplierFilterId] = React.useState("");
+  const [supplierFilterSearch, setSupplierFilterSearch] = React.useState("");
+  const debouncedSupplierFilterSearch = useDebouncedValue(supplierFilterSearch, 300);
+  const [search, setSearch] = React.useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
 
-  const listQuery = React.useMemo(() => ({ page, size }), [page, size]);
+  const listQuery = React.useMemo(
+    () => ({
+      page,
+      size,
+      status: statusFilter === "ALL" ? undefined : (statusFilter as SpareInwardStatus),
+      supplierId: supplierFilterId || undefined,
+      search: debouncedSearch || undefined,
+    }),
+    [page, size, statusFilter, supplierFilterId, debouncedSearch],
+  );
 
   const list = useQuery({
     queryKey: spareInwardKeys.list(listQuery),
     queryFn: () => spareInwardApi.list(listQuery),
   });
-  const suppliers = useQuery({
+
+  // Independent of the create form's own supplier picker — powers the
+  // filter bar and stays available even while that dialog is closed.
+  const supplierFilterOptions = useInfiniteQuery({
+    queryKey: ["purchase-order", "suppliers", "filter", debouncedSupplierFilterSearch],
+    queryFn: ({ pageParam = 0 }) =>
+      purchaseOrderApi.suppliers({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedSupplierFilterSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
+  });
+  const supplierFilterList = React.useMemo(
+    () => supplierFilterOptions.data?.pages.flatMap((page) => page.data) ?? [],
+    [supplierFilterOptions.data],
+  );
+  const suppliers = useInfiniteQuery({
     queryKey: ["purchase-order", "suppliers", debouncedSupplierSearch],
-    queryFn: () => purchaseOrderApi.suppliers(debouncedSupplierSearch),
+    queryFn: ({ pageParam = 0 }) =>
+      purchaseOrderApi.suppliers({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedSupplierSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") {
+        return loaded < total ? allPages.length : undefined;
+      }
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
     enabled: createOpen,
   });
+  const supplierOptions = React.useMemo(
+    () => suppliers.data?.pages.flatMap((page) => page.data) ?? [],
+    [suppliers.data],
+  );
   const openPOs = useQuery({
     queryKey: spareInwardKeys.openPOs(supplierId),
     queryFn: () => spareInwardApi.openPurchaseOrders(supplierId),
@@ -241,6 +316,64 @@ export function SpareInwardListPage() {
         )}
       </div>
 
+      <div className="space-y-3">
+        <StatusTabs
+          tabs={STATUS_TABS}
+          active={statusFilter}
+          onChange={(key) => {
+            setStatusFilter(key);
+            setPage(0);
+          }}
+          layoutId="spare-inward-status-tabs"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <TableSearchInput
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(0);
+            }}
+            placeholder="Search inward number, invoice or supplier..."
+          />
+          <div className="w-64">
+            <Combobox
+              options={supplierFilterList}
+              value={supplierFilterId}
+              onChange={(v) => {
+                setSupplierFilterId(v);
+                setPage(0);
+              }}
+              searchValue={supplierFilterSearch}
+              onSearchChange={setSupplierFilterSearch}
+              placeholder="Filter by supplier..."
+              searchPlaceholder="Type to search..."
+              emptyText={supplierFilterOptions.isLoading ? "Loading suppliers..." : "No suppliers found"}
+              hasMore={Boolean(supplierFilterOptions.hasNextPage)}
+              isLoadingMore={supplierFilterOptions.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (supplierFilterOptions.hasNextPage && !supplierFilterOptions.isFetchingNextPage) {
+                  supplierFilterOptions.fetchNextPage();
+                }
+              }}
+            />
+          </div>
+          {supplierFilterId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSupplierFilterId("");
+                setSupplierFilterSearch("");
+                setPage(0);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -278,7 +411,7 @@ export function SpareInwardListPage() {
                 className="cursor-pointer"
                 onClick={() => router.push(`/workshop/inward/${inward.id}`)}
               >
-                <TableCell className="font-medium">{inward.inwardNumber ?? "—"}</TableCell>
+                <TableCell className="font-medium text-primary hover:underline">{inward.inwardNumber ?? "—"}</TableCell>
                 <TableCell>{inward.po.poNumber ?? "—"}</TableCell>
                 <TableCell>{inward.supplier.name}</TableCell>
                 <TableCell>{new Date(inward.inwardDate).toLocaleDateString("en-IN")}</TableCell>
@@ -348,7 +481,7 @@ export function SpareInwardListPage() {
                 <label className="text-sm font-medium">Supplier</label>
 
                 <Combobox
-                  options={suppliers.data ?? []}
+                  options={supplierOptions}
                   value={supplierId}
                   onChange={(v) => {
                     setSupplierId(v);
@@ -356,6 +489,13 @@ export function SpareInwardListPage() {
                   }}
                   searchValue={supplierSearch}
                   onSearchChange={setSupplierSearch}
+                  hasMore={Boolean(suppliers.hasNextPage)}
+                  isLoadingMore={suppliers.isFetchingNextPage}
+                  onScrollEnd={() => {
+                    if (suppliers.hasNextPage && !suppliers.isFetchingNextPage) {
+                      suppliers.fetchNextPage();
+                    }
+                  }}
                   placeholder="Search supplier..."
                   searchPlaceholder="Type to search..."
                   emptyText={suppliers.isLoading ? "Loading suppliers..." : "No suppliers found"}

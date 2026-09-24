@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
     Select,
@@ -40,11 +42,20 @@ const VOUCHER_TYPES: VoucherType[] = [
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** Every voucher posted on a given date (or range), across all types —
- *  the day-by-day audit trail. Click a row to see its full Dr/Cr breakdown. */
+/** A Day Book is one day's vouchers — that's the definition, matching Tally
+ *  (this ERP's statutory accounting source). Previously this screen let
+ *  From/To drift apart into an arbitrary range, which isn't a Day Book
+ *  anymore; a multi-day view belongs in a separate report, not here. */
+const addDays = (date: string, delta: number): string => {
+    const d = new Date(`${date}T00:00:00`);
+    d.setDate(d.getDate() + delta);
+    return d.toISOString().slice(0, 10);
+};
+
+/** Every voucher posted on one date, across all types — the day-by-day
+ *  audit trail. Click a row to see its full Dr/Cr breakdown. */
 export function DayBookPage() {
-    const [from, setFrom] = React.useState(today());
-    const [to, setTo] = React.useState(today());
+    const [date, setDate] = React.useState(today());
     const [branchId, setBranchId] = React.useState<string>("ALL");
     const [voucherType, setVoucherType] = React.useState<VoucherType | "ALL">("ALL");
     const [openVoucherId, setOpenVoucherId] = React.useState<string | null>(null);
@@ -55,8 +66,8 @@ export function DayBookPage() {
     });
 
     const filters = {
-        from,
-        to,
+        from: date,
+        to: date,
         branchId: branchId === "ALL" ? undefined : branchId,
         voucherType: voucherType === "ALL" ? undefined : voucherType,
     };
@@ -64,7 +75,7 @@ export function DayBookPage() {
     const dayBook = useQuery({
         queryKey: ledgerKeys.dayBook(filters),
         queryFn: () => ledgerApi.dayBook(filters),
-        enabled: Boolean(from),
+        enabled: Boolean(date),
     });
 
     const voucher = useQuery({
@@ -90,12 +101,38 @@ export function DayBookPage() {
 
             <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">From</label>
-                    <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">To</label>
-                    <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                    <label className="text-xs font-medium text-muted-foreground">Date</label>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Previous day"
+                            onClick={() => setDate((d) => addDays(d, -1))}
+                        >
+                            <IconChevronLeft size={16} />
+                        </Button>
+                        <Input
+                            type="date"
+                            value={date}
+                            max={today()}
+                            onChange={(e) => setDate(e.target.value)}
+                            className="w-40"
+                        />
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Next day"
+                            disabled={date >= today()}
+                            onClick={() => setDate((d) => addDays(d, 1))}
+                        >
+                            <IconChevronRight size={16} />
+                        </Button>
+                        {date !== today() ? (
+                            <Button variant="ghost" size="sm" onClick={() => setDate(today())}>
+                                Today
+                            </Button>
+                        ) : null}
+                    </div>
                 </div>
                 <Select value={branchId} onValueChange={setBranchId}>
                     <SelectTrigger className="w-48">
@@ -153,7 +190,7 @@ export function DayBookPage() {
                         {!dayBook.isLoading && dayBook.data?.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                                    No vouchers posted in this range.
+                                    No vouchers posted on this date.
                                 </TableCell>
                             </TableRow>
                         ) : null}

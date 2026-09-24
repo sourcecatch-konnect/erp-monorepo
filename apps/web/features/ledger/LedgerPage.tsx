@@ -25,7 +25,7 @@ import { CompactMoney } from "./components/CompactMoney";
 import { downloadLedgerCsv } from "./components/exportLadgerCSV";
 import { recentFyCodes } from "./fy";
 
-type ReportTab = "bank" | "cash" | "debtor" | "creditor" | "expense" | "ageing";
+type ReportTab = "bank" | "cash" | "debtor" | "creditor" | "driver" | "expense" | "ageing";
 
 type CashTabConfig = {
   label: string;
@@ -39,25 +39,111 @@ type CashTabConfig = {
  *  Workshop PO/Inward/Job Card/Service Bill vouchers show up), same as
  *  Debtor + Ageing reading the real Bill/Receipt statement instead of
  *  LedgerEntry. */
-const cashTabs: Record<"bank" | "cash" | "creditor" | "expense", CashTabConfig> = {
+const cashTabs: Record<"bank" | "cash" | "creditor" | "driver" | "expense", CashTabConfig> = {
   bank: { label: "Bank", description: "Every entry into/out of one bank account", partyKind: "account-bank", balanceConvention: "asset" },
   cash: { label: "Cash", description: "Every entry into/out of one cash account", partyKind: "account-cash", balanceConvention: "asset" },
   creditor: { label: "Creditor", description: "Everything paid to one creditor", partyKind: "creditor", balanceConvention: "liability" },
+  driver: { label: "Driver", description: "One driver's advance vs. settlement position, from posted Log Slips", partyKind: "driver", balanceConvention: "asset" },
   expense: { label: "Expense", description: "Every payment tagged as an expense, across all payees", partyKind: null, balanceConvention: null },
 };
 
-const TAB_ORDER: ReportTab[] = ["bank", "cash", "debtor", "creditor", "expense", "ageing"];
+const TAB_ORDER: ReportTab[] = ["bank", "cash", "debtor", "creditor", "driver", "expense", "ageing"];
 const TAB_LABEL: Record<ReportTab, string> = {
   bank: "Bank",
   cash: "Cash",
   debtor: "Debtor",
   creditor: "Creditor",
+  driver: "Driver",
   expense: "Expense",
   ageing: "Ageing",
 };
 
 const FY_OPTIONS = recentFyCodes(4);
+function LedgerTotals({
+  data,
+  convention,
+  isLoading,
+}: {
+  data?: {
+    totalIn?: number;
+    totalOut?: number;
+    closingBalance?: number;
+  };
+  convention: BalanceConvention;
+  isLoading: boolean;
+}) {
+  const closingBalance = data?.closingBalance ?? 0;
 
+  return (
+    <section
+      aria-label="Ledger totals"
+      className="border-t border-border bg-muted/20"
+    >
+      <div className="flex items-center justify-between border-b border-border/70 px-5 py-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Period summary
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Totals for the selected ledger and date range
+          </p>
+        </div>
+        {isLoading && (
+          <span className="text-xs text-muted-foreground">Updating…</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 divide-y divide-border/70 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="px-5 py-4">
+          <p className="text-xs font-medium text-muted-foreground">
+            {convention ? "Total debit" : "Total in"}
+          </p>
+          <div className="mt-1 text-lg font-semibold tabular-nums tracking-tight text-foreground">
+            {isLoading ? (
+              <span className="text-muted-foreground">—</span>
+            ) : (
+              <CompactMoney value={debitTotal(data, convention)} />
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-4">
+          <p className="text-xs font-medium text-muted-foreground">
+            {convention ? "Total credit" : "Total out"}
+          </p>
+          <div className="mt-1 text-lg font-semibold tabular-nums tracking-tight text-foreground">
+            {isLoading ? (
+              <span className="text-muted-foreground">—</span>
+            ) : (
+              <CompactMoney value={creditTotal(data, convention)} />
+            )}
+          </div>
+        </div>
+
+        <div className="bg-primary/[0.05] px-5 py-4">
+          <p className="text-xs font-semibold text-foreground">
+            Closing balance
+          </p>
+          <div className="mt-1 flex flex-wrap items-baseline gap-2">
+            <span className="text-xl font-bold tabular-nums tracking-tight text-foreground">
+              {isLoading ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <CompactMoney value={Math.abs(closingBalance)} />
+              )}
+            </span>
+
+            {!isLoading && convention && (
+              <span className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                {isDr(closingBalance, convention) ? "Dr" : "Cr"}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 /** Bank / Cash / Debtor / Creditor / Expense / Ageing ledger reports. */
 export function LedgerPage() {
   const [tab, setTab] = React.useState<ReportTab>("bank");
@@ -80,21 +166,24 @@ export function LedgerPage() {
     queryFn: () => branchApi.list({ page: 0, size: 200 }),
   });
 
-  // Bank / Cash (legacy LedgerEntry) and Creditor / Expense (JournalLine).
+  // Bank / Cash (legacy LedgerEntry) and Creditor / Driver / Expense (JournalLine).
   const cashQuery = useQuery({
     queryKey:
       tab === "expense"
         ? ledgerKeys.expenses(range)
         : tab === "creditor"
           ? ledgerKeys.creditor(partyId, range)
-          : ledgerKeys.account(partyId, range),
+          : tab === "driver"
+            ? ledgerKeys.driver(partyId, range)
+            : ledgerKeys.account(partyId, range),
     queryFn: () => {
       if (tab === "expense") return ledgerApi.expenses(range);
       if (tab === "creditor") return ledgerApi.forCreditor(partyId, range);
+      if (tab === "driver") return ledgerApi.forDriver(partyId, range);
       return ledgerApi.forAccount(partyId, range);
     },
     enabled:
-      (tab === "bank" || tab === "cash" || tab === "creditor" || tab === "expense") &&
+      (tab === "bank" || tab === "cash" || tab === "creditor" || tab === "driver" || tab === "expense") &&
       (tab === "expense" || partyId.length > 0),
   });
 
@@ -124,7 +213,7 @@ export function LedgerPage() {
 
   const handleExportCsv = () => {
     if (tab === "debtor" || tab === "ageing" || !cashQuery.data) return;
-    const cfg = cashTabs[tab as "bank" | "cash" | "creditor" | "expense"];
+    const cfg = cashTabs[tab as "bank" | "cash" | "creditor" | "driver" | "expense"];
     downloadLedgerCsv({
       filename: `${tab}-ledger`,
       openingBalance: cashQuery.data.openingBalance,
@@ -137,15 +226,15 @@ export function LedgerPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
+      <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div>
-          <h1 className="text-lg font-semibold">Ledgers</h1>
-          <p className="text-sm text-muted-foreground">
-            Bank, Cash, Debtor, Creditor, Expense and Ageing — every entry, with a running
-            balance. The Debtor tab is a full statement: bills, receipts and adjustments.
+          <h1 className="text-2xl font-semibold tracking-tight">Ledgers</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review account movements, statements and balances.
           </p>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => window.print()}>
             Print
           </Button>
@@ -183,10 +272,10 @@ export function LedgerPage() {
             <div className="w-64">
               <LedgerPartyPicker kind="customer" value={partyId} onChange={setPartyId} />
             </div>
-          ) : tab !== "ageing" && cashTabs[tab as "bank" | "cash" | "creditor" | "expense"]?.partyKind ? (
+          ) : tab !== "ageing" && cashTabs[tab as "bank" | "cash" | "creditor" | "driver" | "expense"]?.partyKind ? (
             <div className="w-64">
               <LedgerPartyPicker
-                kind={cashTabs[tab as "bank" | "cash" | "creditor" | "expense"].partyKind!}
+                kind={cashTabs[tab as "bank" | "cash" | "creditor" | "driver" | "expense"].partyKind!}
                 value={partyId}
                 onChange={setPartyId}
               />
@@ -291,8 +380,8 @@ export function LedgerPage() {
           />
         </TabsContent>
 
-        {/* ---- Bank / Cash / Creditor / Expense ---- */}
-        {(["bank", "cash", "creditor", "expense"] as const).map((key) => {
+        {/* ---- Bank / Cash / Creditor / Driver / Expense ---- */}
+        {(["bank", "cash", "creditor", "driver", "expense"] as const).map((key) => {
           const cfg = cashTabs[key];
           return (
             <TabsContent key={key} value={key} className="space-y-3">
@@ -312,37 +401,11 @@ export function LedgerPage() {
                       console.log("open source voucher for", entry.id);
                     }}
                   />
-                  <div className="grid grid-cols-3 gap-px border-t bg-border text-sm">
-                    <div className="bg-card px-4 py-3">
-                      <p className="text-xs text-muted-foreground">
-                        {cfg.balanceConvention ? "Total Debit" : "Total In"}
-                      </p>
-                      <CompactMoney
-                        className="text-base font-semibold"
-                        value={debitTotal(cashQuery.data, cfg.balanceConvention)}
-                      />
-                    </div>
-                    <div className="bg-card px-4 py-3">
-                      <p className="text-xs text-muted-foreground">
-                        {cfg.balanceConvention ? "Total Credit" : "Total Out"}
-                      </p>
-                      <CompactMoney
-                        className="text-base font-semibold"
-                        value={creditTotal(cashQuery.data, cfg.balanceConvention)}
-                      />
-                    </div>
-                    <div className="bg-card px-4 py-3">
-                      <p className="text-xs text-muted-foreground">Closing Balance</p>
-                      <span className="inline-flex items-baseline gap-1">
-                        <CompactMoney className="text-base font-semibold" value={cashQuery.data?.closingBalance ?? 0} />
-                        {cfg.balanceConvention ? (
-                          <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                            {isDr(cashQuery.data?.closingBalance ?? 0, cfg.balanceConvention) ? "Dr" : "Cr"}
-                          </span>
-                        ) : null}
-                      </span>
-                    </div>
-                  </div>
+                  <LedgerTotals
+                    data={cashQuery.data}
+                    convention={cfg.balanceConvention}
+                    isLoading={cashQuery.isLoading}
+                  />
                 </div>
               ) : null}
             </TabsContent>

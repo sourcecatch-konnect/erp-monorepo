@@ -21,6 +21,7 @@ import {
   logSlipListSelect,
 } from "./log-slip.service.js";
 import { buildLogSlipPdfHtml } from "./log-slip.pdf.js";
+import { postLogSlipVoucher } from "../ledger/posting.service.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 import { Prisma, type LogSlipStatus } from "../../../generated/prisma/index.js";
 
@@ -299,21 +300,50 @@ router.post(
 
     const slip = await db.logSlip.findUnique({
       where: { id },
-      select: { id: true, status: true, journeyId: true },
+      select: {
+        id: true,
+        status: true,
+        journeyId: true,
+        logSlipNumber: true,
+        logSlipDate: true,
+        fyCode: true,
+        driverId: true,
+        journey: { select: { homeBranchId: true } },
+        totalFreightPaise: true,
+        totalExpensePaise: true,
+        netVehicleResultPaise: true,
+        driverReceivablePaise: true,
+        driverPayablePaise: true,
+      },
     });
     if (!slip) throw new NotFoundError("Log slip not found");
     if (slip.status !== "GENERATED") {
       throw new BadRequestError("Only a generated log slip can be posted");
     }
+    if (!slip.logSlipNumber)
+      throw new BadRequestError("Log slip has no number assigned");
 
-    // NOTE: journal entries are created here once the accounts ledger core
-    // (JournalPostingService, plan §7) lands. Until then posting settles the
-    // journey operationally; postedJournalEntryId stays null.
     const updated = await db.$transaction(async (tx) => {
+      const voucher = await postLogSlipVoucher(tx, {
+        logSlipId: slip.id,
+        logSlipNumber: slip.logSlipNumber!,
+        logSlipDate: slip.logSlipDate,
+        branchId: slip.journey.homeBranchId,
+        fyCode: slip.fyCode,
+        driverId: slip.driverId,
+        totalFreightPaise: slip.totalFreightPaise,
+        totalExpensePaise: slip.totalExpensePaise,
+        netVehicleResultPaise: slip.netVehicleResultPaise,
+        driverReceivablePaise: slip.driverReceivablePaise,
+        driverPayablePaise: slip.driverPayablePaise,
+        createdById: me,
+      });
+
       const row = await tx.logSlip.update({
         where: { id },
         data: {
           status: "POSTED_TO_ACCOUNTS",
+          postedJournalEntryId: voucher.id,
           postedById: me,
           postedAt: new Date(),
           version: { increment: 1 },
@@ -333,6 +363,43 @@ router.post(
     }, TX_BUDGET);
 
     return sendOk(res, updated);
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Voucher                                                            */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/:id/voucher",
+  can(PERMS.LEDGER.VOUCHER_VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const slip = await db.logSlip.findUnique({
+      where: { id },
+      select: { postedJournalEntryId: true },
+    });
+    if (!slip) throw new NotFoundError("Log slip not found");
+    if (!slip.postedJournalEntryId)
+      throw new NotFoundError("No voucher posted for this log slip yet");
+    const voucher = await db.journalEntry.findUniqueOrThrow({
+      where: { id: slip.postedJournalEntryId },
+      include: {
+        branch: { select: { id: true, name: true, branchCode: true } },
+        createdBy: { select: { id: true, firstName: true, lastName: true } },
+        lines: {
+          orderBy: { lineNumber: "asc" },
+          include: {
+            ledger: {
+              select: { id: true, name: true, code: true, kind: true, group: true },
+            },
+          },
+        },
+        // A Log Slip voucher never carries bill allocations — the dialog
+        // still expects the array to exist (it does `.length` on it).
+        allocations: true,
+      },
+    });
+    return sendOk(res, voucher);
   },
 );
 

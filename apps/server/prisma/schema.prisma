@@ -145,6 +145,7 @@ model User {
   approvedLRCharges LRCharge[] @relation("ApprovedLRCharges")
 
   createdBills      Bill[]              @relation("CreatedBills")
+  billCreditNotes   BillCreditNote[]
   updatedBills      Bill[]              @relation("UpdatedBills")
   reviewedBills     Bill[]              @relation("ReviewedBills")
   approvedBills     Bill[]              @relation("ApprovedBills")
@@ -303,6 +304,7 @@ model Branch {
   creditors          Creditor[]           @relation("BranchCreditor")
   cashPayments       CashPayment[]        @relation("BranchCashPayment")
   bills              Bill[]
+  billCreditNotes    BillCreditNote[]
   receipts           Receipt[]
   ledgers            Ledger[]
   journalEntries     JournalEntry[]
@@ -622,6 +624,7 @@ model Customer {
   vehicleTrips            VehicleTrip[]
   billsAsServiceCustomer  Bill[]             @relation("BillServiceCustomer")
   billsAsBillingCustomer  Bill[]             @relation("BillBillingCustomer")
+  billCreditNotes         BillCreditNote[]
   receipts                Receipt[]
   cashReceivables         CashReceivable[]
   ledgerEntries           LedgerEntry[]
@@ -750,6 +753,7 @@ model Driver {
   advances           DriverAdvance[]
   logSlips           LogSlip[]
   jobCards           JobCard[]
+  ledger             Ledger?
 
   @@index([name])
 }
@@ -2210,6 +2214,7 @@ model Bill {
   journalEntryId     String?             @unique
   journalEntry       JournalEntry?       @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
   ledgerAllocations  LedgerAllocation[]
+  creditNotes        BillCreditNote[]
 
   @@index([branchId, status])
   @@index([serviceCustomerId, status])
@@ -2217,6 +2222,41 @@ model Bill {
   @@index([billDate])
   @@index([fyCode])
   @@index([placeOfSupplyStateId])
+}
+
+/// Post-finalisation correction against a FINALISED+ bill. GST makes invoice
+/// fields immutable once issued, so a rate/discount/damage correction is
+/// made here instead of editing the frozen bill (see CONTEXT.md "Freight is
+/// locked on bill"). CREDIT_NOTE reduces what the customer owes; DEBIT_NOTE
+/// increases it. Each posts its own JournalEntry rather than reversing the
+/// original SALES voucher, so both the original charge and the correction
+/// stay visible in the ledger.
+model BillCreditNote {
+  id          String      @id @default(cuid())
+  noteType    VoucherType
+  noteNumber  String      @unique
+  fyCode      String
+  branchId    String
+  billId      String
+  customerId  String
+  amountPaise BigInt
+  reason      String
+  createdById String
+  createdAt   DateTime    @default(now())
+
+  branch         Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  bill           Bill          @relation(fields: [billId], references: [id], onDelete: Restrict)
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  // Nullable: the note row is created first (to get an id for the voucher's
+  // sourceId), then the voucher is posted, then this is patched — same
+  // two-step order as Bill.journalEntryId / Receipt.journalEntryId.
+  journalEntryId String?       @unique
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+
+  @@index([billId])
+  @@index([customerId])
+  @@index([branchId, fyCode])
 }
 
 /// Frozen allocation of one LR charge to one bill. A charge may be allocated
@@ -3066,6 +3106,7 @@ model Ledger {
   pumpId              String? @unique
   cashAccountId       String? @unique
   sparePartSupplierId String? @unique
+  driverId            String? @unique
 
   branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
   customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
@@ -3075,6 +3116,7 @@ model Ledger {
   pump              Pump?              @relation(fields: [pumpId], references: [id], onDelete: Restrict)
   cashAccount       CashAccount?       @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
   sparePartSupplier SparePartSupplier? @relation(fields: [sparePartSupplierId], references: [id], onDelete: Restrict)
+  driver            Driver?            @relation(fields: [driverId], references: [id], onDelete: Restrict)
   lines             JournalLine[]
 
   createdAt DateTime @default(now())
@@ -3138,6 +3180,8 @@ model JournalEntry {
   serviceBill        ServiceBill?
   replacementInward  ReplacementInward?
   serviceBillPayment ServiceBillPayment?
+  billCreditNote     BillCreditNote?
+  logSlip            LogSlip?
 
   @@unique([voucherType, sourceType, sourceId])
   @@unique([voucherType, voucherNumber])
@@ -4260,6 +4304,7 @@ enum JournalSourceType {
   JOB_CARD
   SERVICE_BILL
   SUPPLIER_REPLACEMENT
+  LOG_SLIP
 }
 
 enum AllocationRefType {
@@ -4529,7 +4574,7 @@ model LogSlip {
   remarks                 String?
   generatedById           String?
   generatedAt             DateTime?
-  postedJournalEntryId    String?
+  postedJournalEntryId    String?       @unique
   postedById              String?
   postedAt                DateTime?
   reopenedById            String?
@@ -4539,11 +4584,12 @@ model LogSlip {
   updatedAt               DateTime      @updatedAt
   version                 Int           @default(1)
 
-  journey     VehicleJourney @relation(fields: [journeyId], references: [id])
-  vehicle     Vehicle        @relation(fields: [vehicleId], references: [id])
-  driver      Driver         @relation(fields: [driverId], references: [id])
-  generatedBy User?          @relation("GeneratedLogSlips", fields: [generatedById], references: [id])
-  lines       LogSlipLine[]
+  journey            VehicleJourney @relation(fields: [journeyId], references: [id])
+  vehicle            Vehicle        @relation(fields: [vehicleId], references: [id])
+  driver             Driver         @relation(fields: [driverId], references: [id])
+  generatedBy        User?          @relation("GeneratedLogSlips", fields: [generatedById], references: [id])
+  postedJournalEntry JournalEntry?  @relation(fields: [postedJournalEntryId], references: [id], onDelete: SetNull)
+  lines              LogSlipLine[]
 
   @@index([status])
   @@index([fyCode])

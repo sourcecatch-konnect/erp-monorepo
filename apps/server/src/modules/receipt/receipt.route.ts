@@ -338,6 +338,8 @@ router.post("/", can(PERMS.RECEIPT.CREATE), async (req, res) => {
             amountAppliedPaise: a.amountAppliedPaise,
             tdsAmountPaise: a.tdsAmountPaise,
             tdsSection: a.tdsSection,
+            tdsCertNumber: a.tdsCertNumber,
+            tdsCertDate: a.tdsCertDate,
             damageAmountPaise: a.damageAmountPaise,
             rateDiffAmountPaise: a.rateDiffAmountPaise,
           })),

@@ -93,7 +93,7 @@ export function JobCardListPage() {
             )}
             {jobCards.map((jc) => (
               <TableRow key={jc.id} className="cursor-pointer hover:bg-muted/40">
-                <TableCell className="font-medium">
+                <TableCell className="font-medium text-primary hover:underline">
                   <Link href={`/workshop/job-cards/${jc.id}`} className="hover:underline">
                     {jc.jobCardNumber ?? "—"}
                   </Link>
