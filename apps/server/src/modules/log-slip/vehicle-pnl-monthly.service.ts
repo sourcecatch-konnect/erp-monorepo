@@ -10,6 +10,13 @@ import {
 /* result = trip balance − fixed costs − variable costs                 */
 /* ------------------------------------------------------------------ */
 
+/** A posted Log Slip counted in the month; the page links to it for the legs. */
+export type MonthlyPnlSlip = {
+  logSlipId: string;
+  journeyId: string;
+  logSlipNumber: string | null;
+};
+
 export type MonthlyPnlRow = {
   vehicleId: string;
   vehicleNumber: string;
@@ -45,6 +52,8 @@ export type MonthlyPnlRow = {
   /** tripBalance − fixedTotal − variableTotal (the sheet's "G.Total"). */
   resultPaise: bigint;
   hasMonthlyCostRow: boolean;
+  /** The month's posted Log Slips, oldest first. */
+  slips: MonthlyPnlSlip[];
 };
 
 export type MonthlyPnlTotals = {
@@ -80,6 +89,9 @@ export async function computeMonthlyVehiclePnl(
         vehicle: { ownershipType: "Own_Vehicle" },
       },
       select: {
+        id: true,
+        journeyId: true,
+        logSlipNumber: true,
         vehicleId: true,
         logSlipDate: true,
         totalKm: true,
@@ -89,6 +101,7 @@ export async function computeMonthlyVehiclePnl(
         totalDieselAmountPaise: true,
         journey: { select: { startedAt: true, closedAt: true } },
       },
+      orderBy: { logSlipDate: "asc" },
     }),
     db.jobCard.findMany({
       where: {
@@ -109,6 +122,7 @@ export async function computeMonthlyVehiclePnl(
     expense: bigint;
     from: Date | null;
     to: Date | null;
+    slips: MonthlyPnlSlip[];
   };
   const tripsByVehicle = new Map<string, Trip>();
   for (const slip of slips) {
@@ -121,7 +135,13 @@ export async function computeMonthlyVehiclePnl(
       expense: 0n,
       from: null,
       to: null,
+      slips: [],
     };
+    t.slips.push({
+      logSlipId: slip.id,
+      journeyId: slip.journeyId,
+      logSlipNumber: slip.logSlipNumber,
+    });
     t.trips += 1;
     t.days += slip.totalDays;
     t.km += slip.totalKm;
@@ -183,6 +203,7 @@ export async function computeMonthlyVehiclePnl(
       variableTotalPaise: variableTotal,
       resultPaise: tripBalance - fixedTotal - variableTotal,
       hasMonthlyCostRow: c.hasMonthlyRow,
+      slips: t?.slips ?? [],
     };
   });
 

@@ -125,6 +125,15 @@ function Breakdown({ row }: { row: MonthlyPnlRow }) {
                 <Line label="Diesel" paise={row.dieselPaise} />
                 <Line label="Other trip expenses" paise={row.otherExpensePaise} />
                 <Line label="Trip balance" paise={row.tripBalancePaise} />
+                {row.slips.map((slip) => (
+                    <Link
+                        key={slip.logSlipId}
+                        href={`/vehicle-journeys/${slip.journeyId}/log-slip`}
+                        className="block pt-1 text-xs font-medium text-primary hover:underline"
+                    >
+                        {slip.logSlipNumber ?? "Log slip"} ↗
+                    </Link>
+                ))}
             </div>
             <div className="space-y-1.5">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
