@@ -586,9 +586,54 @@ model Vehicle {
   logSlips         LogSlip[]
   deliveryChallans DeliveryChallan[]
   jobCards         JobCard[]
+  costDefault      VehicleCostDefault?
+  monthlyCosts     VehicleMonthlyCost[]
 
   @@index([transportId, ownershipType])
   @@index([vehicleTypeId])
+}
+
+/// Standing monthly fixed costs for a vehicle (annual tax/insurance/fitness
+/// spread over 12 months, EMI, permit). Applies to every month that has no
+/// VehicleMonthlyCost override. Reporting only — nothing posts to accounts.
+model VehicleCostDefault {
+  vehicleId      String   @id
+  taxPaise       BigInt   @default(0)
+  insurancePaise BigInt   @default(0)
+  permitPaise    BigInt   @default(0)
+  fitnessPaise   BigInt   @default(0)
+  emiPaise       BigInt   @default(0)
+  updatedById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+/// One vehicle's costs for one calendar month ("YYYY-MM"). Fixed costs here
+/// override the vehicle's defaults for that month; salary, tyre and other are
+/// entered monthly (no default). Spare & repairs come from Job Cards, not here.
+model VehicleMonthlyCost {
+  id             String   @id @default(cuid())
+  vehicleId      String
+  month          String
+  taxPaise       BigInt   @default(0)
+  insurancePaise BigInt   @default(0)
+  permitPaise    BigInt   @default(0)
+  fitnessPaise   BigInt   @default(0)
+  emiPaise       BigInt   @default(0)
+  salaryPaise    BigInt   @default(0)
+  tyrePaise      BigInt   @default(0)
+  otherPaise     BigInt   @default(0)
+  remarks        String?
+  updatedById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, month])
+  @@index([month])
 }
 
 model Customer {

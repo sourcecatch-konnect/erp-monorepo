@@ -296,6 +296,97 @@ export const logSlipApi = {
     );
     return res.data;
   },
+  vehiclePnl: async (filters: {
+    from?: string;
+    to?: string;
+    vehicleId?: string;
+    search?: string;
+    page?: number;
+    size?: number;
+  } = {}): Promise<ListResult<VehiclePnlRow>> => {
+    const res = await api.get<ApiResponse<VehiclePnlRow[]>>("/log-slips/vehicle-pnl", {
+      params: filters,
+    });
+    return unwrapListResponse(res);
+  },
+
+  vehiclePnlSummary: async (filters: {
+    from?: string;
+    to?: string;
+    search?: string;
+  } = {}): Promise<VehiclePnlSummary> => {
+    const res = await api.get<ApiResponse<VehiclePnlSummary>>(
+      "/log-slips/vehicle-pnl/summary",
+      { params: filters },
+    );
+    return unwrapApiResponse(res);
+  },
+};
+
+export type VehiclePnlJourneyRow = {
+  logSlipId: string;
+  journeyId: string;
+  journeyNumber: string;
+  logSlipNumber: string | null;
+  logSlipDate: string;
+  totalKm: number;
+  totalFreightPaise: string;
+  totalExpensePaise: string;
+  netResultPaise: string;
+};
+
+export type VehiclePnlMonth = {
+  month: string;
+  freightPaise: string;
+  expensePaise: string;
+  repairsPaise: string;
+  profitPaise: string;
+  km: number;
+};
+
+export type VehiclePnlRow = {
+  vehicleId: string;
+  vehicleNumber: string;
+  journeyCount: number;
+  totalKm: number;
+  totalFreightPaise: string;
+  totalExpensePaise: string;
+  /** Trip margin: freight − trip expenses. */
+  netResultPaise: string;
+  totalDieselQty: number;
+  actualAverage: number | null;
+  dieselPaise: string;
+  otherExpensePaise: string;
+  repairsPaise: string;
+  /** Trip margin − repairs. Excludes EMI/insurance/permit (not tracked). */
+  profitAfterRepairsPaise: string;
+  marginPct: number | null;
+  revenuePerKmPaise: string | null;
+  costPerKmPaise: string | null;
+  profitPerKmPaise: string | null;
+  profitPerJourneyPaise: string | null;
+  profitPerDayPaise: string | null;
+  loadedKm: number;
+  emptyKm: number;
+  emptyPct: number | null;
+  runningDays: number;
+  periodDays: number;
+  utilisationPct: number | null;
+  monthly: VehiclePnlMonth[];
+  journeys: VehiclePnlJourneyRow[];
+};
+
+export type VehiclePnlSummary = {
+  vehicleCount: number;
+  lossMakingCount: number;
+  totalFreightPaise: string;
+  totalExpensePaise: string;
+  totalRepairsPaise: string;
+  profitAfterRepairsPaise: string;
+  marginPct: number | null;
+  totalKm: number;
+  bestVehicle: { vehicleNumber: string; profitPaise: string } | null;
+  worstVehicle: { vehicleNumber: string; profitPaise: string } | null;
 };
 
 /* ------------------------------------------------------------------ */

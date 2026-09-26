@@ -15,13 +15,16 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
+import { computeVehiclePnl } from "./vehicle-pnl.service.js";
+import { computeMonthlyVehiclePnl } from "./vehicle-pnl-monthly.service.js";
+import { MONTH_RE } from "../vehicle-cost/vehicle-cost.service.js";
 import {
   computeLogSlip,
   logSlipInclude,
   logSlipListSelect,
 } from "./log-slip.service.js";
 import { buildLogSlipPdfHtml } from "./log-slip.pdf.js";
-import { postLogSlipVoucher } from "../ledger/posting.service.js";
+import { postLogSlipVoucher, reverseJournal } from "../ledger/posting.service.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 import { Prisma, type LogSlipStatus } from "../../../generated/prisma/index.js";
 
@@ -84,6 +87,45 @@ router.get("/", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
   ]);
 
   return sendOk(res, data, { page: query.page, size: query.size, total });
+});
+
+/* ------------------------------------------------------------------ */
+/* Vehicle P&L (Phase 7) — registered before "/:id" so "vehicle-pnl"   */
+/* isn't swallowed as a log slip id.                                   */
+/* ------------------------------------------------------------------ */
+router.get("/vehicle-pnl", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+  const to = typeof req.query.to === "string" ? new Date(`${req.query.to}T23:59:59.999Z`) : undefined;
+  const vehicleId = typeof req.query.vehicleId === "string" ? req.query.vehicleId : undefined;
+  const query = parseListQuery(req);
+  const { data, total } = await computeVehiclePnl({
+    from,
+    to,
+    vehicleId,
+    search: query.search,
+    page: query.page,
+    size: query.size,
+  });
+  return sendOk(res, data, { page: query.page, size: query.size, total });
+});
+
+// Monthly performance report: every own vehicle (idle ones included) with
+// fixed and variable costs applied — the accountant's month-end sheet.
+router.get("/vehicle-pnl/monthly", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const month = typeof req.query.month === "string" ? req.query.month : "";
+  if (!MONTH_RE.test(month))
+    throw new ValidationError("month must look like 2026-08");
+  return sendOk(res, await computeMonthlyVehiclePnl(month));
+});
+
+// Totals across every matching vehicle (not just the current page) for the
+// summary cards.
+router.get("/vehicle-pnl/summary", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+  const to = typeof req.query.to === "string" ? new Date(`${req.query.to}T23:59:59.999Z`) : undefined;
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const { summary } = await computeVehiclePnl({ from, to, search });
+  return sendOk(res, summary);
 });
 
 /* ------------------------------------------------------------------ */
@@ -324,9 +366,20 @@ router.post(
       throw new BadRequestError("Log slip has no number assigned");
 
     const updated = await db.$transaction(async (tx) => {
+      // A reopened slip keeps its number, and the earlier (reversed) voucher
+      // already used it — suffix the revision so the unique
+      // (voucherType, voucherNumber) constraint holds.
+      const priorVouchers = await tx.journalEntry.count({
+        where: { sourceType: "LOG_SLIP", sourceId: { startsWith: slip.id } },
+      });
       const voucher = await postLogSlipVoucher(tx, {
         logSlipId: slip.id,
         logSlipNumber: slip.logSlipNumber!,
+        voucherNumber:
+          priorVouchers > 0
+            ? `${slip.logSlipNumber}/R${priorVouchers}`
+            : undefined,
+        sourceId: priorVouchers > 0 ? `${slip.id}:R${priorVouchers}` : undefined,
         logSlipDate: slip.logSlipDate,
         branchId: slip.journey.homeBranchId,
         fyCode: slip.fyCode,
@@ -412,7 +465,12 @@ router.post("/:id/reopen", can(PERMS.LOGSLIP.REOPEN), async (req, res) => {
 
   const slip = await db.logSlip.findUnique({
     where: { id },
-    select: { id: true, status: true, journeyId: true },
+    select: {
+      id: true,
+      status: true,
+      journeyId: true,
+      postedJournalEntryId: true,
+    },
   });
   if (!slip) throw new NotFoundError("Log slip not found");
   if (!["GENERATED", "POSTED_TO_ACCOUNTS"].includes(slip.status)) {
@@ -427,9 +485,19 @@ router.post("/:id/reopen", can(PERMS.LOGSLIP.REOPEN), async (req, res) => {
   }
 
   const updated = await db.$transaction(async (tx) => {
+    // Cancel the posted voucher so the books and Vehicle P&L don't count the
+    // old amounts once the slip is edited and re-posted.
+    if (slip.postedJournalEntryId)
+      await reverseJournal(
+        tx,
+        slip.postedJournalEntryId,
+        parsed.data.reason,
+        me,
+      );
     const row = await tx.logSlip.update({
       where: { id },
       data: {
+        postedJournalEntryId: null,
         status: "REOPENED",
         reopenedById: me,
         reopenedAt: new Date(),

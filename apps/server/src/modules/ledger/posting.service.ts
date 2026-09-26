@@ -1066,6 +1066,10 @@ export async function postBillCreditNoteVoucher(tx: Tx, args: BillCreditNoteVouc
 export type LogSlipVoucherArgs = {
   logSlipId: string;
   logSlipNumber: string;
+  /** Overrides the voucher number — used when re-posting a reopened slip. */
+  voucherNumber?: string;
+  /** Overrides the source id (unique per voucherType+source) on re-post. */
+  sourceId?: string;
   logSlipDate: Date;
   branchId: string;
   fyCode: string;
@@ -1183,13 +1187,13 @@ export async function postLogSlipVoucher(tx: Tx, args: LogSlipVoucherArgs) {
 
   return postJournal(tx, {
     voucherType: "JOURNAL",
-    voucherNumber: args.logSlipNumber,
+    voucherNumber: args.voucherNumber ?? args.logSlipNumber,
     voucherDate: args.logSlipDate,
     fyCode: args.fyCode,
     branchId: args.branchId,
     narration: lineNarration,
     sourceType: "LOG_SLIP",
-    sourceId: args.logSlipId,
+    sourceId: args.sourceId ?? args.logSlipId,
     sourceNumber: args.logSlipNumber,
     createdById: args.createdById,
     lines,

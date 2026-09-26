@@ -17,6 +17,7 @@ import {
   IconCalendarWeek,
   IconEdit,
   IconBoxSeam,
+  IconChartBar,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -368,6 +369,24 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/accounts/journal",
         icon: IconEdit,
         permission: PERMS.LEDGER.JOURNAL_CREATE,
+      },
+      {
+        title: "Vehicle P&L",
+        href: "/vehicle-journeys/vehicle-pnl",
+        icon: IconChartBar,
+        permission: PERMS.LOGSLIP.VIEW,
+      },
+      {
+        title: "Vehicle Performance",
+        href: "/vehicle-journeys/vehicle-pnl/monthly",
+        icon: IconChartBar,
+        permission: PERMS.LOGSLIP.VIEW,
+      },
+      {
+        title: "Vehicle Costs",
+        href: "/vehicle-journeys/vehicle-costs",
+        icon: IconReceipt2,
+        permission: PERMS.LOGSLIP.VIEW,
       },
     ],
   },
