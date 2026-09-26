@@ -52,6 +52,16 @@ export type MonthlyPnlRow = {
   /** tripBalance − fixedTotal − variableTotal (the sheet's "G.Total"). */
   resultPaise: bigint;
   hasMonthlyCostRow: boolean;
+
+  /** Freight billed on the LRs carried (LR group base freight). Only trips
+   *  whose every LR group has a booking amount count — see freightDiffPaise. */
+  bookingFreightPaise: bigint;
+  /** Booking − onward freight on those same trips: the margin the company
+   *  keeps that no vehicle is credited with (the "Freight Difference" sheet). */
+  freightDiffPaise: bigint;
+  /** Loaded trips skipped because an LR group has no booking amount yet. */
+  missingBookingTrips: number;
+
   /** The month's posted Log Slips, oldest first. */
   slips: MonthlyPnlSlip[];
 };
@@ -67,6 +77,11 @@ export type MonthlyPnlTotals = {
   freightPaise: bigint;
   fixedTotalPaise: bigint;
   variableTotalPaise: bigint;
+  bookingFreightPaise: bigint;
+  freightDiffPaise: bigint;
+  /** netPaise + freightDiffPaise: what the fleet earned the business. */
+  businessResultPaise: bigint;
+  missingBookingTrips: number;
 };
 
 export type MonthlyPnlResult = {
@@ -155,6 +170,48 @@ export async function computeMonthlyVehiclePnl(
     tripsByVehicle.set(slip.vehicleId, t);
   }
 
+  /* ---- freight difference: booking (billed) vs onward (credited) ---- */
+  // Same trip filter as the journey's freight total. Only primary groups —
+  // a group's secondary leg would otherwise count its booking twice.
+  const trips = slips.length
+    ? await db.vehicleTrip.findMany({
+        where: {
+          journeyId: { in: slips.map((s) => s.journeyId) },
+          deletedAt: null,
+          status: { not: "Cancelled" },
+          primaryGroups: { some: { deletedAt: null } },
+        },
+        select: {
+          vehicleId: true,
+          onwardFreight: true,
+          primaryGroups: {
+            where: { deletedAt: null },
+            select: { baseFreightAmount: true },
+          },
+        },
+      })
+    : [];
+  type Diff = { booking: bigint; diff: bigint; missing: number };
+  const diffByVehicle = new Map<string, Diff>();
+  for (const trip of trips) {
+    const d = diffByVehicle.get(trip.vehicleId) ?? {
+      booking: 0n,
+      diff: 0n,
+      missing: 0,
+    };
+    if (trip.primaryGroups.some((g) => g.baseFreightAmount === null)) {
+      d.missing += 1;
+    } else {
+      const booking = trip.primaryGroups.reduce(
+        (s, g) => s + (g.baseFreightAmount ?? 0n),
+        0n,
+      );
+      d.booking += booking;
+      d.diff += booking - trip.onwardFreight;
+    }
+    diffByVehicle.set(trip.vehicleId, d);
+  }
+
   const repairsByVehicle = new Map<string, bigint>();
   for (const jc of jobCards)
     repairsByVehicle.set(
@@ -203,6 +260,9 @@ export async function computeMonthlyVehiclePnl(
       variableTotalPaise: variableTotal,
       resultPaise: tripBalance - fixedTotal - variableTotal,
       hasMonthlyCostRow: c.hasMonthlyRow,
+      bookingFreightPaise: diffByVehicle.get(c.vehicleId)?.booking ?? 0n,
+      freightDiffPaise: diffByVehicle.get(c.vehicleId)?.diff ?? 0n,
+      missingBookingTrips: diffByVehicle.get(c.vehicleId)?.missing ?? 0,
       slips: t?.slips ?? [],
     };
   });
@@ -228,6 +288,10 @@ export async function computeMonthlyVehiclePnl(
     freightPaise: sum((r) => r.freightPaise),
     fixedTotalPaise: sum((r) => r.fixedTotalPaise),
     variableTotalPaise: sum((r) => r.variableTotalPaise),
+    bookingFreightPaise: sum((r) => r.bookingFreightPaise),
+    freightDiffPaise: sum((r) => r.freightDiffPaise),
+    businessResultPaise: sum((r) => r.resultPaise + r.freightDiffPaise),
+    missingBookingTrips: rows.reduce((s, r) => s + r.missingBookingTrips, 0),
   };
 
   return { month, rows, totals };

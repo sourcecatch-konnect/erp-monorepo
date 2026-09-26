@@ -51,6 +51,9 @@ export type MonthlyPnlRow = {
   variableTotalPaise: string;
   resultPaise: string;
   hasMonthlyCostRow: boolean;
+  bookingFreightPaise: string;
+  freightDiffPaise: string;
+  missingBookingTrips: number;
   slips: { logSlipId: string; journeyId: string; logSlipNumber: string | null }[];
 };
 
@@ -64,6 +67,10 @@ export type MonthlyPnlTotals = {
   freightPaise: string;
   fixedTotalPaise: string;
   variableTotalPaise: string;
+  bookingFreightPaise: string;
+  freightDiffPaise: string;
+  businessResultPaise: string;
+  missingBookingTrips: number;
 };
 
 export type MonthlyPnlResult = {

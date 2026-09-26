@@ -50,6 +50,7 @@ function exportCsv(data: MonthlyPnlResult) {
         "Freight", "Trip expenses", "Trip balance",
         "Tax", "Insurance", "Permit", "Fitness", "EMI", "Salary", "Fixed total",
         "Spare & repairs", "Tyre", "Other", "Variable total", "Result",
+        "Booking freight", "Freight difference",
     ];
     const lines = data.rows.map((r, i) =>
         [
@@ -60,6 +61,7 @@ function exportCsv(data: MonthlyPnlResult) {
             rupees(r.fitnessPaise), rupees(r.emiPaise), rupees(r.salaryPaise), rupees(r.fixedTotalPaise),
             rupees(r.repairsPaise), rupees(r.tyrePaise), rupees(r.otherCostPaise),
             rupees(r.variableTotalPaise), rupees(r.resultPaise),
+            rupees(r.bookingFreightPaise), rupees(r.freightDiffPaise),
         ].join(","),
     );
     lines.push(
@@ -67,6 +69,8 @@ function exportCsv(data: MonthlyPnlResult) {
         `Profit vehicle amount,${rupees(data.totals.profitAmountPaise)}`,
         `Loss vehicle amount,${rupees(data.totals.lossAmountPaise)}`,
         `Net,${rupees(data.totals.netPaise)}`,
+        `Freight difference,${rupees(data.totals.freightDiffPaise)}`,
+        `Business result,${rupees(data.totals.businessResultPaise)}`,
     );
     const blob = new Blob(["﻿" + [header.join(","), ...lines].join("\n")], {
         type: "text/csv;charset=utf-8",
@@ -125,6 +129,13 @@ function Breakdown({ row }: { row: MonthlyPnlRow }) {
                 <Line label="Diesel" paise={row.dieselPaise} />
                 <Line label="Other trip expenses" paise={row.otherExpensePaise} />
                 <Line label="Trip balance" paise={row.tripBalancePaise} />
+                <Line label="Booking freight" paise={row.bookingFreightPaise} />
+                <Line label="Freight difference" paise={row.freightDiffPaise} />
+                {row.missingBookingTrips > 0 ? (
+                    <p className="text-xs text-amber-700">
+                        {row.missingBookingTrips} trip(s) skipped — LR has no booking amount
+                    </p>
+                ) : null}
                 {row.slips.map((slip) => (
                     <Link
                         key={slip.logSlipId}
@@ -238,17 +249,35 @@ export default function VehiclePnlMonthlyPage() {
                                 tone={data.totals.lossVehicleCount > 0 ? "text-destructive" : undefined}
                             />
                             <Stat
-                                label="Net result"
-                                value={formatPaise(data.totals.netPaise)}
-                                sub={`${data.totals.vehicleCount} own vehicles`}
-                                tone={profitTone(data.totals.netPaise)}
+                                label="Freight difference"
+                                value={formatPaise(data.totals.freightDiffPaise)}
+                                sub={`Booking ${formatPaise(data.totals.bookingFreightPaise)}`}
+                                tone={profitTone(data.totals.freightDiffPaise)}
                             />
                             <Stat
-                                label="Freight"
-                                value={formatPaise(data.totals.freightPaise)}
-                                sub={`Fixed ${formatPaise(data.totals.fixedTotalPaise)} · Variable ${formatPaise(data.totals.variableTotalPaise)}`}
+                                label="Business result"
+                                value={formatPaise(data.totals.businessResultPaise)}
+                                sub="Vehicles + freight difference"
+                                tone={profitTone(data.totals.businessResultPaise)}
                             />
                         </div>
+                        <p className="border-t border-border px-5 py-2 text-xs text-muted-foreground tabular-nums">
+                            Vehicle result {formatPaise(data.totals.netPaise)} + Freight difference{" "}
+                            {formatPaise(data.totals.freightDiffPaise)} = Business result{" "}
+                            <span className="font-semibold text-foreground">
+                                {formatPaise(data.totals.businessResultPaise)}
+                            </span>
+                            {" · "}Freight {formatPaise(data.totals.freightPaise)} · Fixed{" "}
+                            {formatPaise(data.totals.fixedTotalPaise)} · Variable{" "}
+                            {formatPaise(data.totals.variableTotalPaise)}
+                            {data.totals.missingBookingTrips > 0 ? (
+                                <span className="text-amber-700">
+                                    {" · "}
+                                    {data.totals.missingBookingTrips} trip(s) without a booking
+                                    amount left out
+                                </span>
+                            ) : null}
+                        </p>
                     </section>
 
                     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -263,7 +292,8 @@ export default function VehiclePnlMonthlyPage() {
                                     <TableHead className="text-right text-xs font-semibold">Trip balance</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Fixed</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Variable</TableHead>
-                                    <TableHead className="pr-5 text-right text-xs font-semibold">Result</TableHead>
+                                    <TableHead className="text-right text-xs font-semibold">Result</TableHead>
+                                    <TableHead className="pr-5 text-right text-xs font-semibold">Freight diff</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -304,14 +334,17 @@ export default function VehiclePnlMonthlyPage() {
                                                     {formatPaise(row.variableTotalPaise)}
                                                 </TableCell>
                                                 <TableCell
-                                                    className={`pr-5 text-right font-semibold tabular-nums ${profitTone(row.resultPaise)}`}
+                                                    className={`text-right font-semibold tabular-nums ${profitTone(row.resultPaise)}`}
                                                 >
                                                     {formatPaise(row.resultPaise)}
+                                                </TableCell>
+                                                <TableCell className="pr-5 text-right tabular-nums text-muted-foreground">
+                                                    {formatPaise(row.freightDiffPaise)}
                                                 </TableCell>
                                             </TableRow>
                                             {open ? (
                                                 <TableRow className="bg-muted/20 hover:bg-muted/20">
-                                                    <TableCell colSpan={9} className="p-0">
+                                                    <TableCell colSpan={10} className="p-0">
                                                         <Breakdown row={row} />
                                                     </TableCell>
                                                 </TableRow>
@@ -327,7 +360,9 @@ export default function VehiclePnlMonthlyPage() {
                         Result = trip balance (freight − trip expenses) − monthly fixed
                         (tax, insurance, permit, fitness, EMI, salary) − monthly variable
                         (spare &amp; repairs from finalised Job Cards, tyre, other). Vehicles
-                        with no trips still carry their fixed costs.
+                        with no trips still carry their fixed costs. Freight difference =
+                        booking freight billed on the LRs − onward freight credited to the
+                        vehicle; it is kept by the business, not by any vehicle.
                     </p>
                 </>
             ) : null}
