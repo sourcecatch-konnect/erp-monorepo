@@ -341,6 +341,9 @@ export type VehiclePnlMonth = {
   expensePaise: string;
   repairsPaise: string;
   profitPaise: string;
+  /** Vehicle Costs for the month (EMI, insurance, salary…); detail page only. */
+  fixedCostsPaise: string;
+  trueProfitPaise: string;
   km: number;
 };
 
@@ -360,6 +363,9 @@ export type VehiclePnlRow = {
   repairsPaise: string;
   /** Trip margin − repairs. Excludes EMI/insurance/permit (not tracked). */
   profitAfterRepairsPaise: string;
+  /** Null on the list; set on the detail page for an own vehicle. */
+  fixedCostsPaise: string | null;
+  trueProfitPaise: string | null;
   marginPct: number | null;
   revenuePerKmPaise: string | null;
   costPerKmPaise: string | null;

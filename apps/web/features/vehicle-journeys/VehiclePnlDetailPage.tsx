@@ -183,11 +183,18 @@ export default function VehiclePnlDetailPage({
         },
     ];
 
+    // Own vehicles get their Vehicle Costs (EMI, insurance, salary…) charged
+    // every month, idle ones included, so the line is true profit.
+    const hasVehicleCosts = row.fixedCostsPaise !== null;
+    const profitLabel = hasVehicleCosts ? "True profit" : "Profit";
     const monthly = row.monthly.map((m) => ({
         month: formatMonth(m.month),
         Freight: paiseToRupees(m.freightPaise),
-        Cost: paiseToRupees(m.expensePaise) + paiseToRupees(m.repairsPaise),
-        Profit: paiseToRupees(m.profitPaise),
+        Cost:
+            paiseToRupees(m.expensePaise) +
+            paiseToRupees(m.repairsPaise) +
+            paiseToRupees(m.fixedCostsPaise),
+        [profitLabel]: paiseToRupees(m.trueProfitPaise),
     }));
 
     const kmSplit = [
@@ -258,6 +265,18 @@ export default function VehiclePnlDetailPage({
                         <StatLine label="Freight" value={formatPaise(row.totalFreightPaise)} />
                         <StatLine label="Trip expenses" value={formatPaise(row.totalExpensePaise)} />
                         <StatLine label="Repairs" value={formatPaise(row.repairsPaise)} />
+                        {row.fixedCostsPaise !== null && row.trueProfitPaise !== null ? (
+                            <>
+                                <StatLine
+                                    label="Vehicle costs (EMI, insurance…)"
+                                    value={formatPaise(row.fixedCostsPaise)}
+                                />
+                                <StatLine
+                                    label="True profit"
+                                    value={formatPaise(row.trueProfitPaise)}
+                                />
+                            </>
+                        ) : null}
                     </StatGroup>
                     <StatGroup title="Per unit">
                         <StatLine label="Revenue / km" value={formatMoneyOrDash(row.revenuePerKmPaise)} />
@@ -306,7 +325,11 @@ export default function VehiclePnlDetailPage({
 
                 <ChartCard
                     title="Monthly trend"
-                    subtitle="Is this vehicle getting better or worse?"
+                    subtitle={
+                        hasVehicleCosts
+                            ? "Is this vehicle getting better or worse? Cost includes EMI, insurance, salary and other Vehicle Costs."
+                            : "Is this vehicle getting better or worse?"
+                    }
                 >
                     <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={monthly}>
@@ -319,7 +342,7 @@ export default function VehiclePnlDetailPage({
                             <Bar dataKey="Cost" fill={COLORS.repairs} radius={[4, 4, 0, 0]} />
                             <Line
                                 type="monotone"
-                                dataKey="Profit"
+                                dataKey={profitLabel}
                                 stroke={COLORS.profit}
                                 strokeWidth={2}
                                 dot

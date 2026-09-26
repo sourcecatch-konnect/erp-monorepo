@@ -93,6 +93,52 @@ export async function listMonthlyCosts(month: string): Promise<VehicleCostRow[]>
   });
 }
 
+/**
+ * One vehicle's effective costs for each of `months` — same rule as
+ * listMonthlyCosts (saved row, else defaults with zero salary/tyre/other),
+ * in two queries however many months are asked for.
+ */
+export async function costsForVehicleMonths(
+  vehicleId: string,
+  months: string[],
+): Promise<Map<string, MonthlyCosts>> {
+  const [costDefault, saved] = await Promise.all([
+    db.vehicleCostDefault.findUnique({ where: { vehicleId } }),
+    db.vehicleMonthlyCost.findMany({
+      where: { vehicleId, month: { in: months } },
+    }),
+  ]);
+  const defaults = costDefault ? pickFixed(costDefault) : ZERO_FIXED;
+  const savedByMonth = new Map(saved.map((row) => [row.month, row]));
+  return new Map(
+    months.map((month) => {
+      const row = savedByMonth.get(month);
+      return [
+        month,
+        row
+          ? {
+              ...pickFixed(row),
+              salaryPaise: row.salaryPaise,
+              tyrePaise: row.tyrePaise,
+              otherPaise: row.otherPaise,
+            }
+          : { ...defaults, salaryPaise: 0n, tyrePaise: 0n, otherPaise: 0n },
+      ];
+    }),
+  );
+}
+
+/** Everything entered on Vehicle Costs for a month, as one amount. */
+export const totalMonthlyCosts = (c: MonthlyCosts) =>
+  c.taxPaise +
+  c.insurancePaise +
+  c.permitPaise +
+  c.fitnessPaise +
+  c.emiPaise +
+  c.salaryPaise +
+  c.tyrePaise +
+  c.otherPaise;
+
 export async function upsertMonthlyCost(
   vehicleId: string,
   month: string,

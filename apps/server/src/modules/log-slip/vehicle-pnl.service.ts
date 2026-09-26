@@ -1,4 +1,9 @@
 import { db } from "../../../prisma/prisma.js";
+import {
+  costsForVehicleMonths,
+  totalMonthlyCosts,
+} from "../vehicle-cost/vehicle-cost.service.js";
+import { monthRange } from "./vehicle-pnl-monthly.service.js";
 
 /* ------------------------------------------------------------------ */
 /* Vehicle P&L — rolls up every POSTED Log Slip per vehicle            */
@@ -39,6 +44,11 @@ export type VehiclePnlMonth = {
   repairsPaise: bigint;
   /** freight − trip expenses − repairs */
   profitPaise: bigint;
+  /** Everything entered on Vehicle Costs for the month (EMI, insurance,
+   *  salary, tyre…); 0 unless the report was run for a single own vehicle. */
+  fixedCostsPaise: bigint;
+  /** profit − fixedCosts */
+  trueProfitPaise: bigint;
   km: number;
 };
 
@@ -61,8 +71,12 @@ export type VehiclePnlRow = {
   otherExpensePaise: bigint;
   /** Finalised Job Card cost (parts + service) in the range. */
   repairsPaise: bigint;
-  /** Trip margin − repairs. Excludes EMI/insurance/permit (not tracked yet). */
+  /** Trip margin − repairs. Excludes the Vehicle Costs (EMI, insurance…). */
   profitAfterRepairsPaise: bigint;
+  /** Vehicle Costs over the months in range, and profit after them. Only
+   *  worked out for a single own vehicle (the detail page); null otherwise. */
+  fixedCostsPaise: bigint | null;
+  trueProfitPaise: bigint | null;
   /** profitAfterRepairs ÷ freight × 100; null when there is no freight. */
   marginPct: number | null;
   revenuePerKmPaise: bigint | null;
@@ -134,8 +148,42 @@ const emptyMonth = (month: string): VehiclePnlMonth => ({
   expensePaise: 0n,
   repairsPaise: 0n,
   profitPaise: 0n,
+  fixedCostsPaise: 0n,
+  trueProfitPaise: 0n,
   km: 0,
 });
+
+/**
+ * Detail page only: charge an own vehicle's Vehicle Costs for every month in
+ * the range — idle months included, since EMI and insurance are due whether
+ * or not the truck ran — and derive true profit per month and overall.
+ */
+async function applyVehicleCosts(row: VehiclePnlRow, filters: VehiclePnlFilters) {
+  const vehicle = await db.vehicle.findUnique({
+    where: { id: row.vehicleId },
+    select: { ownershipType: true },
+  });
+  if (vehicle?.ownershipType !== "Own_Vehicle" || row.monthly.length === 0)
+    return;
+
+  const first = filters.from ? monthKey(filters.from) : row.monthly[0]!.month;
+  const last = filters.to
+    ? monthKey(filters.to)
+    : row.monthly[row.monthly.length - 1]!.month;
+  const months = monthRange(first, last);
+  const costs = await costsForVehicleMonths(row.vehicleId, months);
+  const byMonth = new Map(row.monthly.map((m) => [m.month, m]));
+
+  let fixedTotal = 0n;
+  row.monthly = months.map((key) => {
+    const m = byMonth.get(key) ?? emptyMonth(key);
+    const fixed = totalMonthlyCosts(costs.get(key)!);
+    fixedTotal += fixed;
+    return { ...m, fixedCostsPaise: fixed, trueProfitPaise: m.profitPaise - fixed };
+  });
+  row.fixedCostsPaise = fixedTotal;
+  row.trueProfitPaise = row.profitAfterRepairsPaise - fixedTotal;
+}
 
 /**
  * One row per vehicle, summed across every Log Slip that actually reached
@@ -335,6 +383,8 @@ export async function computeVehiclePnl(
       otherExpensePaise: acc.expense - acc.diesel,
       repairsPaise: repairs,
       profitAfterRepairsPaise: profit,
+      fixedCostsPaise: null,
+      trueProfitPaise: null,
       marginPct: pct(Number(profit), Number(acc.freight)),
       revenuePerKmPaise: perUnit(acc.freight, acc.totalKm),
       costPerKmPaise: perUnit(acc.expense + repairs, acc.totalKm),
@@ -350,14 +400,17 @@ export async function computeVehiclePnl(
       utilisationPct: Math.min(100, (acc.runningDays / periodDays) * 100),
 
       monthly: [...acc.months.values()]
-        .map((m) => ({
-          ...m,
-          profitPaise: m.freightPaise - m.expensePaise - m.repairsPaise,
-        }))
+        .map((m) => {
+          const monthProfit = m.freightPaise - m.expensePaise - m.repairsPaise;
+          return { ...m, profitPaise: monthProfit, trueProfitPaise: monthProfit };
+        })
         .sort((a, b) => (a.month < b.month ? -1 : 1)),
       journeys: acc.journeys,
     };
   });
+
+  if (filters.vehicleId && allRows.length === 1)
+    await applyVehicleCosts(allRows[0]!, filters);
 
   allRows.sort((a, b) =>
     a.profitAfterRepairsPaise < b.profitAfterRepairsPaise ? -1 : 1,

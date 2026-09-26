@@ -366,6 +366,52 @@ const formatMetric = (value: number, metric: Metric) =>
 
 type RankFilter = "all" | "profit" | "loss" | "idle";
 
+/** Vehicle-number search plus the profit / loss / idle filter, shared by the
+ * main table and the leaderboard. */
+const matchesFilter = (row: MonthlyPnlRow, search: string, filter: RankFilter) => {
+    const term = search.trim().toLowerCase();
+    if (term && !row.vehicleNumber.toLowerCase().includes(term)) return false;
+    const result = BigInt(row.resultPaise);
+    if (filter === "profit") return result > 0n;
+    if (filter === "loss") return result < 0n;
+    if (filter === "idle") return row.trips === 0;
+    return true;
+};
+
+function SearchAndFilter({
+    search,
+    filter,
+    onSearch,
+    onFilter,
+}: {
+    search: string;
+    filter: RankFilter;
+    onSearch: (value: string) => void;
+    onFilter: (value: RankFilter) => void;
+}) {
+    return (
+        <>
+            <Input
+                placeholder="Search vehicle no."
+                value={search}
+                onChange={(e) => onSearch(e.target.value)}
+                className="h-9 w-48"
+            />
+            <select
+                aria-label="Filter"
+                className={`${fieldClass} w-40`}
+                value={filter}
+                onChange={(e) => onFilter(e.target.value as RankFilter)}
+            >
+                <option value="all">All vehicles</option>
+                <option value="profit">Profit-making</option>
+                <option value="loss">Loss-making</option>
+                <option value="idle">Idle (no trips)</option>
+            </select>
+        </>
+    );
+}
+
 type Ranked = { row: MonthlyPnlRow; value: number | null; rank: number | null };
 
 /** Full ranking of every own vehicle for the period, in a dialog so it stays
@@ -403,15 +449,7 @@ function LeaderboardDialog({
         return [...rankable, ...unranked];
     }, [rows, metric, worstFirst]);
 
-    const term = search.trim().toLowerCase();
-    const visible = ranked.filter(({ row }) => {
-        if (term && !row.vehicleNumber.toLowerCase().includes(term)) return false;
-        const result = BigInt(row.resultPaise);
-        if (filter === "profit") return result > 0n;
-        if (filter === "loss") return result < 0n;
-        if (filter === "idle") return row.trips === 0;
-        return true;
-    });
+    const visible = ranked.filter(({ row }) => matchesFilter(row, search, filter));
     const pageRows = visible.slice(page * size, page * size + size);
 
     const toggleClass = (active: boolean) =>
@@ -429,29 +467,18 @@ function LeaderboardDialog({
                 </DialogHeader>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                        placeholder="Search vehicle no."
-                        value={search}
-                        onChange={(e) => {
-                            setSearch(e.target.value);
+                    <SearchAndFilter
+                        search={search}
+                        filter={filter}
+                        onSearch={(value) => {
+                            setSearch(value);
                             setPage(0);
                         }}
-                        className="h-9 w-48"
+                        onFilter={(value) => {
+                            setFilter(value);
+                            setPage(0);
+                        }}
                     />
-                    <select
-                        aria-label="Filter"
-                        className={`${fieldClass} w-40`}
-                        value={filter}
-                        onChange={(e) => {
-                            setFilter(e.target.value as RankFilter);
-                            setPage(0);
-                        }}
-                    >
-                        <option value="all">All vehicles</option>
-                        <option value="profit">Profit-making</option>
-                        <option value="loss">Loss-making</option>
-                        <option value="idle">Idle (no trips)</option>
-                    </select>
                     <div className="flex gap-1 rounded-md bg-muted p-0.5">
                         {METRICS.map((m) => (
                             <button
@@ -597,6 +624,16 @@ export default function VehiclePnlMonthlyPage() {
     const data = query.data;
     const multiMonth = (data?.monthCount ?? 1) > 1;
 
+    // Table-only search / filter / paging — the cards, leaderboard and CSV
+    // always cover every vehicle.
+    const [search, setSearch] = React.useState("");
+    const [filter, setFilter] = React.useState<RankFilter>("all");
+    const [page, setPage] = React.useState(0);
+    const [size, setSize] = React.useState(20);
+    React.useEffect(() => setPage(0), [from, to]);
+    const visibleRows = (data?.rows ?? []).filter((row) => matchesFilter(row, search, filter));
+    const pageRows = visibleRows.slice(page * size, page * size + size);
+
     return (
         <div className="space-y-4 p-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -701,6 +738,23 @@ export default function VehiclePnlMonthlyPage() {
                     />
 
                     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+                            <SearchAndFilter
+                                search={search}
+                                filter={filter}
+                                onSearch={(value) => {
+                                    setSearch(value);
+                                    setPage(0);
+                                }}
+                                onFilter={(value) => {
+                                    setFilter(value);
+                                    setPage(0);
+                                }}
+                            />
+                            <span className="ml-auto text-xs text-muted-foreground">
+                                {visibleRows.length} of {data.rows.length} vehicles
+                            </span>
+                        </div>
                         <Table>
                             <TableHeader className="bg-muted/40">
                                 <TableRow className="hover:bg-transparent">
@@ -720,7 +774,17 @@ export default function VehiclePnlMonthlyPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {data.rows.map((row) => {
+                                {pageRows.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={multiMonth ? 11 : 10}
+                                            className="py-8 text-center text-sm text-muted-foreground"
+                                        >
+                                            No vehicles match.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : null}
+                                {pageRows.map((row) => {
                                     const open = openId === row.vehicleId;
                                     const loss = BigInt(row.resultPaise) < 0n;
                                     return (
@@ -782,6 +846,16 @@ export default function VehiclePnlMonthlyPage() {
                                 })}
                             </TableBody>
                         </Table>
+                        <TablePaginationFooter
+                            total={visibleRows.length}
+                            page={page}
+                            size={size}
+                            onPageChange={setPage}
+                            onSizeChange={(next) => {
+                                setSize(next);
+                                setPage(0);
+                            }}
+                        />
                     </section>
 
                     <p className="text-xs text-muted-foreground">
