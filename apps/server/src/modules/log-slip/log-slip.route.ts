@@ -16,7 +16,11 @@ import {
   ValidationError,
 } from "../../lib/error.js";
 import { computeVehiclePnl } from "./vehicle-pnl.service.js";
-import { computeMonthlyVehiclePnl } from "./vehicle-pnl-monthly.service.js";
+import {
+  computeMonthlyVehiclePnl,
+  MAX_PERIOD_MONTHS,
+  monthRange,
+} from "./vehicle-pnl-monthly.service.js";
 import { MONTH_RE } from "../vehicle-cost/vehicle-cost.service.js";
 import {
   computeLogSlip,
@@ -109,13 +113,19 @@ router.get("/vehicle-pnl", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
   return sendOk(res, data, { page: query.page, size: query.size, total });
 });
 
-// Monthly performance report: every own vehicle (idle ones included) with
-// fixed and variable costs applied — the accountant's month-end sheet.
+// Performance report: every own vehicle (idle ones included) with fixed and
+// variable costs applied — the accountant's month-end sheet. Takes ?month=
+// for one month, or ?from=&to= (inclusive) for a quarter, year or custom range.
 router.get("/vehicle-pnl/monthly", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
-  const month = typeof req.query.month === "string" ? req.query.month : "";
-  if (!MONTH_RE.test(month))
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const from = text(req.query.from) || text(req.query.month);
+  const to = text(req.query.to) || from;
+  if (!MONTH_RE.test(from) || !MONTH_RE.test(to))
     throw new ValidationError("month must look like 2026-08");
-  return sendOk(res, await computeMonthlyVehiclePnl(month));
+  if (from > to) throw new ValidationError("from month is after to month");
+  if (monthRange(from, to).length > MAX_PERIOD_MONTHS)
+    throw new ValidationError(`period can be at most ${MAX_PERIOD_MONTHS} months`);
+  return sendOk(res, await computeMonthlyVehiclePnl(from, to));
 });
 
 // Totals across every matching vehicle (not just the current page) for the

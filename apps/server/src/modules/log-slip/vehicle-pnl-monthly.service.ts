@@ -61,6 +61,8 @@ export type MonthlyPnlRow = {
   freightDiffPaise: bigint;
   /** Loaded trips skipped because an LR group has no booking amount yet. */
   missingBookingTrips: number;
+  /** Months in the period in which the vehicle had a posted Log Slip. */
+  monthsRan: number;
 
   /** The month's posted Log Slips, oldest first. */
   slips: MonthlyPnlSlip[];
@@ -85,14 +87,124 @@ export type MonthlyPnlTotals = {
 };
 
 export type MonthlyPnlResult = {
-  month: string;
+  /** Inclusive "YYYY-MM" range; from === to for a single month. */
+  from: string;
+  to: string;
+  monthCount: number;
   rows: MonthlyPnlRow[];
   totals: MonthlyPnlTotals;
 };
 
+/** Longest range a period report may cover (two financial years). */
+export const MAX_PERIOD_MONTHS = 24;
+
+/** Every "YYYY-MM" from `from` to `to`, inclusive. */
+export const monthRange = (from: string, to: string): string[] => {
+  const [fy, fm] = from.split("-").map(Number) as [number, number];
+  const [ty, tm] = to.split("-").map(Number) as [number, number];
+  const months: string[] = [];
+  for (let i = fy * 12 + fm - 1; i <= ty * 12 + tm - 1; i++)
+    months.push(
+      `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`,
+    );
+  return months;
+};
+
+const BIGINT_KEYS = [
+  "freightPaise",
+  "dieselPaise",
+  "otherExpensePaise",
+  "totalExpensePaise",
+  "tripBalancePaise",
+  "taxPaise",
+  "insurancePaise",
+  "permitPaise",
+  "fitnessPaise",
+  "emiPaise",
+  "salaryPaise",
+  "fixedTotalPaise",
+  "repairsPaise",
+  "tyrePaise",
+  "otherCostPaise",
+  "variableTotalPaise",
+  "resultPaise",
+  "bookingFreightPaise",
+  "freightDiffPaise",
+] as const satisfies readonly (keyof MonthlyPnlRow)[];
+
+const NUMBER_KEYS = [
+  "trips",
+  "days",
+  "km",
+  "missingBookingTrips",
+  "monthsRan",
+] as const satisfies readonly (keyof MonthlyPnlRow)[];
+
+/**
+ * The report over a range of months: each month is computed exactly as the
+ * single-month report (so fixed costs are charged once per month, idle or
+ * not) and the vehicle rows are summed. A quarter therefore always equals
+ * the sum of its three monthly reports.
+ */
 export async function computeMonthlyVehiclePnl(
-  month: string,
+  from: string,
+  to: string = from,
 ): Promise<MonthlyPnlResult> {
+  const months = monthRange(from, to);
+  const byVehicle = new Map<string, MonthlyPnlRow>();
+  // Sequential on purpose: each month runs several queries, and a year in
+  // parallel would crowd the connection pool.
+  for (const month of months) {
+    for (const row of await computeMonthRows(month)) {
+      const acc = byVehicle.get(row.vehicleId);
+      if (!acc) {
+        byVehicle.set(row.vehicleId, { ...row, slips: [...row.slips] });
+        continue;
+      }
+      for (const key of BIGINT_KEYS) acc[key] += row[key];
+      for (const key of NUMBER_KEYS) acc[key] += row[key];
+      if (row.periodFrom && (!acc.periodFrom || row.periodFrom < acc.periodFrom))
+        acc.periodFrom = row.periodFrom;
+      if (row.periodTo && (!acc.periodTo || row.periodTo > acc.periodTo))
+        acc.periodTo = row.periodTo;
+      acc.hasMonthlyCostRow ||= row.hasMonthlyCostRow;
+      acc.slips.push(...row.slips);
+    }
+  }
+  const rows = [...byVehicle.values()];
+
+  // Worst first, like the accountant's loss-highlighted sheet.
+  rows.sort((a, b) => (a.resultPaise < b.resultPaise ? -1 : 1));
+
+  const sum = (pick: (r: MonthlyPnlRow) => bigint) =>
+    rows.reduce((s, r) => s + pick(r), 0n);
+  const totals: MonthlyPnlTotals = {
+    vehicleCount: rows.length,
+    profitVehicleCount: rows.filter((r) => r.resultPaise > 0n).length,
+    lossVehicleCount: rows.filter((r) => r.resultPaise < 0n).length,
+    profitAmountPaise: rows.reduce(
+      (s, r) => (r.resultPaise > 0n ? s + r.resultPaise : s),
+      0n,
+    ),
+    lossAmountPaise: rows.reduce(
+      (s, r) => (r.resultPaise < 0n ? s + r.resultPaise : s),
+      0n,
+    ),
+    netPaise: sum((r) => r.resultPaise),
+    freightPaise: sum((r) => r.freightPaise),
+    fixedTotalPaise: sum((r) => r.fixedTotalPaise),
+    variableTotalPaise: sum((r) => r.variableTotalPaise),
+    bookingFreightPaise: sum((r) => r.bookingFreightPaise),
+    freightDiffPaise: sum((r) => r.freightDiffPaise),
+    businessResultPaise: sum((r) => r.resultPaise + r.freightDiffPaise),
+    missingBookingTrips: rows.reduce((s, r) => s + r.missingBookingTrips, 0),
+  };
+
+  return { from, to, monthCount: months.length, rows, totals };
+}
+
+/** One calendar month: a row per own vehicle, idle ones included. */
+async function computeMonthRows(month: string): Promise<MonthlyPnlRow[]> {
   const { start, endExclusive } = monthBounds(month);
 
   const [costs, slips, jobCards] = await Promise.all([
@@ -219,7 +331,7 @@ export async function computeMonthlyVehiclePnl(
       (repairsByVehicle.get(jc.vehicleId) ?? 0n) + jc.totalAmountPaise,
     );
 
-  const rows: MonthlyPnlRow[] = costs.map((c) => {
+  return costs.map((c): MonthlyPnlRow => {
     const t = tripsByVehicle.get(c.vehicleId);
     const freight = t?.freight ?? 0n;
     const expense = t?.expense ?? 0n;
@@ -263,36 +375,8 @@ export async function computeMonthlyVehiclePnl(
       bookingFreightPaise: diffByVehicle.get(c.vehicleId)?.booking ?? 0n,
       freightDiffPaise: diffByVehicle.get(c.vehicleId)?.diff ?? 0n,
       missingBookingTrips: diffByVehicle.get(c.vehicleId)?.missing ?? 0,
+      monthsRan: t ? 1 : 0,
       slips: t?.slips ?? [],
     };
   });
-
-  // Worst first, like the accountant's loss-highlighted sheet.
-  rows.sort((a, b) => (a.resultPaise < b.resultPaise ? -1 : 1));
-
-  const sum = (pick: (r: MonthlyPnlRow) => bigint) =>
-    rows.reduce((s, r) => s + pick(r), 0n);
-  const totals: MonthlyPnlTotals = {
-    vehicleCount: rows.length,
-    profitVehicleCount: rows.filter((r) => r.resultPaise > 0n).length,
-    lossVehicleCount: rows.filter((r) => r.resultPaise < 0n).length,
-    profitAmountPaise: rows.reduce(
-      (s, r) => (r.resultPaise > 0n ? s + r.resultPaise : s),
-      0n,
-    ),
-    lossAmountPaise: rows.reduce(
-      (s, r) => (r.resultPaise < 0n ? s + r.resultPaise : s),
-      0n,
-    ),
-    netPaise: sum((r) => r.resultPaise),
-    freightPaise: sum((r) => r.freightPaise),
-    fixedTotalPaise: sum((r) => r.fixedTotalPaise),
-    variableTotalPaise: sum((r) => r.variableTotalPaise),
-    bookingFreightPaise: sum((r) => r.bookingFreightPaise),
-    freightDiffPaise: sum((r) => r.freightDiffPaise),
-    businessResultPaise: sum((r) => r.resultPaise + r.freightDiffPaise),
-    missingBookingTrips: rows.reduce((s, r) => s + r.missingBookingTrips, 0),
-  };
-
-  return { month, rows, totals };
 }

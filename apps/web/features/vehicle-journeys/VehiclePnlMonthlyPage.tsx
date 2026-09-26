@@ -3,9 +3,22 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react";
+import {
+    IconChevronDown,
+    IconChevronRight,
+    IconDownload,
+    IconTrophy,
+} from "@tabler/icons-react";
 
 import { Button } from "@skerp/ui/components/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@skerp/ui/components/dialog";
+import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
     Table,
@@ -17,6 +30,7 @@ import {
 } from "@skerp/ui/components/table";
 
 import { formatPaise } from "@/lib/money";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 import {
     currentMonth,
     vehicleCostApi,
@@ -46,7 +60,7 @@ const rupees = (paise: string) => (Number(paise) / 100).toFixed(2);
 /** Plain CSV the accountant can open in Excel — one line per vehicle. */
 function exportCsv(data: MonthlyPnlResult) {
     const header = [
-        "Sr", "Vehicle", "Period from", "Period to", "Trips", "Days", "Km",
+        "Sr", "Vehicle", "Period from", "Period to", "Months ran", "Trips", "Days", "Km",
         "Freight", "Trip expenses", "Trip balance",
         "Tax", "Insurance", "Permit", "Fitness", "EMI", "Salary", "Fixed total",
         "Spare & repairs", "Tyre", "Other", "Variable total", "Result",
@@ -55,7 +69,7 @@ function exportCsv(data: MonthlyPnlResult) {
     const lines = data.rows.map((r, i) =>
         [
             i + 1, r.vehicleNumber, r.periodFrom?.slice(0, 10) ?? "", r.periodTo?.slice(0, 10) ?? "",
-            r.trips, r.days, r.km,
+            `${r.monthsRan}/${data.monthCount}`, r.trips, r.days, r.km,
             rupees(r.freightPaise), rupees(r.totalExpensePaise), rupees(r.tripBalancePaise),
             rupees(r.taxPaise), rupees(r.insurancePaise), rupees(r.permitPaise),
             rupees(r.fitnessPaise), rupees(r.emiPaise), rupees(r.salaryPaise), rupees(r.fixedTotalPaise),
@@ -78,7 +92,10 @@ function exportCsv(data: MonthlyPnlResult) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `vehicle-performance-${data.month}.csv`;
+    link.download =
+        data.from === data.to
+            ? `vehicle-performance-${data.from}.csv`
+            : `vehicle-performance-${data.from}_to_${data.to}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -175,19 +192,410 @@ function Breakdown({ row }: { row: MonthlyPnlRow }) {
     );
 }
 
+/* ---------------- period (month / quarter / year / custom) ---------------- */
+
+type PeriodMode = "month" | "quarter" | "year" | "custom";
+type Period = {
+    mode: PeriodMode;
+    month: string;
+    /** Financial year by its starting calendar year: 2026 → FY 2026-27. */
+    fy: number;
+    quarter: 1 | 2 | 3 | 4;
+    from: string;
+    to: string;
+};
+
+const ym = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}`;
+const splitYm = (value: string) => value.split("-").map(Number) as [number, number];
+/** Indian financial year starts in April. */
+const fyOf = (value: string) => {
+    const [year, month] = splitYm(value);
+    return month >= 4 ? year : year - 1;
+};
+const fyLabel = (fy: number) => `FY ${fy}-${String((fy + 1) % 100).padStart(2, "0")}`;
+/** Q1 Apr–Jun, Q2 Jul–Sep, Q3 Oct–Dec, Q4 Jan–Mar. */
+const quarterRange = (fy: number, quarter: number) => {
+    const [year, month] = quarter < 4 ? [fy, 1 + 3 * quarter] : [fy + 1, 1];
+    return { from: ym(year, month), to: ym(year, month + 2) };
+};
+const QUARTER_MONTHS = ["", "Apr–Jun", "Jul–Sep", "Oct–Dec", "Jan–Mar"];
+
+const initialPeriod = (): Period => {
+    const month = currentMonth();
+    const [, mon] = splitYm(month);
+    return {
+        mode: "month",
+        month,
+        fy: fyOf(month),
+        quarter: (mon >= 4 ? Math.floor((mon - 4) / 3) + 1 : 4) as Period["quarter"],
+        from: month,
+        to: month,
+    };
+};
+
+/** The inclusive month range and title for a period. */
+const resolvePeriod = (p: Period): { from: string; to: string; label: string } => {
+    switch (p.mode) {
+        case "month":
+            return { from: p.month, to: p.month, label: monthTitle(p.month) };
+        case "quarter":
+            return {
+                ...quarterRange(p.fy, p.quarter),
+                label: `Q${p.quarter} ${fyLabel(p.fy)} (${QUARTER_MONTHS[p.quarter]})`,
+            };
+        case "year":
+            return { from: ym(p.fy, 4), to: ym(p.fy + 1, 3), label: fyLabel(p.fy) };
+        case "custom":
+            return {
+                from: p.from,
+                to: p.to,
+                label: `${monthTitle(p.from)} – ${monthTitle(p.to)}`,
+            };
+    }
+};
+
+const fieldClass = "h-9 rounded-md border border-input bg-background px-3 text-sm";
+
+function PeriodPicker({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+    const set = (patch: Partial<Period>) => onChange({ ...value, ...patch });
+    const thisFy = fyOf(currentMonth());
+    const fyOptions = [thisFy, thisFy - 1, thisFy - 2, thisFy - 3];
+    const fySelect = (
+        <select
+            className={`${fieldClass} w-32`}
+            value={value.fy}
+            onChange={(e) => set({ fy: Number(e.target.value) })}
+        >
+            {fyOptions.map((fy) => (
+                <option key={fy} value={fy}>
+                    {fyLabel(fy)}
+                </option>
+            ))}
+        </select>
+    );
+    return (
+        <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Period</label>
+                <select
+                    className={`${fieldClass} w-28`}
+                    value={value.mode}
+                    onChange={(e) => set({ mode: e.target.value as PeriodMode })}
+                >
+                    <option value="month">Month</option>
+                    <option value="quarter">Quarter</option>
+                    <option value="year">Year</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </div>
+            {value.mode === "month" ? (
+                <input
+                    type="month"
+                    className={`${fieldClass} w-44`}
+                    value={value.month}
+                    onChange={(e) => set({ month: e.target.value })}
+                />
+            ) : null}
+            {value.mode === "quarter" ? (
+                <>
+                    <select
+                        className={`${fieldClass} w-40`}
+                        value={value.quarter}
+                        onChange={(e) =>
+                            set({ quarter: Number(e.target.value) as Period["quarter"] })
+                        }
+                    >
+                        {[1, 2, 3, 4].map((q) => (
+                            <option key={q} value={q}>
+                                Q{q} ({QUARTER_MONTHS[q]})
+                            </option>
+                        ))}
+                    </select>
+                    {fySelect}
+                </>
+            ) : null}
+            {value.mode === "year" ? fySelect : null}
+            {value.mode === "custom" ? (
+                <>
+                    <input
+                        type="month"
+                        aria-label="From month"
+                        className={`${fieldClass} w-40`}
+                        value={value.from}
+                        onChange={(e) => set({ from: e.target.value })}
+                    />
+                    <span className="pb-2 text-sm text-muted-foreground">to</span>
+                    <input
+                        type="month"
+                        aria-label="To month"
+                        className={`${fieldClass} w-40`}
+                        value={value.to}
+                        onChange={(e) => set({ to: e.target.value })}
+                    />
+                </>
+            ) : null}
+        </div>
+    );
+}
+
+/* ---------------- leaderboard ---------------- */
+
+type Metric = "profit" | "margin" | "perKm";
+const METRICS: { key: Metric; label: string }[] = [
+    { key: "profit", label: "Profit" },
+    { key: "margin", label: "Margin %" },
+    { key: "perKm", label: "Profit / km" },
+];
+
+/** The ranking value, or null when it can't be worked out (no freight or no
+ * km — an idle vehicle is ranked by profit only). */
+const metricValue = (row: MonthlyPnlRow, metric: Metric): number | null => {
+    const result = Number(row.resultPaise);
+    if (metric === "profit") return result;
+    if (metric === "margin") {
+        const freight = Number(row.freightPaise);
+        return freight > 0 ? (result / freight) * 100 : null;
+    }
+    return row.km > 0 ? result / row.km : null;
+};
+
+const formatMetric = (value: number, metric: Metric) =>
+    metric === "margin"
+        ? `${value.toFixed(1)}%`
+        : `${formatPaise(String(Math.round(value)))}${metric === "perKm" ? "/km" : ""}`;
+
+type RankFilter = "all" | "profit" | "loss" | "idle";
+
+type Ranked = { row: MonthlyPnlRow; value: number | null; rank: number | null };
+
+/** Full ranking of every own vehicle for the period, in a dialog so it stays
+ * usable with a large fleet. Filtering and paging are client-side — the
+ * report already holds every vehicle. Rank is the position in the full
+ * ranking, so it doesn't change when you search or filter. */
+function LeaderboardDialog({
+    rows,
+    label,
+    open,
+    onOpenChange,
+}: {
+    rows: MonthlyPnlRow[];
+    label: string;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const [metric, setMetric] = React.useState<Metric>("profit");
+    const [worstFirst, setWorstFirst] = React.useState(false);
+    const [filter, setFilter] = React.useState<RankFilter>("all");
+    const [search, setSearch] = React.useState("");
+    const [page, setPage] = React.useState(0);
+    const [size, setSize] = React.useState(10);
+
+    const ranked = React.useMemo((): Ranked[] => {
+        const withValue = rows.map((row) => ({ row, value: metricValue(row, metric) }));
+        const rankable = withValue
+            .filter((r): r is { row: MonthlyPnlRow; value: number } => r.value !== null)
+            .sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value))
+            .map((r, i) => ({ ...r, rank: i + 1 }));
+        // Vehicles that can't be ranked on this measure (no freight / no km) go last.
+        const unranked = withValue
+            .filter((r) => r.value === null)
+            .map((r) => ({ ...r, rank: null }));
+        return [...rankable, ...unranked];
+    }, [rows, metric, worstFirst]);
+
+    const term = search.trim().toLowerCase();
+    const visible = ranked.filter(({ row }) => {
+        if (term && !row.vehicleNumber.toLowerCase().includes(term)) return false;
+        const result = BigInt(row.resultPaise);
+        if (filter === "profit") return result > 0n;
+        if (filter === "loss") return result < 0n;
+        if (filter === "idle") return row.trips === 0;
+        return true;
+    });
+    const pageRows = visible.slice(page * size, page * size + size);
+
+    const toggleClass = (active: boolean) =>
+        `rounded px-2.5 py-1 text-xs font-medium ${active ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="flex max-h-[88vh] flex-col gap-4 sm:max-w-4xl">
+                <DialogHeader>
+                    <DialogTitle>Leaderboard</DialogTitle>
+                    <DialogDescription>
+                        {label} · {rows.length} own vehicles, ranked on true profit
+                        (after fixed and variable costs).
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                        placeholder="Search vehicle no."
+                        value={search}
+                        onChange={(e) => {
+                            setSearch(e.target.value);
+                            setPage(0);
+                        }}
+                        className="h-9 w-48"
+                    />
+                    <select
+                        aria-label="Filter"
+                        className={`${fieldClass} w-40`}
+                        value={filter}
+                        onChange={(e) => {
+                            setFilter(e.target.value as RankFilter);
+                            setPage(0);
+                        }}
+                    >
+                        <option value="all">All vehicles</option>
+                        <option value="profit">Profit-making</option>
+                        <option value="loss">Loss-making</option>
+                        <option value="idle">Idle (no trips)</option>
+                    </select>
+                    <div className="flex gap-1 rounded-md bg-muted p-0.5">
+                        {METRICS.map((m) => (
+                            <button
+                                key={m.key}
+                                type="button"
+                                onClick={() => {
+                                    setMetric(m.key);
+                                    setPage(0);
+                                }}
+                                className={toggleClass(metric === m.key)}
+                            >
+                                {m.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex gap-1 rounded-md bg-muted p-0.5">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setWorstFirst(false);
+                                setPage(0);
+                            }}
+                            className={toggleClass(!worstFirst)}
+                        >
+                            Best first
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setWorstFirst(true);
+                                setPage(0);
+                            }}
+                            className={toggleClass(worstFirst)}
+                        >
+                            Worst first
+                        </button>
+                    </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-border">
+                    <Table>
+                        <TableHeader className="bg-muted/40">
+                            <TableRow className="hover:bg-transparent">
+                                <TableHead className="w-14 pl-4 text-xs font-semibold">Rank</TableHead>
+                                <TableHead className="text-xs font-semibold">Vehicle</TableHead>
+                                <TableHead className="text-right text-xs font-semibold">Trips</TableHead>
+                                <TableHead className="text-right text-xs font-semibold">Km</TableHead>
+                                <TableHead className="text-right text-xs font-semibold">Freight</TableHead>
+                                <TableHead className="text-right text-xs font-semibold">Result</TableHead>
+                                <TableHead className="pr-4 text-right text-xs font-semibold">
+                                    {METRICS.find((m) => m.key === metric)?.label}
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {pageRows.map(({ row, value, rank }) => (
+                                <TableRow key={row.vehicleId} className="h-11">
+                                    <TableCell className="pl-4 font-semibold tabular-nums text-muted-foreground">
+                                        {rank ?? "—"}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        <Link
+                                            href={`/vehicle-journeys/vehicle-pnl/${row.vehicleId}`}
+                                            className="hover:underline"
+                                        >
+                                            {row.vehicleNumber}
+                                        </Link>
+                                        {row.trips === 0 ? (
+                                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                                idle
+                                            </span>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">{row.trips}</TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                        {row.km.toLocaleString("en-IN")}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                        {formatPaise(row.freightPaise)}
+                                    </TableCell>
+                                    <TableCell
+                                        className={`text-right tabular-nums ${profitTone(row.resultPaise)}`}
+                                    >
+                                        {formatPaise(row.resultPaise)}
+                                    </TableCell>
+                                    <TableCell
+                                        className={`pr-4 text-right font-semibold tabular-nums ${value === null ? "text-muted-foreground" : value < 0 ? "text-destructive" : "text-emerald-700"}`}
+                                    >
+                                        {value === null ? "—" : formatMetric(value, metric)}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {pageRows.length === 0 ? (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={7}
+                                        className="py-8 text-center text-sm text-muted-foreground"
+                                    >
+                                        No vehicles match.
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
+                        </TableBody>
+                    </Table>
+                </div>
+
+                <TablePaginationFooter
+                    total={visible.length}
+                    page={page}
+                    size={size}
+                    onPageChange={setPage}
+                    onSizeChange={(next) => {
+                        setSize(next);
+                        setPage(0);
+                    }}
+                />
+                {metric !== "profit" ? (
+                    <p className="text-xs text-muted-foreground">
+                        Vehicles with no freight or no km can&apos;t be ranked on this
+                        measure; they are listed last with “—”.
+                    </p>
+                ) : null}
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 /** The accountant's month-end Performance Report, automated: every own
  * vehicle (idle ones too), trip balance less monthly fixed and variable
  * costs. Read-only — costs are entered on the Vehicle Costs page. */
 export default function VehiclePnlMonthlyPage() {
-    const [month, setMonth] = React.useState(currentMonth());
+    const [period, setPeriod] = React.useState<Period>(initialPeriod);
     const [openId, setOpenId] = React.useState<string | null>(null);
+    const [leaderboardOpen, setLeaderboardOpen] = React.useState(false);
+    const { from, to, label } = resolvePeriod(period);
+    const validRange = /^\d{4}-\d{2}$/.test(from) && /^\d{4}-\d{2}$/.test(to) && from <= to;
 
     const query = useQuery({
-        queryKey: ["vehicle-pnl-monthly", month],
-        queryFn: () => vehicleCostApi.monthlyPnl(month),
-        enabled: /^\d{4}-\d{2}$/.test(month),
+        queryKey: ["vehicle-pnl-monthly", from, to],
+        queryFn: () => vehicleCostApi.monthlyPnl(from, to),
+        enabled: validRange,
     });
     const data = query.data;
+    const multiMonth = (data?.monthCount ?? 1) > 1;
 
     return (
         <div className="space-y-4 p-4">
@@ -197,22 +605,22 @@ export default function VehiclePnlMonthlyPage() {
                         Vehicle Performance Report
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        {monthTitle(month)} · own vehicles, after monthly fixed and
-                        variable costs.
+                        {label} · own vehicles, after monthly fixed and variable
+                        costs.
                     </p>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">Month</label>
-                        <input
-                            type="month"
-                            className="h-9 w-44 rounded-md border border-input bg-background px-3 text-sm"
-                            value={month}
-                            onChange={(e) => setMonth(e.target.value)}
-                        />
-                    </div>
+                    <PeriodPicker value={period} onChange={setPeriod} />
                     <Button variant="outline" size="sm" asChild>
                         <Link href="/vehicle-journeys/vehicle-costs">Enter monthly costs</Link>
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!data}
+                        onClick={() => setLeaderboardOpen(true)}
+                    >
+                        <IconTrophy size={16} /> Leaderboard
                     </Button>
                     <Button
                         variant="outline"
@@ -225,6 +633,11 @@ export default function VehiclePnlMonthlyPage() {
                 </div>
             </div>
 
+            {!validRange ? (
+                <div className="rounded-md border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-800">
+                    Pick a “from” month that is on or before the “to” month.
+                </div>
+            ) : null}
             {query.isLoading ? <Skeleton className="h-64 w-full" /> : null}
             {query.isError ? (
                 <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
@@ -280,6 +693,13 @@ export default function VehiclePnlMonthlyPage() {
                         </p>
                     </section>
 
+                    <LeaderboardDialog
+                        rows={data.rows}
+                        label={label}
+                        open={leaderboardOpen}
+                        onOpenChange={setLeaderboardOpen}
+                    />
+
                     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                         <Table>
                             <TableHeader className="bg-muted/40">
@@ -287,6 +707,9 @@ export default function VehiclePnlMonthlyPage() {
                                     <TableHead className="w-10 pl-4" />
                                     <TableHead className="text-xs font-semibold">Vehicle</TableHead>
                                     <TableHead className="text-xs font-semibold">Period</TableHead>
+                                    {multiMonth ? (
+                                        <TableHead className="text-right text-xs font-semibold">Months</TableHead>
+                                    ) : null}
                                     <TableHead className="text-right text-xs font-semibold">Trips</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Days</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Trip balance</TableHead>
@@ -322,6 +745,11 @@ export default function VehiclePnlMonthlyPage() {
                                                         ? `${shortDate(row.periodFrom)} – ${shortDate(row.periodTo)}`
                                                         : "—"}
                                                 </TableCell>
+                                                {multiMonth ? (
+                                                    <TableCell className="text-right text-muted-foreground tabular-nums">
+                                                        {row.monthsRan}/{data.monthCount}
+                                                    </TableCell>
+                                                ) : null}
                                                 <TableCell className="text-right tabular-nums">{row.trips}</TableCell>
                                                 <TableCell className="text-right tabular-nums">{row.days}</TableCell>
                                                 <TableCell className="text-right tabular-nums">
@@ -344,7 +772,7 @@ export default function VehiclePnlMonthlyPage() {
                                             </TableRow>
                                             {open ? (
                                                 <TableRow className="bg-muted/20 hover:bg-muted/20">
-                                                    <TableCell colSpan={10} className="p-0">
+                                                    <TableCell colSpan={multiMonth ? 11 : 10} className="p-0">
                                                         <Breakdown row={row} />
                                                     </TableCell>
                                                 </TableRow>

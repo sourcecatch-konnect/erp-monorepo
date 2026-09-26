@@ -54,6 +54,7 @@ export type MonthlyPnlRow = {
   bookingFreightPaise: string;
   freightDiffPaise: string;
   missingBookingTrips: number;
+  monthsRan: number;
   slips: { logSlipId: string; journeyId: string; logSlipNumber: string | null }[];
 };
 
@@ -74,7 +75,10 @@ export type MonthlyPnlTotals = {
 };
 
 export type MonthlyPnlResult = {
-  month: string;
+  /** Inclusive "YYYY-MM" range; from === to for a single month. */
+  from: string;
+  to: string;
+  monthCount: number;
   rows: MonthlyPnlRow[];
   totals: MonthlyPnlTotals;
 };
@@ -114,10 +118,10 @@ export const vehicleCostApi = {
     return unwrapApiResponse(res);
   },
 
-  monthlyPnl: async (month: string): Promise<MonthlyPnlResult> => {
+  monthlyPnl: async (from: string, to: string): Promise<MonthlyPnlResult> => {
     const res = await api.get<ApiResponse<MonthlyPnlResult>>(
       "/log-slips/vehicle-pnl/monthly",
-      { params: { month } },
+      { params: { from, to } },
     );
     return unwrapApiResponse(res);
   },
