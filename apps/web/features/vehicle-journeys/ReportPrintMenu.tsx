@@ -25,6 +25,7 @@ export function ReportPrintMenu({
     previewPath,
     fileName,
     disabled,
+    label = "Print / PDF",
 }: {
     /** Fetches the PDF from the server. */
     downloadPdf: (withLetterhead: boolean) => Promise<Blob>;
@@ -33,6 +34,8 @@ export function ReportPrintMenu({
     /** Base file name, without ".pdf"; "-plain" is added for no letterhead. */
     fileName: string;
     disabled?: boolean;
+    /** Button text, for pages that offer more than one printable report. */
+    label?: string;
 }) {
     const [busy, setBusy] = React.useState(false);
 
@@ -61,7 +64,7 @@ export function ReportPrintMenu({
                     ) : (
                         <IconPrinter size={16} />
                     )}
-                    {busy ? "Preparing…" : "Print / PDF"}
+                    {busy ? "Preparing…" : label}
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">

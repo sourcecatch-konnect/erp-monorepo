@@ -1,6 +1,10 @@
 import path from "node:path";
 import { imageToBase64Src } from "../_shared/pdf.helper.js";
-import type { MonthlyPnlResult } from "./vehicle-pnl-monthly.service.js";
+import type {
+  MonthlyPnlResult,
+  SheetLeg,
+  SheetSlip,
+} from "./vehicle-pnl-monthly.service.js";
 import type { VehiclePnlRow } from "./vehicle-pnl.service.js";
 
 /* ------------------------------------------------------------------ */
@@ -154,6 +158,15 @@ const shell = (args: {
   .signs { display: flex; justify-content: space-between; gap: 10mm; margin-top: 12mm; page-break-inside: avoid; }
   .sign { flex: 1; border-top: 1px dotted #333; padding-top: 2px; text-align: center; font-weight: 700; }
   .gen { font-size: 6.8px; color: #444; margin-top: 3mm; }
+  /* Monthly vehicle sheet: one block per vehicle, never split over pages */
+  .vblock { margin-bottom: 4mm; }
+  .vblock .vbar td { background: #fff2a8; text-align: center; font-weight: 800; font-size: 9.5px; letter-spacing: .5px; }
+  .vblock th { background: #fce4cc; text-align: center; }
+  .vblock td.frt { background: #fde7f1; }
+  .vblock tr.sum td { background: #e2f5d9; font-weight: 800; }
+  .vblock .costs th { background: #f0f0f0; }
+  .vblock .costs td.gt { background: #f7d4d4; font-weight: 800; }
+  .vblock .idle { text-align: center; color: #555; font-style: italic; }
   @media screen {
     body { background: #e5e7eb; padding: 16px; }
     .sheet { width: ${args.landscape ? "281mm" : "194mm"}; margin: 0 auto; padding: 8mm; background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,.18); }
@@ -454,6 +467,151 @@ export function buildVehicleDetailPdfHtml(
   return shell({
     title: `Vehicle P&L ${row.vehicleNumber}`,
     landscape: false,
+    withLetterhead,
+    body,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Monthly vehicle sheet (landscape) — the accountant's per-vehicle    */
+/* layout: every Log Slip with its legs, a total row, then the monthly */
+/* fixed and variable costs and G.Total (= Result on Performance).     */
+/* ------------------------------------------------------------------ */
+
+const legDate = (value: string | null) =>
+  value ? dateText(new Date(value)) : "—";
+
+const SHEET_COLS = 17;
+
+function sheetSlipRows(slip: SheetSlip, sr: number) {
+  const legs: SheetLeg[] = slip.legs.length
+    ? slip.legs
+    : [{ from: "—", to: "—", lrNumbers: [], date: null, freightPaise: 0n, isEmpty: false }];
+  const span = legs.length;
+  // Slip-level cells span all of its legs, as on the paper sheet.
+  const slipCell = (content: string, cls = "num") =>
+    `<td class="${cls}" rowspan="${span}">${content}</td>`;
+  return legs
+    .map((leg, i) => {
+      const lr = leg.lrNumbers.length
+        ? esc(leg.lrNumbers.join(", "))
+        : leg.isEmpty
+          ? "Empty Trip"
+          : "—";
+      const legCells = `<td>${esc(leg.from)}</td><td>${esc(leg.to)}</td><td>${lr}</td>
+        <td>${esc(legDate(leg.date))}</td><td class="num frt">${money(leg.freightPaise)}</td>`;
+      if (i > 0) return `<tr>${legCells}</tr>`;
+      return `<tr>
+        ${slipCell(String(sr))}
+        ${slipCell(esc(slip.logSlipNumber ?? "—"), "")}
+        ${slipCell(esc(slip.driverName), "")}
+        ${legCells}
+        ${slipCell(slip.km.toLocaleString("en-IN"))}
+        ${slipCell(money(slip.dieselPaise))}
+        ${slipCell(money(slip.cashPaise))}
+        ${slipCell(money(slip.expensePaise))}
+        ${slipCell(String(slip.days))}
+        ${slipCell(money(slip.freightPaise))}
+        ${slipCell(`<span class="${tone(slip.netPaise)}">${money(slip.netPaise)}</span>`)}
+        ${slipCell(slip.driverPayablePaise > 0n ? money(slip.driverPayablePaise) : "")}
+        ${slipCell(slip.driverReceivablePaise > 0n ? money(slip.driverReceivablePaise) : "")}
+      </tr>`;
+    })
+    .join("");
+}
+
+function vehicleBlock(row: MonthlyPnlResult["rows"][number], slips: SheetSlip[]) {
+  const sum = (pick: (s: SheetSlip) => bigint) => slips.reduce((t, s) => t + pick(s), 0n);
+  const net = sum((s) => s.netPaise);
+  const header = `<tr>
+    <th>Sr.</th><th>Log Slip No.</th><th>Driver's Name</th><th>Station</th><th>To Station</th>
+    <th>L.R. No.</th><th>L.R. Date</th><th>Onward Frt</th><th>Total KM</th><th>Diesel</th>
+    <th>Cash</th><th>Total Exps</th><th>Total Days</th><th>Total Frt</th><th>Net Balance</th>
+    <th>Payable Amt</th><th>Receivable Amt</th>
+  </tr>`;
+
+  const body = slips.length
+    ? slips.map((slip, i) => sheetSlipRows(slip, i + 1)).join("") +
+      `<tr class="sum">
+        <td colspan="7" class="num">Total</td>
+        <td class="num">${money(sum((s) => s.freightPaise))}</td>
+        <td class="num">${slips.reduce((t, s) => t + s.km, 0).toLocaleString("en-IN")}</td>
+        <td class="num">${money(sum((s) => s.dieselPaise))}</td>
+        <td class="num">${money(sum((s) => s.cashPaise))}</td>
+        <td class="num">${money(sum((s) => s.expensePaise))}</td>
+        <td class="num">${slips.reduce((t, s) => t + s.days, 0)}</td>
+        <td class="num">${money(sum((s) => s.freightPaise))}</td>
+        <td class="num ${tone(net)}">${money(net)}</td>
+        <td class="num">${money(sum((s) => s.driverPayablePaise))}</td>
+        <td class="num">${money(sum((s) => s.driverReceivablePaise))}</td>
+      </tr>`
+    : `<tr><td colspan="${SHEET_COLS}" class="idle">No posted Log Slips in this period — fixed costs still apply.</td></tr>`;
+
+  const totalExp = row.fixedTotalPaise + row.variableTotalPaise;
+  const costs = `<table class="costs">
+    <thead><tr>
+      <th>Mtly Fxd</th><th>Tax</th><th>Insurance</th><th>Permit</th><th>Fitness</th><th>EMI</th><th>Salary</th>
+      <th>Mtly V'ble</th><th>Spare &amp; Repairs</th><th>Tyre</th><th>Other</th><th>Total Exp</th><th>G.Total</th>
+    </tr></thead>
+    <tbody><tr>
+      <td></td>
+      <td class="num">${money(row.taxPaise)}</td><td class="num">${money(row.insurancePaise)}</td>
+      <td class="num">${money(row.permitPaise)}</td><td class="num">${money(row.fitnessPaise)}</td>
+      <td class="num">${money(row.emiPaise)}</td><td class="num">${money(row.salaryPaise)}</td>
+      <td></td>
+      <td class="num">${money(row.repairsPaise)}</td><td class="num">${money(row.tyrePaise)}</td>
+      <td class="num">${money(row.otherCostPaise)}</td><td class="num">${money(totalExp)}</td>
+      <td class="num gt ${tone(row.resultPaise)}">${money(row.resultPaise)}</td>
+    </tr></tbody>
+  </table>`;
+
+  return `<div class="vblock keep">
+    <table>
+      <thead>
+        <tr class="vbar"><td colspan="${SHEET_COLS}">${esc(row.vehicleNumber)}</td></tr>
+        ${slips.length ? header : ""}
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+    ${costs}
+  </div>`;
+}
+
+export function buildVehicleSheetPdfHtml(
+  report: MonthlyPnlResult,
+  slipsByVehicle: Map<string, SheetSlip[]>,
+  options?: PdfOptions,
+) {
+  const withLetterhead = options?.withLetterhead ?? true;
+  const label = performancePeriodLabel(report.from, report.to);
+  const byNumber = (a: { vehicleNumber: string }, b: { vehicleNumber: string }) =>
+    a.vehicleNumber.localeCompare(b.vehicleNumber);
+  // Vehicles that ran first, then idle ones — each group by vehicle number.
+  const ran = report.rows.filter((r) => slipsByVehicle.has(r.vehicleId)).sort(byNumber);
+  const idle = report.rows.filter((r) => !slipsByVehicle.has(r.vehicleId)).sort(byNumber);
+
+  const blocks = [...ran, ...idle]
+    .map((row) => vehicleBlock(row, slipsByVehicle.get(row.vehicleId) ?? []))
+    .join("");
+
+  const body = `
+    <div class="title-row">
+      <div>
+        <div class="doc-title"><span>MONTHLY VEHICLE SHEET</span></div>
+        <div class="muted">For the ${report.monthCount > 1 ? "period" : "month"} of ${esc(label)} · own vehicles</div>
+      </div>
+      <div class="meta"><strong>${esc(label)}</strong><br />${ran.length} ran · ${idle.length} idle</div>
+    </div>
+    ${blocks}
+    <div class="note">
+      G.Total = Net Balance − Mtly Fxd − Mtly V'ble; it equals the Result on the Vehicle Performance report.
+      Legs, L.R. numbers and amounts are as posted on each Log Slip. Payable / Receivable is the driver settlement on the Log Slip.
+    </div>
+    ${signatures}`;
+
+  return shell({
+    title: `Monthly Vehicle Sheet ${label}`,
+    landscape: true,
     withLetterhead,
     body,
   });

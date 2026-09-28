@@ -666,6 +666,21 @@ export default function VehiclePnlMonthlyPage() {
                                 : `vehicle-performance-${from}_to_${to}`
                         }
                     />
+                    <ReportPrintMenu
+                        label="Vehicle sheet"
+                        disabled={!data || !validRange}
+                        downloadPdf={(withLetterhead) =>
+                            vehicleCostApi.vehicleSheetPdf(from, to, withLetterhead)
+                        }
+                        previewPath={(withLetterhead) =>
+                            `/log-slips/vehicle-pnl/monthly/sheet/print-preview?from=${from}&to=${to}&letterhead=${withLetterhead}`
+                        }
+                        fileName={
+                            from === to
+                                ? `vehicle-sheet-${from}`
+                                : `vehicle-sheet-${from}_to_${to}`
+                        }
+                    />
                 </div>
             </div>
 

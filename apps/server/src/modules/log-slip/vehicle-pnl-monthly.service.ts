@@ -391,3 +391,127 @@ async function computeMonthRows(month: string): Promise<MonthlyPnlRow[]> {
     };
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Monthly vehicle sheet — the accountant's per-vehicle, leg-by-leg    */
+/* layout. Legs come from the Log Slip's frozen TRIP_FREIGHT lines,     */
+/* the same source as the Log Slip PDF, so they match what was posted.  */
+/* ------------------------------------------------------------------ */
+
+export type SheetLeg = {
+  from: string;
+  to: string;
+  lrNumbers: string[];
+  /** Leg start — the sheet's "L.R. Date". */
+  date: string | null;
+  freightPaise: bigint;
+  isEmpty: boolean;
+};
+
+export type SheetSlip = {
+  logSlipNumber: string | null;
+  logSlipDate: Date;
+  driverName: string;
+  km: number;
+  days: number;
+  freightPaise: bigint;
+  dieselPaise: bigint;
+  /** Toll, driver and other trip expenses (total expenses − diesel). */
+  cashPaise: bigint;
+  expensePaise: bigint;
+  /** freight − expenses: the sheet's "Net Balance". */
+  netPaise: bigint;
+  driverPayablePaise: bigint;
+  driverReceivablePaise: bigint;
+  legs: SheetLeg[];
+};
+
+/* Older slips may lack metadata — fall back to the "Leg n: From → To
+   (empty)" description, as the Log Slip PDF does. */
+function toSheetLeg(line: {
+  description: string;
+  amountPaise: bigint;
+  metadata: unknown;
+}): SheetLeg {
+  const meta =
+    line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
+      ? (line.metadata as Record<string, unknown>)
+      : {};
+  const text = (key: string) =>
+    typeof meta[key] === "string" ? (meta[key] as string) : null;
+  const route = line.description.match(
+    /:\s*(.*?)\s*(?:→|->)\s*(.*?)(?:\s*\(empty\))?$/i,
+  );
+  return {
+    from: text("source") ?? route?.[1]?.trim() ?? "-",
+    to: text("destination") ?? route?.[2]?.trim() ?? "-",
+    lrNumbers: Array.isArray(meta.lrNumbers)
+      ? meta.lrNumbers.filter(
+          (n): n is string => typeof n === "string" && Boolean(n),
+        )
+      : [],
+    date: text("startedAt"),
+    freightPaise: line.amountPaise,
+    isEmpty: meta.isEmpty === true || /\(empty\)/i.test(line.description),
+  };
+}
+
+/** Posted Log Slips of own vehicles in the month range, grouped per vehicle,
+ *  oldest first — the same slips the Performance report counts. */
+export async function loadSheetSlips(
+  from: string,
+  to: string,
+): Promise<Map<string, SheetSlip[]>> {
+  const slips = await db.logSlip.findMany({
+    where: {
+      postedJournalEntryId: { not: null },
+      logSlipDate: {
+        gte: monthBounds(from).start,
+        lt: monthBounds(to).endExclusive,
+      },
+      vehicle: { ownershipType: "Own_Vehicle" },
+    },
+    select: {
+      vehicleId: true,
+      logSlipNumber: true,
+      logSlipDate: true,
+      totalKm: true,
+      totalDays: true,
+      totalFreightPaise: true,
+      totalExpensePaise: true,
+      totalDieselAmountPaise: true,
+      netVehicleResultPaise: true,
+      driverPayablePaise: true,
+      driverReceivablePaise: true,
+      driver: { select: { name: true } },
+      lines: {
+        where: { lineType: "TRIP_FREIGHT" },
+        orderBy: { sortOrder: "asc" },
+        select: { description: true, amountPaise: true, metadata: true },
+      },
+    },
+    orderBy: { logSlipDate: "asc" },
+  });
+
+  const byVehicle = new Map<string, SheetSlip[]>();
+  for (const slip of slips) {
+    const list = byVehicle.get(slip.vehicleId) ?? [];
+    list.push({
+      logSlipNumber: slip.logSlipNumber,
+      logSlipDate: slip.logSlipDate,
+      driverName: slip.driver.name,
+      km: slip.totalKm,
+      days: slip.totalDays,
+      freightPaise: slip.totalFreightPaise,
+      dieselPaise: slip.totalDieselAmountPaise,
+      cashPaise: slip.totalExpensePaise - slip.totalDieselAmountPaise,
+      expensePaise: slip.totalExpensePaise,
+      netPaise: slip.netVehicleResultPaise,
+      driverPayablePaise: slip.driverPayablePaise,
+      driverReceivablePaise: slip.driverReceivablePaise,
+      legs: slip.lines.map(toSheetLeg),
+    });
+    byVehicle.set(slip.vehicleId, list);
+  }
+  return byVehicle;
+}

@@ -18,6 +18,7 @@ import {
 import { computeVehiclePnl } from "./vehicle-pnl.service.js";
 import {
   computeMonthlyVehiclePnl,
+  loadSheetSlips,
   MAX_PERIOD_MONTHS,
   monthRange,
 } from "./vehicle-pnl-monthly.service.js";
@@ -25,6 +26,7 @@ import { MONTH_RE } from "../vehicle-cost/vehicle-cost.service.js";
 import {
   buildVehicleDetailPdfHtml,
   buildVehiclePerformancePdfHtml,
+  buildVehicleSheetPdfHtml,
 } from "./vehicle-pnl.pdf.js";
 import {
   computeLogSlip,
@@ -185,6 +187,33 @@ router.get(
   "/vehicle-pnl/monthly/print-preview",
   can(PERMS.LOGSLIP.VIEW),
   async (req, res) => sendPreview(res, (await performanceHtml(req)).html),
+);
+
+/* Monthly vehicle sheet — the accountant's per-vehicle, leg-by-leg layout
+   for the same period; its G.Total equals the Performance report's Result. */
+const vehicleSheetHtml = async (req: Request) => {
+  const { from, to } = parseMonthRange(req);
+  const [report, slips] = await Promise.all([
+    computeMonthlyVehiclePnl(from, to),
+    loadSheetSlips(from, to),
+  ]);
+  return {
+    html: buildVehicleSheetPdfHtml(report, slips, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `vehicle-sheet-${from === to ? from : `${from}_to_${to}`}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get("/vehicle-pnl/monthly/sheet/pdf", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { html, fileName } = await vehicleSheetHtml(req);
+  return sendPdf(res, html, fileName);
+});
+
+router.get(
+  "/vehicle-pnl/monthly/sheet/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await vehicleSheetHtml(req)).html),
 );
 
 // Totals across every matching vehicle (not just the current page) for the

@@ -138,6 +138,19 @@ export const vehicleCostApi = {
     });
     return res.data;
   },
+
+  /** Printable per-vehicle, leg-by-leg sheet for the same period. */
+  vehicleSheetPdf: async (
+    from: string,
+    to: string,
+    withLetterhead: boolean,
+  ): Promise<Blob> => {
+    const res = await api.get("/log-slips/vehicle-pnl/monthly/sheet/pdf", {
+      params: { from, to, letterhead: withLetterhead },
+      responseType: "blob",
+    });
+    return res.data;
+  },
 };
 
 /** "2026-08" for today, in local time — the default month for the pages. */
