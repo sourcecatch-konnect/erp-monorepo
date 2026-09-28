@@ -515,3 +515,81 @@ export async function loadSheetSlips(
   }
   return byVehicle;
 }
+
+/* ------------------------------------------------------------------ */
+/* Freight difference, LR-wise — the accountant's check sheet. Same     */
+/* trips and rules as freightDiffByVehicle, one row per loaded trip,    */
+/* so its total equals the Freight difference on the Performance report.*/
+/* ------------------------------------------------------------------ */
+
+export type FreightDiffRow = {
+  lrNumbers: string[];
+  vehicleNumber: string;
+  tripDate: Date | null;
+  onwardPaise: bigint;
+  /** Null when any LR on the trip has no booking amount yet. */
+  bookingPaise: bigint | null;
+  diffPaise: bigint | null;
+};
+
+export async function loadFreightDiffRows(
+  from: string,
+  to: string,
+): Promise<FreightDiffRow[]> {
+  const slips = await db.logSlip.findMany({
+    where: {
+      postedJournalEntryId: { not: null },
+      logSlipDate: {
+        gte: monthBounds(from).start,
+        lt: monthBounds(to).endExclusive,
+      },
+      vehicle: { ownershipType: "Own_Vehicle" },
+    },
+    select: { journeyId: true },
+  });
+  if (!slips.length) return [];
+
+  const trips = await db.vehicleTrip.findMany({
+    where: {
+      journeyId: { in: slips.map((s) => s.journeyId) },
+      deletedAt: null,
+      status: { not: "Cancelled" },
+      primaryGroups: { some: { deletedAt: null } },
+    },
+    select: {
+      onwardFreight: true,
+      startDateTime: true,
+      vehicle: { select: { vehicleNumber: true } },
+      primaryGroups: {
+        where: { deletedAt: null },
+        select: {
+          baseFreightAmount: true,
+          lorryReceipts: {
+            where: { deletedAt: null },
+            select: { lrNumber: true },
+          },
+        },
+      },
+    },
+    orderBy: [{ startDateTime: "asc" }],
+  });
+
+  return trips.map((trip) => {
+    const missing = trip.primaryGroups.some((g) => g.baseFreightAmount === null);
+    const booking = missing
+      ? null
+      : trip.primaryGroups.reduce((s, g) => s + (g.baseFreightAmount ?? 0n), 0n);
+    return {
+      lrNumbers: [
+        ...new Set(
+          trip.primaryGroups.flatMap((g) => g.lorryReceipts.map((lr) => lr.lrNumber)),
+        ),
+      ].sort(),
+      vehicleNumber: trip.vehicle.vehicleNumber,
+      tripDate: trip.startDateTime,
+      onwardPaise: trip.onwardFreight,
+      bookingPaise: booking,
+      diffPaise: booking === null ? null : booking - trip.onwardFreight,
+    };
+  });
+}

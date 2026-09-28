@@ -151,6 +151,19 @@ export const vehicleCostApi = {
     });
     return res.data;
   },
+
+  /** Printable LR-wise freight difference for the same period. */
+  freightDiffPdf: async (
+    from: string,
+    to: string,
+    withLetterhead: boolean,
+  ): Promise<Blob> => {
+    const res = await api.get("/log-slips/vehicle-pnl/monthly/freight-diff/pdf", {
+      params: { from, to, letterhead: withLetterhead },
+      responseType: "blob",
+    });
+    return res.data;
+  },
 };
 
 /** "2026-08" for today, in local time — the default month for the pages. */

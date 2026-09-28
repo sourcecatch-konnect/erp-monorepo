@@ -8,6 +8,7 @@ import {
     IconChevronRight,
     IconDownload,
     IconTrophy,
+    IconArrowUpRight
 } from "@tabler/icons-react";
 
 import { Button } from "@skerp/ui/components/button";
@@ -43,8 +44,8 @@ import { ReportPrintMenu } from "./ReportPrintMenu";
 const shortDate = (value: string | null) =>
     value
         ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "2-digit" }).format(
-              new Date(value),
-          )
+            new Date(value),
+        )
         : "—";
 
 const monthTitle = (month: string) => {
@@ -679,6 +680,21 @@ export default function VehiclePnlMonthlyPage() {
                             from === to
                                 ? `vehicle-sheet-${from}`
                                 : `vehicle-sheet-${from}_to_${to}`
+                        }
+                    />
+                    <ReportPrintMenu
+                        label="Freight difference"
+                        disabled={!data || !validRange}
+                        downloadPdf={(withLetterhead) =>
+                            vehicleCostApi.freightDiffPdf(from, to, withLetterhead)
+                        }
+                        previewPath={(withLetterhead) =>
+                            `/log-slips/vehicle-pnl/monthly/freight-diff/print-preview?from=${from}&to=${to}&letterhead=${withLetterhead}`
+                        }
+                        fileName={
+                            from === to
+                                ? `freight-difference-${from}`
+                                : `freight-difference-${from}_to_${to}`
                         }
                     />
                 </div>

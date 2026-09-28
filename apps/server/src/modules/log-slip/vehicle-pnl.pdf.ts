@@ -1,6 +1,7 @@
 import path from "node:path";
 import { imageToBase64Src } from "../_shared/pdf.helper.js";
 import type {
+  FreightDiffRow,
   MonthlyPnlResult,
   SheetLeg,
   SheetSlip,
@@ -614,5 +615,78 @@ export function buildVehicleSheetPdfHtml(
     landscape: true,
     withLetterhead,
     body,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Freight difference, LR-wise (portrait) — booking billed on each      */
+/* trip's LRs against the onward freight credited to the vehicle.       */
+/* ------------------------------------------------------------------ */
+
+export function buildFreightDiffPdfHtml(
+  rows: FreightDiffRow[],
+  period: { from: string; to: string },
+  options?: PdfOptions,
+) {
+  const withLetterhead = options?.withLetterhead ?? true;
+  const label = performancePeriodLabel(period.from, period.to);
+  const counted = rows.filter((r) => r.bookingPaise !== null);
+  const missing = rows.length - counted.length;
+  const sum = (pick: (r: FreightDiffRow) => bigint) =>
+    counted.reduce((s, r) => s + pick(r), 0n);
+  const onward = sum((r) => r.onwardPaise);
+  const booking = sum((r) => r.bookingPaise ?? 0n);
+  const diff = sum((r) => r.diffPaise ?? 0n);
+
+  const body = rows
+    .map(
+      (r, i) => `<tr>
+        <td class="num">${i + 1}</td>
+        <td>${esc(r.lrNumbers.join(", ") || "—")}</td>
+        <td>${esc(r.vehicleNumber)}</td>
+        <td>${esc(dateText(r.tripDate))}</td>
+        <td class="num">${money(r.onwardPaise)}</td>
+        <td class="num">${r.bookingPaise === null ? `<span class="warn">missing</span>` : money(r.bookingPaise)}</td>
+        <td class="num ${r.diffPaise === null ? "" : tone(r.diffPaise)}"><strong>${r.diffPaise === null ? "—" : money(r.diffPaise)}</strong></td>
+      </tr>`,
+    )
+    .join("");
+
+  const html = `
+    <div class="title-row">
+      <div>
+        <div class="doc-title"><span>FREIGHT DIFFERENCE</span></div>
+        <div class="muted">Booking freight billed on the LRs − onward freight credited to the vehicle · own vehicles</div>
+      </div>
+      <div class="meta"><strong>${esc(label)}</strong><br />${rows.length} trips</div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th class="num">Sr</th><th>L.R. No.</th><th>Vehicle</th><th>Trip date</th>
+        <th class="num">Onward Freight</th><th class="num">Booking Amount</th><th class="num">Difference</th>
+      </tr></thead>
+      <tbody>
+        ${body || `<tr><td colspan="7" class="muted">No loaded trips with LRs in this period.</td></tr>`}
+        <tr class="total">
+          <td></td><td colspan="3">Total${missing > 0 ? " (trips with a booking amount)" : ""}</td>
+          <td class="num">${money(onward)}</td>
+          <td class="num">${money(booking)}</td>
+          <td class="num ${tone(diff)}">${money(diff)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      One row per loaded trip; a trip carrying several LRs shows them together, since the vehicle's onward freight is for the whole trip.
+      Trips from posted Log Slips in the period, the same as the Vehicle Performance report — this total equals its Freight difference.
+      ${missing > 0 ? `<br /><span class="warn">${missing} trip(s) marked "missing" have an LR with no booking amount and are left out of the total — enter the booking amount on the LR.</span>` : ""}
+    </div>
+    ${signatures}`;
+
+  return shell({
+    title: `Freight Difference ${label}`,
+    landscape: false,
+    withLetterhead,
+    body: html,
   });
 }

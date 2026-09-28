@@ -18,12 +18,14 @@ import {
 import { computeVehiclePnl } from "./vehicle-pnl.service.js";
 import {
   computeMonthlyVehiclePnl,
+  loadFreightDiffRows,
   loadSheetSlips,
   MAX_PERIOD_MONTHS,
   monthRange,
 } from "./vehicle-pnl-monthly.service.js";
 import { MONTH_RE } from "../vehicle-cost/vehicle-cost.service.js";
 import {
+  buildFreightDiffPdfHtml,
   buildVehicleDetailPdfHtml,
   buildVehiclePerformancePdfHtml,
   buildVehicleSheetPdfHtml,
@@ -214,6 +216,33 @@ router.get(
   "/vehicle-pnl/monthly/sheet/print-preview",
   can(PERMS.LOGSLIP.VIEW),
   async (req, res) => sendPreview(res, (await vehicleSheetHtml(req)).html),
+);
+
+/* Freight difference, LR-wise — its total equals the report's card. */
+const freightDiffHtml = async (req: Request) => {
+  const { from, to } = parseMonthRange(req);
+  const rows = await loadFreightDiffRows(from, to);
+  return {
+    html: buildFreightDiffPdfHtml(rows, { from, to }, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `freight-difference-${from === to ? from : `${from}_to_${to}`}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get(
+  "/vehicle-pnl/monthly/freight-diff/pdf",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => {
+    const { html, fileName } = await freightDiffHtml(req);
+    return sendPdf(res, html, fileName);
+  },
+);
+
+router.get(
+  "/vehicle-pnl/monthly/freight-diff/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await freightDiffHtml(req)).html),
 );
 
 // Totals across every matching vehicle (not just the current page) for the
