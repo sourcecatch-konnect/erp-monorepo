@@ -105,7 +105,8 @@ export type VehiclePnlRow = {
    *  close (not the Log Slip date — a slip posted weeks late would otherwise
    *  stretch the period and make the truck look idle). */
   periodDays: number;
-  /** Journey days that fall inside the period — used for utilisation. */
+  /** Running days counted in the period (by Log Slip date, like the money),
+   *  capped at periodDays — used for utilisation. */
   daysInPeriod: number;
   utilisationPct: number | null;
 
@@ -155,8 +156,6 @@ type Acc = {
   runningDays: number;
   firstStart: Date;
   lastEnd: Date;
-  /** Each journey's start and end, to count the days inside the period. */
-  spans: { start: Date; end: Date }[];
   journeys: VehiclePnlJourneyRow[];
   months: Map<string, VehiclePnlMonth>;
 };
@@ -323,7 +322,6 @@ export async function computeVehiclePnl(
         runningDays: 0,
         firstStart: slip.journey.startedAt,
         lastEnd: journeyEnd,
-        spans: [],
         journeys: [],
         months: new Map(),
       };
@@ -340,7 +338,6 @@ export async function computeVehiclePnl(
     if (slip.journey.startedAt < acc.firstStart)
       acc.firstStart = slip.journey.startedAt;
     if (journeyEnd > acc.lastEnd) acc.lastEnd = journeyEnd;
-    acc.spans.push({ start: slip.journey.startedAt, end: journeyEnd });
     acc.journeys.push(journeyRow);
 
     const key = monthKey(slip.logSlipDate);
@@ -421,16 +418,12 @@ export async function computeVehiclePnl(
     const periodStart = filters.from ?? acc.firstStart;
     const periodEnd = filters.to ?? acc.lastEnd;
     const periodDays = Math.max(1, daysBetween(periodStart, periodEnd));
-    // Only the part of each journey inside the period — a journey that began
-    // before From would otherwise give e.g. 31 running days in a 30-day month.
-    const daysInPeriod = Math.min(
-      periodDays,
-      acc.spans.reduce((sum, span) => {
-        const start = span.start > periodStart ? span.start : periodStart;
-        const end = span.end < periodEnd ? span.end : periodEnd;
-        return end > start ? sum + Math.max(1, daysBetween(start, end)) : sum;
-      }, 0),
-    );
+    // A journey's days belong to the same period as its money (the Log Slip
+    // date), like the Days column on Vehicle Performance — counting by the
+    // journey's own dates instead would show a late-posted trip as profit in
+    // a month where the truck looks idle. Capped so a journey that began
+    // before From can't give e.g. 31 days in a 30-day month.
+    const daysInPeriod = Math.min(periodDays, acc.runningDays);
 
     return {
       vehicleId: acc.vehicleId,
