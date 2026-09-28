@@ -1,6 +1,13 @@
 import { Prisma } from "../../../../generated/prisma/index.js";
 import { db } from "../../../../prisma/prisma.js";
 import { BadRequestError } from "../../../lib/error.js";
+import { claimedAmong } from "./claims.js";
+import {
+  afterPosition,
+  decodeCursor,
+  pageMerged,
+  type StreamPage,
+} from "./eligible-stream.js";
 
 type DbClient = typeof db | Prisma.TransactionClient;
 
@@ -37,6 +44,7 @@ export type EligibleTransporterLR = {
 
 const lrSelect = {
   id: true,
+  createdAt: true,
   lrNumber: true,
   groupId: true,
   group: {
@@ -75,23 +83,6 @@ const toEligible = (lr: LrRow): EligibleTransporterLR => ({
   stationeryPaise: 0n,
 });
 
-/** Active LR source ids already claimed by *some other* slip — a draft's own
- *  current lines never block its own re-save (excludeSlipId). */
-async function claimedLrIds(
-  client: DbClient,
-  excludeSlipId?: string,
-): Promise<Set<string>> {
-  const claims = await client.vendorPaymentSlipLine.findMany({
-    where: {
-      sourceType: "LR",
-      isActive: true,
-      ...(excludeSlipId ? { slipId: { not: excludeSlipId } } : {}),
-    },
-    select: { sourceId: true },
-  });
-  return new Set(claims.map((c) => c.sourceId));
-}
-
 export type FindEligibleTransporterLRsParams = {
   transportId: string;
   /** `{ originBranchId }` for a chosen branch, or the caller's branch scope
@@ -99,47 +90,93 @@ export type FindEligibleTransporterLRsParams = {
   branchWhere?: Prisma.LRGroupWhereInput;
   from?: Date;
   to?: Date;
+  /** Matched in the database against LR no., LR-group no. and market vehicle no. */
+  search?: string;
+  /** `nextCursor` from the previous chunk; omit for the first chunk. */
+  cursor?: string;
+  size: number;
+};
+
+// A single stream — the rank only matters when several sources are merged.
+const LR_STREAM_RANK = 0;
+
+const eligibleLrWhere = (
+  params: FindEligibleTransporterLRsParams,
+): Prisma.LorryReceiptWhereInput => {
+  const search = params.search?.trim();
+  return {
+    status: { in: [...DELIVERED_LR_STATUSES] },
+    ...(params.from || params.to
+      ? {
+          delivery: {
+            deliveredAt: {
+              ...(params.from ? { gte: params.from } : {}),
+              ...(params.to ? { lte: params.to } : {}),
+            },
+          },
+        }
+      : {}),
+    group: {
+      is: {
+        isMarketVehicle: true,
+        marketTransportId: params.transportId,
+        ...params.branchWhere,
+      },
+    },
+    ...(search
+      ? {
+          OR: [
+            { lrNumber: { contains: search, mode: "insensitive" } },
+            { group: { is: { groupNumber: { contains: search, mode: "insensitive" } } } },
+            {
+              group: {
+                is: { marketVehicleNumber: { contains: search, mode: "insensitive" } },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
 };
 
 /**
  * Eligible = delivered market-vehicle LRs for this transporter, within
  * branch scope, that have no active vendor-payment-slip source reservation
- * yet. Feeds the create-slip screen's browse step.
+ * yet. Feeds the create-slip screen's browse step, one chunk at a time —
+ * there is no row cap; the caller pages on with `nextCursor`.
  */
 export async function findEligibleTransporterLRs(
   client: DbClient,
   params: FindEligibleTransporterLRsParams,
-): Promise<EligibleTransporterLR[]> {
-  const claimed = await claimedLrIds(client);
+): Promise<StreamPage<EligibleTransporterLR>> {
+  const base = eligibleLrWhere(params);
 
-  const lrs = await client.lorryReceipt.findMany({
-    where: {
-      status: { in: [...DELIVERED_LR_STATUSES] },
-      id: claimed.size ? { notIn: [...claimed] } : undefined,
-      ...(params.from || params.to
-        ? {
-            delivery: {
-              deliveredAt: {
-                ...(params.from ? { gte: params.from } : {}),
-                ...(params.to ? { lte: params.to } : {}),
-              },
-            },
-          }
-        : {}),
-      group: {
-        is: {
-          isMarketVehicle: true,
-          marketTransportId: params.transportId,
-          ...params.branchWhere,
+  const page = await pageMerged<LrRow>(
+    [
+      {
+        rank: LR_STREAM_RANK,
+        fetch: (after, take) =>
+          client.lorryReceipt.findMany({
+            where: { AND: [base, afterPosition(LR_STREAM_RANK, after)] },
+            select: lrSelect,
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take,
+          }),
+        dropClaimed: async (rows) => {
+          const claimed = await claimedAmong(
+            client,
+            ["LR"],
+            rows.map((row) => row.id),
+          );
+          return rows.filter((row) => !claimed.has(row.id));
         },
       },
-    },
-    select: lrSelect,
-    orderBy: { createdAt: "asc" },
-    take: 500,
-  });
+    ],
+    params.cursor ? decodeCursor(params.cursor) : null,
+    params.size,
+  );
 
-  return lrs.map(toEligible);
+  return { items: page.items.map(toEligible), nextCursor: page.nextCursor };
 }
 
 /**
@@ -160,7 +197,7 @@ export async function reconcileTransporterLines(
 ): Promise<Map<string, EligibleTransporterLR>> {
   if (sourceIds.length === 0) return new Map();
 
-  const claimed = await claimedLrIds(client, excludeSlipId);
+  const claimed = await claimedAmong(client, ["LR"], sourceIds, excludeSlipId);
   const conflicting = sourceIds.filter((id) => claimed.has(id));
   if (conflicting.length)
     throw new BadRequestError(

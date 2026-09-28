@@ -269,13 +269,18 @@ router.get(
       ? { originBranchId: input.branchId }
       : branchFilter(req, "originBranchId");
 
-    const eligible = await findEligibleTransporterLRs(db, {
+    // One chunk per request: `{ items, nextCursor }` — the client keeps asking
+    // with `nextCursor` while it is non-null (no row cap, no count).
+    const page = await findEligibleTransporterLRs(db, {
       transportId: input.transportId,
       branchWhere,
       from: input.from,
       to: input.to,
+      search: input.search,
+      cursor: input.cursor,
+      size: input.size,
     });
-    return sendOk(res, eligible);
+    return sendOk(res, page);
   },
 );
 
@@ -286,24 +291,26 @@ router.get(
     const input = validate(eligibleHamaliSourceQuerySchema.safeParse(req.query));
     if (input.branchId) assertBranchAccess(req, input.branchId);
 
-    const eligible = await findEligibleHamaliSources(db, {
+    // The three hamali source types don't share one queryable branch field,
+    // so the allowed branches (a chosen one, or the caller's scope) are passed
+    // down and applied inside each source's query — same rule branchFilter()
+    // applies. Filtering afterwards would drop rows from an already-sized chunk.
+    const branchIds = input.branchId
+      ? [input.branchId]
+      : !req.ctx || req.ctx.branchScope === "ALL"
+        ? undefined
+        : req.ctx.branchIds;
+
+    const page = await findEligibleHamaliSources(db, {
       labourId: input.labourId,
-      branchId: input.branchId,
+      branchIds,
       from: input.from,
       to: input.to,
+      search: input.search,
+      cursor: input.cursor,
+      size: input.size,
     });
-    // The three hamali source types don't share one queryable branch field
-    // (unlike LRGroup for the transporter calculator), so a chosen branchId
-    // is pushed into each sub-query above but the caller's *scope* (when no
-    // branchId was chosen) is enforced here instead, post-fetch — same rule
-    // branchFilter() applies, just against the mapped branchId on each row.
-    const scoped = input.branchId
-      ? eligible
-      : eligible.filter((s) => {
-          if (!req.ctx || req.ctx.branchScope === "ALL") return true;
-          return s.branchId !== null && req.ctx.branchIds.includes(s.branchId);
-        });
-    return sendOk(res, scoped);
+    return sendOk(res, page);
   },
 );
 
@@ -901,6 +908,33 @@ router.get("/slips", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {
     db.vendorPaymentSlip.count({ where }),
   ]);
   return sendOk(res, data, { page: query.page, size: query.size, total });
+});
+
+// Headline numbers for the register. Computed over every slip in the caller's
+// branch scope — not over whichever chunk of the list happens to be loaded.
+// Declared before `/slips/:id` so "summary" is never read as a slip id.
+router.get("/slips/summary", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {
+  const scope = branchFilter(req);
+  const [byStatus, payable] = await Promise.all([
+    db.vendorPaymentSlip.groupBy({
+      by: ["status"],
+      where: scope,
+      _count: { _all: true },
+    }),
+    db.vendorPaymentSlip.aggregate({
+      where: { ...scope, status: { in: ["APPROVED", "PARTIALLY_PAID"] } },
+      _sum: { netPayablePaise: true, paidPaise: true },
+    }),
+  ]);
+  const countOf = (status: string) =>
+    byStatus.find((row) => row.status === status)?._count._all ?? 0;
+
+  return sendOk(res, {
+    draftCount: countOf("DRAFT"),
+    pendingApprovalCount: countOf("PENDING_APPROVAL"),
+    outstandingPaise:
+      (payable._sum.netPayablePaise ?? 0n) - (payable._sum.paidPaise ?? 0n),
+  });
 });
 
 router.get("/slips/:id", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {

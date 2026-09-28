@@ -184,19 +184,45 @@ const listSlips = async (
   return unwrapListResponse(response);
 };
 
+/** One chunk of an eligible-source list. Ask for the next chunk with
+ *  `nextCursor` until it comes back null — there is no fixed cap or count. */
+export type EligibleChunk<T> = { items: T[]; nextCursor: string | null };
+
+type EligibleChunkFilters = {
+  branchId?: string;
+  from?: string;
+  to?: string;
+  /** Matched in the database, so it covers every eligible row — not just the
+   *  chunks already loaded. */
+  search?: string;
+  cursor?: string;
+  size?: number;
+};
+
+const chunkParams = ({ size, search, ...rest }: EligibleChunkFilters) => ({
+  ...rest,
+  search: search?.trim() || undefined,
+  size: size === undefined ? undefined : String(size),
+});
+
+export type VendorPaymentSlipSummary = {
+  draftCount: number;
+  pendingApprovalCount: number;
+  outstandingPaise: string;
+};
+
 export const vendorPaymentApi = {
-  eligibleTransporterLRs: (filters: {
-    transportId: string;
-    branchId?: string;
-    from?: string;
-    to?: string;
-  }) => get<EligibleTransporterLR[]>("/vendor-payment/calculators/transporter", filters),
-  eligibleHamaliSources: (filters: {
-    labourId: string;
-    branchId?: string;
-    from?: string;
-    to?: string;
-  }) => get<EligibleHamaliSource[]>("/vendor-payment/calculators/hamali", filters),
+  eligibleTransporterLRs: (filters: EligibleChunkFilters & { transportId: string }) =>
+    get<EligibleChunk<EligibleTransporterLR>>(
+      "/vendor-payment/calculators/transporter",
+      { ...chunkParams(filters), transportId: filters.transportId },
+    ),
+  eligibleHamaliSources: (filters: EligibleChunkFilters & { labourId: string }) =>
+    get<EligibleChunk<EligibleHamaliSource>>("/vendor-payment/calculators/hamali", {
+      ...chunkParams(filters),
+      labourId: filters.labourId,
+    }),
+  slipSummary: () => get<VendorPaymentSlipSummary>("/vendor-payment/slips/summary"),
   createSlip: (body: CreateVendorPaymentSlipBody) =>
     post<VendorPaymentSlip>("/vendor-payment/slips", body),
   updateSlip: (id: string, body: UpdateVendorPaymentSlipBody) =>

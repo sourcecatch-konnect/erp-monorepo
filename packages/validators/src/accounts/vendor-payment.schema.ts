@@ -59,11 +59,22 @@ export const vendorPaymentSlipListQuerySchema = z.object({
 /* Calculators — eligible source documents for a slip draft            */
 /* ------------------------------------------------------------------ */
 
+// The eligible-source lists are served in chunks: `size` rows per request, and
+// the opaque `cursor` from the previous response's `nextCursor` to continue.
+// `search` is matched in the database, so it covers every eligible row — not
+// just the chunks already loaded in the browser.
+const eligibleChunkParams = {
+  search: z.string().trim().max(120).optional(),
+  cursor: z.string().trim().max(400).optional(),
+  size: z.coerce.number().int().min(1).max(100).default(25),
+};
+
 export const eligibleTransporterLRQuerySchema = z.object({
   transportId: id,
   branchId: id.optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
+  ...eligibleChunkParams,
 });
 
 export const eligibleHamaliSourceQuerySchema = z.object({
@@ -71,6 +82,7 @@ export const eligibleHamaliSourceQuerySchema = z.object({
   branchId: id.optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
+  ...eligibleChunkParams,
 });
 
 /* ------------------------------------------------------------------ */

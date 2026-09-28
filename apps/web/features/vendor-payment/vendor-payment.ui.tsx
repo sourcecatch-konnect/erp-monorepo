@@ -1,5 +1,8 @@
 import * as React from "react";
 import { IconTruckDelivery } from "@tabler/icons-react";
+import { Button } from "@skerp/ui/components/button";
+import { Skeleton } from "@skerp/ui/components/skeleton";
+import { TableCell, TableRow } from "@skerp/ui/components/table";
 import { cn } from "@/lib/utils";
 import type { VendorPaymentStatus } from "./vendor-payment.service";
 
@@ -88,6 +91,65 @@ export function PageHeader({
         </div>
         {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
       </div>
+    </div>
+  );
+}
+
+/** Placeholder rows shown while the next chunk of a list is being fetched. */
+export function SkeletonTableRows({
+  columns,
+  rows = 3,
+}: {
+  columns: number;
+  rows?: number;
+}) {
+  return (
+    <>
+      {Array.from({ length: rows }, (_, row) => (
+        <TableRow key={`skeleton-${row}`}>
+          {Array.from({ length: columns }, (_, column) => (
+            <TableCell key={column}>
+              <Skeleton className="h-4 w-full max-w-28" />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Footer for a chunk-loaded list. Pass `total` when the server reports one;
+ * lists that only know whether another chunk exists (the eligible-source
+ * lists) omit it.
+ */
+export function LoadMoreFooter({
+  shown,
+  total,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  shown: number;
+  total?: number;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between pt-4">
+      <p className="text-sm text-muted-foreground">
+        {total !== undefined
+          ? `Showing ${shown} of ${total}`
+          : hasNextPage
+            ? `${shown} loaded so far`
+            : `${shown} in total`}
+      </p>
+      {hasNextPage ? (
+        <Button variant="outline" onClick={onLoadMore} disabled={isFetchingNextPage}>
+          Load more
+        </Button>
+      ) : null}
     </div>
   );
 }

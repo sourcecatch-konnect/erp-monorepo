@@ -1,15 +1,18 @@
 import { Prisma } from "../../../../generated/prisma/index.js";
 import { db } from "../../../../prisma/prisma.js";
 import { BadRequestError } from "../../../lib/error.js";
+import { claimedAmong } from "./claims.js";
+import {
+  afterPosition,
+  decodeCursor,
+  pageMerged,
+  type StreamPage,
+  type StreamSource,
+} from "./eligible-stream.js";
 
 type DbClient = typeof db | Prisma.TransactionClient;
 
 export type HamaliSourceType = "GRN_HAMALI" | "RAIL_BRANCH_GRN" | "VP_LOADING";
-const HAMALI_SOURCE_TYPES: readonly HamaliSourceType[] = [
-  "GRN_HAMALI",
-  "RAIL_BRANCH_GRN",
-  "VP_LOADING",
-];
 
 export type EligibleHamaliSource = {
   sourceType: HamaliSourceType;
@@ -25,170 +28,310 @@ export type EligibleHamaliSource = {
 
 export type FindEligibleHamaliSourcesParams = {
   labourId: string;
-  branchId?: string;
+  /** Branches the caller may see (a chosen branch, or their scope). `undefined`
+   *  means unrestricted; an empty list matches nothing. */
+  branchIds?: string[];
   from?: Date;
   to?: Date;
+  /** Matched in the database against the GRN no. / rake no. / gate no. */
+  search?: string;
+  /** `nextCursor` from the previous chunk; omit for the first chunk. */
+  cursor?: string;
+  size: number;
 };
 
-/** Active claims across all three hamali source types — a draft's own
- *  current lines never block its own re-save (excludeSlipId). */
-async function claimedSourceIds(
-  client: DbClient,
-  excludeSlipId?: string,
-): Promise<Set<string>> {
-  const claims = await client.vendorPaymentSlipLine.findMany({
-    where: {
-      sourceType: { in: [...HAMALI_SOURCE_TYPES] },
-      isActive: true,
-      ...(excludeSlipId ? { slipId: { not: excludeSlipId } } : {}),
-    },
-    select: { sourceId: true },
-  });
-  return new Set(claims.map((c) => c.sourceId));
-}
+// A candidate as the merge sees it: the eligible source plus the (id,
+// createdAt) key its stream is ordered by. `id` is the source record id, which
+// is unique across the three tables.
+type Candidate = EligibleHamaliSource & { id: string; createdAt: Date };
 
-const inDateRange = (date: Date | null, from?: Date, to?: Date): boolean => {
-  if (!from && !to) return true;
-  if (!date) return false;
-  if (from && date < from) return false;
-  if (to && date > to) return false;
-  return true;
+// Order in which sources win a tie on createdAt when merged.
+const RANK: Record<HamaliSourceType, number> = {
+  GRN_HAMALI: 0,
+  RAIL_BRANCH_GRN: 1,
+  VP_LOADING: 2,
 };
+
+const rangeOf = (from?: Date, to?: Date) => ({
+  ...(from ? { gte: from } : {}),
+  ...(to ? { lte: to } : {}),
+});
+
+const insensitive = (search: string) =>
+  ({ contains: search, mode: "insensitive" }) as const;
+
+/* Each source's "occurredAt" is COALESCE(first non-null of several columns),
+ * and the from/to filter applies to that value. Prisma can't filter on a
+ * COALESCE, so it is expressed as "the first non-null column is in range" —
+ * exactly equivalent, and evaluated in the database. */
+
+const grnFilters = (
+  params: FindEligibleHamaliSourcesParams,
+): Prisma.GRNWhereInput[] => {
+  const range = rangeOf(params.from, params.to);
+  const search = params.search?.trim();
+  return [
+    ...(params.from || params.to
+      ? [
+          {
+            OR: [
+              { outDateTime: range },
+              { outDateTime: null, inDateTime: range },
+              { outDateTime: null, inDateTime: null, createdAt: range },
+            ],
+          },
+        ]
+      : []),
+    ...(params.branchIds
+      ? [{ lorryReceipt: { group: { is: { originBranchId: { in: params.branchIds } } } } }]
+      : []),
+    ...(search ? [{ grnNumber: insensitive(search) }] : []),
+  ];
+};
+
+const railBranchFilters = (
+  params: FindEligibleHamaliSourcesParams,
+): Prisma.RailBranchGRNWhereInput[] => {
+  const range = rangeOf(params.from, params.to);
+  const search = params.search?.trim();
+  return [
+    ...(params.from || params.to
+      ? [
+          {
+            OR: [
+              { outDateTime: range },
+              { outDateTime: null, inDateTime: range },
+              { outDateTime: null, inDateTime: null, submittedAt: range },
+              {
+                outDateTime: null,
+                inDateTime: null,
+                submittedAt: null,
+                createdAt: range,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(params.branchIds ? [{ railRake: { toBranchId: { in: params.branchIds } } }] : []),
+    ...(search ? [{ railRake: { rakeNumber: insensitive(search) } }] : []),
+  ];
+};
+
+const vpLoadingFilters = (
+  params: FindEligibleHamaliSourcesParams,
+): Prisma.VPWagonLoadingWhereInput[] => {
+  const range = rangeOf(params.from, params.to);
+  const search = params.search?.trim();
+  return [
+    ...(params.from || params.to
+      ? [
+          {
+            OR: [
+              { loadingCompletedAt: range },
+              { loadingCompletedAt: null, loadingStartedAt: range },
+              { loadingCompletedAt: null, loadingStartedAt: null, createdAt: range },
+            ],
+          },
+        ]
+      : []),
+    ...(params.branchIds
+      ? [
+          {
+            mrRrRow: {
+              mrRr: { vpSchedule: { is: { fromBranchId: { in: params.branchIds } } } },
+            },
+          },
+        ]
+      : []),
+    ...(search ? [{ gateNo: insensitive(search) }] : []),
+  ];
+};
+
+const dropClaimedFor =
+  (client: DbClient, sourceType: HamaliSourceType) =>
+  async (rows: Candidate[]): Promise<Candidate[]> => {
+    const claimed = await claimedAmong(
+      client,
+      [sourceType],
+      rows.map((row) => row.id),
+    );
+    return rows.filter((row) => !claimed.has(row.id));
+  };
 
 /** Origin GRN hamali — GRN.labourCharge paid to GRN.labourId, branch-scoped
  *  via the LR's origin branch. Eligible once SUBMITTED. */
-async function fetchGrnHamali(
+const grnSource = (
   client: DbClient,
-  labourId: string,
-  branchId?: string,
-): Promise<EligibleHamaliSource[]> {
-  const rows = await client.gRN.findMany({
-    where: {
-      status: "SUBMITTED",
-      labourId,
-      labourCharge: { not: null },
-      deletedAt: null,
-      lorryReceipt: branchId
-        ? { group: { is: { originBranchId: branchId } } }
-        : undefined,
-    },
-    select: {
-      id: true,
-      grnNumber: true,
-      labourCharge: true,
-      outDateTime: true,
-      inDateTime: true,
-      createdAt: true,
-      lorryReceipt: {
-        select: { group: { select: { originBranchId: true } } },
+  params: FindEligibleHamaliSourcesParams,
+): StreamSource<Candidate> => ({
+  rank: RANK.GRN_HAMALI,
+  fetch: async (after, take) => {
+    const rows = await client.gRN.findMany({
+      where: {
+        AND: [
+          {
+            status: "SUBMITTED",
+            labourId: params.labourId,
+            labourCharge: { not: null },
+            deletedAt: null,
+          },
+          ...grnFilters(params),
+          afterPosition(RANK.GRN_HAMALI, after),
+        ],
       },
-    },
-    take: 500,
-  });
-  return rows.map((r) => ({
-    sourceType: "GRN_HAMALI" as const,
-    sourceId: r.id,
-    label: r.grnNumber,
-    branchId: r.lorryReceipt.group.originBranchId,
-    occurredAt: r.outDateTime ?? r.inDateTime ?? r.createdAt,
-    hamaliPaise: r.labourCharge ?? 0n,
-  }));
-}
+      select: {
+        id: true,
+        grnNumber: true,
+        labourCharge: true,
+        outDateTime: true,
+        inDateTime: true,
+        createdAt: true,
+        lorryReceipt: { select: { group: { select: { originBranchId: true } } } },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt,
+      sourceType: "GRN_HAMALI" as const,
+      sourceId: r.id,
+      label: r.grnNumber,
+      branchId: r.lorryReceipt.group.originBranchId,
+      occurredAt: r.outDateTime ?? r.inDateTime ?? r.createdAt,
+      hamaliPaise: r.labourCharge ?? 0n,
+    }));
+  },
+  dropClaimed: dropClaimedFor(client, "GRN_HAMALI"),
+});
 
 /** Rail Branch GRN labour charge — paid to labourLeaderId, branch-scoped via
  *  the rail rake's destination branch. Eligible once SUBMITTED. */
-async function fetchRailBranchGrn(
+const railBranchSource = (
   client: DbClient,
-  labourId: string,
-  branchId?: string,
-): Promise<EligibleHamaliSource[]> {
-  const rows = await client.railBranchGRN.findMany({
-    where: {
-      status: "SUBMITTED",
-      labourLeaderId: labourId,
-      labourCharge: { not: null },
-      railRake: branchId ? { toBranchId: branchId } : undefined,
-    },
-    select: {
-      id: true,
-      labourCharge: true,
-      outDateTime: true,
-      inDateTime: true,
-      submittedAt: true,
-      createdAt: true,
-      railRake: { select: { rakeNumber: true, toBranchId: true } },
-    },
-    take: 500,
-  });
-  return rows.map((r) => ({
-    sourceType: "RAIL_BRANCH_GRN" as const,
-    sourceId: r.id,
-    label: `Rake ${r.railRake.rakeNumber}`,
-    branchId: r.railRake.toBranchId,
-    occurredAt: r.outDateTime ?? r.inDateTime ?? r.submittedAt ?? r.createdAt,
-    hamaliPaise: r.labourCharge ?? 0n,
-  }));
-}
+  params: FindEligibleHamaliSourcesParams,
+): StreamSource<Candidate> => ({
+  rank: RANK.RAIL_BRANCH_GRN,
+  fetch: async (after, take) => {
+    const rows = await client.railBranchGRN.findMany({
+      where: {
+        AND: [
+          {
+            status: "SUBMITTED",
+            labourLeaderId: params.labourId,
+            labourCharge: { not: null },
+          },
+          ...railBranchFilters(params),
+          afterPosition(RANK.RAIL_BRANCH_GRN, after),
+        ],
+      },
+      select: {
+        id: true,
+        labourCharge: true,
+        outDateTime: true,
+        inDateTime: true,
+        submittedAt: true,
+        createdAt: true,
+        railRake: { select: { rakeNumber: true, toBranchId: true } },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt,
+      sourceType: "RAIL_BRANCH_GRN" as const,
+      sourceId: r.id,
+      label: `Rake ${r.railRake.rakeNumber}`,
+      branchId: r.railRake.toBranchId,
+      occurredAt: r.outDateTime ?? r.inDateTime ?? r.submittedAt ?? r.createdAt,
+      hamaliPaise: r.labourCharge ?? 0n,
+    }));
+  },
+  dropClaimed: dropClaimedFor(client, "RAIL_BRANCH_GRN"),
+});
 
 /** VP Wagon Loading labour charge — paid to labourId, branch-scoped via the
  *  loading VP schedule's origin branch. Eligible once COMPLETED or VERIFIED. */
-async function fetchVpWagonLoading(
+const vpLoadingSource = (
   client: DbClient,
-  labourId: string,
-  branchId?: string,
-): Promise<EligibleHamaliSource[]> {
-  const rows = await client.vPWagonLoading.findMany({
-    where: {
-      status: { in: ["COMPLETED", "VERIFIED"] },
-      labourId,
-      labourCharge: { not: null },
-      mrRrRow: branchId
-        ? { mrRr: { vpSchedule: { is: { fromBranchId: branchId } } } }
-        : undefined,
-    },
-    select: {
-      id: true,
-      gateNo: true,
-      labourCharge: true,
-      loadingCompletedAt: true,
-      loadingStartedAt: true,
-      createdAt: true,
-      mrRrRow: {
-        select: { mrRr: { select: { vpSchedule: { select: { fromBranchId: true } } } } },
+  params: FindEligibleHamaliSourcesParams,
+): StreamSource<Candidate> => ({
+  rank: RANK.VP_LOADING,
+  fetch: async (after, take) => {
+    const rows = await client.vPWagonLoading.findMany({
+      where: {
+        AND: [
+          {
+            status: { in: ["COMPLETED", "VERIFIED"] },
+            labourId: params.labourId,
+            labourCharge: { not: null },
+          },
+          ...vpLoadingFilters(params),
+          afterPosition(RANK.VP_LOADING, after),
+        ],
       },
-    },
-    take: 500,
-  });
-  return rows.map((r) => ({
-    sourceType: "VP_LOADING" as const,
-    sourceId: r.id,
-    label: r.gateNo ? `Gate ${r.gateNo}` : r.id,
-    branchId: r.mrRrRow.mrRr.vpSchedule.fromBranchId,
-    occurredAt: r.loadingCompletedAt ?? r.loadingStartedAt ?? r.createdAt,
-    hamaliPaise: r.labourCharge ?? 0n,
-  }));
-}
+      select: {
+        id: true,
+        gateNo: true,
+        labourCharge: true,
+        loadingCompletedAt: true,
+        loadingStartedAt: true,
+        createdAt: true,
+        mrRrRow: {
+          select: { mrRr: { select: { vpSchedule: { select: { fromBranchId: true } } } } },
+        },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt,
+      sourceType: "VP_LOADING" as const,
+      sourceId: r.id,
+      label: r.gateNo ? `Gate ${r.gateNo}` : r.id,
+      branchId: r.mrRrRow.mrRr.vpSchedule.fromBranchId,
+      occurredAt: r.loadingCompletedAt ?? r.loadingStartedAt ?? r.createdAt,
+      hamaliPaise: r.labourCharge ?? 0n,
+    }));
+  },
+  dropClaimed: dropClaimedFor(client, "VP_LOADING"),
+});
 
 /**
  * Eligible = unreserved hamali amounts for this labour across all three
  * source types, branch-scoped, in range. Feeds the create-slip screen's
  * browse step — the three source types can be freely combined on one slip.
+ *
+ * Served one chunk at a time as a single merged stream (oldest record first);
+ * there is no row cap — the caller pages on with `nextCursor`.
  */
 export async function findEligibleHamaliSources(
   client: DbClient,
   params: FindEligibleHamaliSourcesParams,
-): Promise<EligibleHamaliSource[]> {
-  const claimed = await claimedSourceIds(client);
-  const [grn, railBranch, vpLoading] = await Promise.all([
-    fetchGrnHamali(client, params.labourId, params.branchId),
-    fetchRailBranchGrn(client, params.labourId, params.branchId),
-    fetchVpWagonLoading(client, params.labourId, params.branchId),
-  ]);
+): Promise<StreamPage<EligibleHamaliSource>> {
+  const page = await pageMerged<Candidate>(
+    [
+      grnSource(client, params),
+      railBranchSource(client, params),
+      vpLoadingSource(client, params),
+    ],
+    params.cursor ? decodeCursor(params.cursor) : null,
+    params.size,
+  );
 
-  return [...grn, ...railBranch, ...vpLoading]
-    .filter((s) => !claimed.has(s.sourceId))
-    .filter((s) => inDateRange(s.occurredAt, params.from, params.to))
-    .sort((a, b) => (a.occurredAt?.getTime() ?? 0) - (b.occurredAt?.getTime() ?? 0));
+  return {
+    items: page.items.map((candidate) => ({
+      sourceType: candidate.sourceType,
+      sourceId: candidate.sourceId,
+      label: candidate.label,
+      branchId: candidate.branchId,
+      occurredAt: candidate.occurredAt,
+      hamaliPaise: candidate.hamaliPaise,
+    })),
+    nextCursor: page.nextCursor,
+  };
 }
 
 /**
@@ -206,7 +349,12 @@ export async function reconcileHamaliLines(
 ): Promise<Map<string, bigint>> {
   if (refs.length === 0) return new Map();
 
-  const claimed = await claimedSourceIds(client, excludeSlipId);
+  const claimed = await claimedAmong(
+    client,
+    ["GRN_HAMALI", "RAIL_BRANCH_GRN", "VP_LOADING"],
+    refs.map((r) => r.sourceId),
+    excludeSlipId,
+  );
   const conflicting = refs.filter((r) => claimed.has(r.sourceId));
   if (conflicting.length)
     throw new BadRequestError(

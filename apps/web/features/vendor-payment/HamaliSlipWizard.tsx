@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconAlertTriangle, IconUsers } from "@tabler/icons-react";
 
@@ -37,7 +37,17 @@ import {
   type EligibleHamaliSource,
   type HamaliSourceType,
 } from "./vendor-payment.service";
-import { Field, StepHeading, money, today } from "./vendor-payment.ui";
+import {
+  Field,
+  LoadMoreFooter,
+  SkeletonTableRows,
+  StepHeading,
+  money,
+  today,
+} from "./vendor-payment.ui";
+
+// Eligible sources are fetched a chunk at a time — never the whole set.
+const ELIGIBLE_CHUNK_SIZE = 25;
 
 const SOURCE_TYPE_LABELS: Record<HamaliSourceType, string> = {
   GRN_HAMALI: "Origin GRN",
@@ -64,8 +74,15 @@ export function HamaliSlipWizard() {
   const [to, setTo] = React.useState(today());
   const [searched, setSearched] = React.useState(false);
   const [tdsPct, setTdsPct] = React.useState("2");
+  const [sourceSearch, setSourceSearch] = React.useState("");
+  const debouncedSourceSearch = useDebouncedValue(sourceSearch.trim(), 400);
 
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  // The selected source objects themselves — not just their keys — so a new
+  // search or another chunk (which changes the visible list) can never drop a
+  // selection or its amount.
+  const [selected, setSelected] = React.useState<Map<string, EligibleHamaliSource>>(
+    new Map(),
+  );
 
   const branches = useQuery({
     queryKey: ["vendor-payment", "branches"],
@@ -82,27 +99,43 @@ export function HamaliSlipWizard() {
     value: l.id,
   }));
 
-  const eligible = useQuery({
-    queryKey: ["vendor-payment", "eligible-hamali-sources", labourId, branchId, from, to],
-    queryFn: () =>
+  // Chunked, server-side: each request returns one chunk plus a cursor for the
+  // next, and the search term is matched in the database against every
+  // eligible source — not just the chunks already on screen.
+  const eligible = useInfiniteQuery({
+    queryKey: [
+      "vendor-payment",
+      "eligible-hamali-sources",
+      labourId,
+      branchId,
+      from,
+      to,
+      debouncedSourceSearch,
+    ],
+    queryFn: ({ pageParam }) =>
       vendorPaymentApi.eligibleHamaliSources({
         labourId,
         branchId: branchId || undefined,
         from: from || undefined,
         to: to || undefined,
+        search: debouncedSourceSearch || undefined,
+        cursor: pageParam,
+        size: ELIGIBLE_CHUNK_SIZE,
       }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    placeholderData: keepPreviousData,
     enabled: searched && Boolean(labourId),
   });
-  const sources = React.useMemo(() => eligible.data ?? [], [eligible.data]);
-  const sourceByKey = React.useMemo(
-    () => new Map(sources.map((s) => [sourceKey(s), s])),
-    [sources],
+  const sources = React.useMemo(
+    () => eligible.data?.pages.flatMap((page) => page.items) ?? [],
+    [eligible.data],
   );
 
   const toggleSource = (s: EligibleHamaliSource, checked: boolean) => {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(sourceKey(s));
+      const next = new Map(prev);
+      if (checked) next.set(sourceKey(s), s);
       else next.delete(sourceKey(s));
       return next;
     });
@@ -116,15 +149,13 @@ export function HamaliSlipWizard() {
   const totals = React.useMemo(() => {
     let gross = 0n;
     let tds = 0n;
-    for (const key of selected) {
-      const s = sourceByKey.get(key);
-      if (!s) continue;
+    for (const s of selected.values()) {
       const g = BigInt(s.hamaliPaise);
       gross += g;
       tds += roundPaiseByBps(g, BigInt(tdsRateBps));
     }
     return { gross, tds, net: gross - tds };
-  }, [selected, sourceByKey, tdsRateBps]);
+  }, [selected, tdsRateBps]);
 
   const canSave =
     selected.size > 0 && Boolean(branchId) && Boolean(labourId) && tdsRateBps >= 0 && tdsRateBps <= 10000;
@@ -134,21 +165,18 @@ export function HamaliSlipWizard() {
     branchId,
     labourId,
     tdsRateBps,
-    lines: [...selected].map((key) => {
-      const s = sourceByKey.get(key)!;
-      return {
-        sourceType: s.sourceType,
-        sourceId: s.sourceId,
-        freightPaise: "0",
-        detentionPaise: "0",
-        advancePaise: "0",
-        commissionPaise: "0",
-        hamaliPaise: s.hamaliPaise,
-        tdsPaise: "0",
-        damagePaise: "0",
-        stationeryPaise: "0",
-      };
-    }),
+    lines: [...selected.values()].map((s) => ({
+      sourceType: s.sourceType,
+      sourceId: s.sourceId,
+      freightPaise: "0",
+      detentionPaise: "0",
+      advancePaise: "0",
+      commissionPaise: "0",
+      hamaliPaise: s.hamaliPaise,
+      tdsPaise: "0",
+      damagePaise: "0",
+      stationeryPaise: "0",
+    })),
   });
 
   const saveDraft = useMutation({
@@ -241,27 +269,49 @@ export function HamaliSlipWizard() {
                 title="Select sources"
                 description="All three source types can be combined on one slip. Amounts are read from the source record — not editable here."
               />
-              {sources.length ? (
+              {selected.size ? (
                 <span className="rounded-sm border bg-background px-3 py-1 text-xs font-medium">
-                  {sources.length} eligible source{sources.length === 1 ? "" : "s"}
+                  {selected.size} selected
                 </span>
               ) : null}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Input
+              value={sourceSearch}
+              onChange={(event) => setSourceSearch(event.target.value)}
+              placeholder="Search by GRN no., rake no. or gate no..."
+              aria-label="Search eligible hamali sources"
+              className="sm:max-w-sm"
+            />
             {eligible.isLoading ? (
               <Skeleton className="h-40" />
+            ) : eligible.isError ? (
+              <div className="py-10 text-center">
+                <p className="font-medium">Could not load eligible hamali</p>
+                <Button variant="outline" className="mt-3" onClick={() => eligible.refetch()}>
+                  Try again
+                </Button>
+              </div>
             ) : !sources.length ? (
               <div className="py-10 text-center">
                 <span className="mx-auto flex size-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
                   <IconUsers size={20} />
                 </span>
-                <p className="mt-3 font-medium">No eligible hamali</p>
+                <p className="mt-3 font-medium">
+                  {debouncedSourceSearch ? "No matching sources" : "No eligible hamali"}
+                </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Nothing unclaimed for this labour in the selected range.
+                  {debouncedSourceSearch
+                    ? "No eligible source matches that GRN no., rake no. or gate no."
+                    : "Nothing unclaimed for this labour in the selected range."}
                 </p>
               </div>
             ) : (
+              <div
+                aria-busy={eligible.isPlaceholderData}
+                className={eligible.isPlaceholderData ? "opacity-60" : undefined}
+              >
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -300,8 +350,16 @@ export function HamaliSlipWizard() {
                         </TableRow>
                       );
                     })}
+                    {eligible.isFetchingNextPage ? <SkeletonTableRows columns={5} /> : null}
                   </TableBody>
                 </Table>
+              </div>
+              <LoadMoreFooter
+                shown={sources.length}
+                hasNextPage={Boolean(eligible.hasNextPage)}
+                isFetchingNextPage={eligible.isFetchingNextPage}
+                onLoadMore={() => eligible.fetchNextPage()}
+              />
               </div>
             )}
           </CardContent>

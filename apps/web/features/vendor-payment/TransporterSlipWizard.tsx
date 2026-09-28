@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconAlertTriangle, IconTruck } from "@tabler/icons-react";
 
@@ -36,7 +36,18 @@ import {
   vendorPaymentApi,
   type EligibleTransporterLR,
 } from "./vendor-payment.service";
-import { Field, StepHeading, money, rupeesToPaise, today } from "./vendor-payment.ui";
+import {
+  Field,
+  LoadMoreFooter,
+  SkeletonTableRows,
+  StepHeading,
+  money,
+  rupeesToPaise,
+  today,
+} from "./vendor-payment.ui";
+
+// Eligible LRs are fetched a chunk at a time — never the whole set.
+const ELIGIBLE_CHUNK_SIZE = 25;
 
 type LineDraft = {
   freight: string;
@@ -91,6 +102,8 @@ export function TransporterSlipWizard() {
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState(today());
   const [searched, setSearched] = React.useState(false);
+  const [lrSearch, setLrSearch] = React.useState("");
+  const debouncedLrSearch = useDebouncedValue(lrSearch.trim(), 400);
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [lines, setLines] = React.useState<Record<string, LineDraft>>({});
@@ -113,18 +126,40 @@ export function TransporterSlipWizard() {
     (t) => ({ label: t.name, value: t.id }),
   );
 
-  const eligible = useQuery({
-    queryKey: ["vendor-payment", "eligible-transporter-lrs", transportId, branchId, from, to],
-    queryFn: () =>
+  // Chunked, server-side: each request returns one chunk plus a cursor for the
+  // next, and the search term is matched in the database against every
+  // eligible LR — not just the chunks already on screen. Selected LRs and
+  // their amounts live in `selected`/`lines`, so changing the search or
+  // loading more never drops a selection.
+  const eligible = useInfiniteQuery({
+    queryKey: [
+      "vendor-payment",
+      "eligible-transporter-lrs",
+      transportId,
+      branchId,
+      from,
+      to,
+      debouncedLrSearch,
+    ],
+    queryFn: ({ pageParam }) =>
       vendorPaymentApi.eligibleTransporterLRs({
         transportId,
         branchId: branchId || undefined,
         from: from || undefined,
         to: to || undefined,
+        search: debouncedLrSearch || undefined,
+        cursor: pageParam,
+        size: ELIGIBLE_CHUNK_SIZE,
       }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    placeholderData: keepPreviousData,
     enabled: searched && Boolean(transportId),
   });
-  const lrs = eligible.data ?? [];
+  const lrs = React.useMemo(
+    () => eligible.data?.pages.flatMap((page) => page.items) ?? [],
+    [eligible.data],
+  );
 
   const toLineDraft = (lr: EligibleTransporterLR): LineDraft => ({
     freight: (Number(BigInt(lr.freightPaise)) / 100).toFixed(2),
@@ -294,28 +329,50 @@ export function TransporterSlipWizard() {
                 title="Select LRs and confirm amounts"
                 description="Delivered LRs for this transporter with no active claim. Amounts are prefilled from the LR group's market-vehicle figures and the acknowledgement — adjust as needed."
               />
-              {lrs.length ? (
+              {selected.size ? (
                 <span className="rounded-sm border bg-background px-3 py-1 text-xs font-medium">
-                  {lrs.length} eligible LR{lrs.length === 1 ? "" : "s"}
+                  {selected.size} selected
                 </span>
               ) : null}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Input
+              value={lrSearch}
+              onChange={(event) => setLrSearch(event.target.value)}
+              placeholder="Search by LR no., group no. or vehicle no..."
+              aria-label="Search eligible LRs"
+              className="sm:max-w-sm"
+            />
             {eligible.isLoading ? (
               <Skeleton className="h-40" />
+            ) : eligible.isError ? (
+              <div className="py-10 text-center">
+                <p className="font-medium">Could not load eligible LRs</p>
+                <Button variant="outline" className="mt-3" onClick={() => eligible.refetch()}>
+                  Try again
+                </Button>
+              </div>
             ) : !lrs.length ? (
               <div className="py-10 text-center">
                 <span className="mx-auto flex size-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
                   <IconTruck size={20} />
                 </span>
-                <p className="mt-3 font-medium">No eligible LRs</p>
+                <p className="mt-3 font-medium">
+                  {debouncedLrSearch ? "No matching LRs" : "No eligible LRs"}
+                </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Nothing delivered and unclaimed for this transporter in the selected range.
+                  {debouncedLrSearch
+                    ? "No eligible LR matches that LR no., group no. or vehicle no."
+                    : "Nothing delivered and unclaimed for this transporter in the selected range."}
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div
+                aria-busy={eligible.isPlaceholderData}
+                className={eligible.isPlaceholderData ? "opacity-60" : undefined}
+              >
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -424,8 +481,16 @@ export function TransporterSlipWizard() {
                         </TableRow>
                       );
                     })}
+                    {eligible.isFetchingNextPage ? <SkeletonTableRows columns={12} /> : null}
                   </TableBody>
                 </Table>
+                </div>
+                <LoadMoreFooter
+                  shown={lrs.length}
+                  hasNextPage={Boolean(eligible.hasNextPage)}
+                  isFetchingNextPage={eligible.isFetchingNextPage}
+                  onLoadMore={() => eligible.fetchNextPage()}
+                />
               </div>
             )}
           </CardContent>
