@@ -366,6 +366,19 @@ export type VehiclePnlRow = {
   /** Null on the list; set on the detail page for an own vehicle. */
   fixedCostsPaise: string | null;
   trueProfitPaise: string | null;
+  /** Each Vehicle Costs line over the range; own vehicle, detail page only. */
+  costs: {
+    taxPaise: string;
+    insurancePaise: string;
+    permitPaise: string;
+    fitnessPaise: string;
+    emiPaise: string;
+    salaryPaise: string;
+    tyrePaise: string;
+    otherPaise: string;
+  } | null;
+  /** Booking vs onward freight on loaded trips; detail page only. */
+  freightDiff: { booking: string; diff: string; missing: number } | null;
   marginPct: number | null;
   revenuePerKmPaise: string | null;
   costPerKmPaise: string | null;
@@ -377,6 +390,8 @@ export type VehiclePnlRow = {
   emptyPct: number | null;
   runningDays: number;
   periodDays: number;
+  /** Journey days inside the period — the utilisation numerator. */
+  daysInPeriod: number;
   utilisationPct: number | null;
   monthly: VehiclePnlMonth[];
   journeys: VehiclePnlJourneyRow[];

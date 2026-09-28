@@ -2,8 +2,13 @@ import { db } from "../../../prisma/prisma.js";
 import {
   costsForVehicleMonths,
   totalMonthlyCosts,
+  type MonthlyCosts,
 } from "../vehicle-cost/vehicle-cost.service.js";
-import { monthRange } from "./vehicle-pnl-monthly.service.js";
+import {
+  freightDiffByVehicle,
+  monthRange,
+  type FreightDiff,
+} from "./vehicle-pnl-monthly.service.js";
 
 /* ------------------------------------------------------------------ */
 /* Vehicle P&L — rolls up every POSTED Log Slip per vehicle            */
@@ -77,6 +82,12 @@ export type VehiclePnlRow = {
    *  worked out for a single own vehicle (the detail page); null otherwise. */
   fixedCostsPaise: bigint | null;
   trueProfitPaise: bigint | null;
+  /** Each Vehicle Costs line summed over the months in range (same rule as
+   *  fixedCostsPaise); null unless a single own vehicle. */
+  costs: MonthlyCosts | null;
+  /** Booking vs onward freight on the loaded trips (see freightDiffByVehicle);
+   *  null unless the report was run for a single vehicle. */
+  freightDiff: FreightDiff | null;
   /** profitAfterRepairs ÷ freight × 100; null when there is no freight. */
   marginPct: number | null;
   revenuePerKmPaise: bigint | null;
@@ -88,8 +99,14 @@ export type VehiclePnlRow = {
   loadedKm: number;
   emptyKm: number;
   emptyPct: number | null;
+  /** Full length of the journeys (Log Slip days) — used for profit per day. */
   runningDays: number;
+  /** Period: the From–To filter, else first journey start to last journey
+   *  close (not the Log Slip date — a slip posted weeks late would otherwise
+   *  stretch the period and make the truck look idle). */
   periodDays: number;
+  /** Journey days that fall inside the period — used for utilisation. */
+  daysInPeriod: number;
   utilisationPct: number | null;
 
   monthly: VehiclePnlMonth[];
@@ -137,10 +154,16 @@ type Acc = {
   dieselQty: number;
   runningDays: number;
   firstStart: Date;
-  lastSlipDate: Date;
+  lastEnd: Date;
+  /** Each journey's start and end, to count the days inside the period. */
+  spans: { start: Date; end: Date }[];
   journeys: VehiclePnlJourneyRow[];
   months: Map<string, VehiclePnlMonth>;
 };
+
+/** Days between two instants, rounded up the way Log Slip days are. */
+const daysBetween = (start: Date, end: Date) =>
+  Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY);
 
 const emptyMonth = (month: string): VehiclePnlMonth => ({
   month,
@@ -175,14 +198,40 @@ async function applyVehicleCosts(row: VehiclePnlRow, filters: VehiclePnlFilters)
   const byMonth = new Map(row.monthly.map((m) => [m.month, m]));
 
   let fixedTotal = 0n;
+  const lines: MonthlyCosts = {
+    taxPaise: 0n,
+    insurancePaise: 0n,
+    permitPaise: 0n,
+    fitnessPaise: 0n,
+    emiPaise: 0n,
+    salaryPaise: 0n,
+    tyrePaise: 0n,
+    otherPaise: 0n,
+  };
   row.monthly = months.map((key) => {
     const m = byMonth.get(key) ?? emptyMonth(key);
-    const fixed = totalMonthlyCosts(costs.get(key)!);
+    const monthCosts = costs.get(key)!;
+    for (const k of Object.keys(lines) as (keyof MonthlyCosts)[])
+      lines[k] += monthCosts[k];
+    const fixed = totalMonthlyCosts(monthCosts);
     fixedTotal += fixed;
     return { ...m, fixedCostsPaise: fixed, trueProfitPaise: m.profitPaise - fixed };
   });
+  row.costs = lines;
   row.fixedCostsPaise = fixedTotal;
-  row.trueProfitPaise = row.profitAfterRepairsPaise - fixedTotal;
+  const trueProfit = row.profitAfterRepairsPaise - fixedTotal;
+  row.trueProfitPaise = trueProfit;
+
+  // The detail page headlines true profit, so the margin and per-unit
+  // figures under it use true profit (and full cost) too.
+  row.marginPct = pct(Number(trueProfit), Number(row.totalFreightPaise));
+  row.costPerKmPaise = perUnit(
+    row.totalExpensePaise + row.repairsPaise + fixedTotal,
+    row.totalKm,
+  );
+  row.profitPerKmPaise = perUnit(trueProfit, row.totalKm);
+  row.profitPerJourneyPaise = perUnit(trueProfit, row.journeyCount);
+  row.profitPerDayPaise = perUnit(trueProfit, row.runningDays);
 }
 
 /**
@@ -192,9 +241,10 @@ async function applyVehicleCosts(row: VehiclePnlRow, filters: VehiclePnlFilters)
  * (see postLogSlipVoucher in posting.service.ts), so they're excluded here
  * the same way a bill in DRAFT never appears in the Debtor statement.
  *
- * Repairs come from FINALISED Job Cards (in-date within the range). Fixed
- * costs (EMI, insurance premium, permit/tax) are not tracked yet, so
- * `profitAfterRepairsPaise` is deliberately not called "net profit".
+ * Repairs come from FINALISED Job Cards (in-date within the range). The list
+ * leaves out Vehicle Costs (EMI, insurance, salary…), so
+ * `profitAfterRepairsPaise` is deliberately not called "net profit"; the
+ * detail page (single vehicle) adds them via applyVehicleCosts.
  * Sorted worst-first (profit after repairs ascending).
  */
 export async function computeVehiclePnl(
@@ -223,7 +273,9 @@ export async function computeVehiclePnl(
     select: {
       id: true,
       journeyId: true,
-      journey: { select: { journeyNumber: true, startedAt: true } },
+      journey: {
+        select: { journeyNumber: true, startedAt: true, closedAt: true },
+      },
       logSlipNumber: true,
       logSlipDate: true,
       vehicleId: true,
@@ -253,6 +305,9 @@ export async function computeVehiclePnl(
       netResultPaise: slip.netVehicleResultPaise,
     };
 
+    // A posted slip's journey is closed; fall back to the slip date just in case.
+    const journeyEnd = slip.journey.closedAt ?? slip.logSlipDate;
+
     let acc = byVehicle.get(slip.vehicleId);
     if (!acc) {
       acc = {
@@ -267,7 +322,8 @@ export async function computeVehiclePnl(
         dieselQty: 0,
         runningDays: 0,
         firstStart: slip.journey.startedAt,
-        lastSlipDate: slip.logSlipDate,
+        lastEnd: journeyEnd,
+        spans: [],
         journeys: [],
         months: new Map(),
       };
@@ -283,7 +339,8 @@ export async function computeVehiclePnl(
     acc.runningDays += slip.totalDays;
     if (slip.journey.startedAt < acc.firstStart)
       acc.firstStart = slip.journey.startedAt;
-    if (slip.logSlipDate > acc.lastSlipDate) acc.lastSlipDate = slip.logSlipDate;
+    if (journeyEnd > acc.lastEnd) acc.lastEnd = journeyEnd;
+    acc.spans.push({ start: slip.journey.startedAt, end: journeyEnd });
     acc.journeys.push(journeyRow);
 
     const key = monthKey(slip.logSlipDate);
@@ -362,10 +419,17 @@ export async function computeVehiclePnl(
     const km = kmByVehicle.get(acc.vehicleId) ?? { loaded: 0, empty: 0 };
 
     const periodStart = filters.from ?? acc.firstStart;
-    const periodEnd = filters.to ?? acc.lastSlipDate;
-    const periodDays = Math.max(
-      1,
-      Math.ceil((periodEnd.getTime() - periodStart.getTime()) / MS_PER_DAY),
+    const periodEnd = filters.to ?? acc.lastEnd;
+    const periodDays = Math.max(1, daysBetween(periodStart, periodEnd));
+    // Only the part of each journey inside the period — a journey that began
+    // before From would otherwise give e.g. 31 running days in a 30-day month.
+    const daysInPeriod = Math.min(
+      periodDays,
+      acc.spans.reduce((sum, span) => {
+        const start = span.start > periodStart ? span.start : periodStart;
+        const end = span.end < periodEnd ? span.end : periodEnd;
+        return end > start ? sum + Math.max(1, daysBetween(start, end)) : sum;
+      }, 0),
     );
 
     return {
@@ -385,6 +449,8 @@ export async function computeVehiclePnl(
       profitAfterRepairsPaise: profit,
       fixedCostsPaise: null,
       trueProfitPaise: null,
+      costs: null,
+      freightDiff: null,
       marginPct: pct(Number(profit), Number(acc.freight)),
       revenuePerKmPaise: perUnit(acc.freight, acc.totalKm),
       costPerKmPaise: perUnit(acc.expense + repairs, acc.totalKm),
@@ -397,7 +463,8 @@ export async function computeVehiclePnl(
       emptyPct: pct(km.empty, km.loaded + km.empty),
       runningDays: acc.runningDays,
       periodDays,
-      utilisationPct: Math.min(100, (acc.runningDays / periodDays) * 100),
+      daysInPeriod,
+      utilisationPct: (daysInPeriod / periodDays) * 100,
 
       monthly: [...acc.months.values()]
         .map((m) => {
@@ -409,8 +476,16 @@ export async function computeVehiclePnl(
     };
   });
 
-  if (filters.vehicleId && allRows.length === 1)
-    await applyVehicleCosts(allRows[0]!, filters);
+  if (filters.vehicleId && allRows.length === 1) {
+    const row = allRows[0]!;
+    row.freightDiff =
+      (await freightDiffByVehicle(journeyIds)).get(row.vehicleId) ?? {
+        booking: 0n,
+        diff: 0n,
+        missing: 0,
+      };
+    await applyVehicleCosts(row, filters);
+  }
 
   allRows.sort((a, b) =>
     a.profitAfterRepairsPaise < b.profitAfterRepairsPaise ? -1 : 1,

@@ -203,6 +203,55 @@ export async function computeMonthlyVehiclePnl(
   return { from, to, monthCount: months.length, rows, totals };
 }
 
+export type FreightDiff = { booking: bigint; diff: bigint; missing: number };
+
+/**
+ * Freight difference per vehicle over the given journeys: booking freight
+ * billed on each loaded trip's LRs minus the onward freight credited to the
+ * vehicle. Same trip filter as the journey's freight total. Only primary
+ * groups — a group's secondary leg would otherwise count its booking twice.
+ * A trip with any LR group lacking a booking amount is skipped and counted
+ * in `missing`, so a missing entry doesn't read as a loss.
+ */
+export async function freightDiffByVehicle(
+  journeyIds: string[],
+): Promise<Map<string, FreightDiff>> {
+  const trips = journeyIds.length
+    ? await db.vehicleTrip.findMany({
+        where: {
+          journeyId: { in: journeyIds },
+          deletedAt: null,
+          status: { not: "Cancelled" },
+          primaryGroups: { some: { deletedAt: null } },
+        },
+        select: {
+          vehicleId: true,
+          onwardFreight: true,
+          primaryGroups: {
+            where: { deletedAt: null },
+            select: { baseFreightAmount: true },
+          },
+        },
+      })
+    : [];
+  const byVehicle = new Map<string, FreightDiff>();
+  for (const trip of trips) {
+    const d = byVehicle.get(trip.vehicleId) ?? { booking: 0n, diff: 0n, missing: 0 };
+    if (trip.primaryGroups.some((g) => g.baseFreightAmount === null)) {
+      d.missing += 1;
+    } else {
+      const booking = trip.primaryGroups.reduce(
+        (s, g) => s + (g.baseFreightAmount ?? 0n),
+        0n,
+      );
+      d.booking += booking;
+      d.diff += booking - trip.onwardFreight;
+    }
+    byVehicle.set(trip.vehicleId, d);
+  }
+  return byVehicle;
+}
+
 /** One calendar month: a row per own vehicle, idle ones included. */
 async function computeMonthRows(month: string): Promise<MonthlyPnlRow[]> {
   const { start, endExclusive } = monthBounds(month);
@@ -282,47 +331,9 @@ async function computeMonthRows(month: string): Promise<MonthlyPnlRow[]> {
     tripsByVehicle.set(slip.vehicleId, t);
   }
 
-  /* ---- freight difference: booking (billed) vs onward (credited) ---- */
-  // Same trip filter as the journey's freight total. Only primary groups —
-  // a group's secondary leg would otherwise count its booking twice.
-  const trips = slips.length
-    ? await db.vehicleTrip.findMany({
-        where: {
-          journeyId: { in: slips.map((s) => s.journeyId) },
-          deletedAt: null,
-          status: { not: "Cancelled" },
-          primaryGroups: { some: { deletedAt: null } },
-        },
-        select: {
-          vehicleId: true,
-          onwardFreight: true,
-          primaryGroups: {
-            where: { deletedAt: null },
-            select: { baseFreightAmount: true },
-          },
-        },
-      })
-    : [];
-  type Diff = { booking: bigint; diff: bigint; missing: number };
-  const diffByVehicle = new Map<string, Diff>();
-  for (const trip of trips) {
-    const d = diffByVehicle.get(trip.vehicleId) ?? {
-      booking: 0n,
-      diff: 0n,
-      missing: 0,
-    };
-    if (trip.primaryGroups.some((g) => g.baseFreightAmount === null)) {
-      d.missing += 1;
-    } else {
-      const booking = trip.primaryGroups.reduce(
-        (s, g) => s + (g.baseFreightAmount ?? 0n),
-        0n,
-      );
-      d.booking += booking;
-      d.diff += booking - trip.onwardFreight;
-    }
-    diffByVehicle.set(trip.vehicleId, d);
-  }
+  const diffByVehicle = await freightDiffByVehicle(
+    slips.map((s) => s.journeyId),
+  );
 
   const repairsByVehicle = new Map<string, bigint>();
   for (const jc of jobCards)

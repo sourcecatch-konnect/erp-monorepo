@@ -81,6 +81,14 @@ export default function VehiclePnlPage() {
         queryFn: () => logSlipApi.vehiclePnlSummary(filters),
     });
 
+    // Open the detail for the same dates, so its numbers match this row.
+    const dateQuery = new URLSearchParams({
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+    }).toString();
+    const detailHref = (vehicleId: string) =>
+        `/vehicle-journeys/vehicle-pnl/${vehicleId}${dateQuery ? `?${dateQuery}` : ""}`;
+
     const rows = pnl.data?.data ?? [];
     const total = pnl.data?.meta?.total ?? 0;
     const summary = summaryQuery.data;
@@ -237,7 +245,7 @@ export default function VehiclePnlPage() {
                                         >
                                             <TableCell className="pl-5">
                                                 <Link
-                                                    href={`/vehicle-journeys/vehicle-pnl/${row.vehicleId}`}
+                                                    href={detailHref(row.vehicleId)}
                                                     className="font-semibold hover:text-primary hover:underline"
                                                 >
                                                     {row.vehicleNumber}
@@ -272,7 +280,7 @@ export default function VehiclePnlPage() {
                                             </TableCell>
                                             <TableCell className="pr-5 text-right">
                                                 <Link
-                                                    href={`/vehicle-journeys/vehicle-pnl/${row.vehicleId}`}
+                                                    href={detailHref(row.vehicleId)}
                                                     aria-label={`Open ${row.vehicleNumber} detail`}
                                                     className="text-muted-foreground hover:text-primary"
                                                 >
@@ -297,9 +305,16 @@ export default function VehiclePnlPage() {
                     </section>
 
                     <p className="text-xs text-muted-foreground">
-                        Costs = trip expenses + finalised Job Card repairs. EMI, insurance
-                        and permit/tax are not tracked yet, so this is not the full profit.
-                        Open a vehicle for charts, cost per km and empty-km details.
+                        Costs = trip expenses + finalised Job Card repairs. This view
+                        leaves out Vehicle Costs (EMI, insurance, salary…) — see{" "}
+                        <Link
+                            href="/vehicle-journeys/vehicle-pnl/monthly"
+                            className="font-medium text-primary hover:underline"
+                        >
+                            Vehicle Performance
+                        </Link>{" "}
+                        for true profit. Open a vehicle for its full breakdown, trend and
+                        empty-km details.
                     </p>
                 </div>
             )}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { IconArrowLeft } from "@tabler/icons-react";
 import {
@@ -31,7 +32,7 @@ import {
 } from "@skerp/ui/components/table";
 
 import { formatPaise } from "@/lib/money";
-import { logSlipApi } from "./journey.service";
+import { logSlipApi, type VehiclePnlRow } from "./journey.service";
 import {
     formatMoneyOrDash,
     formatMonth,
@@ -45,6 +46,7 @@ const COLORS = {
     diesel: "#f59e0b",
     other: "#64748b",
     repairs: "#e11d48",
+    vehicleCosts: "#7c3aed",
     profit: "#2563eb",
     loaded: "#059669",
     empty: "#f59e0b",
@@ -118,13 +120,109 @@ function ChartCard({
     );
 }
 
+/** Every line behind the vehicle's result — the full version of the summary
+ * shown when a row is expanded on Vehicle Performance, grouped the same way
+ * as the accountant's sheet (trips, monthly fixed, monthly variable). */
+function ProfitBreakdown({ row }: { row: VehiclePnlRow }) {
+    const costs = row.costs;
+    const diesel = BigInt(row.dieselPaise);
+    const tripBalance = BigInt(row.totalFreightPaise) - BigInt(row.totalExpensePaise);
+    const fixed = costs
+        ? BigInt(costs.taxPaise) +
+          BigInt(costs.insurancePaise) +
+          BigInt(costs.permitPaise) +
+          BigInt(costs.fitnessPaise) +
+          BigInt(costs.emiPaise) +
+          BigInt(costs.salaryPaise)
+        : null;
+    const variable =
+        BigInt(row.repairsPaise) +
+        (costs ? BigInt(costs.tyrePaise) + BigInt(costs.otherPaise) : 0n);
+    const result = tripBalance - (fixed ?? 0n) - variable;
+    const diff = row.freightDiff;
+
+    return (
+        <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="border-b border-border px-5 py-3">
+                <h2 className="text-sm font-semibold">Profit breakdown</h2>
+                <p className="text-xs text-muted-foreground">
+                    Every freight, expense and cost line for the selected period.
+                </p>
+            </div>
+            <div className="grid divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                <StatGroup
+                    title={`Trips (${row.journeyCount} · ${row.totalKm.toLocaleString("en-IN")} km)`}
+                >
+                    <StatLine label="Freight" value={formatPaise(row.totalFreightPaise)} />
+                    <StatLine label="Diesel" value={formatPaise(diesel.toString())} />
+                    <StatLine
+                        label="Other trip expenses"
+                        value={formatPaise(row.otherExpensePaise)}
+                    />
+                    <StatLine label="Trip balance" value={formatPaise(tripBalance.toString())} />
+                    {diff ? (
+                        <>
+                            <StatLine label="Booking freight" value={formatPaise(diff.booking)} />
+                            <StatLine label="Freight difference" value={formatPaise(diff.diff)} />
+                            {diff.missing > 0 ? (
+                                <p className="text-xs text-amber-700">
+                                    {diff.missing} trip(s) skipped — LR has no booking amount
+                                </p>
+                            ) : null}
+                        </>
+                    ) : null}
+                </StatGroup>
+                <StatGroup title="Monthly fixed">
+                    {costs ? (
+                        <>
+                            <StatLine label="Tax" value={formatPaise(costs.taxPaise)} />
+                            <StatLine label="Insurance" value={formatPaise(costs.insurancePaise)} />
+                            <StatLine label="Permit" value={formatPaise(costs.permitPaise)} />
+                            <StatLine label="Fitness" value={formatPaise(costs.fitnessPaise)} />
+                            <StatLine label="EMI" value={formatPaise(costs.emiPaise)} />
+                            <StatLine label="Salary" value={formatPaise(costs.salaryPaise)} />
+                            <StatLine label="Total fixed" value={formatPaise((fixed ?? 0n).toString())} />
+                        </>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            Tracked for own vehicles only.
+                        </p>
+                    )}
+                </StatGroup>
+                <StatGroup title="Monthly variable">
+                    <StatLine label="Spare & repairs" value={formatPaise(row.repairsPaise)} />
+                    {costs ? (
+                        <>
+                            <StatLine label="Tyre" value={formatPaise(costs.tyrePaise)} />
+                            <StatLine label="Other" value={formatPaise(costs.otherPaise)} />
+                        </>
+                    ) : null}
+                    <StatLine label="Total variable" value={formatPaise(variable.toString())} />
+                </StatGroup>
+            </div>
+            <p className="border-t border-border px-5 py-2 text-xs text-muted-foreground tabular-nums">
+                Trip balance {formatPaise(tripBalance.toString())}
+                {fixed !== null ? ` − Fixed ${formatPaise(fixed.toString())}` : ""} − Variable{" "}
+                {formatPaise(variable.toString())} ={" "}
+                <span className={`font-semibold ${profitTone(result.toString())}`}>
+                    {formatPaise(result.toString())}
+                </span>
+                {costs ? null : " (no Vehicle Costs for hired vehicles)"}
+            </p>
+        </section>
+    );
+}
+
 export default function VehiclePnlDetailPage({
     vehicleId,
 }: {
     vehicleId: string;
 }) {
-    const [from, setFrom] = React.useState("");
-    const [to, setTo] = React.useState("");
+    // Opened from Vehicle Performance with ?from=&to=, so the detail covers
+    // the same period and its true profit matches that report's result.
+    const searchParams = useSearchParams();
+    const [from, setFrom] = React.useState(() => searchParams.get("from") ?? "");
+    const [to, setTo] = React.useState(() => searchParams.get("to") ?? "");
 
     const query = useQuery({
         queryKey: ["vehicle-pnl-detail", vehicleId, from, to],
@@ -176,9 +274,18 @@ export default function VehiclePnlDetailPage({
             fill: COLORS.other,
         },
         { name: "Repairs", value: paiseToRupees(row.repairsPaise), fill: COLORS.repairs },
+        ...(row.fixedCostsPaise !== null
+            ? [
+                  {
+                      name: "Vehicle costs",
+                      value: paiseToRupees(row.fixedCostsPaise),
+                      fill: COLORS.vehicleCosts,
+                  },
+              ]
+            : []),
         {
-            name: "Profit",
-            value: paiseToRupees(row.profitAfterRepairsPaise),
+            name: row.trueProfitPaise !== null ? "True profit" : "Profit",
+            value: paiseToRupees(row.trueProfitPaise ?? row.profitAfterRepairsPaise),
             fill: COLORS.profit,
         },
     ];
@@ -245,13 +352,18 @@ export default function VehiclePnlDetailPage({
                 <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-5 py-4">
                     <div>
                         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                            Profit after repairs
+                            {row.trueProfitPaise !== null ? "True profit" : "Profit after repairs"}
                         </p>
                         <p
-                            className={`mt-1 text-2xl font-semibold tabular-nums ${profitTone(row.profitAfterRepairsPaise)}`}
+                            className={`mt-1 text-2xl font-semibold tabular-nums ${profitTone(row.trueProfitPaise ?? row.profitAfterRepairsPaise)}`}
                         >
-                            {formatPaise(row.profitAfterRepairsPaise)}
+                            {formatPaise(row.trueProfitPaise ?? row.profitAfterRepairsPaise)}
                         </p>
+                        {row.trueProfitPaise !== null ? (
+                            <p className="text-xs text-muted-foreground">
+                                Before Vehicle Costs: {formatPaise(row.profitAfterRepairsPaise)}
+                            </p>
+                        ) : null}
                     </div>
                     <p className="text-sm text-muted-foreground">
                         Margin{" "}
@@ -265,20 +377,16 @@ export default function VehiclePnlDetailPage({
                         <StatLine label="Freight" value={formatPaise(row.totalFreightPaise)} />
                         <StatLine label="Trip expenses" value={formatPaise(row.totalExpensePaise)} />
                         <StatLine label="Repairs" value={formatPaise(row.repairsPaise)} />
-                        {row.fixedCostsPaise !== null && row.trueProfitPaise !== null ? (
-                            <>
-                                <StatLine
-                                    label="Vehicle costs (EMI, insurance…)"
-                                    value={formatPaise(row.fixedCostsPaise)}
-                                />
-                                <StatLine
-                                    label="True profit"
-                                    value={formatPaise(row.trueProfitPaise)}
-                                />
-                            </>
+                        {row.fixedCostsPaise !== null ? (
+                            <StatLine
+                                label="Vehicle costs"
+                                value={formatPaise(row.fixedCostsPaise)}
+                            />
                         ) : null}
                     </StatGroup>
-                    <StatGroup title="Per unit">
+                    <StatGroup
+                        title={hasVehicleCosts ? "Per unit (after Vehicle Costs)" : "Per unit"}
+                    >
                         <StatLine label="Revenue / km" value={formatMoneyOrDash(row.revenuePerKmPaise)} />
                         <StatLine label="Cost / km" value={formatMoneyOrDash(row.costPerKmPaise)} />
                         <StatLine label="Profit / km" value={formatMoneyOrDash(row.profitPerKmPaise)} />
@@ -296,12 +404,14 @@ export default function VehiclePnlDetailPage({
                         />
                         <StatLine
                             label="Utilisation"
-                            value={`${formatPct(row.utilisationPct)} (${row.runningDays}/${row.periodDays} days)`}
+                            value={`${formatPct(row.utilisationPct)} (${row.daysInPeriod}/${row.periodDays} days)`}
                         />
                         <StatLine label="Empty km" value={formatPct(row.emptyPct)} />
                     </StatGroup>
                 </div>
             </section>
+
+            <ProfitBreakdown row={row} />
 
             <div className="grid gap-4 lg:grid-cols-2">
                 <ChartCard
@@ -387,45 +497,6 @@ export default function VehiclePnlDetailPage({
                             No closed trip km recorded yet.
                         </p>
                     )}
-                </ChartCard>
-
-                <ChartCard
-                    title="Cost per km"
-                    subtitle="Diesel, other trip expenses and repairs"
-                >
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                            layout="vertical"
-                            data={[
-                                {
-                                    name: "Cost / km",
-                                    Diesel:
-                                        row.totalKm > 0
-                                            ? paiseToRupees(row.dieselPaise) / row.totalKm
-                                            : 0,
-                                    "Other trip exp.":
-                                        row.totalKm > 0
-                                            ? paiseToRupees(row.otherExpensePaise) / row.totalKm
-                                            : 0,
-                                    Repairs:
-                                        row.totalKm > 0
-                                            ? paiseToRupees(row.repairsPaise) / row.totalKm
-                                            : 0,
-                                },
-                            ]}
-                        >
-                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                            <XAxis type="number" tick={{ fontSize: 11 }} />
-                            <YAxis type="category" dataKey="name" hide />
-                            <Tooltip
-                                formatter={(v) => `₹${Number(v).toFixed(2)} / km`}
-                            />
-                            <Legend />
-                            <Bar dataKey="Diesel" stackId="c" fill={COLORS.diesel} />
-                            <Bar dataKey="Other trip exp." stackId="c" fill={COLORS.other} />
-                            <Bar dataKey="Repairs" stackId="c" fill={COLORS.repairs} />
-                        </BarChart>
-                    </ResponsiveContainer>
                 </ChartCard>
             </div>
 

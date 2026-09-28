@@ -126,67 +126,51 @@ function Stat({
     );
 }
 
-function Line({ label, paise }: { label: string; paise: string }) {
+/** Last calendar day of a "YYYY-MM" month, as "YYYY-MM-DD". */
+const monthEnd = (month: string) => {
+    const [year, mon] = splitYm(month);
+    return `${month}-${String(new Date(Date.UTC(year, mon, 0)).getUTCDate()).padStart(2, "0")}`;
+};
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
     return (
-        <div className="flex justify-between gap-4 text-sm">
-            <span className="text-muted-foreground">{label}</span>
-            <span className="tabular-nums">{formatPaise(paise)}</span>
+        <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {label}
+            </p>
+            <p className="mt-0.5 truncate text-sm font-medium tabular-nums">{value}</p>
         </div>
     );
 }
 
-function Breakdown({ row }: { row: MonthlyPnlRow }) {
+/** Short summary under an expanded row. Every line (each expense, fixed and
+ * variable cost) lives on the vehicle's detail page, opened for this same
+ * period so its true profit matches the Result here. */
+function RowSummary({ row, from, to }: { row: MonthlyPnlRow; from: string; to: string }) {
+    const href = `/vehicle-journeys/vehicle-pnl/${row.vehicleId}?from=${from}-01&to=${monthEnd(to)}`;
     return (
-        <div className="grid gap-6 px-5 py-4 sm:grid-cols-3">
-            <div className="space-y-1.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Trips ({row.trips} · {row.km.toLocaleString("en-IN")} km)
-                </p>
-                <Line label="Freight" paise={row.freightPaise} />
-                <Line label="Diesel" paise={row.dieselPaise} />
-                <Line label="Other trip expenses" paise={row.otherExpensePaise} />
-                <Line label="Trip balance" paise={row.tripBalancePaise} />
-                <Line label="Booking freight" paise={row.bookingFreightPaise} />
-                <Line label="Freight difference" paise={row.freightDiffPaise} />
+        <div className="flex flex-wrap items-end justify-between gap-4 px-5 py-4">
+            <div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-5">
+                <SummaryItem label="Freight" value={formatPaise(row.freightPaise)} />
+                <SummaryItem label="Trip expenses" value={formatPaise(row.totalExpensePaise)} />
+                <SummaryItem label="Km" value={row.km.toLocaleString("en-IN")} />
+                <SummaryItem label="Booking freight" value={formatPaise(row.bookingFreightPaise)} />
+                <SummaryItem
+                    label="Business result"
+                    value={formatPaise(
+                        (BigInt(row.resultPaise) + BigInt(row.freightDiffPaise)).toString(),
+                    )}
+                />
+            </div>
+            <div className="flex flex-col items-end gap-1">
                 {row.missingBookingTrips > 0 ? (
                     <p className="text-xs text-amber-700">
                         {row.missingBookingTrips} trip(s) skipped — LR has no booking amount
                     </p>
                 ) : null}
-                {row.slips.map((slip) => (
-                    <Link
-                        key={slip.logSlipId}
-                        href={`/vehicle-journeys/${slip.journeyId}/log-slip`}
-                        className="block pt-1 text-xs font-medium text-primary hover:underline"
-                    >
-                        {slip.logSlipNumber ?? "Log slip"} ↗
-                    </Link>
-                ))}
-            </div>
-            <div className="space-y-1.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Monthly fixed
-                </p>
-                <Line label="Tax" paise={row.taxPaise} />
-                <Line label="Insurance" paise={row.insurancePaise} />
-                <Line label="Permit" paise={row.permitPaise} />
-                <Line label="Fitness" paise={row.fitnessPaise} />
-                <Line label="EMI" paise={row.emiPaise} />
-                <Line label="Salary" paise={row.salaryPaise} />
-            </div>
-            <div className="space-y-1.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Monthly variable
-                </p>
-                <Line label="Spare & repairs" paise={row.repairsPaise} />
-                <Line label="Tyre" paise={row.tyrePaise} />
-                <Line label="Other" paise={row.otherCostPaise} />
-                <Link
-                    href={`/vehicle-journeys/vehicle-pnl/${row.vehicleId}`}
-                    className="inline-block pt-2 text-xs font-medium text-primary hover:underline"
-                >
-                    Open vehicle detail ↗
-                </Link>
+                <Button size="sm" asChild>
+                    <Link href={href}>View full breakdown ↗</Link>
+                </Button>
             </div>
         </div>
     );
@@ -837,7 +821,7 @@ export default function VehiclePnlMonthlyPage() {
                                             {open ? (
                                                 <TableRow className="bg-muted/20 hover:bg-muted/20">
                                                     <TableCell colSpan={multiMonth ? 11 : 10} className="p-0">
-                                                        <Breakdown row={row} />
+                                                        <RowSummary row={row} from={from} to={to} />
                                                     </TableCell>
                                                 </TableRow>
                                             ) : null}
