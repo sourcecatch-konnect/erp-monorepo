@@ -23,6 +23,10 @@ import {
 } from "./vehicle-pnl-monthly.service.js";
 import { MONTH_RE } from "../vehicle-cost/vehicle-cost.service.js";
 import {
+  buildVehicleDetailPdfHtml,
+  buildVehiclePerformancePdfHtml,
+} from "./vehicle-pnl.pdf.js";
+import {
   computeLogSlip,
   logSlipInclude,
   logSlipListSelect,
@@ -113,10 +117,8 @@ router.get("/vehicle-pnl", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
   return sendOk(res, data, { page: query.page, size: query.size, total });
 });
 
-// Performance report: every own vehicle (idle ones included) with fixed and
-// variable costs applied — the accountant's month-end sheet. Takes ?month=
-// for one month, or ?from=&to= (inclusive) for a quarter, year or custom range.
-router.get("/vehicle-pnl/monthly", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+/** ?month= for one month, or ?from=&to= (inclusive "YYYY-MM") for a range. */
+const parseMonthRange = (req: Request) => {
   const text = (value: unknown) => (typeof value === "string" ? value : "");
   const from = text(req.query.from) || text(req.query.month);
   const to = text(req.query.to) || from;
@@ -125,8 +127,65 @@ router.get("/vehicle-pnl/monthly", can(PERMS.LOGSLIP.VIEW), async (req, res) => 
   if (from > to) throw new ValidationError("from month is after to month");
   if (monthRange(from, to).length > MAX_PERIOD_MONTHS)
     throw new ValidationError(`period can be at most ${MAX_PERIOD_MONTHS} months`);
+  return { from, to };
+};
+
+/** ?from=&to= calendar dates (inclusive) for the Vehicle P&L views. */
+const parseDateRange = (req: Request) => ({
+  from: typeof req.query.from === "string" ? new Date(req.query.from) : undefined,
+  to:
+    typeof req.query.to === "string"
+      ? new Date(`${req.query.to}T23:59:59.999Z`)
+      : undefined,
+});
+
+const withLetterheadOf = (req: Request) => req.query.letterhead !== "false";
+
+const sendPdf = async (res: Response, html: string, fileName: string) => {
+  const pdf = await generatePdfFromHtml(html);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  return res.send(pdf);
+};
+
+const sendPreview = (res: Response, html: string) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(200).send(html);
+};
+
+// Performance report: every own vehicle (idle ones included) with fixed and
+// variable costs applied — the accountant's month-end sheet. Takes ?month=
+// for one month, or ?from=&to= (inclusive) for a quarter, year or custom range.
+router.get("/vehicle-pnl/monthly", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { from, to } = parseMonthRange(req);
   return sendOk(res, await computeMonthlyVehiclePnl(from, to));
 });
+
+/* Printable Performance report — same letterhead options as LR / GRN.
+   Registered before "/vehicle-pnl/:vehicleId/…" so "monthly" isn't read
+   as a vehicle id. */
+const performanceHtml = async (req: Request) => {
+  const { from, to } = parseMonthRange(req);
+  const report = await computeMonthlyVehiclePnl(from, to);
+  return {
+    html: buildVehiclePerformancePdfHtml(report, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `vehicle-performance-${from === to ? from : `${from}_to_${to}`}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get("/vehicle-pnl/monthly/pdf", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { html, fileName } = await performanceHtml(req);
+  return sendPdf(res, html, fileName);
+});
+
+router.get(
+  "/vehicle-pnl/monthly/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await performanceHtml(req)).html),
+);
 
 // Totals across every matching vehicle (not just the current page) for the
 // summary cards.
@@ -137,6 +196,34 @@ router.get("/vehicle-pnl/summary", can(PERMS.LOGSLIP.VIEW), async (req, res) => 
   const { summary } = await computeVehiclePnl({ from, to, search });
   return sendOk(res, summary);
 });
+
+/* Printable single-vehicle P&L (the detail page), for the same dates. */
+const vehicleDetailHtml = async (req: Request) => {
+  const vehicleId = String(req.params.vehicleId);
+  const period = parseDateRange(req);
+  const row = (await computeVehiclePnl({ vehicleId, ...period })).data[0];
+  if (!row)
+    throw new NotFoundError(
+      "No posted Log Slips for this vehicle in the selected range",
+    );
+  return {
+    html: buildVehicleDetailPdfHtml(row, period, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `vehicle-pnl-${row.vehicleNumber}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get("/vehicle-pnl/:vehicleId/pdf", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { html, fileName } = await vehicleDetailHtml(req);
+  return sendPdf(res, html, fileName);
+});
+
+router.get(
+  "/vehicle-pnl/:vehicleId/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await vehicleDetailHtml(req)).html),
+);
 
 /* ------------------------------------------------------------------ */
 /* Preview — live settlement computed from the journey                */

@@ -125,6 +125,19 @@ export const vehicleCostApi = {
     );
     return unwrapApiResponse(res);
   },
+
+  /** Printable Performance report for the same period. */
+  monthlyPnlPdf: async (
+    from: string,
+    to: string,
+    withLetterhead: boolean,
+  ): Promise<Blob> => {
+    const res = await api.get("/log-slips/vehicle-pnl/monthly/pdf", {
+      params: { from, to, letterhead: withLetterhead },
+      responseType: "blob",
+    });
+    return res.data;
+  },
 };
 
 /** "2026-08" for today, in local time — the default month for the pages. */

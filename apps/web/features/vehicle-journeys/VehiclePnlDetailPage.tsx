@@ -33,6 +33,7 @@ import {
 
 import { formatPaise } from "@/lib/money";
 import { logSlipApi, type VehiclePnlRow } from "./journey.service";
+import { ReportPrintMenu } from "./ReportPrintMenu";
 import {
     formatMoneyOrDash,
     formatMonth,
@@ -345,6 +346,24 @@ export default function VehiclePnlDetailPage({
                             onChange={(e) => setTo(e.target.value)}
                         />
                     </div>
+                    <ReportPrintMenu
+                        downloadPdf={(withLetterhead) =>
+                            logSlipApi.vehiclePnlPdf(
+                                vehicleId,
+                                { from: from || undefined, to: to || undefined },
+                                withLetterhead,
+                            )
+                        }
+                        previewPath={(withLetterhead) => {
+                            const params = new URLSearchParams({
+                                ...(from ? { from } : {}),
+                                ...(to ? { to } : {}),
+                                letterhead: String(withLetterhead),
+                            });
+                            return `/log-slips/vehicle-pnl/${encodeURIComponent(vehicleId)}/print-preview?${params}`;
+                        }}
+                        fileName={`vehicle-pnl-${row.vehicleNumber}`}
+                    />
                 </div>
             </div>
 

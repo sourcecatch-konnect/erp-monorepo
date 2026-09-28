@@ -321,6 +321,19 @@ export const logSlipApi = {
     );
     return unwrapApiResponse(res);
   },
+
+  /** Printable single-vehicle P&L for the same From/To as the detail page. */
+  vehiclePnlPdf: async (
+    vehicleId: string,
+    period: { from?: string; to?: string },
+    withLetterhead: boolean,
+  ): Promise<Blob> => {
+    const res = await api.get(
+      `/log-slips/vehicle-pnl/${encodeURIComponent(vehicleId)}/pdf`,
+      { params: { ...period, letterhead: withLetterhead }, responseType: "blob" },
+    );
+    return res.data;
+  },
 };
 
 export type VehiclePnlJourneyRow = {

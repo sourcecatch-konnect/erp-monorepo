@@ -27,6 +27,7 @@ import {
 } from "@skerp/ui/components/table";
 
 import { formatPaise } from "@/lib/money";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import {
     currentMonth,
@@ -235,6 +236,21 @@ export default function VehicleCostsPage() {
     });
     const rows = query.data ?? [];
 
+    // Client-side: the list is every own vehicle for one month, already loaded.
+    const [search, setSearch] = React.useState("");
+    const [source, setSource] = React.useState<"all" | "saved" | "defaults">("all");
+    const [page, setPage] = React.useState(0);
+    const [size, setSize] = React.useState(20);
+    React.useEffect(() => setPage(0), [month]);
+    const term = search.trim().toLowerCase();
+    const visibleRows = rows.filter(
+        (row) =>
+            (!term || row.vehicleNumber.toLowerCase().includes(term)) &&
+            (source === "all" || row.hasMonthlyRow === (source === "saved")),
+    );
+    const pageRows = visibleRows.slice(page * size, page * size + size);
+    const savedCount = rows.filter((row) => row.hasMonthlyRow).length;
+
     return (
         <div className="space-y-4 p-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -276,6 +292,33 @@ export default function VehicleCostsPage() {
 
             {rows.length > 0 ? (
                 <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                    <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+                        <Input
+                            placeholder="Search vehicle no."
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                setPage(0);
+                            }}
+                            className="h-9 w-48"
+                        />
+                        <select
+                            aria-label="Source"
+                            className="h-9 w-48 rounded-md border border-input bg-background px-3 text-sm"
+                            value={source}
+                            onChange={(e) => {
+                                setSource(e.target.value as typeof source);
+                                setPage(0);
+                            }}
+                        >
+                            <option value="all">All vehicles</option>
+                            <option value="saved">Saved for this month</option>
+                            <option value="defaults">Defaults (not saved yet)</option>
+                        </select>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                            {savedCount} of {rows.length} saved for this month
+                        </span>
+                    </div>
                     <Table>
                         <TableHeader className="bg-muted/40">
                             <TableRow className="hover:bg-transparent">
@@ -288,7 +331,17 @@ export default function VehicleCostsPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {rows.map((row) => (
+                            {pageRows.length === 0 ? (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={6}
+                                        className="py-8 text-center text-sm text-muted-foreground"
+                                    >
+                                        No vehicles match.
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
+                            {pageRows.map((row) => (
                                 <TableRow key={row.vehicleId} className="h-12 border-b border-border/60">
                                     <TableCell className="pl-5 font-semibold">{row.vehicleNumber}</TableCell>
                                     <TableCell className="text-right tabular-nums">
@@ -325,6 +378,16 @@ export default function VehicleCostsPage() {
                             ))}
                         </TableBody>
                     </Table>
+                    <TablePaginationFooter
+                        total={visibleRows.length}
+                        page={page}
+                        size={size}
+                        onPageChange={setPage}
+                        onSizeChange={(next) => {
+                            setSize(next);
+                            setPage(0);
+                        }}
+                    />
                 </section>
             ) : null}
 

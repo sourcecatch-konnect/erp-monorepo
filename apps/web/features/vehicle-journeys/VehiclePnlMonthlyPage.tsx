@@ -38,6 +38,7 @@ import {
     type MonthlyPnlRow,
 } from "./vehicle-cost.service";
 import { profitTone } from "./vehicle-pnl.format";
+import { ReportPrintMenu } from "./ReportPrintMenu";
 
 const shortDate = (value: string | null) =>
     value
@@ -651,6 +652,20 @@ export default function VehiclePnlMonthlyPage() {
                     >
                         <IconDownload size={16} /> Export
                     </Button>
+                    <ReportPrintMenu
+                        disabled={!data || !validRange}
+                        downloadPdf={(withLetterhead) =>
+                            vehicleCostApi.monthlyPnlPdf(from, to, withLetterhead)
+                        }
+                        previewPath={(withLetterhead) =>
+                            `/log-slips/vehicle-pnl/monthly/print-preview?from=${from}&to=${to}&letterhead=${withLetterhead}`
+                        }
+                        fileName={
+                            from === to
+                                ? `vehicle-performance-${from}`
+                                : `vehicle-performance-${from}_to_${to}`
+                        }
+                    />
                 </div>
             </div>
 
