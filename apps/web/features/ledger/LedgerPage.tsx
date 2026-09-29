@@ -53,7 +53,7 @@ const CREDITOR_TYPE_OPTIONS: { label: string; value: CreditorTypeFilter }[] = [
   { label: "Other creditors/suppliers", value: "NON_VENDOR" },
 ];
 
-type ReportTab = "bank" | "cash" | "debtor" | "creditor" | "expense" | "ageing";
+type ReportTab = "bank" | "cash" | "debtor" | "creditor" | "driver" | "expense" | "ageing";
 
 type CashTabConfig = {
   label: string;
