@@ -41,11 +41,15 @@ import {
 import { profitTone } from "./vehicle-pnl.format";
 import { ReportPrintMenu } from "./ReportPrintMenu";
 
+// Year included: a quarter, year or custom period can span two calendar years,
+// and a journey can start in an earlier month than its Log Slip.
 const shortDate = (value: string | null) =>
     value
-        ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "2-digit" }).format(
-            new Date(value),
-        )
+        ? new Intl.DateTimeFormat("en-IN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+        }).format(new Date(value))
         : "—";
 
 const monthTitle = (month: string) => {
@@ -171,7 +175,7 @@ function RowSummary({ row, from, to }: { row: MonthlyPnlRow; from: string; to: s
                     </p>
                 ) : null}
                 <Button size="sm" asChild>
-                    <Link href={href}>View full breakdown ↗</Link>
+                    <Link href={href}>View full breakdown <IconArrowUpRight className="h-4 w-4" /></Link>
                 </Button>
             </div>
         </div>
@@ -788,7 +792,7 @@ export default function VehiclePnlMonthlyPage() {
                         <Table>
                             <TableHeader className="bg-muted/40">
                                 <TableRow className="hover:bg-transparent">
-                                    <TableHead className="w-10 pl-4" />
+                                    <TableHead className="w-9 pl-4" />
                                     <TableHead className="text-xs font-semibold">Vehicle</TableHead>
                                     <TableHead className="text-xs font-semibold">Period</TableHead>
                                     {multiMonth ? (
@@ -800,7 +804,7 @@ export default function VehiclePnlMonthlyPage() {
                                     <TableHead className="text-right text-xs font-semibold">Fixed</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Variable</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Result</TableHead>
-                                    <TableHead className="pr-5 text-right text-xs font-semibold">Freight diff</TableHead>
+                                    <TableHead className="pr-2 text-right text-xs font-semibold">Freight diff</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
