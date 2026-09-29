@@ -8,15 +8,9 @@ import { toast } from "sonner";
 import { IconFileInvoice, IconCash } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
+
 import { Textarea } from "@skerp/ui/components/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@skerp/ui/components/select";
+
 import {
   Table,
   TableBody,
@@ -43,8 +37,6 @@ import { serviceBillApi } from "./api/service-bill.service";
 import { serviceBillKeys } from "./api/service-bill.keys";
 import { ServiceBillStatusBadge } from "./serviceBillStatusBadge";
 import { PayServiceBillDialog } from "./PayServiceBillDialog";
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 
 export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string }) {

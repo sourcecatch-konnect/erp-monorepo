@@ -38,7 +38,7 @@ import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebounced
 import { formatPaise, rupeesToPaise } from "@/lib/money";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
-import { StatusTabs, TablePaginationFooter, TableSearchInput } from "@/components/data-table";
+import { StatusTabs, TablePaginationFooter } from "@/components/data-table";
 import {
   serviceBillApi,
   LOOKUP_PAGE_SIZE,

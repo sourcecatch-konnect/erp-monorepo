@@ -792,7 +792,7 @@ export default function VehiclePnlMonthlyPage() {
                         <Table>
                             <TableHeader className="bg-muted/40">
                                 <TableRow className="hover:bg-transparent">
-                                    <TableHead className="w-9 pl-4" />
+                                    <TableHead className="w-10 pl-4" />
                                     <TableHead className="text-xs font-semibold">Vehicle</TableHead>
                                     <TableHead className="text-xs font-semibold">Period</TableHead>
                                     {multiMonth ? (
@@ -804,7 +804,7 @@ export default function VehiclePnlMonthlyPage() {
                                     <TableHead className="text-right text-xs font-semibold">Fixed</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Variable</TableHead>
                                     <TableHead className="text-right text-xs font-semibold">Result</TableHead>
-                                    <TableHead className="pr-2 text-right text-xs font-semibold">Freight diff</TableHead>
+                                    <TableHead className="pr-5 text-right text-xs font-semibold">Freight diff</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
