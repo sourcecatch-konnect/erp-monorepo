@@ -14,7 +14,12 @@ export type AuditAction =
   | "role.permissions.update"
   | "user.role.update"
   | "user.permissions.update"
-  | "user.branches.update";
+  | "user.branches.update"
+  | "vendor_payment.submit"
+  | "vendor_payment.approve"
+  | "vendor_payment.reject"
+  | "vendor_payment.disburse"
+  | "vendor_payment.cancel";
 
 export type AuditEntry = {
   actor: { id: string };

@@ -22,6 +22,10 @@ export const outstandingBillsQuerySchema = z.object({
   lrNumber: z.string().trim().optional(),
   billNumber: z.string().trim().optional(),
   uptoDate: isoDate.optional(),
+  // Chunked like every other list: a customer can have more outstanding bills
+  // than fit on one screen, so this is paged rather than capped.
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(25),
 });
 
 export const createReceiptSchema = z.object({

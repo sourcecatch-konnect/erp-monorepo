@@ -31,6 +31,10 @@ import {
   buildCustomerStatement,
   perBillOutstanding,
 } from "./customer-statement.service.js";
+import {
+  buildVendorStatement,
+  perSlipOutstanding,
+} from "./vendor-statement.service.js";
 import { buildAgeingReport } from "./ageing.service.js";
 import {
   buildStatementHtml,
@@ -151,6 +155,40 @@ router.get(
   },
 );
 
+// Vendor statement (VP-8) — the Debtor statement's mirror for a transporter
+// or labour party ledger. Keyed by Ledger.id, same convention
+// GET /creditors/:id already uses (not Transport.id/Labour.id directly).
+router.get(
+  "/vendors/:id/statement",
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const q = validate(customerStatementQuerySchema.safeParse(req.query));
+    const view = await buildVendorStatement(id, {
+      branchWhere: branchWhereFor(req, q.branchId),
+      fyCode: q.fyCode,
+      from: q.from,
+      to: q.to,
+    });
+    return sendOk(res, view);
+  },
+);
+
+// Slip-wise outstanding for one vendor — mirrors bills-outstanding.
+router.get(
+  "/vendors/:id/slips-outstanding",
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const q = validate(customerStatementQuerySchema.safeParse(req.query));
+    const rows = await perSlipOutstanding(id, {
+      branchWhere: branchWhereFor(req, q.branchId),
+      fyCode: q.fyCode,
+    });
+    return sendOk(res, rows);
+  },
+);
+
 // Ageing — one row per customer, unpaid bills bucketed by days overdue.
 router.get("/ageing", can(PERMS.LEDGER.VIEW), async (req, res) => {
   const q = validate(ageingQuerySchema.safeParse(req.query));
@@ -237,7 +275,11 @@ router.get("/accounts", can(PERMS.LEDGER.VIEW), async (req, res) => {
   const input = validate(chartOfAccountsQuerySchema.safeParse(req.query));
   const where: Prisma.LedgerWhereInput = {
     ...(input.kind ? { kind: input.kind } : {}),
-    ...(input.group ? { group: input.group } : {}),
+    ...(input.groups?.length
+      ? { group: { in: input.groups } }
+      : input.group
+        ? { group: input.group }
+        : {}),
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     ...(input.search
       ? {

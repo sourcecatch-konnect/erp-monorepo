@@ -353,6 +353,24 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.RECEIPT.VIEW,
       },
       {
+        title: "Payment Slips",
+        href: "/accounts/vendor-payments",
+        icon: IconWallet,
+        permission: PERMS.ACCOUNTS.PAYMENT.VIEW,
+      },
+      {
+        title: "Payment Approvals",
+        href: "/accounts/vendor-payments/approvals",
+        icon: IconClipboardList,
+        permission: PERMS.ACCOUNTS.PAYMENT.APPROVE,
+      },
+      {
+        title: "Payment Disbursements",
+        href: "/accounts/vendor-payments/disbursements",
+        icon: IconCashBanknote,
+        permission: PERMS.ACCOUNTS.PAYMENT.DISBURSE,
+      },
+      {
         title: "Chart of Accounts",
         href: "/accounts/chart-of-accounts",
         icon: IconBooks,

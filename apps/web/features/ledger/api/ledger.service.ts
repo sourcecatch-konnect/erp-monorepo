@@ -5,6 +5,8 @@ import type {
   BillOutstandingRow,
   CustomerStatementView,
   LedgerView,
+  SlipOutstandingRow,
+  VendorStatementView,
 } from "@skerp/types";
 import { unwrapApiResponse } from "../../masters/_shared/master-api";
 import type { LedgerRange } from "./ledger.keys";
@@ -39,11 +41,32 @@ export type LedgerAccount = {
   branch: { id: string; name: string; branchCode: string } | null;
   createdAt: string;
   updatedAt: string;
+  // Party FKs — the server sends every scalar column by default (no
+  // `select` on that query), so these are already on the wire; only a GL
+  // ledger's counterpart-master row is non-null, and exactly one of them.
+  customerId?: string | null;
+  transportId?: string | null;
+  creditorId?: string | null;
+  labourId?: string | null;
+  pumpId?: string | null;
+  sparePartSupplierId?: string | null;
 };
+
+export type VendorType = "TRANSPORTER" | "LABOUR";
+
+/** Which SUNDRY_CREDITOR ledgers count as a "vendor" (has a vendor-payment
+ *  statement) vs a plain creditor/supplier (only the flat ledger view). */
+export function vendorTypeOf(account: LedgerAccount): VendorType | null {
+  if (account.transportId) return "TRANSPORTER";
+  if (account.labourId) return "LABOUR";
+  return null;
+}
 
 export type ChartOfAccountsFilters = {
   kind?: LedgerKind;
   group?: LedgerAccountGroup;
+  /** Several groups in one request; wins over `group` when both are set. */
+  groups?: LedgerAccountGroup[];
   search?: string;
   isActive?: boolean;
 };
@@ -173,6 +196,30 @@ export const ledgerApi = {
     return unwrapApiResponse(res);
   },
 
+  // --- VP-8: vendor statement / slip-wise outstanding ---
+
+  vendorStatement: async (
+    ledgerId: string,
+    filters: StatementFilters = {},
+  ): Promise<VendorStatementView> => {
+    const res = await api.get<ApiResponse<VendorStatementView>>(
+      `/ledger/vendors/${ledgerId}/statement`,
+      { params: filters },
+    );
+    return unwrapApiResponse(res);
+  },
+
+  slipsOutstanding: async (
+    ledgerId: string,
+    filters: StatementFilters = {},
+  ): Promise<SlipOutstandingRow[]> => {
+    const res = await api.get<ApiResponse<SlipOutstandingRow[]>>(
+      `/ledger/vendors/${ledgerId}/slips-outstanding`,
+      { params: filters },
+    );
+    return unwrapApiResponse(res);
+  },
+
   billsOutstanding: async (
     id: string,
     filters: StatementFilters = {},
@@ -211,6 +258,7 @@ export const ledgerApi = {
     get<LedgerAccount[]>("/ledger/accounts", {
       kind: filters.kind,
       group: filters.group,
+      groups: filters.groups?.length ? filters.groups.join(",") : undefined,
       search: filters.search,
       isActive: filters.isActive === undefined ? undefined : String(filters.isActive),
     }),

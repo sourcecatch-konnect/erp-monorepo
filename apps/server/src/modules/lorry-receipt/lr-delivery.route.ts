@@ -31,6 +31,12 @@ import {
   getLRDeliveryEligibility,
 } from "./lr-delivery-eligibility.service.js";
 import { evaluateBillingForLR } from "../billing/billing.service.js";
+import { BILLING_ELIGIBILITY_CACHE } from "../billing/billing.cache.js";
+import { cached, invalidateCacheOnWrite } from "../_shared/cache.js";
+import {
+  LR_DELIVERY_STATS_CACHE,
+  LR_DELIVERY_STATS_TTL_SECONDS,
+} from "./lr-delivery.cache.js";
 
 /**
  * Delivery + acknowledgement actions on a single LR. Mounted on
@@ -43,6 +49,11 @@ import { evaluateBillingForLR } from "../billing/billing.service.js";
  */
 const router: Router = Router();
 router.use(authMiddleware);
+// Acknowledging / un-acknowledging an LR changes which customers are billable
+// (GET /billing/eligible-clients) as well as the dashboard delivery counts.
+router.use(
+  invalidateCacheOnWrite(BILLING_ELIGIBILITY_CACHE, LR_DELIVERY_STATS_CACHE),
+);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
@@ -218,87 +229,119 @@ router.get(
   },
 );
 
-/** Counts + average delivery days for the dashboard cards. */
+type DeliveryStatsScopes = {
+  scope: ReturnType<typeof lrBranchFilter>;
+  destinationScope: ReturnType<typeof lrDestinationBranchFilter>;
+  originScope: ReturnType<typeof lrOriginBranchFilter>;
+};
+
+const computeDeliveryStats = async ({
+  scope,
+  destinationScope,
+  originScope,
+}: DeliveryStatsScopes) => {
+  const lrScope = {
+    ...(scope.id ? { id: scope.id } : {}),
+    ...(scope.group ? { group: scope.group } : {}),
+  };
+
+  const [pendingCandidates, atHub, pendingPod, recentDeliveries] =
+    await Promise.all([
+      db.lorryReceipt.findMany({
+        where: {
+          deletedAt: null,
+          status: "FINALISED",
+          ...(destinationScope.id ? { id: destinationScope.id } : {}),
+          group: {
+            ...(destinationScope.group ?? {}),
+            status: "FINALISED",
+            deletedAt: null,
+            NOT: { hubId: { not: null }, secondaryTripId: null },
+          },
+        },
+        select: { id: true },
+      }),
+      db.lRGroup.count({
+        where: {
+          deletedAt: null,
+          status: "FINALISED",
+          hubId: { not: null },
+          secondaryTripId: null,
+          ...(scope.group ?? {}),
+        },
+      }),
+      db.lorryReceipt.count({
+        where: {
+          deletedAt: null,
+          status: "DELIVERED",
+          ...(originScope.id ? { id: originScope.id } : {}),
+          ...(originScope.group ? { group: originScope.group } : {}),
+        },
+      }),
+      db.lRDelivery.findMany({
+        where: {
+          deliveredAt: {
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          },
+          lr: { deletedAt: null, ...lrScope },
+        },
+        select: {
+          deliveredAt: true,
+          lr: { select: { group: { select: { finalisedAt: true } } } },
+        },
+        take: 1000,
+      }),
+    ]);
+
+  const pendingEligibility = await getLRDeliveryEligibilities(
+    pendingCandidates.map((lr) => lr.id),
+  );
+  const pendingDelivery = [...pendingEligibility.values()].filter(
+    (eligibility) => eligibility.eligible,
+  ).length;
+
+  const spans = recentDeliveries
+    .map((d) =>
+      d.lr.group.finalisedAt
+        ? (d.deliveredAt.getTime() - d.lr.group.finalisedAt.getTime()) /
+          86_400_000
+        : null,
+    )
+    .filter((v): v is number => v != null && v >= 0);
+  const avgDeliveryDays = spans.length
+    ? Math.round((spans.reduce((a, b) => a + b, 0) / spans.length) * 10) / 10
+    : null;
+
+  return { pendingDelivery, atHub, pendingPod, avgDeliveryDays };
+};
+
+/**
+ * Counts + average delivery days for the dashboard cards. Every card load
+ * used to scan all FINALISED LRs and run the delivery-eligibility check on
+ * each; now it's cached per branch scope. Writes on this router and on the LR
+ * group router (which also creates deliveries) invalidate it, and the short
+ * TTL bounds staleness for changes made through other modules (e.g. trips).
+ */
 router.get(
   "/worklists/delivery-stats",
   can(PERMS.LORRY_RECEIPT.VIEW),
   async (req, res) => {
-    const scope = lrBranchFilter(req);
-    const destinationScope = lrDestinationBranchFilter(req);
-    const originScope = lrOriginBranchFilter(req);
-    const lrScope = {
-      ...(scope.id ? { id: scope.id } : {}),
-      ...(scope.group ? { group: scope.group } : {}),
+    const scopes: DeliveryStatsScopes = {
+      scope: lrBranchFilter(req),
+      destinationScope: lrDestinationBranchFilter(req),
+      originScope: lrOriginBranchFilter(req),
     };
 
-    const [pendingCandidates, atHub, pendingPod, recentDeliveries] =
-      await Promise.all([
-        db.lorryReceipt.findMany({
-          where: {
-            deletedAt: null,
-            status: "FINALISED",
-            ...(destinationScope.id ? { id: destinationScope.id } : {}),
-            group: {
-              ...(destinationScope.group ?? {}),
-              status: "FINALISED",
-              deletedAt: null,
-              NOT: { hubId: { not: null }, secondaryTripId: null },
-            },
-          },
-          select: { id: true },
-        }),
-        db.lRGroup.count({
-          where: {
-            deletedAt: null,
-            status: "FINALISED",
-            hubId: { not: null },
-            secondaryTripId: null,
-            ...(scope.group ?? {}),
-          },
-        }),
-        db.lorryReceipt.count({
-          where: {
-            deletedAt: null,
-            status: "DELIVERED",
-            ...(originScope.id ? { id: originScope.id } : {}),
-            ...(originScope.group ? { group: originScope.group } : {}),
-          },
-        }),
-        db.lRDelivery.findMany({
-          where: {
-            deliveredAt: {
-              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-            },
-            lr: { deletedAt: null, ...lrScope },
-          },
-          select: {
-            deliveredAt: true,
-            lr: { select: { group: { select: { finalisedAt: true } } } },
-          },
-          take: 1000,
-        }),
-      ]);
-
-    const pendingEligibility = await getLRDeliveryEligibilities(
-      pendingCandidates.map((lr) => lr.id),
+    const stats = await cached(
+      {
+        namespace: LR_DELIVERY_STATS_CACHE,
+        key: scopes,
+        ttlSeconds: LR_DELIVERY_STATS_TTL_SECONDS,
+      },
+      () => computeDeliveryStats(scopes),
     );
-    const pendingDelivery = [...pendingEligibility.values()].filter(
-      (eligibility) => eligibility.eligible,
-    ).length;
 
-    const spans = recentDeliveries
-      .map((d) =>
-        d.lr.group.finalisedAt
-          ? (d.deliveredAt.getTime() - d.lr.group.finalisedAt.getTime()) /
-          86_400_000
-          : null,
-      )
-      .filter((v): v is number => v != null && v >= 0);
-    const avgDeliveryDays = spans.length
-      ? Math.round((spans.reduce((a, b) => a + b, 0) / spans.length) * 10) / 10
-      : null;
-
-    return sendOk(res, { pendingDelivery, atHub, pendingPod, avgDeliveryDays });
+    return sendOk(res, stats);
   },
 );
 

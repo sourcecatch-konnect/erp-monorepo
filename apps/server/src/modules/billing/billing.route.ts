@@ -28,11 +28,16 @@ import {
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { parseListQuery } from "../_shared/list.query.js";
+import { cached, invalidateCacheOnWrite } from "../_shared/cache.js";
 import {
   fyCodeFor,
   formatDocNumber,
   nextSequence,
 } from "../_shared/doc-number.js";
+import {
+  BILLING_ELIGIBILITY_CACHE,
+  BILLING_ELIGIBILITY_TTL_SECONDS,
+} from "./billing.cache.js";
 import {
   billDetailInclude,
   calculateBill,
@@ -50,6 +55,7 @@ import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
 const router: Router = Router();
 router.use(authMiddleware);
+router.use(invalidateCacheOnWrite(BILLING_ELIGIBILITY_CACHE));
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 const LR_RESERVING_BILL_STATUSES: BillStatus[] = [
@@ -131,36 +137,18 @@ const ELIGIBLE_CLIENTS_PAGE_SIZE = 1000;
 // page size that's 200k LRs scanned before giving up on this request.
 const ELIGIBLE_CLIENTS_MAX_PAGES = 200;
 
-router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
-  const input = validate(eligibleClientQuerySchema.safeParse(req.query));
-  if (input.branchId) assertBranchAccess(req, input.branchId);
+type EligibleClientRow = {
+  id: string;
+  name: string;
+  stateId: string;
+  splitBillsByChargeType: boolean;
+};
 
-  const where: Prisma.LorryReceiptWhereInput = {
-    status: "ACKNOWLEDGED",
-    billingStatus: {
-      in: ["NOT_BILLABLE", "READY_TO_BILL", "PARTIALLY_BILLED"],
-    },
-    ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
-    group: {
-      is: {
-        ...(input.branchId
-          ? { originBranchId: input.branchId }
-          : branchFilter(req, "originBranchId")),
-        transportType: transportWhere(input.billType),
-        paymentMode: paymentModeForBillType(input.billType),
-      },
-    },
-  };
-
-  const unique = new Map<
-    string,
-    {
-      id: string;
-      name: string;
-      stateId: string;
-      splitBillsByChargeType: boolean;
-    }
-  >();
+const scanEligibleClients = async (
+  where: Prisma.LorryReceiptWhereInput,
+  billingPartyType: "CONSIGNOR" | "CONSIGNEE",
+): Promise<EligibleClientRow[]> => {
+  const unique = new Map<string, EligibleClientRow>();
 
   // "Eligible" isn't a stored column — it's derived per LR from its charges,
   // so it can't be pushed down to a single DISTINCT query without duplicating
@@ -244,16 +232,12 @@ router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
       )
         continue;
       const customer =
-        input.billingPartyType === "CONSIGNOR"
+        billingPartyType === "CONSIGNOR"
           ? lr.group.consignor
           : lr.group.consignee;
       if (!customer.splitBillsByChargeType && lr.billLines.length > 0)
         continue;
-      if (
-        !input.search ||
-        customer.name.toLowerCase().includes(input.search.toLowerCase())
-      )
-        unique.set(customer.id, customer);
+      unique.set(customer.id, customer);
     }
 
     if (lrs.length < ELIGIBLE_CLIENTS_PAGE_SIZE) break;
@@ -264,9 +248,50 @@ router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
       );
   }
 
+  return [...unique.values()];
+};
+
+router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
+  const input = validate(eligibleClientQuerySchema.safeParse(req.query));
+  if (input.branchId) assertBranchAccess(req, input.branchId);
+
+  const where: Prisma.LorryReceiptWhereInput = {
+    status: "ACKNOWLEDGED",
+    billingStatus: {
+      in: ["NOT_BILLABLE", "READY_TO_BILL", "PARTIALLY_BILLED"],
+    },
+    ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
+    group: {
+      is: {
+        ...(input.branchId
+          ? { originBranchId: input.branchId }
+          : branchFilter(req, "originBranchId")),
+        transportType: transportWhere(input.billType),
+        paymentMode: paymentModeForBillType(input.billType),
+      },
+    },
+  };
+
+  // The whole exhaustive scan is cached (keyed by the resolved filter, which
+  // already embeds the caller's branch scope); `search` narrows the cached
+  // list afterwards, so typing in a search box never triggers a re-scan.
+  const eligible = await cached(
+    {
+      namespace: BILLING_ELIGIBILITY_CACHE,
+      key: { where, billingPartyType: input.billingPartyType },
+      ttlSeconds: BILLING_ELIGIBILITY_TTL_SECONDS,
+    },
+    () => scanEligibleClients(where, input.billingPartyType),
+  );
+
+  const needle = input.search?.toLowerCase();
+  const matching = needle
+    ? eligible.filter((customer) => customer.name.toLowerCase().includes(needle))
+    : eligible;
+
   return sendOk(
     res,
-    [...unique.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    [...matching].sort((a, b) => a.name.localeCompare(b.name)),
   );
 });
 
