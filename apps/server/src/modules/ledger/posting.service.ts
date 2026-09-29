@@ -7,6 +7,7 @@ import {
   type LedgerAccountGroup,
   type LRChargeEffect,
   type LRChargeType,
+  type VendorPaymentType,
   type VoucherType,
 } from "../../../generated/prisma/index.js";
 import { BadRequestError } from "../../lib/error.js";
@@ -183,13 +184,18 @@ export type DraftLine = {
   narration?: string | null;
 };
 
+/** A NEW_REF/AGAINST_REF ties to exactly one reference kind — a Bill (debtor
+ *  side) or a VendorPaymentSlip (creditor side), matching the DB CHECK on
+ *  LedgerAllocation. The union keeps call sites from passing both or neither. */
 export type DraftAllocation = {
   /** index into the `lines` array of the party line this ref sits on */
   lineIndex: number;
-  billId: string;
   refType: AllocationRefType;
   amountPaise: bigint;
-};
+} & (
+  | { billId: string; vendorPaymentSlipId?: undefined }
+  | { vendorPaymentSlipId: string; billId?: undefined }
+);
 
 export type PostJournalArgs = {
   voucherType: VoucherType;
@@ -283,7 +289,8 @@ export async function postJournal(tx: Tx, args: PostJournalArgs) {
         return {
           journalEntryId: entry.id,
           journalLineId: line.id,
-          billId: alloc.billId,
+          billId: alloc.billId ?? null,
+          vendorPaymentSlipId: alloc.vendorPaymentSlipId ?? null,
           refType: alloc.refType,
           amountPaise: alloc.amountPaise,
         };
@@ -1247,19 +1254,26 @@ export async function reverseJournal(
       creditPaise: line.debitPaise,
     })),
     // Mirror every allocation onto the contra with its refType flipped:
-    // a NEW_REF (e.g. a sale opening the bill's outstanding) closes as
-    // AGAINST_REF, and an AGAINST_REF (e.g. a receipt settling the bill)
-    // reopens as NEW_REF. Symmetric regardless of which voucher type — a
-    // sales voucher or a receipt voucher — is being reversed.
-    allocations: original.allocations.map((alloc) => ({
-      lineIndex: lineIndexById.get(alloc.journalLineId) ?? 0,
-      billId: alloc.billId,
-      refType:
+    // a NEW_REF (e.g. a sale opening the bill's outstanding, or a vendor
+    // accrual opening the slip's payable) closes as AGAINST_REF, and an
+    // AGAINST_REF (e.g. a receipt or a disbursement settling it) reopens as
+    // NEW_REF. Symmetric regardless of reference kind (Bill vs
+    // VendorPaymentSlip) or which voucher type is being reversed.
+    allocations: original.allocations.map((alloc) => {
+      const lineIndex = lineIndexById.get(alloc.journalLineId) ?? 0;
+      const refType =
         alloc.refType === "NEW_REF"
           ? ("AGAINST_REF" as const)
-          : ("NEW_REF" as const),
-      amountPaise: alloc.amountPaise,
-    })),
+          : ("NEW_REF" as const);
+      return alloc.billId
+        ? { lineIndex, billId: alloc.billId, refType, amountPaise: alloc.amountPaise }
+        : {
+            lineIndex,
+            vendorPaymentSlipId: alloc.vendorPaymentSlipId!,
+            refType,
+            amountPaise: alloc.amountPaise,
+          };
+    }),
   });
 
   await tx.journalEntry.update({
@@ -1268,4 +1282,337 @@ export async function reverseJournal(
   });
 
   return contra;
+}
+
+/* ------------------------------------------------------------------ */
+/* Vendor payment (Transporter / Hamali accrual + settlement) — VP-3   */
+/* ------------------------------------------------------------------ */
+
+// GL codes for the vendor-payment accrual. FREIGHT_EXPENSE and TDS_PAYABLE
+// already exist and are reused as-is. Every other code here is a clearly-
+// named PLACEHOLDER pending Accounts' written sign-off (see VP-3 acceptance
+// criteria — "Accounts must confirm stable GL codes... never create a ledger
+// from a client-provided name"). In particular VENDOR_ADVANCE_RECOVERY_CODE
+// is only correct if transporter advances are *debited* to this same ledger
+// wherever they're paid out — as of this writing no such flow exists yet in
+// this codebase (Cash Planning's CreditorCategory has no ADVANCE bucket), so
+// crediting it here would currently never net against a matching debit. Do
+// not wire the advance deduction line into production posting until that's
+// resolved, one way or the other.
+const VENDOR_DETENTION_EXPENSE_CODE = "DETENTION_EXPENSE";
+const VENDOR_HAMALI_EXPENSE_CODE = "HAMALI_EXPENSE";
+const VENDOR_ADVANCE_RECOVERY_CODE = "TRANSPORTER_ADVANCE_RECOVERY";
+const VENDOR_COMMISSION_RECOVERY_CODE = "COMMISSION_RECOVERY";
+const VENDOR_HAMALI_RECOVERY_CODE = "HAMALI_RECOVERY";
+const VENDOR_DAMAGE_RECOVERY_CODE = "DAMAGE_RECOVERY";
+const VENDOR_STATIONERY_RECOVERY_CODE = "STATIONERY_RECOVERY";
+
+/** Resolve the slip's single payee ledger — exactly one of transportId /
+ *  labourId is set, DB-enforced by VendorPaymentSlip_one_payee_chk. */
+async function getVendorPayeeLedger(
+  tx: Tx,
+  ref: { transportId: string | null; labourId: string | null },
+) {
+  if (ref.transportId)
+    return getOrCreatePartyLedger(tx, { transportId: ref.transportId });
+  if (ref.labourId)
+    return getOrCreatePartyLedger(tx, { labourId: ref.labourId });
+  throw new BadRequestError(
+    "Vendor payment slip has no payee (transportId/labourId)",
+  );
+}
+
+export type VendorSlipAccrualLine = {
+  freightPaise: bigint;
+  detentionPaise: bigint;
+  // Deduction on a TRANSPORTER slip; unused (expected 0) on a HAMALI slip.
+  advancePaise: bigint;
+  commissionPaise: bigint;
+  // Deduction on a TRANSPORTER slip ("hamali recovery"); on a HAMALI slip
+  // this instead carries the *gross* claimed hamali (the Dr side) — same
+  // column, opposite meaning, branched on `type` below.
+  hamaliPaise: bigint;
+  tdsPaise: bigint;
+  damagePaise: bigint;
+  stationeryPaise: bigint;
+};
+
+export type VendorSlipAccrualArgs = {
+  slipId: string;
+  slipNumber: string;
+  type: VendorPaymentType;
+  branchId: string;
+  fyCode: string;
+  voucherDate: Date;
+  transportId: string | null;
+  labourId: string | null;
+  lines: VendorSlipAccrualLine[];
+  netPayablePaise: bigint;
+  /** Pass slip.accrualJournalEntryId — short-circuits to the existing POSTED
+   *  journal instead of re-posting when an approval request is retried. */
+  existingAccrualJournalEntryId?: string | null;
+  createdById: string;
+};
+
+const sumLines = (lines: VendorSlipAccrualLine[]): VendorSlipAccrualLine =>
+  lines.reduce(
+    (sum, l) => ({
+      freightPaise: sum.freightPaise + l.freightPaise,
+      detentionPaise: sum.detentionPaise + l.detentionPaise,
+      advancePaise: sum.advancePaise + l.advancePaise,
+      commissionPaise: sum.commissionPaise + l.commissionPaise,
+      hamaliPaise: sum.hamaliPaise + l.hamaliPaise,
+      tdsPaise: sum.tdsPaise + l.tdsPaise,
+      damagePaise: sum.damagePaise + l.damagePaise,
+      stationeryPaise: sum.stationeryPaise + l.stationeryPaise,
+    }),
+    {
+      freightPaise: 0n,
+      detentionPaise: 0n,
+      advancePaise: 0n,
+      commissionPaise: 0n,
+      hamaliPaise: 0n,
+      tdsPaise: 0n,
+      damagePaise: 0n,
+      stationeryPaise: 0n,
+    },
+  );
+
+/**
+ * Post the accrual JOURNAL when a vendor-payment slip becomes APPROVED:
+ *
+ * TRANSPORTER:
+ *   Dr Freight Expense, Detention Expense
+ *       Cr Advance / Commission / Hamali / TDS / Damage / Stationery recovery
+ *       Cr Transporter party ledger = netPayablePaise  (+ NEW_REF)
+ *
+ * HAMALI:
+ *   Dr Hamali/Labour Expense (gross)
+ *       Cr TDS Payable
+ *       Cr Labour party ledger = netPayablePaise  (+ NEW_REF)
+ *
+ * Idempotent: if `existingAccrualJournalEntryId` already names a POSTED
+ * journal, returns it unchanged rather than posting again. Must run inside
+ * the caller's transaction (the same one that flips the slip to APPROVED).
+ */
+export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs) {
+  if (args.existingAccrualJournalEntryId) {
+    const existing = await tx.journalEntry.findUnique({
+      where: { id: args.existingAccrualJournalEntryId },
+    });
+    if (existing && existing.status === "POSTED") return existing;
+  }
+
+  const payeeLedger = await getVendorPayeeLedger(tx, args);
+  const totals = sumLines(args.lines);
+  const lineNarration = `${args.type === "TRANSPORTER" ? "Transporter" : "Hamali"} accrual ${args.slipNumber}`;
+  const lines: DraftLine[] = [];
+
+  // Every GL code this accrual could touch, resolved in one query instead of
+  // one `getGLLedger` round trip per line item — a TRANSPORTER accrual has up
+  // to 8 of these, which was 8 sequential network round trips on every single
+  // approval (this function runs on both the submit auto-approve path and the
+  // standalone approve endpoint).
+  const codes =
+    args.type === "TRANSPORTER"
+      ? [
+          "FREIGHT_EXPENSE",
+          VENDOR_DETENTION_EXPENSE_CODE,
+          VENDOR_ADVANCE_RECOVERY_CODE,
+          VENDOR_COMMISSION_RECOVERY_CODE,
+          VENDOR_HAMALI_RECOVERY_CODE,
+          "TDS_PAYABLE",
+          VENDOR_DAMAGE_RECOVERY_CODE,
+          VENDOR_STATIONERY_RECOVERY_CODE,
+        ]
+      : [VENDOR_HAMALI_EXPENSE_CODE, "TDS_PAYABLE"];
+  const ledgers = await tx.ledger.findMany({ where: { code: { in: codes } } });
+  const ledgerByCode = new Map(ledgers.map((l) => [l.code, l]));
+  const requireLedger = (code: string) => {
+    const ledger = ledgerByCode.get(code);
+    if (!ledger)
+      throw new BadRequestError(
+        `Chart of accounts is missing the "${code}" ledger. Run: pnpm exec tsx prisma/seed-ledger.ts`,
+      );
+    return ledger;
+  };
+
+  const debit = (code: string, amount: bigint) => {
+    if (amount < 0n) throw new BadRequestError(`${code} amount cannot be negative`);
+    if (amount === 0n) return;
+    const ledger = requireLedger(code);
+    lines.push({ ledgerId: ledger.id, debitPaise: amount, creditPaise: 0n, narration: lineNarration });
+  };
+  const credit = (code: string, amount: bigint) => {
+    if (amount < 0n) throw new BadRequestError(`${code} amount cannot be negative`);
+    if (amount === 0n) return;
+    const ledger = requireLedger(code);
+    lines.push({ ledgerId: ledger.id, debitPaise: 0n, creditPaise: amount, narration: lineNarration });
+  };
+
+  if (args.type === "TRANSPORTER") {
+    debit("FREIGHT_EXPENSE", totals.freightPaise);
+    debit(VENDOR_DETENTION_EXPENSE_CODE, totals.detentionPaise);
+    credit(VENDOR_ADVANCE_RECOVERY_CODE, totals.advancePaise);
+    credit(VENDOR_COMMISSION_RECOVERY_CODE, totals.commissionPaise);
+    credit(VENDOR_HAMALI_RECOVERY_CODE, totals.hamaliPaise);
+    credit("TDS_PAYABLE", totals.tdsPaise);
+    credit(VENDOR_DAMAGE_RECOVERY_CODE, totals.damagePaise);
+    credit(VENDOR_STATIONERY_RECOVERY_CODE, totals.stationeryPaise);
+  } else {
+    // HAMALI — hamaliPaise here is the gross claimed amount, not a deduction.
+    debit(VENDOR_HAMALI_EXPENSE_CODE, totals.hamaliPaise);
+    credit("TDS_PAYABLE", totals.tdsPaise);
+  }
+
+  if (args.netPayablePaise < 0n)
+    throw new BadRequestError("Net payable cannot be negative");
+
+  // A slip whose deductions exactly equal its gross has nothing left to pay —
+  // skip the payee line/allocation rather than post a zero-amount line
+  // (postJournal rejects a line that is neither a debit nor a credit).
+  const allocations: DraftAllocation[] = [];
+  if (args.netPayablePaise > 0n) {
+    allocations.push({
+      lineIndex: lines.length,
+      vendorPaymentSlipId: args.slipId,
+      refType: "NEW_REF",
+      amountPaise: args.netPayablePaise,
+    });
+    lines.push({
+      ledgerId: payeeLedger.id,
+      debitPaise: 0n,
+      creditPaise: args.netPayablePaise,
+      narration: lineNarration,
+    });
+  }
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.slipNumber,
+    voucherDate: args.voucherDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "VENDOR_PAYMENT_ACCRUAL",
+    sourceId: args.slipId,
+    sourceNumber: args.slipNumber,
+    createdById: args.createdById,
+    lines,
+    allocations,
+  });
+}
+
+export type VendorDisbursementArgs = {
+  disbursementId: string;
+  voucherNumber: string;
+  slipId: string;
+  slipNumber: string;
+  paidAt: Date;
+  branchId: string;
+  fyCode: string;
+  transportId: string | null;
+  labourId: string | null;
+  fundingLedgerId: string;
+  paidPaise: bigint;
+  /** Pass disbursement.settlementJournalEntryId — short-circuits to the
+   *  existing POSTED journal instead of re-posting on a retried request. */
+  existingSettlementJournalEntryId?: string | null;
+  createdById: string;
+};
+
+/**
+ * Post the PAYMENT voucher for one settlement against a vendor-payment slip:
+ *   Dr Transporter/Labour party ledger = paidPaise  (+ AGAINST_REF on the
+ *       slip's NEW_REF opened by the accrual)
+ *   Cr the validated Cash/Bank funding ledger
+ * Each disbursement is its own voucher (`voucherNumber` supplied by the
+ * caller — a slip can have several partial disbursements, so unlike
+ * postSalesVoucher/postReceiptVoucher this can't just reuse the slip
+ * number). `fundingLedgerId` must resolve to a Ledger in group CASH or BANK
+ * — that's the only "allowed funding source" check made here. `CashAccount`
+ * (and the Ledger seeded from it) carries no `branchId` anywhere in this
+ * schema, so there is no per-branch funding-ledger scope to validate at the
+ * posting layer; the caller (the VP-7 route) is responsible for the actual
+ * branch-access check, via `assertBranchAccess(req, slip.branchId)` against
+ * the *slip*, same as every other route in this codebase.
+ * Idempotent through `existingSettlementJournalEntryId`; the caller is
+ * additionally expected to have already made disbursement-row creation
+ * idempotent via the unique `clientRequestId` constraint before calling this.
+ */
+export async function postVendorDisbursement(tx: Tx, args: VendorDisbursementArgs) {
+  if (args.existingSettlementJournalEntryId) {
+    const existing = await tx.journalEntry.findUnique({
+      where: { id: args.existingSettlementJournalEntryId },
+    });
+    if (existing && existing.status === "POSTED") return existing;
+  }
+
+  const fundingLedger = await tx.ledger.findUnique({
+    where: { id: args.fundingLedgerId },
+  });
+  if (!fundingLedger)
+    throw new BadRequestError("Funding ledger not found");
+  if (fundingLedger.group !== "CASH" && fundingLedger.group !== "BANK")
+    throw new BadRequestError(
+      "Funding ledger must be an allowed Cash or Bank account",
+    );
+
+  const payeeLedger = await getVendorPayeeLedger(tx, args);
+  const lineNarration = `Vendor payment ${args.voucherNumber} — slip ${args.slipNumber}`;
+
+  return postJournal(tx, {
+    voucherType: "PAYMENT",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.paidAt,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "VENDOR_PAYMENT",
+    sourceId: args.disbursementId,
+    sourceNumber: args.voucherNumber,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: payeeLedger.id,
+        debitPaise: args.paidPaise,
+        creditPaise: 0n,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: fundingLedger.id,
+        debitPaise: 0n,
+        creditPaise: args.paidPaise,
+        narration: lineNarration,
+      },
+    ],
+    allocations: [
+      {
+        lineIndex: 0,
+        vendorPaymentSlipId: args.slipId,
+        refType: "AGAINST_REF",
+        amountPaise: args.paidPaise,
+      },
+    ],
+  });
+}
+
+/**
+ * Reverse a vendor-payment slip's accrual (slip cancellation, APPROVED and
+ * unpaid only). A slip with any payment against it must use the separate
+ * refund/payment-reversal flow instead — never this.
+ */
+export async function reverseVendorSlipAccrual(
+  tx: Tx,
+  slip: { accrualJournalEntryId: string | null; paidPaise: bigint },
+  reason: string,
+  createdById: string,
+) {
+  if (slip.paidPaise > 0n)
+    throw new BadRequestError(
+      "A slip with any payment against it cannot have its accrual reversed — use the refund/payment-reversal flow",
+    );
+  if (!slip.accrualJournalEntryId)
+    throw new BadRequestError("Slip has no accrual to reverse");
+  return reverseJournal(tx, slip.accrualJournalEntryId, reason, createdById);
 }

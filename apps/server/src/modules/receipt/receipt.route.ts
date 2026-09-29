@@ -125,58 +125,66 @@ router.get(
         ],
       };
 
-    const bills = await db.bill.findMany({
-      where: {
-        ...(input.branchId
-          ? { branchId: input.branchId }
-          : branchFilter(req, "branchId")),
-        billingCustomerId: input.customerId,
-        status: { in: RECEIVABLE_BILL_STATUSES },
-        outstandingAmountPaise: { gt: 0n },
-        // A bill with a receipt awaiting approval is "reserved" — its
-        // outstanding amount hasn't been reduced yet (that only happens once
-        // the receipt posts), so without this it would stay pickable and let
-        // someone create a second, conflicting receipt against it.
-        receiptAllocations: {
-          none: { receipt: { status: "PENDING_APPROVAL" } },
-        },
-        ...(input.uptoDate ? { billDate: { lte: input.uptoDate } } : {}),
-        ...(input.billNumber
-          ? { billNumber: { contains: input.billNumber, mode: "insensitive" } }
-          : {}),
-        ...(Object.keys(lrFilter).length > 0
-          ? { lines: { some: { lr: lrFilter } } }
-          : {}),
+    const where: Prisma.BillWhereInput = {
+      ...(input.branchId
+        ? { branchId: input.branchId }
+        : branchFilter(req, "branchId")),
+      billingCustomerId: input.customerId,
+      status: { in: RECEIVABLE_BILL_STATUSES },
+      outstandingAmountPaise: { gt: 0n },
+      // A bill with a receipt awaiting approval is "reserved" — its
+      // outstanding amount hasn't been reduced yet (that only happens once
+      // the receipt posts), so without this it would stay pickable and let
+      // someone create a second, conflicting receipt against it.
+      receiptAllocations: {
+        none: { receipt: { status: "PENDING_APPROVAL" } },
       },
-      include: {
-        branch: { select: { name: true } },
-        lines: {
-          take: 1,
-          orderBy: { lineNumber: "asc" },
-          include: {
-            lr: {
-              select: {
-                lrNumber: true,
-                group: {
-                  select: {
-                    marketVehicleNumber: true,
-                    primaryTrip: {
-                      select: { vehicle: { select: { vehicleNumber: true } } },
-                    },
-                    secondaryTrip: {
-                      select: { vehicle: { select: { vehicleNumber: true } } },
+      ...(input.uptoDate ? { billDate: { lte: input.uptoDate } } : {}),
+      ...(input.billNumber
+        ? { billNumber: { contains: input.billNumber, mode: "insensitive" } }
+        : {}),
+      ...(Object.keys(lrFilter).length > 0
+        ? { lines: { some: { lr: lrFilter } } }
+        : {}),
+    };
+
+    const [bills, total] = await Promise.all([
+      db.bill.findMany({
+        where,
+        include: {
+          branch: { select: { name: true } },
+          lines: {
+            take: 1,
+            orderBy: { lineNumber: "asc" },
+            include: {
+              lr: {
+                select: {
+                  lrNumber: true,
+                  group: {
+                    select: {
+                      marketVehicleNumber: true,
+                      primaryTrip: {
+                        select: { vehicle: { select: { vehicleNumber: true } } },
+                      },
+                      secondaryTrip: {
+                        select: { vehicle: { select: { vehicleNumber: true } } },
+                      },
                     },
                   },
                 },
               },
             },
           },
+          _count: { select: { lines: true } },
         },
-        _count: { select: { lines: true } },
-      },
-      orderBy: { billDate: "asc" },
-      take: 500,
-    });
+        // billDate alone isn't unique — the id tiebreak keeps paging stable
+        // (no repeated/skipped rows) when several bills share a date.
+        orderBy: [{ billDate: "asc" }, { id: "asc" }],
+        skip: input.page * input.size,
+        take: input.size,
+      }),
+      db.bill.count({ where }),
+    ]);
     const data = bills.map((bill) => {
       const firstLine = bill.lines[0];
       const vehicle =
@@ -198,7 +206,7 @@ router.get(
         taxableAmountPaise: bill.taxableAmountPaise,
       };
     });
-    return sendOk(res, data);
+    return sendOk(res, data, { page: input.page, size: input.size, total });
   },
 );
 

@@ -40,7 +40,8 @@ export type OutstandingBillsFilters = {
   lrNumber?: string;
   uptoDate?: string;
   billNumber?: string;
-
+  page?: number;
+  size?: number;
 };
 
 export type ReceiptAllocationInput = {
@@ -184,9 +185,25 @@ const listReceipts = async (
   return unwrapListResponse(response);
 };
 
+const outstandingBills = async (
+  filters: OutstandingBillsFilters,
+): Promise<ListResult<OutstandingBill>> => {
+  const { page, size, ...rest } = filters;
+  const response = await api.get<ApiResponse<OutstandingBill[]>>(
+    "/receipt/outstanding-bills",
+    {
+      params: {
+        ...rest,
+        page: page === undefined ? undefined : String(page),
+        size: size === undefined ? undefined : String(size),
+      },
+    },
+  );
+  return unwrapListResponse(response);
+};
+
 export const receiptApi = {
-  outstandingBills: (filters: OutstandingBillsFilters) =>
-    get<OutstandingBill[]>("/receipt/outstanding-bills", filters),
+  outstandingBills,
   create: (body: CreateReceiptDraft) =>
     post<ReceiptStatusPatch>("/receipt", body),
   list: listReceipts,

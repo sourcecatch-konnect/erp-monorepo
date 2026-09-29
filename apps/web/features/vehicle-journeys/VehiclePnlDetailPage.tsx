@@ -19,6 +19,7 @@ import {
     Tooltip,
     XAxis,
     YAxis,
+    type TooltipValueType,
 } from "recharts";
 
 import { Skeleton } from "@skerp/ui/components/skeleton";
@@ -504,7 +505,7 @@ export default function VehiclePnlDetailPage({
                                     ))}
                                 </Pie>
                                 <Tooltip
-                                    formatter={(v) =>
+                                    formatter={(v: TooltipValueType | undefined) =>
                                         `${Number(v).toLocaleString("en-IN")} km`
                                     }
                                 />

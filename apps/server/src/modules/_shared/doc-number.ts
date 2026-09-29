@@ -43,10 +43,16 @@ export const nextSequence = async (
  * distinguishable at a glance even though they live in separate sequences:
  * orders `SKO`, lorry receipts `SKT`, LR groups `SKG`, trips `SKV/TRIP/...`.
  * The DB never collides (separate `docType`); the prefix is purely for humans.
+ *
+ * `digits` defaults to 5 (every existing document type). Pass a different
+ * value only when a specific format is contractually required — e.g. VP-2's
+ * VPAY slip number is spec'd as 4 digits (`SKT/VPAY/<branch>/<fy>/0001`),
+ * one deliberate exception to the app-wide 5-digit convention.
  */
 export const formatDocNumber = (
   branchCode: string,
   fyCode: string,
   seq: number,
   prefix = "SKT",
-) => `${prefix}/${branchCode}/${fyCode}/${String(seq).padStart(5, "0")}`;
+  digits = 5,
+) => `${prefix}/${branchCode}/${fyCode}/${String(seq).padStart(digits, "0")}`;

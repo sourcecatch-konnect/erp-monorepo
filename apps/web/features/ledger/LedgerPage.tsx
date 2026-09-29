@@ -15,15 +15,43 @@ import {
 } from "@skerp/ui/components/select";
 
 import { branchApi } from "@/features/masters/branch/branch.service";
-import { ledgerApi, type AgeingFilters, type StatementFilters } from "./api/ledger.service";
+import { ledgerApi, type AgeingFilters, type StatementFilters, type VendorType } from "./api/ledger.service";
 import { ledgerKeys } from "./api/ledger.keys";
-import { LedgerPartyPicker, type LedgerPartyKind } from "./components/LedgerPartyPicker";
-import { LedgerTable, type BalanceConvention } from "./components/LedgerTable";
+import {
+  LedgerPartyPicker,
+  type CreditorTypeFilter,
+  type LedgerPartyKind,
+} from "./components/LedgerPartyPicker";
+import {
+  LedgerTable,
+  sourceBadge,
+  sourceLabel,
+  type BalanceConvention,
+  type GenericStatementRow,
+} from "./components/LedgerTable";
 import { AgeingTable } from "./components/AgeingTable";
 import { StatementExportButton } from "./components/StatementExportButton";
 import { CompactMoney } from "./components/CompactMoney";
 import { downloadLedgerCsv } from "./components/exportLadgerCSV";
 import { recentFyCodes } from "./fy";
+
+const VENDOR_STATEMENT_KIND_BADGE: Record<string, string> = {
+  ACCRUAL: "bg-blue-50 text-blue-700",
+  PAYMENT: "bg-red-50 text-red-700",
+  REVERSAL: "bg-amber-50 text-amber-700",
+};
+const VENDOR_STATEMENT_KIND_LABEL: Record<string, string> = {
+  ACCRUAL: "Accrual",
+  PAYMENT: "Payment",
+  REVERSAL: "Reversal",
+};
+
+const CREDITOR_TYPE_OPTIONS: { label: string; value: CreditorTypeFilter }[] = [
+  { label: "All vendors", value: "ALL" },
+  { label: "Transporters", value: "TRANSPORTER" },
+  { label: "Labour", value: "LABOUR" },
+  { label: "Other creditors/suppliers", value: "NON_VENDOR" },
+];
 
 type ReportTab = "bank" | "cash" | "debtor" | "creditor" | "driver" | "expense" | "ageing";
 
@@ -152,13 +180,19 @@ export function LedgerPage() {
   const [to, setTo] = React.useState("");
   const [branchId, setBranchId] = React.useState("ALL");
   const [fyCode, setFyCode] = React.useState("ALL");
+  const [creditorTypeFilter, setCreditorTypeFilter] = React.useState<CreditorTypeFilter>("ALL");
+  // Set by LedgerPartyPicker's onSelectAccount when the picked creditor-tab
+  // row is a vendor (VP-8) — null for a plain Creditor/SparePartSupplier row.
+  const [selectedVendorType, setSelectedVendorType] = React.useState<VendorType | null>(null);
 
   const range = { from: from || undefined, to: to || undefined };
-  const showStatementFilters = tab === "debtor" || tab === "ageing";
+  const showStatementFilters = tab === "debtor" || tab === "ageing" || tab === "creditor";
+  const isVendorStatement = tab === "creditor" && Boolean(selectedVendorType);
 
   const changeTab = (next: string) => {
     setTab(next as ReportTab);
     setPartyId("");
+    setSelectedVendorType(null);
   };
 
   const branches = useQuery({
@@ -166,7 +200,9 @@ export function LedgerPage() {
     queryFn: () => branchApi.list({ page: 0, size: 200 }),
   });
 
-  // Bank / Cash (legacy LedgerEntry) and Creditor / Driver / Expense (JournalLine).
+  // Bank / Cash (legacy LedgerEntry) and Expense / plain-Creditor
+  // (JournalLine, flat IN-OUT). A vendor-typed creditor row instead uses
+  // vendorStatementQuery below, which reads VendorPaymentSlip directly.
   const cashQuery = useQuery({
     queryKey:
       tab === "expense"
@@ -183,7 +219,7 @@ export function LedgerPage() {
       return ledgerApi.forAccount(partyId, range);
     },
     enabled:
-      (tab === "bank" || tab === "cash" || tab === "creditor" || tab === "driver" || tab === "expense") &&
+      (tab === "bank" || tab === "cash" || tab === "expense" || (tab === "creditor" && !selectedVendorType)) &&
       (tab === "expense" || partyId.length > 0),
   });
 
@@ -200,6 +236,12 @@ export function LedgerPage() {
     enabled: tab === "debtor" && partyId.length > 0,
   });
 
+  const vendorStatementQuery = useQuery({
+    queryKey: ledgerKeys.vendorStatement(partyId, statementFilters),
+    queryFn: () => ledgerApi.vendorStatement(partyId, statementFilters),
+    enabled: isVendorStatement && partyId.length > 0,
+  });
+
   const ageingFilters: AgeingFilters = {
     branchId: branchId === "ALL" ? undefined : branchId,
     fyCode: fyCode === "ALL" ? undefined : fyCode,
@@ -212,8 +254,8 @@ export function LedgerPage() {
   });
 
   const handleExportCsv = () => {
-    if (tab === "debtor" || tab === "ageing" || !cashQuery.data) return;
-    const cfg = cashTabs[tab as "bank" | "cash" | "creditor" | "driver" | "expense"];
+    if (tab === "debtor" || tab === "ageing" || isVendorStatement || !cashQuery.data) return;
+    const cfg = cashTabs[tab as "bank" | "cash" | "creditor" | "expense"];
     downloadLedgerCsv({
       filename: `${tab}-ledger`,
       openingBalance: cashQuery.data.openingBalance,
@@ -249,7 +291,7 @@ export function LedgerPage() {
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
-              disabled={tab === "ageing" || !cashQuery.data}
+              disabled={tab === "ageing" || isVendorStatement || !cashQuery.data}
             >
               Export CSV
             </Button>
@@ -272,7 +314,45 @@ export function LedgerPage() {
             <div className="w-64">
               <LedgerPartyPicker kind="customer" value={partyId} onChange={setPartyId} />
             </div>
-          ) : tab !== "ageing" && cashTabs[tab as "bank" | "cash" | "creditor" | "driver" | "expense"]?.partyKind ? (
+          ) : tab === "creditor" ? (
+            <>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Vendor type</label>
+                <Select
+                  value={creditorTypeFilter}
+                  onValueChange={(v) => {
+                    setCreditorTypeFilter(v as CreditorTypeFilter);
+                    setPartyId("");
+                    setSelectedVendorType(null);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-52">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CREDITOR_TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-64">
+                <LedgerPartyPicker
+                  kind="creditor"
+                  value={partyId}
+                  onChange={setPartyId}
+                  creditorTypeFilter={creditorTypeFilter}
+                  onSelectAccount={(account) =>
+                    setSelectedVendorType(
+                      account?.transportId ? "TRANSPORTER" : account?.labourId ? "LABOUR" : null,
+                    )
+                  }
+                />
+              </div>
+            </>
+          ) : tab !== "ageing" && cashTabs[tab as "bank" | "cash" | "creditor" | "expense"]?.partyKind ? (
             <div className="w-64">
               <LedgerPartyPicker
                 kind={cashTabs[tab as "bank" | "cash" | "creditor" | "driver" | "expense"].partyKind!}
@@ -380,8 +460,88 @@ export function LedgerPage() {
           />
         </TabsContent>
 
-        {/* ---- Bank / Cash / Creditor / Driver / Expense ---- */}
-        {(["bank", "cash", "creditor", "driver", "expense"] as const).map((key) => {
+        {/* ---- Creditor: plain ledger, or a vendor statement (VP-8) when the
+             picked row is a transporter/labour party ---- */}
+        <TabsContent value="creditor" className="space-y-3">
+          <p className="text-xs text-muted-foreground print:hidden">
+            {isVendorStatement
+              ? "One vendor's real outstanding — every accrual and payment in date order with a running balance."
+              : cashTabs.creditor.description}
+          </p>
+          {!partyId ? (
+            <EmptyHint>Pick a creditor, transporter or labour to see their ledger.</EmptyHint>
+          ) : isVendorStatement ? (
+            <div className="overflow-hidden rounded-md border border-border bg-card">
+              <LedgerTable
+                variant="statement"
+                entries={[]}
+                openingBalance={0}
+                balanceConvention="liability"
+                statementBalanceConvention="liability"
+                statementKindBadge={VENDOR_STATEMENT_KIND_BADGE}
+                statementKindLabel={VENDOR_STATEMENT_KIND_LABEL}
+                statementRows={vendorStatementQuery.data?.lines ?? []}
+                statementOpeningPaise={vendorStatementQuery.data?.openingBalancePaise ?? 0}
+                isLoading={vendorStatementQuery.isLoading}
+                emptyLabel="No transactions in this range"
+                maxHeight={480}
+              />
+              <VendorStatementTotals data={vendorStatementQuery.data} />
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-md border border-border bg-card">
+              {/* Same "statement" visual as the vendor case — opening balance
+                  row, kind badges, running balance — even though a plain
+                  Creditor/SparePartSupplier row has no VendorPaymentSlip to
+                  read, so its rows come from the flat ledgerForCreditor read
+                  via toGenericStatementRows() instead of a richer per-slip
+                  source. "Open the statement" now means the same view for
+                  every Chart-of-Accounts row this tab supports. */}
+              <LedgerTable
+                variant="statement"
+                entries={[]}
+                openingBalance={0}
+                balanceConvention="liability"
+                statementBalanceConvention="liability"
+                statementKindBadge={sourceBadge}
+                statementKindLabel={sourceLabel}
+                statementRows={toGenericStatementRows(cashQuery.data)}
+                statementOpeningPaise={cashQuery.data?.openingBalance ?? 0}
+                isLoading={cashQuery.isLoading}
+                emptyLabel="No entries in this range"
+                maxHeight={480}
+              />
+              <div className="grid grid-cols-3 gap-px border-t bg-border text-sm">
+                <div className="bg-card px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Total Debit</p>
+                  <CompactMoney
+                    className="text-base font-semibold"
+                    value={debitTotal(cashQuery.data, "liability")}
+                  />
+                </div>
+                <div className="bg-card px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Total Credit</p>
+                  <CompactMoney
+                    className="text-base font-semibold"
+                    value={creditTotal(cashQuery.data, "liability")}
+                  />
+                </div>
+                <div className="bg-card px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Closing Balance</p>
+                  <span className="inline-flex items-baseline gap-1">
+                    <CompactMoney className="text-base font-semibold" value={cashQuery.data?.closingBalance ?? 0} />
+                    <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                      {isDr(cashQuery.data?.closingBalance ?? 0, "liability") ? "Dr" : "Cr"}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ---- Bank / Cash / Expense ---- */}
+        {(["bank", "cash", "expense"] as const).map((key) => {
           const cfg = cashTabs[key];
           return (
             <TabsContent key={key} value={key} className="space-y-3">
@@ -455,9 +615,65 @@ function StatementTotals({
   );
 }
 
+function VendorStatementTotals({
+  data,
+}: {
+  data?: import("@skerp/types").VendorStatementView;
+}) {
+  const t = data?.totals;
+  const cell = (label: string, value: number) => (
+    <div className="bg-card px-4 py-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <CompactMoney className="text-base font-semibold" value={value} />
+    </div>
+  );
+  return (
+    <div className="grid grid-cols-2 gap-px border-t bg-border text-sm sm:grid-cols-4">
+      {cell("Accrued", t?.accruedPaise ?? 0)}
+      {cell("Paid", t?.paidPaise ?? 0)}
+      {cell("Reversed", t?.reversedPaise ?? 0)}
+      <div className="bg-card px-4 py-3">
+        <p className="text-xs text-muted-foreground">Outstanding</p>
+        <span className="inline-flex items-baseline gap-1">
+          <CompactMoney className="text-base font-semibold" value={data?.closingBalancePaise ?? 0} />
+          <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+            {(data?.closingBalancePaise ?? 0) >= 0 ? "Cr" : "Dr"}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function isDr(balance: number, convention: BalanceConvention): boolean {
   if (!convention) return true;
   return balance >= 0 === (convention === "asset");
+}
+
+/**
+ * Adapts a plain (non-vendor) creditor's flat LedgerView into the same
+ * GenericStatementRow shape the statement table renders — so a Creditor/
+ * SparePartSupplier row opens the identical "statement" view a transporter/
+ * labour row does, per VP-8's "supported Chart of Accounts rows [also] open
+ * the statement". No slip to drill into for these sources, so `href` stays
+ * null; direction -> debit/credit follows the same IN=credit/OUT=debit
+ * convention ledgerForCreditor's own liability reading already uses.
+ */
+function toGenericStatementRows(
+  view: import("@skerp/types").LedgerView | undefined,
+): GenericStatementRow[] {
+  if (!view) return [];
+  return view.entries.map((e) => ({
+    id: e.id,
+    date: new Date(e.occurredAt).toISOString(),
+    kind: e.sourceType,
+    particulars: e.description,
+    voucherNumber: null,
+    href: null,
+    debitPaise: e.direction === "OUT" ? e.amountPaise : 0,
+    creditPaise: e.direction === "IN" ? e.amountPaise : 0,
+    runningBalancePaise: e.runningBalance,
+  }));
 }
 
 type ReportTotals = { totalIn?: number; totalOut?: number } | undefined;
