@@ -2,14 +2,10 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { IconPlus } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
-import { Textarea } from "@skerp/ui/components/textarea";
-
 import { Combobox } from "@skerp/ui/components/combobox";
 import {
   Table,
@@ -20,43 +16,31 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@skerp/ui/components/dialog";
-import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
+import { StatusTabs, TablePaginationFooter, TableSearchInput } from "@/components/data-table";
 
 import { useCan } from "@/features/auth";
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
-import { formatPaise, rupeesToPaise, paiseToRupees } from "@/lib/money";
+import { formatPaise } from "@/lib/money";
 import {
   purchaseOrderApi,
+  LOOKUP_PAGE_SIZE,
   type PurchaseOrder,
+  type PurchaseOrderStatus,
 } from "./api/purchase-order.service";
 import { purchaseOrderKeys } from "./api/purchase-order.keys";
 import { PurchaseOrderStatusBadge } from "./purchaseOrderStatusBadge";
+import { PurchaseOrderFormDialog } from "./PurchaseOrderFormDialog";
 
-type LineDraft = {
-  key: string;
-  sparePartId: string;
-  qty: string;
-  rate: string;
-};
-
-const newLine = (): LineDraft => ({
-  key: Math.random().toString(36).slice(2),
-  sparePartId: "",
-  qty: "",
-  rate: "",
-});
-
-const today = () => new Date().toISOString().slice(0, 10);
-
-
-
+const STATUS_TABS = [
+  { key: "ALL", label: "All" },
+  { key: "DRAFT", label: "Draft" },
+  { key: "APPROVED", label: "Approved" },
+  { key: "SENT", label: "Sent" },
+  { key: "PARTIALLY_RECEIVED", label: "Partially received" },
+  { key: "RECEIVED", label: "Received" },
+  { key: "CLOSED", label: "Closed" },
+  { key: "CANCELLED", label: "Cancelled" },
+] as const;
 
 /** Purchase Order — commitment-only document (never moves stock or posts to
  *  the ledger). Header + a line-item grid, one page, matching the "search
@@ -64,67 +48,71 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function PurchaseOrderListPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
   const canManage = useCan(PERMS.WORKSHOP.PO_MANAGE);
 
-  const [createOpen, setCreateOpen] = React.useState(false);
+  const [formOpen, setFormOpen] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState<PurchaseOrder | null>(null);
-  const [branchId, setBranchId] = React.useState("");
-  const [supplierId, setSupplierId] = React.useState("");
-  const [poDate, setPoDate] = React.useState(today());
-  const [expectedDate, setExpectedDate] = React.useState("");
-  const [remarks, setRemarks] = React.useState("");
-  const [lines, setLines] = React.useState<LineDraft[]>([newLine()]);
-  const [supplierSearch, setSupplierSearch] = React.useState("");
-  const [partSearch, setPartSearch] = React.useState("");
-  const debouncedSupplierSearch = useDebouncedValue(supplierSearch, 300);
-  const debouncedPartSearch = useDebouncedValue(partSearch, 300);
 
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
+  const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
+  const [supplierFilterId, setSupplierFilterId] = React.useState("");
+  const [supplierFilterSearch, setSupplierFilterSearch] = React.useState("");
+  const debouncedSupplierFilterSearch = useDebouncedValue(supplierFilterSearch, 300);
+  const [search, setSearch] = React.useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const handleSizeChange = (nextSize: number) => {
     setSize(nextSize);
     setPage(0);
   };
 
+  const listParams = {
+    page,
+    size,
+    status: statusFilter === "ALL" ? undefined : (statusFilter as PurchaseOrderStatus),
+    supplierId: supplierFilterId || undefined,
+    search: debouncedSearch || undefined,
+  };
+
   const list = useQuery({
-    queryKey: purchaseOrderKeys.list({ page, size }),
-    queryFn: () => purchaseOrderApi.list({ page, size }),
+    queryKey: purchaseOrderKeys.list(listParams),
+    queryFn: () => purchaseOrderApi.list(listParams),
   });
   const orders = list.data?.data ?? [];
   const total = list.data?.meta?.total ?? 0;
-  // Single-workshop-at-HO: this is always the same one branch, so cache it
-  // indefinitely instead of refetching on every screen open.
-  const headOfficeBranch = useQuery({
-    queryKey: purchaseOrderKeys.branches,
-    queryFn: purchaseOrderApi.headOfficeBranch,
-    staleTime: Infinity,
-  });
-  React.useEffect(() => {
-    if (headOfficeBranch.data && !branchId) setBranchId(headOfficeBranch.data.id);
-  }, [headOfficeBranch.data, branchId]);
-  const suppliers = useQuery({
-    queryKey: purchaseOrderKeys.suppliers(debouncedSupplierSearch),
-    queryFn: () => purchaseOrderApi.suppliers(debouncedSupplierSearch),
-    enabled: createOpen,
-  });
-  const spareParts = useQuery({
-    queryKey: purchaseOrderKeys.spareParts(branchId, debouncedPartSearch),
-    queryFn: () => purchaseOrderApi.spareParts(branchId, debouncedPartSearch),
-    enabled: createOpen,
-  });
 
-  const resetForm = () => {
+  // Independent of the create/edit form's own supplier picker — this one
+  // powers the filter bar and stays available even while that dialog is
+  // closed.
+  const supplierFilterOptions = useInfiniteQuery({
+    queryKey: ["purchase-order", "suppliers", "filter", debouncedSupplierFilterSearch],
+    queryFn: ({ pageParam = 0 }) =>
+      purchaseOrderApi.suppliers({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedSupplierFilterSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
+  });
+  const supplierFilterList = React.useMemo(
+    () => supplierFilterOptions.data?.pages.flatMap((page) => page.data) ?? [],
+    [supplierFilterOptions.data],
+  );
+
+  const openCreate = () => {
     setEditTarget(null);
-    setBranchId(headOfficeBranch.data?.id ?? "");
-    setSupplierId("");
-    setSupplierSearch("");
-    setPartSearch("");
-    setPoDate(today());
-    setExpectedDate("");
-    setRemarks("");
-    setLines([newLine()]);
+    setFormOpen(true);
+  };
+  const openEdit = (po: PurchaseOrder) => {
+    setEditTarget(po);
+    setFormOpen(true);
   };
 
   // Detail page's Edit button routes back here with ?edit=<id> since the
@@ -140,65 +128,6 @@ export function PurchaseOrderListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editParamId, orders]);
 
-  const openEdit = (po: PurchaseOrder) => {
-    setEditTarget(po);
-    setBranchId(po.branchId);
-    setSupplierId(po.supplierId);
-    setPoDate(po.poDate.slice(0, 10));
-    setExpectedDate(po.expectedDate ? po.expectedDate.slice(0, 10) : "");
-    setRemarks(po.remarks ?? "");
-    setLines(
-      po.lines.map((l) => ({
-        key: l.id,
-        sparePartId: l.sparePartId,
-        qty: String(l.qtyOrdered),
-        rate: String(paiseToRupees(Number(l.ratePaise))),
-      })),
-    );
-    setCreateOpen(true);
-  };
-
-  const updateLine = (key: string, patch: Partial<LineDraft>) =>
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  const removeLine = (key: string) =>
-    setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
-
-  const validLines = lines.filter(
-    (l) => l.sparePartId && Number(l.qty) > 0 && Number(l.rate) >= 0,
-  );
-  const estimatedPaise = validLines.reduce(
-    (sum, l) => sum + rupeesToPaise(Number(l.rate)) * Number(l.qty),
-    0,
-  );
-  const canSubmit =
-    Boolean(branchId) && Boolean(supplierId) && Boolean(poDate) && validLines.length === lines.length && validLines.length > 0;
-
-  const save = useMutation({
-    mutationFn: () => {
-      const body = {
-        branchId,
-        supplierId,
-        poDate,
-        expectedDate: expectedDate || undefined,
-        remarks: remarks.trim() || undefined,
-        lines: validLines.map((l) => ({
-          sparePartId: l.sparePartId,
-          qtyOrdered: Number(l.qty),
-          ratePaise: rupeesToPaise(Number(l.rate)),
-        })),
-      };
-      return editTarget ? purchaseOrderApi.update(editTarget.id, body) : purchaseOrderApi.create(body);
-    },
-    onSuccess: (po) => {
-      toast.success(editTarget ? `Purchase Order updated — ${po.poNumber}` : `Purchase Order created — ${po.poNumber}`);
-      queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all });
-      setCreateOpen(false);
-      resetForm();
-    },
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Could not save purchase order"),
-  });
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -210,10 +139,68 @@ export function PurchaseOrderListPage() {
           </p>
         </div>
         {canManage && (
-          <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
+          <Button onClick={openCreate}>
             <IconPlus size={15} className="mr-1" /> New PO
           </Button>
         )}
+      </div>
+
+      <div className="space-y-3">
+        <StatusTabs
+          tabs={STATUS_TABS}
+          active={statusFilter}
+          onChange={(key) => {
+            setStatusFilter(key);
+            setPage(0);
+          }}
+          layoutId="po-status-tabs"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <TableSearchInput
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(0);
+            }}
+            placeholder="Search PO number or supplier..."
+          />
+          <div className="w-64">
+            <Combobox
+              options={supplierFilterList}
+              value={supplierFilterId}
+              onChange={(v) => {
+                setSupplierFilterId(v);
+                setPage(0);
+              }}
+              searchValue={supplierFilterSearch}
+              onSearchChange={setSupplierFilterSearch}
+              placeholder="Filter by supplier..."
+              searchPlaceholder="Type to search..."
+              emptyText={supplierFilterOptions.isLoading ? "Loading suppliers..." : "No suppliers found"}
+              hasMore={Boolean(supplierFilterOptions.hasNextPage)}
+              isLoadingMore={supplierFilterOptions.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (supplierFilterOptions.hasNextPage && !supplierFilterOptions.isFetchingNextPage) {
+                  supplierFilterOptions.fetchNextPage();
+                }
+              }}
+            />
+          </div>
+          {supplierFilterId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSupplierFilterId("");
+                setSupplierFilterSearch("");
+                setPage(0);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-md border">
@@ -253,7 +240,7 @@ export function PurchaseOrderListPage() {
                 className="cursor-pointer"
                 onClick={() => router.push(`/workshop/purchase-orders/${po.id}`)}
               >
-                <TableCell className="font-medium">{po.poNumber ?? "—"}</TableCell>
+                <TableCell className="font-medium text-primary hover:underline">{po.poNumber ?? "—"}</TableCell>
                 <TableCell>{po.supplier.name}</TableCell>
                 <TableCell>{po.branch.name}</TableCell>
                 <TableCell>{new Date(po.poDate).toLocaleDateString("en-IN")}</TableCell>
@@ -288,171 +275,11 @@ export function PurchaseOrderListPage() {
         />
       </div>
 
-      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
-        <DialogContent className="w-[95vw] sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{editTarget ? `Edit ${editTarget.poNumber}` : "New Purchase Order"}</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Branch</label>
-              <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-sm text-muted-foreground">
-                {headOfficeBranch.data?.name ?? "—"}{" "}
-                <span className="ml-1 text-xs">(single workshop — fixed)</span>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Supplier</label>
-              <Combobox
-                options={suppliers.data ?? []}
-                value={supplierId}
-                onChange={setSupplierId}
-                searchValue={supplierSearch}
-                onSearchChange={setSupplierSearch}
-                placeholder="Search supplier..."
-                searchPlaceholder="Type to search..."
-                emptyText={suppliers.isLoading ? "Loading suppliers..." : "No suppliers found"}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">PO date</label>
-              <Input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">
-                Expected date <span className="text-muted-foreground">(optional)</span>
-              </label>
-              <Input
-                type="date"
-                value={expectedDate}
-                onChange={(e) => setExpectedDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5 sm:col-span-3">
-              <label className="text-sm font-medium">
-                Remarks <span className="text-muted-foreground">(optional)</span>
-              </label>
-              <Textarea
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                rows={2}
-                className="resize-none"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-md border">
-            <div className="border-b bg-muted/30 px-3 py-2 text-sm font-semibold">Lines</div>
-            <div className="divide-y">
-              {lines.map((line) => {
-                const amount = rupeesToPaise(Number(line.rate) || 0) * (Number(line.qty) || 0);
-                const selectedPart = spareParts.data?.find((p) => p.value === line.sparePartId);
-                const gap =
-                  selectedPart && selectedPart.currentStock !== null
-                    ? Math.max(selectedPart.minimumStock - selectedPart.currentStock, 0)
-                    : null;
-                const qtyEntered = Number(line.qty) || 0;
-                const afterThisOrder = gap !== null ? gap - qtyEntered : null;
-
-                return (
-                  <div key={line.key} className="space-y-1.5 p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <div className="sm:w-64">
-                        <Combobox
-                          options={spareParts.data ?? []}
-                          value={line.sparePartId}
-                          onChange={(v) => {
-                            const picked = spareParts.data?.find((p) => p.value === v);
-                            updateLine(line.key, {
-                              sparePartId: v,
-                              // Prefill from the master's rate — still freely editable below.
-                              rate: picked ? String(paiseToRupees(Number(picked.ratePaise))) : line.rate,
-                            });
-                          }}
-                          searchValue={partSearch}
-                          onSearchChange={setPartSearch}
-                          disabled={!branchId}
-                          placeholder={branchId ? "Search spare part..." : "Pick a branch first"}
-                          searchPlaceholder="Type to search..."
-                          emptyText={spareParts.isLoading ? "Loading parts..." : "No parts found"}
-                        />
-                      </div>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="Qty"
-                        value={line.qty}
-                        onChange={(e) => updateLine(line.key, { qty: e.target.value })}
-                        className="sm:w-24"
-                      />
-                      <Input
-                        inputMode="decimal"
-                        placeholder="Rate (₹)"
-                        value={line.rate}
-                        onChange={(e) => updateLine(line.key, { rate: e.target.value })}
-                        className="sm:w-32"
-                      />
-                      <span className="text-sm text-muted-foreground sm:w-28 sm:text-right">
-                        {formatPaise(amount)}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        disabled={lines.length <= 1}
-                        onClick={() => removeLine(line.key)}
-                      >
-                        <IconTrash size={15} />
-                      </Button>
-                    </div>
-
-                    {selectedPart && gap !== null && (
-                      <div className="pl-1 text-xs">
-                        {gap === 0 ? (
-                          <span className="text-muted-foreground">
-                            Stock is already at or above minimum ({selectedPart.minimumStock}) — have {selectedPart.currentStock}.
-                          </span>
-                        ) : qtyEntered === 0 ? (
-                          <span className="text-destructive">
-                            Available to order: <span className="font-semibold">{gap}</span> (min{" "}
-                            {selectedPart.minimumStock}, have {selectedPart.currentStock})
-                          </span>
-                        ) : (
-                          <span className={afterThisOrder! > 0 ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"}>
-                            {gap} available − {qtyEntered} ordered ={" "}
-                            <span className="font-semibold">
-                              {afterThisOrder! > 0 ? `${afterThisOrder} still short` : "shortfall covered"}
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex items-center justify-between border-t bg-muted/20 px-3 py-2.5">
-              <Button type="button" variant="outline" size="sm" onClick={() => setLines((p) => [...p, newLine()])}>
-                <IconPlus size={15} className="mr-1" /> Add line
-              </Button>
-              <span className="text-sm">
-                Estimated total{" "}
-                <span className="font-semibold tabular-nums">{formatPaise(estimatedPaise)}</span>
-              </span>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button disabled={!canSubmit || save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? "Saving..." : editTarget ? "Save changes" : "Create PO"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PurchaseOrderFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        editTarget={editTarget}
+      />
     </div>
   );
 }

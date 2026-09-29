@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { Voucher } from "@/features/ledger/voucher.types";
 import type {
   ApiResponse,
   VehicleJourney,
@@ -277,6 +278,10 @@ export const logSlipApi = {
     );
     return unwrapApiResponse(res);
   },
+  voucher: async (id: string): Promise<Voucher> => {
+    const res = await api.get<ApiResponse<Voucher>>(`/log-slips/${id}/voucher`);
+    return unwrapApiResponse(res);
+  },
   reopen: async (id: string, reason: string): Promise<LogSlip> => {
     const res = await api.post<ApiResponse<LogSlip>>(
       `/log-slips/${id}/reopen`,
@@ -291,6 +296,131 @@ export const logSlipApi = {
     );
     return res.data;
   },
+  vehiclePnl: async (filters: {
+    from?: string;
+    to?: string;
+    vehicleId?: string;
+    search?: string;
+    page?: number;
+    size?: number;
+  } = {}): Promise<ListResult<VehiclePnlRow>> => {
+    const res = await api.get<ApiResponse<VehiclePnlRow[]>>("/log-slips/vehicle-pnl", {
+      params: filters,
+    });
+    return unwrapListResponse(res);
+  },
+
+  vehiclePnlSummary: async (filters: {
+    from?: string;
+    to?: string;
+    search?: string;
+  } = {}): Promise<VehiclePnlSummary> => {
+    const res = await api.get<ApiResponse<VehiclePnlSummary>>(
+      "/log-slips/vehicle-pnl/summary",
+      { params: filters },
+    );
+    return unwrapApiResponse(res);
+  },
+
+  /** Printable single-vehicle P&L for the same From/To as the detail page. */
+  vehiclePnlPdf: async (
+    vehicleId: string,
+    period: { from?: string; to?: string },
+    withLetterhead: boolean,
+  ): Promise<Blob> => {
+    const res = await api.get(
+      `/log-slips/vehicle-pnl/${encodeURIComponent(vehicleId)}/pdf`,
+      { params: { ...period, letterhead: withLetterhead }, responseType: "blob" },
+    );
+    return res.data;
+  },
+};
+
+export type VehiclePnlJourneyRow = {
+  logSlipId: string;
+  journeyId: string;
+  journeyNumber: string;
+  logSlipNumber: string | null;
+  logSlipDate: string;
+  totalKm: number;
+  totalFreightPaise: string;
+  totalExpensePaise: string;
+  netResultPaise: string;
+};
+
+export type VehiclePnlMonth = {
+  month: string;
+  freightPaise: string;
+  expensePaise: string;
+  repairsPaise: string;
+  profitPaise: string;
+  /** Vehicle Costs for the month (EMI, insurance, salary…); detail page only. */
+  fixedCostsPaise: string;
+  trueProfitPaise: string;
+  km: number;
+};
+
+export type VehiclePnlRow = {
+  vehicleId: string;
+  vehicleNumber: string;
+  journeyCount: number;
+  totalKm: number;
+  totalFreightPaise: string;
+  totalExpensePaise: string;
+  /** Trip margin: freight − trip expenses. */
+  netResultPaise: string;
+  totalDieselQty: number;
+  actualAverage: number | null;
+  dieselPaise: string;
+  otherExpensePaise: string;
+  repairsPaise: string;
+  /** Trip margin − repairs. Excludes EMI/insurance/permit (not tracked). */
+  profitAfterRepairsPaise: string;
+  /** Null on the list; set on the detail page for an own vehicle. */
+  fixedCostsPaise: string | null;
+  trueProfitPaise: string | null;
+  /** Each Vehicle Costs line over the range; own vehicle, detail page only. */
+  costs: {
+    taxPaise: string;
+    insurancePaise: string;
+    permitPaise: string;
+    fitnessPaise: string;
+    emiPaise: string;
+    salaryPaise: string;
+    tyrePaise: string;
+    otherPaise: string;
+  } | null;
+  /** Booking vs onward freight on loaded trips; detail page only. */
+  freightDiff: { booking: string; diff: string; missing: number } | null;
+  marginPct: number | null;
+  revenuePerKmPaise: string | null;
+  costPerKmPaise: string | null;
+  profitPerKmPaise: string | null;
+  profitPerJourneyPaise: string | null;
+  profitPerDayPaise: string | null;
+  loadedKm: number;
+  emptyKm: number;
+  emptyPct: number | null;
+  runningDays: number;
+  periodDays: number;
+  /** Journey days inside the period — the utilisation numerator. */
+  daysInPeriod: number;
+  utilisationPct: number | null;
+  monthly: VehiclePnlMonth[];
+  journeys: VehiclePnlJourneyRow[];
+};
+
+export type VehiclePnlSummary = {
+  vehicleCount: number;
+  lossMakingCount: number;
+  totalFreightPaise: string;
+  totalExpensePaise: string;
+  totalRepairsPaise: string;
+  profitAfterRepairsPaise: string;
+  marginPct: number | null;
+  totalKm: number;
+  bestVehicle: { vehicleNumber: string; profitPaise: string } | null;
+  worstVehicle: { vehicleNumber: string; profitPaise: string } | null;
 };
 
 /* ------------------------------------------------------------------ */

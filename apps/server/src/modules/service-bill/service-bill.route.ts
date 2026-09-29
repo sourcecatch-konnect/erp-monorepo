@@ -93,6 +93,19 @@ router.get("/", can(PERMS.WORKSHOP.SERVICEBILL_VIEW), async (req, res) => {
     ...(query.branchId ? { branchId: query.branchId } : {}),
     ...(query.serviceProviderId ? { serviceProviderId: query.serviceProviderId } : {}),
     ...(query.status ? { status: query.status } : {}),
+    ...(query.search
+      ? {
+        OR: [
+          { serviceBillNumber: { contains: query.search, mode: "insensitive" as const } },
+          { providerInvoiceNo: { contains: query.search, mode: "insensitive" as const } },
+          {
+            serviceProvider: {
+              name: { contains: query.search, mode: "insensitive" as const },
+            },
+          },
+        ],
+      }
+      : {}),
   };
   const [bills, total] = await Promise.all([
     db.serviceBill.findMany({
@@ -169,6 +182,10 @@ router.post("/", can(PERMS.WORKSHOP.SERVICEBILL_MANAGE), async (req, res) => {
     const seq = await nextSequence(tx, branch.branchCode, fyCode, "SBILL");
     const serviceBillNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/SBILL");
 
+    // Parent row, then lines via createMany — nested `lines: { create: [...]
+    // }` issues one INSERT per line instead of a single batched statement.
+    // The response re-fetches the full detail separately below, so the
+    // created lines don't need to be returned here.
     const created = await tx.serviceBill.create({
       data: {
         serviceBillNumber,
@@ -186,20 +203,23 @@ router.post("/", can(PERMS.WORKSHOP.SERVICEBILL_MANAGE), async (req, res) => {
         createdById: actorId(req),
         postedById: actorId(req),
         postedAt: new Date(),
-        lines: {
-          create: lines.map((line) => ({
-            jobCardServiceLineId: line.id,
-            amountPaise: line.amountPaise,
-          })),
-        },
       },
       select: { id: true, serviceBillNumber: true },
     });
 
-    await tx.jobCardServiceLine.updateMany({
-      where: { id: { in: input.jobCardServiceLineIds } },
-      data: { billedInServiceBillId: created.id },
-    });
+    await Promise.all([
+      tx.serviceBillLine.createMany({
+        data: lines.map((line) => ({
+          serviceBillId: created.id,
+          jobCardServiceLineId: line.id,
+          amountPaise: line.amountPaise,
+        })),
+      }),
+      tx.jobCardServiceLine.updateMany({
+        where: { id: { in: input.jobCardServiceLineIds } },
+        data: { billedInServiceBillId: created.id },
+      }),
+    ]);
 
     const voucher = await postServiceBillVoucher(tx, {
       serviceBillId: created.id,

@@ -1,10 +1,15 @@
 import { useRouter } from "next/navigation";
 import { useCan } from "../auth";
-import { AvailableBillCharge, Bill, billingApi } from "./billing.service";
+import {
+    AvailableBillCharge,
+    Bill,
+    BillCreditNoteType,
+    billingApi,
+} from "./billing.service";
 import { PERMS } from "@skerp/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React from "react";
-import { formatLabel } from "./billing.util";
+import { addDays, formatLabel } from "./billing.util";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@skerp/ui/components/Card";
 import { BillStatus, BillStatusBadge } from "./components/billingStatusBadge";
@@ -14,6 +19,7 @@ import {
     IconCircleCheck,
     IconDownload,
     IconEye,
+    IconFileDollar,
     IconLoader2,
     IconPrinter,
     IconX,
@@ -35,8 +41,13 @@ import { BillTotalsCard } from "./components/BillTotalsCard";
 import { BillAccountingCard } from "./components/BillAccountingCard";
 import { DraftChargeEditor } from "./components/DraftChargeEditor";
 import { CancelBillDialog } from "./components/CancelBillDialog";
+import { CreditNoteDialog } from "./components/CreditNoteDialog";
 import { CancelChargeDialog } from "./components/CancelChargeDialog";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
+
+// Mirrors RECEIVABLE_BILL_STATUSES on the server (customer-statement.compute.ts)
+// — a note only makes sense once a bill is a real, live receivable.
+const RECEIVABLE_BILL_STATUSES = ["FINALISED", "SENT", "PARTIALLY_PAID", "PAID"];
 
 export function BillPreview({ bill }: { bill: Bill }) {
     const router = useRouter();
@@ -46,12 +57,18 @@ export function BillPreview({ bill }: { bill: Bill }) {
     const canApprove = useCan(PERMS.BILLING.APPROVE);
     const canFinalise = useCan(PERMS.BILLING.FINALISE);
     const canCancel = useCan(PERMS.BILLING.CANCEL);
+    const canCreateCreditNote = useCan(PERMS.BILLING.CREDIT_NOTE_CREATE);
     const canViewVoucher = useCan(PERMS.LEDGER.VOUCHER_VIEW);
     const queryClient = useQueryClient();
     const [current, setCurrent] = React.useState(bill);
     const [voucherOpen, setVoucherOpen] = React.useState(false);
     const [cancelOpen, setCancelOpen] = React.useState(false);
     const [cancelReason, setCancelReason] = React.useState("");
+    const [creditNoteOpen, setCreditNoteOpen] = React.useState(false);
+    const [creditNoteType, setCreditNoteType] =
+        React.useState<BillCreditNoteType>("CREDIT_NOTE");
+    const [creditNoteAmount, setCreditNoteAmount] = React.useState("");
+    const [creditNoteReason, setCreditNoteReason] = React.useState("");
     const [chargeToCancel, setChargeToCancel] =
         React.useState<AvailableBillCharge | null>(null);
     const [chargeCancelReason, setChargeCancelReason] = React.useState("");
@@ -194,6 +211,9 @@ export function BillPreview({ bill }: { bill: Bill }) {
                 : {}),
             billDate: current.billDate,
             billingCutoffDate: current.billingCutoffDate ?? null,
+            // Falls back to the parent bill's own date/terms when the sibling
+            // draft's due date wasn't set — required field, see billing.schema.ts.
+            dueDate: current.dueDate ?? addDays(current.billDate, 30),
             remarks: `Separate ${currentChargeKind === "FREIGHT" ? "additional-charge" : "freight"} draft linked to ${current.billNumber ?? "the original draft"}`,
             lrChargeIds: chargeIds,
         });
@@ -325,6 +345,38 @@ export function BillPreview({ bill }: { bill: Bill }) {
                 error instanceof Error ? error.message : "Could not cancel charge",
             ),
     });
+    const creditNotes = useQuery({
+        queryKey: ["billing", "bill", current.id, "credit-notes"],
+        queryFn: () => billingApi.creditNotes(current.id),
+        enabled: RECEIVABLE_BILL_STATUSES.includes(current.status),
+    });
+    const createCreditNote = useMutation({
+        mutationFn: () =>
+            billingApi.createCreditNote(current.id, {
+                noteType: creditNoteType,
+                amountPaise: String(Math.round(Number(creditNoteAmount) * 100)),
+                reason: creditNoteReason.trim(),
+            }),
+        onSuccess: () => {
+            setCreditNoteOpen(false);
+            setCreditNoteAmount("");
+            setCreditNoteReason("");
+            void creditNotes.refetch();
+            void queryClient.invalidateQueries({
+                queryKey: ["billing", "bill", current.id],
+            });
+            void queryClient.invalidateQueries({ queryKey: ["billing", "bills"] });
+            toast.success(
+                creditNoteType === "CREDIT_NOTE"
+                    ? "Credit note posted — outstanding amount reduced"
+                    : "Debit note posted — outstanding amount increased",
+            );
+        },
+        onError: (error) =>
+            toast.error(
+                error instanceof Error ? error.message : "Could not post the note",
+            ),
+    });
     const [pdfBusy, setPdfBusy] = React.useState(false);
     const handlePdf = async (pdfAction: "download" | "print") => {
         try {
@@ -432,6 +484,16 @@ export function BillPreview({ bill }: { bill: Bill }) {
                             <IconX size={16} className="mr-1" /> Cancel bill
                         </Button>
                     ) : null}
+                    {canCreateCreditNote &&
+                        RECEIVABLE_BILL_STATUSES.includes(current.status) ? (
+                        <Button
+                            variant="outline"
+                            onClick={() => setCreditNoteOpen(true)}
+                        >
+                            <IconFileDollar size={16} className="mr-1" /> Credit/Debit
+                            Note
+                        </Button>
+                    ) : null}
                 </div>
             </CardHeader>
             <CardContent className="space-y-6 p-6">
@@ -537,6 +599,47 @@ export function BillPreview({ bill }: { bill: Bill }) {
                                 onViewVoucher={() => setVoucherOpen(true)}
                             />
                         ) : null}
+                        {creditNotes.data && creditNotes.data.length > 0 ? (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-sm">
+                                        Credit / Debit Notes
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 p-4 pt-0">
+                                    {creditNotes.data.map((note) => (
+                                        <div
+                                            key={note.id}
+                                            className="flex items-center justify-between rounded-md border p-2 text-sm"
+                                        >
+                                            <div>
+                                                <p className="font-medium">
+                                                    {note.noteNumber}
+                                                    <span className="ml-2 text-xs text-muted-foreground">
+                                                        {note.noteType === "CREDIT_NOTE"
+                                                            ? "Credit"
+                                                            : "Debit"}
+                                                    </span>
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {note.reason}
+                                                </p>
+                                            </div>
+                                            <p
+                                                className={
+                                                    note.noteType === "CREDIT_NOTE"
+                                                        ? "font-medium text-green-600"
+                                                        : "font-medium text-destructive"
+                                                }
+                                            >
+                                                {note.noteType === "CREDIT_NOTE" ? "-" : "+"}₹
+                                                {(Number(note.amountPaise) / 100).toFixed(2)}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        ) : null}
                     </div>
                 </div>
             </CardContent>
@@ -549,6 +652,20 @@ export function BillPreview({ bill }: { bill: Bill }) {
                 onReasonChange={setCancelReason}
                 onConfirm={() => cancelBill.mutate()}
                 pending={cancelBill.isPending}
+            />
+            <CreditNoteDialog
+                open={creditNoteOpen}
+                onOpenChange={setCreditNoteOpen}
+                billId={current.id}
+                outstandingAmountPaise={current.outstandingAmountPaise}
+                noteType={creditNoteType}
+                onNoteTypeChange={setCreditNoteType}
+                amount={creditNoteAmount}
+                onAmountChange={setCreditNoteAmount}
+                reason={creditNoteReason}
+                onReasonChange={setCreditNoteReason}
+                onConfirm={() => createCreditNote.mutate()}
+                pending={createCreditNote.isPending}
             />
             <CancelChargeDialog
                 charge={chargeToCancel}

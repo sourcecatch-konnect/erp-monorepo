@@ -34,14 +34,30 @@ export const createReceiptSchema = z.object({
   remarks: z.string().trim().max(1000).optional(),
   allocations: z
     .array(
-      z.object({
-        billId: id,
-        amountAppliedPaise: paise,
-        tdsAmountPaise: paise.default(0n),
-        tdsSection: z.string().trim().max(20).optional(),
-        damageAmountPaise: paise.default(0n),
-        rateDiffAmountPaise: signedPaise.default(0n),
-      }),
+      z
+        .object({
+          billId: id,
+          amountAppliedPaise: paise,
+          tdsAmountPaise: paise.default(0n),
+          tdsSection: z.string().trim().max(20).optional(),
+          tdsCertNumber: z.string().trim().max(40).optional(),
+          tdsCertDate: isoDate.optional(),
+          damageAmountPaise: paise.default(0n),
+          rateDiffAmountPaise: signedPaise.default(0n),
+        })
+        // TDS section/certificate were stored as optional and never filled
+        // in practice — every live allocation with TDS>0 was missing both,
+        // which blocks TDS-compliance reporting. Require the section
+        // whenever a real TDS amount is deducted.
+        .superRefine((value, ctx) => {
+          if (value.tdsAmountPaise > 0n && !value.tdsSection) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["tdsSection"],
+              message: "TDS section is required when a TDS amount is deducted",
+            });
+          }
+        }),
     )
     .min(1)
     .max(200),

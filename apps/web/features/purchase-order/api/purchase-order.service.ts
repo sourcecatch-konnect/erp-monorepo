@@ -7,7 +7,7 @@ import {
 } from "@/features/masters/_shared/master-api";
 
 const LOOKUP_SIZE = { size: 1000 } as const;
-const LOOKUP_PAGE_SIZE = 20;
+export const LOOKUP_PAGE_SIZE = 20;
 
 export type PurchaseOrderStatus =
   | "DRAFT"
@@ -127,33 +127,45 @@ export const purchaseOrderApi = {
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
 
-  // Suppliers can grow into a large list, so search server-side instead of
-  // pulling all of them for the picker.
-  suppliers: async (search?: string): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list — paginated + infinite-scrollable
+  // in the combobox rather than truncated to one page silently.
+  suppliers: async (params: {
+    page: number;
+    size: number;
+    search?: string;
+  }): Promise<ListResult<LookupOption>> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined } },
+      { params: { page: params.page, size: params.size, search: params.search || undefined } },
     );
-    return unwrapListResponse(res).data.map((s) => ({
-      value: s.id,
-      label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
-    }));
+    const result = unwrapListResponse(res);
+    return {
+      ...result,
+      data: result.data.map((s) => ({
+        value: s.id,
+        label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
+      })),
+    };
   },
 
   /** Parts with current stock at one branch + reorder threshold + the
    *  master's default rate — feeds the PO line picker. currentStock is null
-   *  until a branch is picked. Search server-side instead of pulling the
-   *  whole catalogue. */
-  spareParts: async (
-    branchId?: string,
-    search?: string,
-  ): Promise<
-    (LookupOption & {
-      unit: string;
-      minimumStock: number;
-      currentStock: number | null;
-      ratePaise: string;
-    })[]
+   *  until a branch is picked. Paginated + infinite-scrollable — the parts
+   *  catalogue can run into the thousands. */
+  spareParts: async (params: {
+    branchId?: string;
+    search?: string;
+    page: number;
+    size: number;
+  }): Promise<
+    ListResult<
+      LookupOption & {
+        unit: string;
+        minimumStock: number;
+        currentStock: number | null;
+        ratePaise: string;
+      }
+    >
   > => {
     const res = await api.get<
       ApiResponse<
@@ -167,15 +179,24 @@ export const purchaseOrderApi = {
         }[]
       >
     >("/purchase-order/lookup/spare-parts", {
-      params: { ...(branchId ? { branchId } : {}), ...(search ? { search } : {}) },
+      params: {
+        ...(params.branchId ? { branchId: params.branchId } : {}),
+        ...(params.search ? { search: params.search } : {}),
+        page: params.page,
+        size: params.size,
+      },
     });
-    return unwrapListResponse(res).data.map((p) => ({
-      value: p.id,
-      label: p.name,
-      unit: p.unit,
-      minimumStock: p.minimumStock,
-      currentStock: p.currentStock,
-      ratePaise: p.ratePaise,
-    }));
+    const result = unwrapListResponse(res);
+    return {
+      ...result,
+      data: result.data.map((p) => ({
+        value: p.id,
+        label: p.name,
+        unit: p.unit,
+        minimumStock: p.minimumStock,
+        currentStock: p.currentStock,
+        ratePaise: p.ratePaise,
+      })),
+    };
   },
 };

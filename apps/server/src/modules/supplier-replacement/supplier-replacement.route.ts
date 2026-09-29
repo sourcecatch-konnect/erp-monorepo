@@ -47,6 +47,18 @@ router.get("/replacement-list", can(PERMS.WORKSHOP.REPLACEMENT_VIEW), async (req
     ...(query.branchId ? { branchId: query.branchId } : {}),
     ...(query.supplierId ? { supplierId: query.supplierId } : {}),
     ...(query.status ? { status: query.status } : {}),
+    ...(query.search
+      ? {
+        OR: [
+          { replacementNumber: { contains: query.search, mode: "insensitive" as const } },
+          {
+            supplier: {
+              name: { contains: query.search, mode: "insensitive" as const },
+            },
+          },
+        ],
+      }
+      : {}),
   };
   const [lists, total] = await Promise.all([
     db.replacementList.findMany({

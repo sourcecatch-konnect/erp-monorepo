@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
@@ -31,7 +31,7 @@ import {
 
 import { formatPaise } from "@/lib/money";
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
-import { jobCardApi, type LookupOption } from "../api/job-card.service";
+import { jobCardApi, LOOKUP_PAGE_SIZE, type LookupOption } from "../api/job-card.service";
 import { jobCardKeys } from "../api/job-card.keys";
 import { newPartLine, type PartLineDraft } from "../line-drafts";
 
@@ -62,11 +62,29 @@ export function AddPartDialog({ open, onOpenChange, branchId, mechanics, onAdd }
     queryKey: jobCardKeys.categories("Item"),
     queryFn: () => jobCardApi.categories("Item"),
   });
-  const parts = useQuery({
+  const parts = useInfiniteQuery({
     queryKey: jobCardKeys.spareParts("Item", categoryId, debouncedPartSearch),
-    queryFn: () => jobCardApi.spareParts("Item", categoryId, debouncedPartSearch),
+    queryFn: ({ pageParam = 0 }) =>
+      jobCardApi.spareParts({
+        type: "Item",
+        categoryId,
+        search: debouncedPartSearch,
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
     enabled: Boolean(categoryId),
   });
+  const partOptions = React.useMemo(
+    () => parts.data?.pages.flatMap((page) => page.data) ?? [],
+    [parts.data],
+  );
   const batches = useQuery({
     queryKey: jobCardKeys.batches(sparePartId, branchId),
     queryFn: () => jobCardApi.batches(sparePartId, branchId),
@@ -82,7 +100,7 @@ export function AddPartDialog({ open, onOpenChange, branchId, mechanics, onAdd }
     setQtyByBatch({});
   };
 
-  const selectedPart = parts.data?.find((p) => p.value === sparePartId);
+  const selectedPart = partOptions.find((p) => p.value === sparePartId);
 
   const rowsToAdd = (batches.data ?? [])
     .filter((b) => Number(qtyByBatch[b.id] ?? 0) > 0)
@@ -138,7 +156,7 @@ export function AddPartDialog({ open, onOpenChange, branchId, mechanics, onAdd }
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Part Name</label>
             <Combobox
-              options={parts.data ?? []}
+              options={partOptions}
               value={sparePartId}
               onChange={(v) => { setSparePartId(v); setQtyByBatch({}); }}
               searchValue={partSearch}
@@ -147,6 +165,11 @@ export function AddPartDialog({ open, onOpenChange, branchId, mechanics, onAdd }
               placeholder={categoryId ? "Search part..." : "Pick a category first"}
               searchPlaceholder="Type to search..."
               emptyText={parts.isLoading ? "Loading parts..." : "No parts found"}
+              hasMore={Boolean(parts.hasNextPage)}
+              isLoadingMore={parts.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (parts.hasNextPage && !parts.isFetchingNextPage) parts.fetchNextPage();
+              }}
             />
           </div>
         </div>

@@ -45,6 +45,19 @@ router.get("/", can(PERMS.WORKSHOP.INWARD_VIEW), async (req, res) => {
     ...(query.poId ? { poId: query.poId } : {}),
     ...(query.supplierId ? { supplierId: query.supplierId } : {}),
     ...(query.status ? { status: query.status } : {}),
+    ...(query.search
+      ? {
+        OR: [
+          { inwardNumber: { contains: query.search, mode: "insensitive" as const } },
+          { supplierInvoiceNo: { contains: query.search, mode: "insensitive" as const } },
+          {
+            supplier: {
+              name: { contains: query.search, mode: "insensitive" as const },
+            },
+          },
+        ],
+      }
+      : {}),
   };
   const [inwards, total] = await Promise.all([
     db.spareInward.findMany({
@@ -207,12 +220,96 @@ router.post("/", can(PERMS.WORKSHOP.INWARD_MANAGE), async (req, res) => {
       });
 
       // Stock: one batch + one StockMovement per accepted line, moving-avg
-      // recompute on StockLedger.
-      for (const line of created.lines) {
-        if (line.qtyReceived <= 0) continue;
+      // recompute on StockLedger. Previously this was a for-loop awaiting 5
+      // separate round trips per line, sequentially — with N lines that's up
+      // to 5N round trips one after another. Grouped by sparePartId (almost
+      // always 1:1 with lines, but this stays correct even if two lines
+      // target the same part) so the ledger read/upsert happens once per
+      // part instead of once per line, and batch/movement inserts + PO-line
+      // updates all fire together via Promise.all instead of one at a time.
+      const acceptedCreatedLines = created.lines.filter((line) => line.qtyReceived > 0);
+      const linesBySparePart = new Map<string, typeof acceptedCreatedLines>();
+      for (const line of acceptedCreatedLines) {
+        const list = linesBySparePart.get(line.sparePartId) ?? [];
+        list.push(line);
+        linesBySparePart.set(line.sparePartId, list);
+      }
 
-        await tx.spareBatch.create({
-          data: {
+      const existingLedgers = await tx.stockLedger.findMany({
+        where: {
+          branchId: po.branchId,
+          sparePartId: { in: [...linesBySparePart.keys()] },
+        },
+      });
+      const ledgerByPart = new Map(
+        existingLedgers.map((ledger) => [ledger.sparePartId, ledger]),
+      );
+
+      const stockMovementsData: {
+        sparePartId: string;
+        branchId: string;
+        movementType: "INWARD";
+        qtyDelta: number;
+        unitCostPaise: bigint;
+        balanceQtyAfter: number;
+        refType: "SPARE_INWARD";
+        refId: string;
+        createdById: string;
+      }[] = [];
+      const ledgerUpserts: ReturnType<typeof tx.stockLedger.upsert>[] = [];
+      const poLineUpdates: ReturnType<typeof tx.purchaseOrderLine.update>[] = [];
+
+      for (const [sparePartId, partLines] of linesBySparePart) {
+        const existing = ledgerByPart.get(sparePartId);
+        let qty = existing?.currentQty ?? 0;
+        let avg = existing?.movingAvgCostPaise ?? 0n;
+
+        for (const line of partLines) {
+          const newQty = qty + line.qtyReceived;
+          avg =
+            newQty === 0
+              ? 0n
+              : (avg * BigInt(qty) + line.ratePaise * BigInt(line.qtyReceived)) /
+                BigInt(newQty);
+          qty = newQty;
+
+          stockMovementsData.push({
+            sparePartId,
+            branchId: po.branchId,
+            movementType: "INWARD",
+            qtyDelta: line.qtyReceived,
+            unitCostPaise: line.ratePaise,
+            balanceQtyAfter: qty,
+            refType: "SPARE_INWARD",
+            refId: created.id,
+            createdById: actorId(req),
+          });
+
+          poLineUpdates.push(
+            tx.purchaseOrderLine.update({
+              where: { id: line.poLineId },
+              data: { qtyReceived: { increment: line.qtyReceived } },
+            }),
+          );
+        }
+
+        ledgerUpserts.push(
+          tx.stockLedger.upsert({
+            where: { sparePartId_branchId: { sparePartId, branchId: po.branchId } },
+            create: {
+              sparePartId,
+              branchId: po.branchId,
+              currentQty: qty,
+              movingAvgCostPaise: avg,
+            },
+            update: { currentQty: qty, movingAvgCostPaise: avg },
+          }),
+        );
+      }
+
+      await Promise.all([
+        tx.spareBatch.createMany({
+          data: acceptedCreatedLines.map((line) => ({
             sparePartId: line.sparePartId,
             supplierId: po.supplierId,
             branchId: po.branchId,
@@ -223,50 +320,12 @@ router.post("/", can(PERMS.WORKSHOP.INWARD_MANAGE), async (req, res) => {
             unitCostPaise: line.ratePaise,
             warrantyExpiry: line.warrantyExpiry,
             guaranteeExpiry: line.guaranteeExpiry,
-          },
-        });
-
-        const stockLedger = await tx.stockLedger.findUnique({
-          where: { sparePartId_branchId: { sparePartId: line.sparePartId, branchId: po.branchId } },
-        });
-        const oldQty = stockLedger?.currentQty ?? 0;
-        const oldAvg = stockLedger?.movingAvgCostPaise ?? 0n;
-        const newQty = oldQty + line.qtyReceived;
-        const newAvg =
-          newQty === 0
-            ? 0n
-            : (oldAvg * BigInt(oldQty) + line.ratePaise * BigInt(line.qtyReceived)) / BigInt(newQty);
-
-        await tx.stockLedger.upsert({
-          where: { sparePartId_branchId: { sparePartId: line.sparePartId, branchId: po.branchId } },
-          create: {
-            sparePartId: line.sparePartId,
-            branchId: po.branchId,
-            currentQty: newQty,
-            movingAvgCostPaise: newAvg,
-          },
-          update: { currentQty: newQty, movingAvgCostPaise: newAvg },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            sparePartId: line.sparePartId,
-            branchId: po.branchId,
-            movementType: "INWARD",
-            qtyDelta: line.qtyReceived,
-            unitCostPaise: line.ratePaise,
-            balanceQtyAfter: newQty,
-            refType: "SPARE_INWARD",
-            refId: created.id,
-            createdById: actorId(req),
-          },
-        });
-
-        await tx.purchaseOrderLine.update({
-          where: { id: line.poLineId },
-          data: { qtyReceived: { increment: line.qtyReceived } },
-        });
-      }
+          })),
+        }),
+        tx.stockMovement.createMany({ data: stockMovementsData }),
+        ...ledgerUpserts,
+        ...poLineUpdates,
+      ]);
 
       // Roll up PO status from its (now-updated) lines.
       const updatedLines = await tx.purchaseOrderLine.findMany({ where: { poId: po.id } });

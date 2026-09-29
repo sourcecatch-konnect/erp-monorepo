@@ -146,6 +146,13 @@ export const ledgerApi = {
     return unwrapApiResponse(res);
   },
 
+  forDriver: async (id: string, range: LedgerRange = {}): Promise<LedgerView> => {
+    const res = await api.get<ApiResponse<LedgerView>>(`/ledger/drivers/${id}`, {
+      params: range,
+    });
+    return unwrapApiResponse(res);
+  },
+
   expenses: async (range: LedgerRange = {}): Promise<LedgerView> => {
     const res = await api.get<ApiResponse<LedgerView>>("/ledger/expenses", {
       params: range,

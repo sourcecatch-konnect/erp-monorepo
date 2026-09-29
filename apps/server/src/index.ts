@@ -35,6 +35,7 @@ import tripExpenseRoute from "./modules/trip-expense/trip-expense.route.js";
 import tripExpenseTypeRoute from "./modules/trip-expense/trip-expense-type.route.js";
 import driverAdvanceRoute from "./modules/trip-expense/driver-advance.route.js";
 import logSlipRoute from "./modules/log-slip/log-slip.route.js";
+import vehicleCostRoute from "./modules/vehicle-cost/vehicle-cost.route.js";
 import lorryReceiptRoute from "./modules/lorry-receipt/lorry-receipt.route.js";
 import lrDeliveryRoute from "./modules/lorry-receipt/lr-delivery.route.js";
 import lrGroupRoute from "./modules/lr-group/lr-group.route.js";
@@ -55,6 +56,7 @@ import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
 import { startDeliverySweeps } from "./modules/lorry-receipt/lr-delivery.sweeps.js";
+import { startDriverLicenseExpirySweep } from "./modules/driver/driver.sweeps.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
 import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
 import MRRRRoute from "./modules/mrrr/mrrr.route.js";
@@ -111,6 +113,7 @@ app.use("/trip-expenses", tripExpenseRoute);
 app.use("/trip-expense-types", tripExpenseTypeRoute);
 app.use("/driver-advances", driverAdvanceRoute);
 app.use("/log-slips", logSlipRoute);
+app.use("/vehicle-costs", vehicleCostRoute);
 app.use("/tracking", trackingRoute);
 // Delivery/ack router first: it owns literal subpaths (e.g. /worklists/...)
 // that the main router's GET /:id would otherwise swallow.
@@ -176,6 +179,7 @@ async function bootstrap() {
   initTrackingRealtime(io);
   startNotificationWorkers();
   startDeliverySweeps();
+  startDriverLicenseExpirySweep();
 
   seedNotificationDefaults().catch((error) => {
     console.error("[notifications] Failed to seed defaults:", error);

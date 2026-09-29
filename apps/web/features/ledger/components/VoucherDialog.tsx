@@ -105,15 +105,15 @@ export function VoucherDialog({
 
     // A SALES voucher settles exactly one bill; a RECEIPT voucher can settle
     // several at once, so this list can carry more than one entry.
-    const billNumbers = voucher
-        ? [
-            ...new Set(
-                voucher.allocations.map(
-                    (allocation) => allocation.bill?.billNumber ?? allocation.billId,
-                ),
+    const allocations = voucher?.allocations ?? [];
+
+    const billNumbers = [
+        ...new Set(
+            allocations.map(
+                (allocation) => allocation.bill?.billNumber ?? allocation.billId,
             ),
-        ]
-        : [];
+        ),
+    ];
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

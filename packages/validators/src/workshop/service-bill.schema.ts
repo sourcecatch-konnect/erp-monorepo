@@ -31,6 +31,7 @@ export const serviceBillListQuerySchema = z.object({
   branchId: id.optional(),
   serviceProviderId: id.optional(),
   status: serviceBillStatusSchema.optional(),
+  search: z.string().trim().optional(),
   page: z.coerce.number().int().min(0).default(0),
   size: z.coerce.number().int().min(1).max(100).default(10),
 });

@@ -15,12 +15,28 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
+import { computeVehiclePnl } from "./vehicle-pnl.service.js";
+import {
+  computeMonthlyVehiclePnl,
+  loadFreightDiffRows,
+  loadSheetSlips,
+  MAX_PERIOD_MONTHS,
+  monthRange,
+} from "./vehicle-pnl-monthly.service.js";
+import { MONTH_RE } from "../vehicle-cost/vehicle-cost.service.js";
+import {
+  buildFreightDiffPdfHtml,
+  buildVehicleDetailPdfHtml,
+  buildVehiclePerformancePdfHtml,
+  buildVehicleSheetPdfHtml,
+} from "./vehicle-pnl.pdf.js";
 import {
   computeLogSlip,
   logSlipInclude,
   logSlipListSelect,
 } from "./log-slip.service.js";
 import { buildLogSlipPdfHtml } from "./log-slip.pdf.js";
+import { postLogSlipVoucher, reverseJournal } from "../ledger/posting.service.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 import { Prisma, type LogSlipStatus } from "../../../generated/prisma/index.js";
 
@@ -84,6 +100,188 @@ router.get("/", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
 
   return sendOk(res, data, { page: query.page, size: query.size, total });
 });
+
+/* ------------------------------------------------------------------ */
+/* Vehicle P&L (Phase 7) — registered before "/:id" so "vehicle-pnl"   */
+/* isn't swallowed as a log slip id.                                   */
+/* ------------------------------------------------------------------ */
+router.get("/vehicle-pnl", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+  const to = typeof req.query.to === "string" ? new Date(`${req.query.to}T23:59:59.999Z`) : undefined;
+  const vehicleId = typeof req.query.vehicleId === "string" ? req.query.vehicleId : undefined;
+  const query = parseListQuery(req);
+  const { data, total } = await computeVehiclePnl({
+    from,
+    to,
+    vehicleId,
+    search: query.search,
+    page: query.page,
+    size: query.size,
+  });
+  return sendOk(res, data, { page: query.page, size: query.size, total });
+});
+
+/** ?month= for one month, or ?from=&to= (inclusive "YYYY-MM") for a range. */
+const parseMonthRange = (req: Request) => {
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const from = text(req.query.from) || text(req.query.month);
+  const to = text(req.query.to) || from;
+  if (!MONTH_RE.test(from) || !MONTH_RE.test(to))
+    throw new ValidationError("month must look like 2026-08");
+  if (from > to) throw new ValidationError("from month is after to month");
+  if (monthRange(from, to).length > MAX_PERIOD_MONTHS)
+    throw new ValidationError(`period can be at most ${MAX_PERIOD_MONTHS} months`);
+  return { from, to };
+};
+
+/** ?from=&to= calendar dates (inclusive) for the Vehicle P&L views. */
+const parseDateRange = (req: Request) => ({
+  from: typeof req.query.from === "string" ? new Date(req.query.from) : undefined,
+  to:
+    typeof req.query.to === "string"
+      ? new Date(`${req.query.to}T23:59:59.999Z`)
+      : undefined,
+});
+
+const withLetterheadOf = (req: Request) => req.query.letterhead !== "false";
+
+const sendPdf = async (res: Response, html: string, fileName: string) => {
+  const pdf = await generatePdfFromHtml(html);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  return res.send(pdf);
+};
+
+const sendPreview = (res: Response, html: string) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(200).send(html);
+};
+
+// Performance report: every own vehicle (idle ones included) with fixed and
+// variable costs applied — the accountant's month-end sheet. Takes ?month=
+// for one month, or ?from=&to= (inclusive) for a quarter, year or custom range.
+router.get("/vehicle-pnl/monthly", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { from, to } = parseMonthRange(req);
+  return sendOk(res, await computeMonthlyVehiclePnl(from, to));
+});
+
+/* Printable Performance report — same letterhead options as LR / GRN.
+   Registered before "/vehicle-pnl/:vehicleId/…" so "monthly" isn't read
+   as a vehicle id. */
+const performanceHtml = async (req: Request) => {
+  const { from, to } = parseMonthRange(req);
+  const report = await computeMonthlyVehiclePnl(from, to);
+  return {
+    html: buildVehiclePerformancePdfHtml(report, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `vehicle-performance-${from === to ? from : `${from}_to_${to}`}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get("/vehicle-pnl/monthly/pdf", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { html, fileName } = await performanceHtml(req);
+  return sendPdf(res, html, fileName);
+});
+
+router.get(
+  "/vehicle-pnl/monthly/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await performanceHtml(req)).html),
+);
+
+/* Monthly vehicle sheet — the accountant's per-vehicle, leg-by-leg layout
+   for the same period; its G.Total equals the Performance report's Result. */
+const vehicleSheetHtml = async (req: Request) => {
+  const { from, to } = parseMonthRange(req);
+  const [report, slips] = await Promise.all([
+    computeMonthlyVehiclePnl(from, to),
+    loadSheetSlips(from, to),
+  ]);
+  return {
+    html: buildVehicleSheetPdfHtml(report, slips, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `vehicle-sheet-${from === to ? from : `${from}_to_${to}`}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get("/vehicle-pnl/monthly/sheet/pdf", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { html, fileName } = await vehicleSheetHtml(req);
+  return sendPdf(res, html, fileName);
+});
+
+router.get(
+  "/vehicle-pnl/monthly/sheet/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await vehicleSheetHtml(req)).html),
+);
+
+/* Freight difference, LR-wise — its total equals the report's card. */
+const freightDiffHtml = async (req: Request) => {
+  const { from, to } = parseMonthRange(req);
+  const rows = await loadFreightDiffRows(from, to);
+  return {
+    html: buildFreightDiffPdfHtml(rows, { from, to }, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `freight-difference-${from === to ? from : `${from}_to_${to}`}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get(
+  "/vehicle-pnl/monthly/freight-diff/pdf",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => {
+    const { html, fileName } = await freightDiffHtml(req);
+    return sendPdf(res, html, fileName);
+  },
+);
+
+router.get(
+  "/vehicle-pnl/monthly/freight-diff/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await freightDiffHtml(req)).html),
+);
+
+// Totals across every matching vehicle (not just the current page) for the
+// summary cards.
+router.get("/vehicle-pnl/summary", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+  const to = typeof req.query.to === "string" ? new Date(`${req.query.to}T23:59:59.999Z`) : undefined;
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const { summary } = await computeVehiclePnl({ from, to, search });
+  return sendOk(res, summary);
+});
+
+/* Printable single-vehicle P&L (the detail page), for the same dates. */
+const vehicleDetailHtml = async (req: Request) => {
+  const vehicleId = String(req.params.vehicleId);
+  const period = parseDateRange(req);
+  const row = (await computeVehiclePnl({ vehicleId, ...period })).data[0];
+  if (!row)
+    throw new NotFoundError(
+      "No posted Log Slips for this vehicle in the selected range",
+    );
+  return {
+    html: buildVehicleDetailPdfHtml(row, period, {
+      withLetterhead: withLetterheadOf(req),
+    }),
+    fileName: `vehicle-pnl-${row.vehicleNumber}${withLetterheadOf(req) ? "" : "-plain"}.pdf`,
+  };
+};
+
+router.get("/vehicle-pnl/:vehicleId/pdf", can(PERMS.LOGSLIP.VIEW), async (req, res) => {
+  const { html, fileName } = await vehicleDetailHtml(req);
+  return sendPdf(res, html, fileName);
+});
+
+router.get(
+  "/vehicle-pnl/:vehicleId/print-preview",
+  can(PERMS.LOGSLIP.VIEW),
+  async (req, res) => sendPreview(res, (await vehicleDetailHtml(req)).html),
+);
 
 /* ------------------------------------------------------------------ */
 /* Preview — live settlement computed from the journey                */
@@ -299,21 +497,61 @@ router.post(
 
     const slip = await db.logSlip.findUnique({
       where: { id },
-      select: { id: true, status: true, journeyId: true },
+      select: {
+        id: true,
+        status: true,
+        journeyId: true,
+        logSlipNumber: true,
+        logSlipDate: true,
+        fyCode: true,
+        driverId: true,
+        journey: { select: { homeBranchId: true } },
+        totalFreightPaise: true,
+        totalExpensePaise: true,
+        netVehicleResultPaise: true,
+        driverReceivablePaise: true,
+        driverPayablePaise: true,
+      },
     });
     if (!slip) throw new NotFoundError("Log slip not found");
     if (slip.status !== "GENERATED") {
       throw new BadRequestError("Only a generated log slip can be posted");
     }
+    if (!slip.logSlipNumber)
+      throw new BadRequestError("Log slip has no number assigned");
 
-    // NOTE: journal entries are created here once the accounts ledger core
-    // (JournalPostingService, plan §7) lands. Until then posting settles the
-    // journey operationally; postedJournalEntryId stays null.
     const updated = await db.$transaction(async (tx) => {
+      // A reopened slip keeps its number, and the earlier (reversed) voucher
+      // already used it — suffix the revision so the unique
+      // (voucherType, voucherNumber) constraint holds.
+      const priorVouchers = await tx.journalEntry.count({
+        where: { sourceType: "LOG_SLIP", sourceId: { startsWith: slip.id } },
+      });
+      const voucher = await postLogSlipVoucher(tx, {
+        logSlipId: slip.id,
+        logSlipNumber: slip.logSlipNumber!,
+        voucherNumber:
+          priorVouchers > 0
+            ? `${slip.logSlipNumber}/R${priorVouchers}`
+            : undefined,
+        sourceId: priorVouchers > 0 ? `${slip.id}:R${priorVouchers}` : undefined,
+        logSlipDate: slip.logSlipDate,
+        branchId: slip.journey.homeBranchId,
+        fyCode: slip.fyCode,
+        driverId: slip.driverId,
+        totalFreightPaise: slip.totalFreightPaise,
+        totalExpensePaise: slip.totalExpensePaise,
+        netVehicleResultPaise: slip.netVehicleResultPaise,
+        driverReceivablePaise: slip.driverReceivablePaise,
+        driverPayablePaise: slip.driverPayablePaise,
+        createdById: me,
+      });
+
       const row = await tx.logSlip.update({
         where: { id },
         data: {
           status: "POSTED_TO_ACCOUNTS",
+          postedJournalEntryId: voucher.id,
           postedById: me,
           postedAt: new Date(),
           version: { increment: 1 },
@@ -337,6 +575,43 @@ router.post(
 );
 
 /* ------------------------------------------------------------------ */
+/* Voucher                                                            */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/:id/voucher",
+  can(PERMS.LEDGER.VOUCHER_VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const slip = await db.logSlip.findUnique({
+      where: { id },
+      select: { postedJournalEntryId: true },
+    });
+    if (!slip) throw new NotFoundError("Log slip not found");
+    if (!slip.postedJournalEntryId)
+      throw new NotFoundError("No voucher posted for this log slip yet");
+    const voucher = await db.journalEntry.findUniqueOrThrow({
+      where: { id: slip.postedJournalEntryId },
+      include: {
+        branch: { select: { id: true, name: true, branchCode: true } },
+        createdBy: { select: { id: true, firstName: true, lastName: true } },
+        lines: {
+          orderBy: { lineNumber: "asc" },
+          include: {
+            ledger: {
+              select: { id: true, name: true, code: true, kind: true, group: true },
+            },
+          },
+        },
+        // A Log Slip voucher never carries bill allocations — the dialog
+        // still expects the array to exist (it does `.length` on it).
+        allocations: true,
+      },
+    });
+    return sendOk(res, voucher);
+  },
+);
+
+/* ------------------------------------------------------------------ */
 /* Reopen (audited)                                                   */
 /* ------------------------------------------------------------------ */
 router.post("/:id/reopen", can(PERMS.LOGSLIP.REOPEN), async (req, res) => {
@@ -345,7 +620,12 @@ router.post("/:id/reopen", can(PERMS.LOGSLIP.REOPEN), async (req, res) => {
 
   const slip = await db.logSlip.findUnique({
     where: { id },
-    select: { id: true, status: true, journeyId: true },
+    select: {
+      id: true,
+      status: true,
+      journeyId: true,
+      postedJournalEntryId: true,
+    },
   });
   if (!slip) throw new NotFoundError("Log slip not found");
   if (!["GENERATED", "POSTED_TO_ACCOUNTS"].includes(slip.status)) {
@@ -360,9 +640,19 @@ router.post("/:id/reopen", can(PERMS.LOGSLIP.REOPEN), async (req, res) => {
   }
 
   const updated = await db.$transaction(async (tx) => {
+    // Cancel the posted voucher so the books and Vehicle P&L don't count the
+    // old amounts once the slip is edited and re-posted.
+    if (slip.postedJournalEntryId)
+      await reverseJournal(
+        tx,
+        slip.postedJournalEntryId,
+        parsed.data.reason,
+        me,
+      );
     const row = await tx.logSlip.update({
       where: { id },
       data: {
+        postedJournalEntryId: null,
         status: "REOPENED",
         reopenedById: me,
         reopenedAt: new Date(),

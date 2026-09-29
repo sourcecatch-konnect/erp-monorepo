@@ -50,6 +50,14 @@ export const finaliseJobCardSchema = z.object({
   closingKm: z.coerce.number().int().min(0),
 });
 
+// Create + finalise in one call — used when a brand-new job card is
+// finalised immediately (no separate "save the draft, then finalise on a
+// second screen" step). Previously the client made two sequential HTTP
+// calls for this; this is the single-request equivalent, one transaction.
+export const createAndFinaliseJobCardSchema = createJobCardSchema.merge(
+  finaliseJobCardSchema,
+);
+
 export const cancelJobCardSchema = z.object({
   reason: z.string().trim().min(1, "Cancellation reason is required").max(500),
 });
