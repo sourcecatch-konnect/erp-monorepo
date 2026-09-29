@@ -1178,32 +1178,61 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
   const lineNarration = `${args.type === "TRANSPORTER" ? "Transporter" : "Hamali"} accrual ${args.slipNumber}`;
   const lines: DraftLine[] = [];
 
-  const debit = async (code: string, amount: bigint) => {
+  // Every GL code this accrual could touch, resolved in one query instead of
+  // one `getGLLedger` round trip per line item — a TRANSPORTER accrual has up
+  // to 8 of these, which was 8 sequential network round trips on every single
+  // approval (this function runs on both the submit auto-approve path and the
+  // standalone approve endpoint).
+  const codes =
+    args.type === "TRANSPORTER"
+      ? [
+          "FREIGHT_EXPENSE",
+          VENDOR_DETENTION_EXPENSE_CODE,
+          VENDOR_ADVANCE_RECOVERY_CODE,
+          VENDOR_COMMISSION_RECOVERY_CODE,
+          VENDOR_HAMALI_RECOVERY_CODE,
+          "TDS_PAYABLE",
+          VENDOR_DAMAGE_RECOVERY_CODE,
+          VENDOR_STATIONERY_RECOVERY_CODE,
+        ]
+      : [VENDOR_HAMALI_EXPENSE_CODE, "TDS_PAYABLE"];
+  const ledgers = await tx.ledger.findMany({ where: { code: { in: codes } } });
+  const ledgerByCode = new Map(ledgers.map((l) => [l.code, l]));
+  const requireLedger = (code: string) => {
+    const ledger = ledgerByCode.get(code);
+    if (!ledger)
+      throw new BadRequestError(
+        `Chart of accounts is missing the "${code}" ledger. Run: pnpm exec tsx prisma/seed-ledger.ts`,
+      );
+    return ledger;
+  };
+
+  const debit = (code: string, amount: bigint) => {
     if (amount < 0n) throw new BadRequestError(`${code} amount cannot be negative`);
     if (amount === 0n) return;
-    const ledger = await getGLLedger(tx, code);
+    const ledger = requireLedger(code);
     lines.push({ ledgerId: ledger.id, debitPaise: amount, creditPaise: 0n, narration: lineNarration });
   };
-  const credit = async (code: string, amount: bigint) => {
+  const credit = (code: string, amount: bigint) => {
     if (amount < 0n) throw new BadRequestError(`${code} amount cannot be negative`);
     if (amount === 0n) return;
-    const ledger = await getGLLedger(tx, code);
+    const ledger = requireLedger(code);
     lines.push({ ledgerId: ledger.id, debitPaise: 0n, creditPaise: amount, narration: lineNarration });
   };
 
   if (args.type === "TRANSPORTER") {
-    await debit("FREIGHT_EXPENSE", totals.freightPaise);
-    await debit(VENDOR_DETENTION_EXPENSE_CODE, totals.detentionPaise);
-    await credit(VENDOR_ADVANCE_RECOVERY_CODE, totals.advancePaise);
-    await credit(VENDOR_COMMISSION_RECOVERY_CODE, totals.commissionPaise);
-    await credit(VENDOR_HAMALI_RECOVERY_CODE, totals.hamaliPaise);
-    await credit("TDS_PAYABLE", totals.tdsPaise);
-    await credit(VENDOR_DAMAGE_RECOVERY_CODE, totals.damagePaise);
-    await credit(VENDOR_STATIONERY_RECOVERY_CODE, totals.stationeryPaise);
+    debit("FREIGHT_EXPENSE", totals.freightPaise);
+    debit(VENDOR_DETENTION_EXPENSE_CODE, totals.detentionPaise);
+    credit(VENDOR_ADVANCE_RECOVERY_CODE, totals.advancePaise);
+    credit(VENDOR_COMMISSION_RECOVERY_CODE, totals.commissionPaise);
+    credit(VENDOR_HAMALI_RECOVERY_CODE, totals.hamaliPaise);
+    credit("TDS_PAYABLE", totals.tdsPaise);
+    credit(VENDOR_DAMAGE_RECOVERY_CODE, totals.damagePaise);
+    credit(VENDOR_STATIONERY_RECOVERY_CODE, totals.stationeryPaise);
   } else {
     // HAMALI — hamaliPaise here is the gross claimed amount, not a deduction.
-    await debit(VENDOR_HAMALI_EXPENSE_CODE, totals.hamaliPaise);
-    await credit("TDS_PAYABLE", totals.tdsPaise);
+    debit(VENDOR_HAMALI_EXPENSE_CODE, totals.hamaliPaise);
+    credit("TDS_PAYABLE", totals.tdsPaise);
   }
 
   if (args.netPayablePaise < 0n)

@@ -255,6 +255,28 @@ const lineCreateData = (lines: RecalculatedLine[]) =>
 const isUniqueConflict = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
 
+/**
+ * Serialize concurrent claims of the same source document(s) in one round
+ * trip instead of one `pg_advisory_xact_lock` call per source id — a slip
+ * with N lines used to cost N sequential network round trips just to acquire
+ * locks, which is real time spent inside the transaction (and against a
+ * remote DB, the dominant cost). The inner subquery sorts by key *before*
+ * the lock function is evaluated per row, so locks are still taken in the
+ * same fixed ascending order every time — that ordering, not the round-trip
+ * count, is what actually prevents a deadlock against a concurrent request
+ * claiming an overlapping set in reverse order.
+ */
+async function lockSources(
+  tx: Prisma.TransactionClient,
+  sortedSourceIds: string[],
+): Promise<void> {
+  if (sortedSourceIds.length === 0) return;
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtext(key))
+    FROM (SELECT unnest(${sortedSourceIds}::text[]) AS key ORDER BY key) AS ordered
+  `;
+}
+
 /* ------------------------------------------------------------------ */
 /* Calculators                                                         */
 /* ------------------------------------------------------------------ */
@@ -340,18 +362,20 @@ router.post("/slips", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) => {
   const fyCode = fyCodeFor(new Date());
   const sortedSourceIds = [...new Set(input.lines.map((l) => l.sourceId))].sort();
 
+  // Reserving a number is a single atomic upsert — safe outside the
+  // transaction (a rolled-back create just leaves a gap) and one less
+  // round trip held under the advisory lock below.
+  const seq = await nextSequence(db, branch.branchCode, fyCode, "VPAY");
+  // VP-2 spec's literal example is 4 digits (.../<0001>), unlike every
+  // other document number in this app (5 digits) — this is the one
+  // deliberate exception, not a copy-paste of the app-wide default.
+  const slipNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/VPAY", 4);
+
   const slipId = await db.$transaction(
     async (tx) => {
       // Serialize concurrent claims of the same source document(s) — same
       // advisory-lock pattern billing.route.ts uses for LR reservation.
-      for (const sourceId of sortedSourceIds)
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${sourceId}))`;
-
-      const seq = await nextSequence(tx, branch.branchCode, fyCode, "VPAY");
-      // VP-2 spec's literal example is 4 digits (.../<0001>), unlike every
-      // other document number in this app (5 digits) — this is the one
-      // deliberate exception, not a copy-paste of the app-wide default.
-      const slipNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/VPAY", 4);
+      await lockSources(tx, sortedSourceIds);
 
       try {
         const created = await tx.vendorPaymentSlip.create({
@@ -411,8 +435,7 @@ router.patch("/slips/:id", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) 
 
   await db.$transaction(
     async (tx) => {
-      for (const sourceId of sortedSourceIds)
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${sourceId}))`;
+      await lockSources(tx, sortedSourceIds);
 
       // A draft's own current lines never block its own re-save — release
       // them before re-claiming, all inside this one transaction.
@@ -669,7 +692,7 @@ router.post(
 
     const forAccess = await db.vendorPaymentSlip.findUnique({
       where: { id },
-      select: { branchId: true },
+      select: { branchId: true, fyCode: true },
     });
     if (!forAccess) throw new NotFoundError("Vendor payment slip not found");
     assertBranchAccess(req, forAccess.branchId);
@@ -687,6 +710,23 @@ router.post(
         );
       return sendOk(res, await loadSlipDetail(priorAttempt.slipId));
     }
+
+    // branchId/fyCode are set once at slip creation and never updated by any
+    // route, so it's safe to resolve the branch and reserve a voucher number
+    // now, against `db`, rather than inside the lock below — one less round
+    // trip held while the advisory lock is open, same as the create route.
+    const branch = await db.branch.findUnique({
+      where: { id: forAccess.branchId },
+      select: { branchCode: true },
+    });
+    if (!branch) throw new NotFoundError("Branch not found");
+    const seq = await nextSequence(db, branch.branchCode, forAccess.fyCode, "VPAY-PMT");
+    const voucherNumber = formatDocNumber(
+      branch.branchCode,
+      forAccess.fyCode,
+      seq,
+      "SKT/VPAY/PMT",
+    );
 
     const me = actorId(req);
     const lockKey = `vendor-payment-slip:${id}`;
@@ -709,20 +749,6 @@ router.post(
           throw new BadRequestError(
             `Amount exceeds outstanding (${outstandingPaise} paise)`,
           );
-
-        const branch = await tx.branch.findUnique({
-          where: { id: slip.branchId },
-          select: { branchCode: true },
-        });
-        if (!branch) throw new NotFoundError("Branch not found");
-
-        const seq = await nextSequence(tx, branch.branchCode, slip.fyCode, "VPAY-PMT");
-        const voucherNumber = formatDocNumber(
-          branch.branchCode,
-          slip.fyCode,
-          seq,
-          "SKT/VPAY/PMT",
-        );
 
         let disbursement;
         try {
