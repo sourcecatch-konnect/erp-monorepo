@@ -8,15 +8,9 @@ import { toast } from "sonner";
 import { IconFileInvoice, IconCash } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
-import { Input } from "@skerp/ui/components/input";
+
 import { Textarea } from "@skerp/ui/components/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@skerp/ui/components/select";
+
 import {
   Table,
   TableBody,
@@ -35,15 +29,14 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { useCan } from "@/features/auth";
-import { formatPaise, rupeesToPaise } from "@/lib/money";
+import { formatPaise } from "@/lib/money";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
 import { DetailSection } from "@/features/masters/_shared/DetailSection";
-import { serviceBillApi, type PaymentMode } from "./api/service-bill.service";
+import { serviceBillApi } from "./api/service-bill.service";
 import { serviceBillKeys } from "./api/service-bill.keys";
 import { ServiceBillStatusBadge } from "./serviceBillStatusBadge";
-
-const today = () => new Date().toISOString().slice(0, 10);
+import { PayServiceBillDialog } from "./PayServiceBillDialog";
 
 
 export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string }) {
@@ -56,10 +49,6 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
     queryKey: serviceBillKeys.detail(serviceBillId),
     queryFn: () => serviceBillApi.get(serviceBillId),
   });
-  const cashAccounts = useQuery({
-    queryKey: serviceBillKeys.cashAccounts,
-    queryFn: serviceBillApi.cashAccounts,
-  });
 
   const [voucherOpen, setVoucherOpen] = React.useState(false);
   const [voucherId, setVoucherId] = React.useState<string | null>(null);
@@ -70,41 +59,9 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
   });
 
   const [payOpen, setPayOpen] = React.useState(false);
-  const [payAmount, setPayAmount] = React.useState("");
-  const [payTds, setPayTds] = React.useState("");
-  const [payMode, setPayMode] = React.useState<PaymentMode>("BANK");
-  const [payDate, setPayDate] = React.useState(today());
-  const [payReference, setPayReference] = React.useState("");
-  const [payAccountId, setPayAccountId] = React.useState("");
 
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [cancelReason, setCancelReason] = React.useState("");
-
-  const pay = useMutation({
-    mutationFn: () =>
-      serviceBillApi.pay(serviceBillId, {
-        paidPaise: rupeesToPaise(Number(payAmount) || 0),
-        tdsPaise: rupeesToPaise(Number(payTds) || 0),
-        paymentMode: payMode,
-        paymentDate: payDate,
-        referenceNumber: payReference.trim() || undefined,
-        fromAccountId: payAccountId,
-      }),
-    onSuccess: (payment) => {
-      toast.success("Payment recorded");
-      queryClient.invalidateQueries({ queryKey: serviceBillKeys.all });
-      setPayOpen(false);
-      setPayAmount("");
-      setPayTds("");
-      setPayReference("");
-      setPayAccountId("");
-      if (payment.journalEntry) {
-        setVoucherId(payment.journalEntry.id);
-        setVoucherOpen(true);
-      }
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not pay"),
-  });
 
   const cancel = useMutation({
     mutationFn: () => serviceBillApi.cancel(serviceBillId, cancelReason.trim()),
@@ -119,8 +76,6 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
   });
 
   const pending = bill.data ? Number(bill.data.netAmountPaise) - Number(bill.data.paidAmountPaise) : 0;
-  const settledThisRound = rupeesToPaise(Number(payAmount) || 0) + rupeesToPaise(Number(payTds) || 0);
-  const pendingAfterThisPayment = pending - settledThisRound;
 
   if (bill.isLoading) {
     return (
@@ -172,12 +127,7 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
             </Button>
           )}
           {sb.status === "POSTED" && pending > 0 && canPay && (
-            <Button
-              onClick={() => {
-                setPayAmount(String(pending / 100));
-                setPayOpen(true);
-              }}
-            >
+            <Button onClick={() => setPayOpen(true)}>
               <IconCash size={15} className="mr-1" /> Pay
             </Button>
           )}
@@ -295,103 +245,17 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
         </div>
       </DetailSection>
 
-      <Dialog open={payOpen} onOpenChange={(open) => !open && setPayOpen(false)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Pay {sb.serviceBillNumber}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Bill pending: <span className="font-semibold">{formatPaise(pending)}</span>
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Paid Amount (₹)</label>
-              <Input inputMode="decimal" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">
-                TDS (₹) <span className="text-muted-foreground">(optional)</span>
-              </label>
-              <Input inputMode="decimal" value={payTds} onChange={(e) => setPayTds(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Mode</label>
-              <Select value={payMode} onValueChange={(v) => setPayMode(v as PaymentMode)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CASH">Cash</SelectItem>
-                  <SelectItem value="BANK">Bank</SelectItem>
-                  <SelectItem value="UPI">UPI</SelectItem>
-                  <SelectItem value="CHEQUE">Cheque</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">From account</label>
-              <Select value={payAccountId} onValueChange={setPayAccountId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cashAccounts.data?.map((a) => (
-                    <SelectItem key={a.value} value={a.value}>
-                      {a.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Payment date</label>
-              <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <label className="text-sm font-medium">
-                Reference no. <span className="text-muted-foreground">(optional)</span>
-              </label>
-              <Input value={payReference} onChange={(e) => setPayReference(e.target.value)} />
-            </div>
-          </div>
-
-          {(Number(payAmount) > 0 || Number(payTds) > 0) && (
-            <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-              {formatPaise(pending)} pending − {formatPaise(rupeesToPaise(Number(payAmount) || 0))} paid
-              {Number(payTds) > 0 && ` − ${formatPaise(rupeesToPaise(Number(payTds) || 0))} TDS`} ={" "}
-              <span
-                className={
-                  pendingAfterThisPayment < 0
-                    ? "font-semibold text-destructive"
-                    : "font-semibold text-emerald-700 dark:text-emerald-400"
-                }
-              >
-                {pendingAfterThisPayment < 0
-                  ? "exceeds pending"
-                  : `${formatPaise(pendingAfterThisPayment)} still pending`}
-              </span>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPayOpen(false)}>
-              Back
-            </Button>
-            <Button
-              disabled={
-                !payAmount ||
-                Number(payAmount) <= 0 ||
-                !payAccountId ||
-                settledThisRound > pending ||
-                pay.isPending
-              }
-              onClick={() => pay.mutate()}
-            >
-              {pay.isPending ? "Paying..." : "Confirm payment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PayServiceBillDialog
+        open={payOpen}
+        onOpenChange={setPayOpen}
+        bill={sb}
+        onPaid={(journalEntryId) => {
+          if (journalEntryId) {
+            setVoucherId(journalEntryId);
+            setVoucherOpen(true);
+          }
+        }}
+      />
 
       <Dialog open={cancelOpen} onOpenChange={(open) => !open && setCancelOpen(false)}>
         <DialogContent>

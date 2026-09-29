@@ -10,7 +10,7 @@ import { cashAccountApi } from "../../masters/cash-account/cash-account.service"
 import { useDebouncedValue } from "../../masters/_shared/hooks/useDebouncedValue";
 import { ledgerApi, vendorTypeOf, type LedgerAccount, type VendorType } from "../api/ledger.service";
 
-export type LedgerPartyKind = "account-bank" | "account-cash" | "customer" | "creditor";
+export type LedgerPartyKind = "account-bank" | "account-cash" | "customer" | "creditor" | "driver";
 
 /** "creditor" kind only — narrows the SUNDRY_CREDITOR list to one vendor
  *  type (VP-8's "vendor type" filter). `"NON_VENDOR"` means the plain
@@ -34,6 +34,7 @@ const placeholderFor: Record<LedgerPartyKind, string> = {
   "account-cash": "Select cash account",
   customer: "Select customer",
   creditor: "Select creditor",
+  driver: "Select driver",
 };
 
 /** Party/account picker for the 5 ledger reports — one Combobox, backed by
@@ -71,6 +72,32 @@ export function LedgerPartyPicker({
     queryFn: async (): Promise<ComboboxOption[]> => {
       if (kind === "customer") {
         const { data } = await customerApi.list({ page: 0, size: 20, search: debouncedSearch || undefined });
+        return data.map((row) => ({ label: row.name, value: row.id }));
+      }
+      if (kind === "creditor") {
+        // Every SUNDRY_CREDITOR party ledger — Creditor master rows AND
+        // SparePartSupplier rows (getOrCreatePartyLedger lazily creates one
+        // PARTY ledger per party the first time a voucher posts to them), so
+        // Workshop's PO/Inward/Job Card/Service Bill postings to a supplier
+        // show up here too, not just old-style Creditor payments.
+        const data = await ledgerApi.chartOfAccounts({
+          kind: "PARTY",
+          group: "SUNDRY_CREDITOR",
+          isActive: true,
+          search: debouncedSearch || undefined,
+        });
+        return data.map((row) => ({ label: row.name, value: row.id }));
+      }
+      if (kind === "driver") {
+        // Every driver's own party ledger — CURRENT_ASSET is only used by
+        // driver ledgers today (getOrCreatePartyLedger lazily creates one
+        // the first time a Log Slip posts, see posting.service.ts).
+        const data = await ledgerApi.chartOfAccounts({
+          kind: "PARTY",
+          group: "CURRENT_ASSET",
+          isActive: true,
+          search: debouncedSearch || undefined,
+        });
         return data.map((row) => ({ label: row.name, value: row.id }));
       }
       const { data } = await cashAccountApi.list({

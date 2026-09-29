@@ -89,6 +89,15 @@ router.get("/creditors/:id", can(PERMS.LEDGER.VIEW), async (req, res) => {
   return sendOk(res, view);
 });
 
+// Driver ledger — same read as Creditor (ledgerForCreditor only cares about
+// Ledger.id, not the party type it belongs to); a driver's own party ledger
+// was added for Log Slip Phase 6 (advance/settlement postings).
+router.get("/drivers/:id", can(PERMS.LEDGER.VIEW), async (req, res) => {
+  const id = getParamId(req);
+  const view = await ledgerForCreditor(id, parseRange(req.query));
+  return sendOk(res, view);
+});
+
 // Expense ledger — flat, category-scoped, not tied to one party.
 router.get("/expenses", can(PERMS.LEDGER.VIEW), async (req, res) => {
   const view = await ledgerForExpenseCategory(parseRange(req.query));

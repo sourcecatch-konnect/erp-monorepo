@@ -56,7 +56,8 @@ export type PartyRef =
   | { creditorId: string }
   | { labourId: string }
   | { pumpId: string }
-  | { sparePartSupplierId: string };
+  | { sparePartSupplierId: string }
+  | { driverId: string };
 
 /** The single party FK for this ref, as a plain object usable in both
  *  `findUnique({ where })` and `create({ data })`. */
@@ -71,7 +72,9 @@ const partyFk = (ref: PartyRef) =>
           ? { labourId: ref.labourId }
           : "pumpId" in ref
             ? { pumpId: ref.pumpId }
-            : { sparePartSupplierId: ref.sparePartSupplierId };
+            : "sparePartSupplierId" in ref
+              ? { sparePartSupplierId: ref.sparePartSupplierId }
+              : { driverId: ref.driverId };
 
 /**
  * Get the party ledger for a customer / vendor, creating it on first use.
@@ -126,7 +129,7 @@ export async function getOrCreatePartyLedger(tx: Tx, ref: PartyRef) {
     if (!row) throw new BadRequestError("Pump not found");
     name = row.name;
     group = "SUNDRY_CREDITOR";
-  } else {
+  } else if ("sparePartSupplierId" in ref) {
     const row = await tx.sparePartSupplier.findUnique({
       where: { id: ref.sparePartSupplierId },
       select: { name: true },
@@ -134,6 +137,19 @@ export async function getOrCreatePartyLedger(tx: Tx, ref: PartyRef) {
     if (!row) throw new BadRequestError("Spare part supplier not found");
     name = row.name;
     group = "SUNDRY_CREDITOR";
+  } else {
+    const row = await tx.driver.findUnique({
+      where: { id: ref.driverId },
+      select: { name: true },
+    });
+    if (!row) throw new BadRequestError("Driver not found");
+    name = row.name;
+    // A driver's ledger swings both ways: it's a Dr balance (receivable —
+    // they still owe unspent advance) most of the time, but Cr (payable —
+    // company owes them a settlement) whenever cash expenses exceed the
+    // advance. CURRENT_ASSET is the more common case; the balance itself
+    // is signed either way regardless of the group bucket.
+    group = "CURRENT_ASSET";
   }
 
   try {
@@ -223,7 +239,12 @@ export async function postJournal(tx: Tx, args: PostJournalArgs) {
       `Voucher does not balance: Dr ${totalDebit} vs Cr ${totalCredit}`,
     );
 
-  const entry = await tx.journalEntry.create({
+  // Parent row, then lines via createManyAndReturn — nested `lines: {
+  // create: [...] }` issues one INSERT per line instead of a single batched
+  // statement; every voucher across every module (Spare Inward, Job Card,
+  // Service Bill, Supplier Replacement, Billing, Receipts) goes through
+  // this one function, so this was a systemic cost, not a one-off.
+  const entryRow = await tx.journalEntry.create({
     data: {
       voucherType: args.voucherType,
       voucherNumber: args.voucherNumber,
@@ -239,18 +260,25 @@ export async function postJournal(tx: Tx, args: PostJournalArgs) {
       createdById: args.createdById,
       postedById: args.createdById,
       postedAt: new Date(),
-      lines: {
-        create: args.lines.map((line, index) => ({
-          lineNumber: index + 1,
-          ledgerId: line.ledgerId,
-          debitPaise: line.debitPaise,
-          creditPaise: line.creditPaise,
-          narration: line.narration ?? null,
-        })),
-      },
     },
-    include: { lines: { orderBy: { lineNumber: "asc" } } },
   });
+
+  const createdLines = await tx.journalLine.createManyAndReturn({
+    data: args.lines.map((line, index) => ({
+      journalEntryId: entryRow.id,
+      lineNumber: index + 1,
+      ledgerId: line.ledgerId,
+      debitPaise: line.debitPaise,
+      creditPaise: line.creditPaise,
+      narration: line.narration ?? null,
+    })),
+  });
+  // createManyAndReturn doesn't guarantee row order matches input order —
+  // sort explicitly (mirrors the previous `orderBy: { lineNumber: "asc" }`
+  // on the nested include) since callers index into `entry.lines` by
+  // position (see `allocations` below).
+  const lines = [...createdLines].sort((a, b) => a.lineNumber - b.lineNumber);
+  const entry = { ...entryRow, lines };
 
   if (args.allocations?.length) {
     await tx.ledgerAllocation.createMany({
@@ -596,10 +624,10 @@ export type SpareInwardVoucherArgs = {
  * SALES voucher reuses the bill number.
  */
 export async function postSpareInwardVoucher(tx: Tx, args: SpareInwardVoucherArgs) {
-  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
-  const supplierLedger = await getOrCreatePartyLedger(tx, {
-    sparePartSupplierId: args.supplierId,
-  });
+  const [inventoryLedger, supplierLedger] = await Promise.all([
+    getGLLedger(tx, "SPARE_PARTS_INVENTORY"),
+    getOrCreatePartyLedger(tx, { sparePartSupplierId: args.supplierId }),
+  ]);
 
   const lineNarration = `Inward ${args.inwardNumber}`;
 
@@ -648,8 +676,11 @@ export type JobCardVoucherArgs = {
  * Service lines carry no entry here — they're billed later by Service Bill.
  */
 export async function postJobCardPartsVoucher(tx: Tx, args: JobCardVoucherArgs) {
-  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
-  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
+  // Independent lookups — run together instead of one after another.
+  const [expenseLedger, inventoryLedger] = await Promise.all([
+    getGLLedger(tx, "REPAIR_EXPENSE"),
+    getGLLedger(tx, "SPARE_PARTS_INVENTORY"),
+  ]);
 
   const lineNarration = `Job Card ${args.jobCardNumber} — parts consumed`;
 
@@ -700,8 +731,10 @@ export type PartReturnVoucherArgs = {
  * cover several parts and this only credits back one of them.
  */
 export async function postPartReturnVoucher(tx: Tx, args: PartReturnVoucherArgs) {
-  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
-  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
+  const [inventoryLedger, expenseLedger] = await Promise.all([
+    getGLLedger(tx, "SPARE_PARTS_INVENTORY"),
+    getGLLedger(tx, "REPAIR_EXPENSE"),
+  ]);
 
   const lineNarration = `Reusable part returned to stock`;
 
@@ -751,10 +784,10 @@ export type ServiceBillVoucherArgs = {
  * Card Finalise deliberately skips it (see JobCard flow doc).
  */
 export async function postServiceBillVoucher(tx: Tx, args: ServiceBillVoucherArgs) {
-  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
-  const providerLedger = await getOrCreatePartyLedger(tx, {
-    sparePartSupplierId: args.serviceProviderId,
-  });
+  const [expenseLedger, providerLedger] = await Promise.all([
+    getGLLedger(tx, "REPAIR_EXPENSE"),
+    getOrCreatePartyLedger(tx, { sparePartSupplierId: args.serviceProviderId }),
+  ]);
 
   const lineNarration = `Service Bill ${args.serviceBillNumber}`;
 
@@ -816,10 +849,10 @@ export type ServiceBillPaymentVoucherArgs = {
  *   Cr  TDS Payable (Contractor)        = tdsPaise
  */
 export async function postServiceBillPaymentVoucher(tx: Tx, args: ServiceBillPaymentVoucherArgs) {
-  const cashLedger = await getCashLedger(tx, args.cashAccountId);
-  const providerLedger = await getOrCreatePartyLedger(tx, {
-    sparePartSupplierId: args.serviceProviderId,
-  });
+  const [cashLedger, providerLedger] = await Promise.all([
+    getCashLedger(tx, args.cashAccountId),
+    getOrCreatePartyLedger(tx, { sparePartSupplierId: args.serviceProviderId }),
+  ]);
 
   const lineNarration = `Service bill payment ${args.voucherNumber}`;
   const settledPaise = args.paidPaise + args.tdsPaise;
@@ -883,10 +916,10 @@ export type ReplacementInwardVoucherArgs = {
  *   Cr  supplier party ledger
  */
 export async function postReplacementInwardVoucher(tx: Tx, args: ReplacementInwardVoucherArgs) {
-  const inventoryLedger = await getGLLedger(tx, "SPARE_PARTS_INVENTORY");
-  const supplierLedger = await getOrCreatePartyLedger(tx, {
-    sparePartSupplierId: args.supplierId,
-  });
+  const [inventoryLedger, supplierLedger] = await Promise.all([
+    getGLLedger(tx, "SPARE_PARTS_INVENTORY"),
+    getOrCreatePartyLedger(tx, { sparePartSupplierId: args.supplierId }),
+  ]);
 
   const lineNarration = `Replacement Inward ${args.replacementInwardNumber} (differential)`;
 
@@ -942,10 +975,10 @@ export type ReplacementCreditNoteVoucherArgs = {
  *   Cr  Repair Expense
  */
 export async function postReplacementCreditNoteVoucher(tx: Tx, args: ReplacementCreditNoteVoucherArgs) {
-  const expenseLedger = await getGLLedger(tx, "REPAIR_EXPENSE");
-  const supplierLedger = await getOrCreatePartyLedger(tx, {
-    sparePartSupplierId: args.supplierId,
-  });
+  const [expenseLedger, supplierLedger] = await Promise.all([
+    getGLLedger(tx, "REPAIR_EXPENSE"),
+    getOrCreatePartyLedger(tx, { sparePartSupplierId: args.supplierId }),
+  ]);
 
   const lineNarration = `Replacement Credit Note ${args.voucherNumber}`;
 
@@ -974,6 +1007,203 @@ export async function postReplacementCreditNoteVoucher(tx: Tx, args: Replacement
         narration: lineNarration,
       },
     ],
+  });
+}
+
+export type BillCreditNoteVoucherArgs = {
+  billCreditNoteId: string;
+  noteType: Extract<VoucherType, "CREDIT_NOTE" | "DEBIT_NOTE">;
+  noteNumber: string;
+  noteDate: Date;
+  branchId: string;
+  fyCode: string;
+  customerId: string;
+  amountPaise: bigint;
+  createdById: string;
+};
+
+/**
+ * Post a correction against a FINALISED+ bill (see BillCreditNote in
+ * schema.prisma). Booked against SALES_ADJUSTMENT rather than the original
+ * income head so the original SALES voucher and this correction both stay
+ * visible in the ledger — nothing here reverses the bill's own voucher.
+ *   CREDIT_NOTE (customer owes less): Dr SALES_ADJUSTMENT / Cr customer ledger
+ *   DEBIT_NOTE  (customer owes more): Dr customer ledger / Cr SALES_ADJUSTMENT
+ */
+export async function postBillCreditNoteVoucher(tx: Tx, args: BillCreditNoteVoucherArgs) {
+  const [adjustmentLedger, customerLedger] = await Promise.all([
+    getGLLedger(tx, "SALES_ADJUSTMENT"),
+    getOrCreatePartyLedger(tx, { customerId: args.customerId }),
+  ]);
+
+  const lineNarration = `${args.noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} Note ${args.noteNumber}`;
+  const isCredit = args.noteType === "CREDIT_NOTE";
+
+  return postJournal(tx, {
+    voucherType: args.noteType,
+    voucherNumber: args.noteNumber,
+    voucherDate: args.noteDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    // JournalSourceType has no DEBIT_NOTE value — CREDIT_NOTE tags "this
+    // module" for both; voucherType (CREDIT_NOTE/DEBIT_NOTE) carries the
+    // actual accounting direction and keeps the uniqueness constraint apart.
+    sourceType: "CREDIT_NOTE",
+    sourceId: args.billCreditNoteId,
+    sourceNumber: args.noteNumber,
+    createdById: args.createdById,
+    lines: [
+      {
+        ledgerId: adjustmentLedger.id,
+        debitPaise: isCredit ? args.amountPaise : 0n,
+        creditPaise: isCredit ? 0n : args.amountPaise,
+        narration: lineNarration,
+      },
+      {
+        ledgerId: customerLedger.id,
+        debitPaise: isCredit ? 0n : args.amountPaise,
+        creditPaise: isCredit ? args.amountPaise : 0n,
+        narration: lineNarration,
+      },
+    ],
+  });
+}
+
+export type LogSlipVoucherArgs = {
+  logSlipId: string;
+  logSlipNumber: string;
+  /** Overrides the voucher number — used when re-posting a reopened slip. */
+  voucherNumber?: string;
+  /** Overrides the source id (unique per voucherType+source) on re-post. */
+  sourceId?: string;
+  logSlipDate: Date;
+  branchId: string;
+  fyCode: string;
+  driverId: string;
+  totalFreightPaise: bigint;
+  totalExpensePaise: bigint;
+  netVehicleResultPaise: bigint;
+  driverReceivablePaise: bigint;
+  driverPayablePaise: bigint;
+  createdById: string;
+};
+
+/**
+ * Consolidated Log Slip settlement (TRIP_JOURNEY_LOGSLIP_PLAN.md §7.2,
+ * "Log Slip Posting"). v1: everything posts in one voucher here, at journey
+ * close — individual DriverAdvance/TripExpense rows are NOT posted as they
+ * occur (their journalEntryId columns stay null; that immediate-posting path
+ * is a deliberately separate follow-up, not done here).
+ *
+ * This is a lite INTERNAL P&L overlay (see plan §5.3 "Authority": Tally is
+ * the statutory source, this ledger is for internal vehicle P&L) — freight
+ * here is the vehicle's own internal onward-freight figure, not the
+ * customer-billed SALES voucher amount, so it is booked against a dedicated
+ * VEHICLE_FREIGHT_INCOME head, never FREIGHT_INCOME, to avoid conflating the
+ * two.
+ *
+ *   Dr VEHICLE_TRIP_EXPENSE            = totalExpensePaise
+ *   Cr VEHICLE_FREIGHT_INCOME          = totalFreightPaise
+ *   Dr/Cr VEHICLE_JOURNEY_RESULT       = balances the above (the net result)
+ *   Dr driver ledger (receivable)      = driverReceivablePaise, or
+ *   Cr driver ledger (payable)         = driverPayablePaise
+ *   Cr/Dr VEHICLE_JOURNEY_RESULT       = mirrors whichever driver line fired
+ *
+ * VEHICLE_JOURNEY_RESULT is a clearing account: its running balance is the
+ * accumulated internal vehicle P&L pending any future closure to equity.
+ */
+export async function postLogSlipVoucher(tx: Tx, args: LogSlipVoucherArgs) {
+  const [expenseLedger, freightLedger, resultLedger, driverLedger] =
+    await Promise.all([
+      getGLLedger(tx, "VEHICLE_TRIP_EXPENSE"),
+      getGLLedger(tx, "VEHICLE_FREIGHT_INCOME"),
+      getGLLedger(tx, "VEHICLE_JOURNEY_RESULT"),
+      getOrCreatePartyLedger(tx, { driverId: args.driverId }),
+    ]);
+
+  const lineNarration = `Log Slip ${args.logSlipNumber}`;
+  const lines: DraftLine[] = [];
+
+  if (args.totalExpensePaise > 0n)
+    lines.push({
+      ledgerId: expenseLedger.id,
+      debitPaise: args.totalExpensePaise,
+      creditPaise: 0n,
+      narration: `${lineNarration} — trip expenses`,
+    });
+  if (args.totalFreightPaise > 0n)
+    lines.push({
+      ledgerId: freightLedger.id,
+      debitPaise: 0n,
+      creditPaise: args.totalFreightPaise,
+      narration: `${lineNarration} — onward freight`,
+    });
+
+  // Net result = freight - expense. Positive means the two lines above put
+  // more on the credit side than debit so far, so a debit to the clearing
+  // account balances it (and vice versa for a loss).
+  const net = args.netVehicleResultPaise;
+  if (net > 0n)
+    lines.push({
+      ledgerId: resultLedger.id,
+      debitPaise: net,
+      creditPaise: 0n,
+      narration: `${lineNarration} — net result`,
+    });
+  else if (net < 0n)
+    lines.push({
+      ledgerId: resultLedger.id,
+      debitPaise: 0n,
+      creditPaise: -net,
+      narration: `${lineNarration} — net result`,
+    });
+
+  if (args.driverReceivablePaise > 0n) {
+    lines.push({
+      ledgerId: driverLedger.id,
+      debitPaise: args.driverReceivablePaise,
+      creditPaise: 0n,
+      narration: `${lineNarration} — driver receivable`,
+    });
+    lines.push({
+      ledgerId: resultLedger.id,
+      debitPaise: 0n,
+      creditPaise: args.driverReceivablePaise,
+      narration: `${lineNarration} — driver settlement`,
+    });
+  } else if (args.driverPayablePaise > 0n) {
+    lines.push({
+      ledgerId: driverLedger.id,
+      debitPaise: 0n,
+      creditPaise: args.driverPayablePaise,
+      narration: `${lineNarration} — driver payable`,
+    });
+    lines.push({
+      ledgerId: resultLedger.id,
+      debitPaise: args.driverPayablePaise,
+      creditPaise: 0n,
+      narration: `${lineNarration} — driver settlement`,
+    });
+  }
+
+  if (lines.length < 2)
+    throw new BadRequestError(
+      "This journey has no freight, expense, or driver settlement to post",
+    );
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.voucherNumber ?? args.logSlipNumber,
+    voucherDate: args.logSlipDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: lineNarration,
+    sourceType: "LOG_SLIP",
+    sourceId: args.sourceId ?? args.logSlipId,
+    sourceNumber: args.logSlipNumber,
+    createdById: args.createdById,
+    lines,
   });
 }
 

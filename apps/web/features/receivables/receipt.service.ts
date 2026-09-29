@@ -49,6 +49,7 @@ export type ReceiptAllocationInput = {
   amountAppliedPaise: string;
   tdsAmountPaise: string;
   tdsSection?: string;
+  tdsCertNumber?: string;
   damageAmountPaise: string;
   rateDiffAmountPaise: string;
 };

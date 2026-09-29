@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconPlus, IconTrash, IconFileInvoice } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
@@ -28,10 +33,16 @@ import {
 } from "@skerp/ui/components/table";
 
 import { useCan } from "@/features/auth";
+import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import { formatPaise, rupeesToPaise } from "@/lib/money";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
-import { jobCardApi, type JobCard, type TruckLocationStatus } from "./api/job-card.service";
+import {
+  jobCardApi,
+  LOOKUP_PAGE_SIZE,
+  type JobCard,
+  type TruckLocationStatus,
+} from "./api/job-card.service";
 import { jobCardKeys } from "./api/job-card.keys";
 import type { PartLineDraft, ServiceLineDraft } from "./line-drafts";
 import { AddPartDialog } from "./components/AddPartDialog";
@@ -59,8 +70,45 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
     queryFn: jobCardApi.headOfficeBranch,
     staleTime: Infinity,
   });
-  const vehicles = useQuery({ queryKey: jobCardKeys.vehicles, queryFn: jobCardApi.vehicles });
-  const drivers = useQuery({ queryKey: jobCardKeys.drivers, queryFn: jobCardApi.drivers });
+  const [vehicleSearch, setVehicleSearch] = React.useState("");
+  const [driverSearch, setDriverSearch] = React.useState("");
+  const debouncedVehicleSearch = useDebouncedValue(vehicleSearch, 300);
+  const debouncedDriverSearch = useDebouncedValue(driverSearch, 300);
+
+  // Vehicles and drivers can both run past a couple hundred rows — paged +
+  // infinite-scrollable instead of the old unconditional size:1000 fetch.
+  const vehicles = useInfiniteQuery({
+    queryKey: [...jobCardKeys.vehicles, debouncedVehicleSearch],
+    queryFn: ({ pageParam = 0 }) =>
+      jobCardApi.vehicles({ page: pageParam, size: LOOKUP_PAGE_SIZE, search: debouncedVehicleSearch }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
+  });
+  const drivers = useInfiniteQuery({
+    queryKey: [...jobCardKeys.drivers, debouncedDriverSearch],
+    queryFn: ({ pageParam = 0 }) =>
+      jobCardApi.drivers({ page: pageParam, size: LOOKUP_PAGE_SIZE, search: debouncedDriverSearch }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
+  });
+  const vehicleOptions = React.useMemo(
+    () => vehicles.data?.pages.flatMap((page) => page.data) ?? [],
+    [vehicles.data],
+  );
+  const driverOptions = React.useMemo(
+    () => drivers.data?.pages.flatMap((page) => page.data) ?? [],
+    [drivers.data],
+  );
   // Mechanics are a small, workshop-owned staff list — cache generously
   // instead of refetching on every screen open.
   const mechanics = useQuery({
@@ -180,26 +228,31 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
     onSuccess: (saved) => {
       toast.success(jobCardId ? "Job card saved" : `Job card created — ${saved.jobCardNumber}`);
       queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
-      if (!jobCardId) router.push(`/workshop/job-cards/${saved.id}`);
+      // Both create and edit land on the Detail page — there's nothing left
+      // to do on this form once it's saved.
+      router.push(`/workshop/job-cards/${saved.id}`);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not save"),
   });
 
-  // On a brand-new job card there's no id yet — create it first, then
-  // finalise immediately, so the whole thing is one click instead of
-  // "Save, wait, then Finalise on a second screen."
+  // On a brand-new job card there's no id yet — create-and-finalise in one
+  // request (one transaction server-side), instead of a create() call
+  // followed by a separate finalise() call. An existing DRAFT still just
+  // finalises directly.
   const finalise = useMutation({
-    mutationFn: async () => {
-      const id = jobCardId ?? (await jobCardApi.create(buildBody())).id;
-      return jobCardApi.finalise(id, {
+    mutationFn: () => {
+      const finaliseBody = {
         outDateTime: new Date(outDateTime).toISOString(),
         closingKm: Number(closingKm) || 0,
-      });
+      };
+      return jobCardId
+        ? jobCardApi.finalise(jobCardId, finaliseBody)
+        : jobCardApi.createAndFinalise({ ...buildBody(), ...finaliseBody });
     },
     onSuccess: (result) => {
       toast.success("Job card finalised — parts issued and posted");
       queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
-      if (!jobCardId) router.push(`/workshop/job-cards/${result.id}`);
+      router.push(`/workshop/job-cards/${result.id}`);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not finalise"),
   });
@@ -306,25 +359,39 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Vehicle</label>
             <Combobox
-              options={(vehicles.data ?? []).map((v) => ({ value: v.value, label: v.label }))}
+              options={vehicleOptions.map((v) => ({ value: v.value, label: v.label }))}
               value={vehicleId}
               onChange={(v) => {
                 setVehicleId(v);
-                const picked = vehicles.data?.find((x) => x.value === v);
+                const picked = vehicleOptions.find((x) => x.value === v);
                 if (picked) setOpeningKm(String(picked.currentKm));
               }}
+              searchValue={vehicleSearch}
+              onSearchChange={setVehicleSearch}
               placeholder="Search vehicle number..."
               searchPlaceholder="Type to search..."
+              hasMore={Boolean(vehicles.hasNextPage)}
+              isLoadingMore={vehicles.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (vehicles.hasNextPage && !vehicles.isFetchingNextPage) vehicles.fetchNextPage();
+              }}
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Driver</label>
             <Combobox
-              options={drivers.data ?? []}
+              options={driverOptions}
               value={driverId}
               onChange={setDriverId}
+              searchValue={driverSearch}
+              onSearchChange={setDriverSearch}
               placeholder="Search driver name..."
               searchPlaceholder="Type to search..."
+              hasMore={Boolean(drivers.hasNextPage)}
+              isLoadingMore={drivers.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (drivers.hasNextPage && !drivers.isFetchingNextPage) drivers.fetchNextPage();
+              }}
             />
           </div>
           <div className="space-y-1.5">

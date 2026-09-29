@@ -6,8 +6,10 @@ import {
   type ListResult,
 } from "@/features/masters/_shared/master-api";
 
-const LOOKUP_SIZE = { size: 1000 } as const;
-const LOOKUP_PAGE_SIZE = 20;
+export const LOOKUP_PAGE_SIZE = 20;
+// Cash accounts are a small, fixed master — a bounded page instead of the
+// old unconditional size:1000.
+const SMALL_MASTER_SIZE = 200;
 
 export type ServiceBillStatus = "DRAFT" | "POSTED" | "CANCELLED";
 export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE";
@@ -73,6 +75,7 @@ export const serviceBillApi = {
     branchId?: string;
     serviceProviderId?: string;
     status?: ServiceBillStatus;
+    search?: string;
     page?: number;
     size?: number;
   }): Promise<ListResult<ServiceBill>> => {
@@ -138,32 +141,41 @@ export const serviceBillApi = {
   },
 
   /** Single-workshop-at-HO: no branch picker — always the branch flagged
-   *  Head Office. */
+   *  Head Office. Filtered to isHeadOffice=true, so at most one row
+   *  regardless of page size. */
   headOfficeBranch: async (): Promise<{ id: string; name: string } | null> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>>(
       "/branches",
-      { params: { ...LOOKUP_SIZE, "filter[isHeadOffice]": "true" } },
+      { params: { size: 1, "filter[isHeadOffice]": "true" } },
     );
     const data = unwrapListResponse(res).data;
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
 
-  // Suppliers can grow into a large list, so search server-side instead of
-  // pulling all of them for the picker.
-  serviceProviders: async (search?: string): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list — paged + infinite-scrollable in
+  // the combobox, instead of a single unconditional size:20 page.
+  serviceProviders: async (params: {
+    page: number;
+    size: number;
+    search?: string;
+  }): Promise<ListResult<LookupOption>> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined } },
+      { params: { page: params.page, size: params.size, search: params.search || undefined } },
     );
-    return unwrapListResponse(res).data.map((s) => ({
-      value: s.id,
-      label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
-    }));
+    const result = unwrapListResponse(res);
+    return {
+      ...result,
+      data: result.data.map((s) => ({
+        value: s.id,
+        label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
+      })),
+    };
   },
 
   cashAccounts: async (): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/cash-accounts", {
-      params: LOOKUP_SIZE,
+      params: { size: SMALL_MASTER_SIZE },
     });
     return unwrapListResponse(res).data.map((a) => ({ value: a.id, label: a.name }));
   },

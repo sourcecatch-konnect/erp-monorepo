@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconEye, IconPlus } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
@@ -36,15 +41,25 @@ import {
 
 import { useCan } from "@/features/auth";
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
-import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
+import { StatusTabs, TablePaginationFooter } from "@/components/data-table";
 import {
   supplierReplacementApi,
+  LOOKUP_PAGE_SIZE,
   type ReplacementType,
+  type ReplacementListStatus,
 } from "./api/supplier-replacement.service";
 import { supplierReplacementKeys } from "./api/supplier-replacement.keys";
 import { ReplacementListStatusBadge } from "./supplierReplaceStatusBadge";
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+const STATUS_TABS = [
+  { key: "ALL", label: "All" },
+  { key: "PENDING", label: "Pending" },
+  { key: "PARTIALLY_RECEIVED", label: "Partially received" },
+  { key: "RECEIVED", label: "Received" },
+  { key: "CANCELLED", label: "Cancelled" },
+] as const;
 
 
 type NewLineDraft = {
@@ -79,20 +94,71 @@ export function SupplierReplacementListPage() {
 
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
+  const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
+  const [supplierFilterId, setSupplierFilterId] = React.useState("");
+  const [supplierFilterSearch, setSupplierFilterSearch] = React.useState("");
+  const debouncedSupplierFilterSearch = useDebouncedValue(supplierFilterSearch, 300);
   const handleSizeChange = (nextSize: number) => {
     setSize(nextSize);
     setPage(0);
   };
 
+  const listsParams = {
+    page,
+    size,
+    status: statusFilter === "ALL" ? undefined : (statusFilter as ReplacementListStatus),
+    supplierId: supplierFilterId || undefined,
+  };
+
   const lists = useQuery({
-    queryKey: supplierReplacementKeys.lists({ page, size }),
-    queryFn: () => supplierReplacementApi.listReplacementLists({ page, size }),
+    queryKey: supplierReplacementKeys.lists(listsParams),
+    queryFn: () => supplierReplacementApi.listReplacementLists(listsParams),
   });
-  const suppliers = useQuery({
+
+  // Independent of the create form's own supplier picker — powers the
+  // filter bar and stays available even while that dialog is closed.
+  const supplierFilterOptions = useInfiniteQuery({
+    queryKey: ["supplier-replacement", "suppliers", "filter", debouncedSupplierFilterSearch],
+    queryFn: ({ pageParam = 0 }) =>
+      supplierReplacementApi.suppliers({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedSupplierFilterSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
+  });
+  const supplierFilterList = React.useMemo(
+    () => supplierFilterOptions.data?.pages.flatMap((page) => page.data) ?? [],
+    [supplierFilterOptions.data],
+  );
+
+  const suppliers = useInfiniteQuery({
     queryKey: supplierReplacementKeys.suppliers(debouncedSupplierSearch),
-    queryFn: () => supplierReplacementApi.suppliers(debouncedSupplierSearch),
+    queryFn: ({ pageParam = 0 }) =>
+      supplierReplacementApi.suppliers({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedSupplierSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
     enabled: createOpen,
   });
+  const supplierOptions = React.useMemo(
+    () => suppliers.data?.pages.flatMap((page) => page.data) ?? [],
+    [suppliers.data],
+  );
   // Single-workshop-at-HO: this is always the same one branch, so cache it
   // indefinitely instead of refetching on every screen open.
   const headOfficeBranch = useQuery({
@@ -196,6 +262,56 @@ export function SupplierReplacementListPage() {
         )}
       </div>
 
+      <div className="space-y-3">
+        <StatusTabs
+          tabs={STATUS_TABS}
+          active={statusFilter}
+          onChange={(key) => {
+            setStatusFilter(key);
+            setPage(0);
+          }}
+          layoutId="supplier-replacement-status-tabs"
+        />
+        <div className="flex items-center gap-2">
+          <div className="w-64">
+            <Combobox
+              options={supplierFilterList}
+              value={supplierFilterId}
+              onChange={(v) => {
+                setSupplierFilterId(v);
+                setPage(0);
+              }}
+              searchValue={supplierFilterSearch}
+              onSearchChange={setSupplierFilterSearch}
+              placeholder="Filter by supplier..."
+              searchPlaceholder="Type to search..."
+              emptyText={supplierFilterOptions.isLoading ? "Loading suppliers..." : "No suppliers found"}
+              hasMore={Boolean(supplierFilterOptions.hasNextPage)}
+              isLoadingMore={supplierFilterOptions.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (supplierFilterOptions.hasNextPage && !supplierFilterOptions.isFetchingNextPage) {
+                  supplierFilterOptions.fetchNextPage();
+                }
+              }}
+            />
+          </div>
+          {supplierFilterId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSupplierFilterId("");
+                setSupplierFilterSearch("");
+                setPage(0);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -232,7 +348,7 @@ export function SupplierReplacementListPage() {
                 className="cursor-pointer"
                 onClick={() => router.push(`/workshop/supplier-replacement/${list.id}`)}
               >
-                <TableCell className="font-medium">{list.replacementNumber ?? "—"}</TableCell>
+                <TableCell className="font-medium text-primary hover:underline" >{list.replacementNumber ?? "—"}</TableCell>
                 <TableCell>{list.supplier.name}</TableCell>
                 <TableCell>{list.originalInward.inwardNumber ?? "—"}</TableCell>
                 <TableCell>{new Date(list.requestDate).toLocaleDateString("en-IN")}</TableCell>
@@ -278,7 +394,7 @@ export function SupplierReplacementListPage() {
             <div className="space-y-1.5 sm:col-span-1">
               <label className="text-sm font-medium">Supplier</label>
               <Combobox
-                options={suppliers.data ?? []}
+                options={supplierOptions}
                 value={supplierId}
                 onChange={(v) => { setSupplierId(v); setOriginalInwardId(""); }}
                 searchValue={supplierSearch}
@@ -286,6 +402,11 @@ export function SupplierReplacementListPage() {
                 placeholder="Search supplier..."
                 searchPlaceholder="Type to search..."
                 emptyText={suppliers.isLoading ? "Loading suppliers..." : "No suppliers found"}
+                hasMore={Boolean(suppliers.hasNextPage)}
+                isLoadingMore={suppliers.isFetchingNextPage}
+                onScrollEnd={() => {
+                  if (suppliers.hasNextPage && !suppliers.isFetchingNextPage) suppliers.fetchNextPage();
+                }}
               />
             </div>
             <div className="space-y-1.5">

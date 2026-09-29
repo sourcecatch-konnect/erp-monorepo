@@ -5,7 +5,14 @@ import {
   unwrapListResponse,
   type ListResult,
 } from "@/features/masters/_shared/master-api";
-import type { PurchaseOrder } from "@/features/purchase-order/api/purchase-order.service";
+import type { PurchaseOrderStatus } from "@/features/purchase-order/api/purchase-order.service";
+
+export type OpenPurchaseOrderOption = {
+  id: string;
+  poNumber: string | null;
+  status: PurchaseOrderStatus;
+  estimatedPaise: string;
+};
 
 export type SpareInwardStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
@@ -74,6 +81,7 @@ export const spareInwardApi = {
     poId?: string;
     supplierId?: string;
     status?: SpareInwardStatus;
+    search?: string;
     page?: number;
     size?: number;
   }): Promise<ListResult<SpareInward>> => {
@@ -96,13 +104,15 @@ export const spareInwardApi = {
     return unwrapApiResponse(res);
   },
 
-  /** Open purchase orders (still receivable against) for one supplier. */
-  openPurchaseOrders: async (supplierId: string): Promise<PurchaseOrder[]> => {
-    const res = await api.get<ApiResponse<PurchaseOrder[]>>("/purchase-order", {
-      params: { supplierId },
-    });
-    return unwrapListResponse(res).data.filter((po) =>
-      ["APPROVED", "SENT", "PARTIALLY_RECEIVED"].includes(po.status),
+  /** Open purchase orders (still receivable against) for one supplier —
+   *  filtered server-side, id/number/status/estimate only. Previously this
+   *  fetched every PO for the supplier (any status, full detail incl. every
+   *  line) and filtered client-side. */
+  openPurchaseOrders: async (supplierId: string): Promise<OpenPurchaseOrderOption[]> => {
+    const res = await api.get<ApiResponse<OpenPurchaseOrderOption[]>>(
+      "/purchase-order/lookup/open",
+      { params: { supplierId, size: 100 } },
     );
+    return unwrapListResponse(res).data;
   },
 };

@@ -15,6 +15,8 @@ export const ledgerKeys = {
     [...ledgerKeys.all, "customer", id, range] as const,
   creditor: (id: string, range?: LedgerRange) =>
     [...ledgerKeys.all, "creditor", id, range] as const,
+  driver: (id: string, range?: LedgerRange) =>
+    [...ledgerKeys.all, "driver", id, range] as const,
   expenses: (range?: LedgerRange) =>
     [...ledgerKeys.all, "expenses", range] as const,
   statement: (id: string, filters?: StatementFilters) =>

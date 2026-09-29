@@ -6,8 +6,11 @@ import {
   type ListResult,
 } from "@/features/masters/_shared/master-api";
 
-const LOOKUP_SIZE = { size: 1000 } as const;
-const LOOKUP_PAGE_SIZE = 20;
+export const LOOKUP_PAGE_SIZE = 20;
+// Fixed, workshop-owned masters (categories, mechanics) — genuinely short
+// lists, so one bounded page covers them without a search/scroll UI. Not
+// "fetch everything unconditionally" like the old size:1000 calls were.
+const SMALL_MASTER_SIZE = 200;
 
 export type JobCardStatus = "DRAFT" | "FINALISED" | "CANCELLED";
 export type TruckLocationStatus = "AT_HO" | "IN_TRANSIT";
@@ -113,6 +116,11 @@ export type SaveJobCardBody = {
   serviceLines?: ServiceLineInput[];
 };
 
+export type CreateAndFinaliseJobCardBody = SaveJobCardBody & {
+  outDateTime: string;
+  closingKm: number;
+};
+
 export type BatchOption = {
   id: string;
   batchNo: string | null;
@@ -144,6 +152,13 @@ export const jobCardApi = {
 
   create: async (body: SaveJobCardBody) => {
     const res = await api.post<ApiResponse<JobCard>>("/job-card", body);
+    return unwrapApiResponse(res);
+  },
+
+  /** Create a brand-new job card and finalise it immediately — one request,
+   *  one transaction, instead of a separate create() then finalise() call. */
+  createAndFinalise: async (body: CreateAndFinaliseJobCardBody) => {
+    const res = await api.post<ApiResponse<JobCard>>("/job-card/create-and-finalise", body);
     return unwrapApiResponse(res);
   },
 
@@ -200,92 +215,130 @@ export const jobCardApi = {
   },
 
   /** Single-workshop-at-HO: no branch picker on this screen — always the
-   *  branch flagged Head Office. */
+   *  branch flagged Head Office. Filtered to isHeadOffice=true, so this is
+   *  at most one row regardless of page size. */
   headOfficeBranch: async (): Promise<{ id: string; name: string } | null> => {
     const res = await api.get<ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>>(
       "/branches",
-      { params: { ...LOOKUP_SIZE, "filter[isHeadOffice]": "true" } },
+      { params: { size: 1, "filter[isHeadOffice]": "true" } },
     );
     const data = unwrapListResponse(res).data;
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
 
-  vehicles: async (): Promise<(LookupOption & { currentKm: number })[]> => {
-    const res = await api.get<ApiResponse<{ id: string; vehicleNumber: string; currentKM: number }[]>>(
-      "/vehicles",
-      { params: LOOKUP_SIZE },
-    );
-    return unwrapListResponse(res).data.map((v) => ({
-      value: v.id,
-      label: v.vehicleNumber,
-      currentKm: v.currentKM,
-    }));
-  },
-
-  drivers: async (): Promise<LookupOption[]> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/drivers", {
-      params: LOOKUP_SIZE,
+  // Vehicles and drivers can both grow past a couple hundred rows — paged +
+  // searchable + infinite-scrollable in the combobox, instead of a single
+  // unconditional size:1000 fetch.
+  vehicles: async (params: {
+    page: number;
+    size: number;
+    search?: string;
+  }): Promise<ListResult<LookupOption & { currentKm: number }>> => {
+    const res = await api.get<
+      ApiResponse<{ id: string; vehicleNumber: string; currentKM: number }[]>
+    >("/vehicles", {
+      params: { page: params.page, size: params.size, search: params.search || undefined },
     });
-    return unwrapListResponse(res).data.map((d) => ({ value: d.id, label: d.name }));
+    const result = unwrapListResponse(res);
+    return {
+      ...result,
+      data: result.data.map((v) => ({
+        value: v.id,
+        label: v.vehicleNumber,
+        currentKm: v.currentKM,
+      })),
+    };
   },
 
-  // Labours are a small, workshop-owned staff list — a plain cached list is
-  // fine, no need for search-as-you-type.
+  drivers: async (params: {
+    page: number;
+    size: number;
+    search?: string;
+  }): Promise<ListResult<LookupOption>> => {
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/drivers", {
+      params: { page: params.page, size: params.size, search: params.search || undefined },
+    });
+    const result = unwrapListResponse(res);
+    return { ...result, data: result.data.map((d) => ({ value: d.id, label: d.name })) };
+  },
+
+  // Labours/categories are small, workshop-owned masters — one bounded page
+  // (SMALL_MASTER_SIZE) instead of the old unconditional size:1000, but
+  // still a plain cached list (no search-as-you-type UI needed for these).
   mechanics: async (): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/labours", {
-      params: { ...LOOKUP_SIZE, "filter[type]": "Mechanic" },
+      params: { size: SMALL_MASTER_SIZE, "filter[type]": "Mechanic" },
     });
     return unwrapListResponse(res).data.map((l) => ({ value: l.id, label: l.name }));
   },
 
-  // Spare parts can grow into thousands of rows, so search server-side
-  // instead of pulling the whole catalogue for the picker.
-  spareParts: async (
-    type: "Item" | "Service",
-    categoryId?: string,
-    search?: string,
-  ): Promise<(LookupOption & { categoryId: string; ratePaise: string })[]> => {
+  // Spare parts can grow into thousands of rows, so search server-side +
+  // paginated + infinite-scrollable in the combobox.
+  spareParts: async (params: {
+    type: "Item" | "Service";
+    categoryId?: string;
+    search?: string;
+    page: number;
+    size: number;
+  }): Promise<ListResult<LookupOption & { categoryId: string; ratePaise: string }>> => {
     const res = await api.get<
       ApiResponse<{ id: string; name: string; categoryId: string; rate: string }[]>
     >("/spare-parts", {
       params: {
-        size: LOOKUP_PAGE_SIZE,
-        search: search || undefined,
-        "filter[type]": type,
-        ...(categoryId ? { "filter[categoryId]": categoryId } : {}),
+        page: params.page,
+        size: params.size,
+        search: params.search || undefined,
+        "filter[type]": params.type,
+        ...(params.categoryId ? { "filter[categoryId]": params.categoryId } : {}),
       },
     });
-    return unwrapListResponse(res).data.map((p) => ({
-      value: p.id,
-      label: p.name,
-      categoryId: p.categoryId,
-      ratePaise: p.rate,
-    }));
+    const result = unwrapListResponse(res);
+    return {
+      ...result,
+      data: result.data.map((p) => ({
+        value: p.id,
+        label: p.name,
+        categoryId: p.categoryId,
+        ratePaise: p.rate,
+      })),
+    };
   },
 
-  // Spare categories are a small, fixed master — a plain cached list is
-  // fine, no need for search-as-you-type.
   categories: async (type: "Item" | "Service"): Promise<LookupOption[]> => {
     const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/spare-category", {
-      params: { ...LOOKUP_SIZE, "filter[type]": type },
+      params: { size: SMALL_MASTER_SIZE, "filter[type]": type },
     });
     return unwrapListResponse(res).data.map((c) => ({ value: c.id, label: c.name }));
   },
 
-  // Suppliers can grow into a large list, so search server-side instead of
-  // pulling all of them for the picker.
-  serviceProviders: async (search?: string): Promise<LookupOption[]> => {
+  // Suppliers can grow into a large list — paged + infinite-scrollable.
+  serviceProviders: async (params: {
+    page: number;
+    size: number;
+    search?: string;
+  }): Promise<ListResult<LookupOption>> => {
     // SparePartSupplier.type is free text but the master form only ever
     // writes "Item" or "Service" (spare-partSupplierForm.tsx's
     // supplierTypeOptions) — filter to "Service" so a pure parts supplier
     // (no labour/service capability) can't be picked as a Job Card provider.
     const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
       "/spare-part-suppliers",
-      { params: { size: LOOKUP_PAGE_SIZE, search: search || undefined, "filter[type]": "Service" } },
+      {
+        params: {
+          page: params.page,
+          size: params.size,
+          search: params.search || undefined,
+          "filter[type]": "Service",
+        },
+      },
     );
-    return unwrapListResponse(res).data.map((s) => ({
-      value: s.id,
-      label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
-    }));
+    const result = unwrapListResponse(res);
+    return {
+      ...result,
+      data: result.data.map((s) => ({
+        value: s.id,
+        label: s.shopName ? `${s.name} (${s.shopName})` : s.name,
+      })),
+    };
   },
 };

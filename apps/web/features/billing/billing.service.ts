@@ -194,6 +194,18 @@ export type {
   Voucher,
 } from "@/features/ledger/voucher.types";
 
+export type BillCreditNoteType = "CREDIT_NOTE" | "DEBIT_NOTE";
+
+export type BillCreditNote = {
+  id: string;
+  noteType: BillCreditNoteType;
+  noteNumber: string;
+  amountPaise: string;
+  reason: string;
+  createdAt: string;
+  createdBy: { id: string; firstName: string; lastName: string };
+};
+
 export type Bill = {
   id: string;
   version: number;
@@ -214,6 +226,7 @@ export type Bill = {
   taxTreatment: string;
   billDate: string;
   billingCutoffDate?: string | null;
+  dueDate?: string | null;
   billingPartyNameSnapshot: string;
   billingGstinSnapshot: string | null;
   billingAddressSnapshot: string | null;
@@ -320,6 +333,7 @@ export type CreateBillDraft = {
   chargeMechanism?: ChargeMechanism;
   billDate: string;
   billingCutoffDate?: string | null;
+  dueDate: string;
   remarks?: string | null;
   lrChargeIds: string[];
 };
@@ -407,6 +421,12 @@ export const billingApi = {
   ) => post<Bill>(`/billing/bills/${id}/${action}`),
   cancel: (id: string, reason: string) =>
     post<BillStatusPatch>(`/billing/bills/${id}/cancel`, { reason }),
+  creditNotes: (id: string) =>
+    get<BillCreditNote[]>(`/billing/bills/${id}/credit-notes`),
+  createCreditNote: (
+    id: string,
+    body: { noteType: BillCreditNoteType; amountPaise: string; reason: string },
+  ) => post<BillCreditNote>(`/billing/bills/${id}/credit-notes`, body),
   taxRules: () =>
     get<Array<Record<string, string | number | boolean | null>>>(
       "/billing/tax-rules",

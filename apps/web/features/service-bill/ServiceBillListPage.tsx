@@ -2,9 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconPlus, IconFileInvoice, IconEye } from "@tabler/icons-react";
+import { IconPlus, IconFileInvoice, IconEye, IconCash } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
@@ -33,19 +38,34 @@ import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebounced
 import { formatPaise, rupeesToPaise } from "@/lib/money";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
-import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
-import { serviceBillApi } from "./api/service-bill.service";
+import { StatusTabs, TablePaginationFooter } from "@/components/data-table";
+import {
+  serviceBillApi,
+  LOOKUP_PAGE_SIZE,
+  type ServiceBill,
+  type ServiceBillStatus,
+} from "./api/service-bill.service";
 import { serviceBillKeys } from "./api/service-bill.keys";
 import { ServiceBillStatusBadge } from "./serviceBillStatusBadge";
+import { PayServiceBillDialog } from "./PayServiceBillDialog";
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+const STATUS_TABS = [
+  { key: "ALL", label: "All" },
+  { key: "DRAFT", label: "Draft" },
+  { key: "POSTED", label: "Posted" },
+  { key: "CANCELLED", label: "Cancelled" },
+] as const;
 
 
 export function ServiceBillListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const canManage = useCan(PERMS.WORKSHOP.SERVICEBILL_MANAGE);
+  const canPay = useCan(PERMS.WORKSHOP.SERVICEBILL_PAY);
 
+  const [payTarget, setPayTarget] = React.useState<ServiceBill | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [branchId, setBranchId] = React.useState("");
   const [serviceProviderId, setServiceProviderId] = React.useState("");
@@ -64,13 +84,48 @@ export function ServiceBillListPage() {
 
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
+  const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
+  const [providerFilterId, setProviderFilterId] = React.useState("");
+  const [providerFilterSearch, setProviderFilterSearch] = React.useState("");
+  const debouncedProviderFilterSearch = useDebouncedValue(providerFilterSearch, 300);
 
-  const listQuery = React.useMemo(() => ({ page, size }), [page, size]);
+  const listQuery = React.useMemo(
+    () => ({
+      page,
+      size,
+      status: statusFilter === "ALL" ? undefined : (statusFilter as ServiceBillStatus),
+      serviceProviderId: providerFilterId || undefined,
+    }),
+    [page, size, statusFilter, providerFilterId],
+  );
 
   const list = useQuery({
     queryKey: serviceBillKeys.list(listQuery),
     queryFn: () => serviceBillApi.list(listQuery),
   });
+
+  // Independent of the create form's own provider picker — powers the
+  // filter bar and stays available even while that dialog is closed.
+  const providerFilterOptions = useInfiniteQuery({
+    queryKey: ["service-bill", "service-providers", "filter", debouncedProviderFilterSearch],
+    queryFn: ({ pageParam = 0 }) =>
+      serviceBillApi.serviceProviders({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedProviderFilterSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
+  });
+  const providerFilterList = React.useMemo(
+    () => providerFilterOptions.data?.pages.flatMap((page) => page.data) ?? [],
+    [providerFilterOptions.data],
+  );
   // Single-workshop-at-HO: this is always the same one branch, so cache it
   // indefinitely instead of refetching on every screen open.
   const headOfficeBranch = useQuery({
@@ -81,11 +136,27 @@ export function ServiceBillListPage() {
   React.useEffect(() => {
     if (headOfficeBranch.data && !branchId) setBranchId(headOfficeBranch.data.id);
   }, [headOfficeBranch.data, branchId]);
-  const providers = useQuery({
+  const providers = useInfiniteQuery({
     queryKey: serviceBillKeys.serviceProviders(debouncedProviderSearch),
-    queryFn: () => serviceBillApi.serviceProviders(debouncedProviderSearch),
+    queryFn: ({ pageParam = 0 }) =>
+      serviceBillApi.serviceProviders({
+        page: pageParam,
+        size: LOOKUP_PAGE_SIZE,
+        search: debouncedProviderSearch,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.flatMap((page) => page.data).length;
+      const total = lastPage.meta?.total;
+      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+    },
     enabled: createOpen,
   });
+  const providerOptions = React.useMemo(
+    () => providers.data?.pages.flatMap((page) => page.data) ?? [],
+    [providers.data],
+  );
   const unbilled = useQuery({
     queryKey: serviceBillKeys.unbilledLines(serviceProviderId, uptoDate),
     queryFn: () => serviceBillApi.unbilledLines(serviceProviderId, uptoDate),
@@ -170,6 +241,56 @@ export function ServiceBillListPage() {
         )}
       </div>
 
+      <div className="space-y-3">
+        <StatusTabs
+          tabs={STATUS_TABS}
+          active={statusFilter}
+          onChange={(key) => {
+            setStatusFilter(key);
+            setPage(0);
+          }}
+          layoutId="service-bill-status-tabs"
+        />
+        <div className="flex items-center gap-2">
+          <div className="w-64">
+            <Combobox
+              options={providerFilterList}
+              value={providerFilterId}
+              onChange={(v) => {
+                setProviderFilterId(v);
+                setPage(0);
+              }}
+              searchValue={providerFilterSearch}
+              onSearchChange={setProviderFilterSearch}
+              placeholder="Filter by provider..."
+              searchPlaceholder="Type to search..."
+              emptyText={providerFilterOptions.isLoading ? "Loading providers..." : "No providers found"}
+              hasMore={Boolean(providerFilterOptions.hasNextPage)}
+              isLoadingMore={providerFilterOptions.isFetchingNextPage}
+              onScrollEnd={() => {
+                if (providerFilterOptions.hasNextPage && !providerFilterOptions.isFetchingNextPage) {
+                  providerFilterOptions.fetchNextPage();
+                }
+              }}
+            />
+          </div>
+          {providerFilterId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setProviderFilterId("");
+                setProviderFilterSearch("");
+                setPage(0);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -210,7 +331,7 @@ export function ServiceBillListPage() {
                   className="cursor-pointer"
                   onClick={() => router.push(`/workshop/service-bills/${bill.id}`)}
                 >
-                  <TableCell className="font-medium">{bill.serviceBillNumber ?? "—"}</TableCell>
+                  <TableCell className="font-medium text-primary hover:underline">{bill.serviceBillNumber ?? "—"}</TableCell>
                   <TableCell>{bill.serviceProvider.name}</TableCell>
                   <TableCell>{new Date(bill.billDate).toLocaleDateString("en-IN")}</TableCell>
                   <TableCell>
@@ -236,6 +357,17 @@ export function ServiceBillListPage() {
                           }}
                         >
                           <IconFileInvoice size={15} />
+                        </Button>
+                      )}
+                      {bill.status === "POSTED" && pending > 0 && canPay && (
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPayTarget(bill);
+                          }}
+                        >
+                          <IconCash size={15} className="mr-1" /> Pay
                         </Button>
                       )}
                       <Button
@@ -281,7 +413,7 @@ export function ServiceBillListPage() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Service Provider</label>
               <Combobox
-                options={providers.data ?? []}
+                options={providerOptions}
                 value={serviceProviderId}
                 onChange={(v) => { setServiceProviderId(v); setSelectedLineIds(new Set()); }}
                 searchValue={providerSearch}
@@ -289,6 +421,11 @@ export function ServiceBillListPage() {
                 placeholder="Search provider..."
                 searchPlaceholder="Type to search..."
                 emptyText={providers.isLoading ? "Loading providers..." : "No providers found"}
+                hasMore={Boolean(providers.hasNextPage)}
+                isLoadingMore={providers.isFetchingNextPage}
+                onScrollEnd={() => {
+                  if (providers.hasNextPage && !providers.isFetchingNextPage) providers.fetchNextPage();
+                }}
               />
             </div>
             <div className="space-y-1.5">
@@ -367,6 +504,21 @@ export function ServiceBillListPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {payTarget && (
+        <PayServiceBillDialog
+          open={Boolean(payTarget)}
+          onOpenChange={(open) => !open && setPayTarget(null)}
+          bill={payTarget}
+          onPaid={(journalEntryId) => {
+            setPayTarget(null);
+            if (journalEntryId) {
+              setVoucherId(journalEntryId);
+              setVoucherOpen(true);
+            }
+          }}
+        />
+      )}
 
       <VoucherDialog
         open={voucherOpen}

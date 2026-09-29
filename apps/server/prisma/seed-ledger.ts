@@ -34,6 +34,30 @@ const GL_LEDGERS: {
     name: "Freight Adjustment",
     group: "DIRECT_INCOME",
   },
+  {
+    code: "SALES_ADJUSTMENT",
+    name: "Sales Adjustment (Credit/Debit Notes)",
+    group: "DIRECT_INCOME",
+  },
+  // Own-vehicle journey accounting (Log Slip Phase 6) — a lite internal P&L
+  // overlay, separate from customer-billed FREIGHT_INCOME, per
+  // TRIP_JOURNEY_LOGSLIP_PLAN.md §7 ("Tally remains statutory source... ERP
+  // maintains a lite double-entry ledger for internal ... vehicle P&L").
+  {
+    code: "VEHICLE_FREIGHT_INCOME",
+    name: "Vehicle Freight Income (Internal)",
+    group: "DIRECT_INCOME",
+  },
+  {
+    code: "VEHICLE_TRIP_EXPENSE",
+    name: "Vehicle Trip Expense (Internal)",
+    group: "DIRECT_EXPENSE",
+  },
+  {
+    code: "VEHICLE_JOURNEY_RESULT",
+    name: "Vehicle Journey Result (Clearing)",
+    group: "CURRENT_ASSET",
+  },
   { code: "ROUND_OFF", name: "Round Off", group: "INDIRECT_INCOME" },
   { code: "OUTPUT_CGST", name: "Output CGST", group: "DUTIES_AND_TAXES" },
   { code: "OUTPUT_SGST", name: "Output SGST", group: "DUTIES_AND_TAXES" },

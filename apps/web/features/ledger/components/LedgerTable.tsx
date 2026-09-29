@@ -248,7 +248,30 @@ function StatementTable({
 /* ------------------------------------------------------------------ */
 /* Bank / Cash / Creditor / Expense IN-OUT ledger (unchanged)          */
 /* ------------------------------------------------------------------ */
+const formatLedgerMoney = (paise: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(paise / 100);
 
+function LedgerAmount({
+  paise,
+  strong = false,
+}: {
+  paise: number;
+  strong?: boolean;
+}) {
+  return (
+    <span
+      className={`whitespace-nowrap tabular-nums tracking-tight ${strong ? "font-semibold text-foreground" : "font-medium text-foreground"
+        }`}
+    >
+      {formatLedgerMoney(paise)}
+    </span>
+  );
+}
 function CashLedgerTable({
   entries,
   openingBalance,
@@ -267,16 +290,33 @@ function CashLedgerTable({
     !balanceConvention || balance >= 0 === (balanceConvention === "asset");
 
   return (
-    <div className="overflow-auto" style={{ maxHeight }}>
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_theme(colors.border)]">
-          <TableRow>
-            <TableHead className="text-xs">Date</TableHead>
-            <TableHead className="text-xs">Description</TableHead>
-            <TableHead className="text-xs">Source</TableHead>
-            <TableHead className="text-right text-xs">Debit</TableHead>
-            <TableHead className="text-right text-xs">Credit</TableHead>
-            <TableHead className="text-right text-xs">Balance</TableHead>
+    <div className="relative overflow-auto" style={{ maxHeight }}>
+
+      <Table className="w-full min-w-[900px] border-separate border-spacing-0 text-sm">
+        <TableHeader >
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="sticky top-0 z-20 w-32 border-b border-border bg-muted text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Date
+            </TableHead>
+            <TableHead className="sticky top-0 z-20 min-w-72 border-b border-border bg-muted text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Particulars
+            </TableHead>
+
+            <TableHead className="sticky top-0 z-20 w-32 border-b border-border bg-muted text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Source
+            </TableHead>
+
+            <TableHead className="sticky top-0 z-20 w-36 border-b border-border bg-muted text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Debit
+            </TableHead>
+
+            <TableHead className="sticky top-0 z-20 w-36 border-b border-border bg-muted text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Credit
+            </TableHead>
+
+            <TableHead className="sticky top-0 z-20 w-44 border-b border-border bg-muted text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Balance
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -320,7 +360,8 @@ function CashLedgerTable({
                 <TableRow
                   key={e.id}
                   onClick={onRowClick ? () => onRowClick(e) : undefined}
-                  className={onRowClick ? "cursor-pointer hover:bg-muted/50" : undefined}
+                  className={`h-14 border-b border-border/60 transition-colors hover:bg-muted/30 ${onRowClick ? "cursor-pointer" : ""
+                    }`}
                 >
                   <TableCell className="whitespace-nowrap text-sm">
                     {new Date(e.occurredAt).toLocaleDateString("en-IN", {
@@ -329,11 +370,24 @@ function CashLedgerTable({
                       year: "numeric",
                     })}
                   </TableCell>
-                  <TableCell className="max-w-xs text-sm" title={e.description}>
-                    <div className="truncate">{e.description}</div>
-                    {reference ? (
-                      <div className="truncate font-mono text-[11px] text-muted-foreground">{reference}</div>
-                    ) : null}
+                  <TableCell className="max-w-[22rem] py-2.5">
+                    <div className="min-w-0">
+                      <p
+                        className="truncate text-sm font-medium text-foreground"
+                        title={e.description}
+                      >
+                        {e.description}
+                      </p>
+
+                      {reference && (
+                        <p
+                          className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground"
+                          title={reference}
+                        >
+                          {reference}
+                        </p>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <span
@@ -346,21 +400,31 @@ function CashLedgerTable({
                       Debit/Credit column it lands in — keeps the familiar
                       green-in/red-out read accountants already use here,
                       independent of which side the accounting label falls on. */}
-                  <TableCell className={`text-right ${e.direction === "IN" ? "text-emerald-600" : "text-red-600"}`}>
-                    {debit ? <CompactMoney className="text-sm font-medium" value={e.amountPaise} /> : null}
-                  </TableCell>
-                  <TableCell className={`text-right ${e.direction === "IN" ? "text-emerald-600" : "text-red-600"}`}>
-                    {!debit ? <CompactMoney className="text-sm font-medium" value={e.amountPaise} /> : null}
-                  </TableCell>
                   <TableCell className="text-right">
-                    <span className="inline-flex items-baseline gap-1">
-                      <CompactMoney className="text-sm font-semibold" value={e.runningBalance} />
-                      {balanceConvention ? (
+                    {debit ? (
+                      <LedgerAmount paise={e.amountPaise} />
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
+
+                  <TableCell className="text-right">
+                    {!debit ? (
+                      <LedgerAmount paise={e.amountPaise} />
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
+
+                  <TableCell className="text-right">
+                    <div className="flex items-baseline justify-end gap-1.5">
+                      <LedgerAmount paise={Math.abs(e.runningBalance)} strong />
+                      {balanceConvention && e.runningBalance !== 0 && (
                         <span className="text-[10px] font-semibold uppercase text-muted-foreground">
                           {isDrBalance(e.runningBalance) ? "Dr" : "Cr"}
                         </span>
-                      ) : null}
-                    </span>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );

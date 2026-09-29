@@ -609,6 +609,7 @@ router.post("/", can(PERMS.VEHICLE_JOURNEY.CREATE), async (req, res) => {
           status: true,
           blackListed: true,
           onLeave: true,
+          licenseExpiryDate: true,
         },
       }),
       db.branch.findUnique({
@@ -640,6 +641,11 @@ router.post("/", can(PERMS.VEHICLE_JOURNEY.CREATE), async (req, res) => {
   if (!driver) throw new BadRequestError("Driver not found");
   if (driver.blackListed) throw new BadRequestError("Driver is blacklisted");
   if (driver.onLeave) throw new BadRequestError("Driver is on leave");
+  if (driver.licenseExpiryDate && driver.licenseExpiryDate < now) {
+    throw new BadRequestError(
+      `Driver's license expired on ${driver.licenseExpiryDate.toISOString().slice(0, 10)} — renew it before starting a journey`,
+    );
+  }
   if (driver.status !== "AVAILABLE") {
     throw new BadRequestError("Driver is already assigned to a trip");
   }
