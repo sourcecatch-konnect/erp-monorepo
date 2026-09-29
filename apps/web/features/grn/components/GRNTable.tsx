@@ -43,6 +43,8 @@ import {
 } from "@skerp/ui/components/table";
 
 import { formatPaise } from "@/lib/money";
+import { ReportPrintMenu } from "@/components/ReportPrintMenu";
+import { grnApi } from "../grn.service";
 import {
   GRNStatus,
   GRNStatusBadge,
@@ -220,7 +222,7 @@ export default function GRNTable({
                   </TableHead>
                 ))}
 
-                <TableHead className="h-10 w-16 text-right text-xs font-semibold uppercase text-muted-foreground">
+                <TableHead className="h-10 w-20 text-right text-xs font-semibold uppercase text-muted-foreground">
                   Actions
                 </TableHead>
               </TableRow>
@@ -237,7 +239,7 @@ export default function GRNTable({
                     </TableCell>
                   ))}
 
-                  <TableCell className="w-16">
+                  <TableCell className="w-20">
                     <Skeleton className="ml-auto size-7 rounded-md" />
                   </TableCell>
                 </TableRow>
@@ -291,8 +293,19 @@ export default function GRNTable({
                       </TableCell>
                     ))}
 
-                    <TableCell className="w-16 text-right">
-                      <div className="flex justify-end gap-1">
+                    <TableCell className="w-20 text-right">
+                      <div className="flex justify-end gap-0.5">
+                        <ReportPrintMenu
+                          compact
+                          label={`Print / PDF ${grn.grnNumber || "GRN"}`}
+                          downloadPdf={(withLetterhead) =>
+                            grnApi.downloadPdf(grn.id, withLetterhead)
+                          }
+                          previewPath={(withLetterhead) =>
+                            `/grn/${encodeURIComponent(grn.id)}/print-preview?letterhead=${withLetterhead}`
+                          }
+                          fileName={identifier.replaceAll("/", "-")}
+                        />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button

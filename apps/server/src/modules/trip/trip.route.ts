@@ -9,6 +9,7 @@ import {
   cancelTripSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
+  EMPTY_TRIP_FREIGHT_MESSAGE,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -1064,6 +1065,7 @@ router.post(
         status: true,
         startDateTime: true,
         onwardFreight: true,
+        isTripEmpty: true,
         journeyId: true,
         sequenceNo: true,
         version: true,
@@ -1072,6 +1074,9 @@ router.post(
     if (!existing) throw new NotFoundError("Trip not found");
     if (existing.status !== "InTransit") {
       throw new BadRequestError("Only an InTransit trip can be corrected here");
+    }
+    if (existing.isTripEmpty && (data.onwardFreight ?? 0) > 0) {
+      throw new BadRequestError(EMPTY_TRIP_FREIGHT_MESSAGE);
     }
     if (data.version !== undefined && data.version !== existing.version) {
       throw new ConflictError(
@@ -1332,6 +1337,7 @@ router.post(
         journeyId: true,
         sequenceNo: true,
         isReturnLeg: true,
+        isTripEmpty: true,
         vehicleId: true,
         version: true,
         journey: {
@@ -1345,6 +1351,9 @@ router.post(
     if (!existing) throw new NotFoundError("Trip not found");
     if (existing.status !== "Closed") {
       throw new BadRequestError("Only a Closed trip can be corrected");
+    }
+    if (existing.isTripEmpty && data.onwardFreight > 0) {
+      throw new BadRequestError(EMPTY_TRIP_FREIGHT_MESSAGE);
     }
     if (data.version !== undefined && data.version !== existing.version) {
       throw new ConflictError(

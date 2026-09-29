@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { rupeesToPaise } from "../_shared/money.js";
+import { EMPTY_TRIP_FREIGHT_MESSAGE } from "../trip/trip.schema.js";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -137,10 +138,30 @@ const legDispatchRefinement = (
   }
 };
 
+// An EMPTY leg (or one ticked empty) carries no load, so it earns no freight.
+const legEmptyFreightRefinement = (
+  data: {
+    legType: z.infer<typeof tripLegTypeSchema>;
+    isTripEmpty?: boolean;
+    onwardFreight?: number | bigint;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  const empty = data.legType === "EMPTY" || data.isTripEmpty;
+  if (empty && Number(data.onwardFreight ?? 0) > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: EMPTY_TRIP_FREIGHT_MESSAGE,
+      path: ["onwardFreight"],
+    });
+  }
+};
+
 export const addJourneyLegSchema = z
   .object(legBaseShape)
   .superRefine(legTypeRefinement)
-  .superRefine(legDispatchRefinement);
+  .superRefine(legDispatchRefinement)
+  .superRefine(legEmptyFreightRefinement);
 
 export const closeJourneyLegSchema = z.object({
   closingKm: positiveIntField("Closing KM"),

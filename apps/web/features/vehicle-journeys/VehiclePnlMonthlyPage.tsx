@@ -39,7 +39,7 @@ import {
     type MonthlyPnlRow,
 } from "./vehicle-cost.service";
 import { profitTone } from "./vehicle-pnl.format";
-import { ReportPrintMenu } from "./ReportPrintMenu";
+import { ReportPrintMenu } from "@/components/ReportPrintMenu";
 
 // Year included: a quarter, year or custom period can span two calendar years,
 // and a journey can start in an earlier month than its Log Slip.

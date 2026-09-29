@@ -139,14 +139,33 @@ const tripTypeRefinement = (
   }
 };
 
+/** An empty trip carries no load, so it earns no freight (₹0 on the Log Slip). */
+export const EMPTY_TRIP_FREIGHT_MESSAGE =
+  "An empty trip can't have onward freight — set it to 0 or untick 'Empty trip'";
+
+const emptyTripFreightRefinement = (
+  data: { isTripEmpty?: boolean; onwardFreight?: number | bigint },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.isTripEmpty && Number(data.onwardFreight ?? 0) > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: EMPTY_TRIP_FREIGHT_MESSAGE,
+      path: ["onwardFreight"],
+    });
+  }
+};
+
 export const createTripSchema = z
   .object(tripBaseShape)
   .superRefine(tripTypeRefinement)
-  .superRefine(tripDispatchRefinement);
+  .superRefine(tripDispatchRefinement)
+  .superRefine(emptyTripFreightRefinement);
 
 export const updateTripSchema = z
   .object(tripBaseShape)
-  .superRefine(tripTypeRefinement);
+  .superRefine(tripTypeRefinement)
+  .superRefine(emptyTripFreightRefinement);
 
 /* ------------------------------------------------------------------ */
 /* Transitions                                                        */
