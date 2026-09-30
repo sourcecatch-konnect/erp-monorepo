@@ -163,7 +163,7 @@ Compliance / Misc: 17. **E-way Bill** (manual attach + NIC API for Part-B + vali
 
 **LR ↔ Trip attachment:** an LR attaches via `LorryReceipt.primaryTripId` (and `secondaryTripId` for the second leg of a hub split). A trip therefore exposes `primaryLRs` + `secondaryLRs`. (No single `currentTripId` / `LRTripAssignmentHistory` — the two-leg model replaces it.)
 
-**Children (implemented):**
+**Children (implemented):**F
 
 - `TripUnloadingPoint(vehicleTripId, sequence, cityId, locationId, plannedDate, actualDate)` — ordered drops.
 - `TripStatusHistory(vehicleTripId, status, changedAt, userId, note)` — status-transition log.

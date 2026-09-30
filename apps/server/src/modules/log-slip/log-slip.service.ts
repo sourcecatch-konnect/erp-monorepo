@@ -274,6 +274,13 @@ export const computeLogSlip = async (
         ].filter((name): name is string => Boolean(name)),
       ),
     ];
+    // Every loaded leg on a paper Log Slip has an LR. LRs and trips are made
+    // by different people in any order, so this warns instead of blocking.
+    if (!leg.isTripEmpty && leg.onwardFreight > 0n && lrNumbers.length === 0) {
+      warnings.push(
+        `Leg ${leg.sequenceNo ?? "?"} (${leg.fromCity?.name ?? "?"} → ${leg.toCity?.name ?? "?"}) has ₹${(Number(leg.onwardFreight) / 100).toLocaleString("en-IN")} freight but no LR attached`,
+      );
+    }
     lines.push({
       lineType: "TRIP_FREIGHT",
       sourceType: "VehicleTrip",

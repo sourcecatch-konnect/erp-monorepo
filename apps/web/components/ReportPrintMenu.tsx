@@ -15,7 +15,7 @@ import {
 } from "@skerp/ui/components/dropdown";
 
 import { runPdfAction, type PdfAction } from "@/lib/pdf-actions";
-import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
+import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 
 /** The same "Print / PDF" menu as the LR and GRN detail screens: download,
  * print or preview, each with or without the letterhead (logo header and
@@ -26,6 +26,7 @@ export function ReportPrintMenu({
     fileName,
     disabled,
     label = "Print / PDF",
+    compact = false,
 }: {
     /** Fetches the PDF from the server. */
     downloadPdf: (withLetterhead: boolean) => Promise<Blob>;
@@ -36,6 +37,8 @@ export function ReportPrintMenu({
     disabled?: boolean;
     /** Button text, for pages that offer more than one printable report. */
     label?: string;
+    /** Icon-only ghost button, for table rows; `label` becomes its aria-label. */
+    compact?: boolean;
 }) {
     const [busy, setBusy] = React.useState(false);
 
@@ -58,14 +61,30 @@ export function ReportPrintMenu({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={disabled || busy}>
-                    {busy ? (
-                        <IconLoader2 size={16} className="animate-spin" />
-                    ) : (
-                        <IconPrinter size={16} />
-                    )}
-                    {busy ? "Preparing…" : label}
-                </Button>
+                {compact ? (
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={label}
+                        title={label}
+                        disabled={disabled || busy}
+                    >
+                        {busy ? (
+                            <IconLoader2 size={16} className="animate-spin" />
+                        ) : (
+                            <IconPrinter size={16} />
+                        )}
+                    </Button>
+                ) : (
+                    <Button variant="outline" size="sm" disabled={disabled || busy}>
+                        {busy ? (
+                            <IconLoader2 size={16} className="animate-spin" />
+                        ) : (
+                            <IconPrinter size={16} />
+                        )}
+                        {busy ? "Preparing…" : label}
+                    </Button>
+                )}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Download</DropdownMenuLabel>

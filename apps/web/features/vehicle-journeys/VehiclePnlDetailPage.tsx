@@ -34,7 +34,7 @@ import {
 
 import { formatPaise } from "@/lib/money";
 import { logSlipApi, type VehiclePnlRow } from "./journey.service";
-import { ReportPrintMenu } from "./ReportPrintMenu";
+import { ReportPrintMenu } from "@/components/ReportPrintMenu";
 import {
     formatMoneyOrDash,
     formatMonth,
