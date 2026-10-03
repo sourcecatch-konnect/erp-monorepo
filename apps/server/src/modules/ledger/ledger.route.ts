@@ -9,6 +9,7 @@ import {
   customerStatementQuerySchema,
   dayBookQuerySchema,
   ledgerQuerySchema,
+  setOpeningBalanceSchema,
   updateLedgerSchema,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
@@ -42,6 +43,7 @@ import {
 } from "./statement-export.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 import { postJournal } from "./posting.service.js";
+import { listOpeningBalances, setOpeningBalance } from "./opening-balance.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -67,6 +69,26 @@ const validate = <T>(
     throw new ValidationError(result.error.flatten().fieldErrors);
   return result.data;
 };
+
+// Opening balances of cash / bank accounts (Finance → Opening Balances).
+router.get("/opening-balances", can(PERMS.LEDGER.VIEW), async (_req, res) =>
+  sendOk(res, await listOpeningBalances()),
+);
+
+router.put(
+  "/opening-balances/:cashAccountId",
+  can(PERMS.LEDGER.MANAGE),
+  async (req, res) => {
+    const input = validate(setOpeningBalanceSchema.safeParse(req.body));
+    await setOpeningBalance({
+      cashAccountId: String(req.params.cashAccountId),
+      asOf: input.asOf,
+      amountPaise: input.amountPaise,
+      actorId: actorId(req),
+    });
+    return sendOk(res, await listOpeningBalances());
+  },
+);
 
 // Bank / Cash ledger — same read, the account's own `type` says which report it is.
 router.get("/cash-accounts/:id", can(PERMS.LEDGER.VIEW), async (req, res) => {

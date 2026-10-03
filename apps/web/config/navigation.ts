@@ -18,6 +18,7 @@ import {
   IconEdit,
   IconBoxSeam,
   IconChartBar,
+  IconUserDollar,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -369,6 +370,30 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/accounts/vendor-payments/disbursements",
         icon: IconCashBanknote,
         permission: PERMS.ACCOUNTS.PAYMENT.DISBURSE,
+      },
+      {
+        title: "Driver Salary Runs",
+        href: "/accounts/driver-salary-runs",
+        icon: IconUserDollar,
+        permission: PERMS.DRIVER_FINANCE.SALARY_VIEW,
+      },
+      {
+        title: "Driver Salary Advances",
+        href: "/accounts/driver-salary-advances",
+        icon: IconUserDollar,
+        permission: PERMS.DRIVER_FINANCE.SALARY_VIEW,
+      },
+      {
+        title: "Driver Payments",
+        href: "/accounts/driver-payments",
+        icon: IconUserDollar,
+        permission: PERMS.DRIVER_FINANCE.SALARY_VIEW,
+      },
+      {
+        title: "Opening Balances",
+        href: "/accounts/opening-balances",
+        icon: IconCashBanknote,
+        permission: PERMS.LEDGER.VIEW,
       },
       {
         title: "Chart of Accounts",

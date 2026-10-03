@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   IconBuildingBank,
   IconCash,
-  IconDeviceFloppy,
   IconPlus,
 } from "@tabler/icons-react";
 
@@ -30,7 +29,6 @@ import {
   TableHeader,
   TableRow,
 } from "@skerp/ui/components/table";
-import { formatPaise } from "@/lib/money";
 
 import { cashPlanningApi } from "../api/cash-planning.service";
 import { cashPlanningKeys } from "../api/cash-planning.keys";
@@ -44,94 +42,22 @@ type Props = {
 };
 
 const toPaise = (rupees: string): number => Math.round(Number(rupees) * 100);
-const toRupeeInput = (paise: number): string => (paise / 100).toFixed(2);
 
 export default function CashPositionPanel({ day, date, canEnter }: Props) {
   const queryClient = useQueryClient();
   const editable = canEnter && day.status === "OPEN";
 
-  // Drill-down entries for the Received column: every positive adjustment
-  // today (receipt credits + manual "add funds"), grouped by account.
-  const receivedByAccount = React.useMemo(() => {
-    const map = new Map<string, ActivityEntry[]>();
-    for (const a of day.adjustments) {
-      if (a.amountPaise <= 0) continue;
-      const list = map.get(a.accountId) ?? [];
-      list.push({
-        id: a.id,
-        label: a.receiptId ? a.reason : "Manual add funds",
-        detail: a.receiptId ? undefined : a.reason,
-        amountPaise: a.amountPaise,
-        at: a.createdAt,
-        tag: a.receiptId ? "receipt" : "manual",
-      });
-      map.set(a.accountId, list);
-    }
-    for (const list of map.values()) {
-      list.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
-    }
-    return map;
-  }, [day.adjustments]);
-
-  // Drill-down entries for the Payment column: approved payments from the
-  // queue + negative/correction adjustments today, grouped by account.
-  const paymentByAccount = React.useMemo(() => {
-    const map = new Map<string, ActivityEntry[]>();
-    for (const a of day.adjustments) {
-      if (a.amountPaise >= 0) continue;
-      const list = map.get(a.accountId) ?? [];
-      list.push({
-        id: a.id,
-        label: "Correction",
-        detail: a.reason,
-        amountPaise: -a.amountPaise,
-        at: a.createdAt,
-        tag: "correction",
-      });
-      map.set(a.accountId, list);
-    }
-    for (const p of day.payments) {
-      if (p.status !== "APPROVED" || !p.fromAccountId) continue;
-      const list = map.get(p.fromAccountId) ?? [];
-      list.push({
-        id: p.id,
-        label: p.payeeName,
-        detail: p.creditor?.name,
-        amountPaise: p.amount,
-        at: p.approvedAt ?? p.createdAt,
-        tag: "payment",
-      });
-      map.set(p.fromAccountId, list);
-    }
-    for (const list of map.values()) {
-      list.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
-    }
-    return map;
-  }, [day.adjustments, day.payments]);
-
-  // Local draft of opening balances (rupee strings), keyed by accountId.
-  const [draft, setDraft] = React.useState<Record<string, string>>({});
-
-  React.useEffect(() => {
-    const next: Record<string, string> = {};
-    for (const b of day.balances) next[b.accountId] = toRupeeInput(b.openingBalance);
-    setDraft(next);
-  }, [day.balances]);
-
-  const save = useMutation({
-    mutationFn: () =>
-      cashPlanningApi.upsertBalances(day.id, {
-        balances: day.balances.map((b) => ({
-          accountId: b.accountId,
-          openingBalance: toPaise(draft[b.accountId] ?? "0"),
-        })),
-      }),
-    onSuccess: (view) => {
-      queryClient.setQueryData(cashPlanningKeys.day(date), view);
-      toast.success("Opening balances saved");
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save"),
-  });
+  // Drill-down entries come from the server: every money movement in the
+  // accounting books for the day (receipts, salaries, advances, vendor and
+  // Cash Planning payments…) plus Cash Planning items with no voucher.
+  const receivedByAccount = React.useMemo(
+    () => new Map(day.balances.map((b) => [b.accountId, b.receivedEntries as ActivityEntry[]])),
+    [day.balances],
+  );
+  const paymentByAccount = React.useMemo(
+    () => new Map(day.balances.map((b) => [b.accountId, b.paymentEntries as ActivityEntry[]])),
+    [day.balances],
+  );
 
   // "+ Add funds" dialog — logs a manual credit/correction against one
   // account, instead of hand-recomputing and overwriting the opening figure.
@@ -169,20 +95,11 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold">Cash Position</h2>
           <p className="text-xs text-muted-foreground">
-            Closing = opening + received − payment. Click Received / Payment for details.
+            Opening = the account&apos;s balance in the accounting books at the start of the day
+            (set the starting balance once in Finance → Opening Balances). Closing = opening +
+            received − payment. Click Received / Payment for details.
           </p>
         </div>
-        {editable ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => save.mutate()}
-            disabled={save.isPending}
-          >
-            <IconDeviceFloppy size={15} className="mr-1" />
-            {save.isPending ? "Saving…" : "Save balances"}
-          </Button>
-        ) : null}
       </div>
 
       <Table>
@@ -206,10 +123,6 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
             </TableRow>
           ) : (
             day.balances.map((b) => {
-              const carriedMismatch =
-                b.carriedOpening !== null &&
-                b.carriedOpening !== undefined &&
-                b.carriedOpening !== b.openingBalance;
               return (
                 <TableRow key={b.accountId}>
                   <TableCell>
@@ -222,30 +135,10 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
                         )}
                       </span>
                       <span className="text-sm font-medium">{b.account.name}</span>
-                      {carriedMismatch ? (
-                        <span
-                          title={`Carried forward: ${formatPaise(b.carriedOpening ?? 0)}`}
-                          className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700"
-                        >
-                          edited
-                        </span>
-                      ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {editable ? (
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="h-9 w-32 text-right"
-                        value={draft[b.accountId] ?? ""}
-                        onChange={(e) =>
-                          setDraft((d) => ({ ...d, [b.accountId]: e.target.value }))
-                        }
-                      />
-                    ) : (
-                      <CompactMoney value={b.openingBalance} />
-                    )}
+                  <TableCell className="text-right" title="From the accounting books">
+                    <CompactMoney value={b.openingBalance} />
                   </TableCell>
                   <TableCell className="text-right text-sm text-emerald-600">
                     <AccountActivityPopover
@@ -253,7 +146,7 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
                       columnLabel="Received today"
                       total={b.receivedTotal}
                       entries={receivedByAccount.get(b.accountId) ?? []}
-                      emptyLabel="No receipts or funds added today"
+                      emptyLabel="No money received today"
                     />
                   </TableCell>
                   <TableCell className="text-right text-sm text-red-600">
@@ -262,7 +155,7 @@ export default function CashPositionPanel({ day, date, canEnter }: Props) {
                       columnLabel="Payment today"
                       total={b.paymentTotal}
                       entries={paymentByAccount.get(b.accountId) ?? []}
-                      emptyLabel="No payments made today"
+                      emptyLabel="No money paid out today"
                     />
                   </TableCell>
                   <TableCell className="text-right text-sm">

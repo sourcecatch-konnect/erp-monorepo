@@ -22,67 +22,175 @@ type DayWithRelations = Prisma.CashPlanDayGetPayload<{ include: typeof dayInclud
 
 const APPROVED = "APPROVED" as const;
 
+type ActivityEntry = {
+  id: string;
+  label: string;
+  detail?: string;
+  amountPaise: number;
+  at: Date;
+  tag: "receipt" | "manual" | "payment" | "correction";
+};
+
+type AccountActivity = { inPaise: number; outPaise: number; inEntries: ActivityEntry[]; outEntries: ActivityEntry[] };
+
+const SOURCE_LABEL: Record<string, string> = {
+  RECEIPT: "Receipt",
+  VENDOR_PAYMENT: "Payment",
+  DRIVER_PAYOUT: "Driver payment",
+  DRIVER_SALARY_ADVANCE: "Salary advance",
+  OPENING_BALANCE: "Opening balance",
+  MANUAL: "Journal",
+};
+
 /**
- * Build the API view from a loaded day: per-account closing balances and the
- * pooled opening / approved / available totals. All money is paise (number).
+ * Every voucher that moved money in or out of these cash / bank accounts on
+ * `date` (the accounting books) — receipts, Cash Planning and vendor
+ * payments, driver salaries / advances / payouts, opening balances.
+ * Reversed entries are left out. Map of CashAccount id → totals and entries.
  */
-export function buildDayView(day: DayWithRelations) {
-  const approvedPayments = day.payments.filter((p) => p.status === APPROVED);
-
-  // Σ approved payments tagged to each account (paise).
-  const taggedByAccount = new Map<string, number>();
-  for (const p of approvedPayments) {
-    if (!p.fromAccountId) continue;
-    taggedByAccount.set(
-      p.fromAccountId,
-      (taggedByAccount.get(p.fromAccountId) ?? 0) + Number(p.amount),
-    );
-  }
-
-  // Σ manual/receipt adjustments tagged to each account (paise, signed), split
-  // into "received" (positive — receipt credits + manual add-funds) and
-  // "payment" (negative — manual corrections, shown as an outflow) buckets so
-  // the UI can render them as separate columns.
-  const adjustedByAccount = new Map<string, number>();
-  const receivedByAccount = new Map<string, number>();
-  const correctionByAccount = new Map<string, number>();
-  for (const a of day.adjustments) {
-    const amt = Number(a.amountPaise);
-    adjustedByAccount.set(a.accountId, (adjustedByAccount.get(a.accountId) ?? 0) + amt);
-    if (amt > 0) {
-      receivedByAccount.set(a.accountId, (receivedByAccount.get(a.accountId) ?? 0) + amt);
-    } else if (amt < 0) {
-      correctionByAccount.set(a.accountId, (correctionByAccount.get(a.accountId) ?? 0) - amt);
+export async function booksDayActivity(
+  client: Prisma.TransactionClient | typeof db,
+  date: Date,
+  accountIds: string[],
+): Promise<Map<string, AccountActivity>> {
+  const result = new Map<string, AccountActivity>(
+    accountIds.map((id) => [id, { inPaise: 0, outPaise: 0, inEntries: [], outEntries: [] }]),
+  );
+  const ledgers = await client.ledger.findMany({
+    where: { cashAccountId: { in: accountIds } },
+    select: { id: true, cashAccountId: true },
+  });
+  if (!ledgers.length) return result;
+  const accountByLedger = new Map(ledgers.map((l) => [l.id, l.cashAccountId!]));
+  const next = new Date(date.getTime() + 86_400_000);
+  const lines = await client.journalLine.findMany({
+    where: {
+      ledgerId: { in: [...accountByLedger.keys()] },
+      journalEntry: { ...LIVE_VOUCHERS, voucherDate: { gte: date, lt: next } },
+    },
+    select: {
+      id: true,
+      ledgerId: true,
+      debitPaise: true,
+      creditPaise: true,
+      narration: true,
+      journalEntry: {
+        select: {
+          id: true,
+          voucherNumber: true,
+          narration: true,
+          sourceType: true,
+          reversesId: true,
+          createdAt: true,
+        },
+      },
+    },
+  });
+  for (const line of lines) {
+    const act = result.get(accountByLedger.get(line.ledgerId)!)!;
+    const je = line.journalEntry;
+    const debit = Number(line.debitPaise);
+    const credit = Number(line.creditPaise);
+    const entry = {
+      id: line.id,
+      label: line.narration?.trim() || je.narration?.trim() || SOURCE_LABEL[je.sourceType] || je.voucherNumber,
+      detail: je.voucherNumber,
+      at: je.createdAt,
+    };
+    if (debit > 0) {
+      act.inPaise += debit;
+      act.inEntries.push({
+        ...entry,
+        // A later-day reversal of a payment = money back: show it as such.
+        amountPaise: debit,
+        tag: je.sourceType === "RECEIPT" ? "receipt" : "manual",
+      });
+    } else if (credit > 0) {
+      act.outPaise += credit;
+      act.outEntries.push({
+        ...entry,
+        amountPaise: credit,
+        tag: "payment",
+      });
     }
   }
+  return result;
+}
+
+const newestFirst = (a: ActivityEntry, b: ActivityEntry) => b.at.getTime() - a.at.getTime();
+
+/**
+ * Build the API view from a loaded day and the day's money movements in the
+ * books: per account, opening (books, start of day) + received − payment =
+ * closing. Cash Planning items with no voucher are added on top so nothing is
+ * lost: approved payments without a voucher (no branch / account) and manual
+ * "add funds" entries. Adjustments created by receipts are skipped — the
+ * receipt's own voucher is already in the books. All money is paise (number).
+ */
+export function buildDayView(day: DayWithRelations, books: Map<string, AccountActivity>) {
+  const approvedPayments = day.payments.filter((p) => p.status === APPROVED);
 
   const balances = day.balances.map((b) => {
+    const act = books.get(b.accountId) ?? { inPaise: 0, outPaise: 0, inEntries: [], outEntries: [] };
+    const inEntries = [...act.inEntries];
+    const outEntries = [...act.outEntries];
+    let received = act.inPaise;
+    let payment = act.outPaise;
+
+    // Cash Planning items that never reached the books.
+    for (const a of day.adjustments) {
+      if (a.accountId !== b.accountId || a.receiptId) continue;
+      const amt = Number(a.amountPaise);
+      if (amt > 0) {
+        received += amt;
+        inEntries.push({ id: a.id, label: "Manual add funds", detail: a.reason, amountPaise: amt, at: a.createdAt, tag: "manual" });
+      } else if (amt < 0) {
+        payment += -amt;
+        outEntries.push({ id: a.id, label: "Correction", detail: a.reason, amountPaise: -amt, at: a.createdAt, tag: "correction" });
+      }
+    }
+    for (const pmt of approvedPayments) {
+      if (pmt.fromAccountId !== b.accountId || pmt.journalEntryId) continue;
+      const amt = Number(pmt.amount);
+      payment += amt;
+      outEntries.push({
+        id: pmt.id,
+        label: pmt.payeeName,
+        detail: pmt.creditor?.name,
+        amountPaise: amt,
+        at: pmt.approvedAt ?? pmt.createdAt,
+        tag: "payment",
+      });
+    }
+
     const opening = Number(b.openingBalance);
-    const adjustmentsTotal = adjustedByAccount.get(b.accountId) ?? 0;
-    const approvedForAccount = taggedByAccount.get(b.accountId) ?? 0;
-    const closingBalance = opening - approvedForAccount + adjustmentsTotal;
     return {
       ...b,
       openingBalance: opening,
       carriedOpening: b.carriedOpening === null ? null : Number(b.carriedOpening),
-      adjustmentsTotal,
-      receivedTotal: receivedByAccount.get(b.accountId) ?? 0,
-      paymentTotal: approvedForAccount + (correctionByAccount.get(b.accountId) ?? 0),
-      closingBalance,
+      adjustmentsTotal: day.adjustments
+        .filter((a) => a.accountId === b.accountId)
+        .reduce((s, a) => s + Number(a.amountPaise), 0),
+      receivedTotal: received,
+      paymentTotal: payment,
+      closingBalance: opening + received - payment,
+      receivedEntries: inEntries.sort(newestFirst),
+      paymentEntries: outEntries.sort(newestFirst),
     };
   });
 
   const totalOpening = balances.reduce((s, b) => s + b.openingBalance, 0);
   const approvedTotal = approvedPayments.reduce((s, p) => s + Number(p.amount), 0);
+  const untaggedApproved = approvedPayments
+    .filter((p) => !p.fromAccountId)
+    .reduce((s, p) => s + Number(p.amount), 0);
   const pendingTotal = day.payments
     .filter((p) => p.status === "PENDING")
     .reduce((s, p) => s + Number(p.amount), 0);
-  const totalAdjustments = day.adjustments.reduce(
-    (s, a) => s + Number(a.amountPaise),
-    0,
-  );
+  const totalAdjustments = day.adjustments.reduce((s, a) => s + Number(a.amountPaise), 0);
   const totalReceived = balances.reduce((s, b) => s + b.receivedTotal, 0);
   const totalPayment = balances.reduce((s, b) => s + b.paymentTotal, 0);
+  const totalClosing = balances.reduce((s, b) => s + b.closingBalance, 0);
 
   return {
     ...day,
@@ -95,8 +203,21 @@ export function buildDayView(day: DayWithRelations) {
     totalAdjustments,
     totalReceived,
     totalPayment,
-    availableCash: totalOpening + totalAdjustments - approvedTotal,
+    // Money left across the accounts, less approved payments not tied to one.
+    availableCash: totalClosing - untaggedApproved,
   };
+}
+
+/** Load a day and its money movements from the books, and build its view. */
+export async function dayView(client: Prisma.TransactionClient | typeof db, dayId: string) {
+  const day = await client.cashPlanDay.findUnique({ where: { id: dayId }, include: dayInclude });
+  if (!day) return null;
+  const books = await booksDayActivity(
+    client,
+    day.date,
+    day.balances.map((b) => b.accountId),
+  );
+  return buildDayView(day, books);
 }
 
 /**
@@ -223,9 +344,21 @@ export function findDay(id: string) {
   return db.cashPlanDay.findUnique({ where: { id }, include: dayInclude });
 }
 
+/** An approved payment being re-approved is added back (it's already in). */
+async function addBack(client: Prisma.TransactionClient, excludePaymentId?: string, accountId?: string) {
+  if (!excludePaymentId) return 0;
+  const p = await client.cashPayment.findUnique({
+    where: { id: excludePaymentId },
+    select: { status: true, amount: true, fromAccountId: true },
+  });
+  if (!p || p.status !== APPROVED) return 0;
+  if (accountId !== undefined && p.fromAccountId !== accountId) return 0;
+  return Number(p.amount);
+}
+
 /**
- * Pooled cash totals for the approval guard. `excludePaymentId` drops a
- * payment from the approved sum (used when re-approving an already-approved row).
+ * Pooled cash for the approval guard — the same books-based figure the day
+ * shows (Σ closing balances − approved payments not tied to an account).
  * Uses the provided client so it can run inside a transaction.
  */
 export async function poolTotals(
@@ -233,40 +366,19 @@ export async function poolTotals(
   dayId: string,
   excludePaymentId?: string,
 ) {
-  const [balanceAgg, approvedAgg, adjustmentAgg] = await Promise.all([
-    client.cashAccountBalance.aggregate({
-      where: { dayId },
-      _sum: { openingBalance: true },
-    }),
-    client.cashPayment.aggregate({
-      where: {
-        dayId,
-        status: APPROVED,
-        ...(excludePaymentId ? { id: { not: excludePaymentId } } : {}),
-      },
-      _sum: { amount: true },
-    }),
-    client.cashAccountAdjustment.aggregate({
-      where: { dayId },
-      _sum: { amountPaise: true },
-    }),
-  ]);
-
-  const totalOpening = Number(balanceAgg._sum.openingBalance ?? 0n);
-  const approvedTotal = Number(approvedAgg._sum.amount ?? 0n);
-  const totalAdjustments = Number(adjustmentAgg._sum.amountPaise ?? 0n);
+  const view = await dayView(client, dayId);
+  const back = await addBack(client, excludePaymentId);
   return {
-    totalOpening,
-    approvedTotal,
-    totalAdjustments,
-    availableCash: totalOpening + totalAdjustments - approvedTotal,
+    totalOpening: view?.totalOpening ?? 0,
+    approvedTotal: view?.approvedTotal ?? 0,
+    totalAdjustments: view?.totalAdjustments ?? 0,
+    availableCash: (view?.availableCash ?? 0) + back,
   };
 }
 
 /**
- * Same as poolTotals but scoped to one cash account — used to guard that
- * approving a payment doesn't overdraw the specific account it's tagged to,
- * even if the combined pool across all accounts still has room.
+ * Same for one account — its closing balance for the day (books + Cash
+ * Planning items), so a payment can't overdraw the account it is tagged to.
  */
 export async function accountTotals(
   client: Prisma.TransactionClient,
@@ -274,56 +386,88 @@ export async function accountTotals(
   accountId: string,
   excludePaymentId?: string,
 ) {
-  const [balance, approvedAgg, adjustmentAgg] = await Promise.all([
-    client.cashAccountBalance.findUnique({
-      where: { dayId_accountId: { dayId, accountId } },
-      select: { openingBalance: true },
-    }),
-    client.cashPayment.aggregate({
-      where: {
-        dayId,
-        fromAccountId: accountId,
-        status: APPROVED,
-        ...(excludePaymentId ? { id: { not: excludePaymentId } } : {}),
-      },
-      _sum: { amount: true },
-    }),
-    client.cashAccountAdjustment.aggregate({
-      where: { dayId, accountId },
-      _sum: { amountPaise: true },
-    }),
-  ]);
-
-  const openingBalance = Number(balance?.openingBalance ?? 0n);
-  const approvedTotal = Number(approvedAgg._sum.amount ?? 0n);
-  const adjustmentsTotal = Number(adjustmentAgg._sum.amountPaise ?? 0n);
+  const view = await dayView(client, dayId);
+  const balance = view?.balances.find((b) => b.accountId === accountId);
+  const back = await addBack(client, excludePaymentId, accountId);
   return {
-    openingBalance,
-    approvedTotal,
-    adjustmentsTotal,
-    availableCash: openingBalance + adjustmentsTotal - approvedTotal,
+    openingBalance: balance?.openingBalance ?? 0,
+    approvedTotal: 0,
+    adjustmentsTotal: balance?.adjustmentsTotal ?? 0,
+    availableCash: (balance?.closingBalance ?? 0) + back,
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Openings from the accounting books (Cash Planning ↔ books, step 1)   */
+/* ------------------------------------------------------------------ */
+
 /**
- * Per-account closing balances of the most recent CLOSED day before `date`,
- * used to pre-seed the next day's opening (carry-forward). Returns a map of
- * accountId → closing paise. Untagged approved payments are not carried (the
- * opening field stays editable, deltas flagged in the UI).
+ * Vouchers that count in Cash Planning: posted and not reversed. A reversal
+ * means the entry was a mistake and never happened, so the reversed voucher
+ * and its reversal are both left out, on whatever days they fall — the
+ * balance is the same as counting both, without fake "received" / "paid"
+ * lines. (Ledgers → Cash / Bank still lists both for audit.)
  */
-export async function priorClosings(date: Date): Promise<Map<string, number>> {
-  const prior = await db.cashPlanDay.findFirst({
-    where: { date: { lt: date }, status: "CLOSED" },
-    orderBy: { date: "desc" },
-    include: dayInclude,
+const LIVE_VOUCHERS = { status: "POSTED" as const, reversesId: null };
+
+/**
+ * Each cash / bank account's balance in the accounting books at the start of
+ * `date` — every voucher dated before it, including the account's opening
+ * balance (Finance → Opening Balances). Reversed vouchers and their reversals
+ * are left out (they cancel out anyway). Map of CashAccount id → paise.
+ */
+export async function booksOpenings(
+  client: Prisma.TransactionClient | typeof db,
+  date: Date,
+  accountIds: string[],
+): Promise<Map<string, number>> {
+  const ledgers = await client.ledger.findMany({
+    where: { cashAccountId: { in: accountIds } },
+    select: { id: true, cashAccountId: true },
   });
+  const sums = ledgers.length
+    ? await client.journalLine.groupBy({
+        by: ["ledgerId"],
+        where: {
+          ledgerId: { in: ledgers.map((l) => l.id) },
+          journalEntry: { ...LIVE_VOUCHERS, voucherDate: { lt: date } },
+        },
+        _sum: { debitPaise: true, creditPaise: true },
+      })
+    : [];
+  const byLedger = new Map(
+    sums.map((s) => [s.ledgerId, Number((s._sum.debitPaise ?? 0n) - (s._sum.creditPaise ?? 0n))]),
+  );
+  const result = new Map<string, number>(accountIds.map((id) => [id, 0]));
+  for (const l of ledgers) result.set(l.cashAccountId!, byLedger.get(l.id) ?? 0);
+  return result;
+}
 
-  const map = new Map<string, number>();
-  if (!prior) return map;
-
-  const view = buildDayView(prior);
-  for (const b of view.balances) map.set(b.accountId, b.closingBalance);
-  return map;
+/**
+ * Refresh an OPEN day's openings from the books (a voucher posted late for an
+ * earlier day still lands in today's opening) and add a row for any account
+ * created since the day was opened. A CLOSED day keeps its numbers.
+ */
+export async function syncOpenDayFromBooks(client: Prisma.TransactionClient | typeof db, dayId: string) {
+  const day = await client.cashPlanDay.findUnique({
+    where: { id: dayId },
+    select: { id: true, date: true, status: true, balances: { select: { accountId: true } } },
+  });
+  if (!day || day.status !== "OPEN") return;
+  const accounts = await client.cashAccount.findMany({
+    where: { isActive: true, deletedAt: null },
+    select: { id: true },
+  });
+  const ids = [...new Set([...accounts.map((a) => a.id), ...day.balances.map((b) => b.accountId)])];
+  const openings = await booksOpenings(client, day.date, ids);
+  for (const accountId of ids) {
+    const opening = BigInt(openings.get(accountId) ?? 0);
+    await client.cashAccountBalance.upsert({
+      where: { dayId_accountId: { dayId, accountId } },
+      update: { openingBalance: opening, carriedOpening: opening },
+      create: { dayId, accountId, openingBalance: opening, carriedOpening: opening },
+    });
+  }
 }
 
 const toDateOnly = (d: Date) =>

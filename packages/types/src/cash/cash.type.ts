@@ -102,16 +102,31 @@ export type CashPaymentWithCreditor = CashPayment & {
   branch?: { id: string; name: string } | null;
 };
 
+/** One money movement in or out of an account on the day (for the drill-down). */
+export type CashActivityEntry = {
+  id: string;
+  label: string;
+  detail?: string;
+  amountPaise: number;
+  at: string | Date;
+  tag: "receipt" | "manual" | "payment" | "correction";
+};
+
 export type CashAccountBalanceWithAccount = CashAccountBalance & {
   account: Pick<CashAccount, "id" | "name" | "type">;
   /** Σ manual/receipt adjustments posted to this account today (paise) */
   adjustmentsTotal: number;
-  /** Σ money in today: positive adjustments — receipt credits + manual "add funds" (paise) */
+  /** Σ money in today, from the accounting books (receipts, transfers in,
+   *  opening balance…) plus Cash Planning entries that have no voucher (paise) */
   receivedTotal: number;
-  /** Σ money out today: approved payments tagged to this account + negative/correction adjustments (paise) */
+  /** Σ money out today, from the accounting books (salaries, advances, vendor
+   *  and Cash Planning payments…) plus Cash Planning items without a voucher (paise) */
   paymentTotal: number;
-  /** opening − approved payments + adjustments for this account, computed server-side */
+  /** opening + received − payment — the account's balance at day end (paise) */
   closingBalance: number;
+  /** What makes up receivedTotal / paymentTotal, newest first. */
+  receivedEntries: CashActivityEntry[];
+  paymentEntries: CashActivityEntry[];
 };
 
 /** Full daily cash-planning view returned by GET the day. */
@@ -133,7 +148,7 @@ export type CashPlanDayView = CashPlanDay & {
   totalReceived: number;
   /** Σ paymentTotal across all accounts (paise) */
   totalPayment: number;
-  /** totalOpening + totalAdjustments − approvedTotal (paise) */
+  /** Σ closing balances − approved payments not tied to an account (paise) */
   availableCash: number;
 };
 

@@ -135,6 +135,7 @@ function ProfitBreakdown({ row }: { row: VehiclePnlRow }) {
           BigInt(costs.permitPaise) +
           BigInt(costs.fitnessPaise) +
           BigInt(costs.emiPaise) +
+          BigInt(costs.driverSalaryPaise) +
           BigInt(costs.salaryPaise)
         : null;
     const variable =
@@ -182,7 +183,14 @@ function ProfitBreakdown({ row }: { row: VehiclePnlRow }) {
                             <StatLine label="Permit" value={formatPaise(costs.permitPaise)} />
                             <StatLine label="Fitness" value={formatPaise(costs.fitnessPaise)} />
                             <StatLine label="EMI" value={formatPaise(costs.emiPaise)} />
-                            <StatLine label="Salary" value={formatPaise(costs.salaryPaise)} />
+                            <StatLine
+                                label="Driver salary"
+                                value={formatPaise(costs.driverSalaryPaise)}
+                            />
+                            <StatLine
+                                label="Other staff salary"
+                                value={formatPaise(costs.salaryPaise)}
+                            />
                             <StatLine label="Total fixed" value={formatPaise((fixed ?? 0n).toString())} />
                         </>
                     ) : (

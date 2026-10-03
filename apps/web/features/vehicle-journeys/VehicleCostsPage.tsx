@@ -56,7 +56,7 @@ const FIXED_FIELDS: { key: FieldKey; label: string }[] = [
     { key: "emiPaise", label: "EMI / installment" },
 ];
 const MONTHLY_FIELDS: { key: FieldKey; label: string }[] = [
-    { key: "salaryPaise", label: "Salary" },
+    { key: "salaryPaise", label: "Other staff salary (cleaner / helper)" },
     { key: "tyrePaise", label: "Tyre" },
     { key: "otherPaise", label: "Other" },
 ];
@@ -183,6 +183,14 @@ function EditDialog({
                         <p className="mt-2 text-xs text-muted-foreground">
                             Spare &amp; repairs are taken from finalised Job Cards
                             automatically.
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Driver salary (automatic, from the approved salary run):{" "}
+                            <span className="font-medium text-foreground">
+                                {row && BigInt(row.driverSalaryPaise) > 0n
+                                    ? formatPaise(row.driverSalaryPaise)
+                                    : "none yet"}
+                            </span>
                         </p>
                     </div>
 
@@ -324,7 +332,13 @@ export default function VehicleCostsPage() {
                             <TableRow className="hover:bg-transparent">
                                 <TableHead className="pl-5 text-xs font-semibold">Vehicle</TableHead>
                                 <TableHead className="text-right text-xs font-semibold">Monthly fixed</TableHead>
-                                <TableHead className="text-right text-xs font-semibold">Salary</TableHead>
+                                <TableHead
+                                    className="text-right text-xs font-semibold"
+                                    title="Automatic — drivers' earned salary from the approved salary run, split by days driven"
+                                >
+                                    Driver salary (auto)
+                                </TableHead>
+                                <TableHead className="text-right text-xs font-semibold">Other staff</TableHead>
                                 <TableHead className="text-right text-xs font-semibold">Tyre + other</TableHead>
                                 <TableHead className="text-xs font-semibold">Source</TableHead>
                                 <TableHead className="w-12 pr-5" />
@@ -334,7 +348,7 @@ export default function VehicleCostsPage() {
                             {pageRows.length === 0 ? (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={6}
+                                        colSpan={7}
                                         className="py-8 text-center text-sm text-muted-foreground"
                                     >
                                         No vehicles match.
@@ -354,6 +368,11 @@ export default function VehicleCostsPage() {
                                                 row.emiPaise,
                                             ),
                                         )}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                        {BigInt(row.driverSalaryPaise) > 0n
+                                            ? formatPaise(row.driverSalaryPaise)
+                                            : "—"}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                         {formatPaise(row.salaryPaise)}

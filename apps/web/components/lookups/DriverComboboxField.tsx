@@ -138,6 +138,7 @@ const tripChoiceHint = (choice: TripDriverChoice) => {
   if (choice.selectionState === "BLACKLISTED") {
     return "Driver is blacklisted";
   }
+
   return "Not eligible for another trip";
 };
 
@@ -225,15 +226,19 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
         (choice) => ({
           value: choice.id,
           label: choice.name,
-          hint: tripChoiceHint(choice),
-          badge:
-            highlightDriverId && choice.id === highlightDriverId
+          hint: choice.licenceExpired
+            ? `Licence expired on ${choice.licenseExpiryDate ?? "—"} — only a trip dated before that is allowed`
+            : tripChoiceHint(choice),
+          badge: choice.licenceExpired
+            ? "Licence expired"
+            : highlightDriverId && choice.id === highlightDriverId
               ? "Journey driver"
               : selectionContext === "journey"
                 ? journeyChoiceBadge(choice)
                 : tripChoiceBadge(choice),
-          badgeTone:
-            highlightDriverId && choice.id === highlightDriverId
+          badgeTone: choice.licenceExpired
+            ? "danger"
+            : highlightDriverId && choice.id === highlightDriverId
               ? "info"
               : tripChoiceTone(choice),
           disabled:

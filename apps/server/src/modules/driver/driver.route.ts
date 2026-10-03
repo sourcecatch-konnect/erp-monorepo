@@ -151,6 +151,19 @@ const crudRouter: Router = createCrudRouter({
           "This driver cannot be deleted because existing vehicle trip records are linked with this driver. To preserve trip history, mark the driver as On Leave or Blacklisted instead.",
         );
       }
+
+      // Salary runs, salary advances and payments keep the driver's books —
+      // the database refuses the delete anyway; say why in plain words.
+      const [salaryLine, advance, payout] = await Promise.all([
+        db.driverSalary.findFirst({ where: { driverId: id }, select: { id: true } }),
+        db.driverSalaryAdvance.findFirst({ where: { driverId: id }, select: { id: true } }),
+        db.driverPayout.findFirst({ where: { driverId: id }, select: { id: true } }),
+      ]);
+      if (salaryLine || advance || payout) {
+        throw new Error(
+          "This driver cannot be deleted because he has salary, salary advance or payment records. Set a Leaving Date in the Driver master instead.",
+        );
+      }
     },
   },
 

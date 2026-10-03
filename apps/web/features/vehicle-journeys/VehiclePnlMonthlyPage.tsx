@@ -68,7 +68,7 @@ function exportCsv(data: MonthlyPnlResult) {
     const header = [
         "Sr", "Vehicle", "Period from", "Period to", "Months ran", "Trips", "Days", "Km",
         "Freight", "Trip expenses", "Trip balance",
-        "Tax", "Insurance", "Permit", "Fitness", "EMI", "Salary", "Fixed total",
+        "Tax", "Insurance", "Permit", "Fitness", "EMI", "Driver salary", "Other staff salary", "Fixed total",
         "Spare & repairs", "Tyre", "Other", "Variable total", "Result",
         "Booking freight", "Freight difference",
     ];
@@ -78,7 +78,7 @@ function exportCsv(data: MonthlyPnlResult) {
             `${r.monthsRan}/${data.monthCount}`, r.trips, r.days, r.km,
             rupees(r.freightPaise), rupees(r.totalExpensePaise), rupees(r.tripBalancePaise),
             rupees(r.taxPaise), rupees(r.insurancePaise), rupees(r.permitPaise),
-            rupees(r.fitnessPaise), rupees(r.emiPaise), rupees(r.salaryPaise), rupees(r.fixedTotalPaise),
+            rupees(r.fitnessPaise), rupees(r.emiPaise), rupees(r.driverSalaryPaise), rupees(r.salaryPaise), rupees(r.fixedTotalPaise),
             rupees(r.repairsPaise), rupees(r.tyrePaise), rupees(r.otherCostPaise),
             rupees(r.variableTotalPaise), rupees(r.resultPaise),
             rupees(r.bookingFreightPaise), rupees(r.freightDiffPaise),
@@ -894,7 +894,7 @@ export default function VehiclePnlMonthlyPage() {
 
                     <p className="text-xs text-muted-foreground">
                         Result = trip balance (freight − trip expenses) − monthly fixed
-                        (tax, insurance, permit, fitness, EMI, salary) − monthly variable
+                        (tax, insurance, permit, fitness, EMI, driver & staff salary) − monthly variable
                         (spare &amp; repairs from finalised Job Cards, tyre, other). Vehicles
                         with no trips still carry their fixed costs. Freight difference =
                         booking freight billed on the LRs − onward freight credited to the

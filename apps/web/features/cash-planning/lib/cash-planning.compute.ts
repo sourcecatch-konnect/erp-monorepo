@@ -40,13 +40,16 @@ export function recomputeDayView(
     );
   }
 
+  // Everything else in a balance (money from the accounting books, manual
+  // entries) is unchanged by this transform — only the Cash Planning payments
+  // tagged to the account move, so apply just that difference.
   const balances = day.balances.map((b) => {
-    const approvedForAccount = taggedByAccount.get(b.accountId) ?? 0;
-    const correctionOutflow = b.paymentTotal - (oldTaggedByAccount.get(b.accountId) ?? 0);
+    const delta =
+      (taggedByAccount.get(b.accountId) ?? 0) - (oldTaggedByAccount.get(b.accountId) ?? 0);
     return {
       ...b,
-      paymentTotal: approvedForAccount + correctionOutflow,
-      closingBalance: b.openingBalance - approvedForAccount + b.adjustmentsTotal,
+      paymentTotal: b.paymentTotal + delta,
+      closingBalance: b.closingBalance - delta,
     };
   });
 
@@ -67,7 +70,8 @@ export function recomputeDayView(
     pendingTotal,
     totalReceived,
     totalPayment,
-    availableCash: totalOpening + day.totalAdjustments - approvedTotal,
+    availableCash:
+      day.availableCash - (approvedTotal - oldApproved.reduce((s, p) => s + p.amount, 0)),
   };
 }
 

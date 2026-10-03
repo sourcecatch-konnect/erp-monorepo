@@ -38,6 +38,7 @@ import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
+import { LogSlipDriverPayoutPanel } from "@/features/driver-finance";
 import { formatPaise } from "@/lib/money";
 import { toValidDate } from "@/lib/date";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -450,6 +451,11 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
             </div>
           ))}
         </div>
+      ) : null}
+
+      {/* Cash handed to the driver for a "payable to driver" balance */}
+      {slip && driverPayable > 0 ? (
+        <LogSlipDriverPayoutPanel logSlipId={slip.id} />
       ) : null}
 
       {/* Diesel account (frozen slip only — needs previous qty & averages) */}

@@ -10,7 +10,7 @@ import type { LedgerAccountGroup } from "../generated/prisma/index.js";
  *     service looks up by `code` (see modules/ledger/posting.service.ts).
  *   - Bank / Cash ledgers: one per CashAccount, linked by `cashAccountId`.
  *
- * Party ledgers (customer / transport / creditor / labour / pump) are NOT
+ * Party ledgers (customer / transport / creditor / labour / pump / driver) are NOT
  * seeded here — they are created lazily by `getOrCreatePartyLedger` the first
  * time a voucher touches that party.
  *
@@ -57,6 +57,22 @@ const GL_LEDGERS: {
     code: "VEHICLE_JOURNEY_RESULT",
     name: "Vehicle Journey Result (Clearing)",
     group: "CURRENT_ASSET",
+  },
+  // Driver salary run (Driver Lifecycle) — debited on run approval, against
+  // each driver's party ledger. Keep in sync with DRIVER_SALARY_EXPENSE_CODE
+  // in modules/ledger/posting.service.ts.
+  {
+    code: "DRIVER_SALARY_EXPENSE",
+    name: "Driver Salary Expense",
+    group: "DIRECT_EXPENSE",
+  },
+  // Opening balances of cash / bank accounts are posted against this
+  // (Tally's "Difference in opening balances"). Keep in sync with
+  // OPENING_BALANCE_SUSPENSE_CODE in modules/ledger/opening-balance.service.ts.
+  {
+    code: "OPENING_BALANCE",
+    name: "Opening Balance (Suspense)",
+    group: "CURRENT_LIABILITY",
   },
   { code: "ROUND_OFF", name: "Round Off", group: "INDIRECT_INCOME" },
   { code: "OUTPUT_CGST", name: "Output CGST", group: "DUTIES_AND_TAXES" },

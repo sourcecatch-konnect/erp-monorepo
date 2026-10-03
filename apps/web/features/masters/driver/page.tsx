@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PERMS } from "@skerp/types";
+import { useCan } from "@/features/auth";
 import type { Driver } from "@skerp/types";
 
 import MasterListPage from "../_shared/MasterListPage";
@@ -35,6 +38,36 @@ const [detailOpen, setDetailOpen] = React.useState(false);
 const [detailId, setDetailId] = React.useState<string | null>(null);
   const [size, setSize] = React.useState(10);
   const debouncedSearch = useDebouncedValue(search);
+
+  // `?open=<driverId>` (e.g. from a salary run) opens that driver straight
+  // away — the edit form when allowed, otherwise the details view.
+  const searchParams = useSearchParams();
+  const openId = searchParams.get("open");
+  const canUpdate = useCan(PERMS.MASTERS.DRIVER.UPDATE);
+  React.useEffect(() => {
+    if (!openId) return;
+    if (!canUpdate) {
+      setDetailId(openId);
+      setDetailOpen(true);
+      return;
+    }
+    let cancelled = false;
+    driverApi
+      .detail(openId)
+      .then((driver) => {
+        if (cancelled) return;
+        setSelected(driver);
+        setOpen(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDetailId(openId);
+        setDetailOpen(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId, canUpdate]);
 
   const listQuery = React.useMemo<ListQuery>(
     () => ({
