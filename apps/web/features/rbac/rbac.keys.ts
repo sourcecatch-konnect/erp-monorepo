@@ -16,4 +16,5 @@ export const rbacKeys = {
 
   auditLog: (params: Record<string, unknown>) =>
     ["rbac", "audit-log", params] as const,
+  auditActors: ["rbac", "audit-log-actors"] as const,
 };

@@ -49,6 +49,26 @@ export type BranchOption = {
   shortCode: string;
 };
 
+export type AuditActor = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+};
+
+export type AuditLogQuery = {
+  entity?: string;
+  entityId?: string;
+  actorId?: string;
+  action?: string;
+  /** ISO instant, inclusive. */
+  from?: string;
+  /** ISO instant, exclusive. */
+  to?: string;
+  page?: number;
+  size?: number;
+};
+
 export type AuditLogEntry = {
   id: string;
   actorId: string;
@@ -57,11 +77,8 @@ export type AuditLogEntry = {
   entityId: string;
   before: unknown;
   after: unknown;
+  /** Display names for every id this entry mentions (entity, roleId, branchIds…). */
+  refs: Record<string, string>;
   createdAt: string;
-  actor: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-  } | null;
+  actor: AuditActor | null;
 };

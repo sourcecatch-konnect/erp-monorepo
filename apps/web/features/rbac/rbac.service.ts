@@ -5,7 +5,9 @@ import {
   unwrapListResponse,
 } from "../masters/_shared/master-api";
 import type {
+  AuditActor,
   AuditLogEntry,
+  AuditLogQuery,
   BranchOption,
   PermissionDefDto,
   PermissionModuleDto,
@@ -100,14 +102,11 @@ permissions: async (moduleCode?: string): Promise<PermissionDefDto[]> =>
     ),
 
   // Audit log
-  auditLog: async (params: {
-    entity?: string;
-    entityId?: string;
-    actorId?: string;
-    action?: string;
-    page?: number;
-    size?: number;
-  }) => {
+  auditActors: async (): Promise<AuditActor[]> =>
+    unwrapApiResponse(
+      await api.get<ApiResponse<AuditActor[]>>("/admin/audit-log/actors")
+    ),
+  auditLog: async (params: AuditLogQuery) => {
     const res = await api.get<ApiResponse<AuditLogEntry[]>>(
       "/admin/audit-log",
       { params }
