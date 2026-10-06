@@ -62,3 +62,23 @@ export const updateUserAccessSchema = z
     }
   });
 export type UpdateUserAccessInput = z.infer<typeof updateUserAccessSchema>;
+
+/** Bounded, zero-based permission pages for the access drawer. */
+export const permissionPageQuerySchema = z.object({
+  page: z.coerce.number().int().min(0).max(100000).default(0),
+  size: z.coerce.number().int().min(1).max(50).default(20),
+  search: z.string().trim().max(120).optional(),
+  moduleCode: z
+    .string()
+    .trim()
+    .max(100)
+    .transform((value) => value || undefined)
+    .optional(),
+  roleId: z
+    .string()
+    .trim()
+    .max(100)
+    .transform((value) => value || undefined)
+    .optional(),
+});
+export type PermissionPageQuery = z.infer<typeof permissionPageQuerySchema>;

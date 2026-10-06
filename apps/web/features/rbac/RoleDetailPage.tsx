@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { permissionLabel, permissionAreaLabel } from "@skerp/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Accordion,
@@ -16,19 +17,6 @@ import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { rbacApi } from "./rbac.service";
 import { rbacKeys } from "./rbac.keys";
 import type { PermissionDefDto, RoleDetail } from "./types";
-
-const titleizeIdentifier = (value: string): string =>
-  value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .split(/[\s._:-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-
-const permissionActionLabel = (key: string): string => {
-  const action = key.split(".").at(-1) ?? key;
-  return titleizeIdentifier(action);
-};
 
 export function RoleDetailPage({ roleId }: { roleId: string }) {
   const qc = useQueryClient();
@@ -128,7 +116,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
             </h1>
             <p className="text-sm text-muted-foreground">
               {role.isSystem
-                ? "System role — managed by the seed script, not editable here."
+                ? "Built-in role. Its permissions are managed by the system."
                 : `${role._count.users} user${role._count.users === 1 ? "" : "s"} · ${granted.size} permission${granted.size === 1 ? "" : "s"}`}
             </p>
           </div>
@@ -155,11 +143,8 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
 
       {readOnly && (
         <div className="rounded-sm border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          This role is locked. To change system-role permissions, edit
-          <code className="mx-1 rounded-sm bg-background px-1">
-            prisma/seed-admin.ts
-          </code>
-          and re-seed.
+          This built-in role cannot be changed here. Copy it to create a role
+          with different permissions.
         </div>
       )}
 
@@ -173,7 +158,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
           <RolePermissionModule
             key={m.moduleCode}
             moduleCode={m.moduleCode}
-            moduleLabel={m.label}
+            moduleLabel={permissionAreaLabel(m.moduleCode)}
             permissionCount={m.permissionCount}
             granted={granted}
             setGranted={setGranted}
@@ -259,7 +244,7 @@ function RolePermissionModule({
   return (
     <AccordionItem
       value={moduleCode}
-      className="overflow-hidden rounded-lg border bg-card shadow-sm transition hover:shadow-md"
+      className="overflow-hidden rounded-lg border bg-card transition-colors duration-150"
     >
       <div className="flex items-center gap-4 border-b bg-muted/30 px-5">
         <AccordionTrigger className="flex-1 py-4 text-left hover:no-underline">
@@ -298,17 +283,12 @@ function RolePermissionModule({
                 className="flex items-center justify-between gap-4 px-5 py-3 transition hover:bg-muted/40"
               >
                 <div>
-                  <div className="text-sm font-medium text-foreground">
-                    {permissionActionLabel(p.key)}
+                  <div
+                    title={p.key}
+                    className="text-sm font-medium text-foreground"
+                  >
+                    {permissionLabel(p.key)}
                   </div>
-                  <div className="mt-1 inline-flex rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                    {p.key}
-                  </div>
-                  {p.description && (
-                    <div className="text-xs text-muted-foreground">
-                      {p.description}
-                    </div>
-                  )}
                 </div>
 
                 <Checkbox

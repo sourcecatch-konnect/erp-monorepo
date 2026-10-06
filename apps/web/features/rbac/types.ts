@@ -82,3 +82,7 @@ export type AuditLogEntry = {
   createdAt: string;
   actor: AuditActor | null;
 };
+
+export type PermissionPageRow = Pick<PermissionDefDto, "key" | "moduleCode"> & {
+  roleAllowed: boolean;
+};

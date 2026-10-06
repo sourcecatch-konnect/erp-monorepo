@@ -48,7 +48,12 @@ router.get("/:id/access", async (req, res) => {
   if (!user) throw new NotFoundError("User not found");
   sendOk(res, {
     ...user,
-    branchIds: user.userBranches.map((b) => b.branchId),
+    branchIds:
+      user.userBranches.length > 0
+        ? user.userBranches.map((b) => b.branchId)
+        : user.branchScope === "ASSIGNED" && user.branchId
+          ? [user.branchId]
+          : [],
     overrides: user.userPermissions.map((up) => ({
       key: up.permission.key,
       effect: up.effect,
@@ -65,7 +70,10 @@ router.patch("/:id/access", async (req, res) => {
       role: { select: { id: true, name: true } },
       userBranches: { select: { branchId: true } },
       userPermissions: {
-        select: { effect: true, permission: { select: { id: true, key: true } } },
+        select: {
+          effect: true,
+          permission: { select: { id: true, key: true } },
+        },
       },
     },
   });
@@ -96,7 +104,7 @@ router.patch("/:id/access", async (req, res) => {
           entityId: user.id,
           before: { roleId: user.roleId },
           after: { roleId: body.roleId },
-        })
+        }),
       );
     }
 
@@ -125,8 +133,11 @@ router.patch("/:id/access", async (req, res) => {
           entity: "User",
           entityId: user.id,
           before: { branchIds: user.userBranches.map((b) => b.branchId) },
-          after: { branchIds: body.branchIds, branchScope: body.branchScope ?? user.branchScope },
-        })
+          after: {
+            branchIds: body.branchIds,
+            branchScope: body.branchScope ?? user.branchScope,
+          },
+        }),
       );
     }
 
@@ -157,7 +168,7 @@ router.patch("/:id/access", async (req, res) => {
           entityId: user.id,
           before: { overrides: auditBefore.overrides },
           after: { overrides: body.overrides },
-        })
+        }),
       );
     }
   });
@@ -169,7 +180,10 @@ router.patch("/:id/access", async (req, res) => {
     where: { id: user.id },
     select: userListSelect,
   });
-  sendOk(res, { ...fresh, branchIds: fresh.userBranches.map((b) => b.branchId) });
+  sendOk(res, {
+    ...fresh,
+    branchIds: fresh.userBranches.map((b) => b.branchId),
+  });
 });
 
 export default router;

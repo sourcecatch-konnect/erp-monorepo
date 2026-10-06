@@ -1,3 +1,4 @@
+import { permissionLabel } from "@skerp/types";
 import { formatDateTime } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
 import type { AuditActor, AuditLogEntry } from "./types";
@@ -107,15 +108,22 @@ export const AUDIT_AREAS: AuditArea[] = [
     allLabel: "All journey activity",
     recordType: "Journey",
     actions: [
-      { action: "vehicle_journey.reopen_settlement", label: "Journey settlement reopened" },
+      {
+        action: "vehicle_journey.reopen_settlement",
+        label: "Journey settlement reopened",
+      },
     ],
   },
 ];
 
 const ACTIVITY_LABELS = new Map(
-  AUDIT_AREAS.flatMap((area) => area.actions.map((a) => [a.action, a.label] as const)),
+  AUDIT_AREAS.flatMap((area) =>
+    area.actions.map((a) => [a.action, a.label] as const),
+  ),
 );
-const RECORD_TYPES = new Map(AUDIT_AREAS.map((area) => [area.entity, area.recordType]));
+const RECORD_TYPES = new Map(
+  AUDIT_AREAS.map((area) => [area.entity, area.recordType]),
+);
 
 /* ------------------------------------------------------------------ */
 /* Value helpers                                                       */
@@ -161,41 +169,28 @@ const joinList = (parts: string[]) =>
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 
-const ACRONYMS = new Set(["rbac", "lr", "grn", "mrrr", "gst", "fy", "km", "id", "pnl"]);
-const WORDS: Record<string, string> = {
-  ewaybill: "E-way Bill",
-  logslip: "Log Slip",
-  cashplanning: "Cash Planning",
-};
-
-const titleWord = (word: string) =>
-  WORDS[word] ??
-  (ACRONYMS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1));
-
-/** "lorry_receipt" / "spare-part" → "Lorry Receipt" / "Spare Part" */
-const titleize = (value: string) =>
-  value.split(/[_-]+/).filter(Boolean).map(titleWord).join(" ");
-
-/** "PENDING_REVIEW" / "branchScope" / "trip.correct_closed" → "Pending review" … */
+const ACRONYMS = new Set([
+  "rbac",
+  "lr",
+  "grn",
+  "mrrr",
+  "gst",
+  "fy",
+  "km",
+  "id",
+  "pnl",
+]);
+/** Turn internal field names and status values into readable text. */
 const humanize = (value: string) => {
   const words = value
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .split(/[\s._-]+/)
     .filter(Boolean)
-    .map((w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.toLowerCase()));
+    .map((w) =>
+      ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.toLowerCase(),
+    );
   const sentence = words.join(" ");
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
-};
-
-/** "masters.customer.view" → "Customer: View"; "accounts.payment.approve" → "Accounts › Payment: Approve" */
-export const permissionLabel = (key: string) => {
-  const parts = key.split(".");
-  const action = parts.pop() ?? key;
-  const area = parts
-    .filter((p) => p !== "masters")
-    .map(titleize)
-    .join(" › ");
-  return area ? `${area}: ${titleize(action)}` : titleize(action);
 };
 
 const permissionItems = (keys: string[]): AuditItem[] =>
@@ -208,7 +203,9 @@ const dateValue = (value: unknown) => {
   return s ? formatDateTime(s) : EM_DASH;
 };
 const paiseValue = (value: unknown) =>
-  formatPaise(typeof value === "number" || typeof value === "string" ? value : null);
+  formatPaise(
+    typeof value === "number" || typeof value === "string" ? value : null,
+  );
 const kmValue = (value: unknown) =>
   typeof value === "number" ? `${value.toLocaleString("en-IN")} km` : EM_DASH;
 const textValue = (value: unknown) => str(value) ?? EM_DASH;
@@ -228,7 +225,10 @@ type Ctx = {
   ref: (id: string | null) => string | null;
 };
 
-type Described = Omit<AuditDescription, "activity" | "recordType" | "recordName">;
+type Described = Omit<
+  AuditDescription,
+  "activity" | "recordType" | "recordName"
+>;
 
 const reasonNote = (value: unknown, label = "Reason"): AuditChange[] => {
   const text = str(value);
@@ -239,7 +239,8 @@ const itemsChange = (
   label: string,
   tone: "added" | "removed" | "neutral",
   items: AuditItem[],
-): AuditChange[] => (items.length ? [{ kind: "items", label, tone, items }] : []);
+): AuditChange[] =>
+  items.length ? [{ kind: "items", label, tone, items }] : [];
 
 /** ["gave 2 …", null, "took away 1 …"] → "Gave 2 … and took away 1 …" */
 const sentence = (parts: (string | null)[]) =>
@@ -253,7 +254,9 @@ const fieldChanges = (ctx: Ctx, specs: FieldSpec[]): AuditChange[] =>
     if (!(key in ctx.after)) return [];
     const before = format(ctx.before[key]);
     const after = format(ctx.after[key]);
-    return before === after ? [] : [{ kind: "field" as const, label, before, after }];
+    return before === after
+      ? []
+      : [{ kind: "field" as const, label, before, after }];
   });
 
 const changedSummary = (changes: AuditChange[]) => {
@@ -268,7 +271,11 @@ const changedSummary = (changes: AuditChange[]) => {
 const TRIP_FIELDS: FieldSpec[] = [
   { key: "startDateTime", label: "Start time", format: dateValue },
   { key: "arrivalDateTime", label: "Arrival time", format: dateValue },
-  { key: "unloadingCompletedAt", label: "Unloading finished", format: dateValue },
+  {
+    key: "unloadingCompletedAt",
+    label: "Unloading finished",
+    format: dateValue,
+  },
   { key: "endDateTime", label: "End time", format: dateValue },
   { key: "closingKm", label: "Closing KM", format: kmValue },
   { key: "onwardFreight", label: "Onward freight", format: paiseValue },
@@ -320,8 +327,12 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
       summary:
         granted.length || removed.length
           ? `${sentence([
-              granted.length ? `gave ${plural(granted.length, "new permission")}` : null,
-              removed.length ? `took away ${plural(removed.length, "permission")}` : null,
+              granted.length
+                ? `gave ${plural(granted.length, "new permission")}`
+                : null,
+              removed.length
+                ? `took away ${plural(removed.length, "permission")}`
+                : null,
             ])}. The role now has ${plural(now.size, "permission")}.`
           : "Saved without changing any permissions.",
       changes: [
@@ -339,7 +350,9 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
     const to = roleName(str(after.roleId)) ?? quote(EM_DASH);
     return {
       tone: "neutral",
-      summary: from ? `Role changed from ${from} to ${to}.` : `Given the role ${to}.`,
+      summary: from
+        ? `Role changed from ${from} to ${to}.`
+        : `Given the role ${to}.`,
       changes: [],
     };
   },
@@ -368,8 +381,12 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
       summary:
         added.length || removed.length
           ? `${sentence([
-              added.length ? `added ${plural(added.length, "branch", "branches")}` : null,
-              removed.length ? `removed ${plural(removed.length, "branch", "branches")}` : null,
+              added.length
+                ? `added ${plural(added.length, "branch", "branches")}`
+                : null,
+              removed.length
+                ? `removed ${plural(removed.length, "branch", "branches")}`
+                : null,
             ])}. Now limited to ${plural(now.length, "branch", "branches")}.`
           : `Limited to ${plural(now.length, "specific branch", "specific branches")}.`,
       changes: [
@@ -393,8 +410,12 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
     const was = effects(before.overrides);
     const now = effects(after.overrides);
 
-    const allowed = [...now].filter(([k, e]) => e === "GRANT" && was.get(k) !== e).map(([k]) => k);
-    const blocked = [...now].filter(([k, e]) => e === "DENY" && was.get(k) !== e).map(([k]) => k);
+    const allowed = [...now]
+      .filter(([k, e]) => e === "GRANT" && was.get(k) !== e)
+      .map(([k]) => k);
+    const blocked = [...now]
+      .filter(([k, e]) => e === "DENY" && was.get(k) !== e)
+      .map(([k]) => k);
     const reset = [...was.keys()].filter((k) => !now.has(k));
 
     return {
@@ -402,8 +423,12 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
       summary:
         allowed.length || blocked.length || reset.length
           ? `${sentence([
-              allowed.length ? `allowed ${plural(allowed.length, "extra permission")}` : null,
-              blocked.length ? `blocked ${plural(blocked.length, "permission")}` : null,
+              allowed.length
+                ? `allowed ${plural(allowed.length, "extra permission")}`
+                : null,
+              blocked.length
+                ? `blocked ${plural(blocked.length, "permission")}`
+                : null,
               reset.length
                 ? `put ${plural(reset.length, "permission")} back to the role’s default`
                 : null,
@@ -412,7 +437,11 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
       changes: [
         ...itemsChange("Allowed", "added", permissionItems(allowed)),
         ...itemsChange("Blocked", "removed", permissionItems(blocked)),
-        ...itemsChange("Back to role default", "neutral", permissionItems(reset)),
+        ...itemsChange(
+          "Back to role default",
+          "neutral",
+          permissionItems(reset),
+        ),
       ],
     };
   },
@@ -461,7 +490,11 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
   "vehicle_journey.reopen_settlement": (ctx) => {
     const fields = fieldChanges(ctx, [
       { key: "status", label: "Journey status", format: enumValue },
-      { key: "settlementStatus", label: "Settlement status", format: enumValue },
+      {
+        key: "settlementStatus",
+        label: "Settlement status",
+        format: enumValue,
+      },
     ]);
     return {
       tone: "neutral",
@@ -501,7 +534,12 @@ const genericLabel = (key: string) =>
   humanize(key.replace(/Ids$/, "s").replace(/(Id|Paise)$/, ""));
 
 /** Plumbing the server records for its own sake — meaningless to a reader. */
-const HIDDEN_KEYS = new Set(["clientRequestId", "requestId", "idempotencyKey", "version"]);
+const HIDDEN_KEYS = new Set([
+  "clientRequestId",
+  "requestId",
+  "idempotencyKey",
+  "version",
+]);
 
 const PAST_TENSE: Record<string, string> = {
   create: "created",
@@ -523,7 +561,15 @@ const PAST_TENSE: Record<string, string> = {
   settle: "settled",
   assign: "assigned",
 };
-const POSITIVE_VERBS = new Set(["create", "approve", "pay", "disburse", "post", "settle", "issue"]);
+const POSITIVE_VERBS = new Set([
+  "create",
+  "approve",
+  "pay",
+  "disburse",
+  "post",
+  "settle",
+  "issue",
+]);
 const NEGATIVE_VERBS = new Set(["delete", "cancel", "reject", "reverse"]);
 
 /** "driver_finance.salary_run.pay" → "Salary run paid". Unknown verbs → the whole action. */
@@ -537,7 +583,11 @@ const genericActivity = (action: string) => {
 
 const genericTone = (action: string): AuditTone => {
   const verb = action.split(".").at(-1) ?? "";
-  return POSITIVE_VERBS.has(verb) ? "positive" : NEGATIVE_VERBS.has(verb) ? "negative" : "neutral";
+  return POSITIVE_VERBS.has(verb)
+    ? "positive"
+    : NEGATIVE_VERBS.has(verb)
+      ? "negative"
+      : "neutral";
 };
 
 const idItems = (ids: string[], ctx: Ctx): AuditItem[] =>
@@ -554,7 +604,8 @@ const INLINE_LENGTH = 140;
 /** One change as a short "Label: value" fact for the summary line. */
 const fact = (change: AuditChange) => {
   if (change.kind === "note") return `${change.label}: ${change.text}`;
-  if (change.kind === "field") return `${change.label}: ${change.before} → ${change.after}`;
+  if (change.kind === "field")
+    return `${change.label}: ${change.before} → ${change.after}`;
   const names = change.items.map((i) => i.label);
   const shown =
     names.length > INLINE_ITEMS
@@ -580,20 +631,38 @@ const describeGeneric = (action: string, ctx: Ctx): Described => {
         const was = new Set(strings(ctx.before[key]));
         const now = strings(ctx.after[key]);
         return [
-          ...itemsChange(`${label} added`, "added", idItems(now.filter((id) => !was.has(id)), ctx)),
+          ...itemsChange(
+            `${label} added`,
+            "added",
+            idItems(
+              now.filter((id) => !was.has(id)),
+              ctx,
+            ),
+          ),
           ...itemsChange(
             `${label} removed`,
             "removed",
-            idItems([...was].filter((id) => !now.includes(id)), ctx),
+            idItems(
+              [...was].filter((id) => !now.includes(id)),
+              ctx,
+            ),
           ),
         ];
       }
-      return itemsChange(label, "neutral", idItems(strings(inAfter ? ctx.after[key] : ctx.before[key]), ctx));
+      return itemsChange(
+        label,
+        "neutral",
+        idItems(strings(inAfter ? ctx.after[key] : ctx.before[key]), ctx),
+      );
     }
 
     // Recorded on one side only (or a free-text reason): a plain fact, not a change.
     if (isReason || !inBefore || !inAfter) {
-      const text = genericValue(key, inAfter ? ctx.after[key] : ctx.before[key], ctx);
+      const text = genericValue(
+        key,
+        inAfter ? ctx.after[key] : ctx.before[key],
+        ctx,
+      );
       return [{ kind: "note", label, text }];
     }
     const before = genericValue(key, ctx.before[key], ctx);
@@ -602,7 +671,11 @@ const describeGeneric = (action: string, ctx: Ctx): Described => {
   });
 
   if (changes.length === 0) {
-    return { tone: genericTone(action), summary: "No further details were recorded.", changes };
+    return {
+      tone: genericTone(action),
+      summary: "No further details were recorded.",
+      changes,
+    };
   }
 
   // Lead with the facts themselves, as many as fit on a line.
@@ -624,7 +697,11 @@ const describeGeneric = (action: string, ctx: Ctx): Described => {
     rest === 0 &&
     changes.every((c) => c.kind !== "items" || c.items.length <= INLINE_ITEMS);
 
-  return { tone: genericTone(action), summary, changes: complete ? [] : changes };
+  return {
+    tone: genericTone(action),
+    summary,
+    changes: complete ? [] : changes,
+  };
 };
 
 /* ------------------------------------------------------------------ */
@@ -640,11 +717,14 @@ export const describeAuditEntry = (entry: AuditLogEntry): AuditDescription => {
   };
 
   const describer = DESCRIBERS[entry.action];
-  const described = describer ? describer(ctx) : describeGeneric(entry.action, ctx);
+  const described = describer
+    ? describer(ctx)
+    : describeGeneric(entry.action, ctx);
 
   return {
     ...described,
-    activity: ACTIVITY_LABELS.get(entry.action) ?? genericActivity(entry.action),
+    activity:
+      ACTIVITY_LABELS.get(entry.action) ?? genericActivity(entry.action),
     recordType: RECORD_TYPES.get(entry.entity) ?? humanize(entry.entity),
     // Current name first; a deleted role still carries its name in the payload.
     recordName:

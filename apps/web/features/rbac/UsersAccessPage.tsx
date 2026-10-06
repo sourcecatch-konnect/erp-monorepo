@@ -26,26 +26,24 @@ export function UsersAccessPage() {
     queryKey: rbacKeys.users,
     queryFn: rbacApi.listUsers,
   });
-const { data: roles } = useQuery({
-  queryKey: rbacKeys.roles,
-  queryFn: rbacApi.listRoles,
-  staleTime: 10 * 60 * 1000,
-});
+  const { data: roles } = useQuery({
+    queryKey: rbacKeys.roles,
+    queryFn: rbacApi.listRoles,
+    staleTime: 10 * 60 * 1000,
+  });
 
-const { data: branches } = useQuery({
-  queryKey: rbacKeys.branches,
-  queryFn: rbacApi.branches,
-  staleTime: 10 * 60 * 1000,
-});
-
+  const { data: branches } = useQuery({
+    queryKey: rbacKeys.branches,
+    queryFn: rbacApi.branches,
+    staleTime: 10 * 60 * 1000,
+  });
 
   return (
     <div className="space-y-6 p-6">
       <header>
         <h1 className="text-2xl font-semibold text-foreground">User access</h1>
         <p className="text-sm text-muted-foreground">
-          Assign roles and branch scope. Per-user overrides live behind
-          &quot;Advanced&quot; on each user.
+          Choose what each person can do and which branches they work in.
         </p>
       </header>
 
@@ -55,7 +53,7 @@ const { data: branches } = useQuery({
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Branch scope</TableHead>
+            <TableHead>Branches</TableHead>
             <TableHead>Status</TableHead>
             <TableHead />
           </TableRow>
@@ -117,12 +115,12 @@ const { data: branches } = useQuery({
       </Table>
 
       {selected && (
-<UserAccessDrawer
-  userId={selected.id}
-  roles={roles ?? []}
-  branches={branches ?? []}
-  onClose={() => setSelected(null)}
-/>
+        <UserAccessDrawer
+          userId={selected.id}
+          roles={roles ?? []}
+          branches={branches ?? []}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   );

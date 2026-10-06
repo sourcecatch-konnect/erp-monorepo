@@ -1,4 +1,7 @@
+import type { PermissionPageQuery } from "@skerp/validators";
 export const rbacKeys = {
+  permissionPage: (params: PermissionPageQuery) =>
+    ["rbac", "permissions", "page", params] as const,
   permissions: ["rbac", "permissions"] as const,
 
   permissionModules: ["rbac", "permission-modules"] as const,

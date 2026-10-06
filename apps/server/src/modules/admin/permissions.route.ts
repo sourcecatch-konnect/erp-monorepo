@@ -1,4 +1,10 @@
 import { Router } from "express";
+import { ValidationError } from "../../lib/error.js";
+import { permissionPageQuerySchema } from "@skerp/validators";
+import { permissionAreaLabel } from "@skerp/types";
+import { can } from "../../auth/can.middleware.js";
+import { PERMS } from "../../auth/permissions.js";
+import { permissionPageOptions } from "./permission-page.query.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 
@@ -21,16 +27,42 @@ router.get("/modules", async (_req, res) => {
     res,
     modules.map((m) => ({
       moduleCode: m.moduleCode,
-      label: m.moduleCode
-        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-        .split(/[\s._:-]+/)
-        .filter(Boolean)
-        .map(
-          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
-        )
-        .join(" "),
+      label: permissionAreaLabel(m.moduleCode),
       permissionCount: m._count.key,
     })),
+  );
+});
+router.get("/page", can(PERMS.ADMIN.RBAC_MANAGE), async (req, res) => {
+  const parsed = permissionPageQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new ValidationError(
+      parsed.error.flatten().fieldErrors,
+      "Check the permission filters and try again.",
+    );
+  }
+  const query = parsed.data;
+  const options = permissionPageOptions(query);
+  const [permissions, total] = await Promise.all([
+    db.permissionDef.findMany({
+      ...options,
+      select: {
+        key: true,
+        moduleCode: true,
+        rolePermissions: {
+          where: { roleId: query.roleId ?? "" },
+          select: { roleId: true },
+        },
+      },
+    }),
+    db.permissionDef.count({ where: options.where }),
+  ]);
+  sendOk(
+    res,
+    permissions.map(({ rolePermissions, ...permission }) => ({
+      ...permission,
+      roleAllowed: rolePermissions.length > 0,
+    })),
+    { total, page: query.page, size: query.size },
   );
 });
 router.get("/", async (req, res) => {
