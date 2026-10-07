@@ -614,6 +614,7 @@ Screens reworked under this guide. Add a row when you finish one.
 |---|---|---|---|
 | Settings → Audit log | Done (`1b4ce98`) | Raw JSON diff replaced by a plain sentence + "Show details" list; IDs resolved to names server-side (roles, users, branches, drivers, vehicles, slips, trips, journeys); filters for activity, person and period; day grouping; click a record for its full history; empty/error states | `features/rbac/AuditLogPage.tsx`, `features/rbac/audit-log.format.ts`, `apps/server/src/modules/admin/audit-log.route.ts` |
 | Settings → User access → Edit access | Done | Shared plain permission names; selected-role defaults; database pagination and search across areas; exception summary; branch pickers; loading, retry and save states | `features/rbac/UserAccessDrawer.tsx`, `packages/types/src/permission-labels.ts` |
+| Settings → Roles → role detail | Done | One bordered list of areas with "N of M allowed" visible while collapsed; search across permission and area names; View → Create → Edit → Delete order (`comparePermissionKeys`); clickable labels; unsaved rows marked "Changed"; one sticky save bar with a change summary; built-in roles shown read-only as allowing everything; shared `Checkbox` gained a proper indeterminate look | `features/rbac/RoleDetailPage.tsx`, `packages/types/src/permissions.ts`, `packages/ui/src/components/checkbox.tsx` |
 
 **Next candidates:** Settings → Roles, Settings → Users, then the master screens
 one by one (see `OPUS_UI_SUGGESTIONS.md` §3).

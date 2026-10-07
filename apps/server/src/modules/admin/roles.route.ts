@@ -3,8 +3,10 @@ import {
   copyRoleSchema,
   createRoleSchema,
   renameRoleSchema,
+  rolePageQuerySchema,
   setRolePermissionsSchema,
 } from "@skerp/validators";
+import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
@@ -12,7 +14,13 @@ import { PERMS } from "../../auth/permissions.js";
 
 import { invalidateAll } from "../../auth/permission-cache.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 
 const router = Router();
@@ -36,6 +44,32 @@ router.get("/", async (_req, res) => {
   sendOk(res, rows);
 });
 
+// Before "/:id", which would otherwise treat "page" as a role id.
+router.get("/page", async (req, res) => {
+  const parsed = rolePageQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new ValidationError(
+      parsed.error.flatten().fieldErrors,
+      "Check the search and page and try again.",
+    );
+  }
+  const query = parsed.data;
+  const where: Prisma.RoleWhereInput = query.search
+    ? { name: { contains: query.search, mode: "insensitive" } }
+    : {};
+  const [roles, total] = await Promise.all([
+    db.role.findMany({
+      where,
+      orderBy: [{ isSystem: "desc" }, { name: "asc" }, { id: "asc" }],
+      skip: query.page * query.size,
+      take: query.size,
+      select: listShape,
+    }),
+    db.role.count({ where }),
+  ]);
+  sendOk(res, roles, { total, page: query.page, size: query.size });
+});
+
 router.get("/:id", async (req, res) => {
   const role = await db.role.findUnique({
     where: { id: req.params.id },
@@ -49,12 +83,47 @@ router.get("/:id", async (req, res) => {
   });
 });
 
+/**
+ * The permissions a new role starts with when it copies `source`. Built-in
+ * roles allow everything (see permission-resolver), whatever they store.
+ */
+const permissionIdsOf = async (source: {
+  isSystem: boolean;
+  rolePermissions: { permissionId: string }[];
+}) =>
+  source.isSystem
+    ? (await db.permissionDef.findMany({ select: { id: true } })).map(
+        (p) => p.id,
+      )
+    : source.rolePermissions.map((rp) => rp.permissionId);
+
+// No cache invalidation here or on copy: nobody holds a brand-new role yet.
 router.post("/", async (req, res) => {
   const body = createRoleSchema.parse(req.body);
   const existing = await db.role.findFirst({ where: { name: body.name } });
   if (existing) throw new ConflictError("Role name already in use");
+  const source = body.inheritFromRoleId
+    ? await db.role.findUnique({
+        where: { id: body.inheritFromRoleId },
+        include: { rolePermissions: true },
+      })
+    : null;
+  if (body.inheritFromRoleId && !source) {
+    throw new NotFoundError(
+      "The role to inherit from no longer exists. Pick another one.",
+    );
+  }
+  const permissionIds = source ? await permissionIdsOf(source) : [];
   const role = await db.role.create({
-    data: { name: body.name, isSystem: false },
+    data: {
+      name: body.name,
+      isSystem: false,
+      rolePermissions: {
+        createMany: {
+          data: permissionIds.map((permissionId) => ({ permissionId })),
+        },
+      },
+    },
     select: listShape,
   });
   await recordAuditEntry({
@@ -62,7 +131,8 @@ router.post("/", async (req, res) => {
     action: "role.create",
     entity: "Role",
     entityId: role.id,
-    after: { name: role.name },
+    // `copiedFrom` is what the audit log already describes and resolves.
+    after: { name: role.name, ...(source ? { copiedFrom: source.id } : {}) },
   });
   sendOk(res, role, undefined, 201);
 });
@@ -128,7 +198,9 @@ router.post("/:id/copy", async (req, res) => {
       isSystem: false,
       rolePermissions: {
         createMany: {
-          data: source.rolePermissions.map((rp) => ({ permissionId: rp.permissionId })),
+          data: (await permissionIdsOf(source)).map((permissionId) => ({
+            permissionId,
+          })),
         },
       },
     },

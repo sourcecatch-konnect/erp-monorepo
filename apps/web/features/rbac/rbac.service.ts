@@ -1,6 +1,11 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import type { PermissionPageQuery } from "@skerp/validators";
+import type {
+  CreateRoleInput,
+  PermissionPageQuery,
+  RolePageQuery,
+  UserAccessPageQuery,
+} from "@skerp/validators";
 import {
   unwrapApiResponse,
   unwrapListResponse,
@@ -46,13 +51,22 @@ export const rbacApi = {
     unwrapApiResponse(
       await api.get<ApiResponse<RoleSummary[]>>("/admin/roles"),
     ),
+  rolesPage: async (params: RolePageQuery, signal?: AbortSignal) => {
+    const list = unwrapListResponse(
+      await api.get<ApiResponse<RoleSummary[]>>("/admin/roles/page", {
+        params,
+        signal,
+      }),
+    );
+    return { items: list.data, total: list.meta?.total ?? 0 };
+  },
   getRole: async (id: string): Promise<RoleDetail> =>
     unwrapApiResponse(
       await api.get<ApiResponse<RoleDetail>>(`/admin/roles/${id}`),
     ),
-  createRole: async (name: string): Promise<RoleSummary> =>
+  createRole: async (input: CreateRoleInput): Promise<RoleSummary> =>
     unwrapApiResponse(
-      await api.post<ApiResponse<RoleSummary>>("/admin/roles", { name }),
+      await api.post<ApiResponse<RoleSummary>>("/admin/roles", input),
     ),
   renameRole: async (id: string, name: string): Promise<RoleSummary> =>
     unwrapApiResponse(
@@ -80,10 +94,15 @@ export const rbacApi = {
     ),
 
   // Users
-  listUsers: async (): Promise<UserSummary[]> =>
-    unwrapApiResponse(
-      await api.get<ApiResponse<UserSummary[]>>("/admin/users"),
-    ),
+  usersPage: async (params: UserAccessPageQuery, signal?: AbortSignal) => {
+    const list = unwrapListResponse(
+      await api.get<ApiResponse<UserSummary[]>>("/admin/users", {
+        params,
+        signal,
+      }),
+    );
+    return { items: list.data, total: list.meta?.total ?? 0 };
+  },
   getUserAccess: async (id: string): Promise<UserAccessDetail> =>
     unwrapApiResponse(
       await api.get<ApiResponse<UserAccessDetail>>(`/admin/users/${id}/access`),

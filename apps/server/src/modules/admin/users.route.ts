@@ -1,12 +1,16 @@
 import { Router } from "express";
-import { updateUserAccessSchema } from "@skerp/validators";
+import {
+  updateUserAccessSchema,
+  userAccessPageQuerySchema,
+} from "@skerp/validators";
+import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { PERMS } from "../../auth/permissions.js";
 import { invalidateUser } from "../../auth/permission-cache.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
-import { NotFoundError } from "../../lib/error.js";
+import { NotFoundError, ValidationError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 
 const router = Router();
@@ -27,12 +31,29 @@ const userListSelect = {
   userBranches: { select: { branchId: true } },
 } as const;
 
-router.get("/", async (_req, res) => {
-  const users = await db.user.findMany({
-    orderBy: { email: "asc" },
-    select: userListSelect,
-  });
-  sendOk(res, users);
+router.get("/", async (req, res) => {
+  const parsed = userAccessPageQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new ValidationError(
+      parsed.error.flatten().fieldErrors,
+      "Check the search and page and try again.",
+    );
+  }
+  const query = parsed.data;
+  const where: Prisma.UserWhereInput = query.search
+    ? { role: { name: { contains: query.search, mode: "insensitive" } } }
+    : {};
+  const [users, total] = await Promise.all([
+    db.user.findMany({
+      where,
+      orderBy: { email: "asc" },
+      skip: query.page * query.size,
+      take: query.size,
+      select: userListSelect,
+    }),
+    db.user.count({ where }),
+  ]);
+  sendOk(res, users, { total, page: query.page, size: query.size });
 });
 
 router.get("/:id/access", async (req, res) => {

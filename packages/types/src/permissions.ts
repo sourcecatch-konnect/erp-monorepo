@@ -524,6 +524,29 @@ export const ALL_PERMISSION_KEYS: readonly PermissionKey[] = (() => {
   return Array.from(keys).sort() as PermissionKey[];
 })();
 
+const registryOrder = (() => {
+  const order = new Map<string, number>();
+  const walk = (node: unknown) => {
+    if (typeof node === "string") {
+      if (!order.has(node)) order.set(node, order.size);
+      return;
+    }
+    if (node && typeof node === "object") {
+      for (const v of Object.values(node as Record<string, unknown>)) walk(v);
+    }
+  };
+  walk(PERMS);
+  return order;
+})();
+
+/**
+ * Sorts keys in the order PERMS declares them, so an area reads
+ * View → Create → Edit → Delete → its special actions. Unknown keys go last.
+ */
+export const comparePermissionKeys = (a: string, b: string): number =>
+  (registryOrder.get(a) ?? Infinity) - (registryOrder.get(b) ?? Infinity) ||
+  a.localeCompare(b);
+
 /**
  * Derive the module code from a permission key. The module is the first two
  * segments for masters (`masters.customer`) and the first segment otherwise

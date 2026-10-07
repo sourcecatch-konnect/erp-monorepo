@@ -8,6 +8,8 @@ export const roleNameSchema = z
 
 export const createRoleSchema = z.object({
   name: roleNameSchema,
+  /** Start with a snapshot of this role's permissions. Later edits to it don't flow through. */
+  inheritFromRoleId: z.string().trim().min(1).optional(),
 });
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 
@@ -82,3 +84,23 @@ export const permissionPageQuerySchema = z.object({
     .optional(),
 });
 export type PermissionPageQuery = z.infer<typeof permissionPageQuerySchema>;
+
+/** Bounded, zero-based list pages with an optional free-text search. */
+const searchPageQuerySchema = z.object({
+  page: z.coerce.number().int().min(0).max(100000).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(20),
+  search: z
+    .string()
+    .trim()
+    .max(120)
+    .transform((value) => value || undefined)
+    .optional(),
+});
+
+/** User pages for Settings → Access; search matches role name. */
+export const userAccessPageQuerySchema = searchPageQuerySchema;
+export type UserAccessPageQuery = z.infer<typeof userAccessPageQuerySchema>;
+
+/** Role pages for Settings → Roles; search matches role name. */
+export const rolePageQuerySchema = searchPageQuerySchema;
+export type RolePageQuery = z.infer<typeof rolePageQuerySchema>;

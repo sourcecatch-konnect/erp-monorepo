@@ -1,4 +1,8 @@
-import type { PermissionPageQuery } from "@skerp/validators";
+import type {
+  PermissionPageQuery,
+  RolePageQuery,
+  UserAccessPageQuery,
+} from "@skerp/validators";
 export const rbacKeys = {
   permissionPage: (params: PermissionPageQuery) =>
     ["rbac", "permissions", "page", params] as const,
@@ -10,9 +14,13 @@ export const rbacKeys = {
     ["rbac", "permissions", moduleCode] as const,
 
   roles: ["rbac", "roles"] as const,
+  rolesPage: (params: RolePageQuery) =>
+    ["rbac", "roles", "page", params] as const,
   role: (id: string) => ["rbac", "role", id] as const,
 
   users: ["rbac", "users"] as const,
+  usersPage: (params: UserAccessPageQuery) =>
+    ["rbac", "users", "page", params] as const,
   user: (id: string) => ["rbac", "user", id] as const,
 
   branches: ["rbac", "branches"] as const,
