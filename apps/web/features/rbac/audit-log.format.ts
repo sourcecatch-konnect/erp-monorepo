@@ -77,6 +77,8 @@ export const AUDIT_AREAS: AuditArea[] = [
       { action: "user.role.update", label: "User role changed" },
       { action: "user.branches.update", label: "User branch access changed" },
       { action: "user.permissions.update", label: "User permissions changed" },
+      { action: "user.status.update", label: "User activated or deactivated" },
+      { action: "user.delete", label: "User deleted" },
     ],
   },
   {
@@ -396,6 +398,25 @@ const DESCRIBERS: Record<string, (ctx: Ctx) => Described> = {
       ],
     };
   },
+
+  "user.status.update": ({ after }) =>
+    after.status === true
+      ? {
+          tone: "positive",
+          summary: "Activated. They can sign in again.",
+          changes: [],
+        }
+      : {
+          tone: "negative",
+          summary: "Deactivated. They can no longer sign in.",
+          changes: [],
+        },
+
+  "user.delete": ({ before }) => ({
+    tone: "negative",
+    summary: `${quote(str(before.name) ?? EM_DASH)} (${str(before.email) ?? EM_DASH}) was permanently deleted.`,
+    changes: [],
+  }),
 
   "user.permissions.update": ({ before, after }) => {
     const effects = (value: unknown) =>

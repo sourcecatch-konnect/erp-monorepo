@@ -101,6 +101,10 @@ const searchPageQuerySchema = z.object({
 export const userAccessPageQuerySchema = searchPageQuerySchema;
 export type UserAccessPageQuery = z.infer<typeof userAccessPageQuerySchema>;
 
+/** User pages for Settings → Users; search matches name, email or username. */
+export const employeePageQuerySchema = searchPageQuerySchema;
+export type EmployeePageQuery = z.infer<typeof employeePageQuerySchema>;
+
 /** Role pages for Settings → Roles; search matches role name. */
 export const rolePageQuerySchema = searchPageQuerySchema;
 export type RolePageQuery = z.infer<typeof rolePageQuerySchema>;

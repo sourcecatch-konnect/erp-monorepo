@@ -15,7 +15,7 @@ import { Input } from "@skerp/ui/components/input";
 import { Label } from "@skerp/ui/components/lable";
 import { generatePassword } from "@/lib/password";
 import { useResetEmployeePassword } from "../hooks/useEmployees";
-import type { Employee, EmployeeCredentials } from "../types";
+import type { EmployeeCredentials, EmployeeListRow } from "../types";
 
 type FormValues = { password: string };
 
@@ -25,7 +25,7 @@ export function ResetPasswordDialog({
   onClose,
   onReset,
 }: {
-  employee: Employee | null;
+  employee: Pick<EmployeeListRow, "id" | "firstName" | "lastName"> | null;
   onClose: () => void;
   onReset: (credentials: EmployeeCredentials) => void;
 }) {

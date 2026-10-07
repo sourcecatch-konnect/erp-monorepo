@@ -1,82 +1,87 @@
 import { api } from "@/lib/api";
+import type { ApiResponse } from "@skerp/types";
+import type { EmployeePageQuery } from "@skerp/validators";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+} from "../../masters/_shared/master-api";
 import type {
   Branch,
   Company,
   CreateEmployeeInput,
   Employee,
+  EmployeeListRow,
   EmployeeMutationResult,
   RoleOption,
   UpdateEmployeeInput,
 } from "../types";
 
-type ApiSuccess<T> = {
-  success: boolean;
-  data: T;
+export const listEmployeesPage = async (
+  params: EmployeePageQuery,
+  signal?: AbortSignal,
+) => {
+  const list = unwrapListResponse(
+    await api.get<ApiResponse<EmployeeListRow[]>>("/employees/page", {
+      params,
+      signal,
+    }),
+  );
+  return { items: list.data, total: list.meta?.total ?? 0 };
 };
 
-export const listEmployees = async (): Promise<Employee[]> => {
-  const res = await api.get<ApiSuccess<Employee[]>>("/employees");
-  return res.data.data;
-};
+export const getEmployee = async (id: string): Promise<Employee> =>
+  unwrapApiResponse(await api.get<ApiResponse<Employee>>(`/employees/${id}`));
 
 export const createEmployee = async (
-  input: CreateEmployeeInput
-): Promise<EmployeeMutationResult> => {
-  const res = await api.post<ApiSuccess<EmployeeMutationResult>>(
-    "/employees",
-    input
+  input: CreateEmployeeInput,
+): Promise<EmployeeMutationResult> =>
+  unwrapApiResponse(
+    await api.post<ApiResponse<EmployeeMutationResult>>("/employees", input),
   );
-  return res.data.data;
-};
 
 export const resetEmployeePassword = async (
   id: string,
-  password: string
-): Promise<EmployeeMutationResult> => {
-  const res = await api.patch<ApiSuccess<EmployeeMutationResult>>(
-    `/employees/${id}/password`,
-    { password }
+  password: string,
+): Promise<EmployeeMutationResult> =>
+  unwrapApiResponse(
+    await api.patch<ApiResponse<EmployeeMutationResult>>(
+      `/employees/${id}/password`,
+      { password },
+    ),
   );
-  return res.data.data;
-};
 
 export const updateEmployee = async (
   id: string,
-  input: UpdateEmployeeInput
-): Promise<Employee> => {
-  const res = await api.patch<ApiSuccess<Employee>>(
-    `/employees/${id}`,
-    input
+  input: UpdateEmployeeInput,
+): Promise<Employee> =>
+  unwrapApiResponse(
+    await api.patch<ApiResponse<Employee>>(`/employees/${id}`, input),
   );
-  return res.data.data;
-};
 
 export const setEmployeeStatus = async (
   id: string,
-  status: boolean
-): Promise<Employee> => {
-  const res = await api.patch<ApiSuccess<Employee>>(
-    `/employees/${id}/status`,
-    { status }
+  status: boolean,
+): Promise<Employee> =>
+  unwrapApiResponse(
+    await api.patch<ApiResponse<Employee>>(`/employees/${id}/status`, {
+      status,
+    }),
   );
-  return res.data.data;
-};
 
-export const listCompanies = async (): Promise<Company[]> => {
-  const res = await api.get<ApiSuccess<Company[]>>("/companies");
-  return res.data.data;
-};
+export const deleteEmployee = async (id: string): Promise<{ id: string }> =>
+  unwrapApiResponse(
+    await api.delete<ApiResponse<{ id: string }>>(`/employees/${id}`),
+  );
 
-export const listBranches = async (
-  companyId?: string
-): Promise<Branch[]> => {
-  const res = await api.get<ApiSuccess<Branch[]>>("/branches", {
-    params: companyId ? { companyId } : undefined,
-  });
-  return res.data.data;
-};
+export const listCompanies = async (): Promise<Company[]> =>
+  unwrapApiResponse(await api.get<ApiResponse<Company[]>>("/companies"));
 
-export const listRoles = async (): Promise<RoleOption[]> => {
-  const res = await api.get<ApiSuccess<RoleOption[]>>("/admin/roles");
-  return res.data.data;
-};
+export const listBranches = async (companyId?: string): Promise<Branch[]> =>
+  unwrapApiResponse(
+    await api.get<ApiResponse<Branch[]>>("/branches", {
+      params: companyId ? { companyId } : undefined,
+    }),
+  );
+
+export const listRoles = async (): Promise<RoleOption[]> =>
+  unwrapApiResponse(await api.get<ApiResponse<RoleOption[]>>("/admin/roles"));
