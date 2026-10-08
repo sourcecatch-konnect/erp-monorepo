@@ -32,6 +32,7 @@ import {
   logSlipPayoutStatus,
   reverseDriverPayout,
   reverseDriverSalaryAdvance,
+  salaryAdvanceInclude,
   unpaidApprovedSalary,
   unpaidLogSlipsForDriver,
 } from "./driver-finance.service.js";
@@ -64,9 +65,9 @@ const validate = <T>(
   result:
     | { success: true; data: T }
     | {
-        success: false;
-        error: { flatten: () => { fieldErrors: Record<string, string[]> } };
-      },
+      success: false;
+      error: { flatten: () => { fieldErrors: Record<string, string[]> } };
+    },
 ) => {
   if (!result.success) throw new ValidationError(result.error.flatten().fieldErrors);
   return result.data;
@@ -85,16 +86,16 @@ router.get(
   can(PERMS.DRIVER_FINANCE.SALARY_VIEW),
   async (req, res) => {
     const driverId = getParamId(req);
-    const driver = await db.driver.findUnique({
-      where: { id: driverId },
-      select: { id: true, name: true },
-    });
-    if (!driver) throw new NotFoundError("Driver not found");
-    const [balance, unpaidLogSlips, salaryDue] = await Promise.all([
+    // ?lite=1 — just the balance (Salary advance dialog); the Pay dialog also
+    // needs unpaid log slips and approved salary. Everything in parallel.
+    const lite = req.query.lite === "1";
+    const [driver, balance, unpaidLogSlips, salaryDue] = await Promise.all([
+      db.driver.findUnique({ where: { id: driverId }, select: { id: true, name: true } }),
       driverLedgerBalance(db, driverId),
-      unpaidLogSlipsForDriver(db, driverId),
-      unpaidApprovedSalary(db, driverId),
+      lite ? { items: [], count: 0 } : unpaidLogSlipsForDriver(db, driverId),
+      lite ? { amountPaise: 0n, runNumbers: [] as string[] } : unpaidApprovedSalary(db, driverId),
     ]);
+    if (!driver) throw new NotFoundError("Driver not found");
     return sendOk(res, {
       driver,
       ...balance,
@@ -119,14 +120,6 @@ router.get(
 /* Salary advances                                                     */
 /* ------------------------------------------------------------------ */
 
-const salaryAdvanceInclude = {
-  driver: { select: { id: true, name: true } },
-  branch: { select: { id: true, name: true, branchCode: true } },
-  fundingLedger: { select: { id: true, name: true } },
-  createdBy: namedUser,
-  reversedBy: namedUser,
-} satisfies Prisma.DriverSalaryAdvanceInclude;
-
 router.get(
   "/salary-advances",
   can(PERMS.DRIVER_FINANCE.SALARY_VIEW),
@@ -139,11 +132,11 @@ router.get(
       ...(filters.status ? { status: filters.status } : {}),
       ...(query.search
         ? {
-            OR: [
-              { advanceNumber: { contains: query.search, mode: "insensitive" } },
-              { driver: { name: { contains: query.search, mode: "insensitive" } } },
-            ],
-          }
+          OR: [
+            { advanceNumber: { contains: query.search, mode: "insensitive" } },
+            { driver: { name: { contains: query.search, mode: "insensitive" } } },
+          ],
+        }
         : {}),
     };
     const [data, total] = await Promise.all([
@@ -167,7 +160,11 @@ router.post(
     const input = validate(createDriverSalaryAdvanceSchema.safeParse(req.body));
     assertBranchAccess(req, input.branchId);
 
+    // The service returns the full record (no reload needed).
     const advance = await createDriverSalaryAdvance(input, actorId(req));
+    sendOk(res, advance, undefined, 201);
+    // Written after the reply so the user doesn't wait for it; the advance is
+    // already committed and recordAuditEntry never throws.
     await recordAuditEntry({
       actor: { id: actorId(req) },
       action: "driver_finance.salary_advance.create",
@@ -175,12 +172,6 @@ router.post(
       entityId: advance.id,
       after: { amountPaise: advance.amountPaise.toString(), driverId: advance.driverId },
     });
-
-    const full = await db.driverSalaryAdvance.findUniqueOrThrow({
-      where: { id: advance.id },
-      include: salaryAdvanceInclude,
-    });
-    return sendOk(res, full, undefined, 201);
   },
 );
 
@@ -192,12 +183,18 @@ router.post(
     const input = validate(reverseDriverFinanceEntrySchema.safeParse(req.body));
     const existing = await db.driverSalaryAdvance.findUnique({
       where: { id },
-      select: { branchId: true },
+      select: { branchId: true, driverId: true },
     });
+
     if (!existing) throw new NotFoundError("Salary advance not found");
     assertBranchAccess(req, existing.branchId);
 
-    await reverseDriverSalaryAdvance(id, input.reason, actorId(req));
+    await reverseDriverSalaryAdvance(
+      id,
+      input.reason,
+      actorId(req),
+      existing.driverId,
+    );
     await recordAuditEntry({
       actor: { id: actorId(req) },
       action: "driver_finance.salary_advance.reverse",
@@ -237,11 +234,11 @@ router.get("/payouts", can(PERMS.DRIVER_FINANCE.SALARY_VIEW), async (req, res) =
     ...(filters.status ? { status: filters.status } : {}),
     ...(query.search
       ? {
-          OR: [
-            { payoutNumber: { contains: query.search, mode: "insensitive" } },
-            { driver: { name: { contains: query.search, mode: "insensitive" } } },
-          ],
-        }
+        OR: [
+          { payoutNumber: { contains: query.search, mode: "insensitive" } },
+          { driver: { name: { contains: query.search, mode: "insensitive" } } },
+        ],
+      }
       : {}),
   };
   const [data, total] = await Promise.all([
@@ -369,11 +366,11 @@ router.get("/salary-runs", can(PERMS.DRIVER_FINANCE.SALARY_VIEW), async (req, re
     ...(filters.status ? { status: filters.status } : {}),
     ...(query.search
       ? {
-          OR: [
-            { runNumber: { contains: query.search, mode: "insensitive" } },
-            { month: { contains: query.search } },
-          ],
-        }
+        OR: [
+          { runNumber: { contains: query.search, mode: "insensitive" } },
+          { month: { contains: query.search } },
+        ],
+      }
       : {}),
   };
   const [data, total] = await Promise.all([
@@ -429,10 +426,12 @@ router.post("/salary-runs", can(PERMS.DRIVER_FINANCE.SALARY_MANAGE), async (req,
 router.patch("/salary-runs/:id", can(PERMS.DRIVER_FINANCE.SALARY_MANAGE), async (req, res) => {
   const id = getParamId(req);
   const input = validate(updateDriverSalaryRunSchema.safeParse(req.body));
-  await assertRunAccess(req, id);
   if (input.updateMaster && !req.ctx?.permissions.has(PERMS.MASTERS.DRIVER.UPDATE))
     throw new ForbiddenError("You can change the salary in this run, but not in the Driver master");
-  const result = await updateSalaryRun(id, input);
+  // The service checks branch access on the run it already reads.
+  const result = await updateSalaryRun(id, input, (branch) => assertHeadOfficeAccess(req, branch));
+  sendOk(res, await salaryRunDetail(id));
+  // After the reply — the edit is committed and recordAuditEntry never throws.
   if (result.masterUpdates.length)
     await recordAuditEntry({
       actor: { id: actorId(req) },
@@ -441,7 +440,6 @@ router.patch("/salary-runs/:id", can(PERMS.DRIVER_FINANCE.SALARY_MANAGE), async 
       entityId: id,
       after: { drivers: result.masterUpdates },
     });
-  return sendOk(res, await salaryRunDetail(id));
 });
 
 router.post(
@@ -450,15 +448,18 @@ router.post(
   async (req, res) => {
     const id = getParamId(req);
     const input = validate(driverSalaryRunVersionSchema.safeParse(req.body));
-    await assertRunAccess(req, id);
-    await approveSalaryRun(id, input.version, actorId(req));
+    // The service checks branch access on the run it already reads.
+    await approveSalaryRun(id, input.version, actorId(req), (branch) =>
+      assertHeadOfficeAccess(req, branch),
+    );
+    sendOk(res, await salaryRunDetail(id));
+    // After the reply — the approval is committed and recordAuditEntry never throws.
     await recordAuditEntry({
       actor: { id: actorId(req) },
       action: "driver_finance.salary_run.approve",
       entity: "DriverSalaryRun",
       entityId: id,
     });
-    return sendOk(res, await salaryRunDetail(id));
   },
 );
 

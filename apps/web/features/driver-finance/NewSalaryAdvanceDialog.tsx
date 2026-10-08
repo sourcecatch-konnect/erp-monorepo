@@ -84,8 +84,8 @@ export function NewSalaryAdvanceDialog({
   }, [open, presetDriverId, driverForm, user?.branchId]);
 
   const balance = useQuery({
-    queryKey: driverFinanceKeys.balance(driverId),
-    queryFn: () => driverFinanceApi.balance(driverId),
+    queryKey: [...driverFinanceKeys.balance(driverId), "lite"],
+    queryFn: () => driverFinanceApi.balance(driverId, true),
     enabled: open && Boolean(driverId),
   });
 

@@ -25,7 +25,7 @@ import {
   assertOnOrAfterStart,
   paidFromText,
   branchCodeOf,
-  lockDriver,
+  lockDrivers,
 } from "./driver-finance.service.js";
 import {
   approvableFrom,
@@ -320,24 +320,77 @@ const runTotals = (lines: { earnedPaise: bigint; netPaise: bigint }[]) => ({
   totalNetPaise: lines.reduce((s, l) => s + (l.netPaise > 0n ? l.netPaise : 0n), 0n),
 });
 
-/** Re-read every line, recompute it against the current ledger and save. */
+const lineSelect = {
+  id: true,
+  driverId: true,
+  baseSalaryPaise: true,
+  absentDays: true,
+  remarks: true,
+} as const;
+
+type StoredLine = { id: string } & LineInput;
+
+/**
+ * Write every computed line in ONE statement instead of one UPDATE per driver
+ * (each is a ~130 ms round trip to the remote database; a run has dozens).
+ * Same columns lineData() writes, plus updatedAt — Prisma's @updatedAt does
+ * not apply to raw SQL. Amounts go as text and are cast to bigint so no
+ * precision is lost on the way.
+ */
+async function saveLines(
+  tx: Prisma.TransactionClient,
+  idByDriver: Map<string, string>,
+  computed: ComputedLine[],
+) {
+  if (!computed.length) return;
+  const rows = computed.map((line) => ({ id: idByDriver.get(line.driverId)!, ...lineData(line) }));
+  const big = (pick: (r: (typeof rows)[number]) => bigint) => rows.map((r) => pick(r).toString());
+  await tx.$executeRaw`
+    UPDATE "DriverSalary" AS s SET
+      "baseSalaryPaise"      = v.base,
+      "absentDays"           = v.absent,
+      "presentDays"          = v.present,
+      "earnedPaise"          = v.earned,
+      "salaryAdvancePaise"   = v.advance,
+      "logSlipBalancePaise"  = v.log_slip,
+      "otherPaymentsPaise"   = v.other,
+      "previousBalancePaise" = v.previous,
+      "netPaise"             = v.net,
+      "remarks"              = v.remarks,
+      "updatedAt"            = ${new Date().toISOString()}::timestamp(3)
+    FROM unnest(
+      ${rows.map((r) => r.id)}::text[],
+      ${big((r) => r.baseSalaryPaise)}::bigint[],
+      ${rows.map((r) => r.absentDays)}::int[],
+      ${rows.map((r) => r.presentDays)}::int[],
+      ${big((r) => r.earnedPaise)}::bigint[],
+      ${big((r) => r.salaryAdvancePaise)}::bigint[],
+      ${big((r) => r.logSlipBalancePaise)}::bigint[],
+      ${big((r) => r.otherPaymentsPaise)}::bigint[],
+      ${big((r) => r.previousBalancePaise)}::bigint[],
+      ${big((r) => r.netPaise)}::bigint[],
+      ${rows.map((r) => r.remarks)}::text[]
+    ) AS v(id, base, absent, present, earned, advance, log_slip, other, previous, net, remarks)
+    WHERE s."id" = v.id
+  `;
+}
+
+/**
+ * Recompute the given lines against the current ledger and save them.
+ * `client` decides where the ledger is read: the transaction (approve — under
+ * the driver locks, so nothing lands between reading and posting) or the
+ * plain pool (draft edits — read in parallel, a preview that approve redoes).
+ */
 async function recomputeAndSave(
   tx: Prisma.TransactionClient,
   run: { id: string; month: string },
+  lines: StoredLine[],
+  computed?: ComputedLine[],
 ) {
-  const lines = await tx.driverSalary.findMany({
-    where: { runId: run.id, isActive: true },
-    select: { id: true, driverId: true, baseSalaryPaise: true, absentDays: true, remarks: true },
-  });
-  const computed = await computeLines(tx, monthBounds(run.month), run.id, lines);
-  const idByDriver = new Map(lines.map((l) => [l.driverId, l.id]));
-  for (const line of computed) {
-    await tx.driverSalary.update({
-      where: { id: idByDriver.get(line.driverId)! },
-      data: lineData(line),
-    });
-  }
-  return computed;
+  const result =
+    computed ?? (await computeLines(tx, monthBounds(run.month), run.id, lines));
+  await saveLines(tx, new Map(lines.map((l) => [l.driverId, l.id])), result);
+  return result;
 }
 
 /* ------------------------------------------------------------------ */
@@ -438,7 +491,7 @@ export async function createSalaryRun(
         );
       throw err;
     }
-  }, TX_OPTIONS);
+  });
 }
 
 /**
@@ -449,51 +502,63 @@ export async function createSalaryRun(
 export async function updateSalaryRun(
   id: string,
   input: UpdateDriverSalaryRunInput,
+  /** Branch-access check (the route's); runs before anything is written. */
+  assertAccess: (branch: { id: string; name: string }) => void,
 ) {
-  const run = await db.driverSalaryRun.findUnique({ where: { id } });
+  // The run and its lines in one round trip.
+  const [run, stored] = await Promise.all([
+    db.driverSalaryRun.findUnique({
+      where: { id },
+      include: { branch: { select: { id: true, name: true } } },
+    }),
+    db.driverSalary.findMany({ where: { runId: id, isActive: true }, select: lineSelect }),
+  ]);
   if (!run) throw new NotFoundError("Salary run not found");
+  assertAccess(run.branch);
   if (run.status !== "DRAFT") throw new BadRequestError("Only a draft salary run can be edited");
   if (run.version !== input.version) throw conflict();
 
-  return db.$transaction(async (tx) => {
-    const existing = await tx.driverSalary.findMany({
-      where: { runId: id, isActive: true },
-      select: { id: true, driverId: true, baseSalaryPaise: true },
-    });
-    const lineByDriver = new Map(existing.map((l) => [l.driverId, l.id]));
-    const salaryByDriver = new Map(existing.map((l) => [l.driverId, l.baseSalaryPaise]));
+  // Apply the edits in memory; everything is written once, below.
+  const lineByDriver = new Map(stored.map((l) => [l.driverId, l]));
+  const removeIds: string[] = [];
+  const masterUpdates: { driverId: string; from: string; to: string }[] = [];
+  for (const edit of input.lines) {
 
-    const masterUpdates: { driverId: string; from: string; to: string }[] = [];
-    for (const edit of input.lines) {
-      const lineId = lineByDriver.get(edit.driverId);
-      if (!lineId) throw new BadRequestError("A driver in this edit is not in the salary run");
-      if (edit.remove) {
-        await tx.driverSalary.delete({ where: { id: lineId } });
-        continue;
-      }
-      await tx.driverSalary.update({
-        where: { id: lineId },
-        data: {
-          absentDays: edit.absentDays,
-          baseSalaryPaise: edit.baseSalaryPaise,
-          remarks: edit.remarks ?? null,
-        },
-      });
-      // A changed salary can also become his salary in the Driver master.
-      if (input.updateMaster && edit.baseSalaryPaise !== salaryByDriver.get(edit.driverId)) {
-        await tx.driver.update({
-          where: { id: edit.driverId },
-          data: { salary: edit.baseSalaryPaise },
-        });
-        masterUpdates.push({
-          driverId: edit.driverId,
-          from: salaryByDriver.get(edit.driverId)!.toString(),
-          to: edit.baseSalaryPaise.toString(),
-        });
-      }
+
+    const line = lineByDriver.get(edit.driverId);
+    if (!line) throw new BadRequestError("A driver in this edit is not in the salary run");
+    if (edit.remove) {
+      removeIds.push(line.id);
+      lineByDriver.delete(edit.driverId);
+      continue;
     }
+    // A changed salary can also become his salary in the Driver master.
+    if (input.updateMaster && edit.baseSalaryPaise !== line.baseSalaryPaise)
+      masterUpdates.push({
+        driverId: edit.driverId,
+        from: line.baseSalaryPaise.toString(),
+        to: edit.baseSalaryPaise.toString(),
+      });
+    lineByDriver.set(edit.driverId, {
+      ...line,
+      absentDays: edit.absentDays,
+      baseSalaryPaise: edit.baseSalaryPaise,
+      remarks: edit.remarks ?? null,
+    });
+  }
+  const lines = [...lineByDriver.values()];
 
-    const computed = await recomputeAndSave(tx, run);
+  // A draft is a preview — nothing is posted, and approve recalculates under
+  // the driver locks — so the ledger is read here, in parallel, outside the
+  // transaction. The version check below still stops two overlapping edits.
+  const computed = await computeLines(db, monthBounds(run.month), run.id, lines);
+
+  return db.$transaction(async (tx) => {
+    if (removeIds.length)
+      await tx.driverSalary.deleteMany({ where: { id: { in: removeIds } } });
+    for (const m of masterUpdates)
+      await tx.driver.update({ where: { id: m.driverId }, data: { salary: BigInt(m.to) } });
+    await recomputeAndSave(tx, run, lines, computed);
     try {
       const updated = await tx.driverSalaryRun.update({
         where: { id, version: input.version },
@@ -506,7 +571,7 @@ export async function updateSalaryRun(
         throw conflict();
       throw err;
     }
-  }, TX_OPTIONS);
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -518,9 +583,19 @@ export async function updateSalaryRun(
  * is counted), then post ONE journal: Dr Driver Salary Expense / Cr each
  * driver (earned). After it, each driver's ledger balance is his net pay.
  */
-export async function approveSalaryRun(id: string, version: number, actorId: string) {
-  const run = await db.driverSalaryRun.findUnique({ where: { id } });
+export async function approveSalaryRun(
+  id: string,
+  version: number,
+  actorId: string,
+  /** Branch-access check (the route's); runs before anything is written. */
+  assertAccess: (branch: { id: string; name: string }) => void,
+) {
+  const run = await db.driverSalaryRun.findUnique({
+    where: { id },
+    include: { branch: { select: { id: true, name: true } } },
+  });
   if (!run) throw new NotFoundError("Salary run not found");
+  assertAccess(run.branch);
   if (run.status !== "DRAFT") throw new BadRequestError("Only a draft salary run can be approved");
   if (run.version !== version) throw conflict();
   if (driverSalaryMakerCheckerEnabled() && run.createdById === actorId)
@@ -533,26 +608,27 @@ export async function approveSalaryRun(id: string, version: number, actorId: str
     throw new BadRequestError(
       `${monthLabel(run.month)} salary can be approved from ${approvableFrom(run.month)}, the last day of the month`,
     );
-  await assertPreviousMonthApproved(run.month);
-  await assertNoLaterApprovedRun(run.month);
+  // Both month-order checks only read — run them together.
+  await Promise.all([
+    assertPreviousMonthApproved(run.month),
+    assertNoLaterApprovedRun(run.month),
+  ]);
 
   const bounds = monthBounds(run.month);
 
   return db.$transaction(async (tx) => {
     // Hold every driver of the run so no advance / payment lands between the
-    // recalculation and the posting. Sorted: no deadlock with another run.
-    const driverIds = (
-      await tx.driverSalary.findMany({
-        where: { runId: id, isActive: true },
-        select: { driverId: true },
-      })
-    )
-      .map((l) => l.driverId)
-      .sort();
-    if (!driverIds.length) throw new BadRequestError("This salary run has no drivers");
-    for (const driverId of driverIds) await lockDriver(tx, driverId);
+    // recalculation and the posting — all locks in one round trip, in the
+    // same fixed order as every other multi-driver lock (no deadlock).
+    const lines = await tx.driverSalary.findMany({
+      where: { runId: id, isActive: true },
+      select: lineSelect,
+    });
+    if (!lines.length) throw new BadRequestError("This salary run has no drivers");
+    await lockDrivers(tx, lines.map((l) => l.driverId));
 
-    const computed = await recomputeAndSave(tx, run);
+    // Read the ledger INSIDE the transaction, after the locks.
+    const computed = await recomputeAndSave(tx, run, lines);
     const journal = await postDriverSalaryRun(tx, {
       runId: run.id,
       runNumber: run.runNumber,
@@ -641,8 +717,7 @@ export async function paySalaryRun(id: string, input: PayDriverSalaryRunInput, a
 
   return db.$transaction(async (tx) => {
     // Drivers first, then accounts — the same order as every other payment.
-    for (const driverId of [...new Set(dues.map((d) => d.driverId))].sort())
-      await lockDriver(tx, driverId);
+    await lockDrivers(tx, dues.map((d) => d.driverId));
 
     // Nothing may have been paid to these drivers since we worked it out.
     const fresh = await paidPerDriver(tx, [id], dues.map((d) => d.driverId));

@@ -346,6 +346,7 @@ export function SalaryRunDetailPage({ id }: { id: string }) {
   const isDraft = run.status === "DRAFT";
   const editable = isDraft && canManage;
   const showPaid = run.status === "APPROVED" || run.status === "PAID";
+
   const anyPaid = BigInt(run.paidPaise) > 0n;
   const dueCount = run.salaries.filter((l) => outstandingOf(l) > 0n).length;
 
@@ -481,7 +482,7 @@ export function SalaryRunDetailPage({ id }: { id: string }) {
       {isDraft && !run.canApproveNow ? (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
           This run can be checked and edited now, but <strong>approved only from{" "}
-          {formatDate(run.approvableFrom)}</strong> — the last day of {run.monthLabel}. Until then the
+            {formatDate(run.approvableFrom)}</strong> — the last day of {run.monthLabel}. Until then the
           office can still record &quot;Paid in cash&quot; on this month&apos;s log slips.
         </p>
       ) : null}

@@ -1660,6 +1660,12 @@ export type DriverMoneyOutArgs = {
   narration: string;
   /** Pass the row's journalEntryId — a retry returns that voucher unchanged. */
   existingJournalEntryId?: string | null;
+  /** The driver's ledger, when the caller already resolved it (saves a round
+   *  trip inside the transaction). */
+  driverLedgerId?: string;
+  /** True when the caller already checked fundingLedgerId is a Cash/Bank
+   *  account (assertFundingMatchesMode) — skips the same check here. */
+  fundingLedgerChecked?: boolean;
   createdById: string;
 };
 
@@ -1672,8 +1678,12 @@ async function postDriverMoneyOut(
   if (already) return already;
 
   const [fundingLedger, driverLedger] = await Promise.all([
-    requireFundingLedger(tx, args.fundingLedgerId),
-    getOrCreatePartyLedger(tx, { driverId: args.driverId }),
+    args.fundingLedgerChecked
+      ? { id: args.fundingLedgerId }
+      : requireFundingLedger(tx, args.fundingLedgerId),
+    args.driverLedgerId
+      ? { id: args.driverLedgerId }
+      : getOrCreatePartyLedger(tx, { driverId: args.driverId }),
   ]);
 
   return postJournal(tx, {

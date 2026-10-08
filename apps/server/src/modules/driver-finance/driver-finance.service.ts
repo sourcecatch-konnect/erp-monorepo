@@ -6,11 +6,14 @@ import { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { BadRequestError, NotFoundError } from "../../lib/error.js";
 import { fyCodeFor } from "../_shared/doc-number.js";
+import { randomUUID } from "node:crypto";
 import {
+  getOrCreatePartyLedger,
   postDriverPayout,
   postDriverSalaryAdvance,
   reverseJournal,
 } from "../ledger/posting.service.js";
+import { getBranchRef, peekBranchRef } from "../branch/branch-ref.cache.js";
 import { reserveDriverFinanceNumber } from "./driver-finance.numbers.js";
 import { driverFinanceStartDate } from "./driver-finance.config.js";
 import { cashLedgerBalance } from "../ledger/opening-balance.service.js";
@@ -29,39 +32,78 @@ const isUniqueConflict = (err: unknown) =>
 export const lockDriver = (tx: Prisma.TransactionClient, driverId: string) =>
   tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`driver-finance:${driverId}`}))`;
 
+/**
+ * lockDriver for many drivers in ONE round trip (a salary run has dozens).
+ * Same lock keys, taken in ascending key order — COLLATE "C" sorts byte-wise,
+ * exactly like JavaScript's default sort, so every multi-driver lock in the
+ * app uses one order and two of them can never deadlock.
+ */
+export const lockDrivers = (tx: Prisma.TransactionClient, driverIds: string[]) => {
+  const keys = [...new Set(driverIds)].map((id) => `driver-finance:${id}`);
+  if (!keys.length) return Promise.resolve(0);
+  return tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(hashtext(key))
+    FROM (SELECT key FROM unnest(${keys}::text[]) AS t(key) ORDER BY key COLLATE "C") AS ordered
+  `;
+};
+
 /** Serialises payments out of one cash / bank account, so two payments can't
  *  both pass the balance check against the same money. Always taken AFTER
  *  the driver lock(s), in a fixed order. */
 const lockCashLedger = (tx: Prisma.TransactionClient, ledgerId: string) =>
   tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cash-ledger:${ledgerId}`}))`;
 
+/** Driver lock then account lock in ONE round trip (same order as always). */
+export const lockDriverAndCash = (
+  tx: Prisma.TransactionClient,
+  driverId: string,
+  ledgerId: string,
+) =>
+  tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`driver-finance:${driverId}`})), pg_advisory_xact_lock(hashtext(${`cash-ledger:${ledgerId}`}))`;
+
 /**
  * Refuse a payment bigger than what the cash / bank account holds in the
  * ERP. The balance includes the account's opening balance (Finance → Opening
  * Balances) — without one it starts at ₹0, so the message says so.
+ * `alreadyLocked`: the caller took the account lock (lockDriverAndCash).
  */
 export async function assertEnoughMoney(
   tx: Prisma.TransactionClient,
   fundingLedgerId: string,
   amountPaise: bigint,
+  { alreadyLocked = false }: { alreadyLocked?: boolean } = {},
 ) {
-  await lockCashLedger(tx, fundingLedgerId);
-  const ledger = await tx.ledger.findUnique({
-    where: { id: fundingLedgerId },
-    select: { name: true, cashAccount: { select: { opening: { select: { id: true } } } } },
-  });
+  if (!alreadyLocked) await lockCashLedger(tx, fundingLedgerId);
+
   const balance = await cashLedgerBalance(tx, fundingLedgerId);
+
   if (amountPaise > balance) {
-    const has = balance > 0n ? `only ${rupees(balance)}` : `no money (${rupees(balance)})`;
+    const ledger = await tx.ledger.findUnique({
+      where: { id: fundingLedgerId },
+      select: {
+        name: true,
+        cashAccount: {
+          select: {
+            opening: { select: { id: true } },
+          },
+        },
+      },
+    });
+
+    const has =
+      balance > 0n
+        ? `only ${rupees(balance)}`
+        : `no money (${rupees(balance)})`;
+
     const hint = ledger?.cashAccount?.opening
       ? ""
       : " — its opening balance is not set; set it in Finance → Opening Balances";
+
     throw new BadRequestError(
       `${ledger?.name ?? "This account"} has ${has} in the ERP — ${rupees(amountPaise)} can't be paid from it${hint}`,
     );
   }
 }
-
 /** Cash / bank accounts with what each holds now (for the pay screens). */
 export async function fundingAccounts() {
   const ledgers = await db.ledger.findMany({
@@ -74,15 +116,25 @@ export async function fundingAccounts() {
     },
     orderBy: [{ group: "asc" }, { name: "asc" }],
   });
-  return Promise.all(
-    ledgers.map(async (l) => ({
-      id: l.id,
-      name: l.name,
-      group: l.group as "CASH" | "BANK",
-      balancePaise: await cashLedgerBalance(db, l.id),
-      hasOpeningBalance: Boolean(l.cashAccount?.opening),
-    })),
+  // Every account's balance in ONE grouped query (was one query per account).
+  const sums = await db.journalLine.groupBy({
+    by: ["ledgerId"],
+    where: {
+      ledgerId: { in: ledgers.map((l) => l.id) },
+      journalEntry: { status: { in: ["POSTED", "REVERSED"] } },
+    },
+    _sum: { debitPaise: true, creditPaise: true },
+  });
+  const balanceOf = new Map(
+    sums.map((s) => [s.ledgerId, (s._sum.debitPaise ?? 0n) - (s._sum.creditPaise ?? 0n)]),
   );
+  return ledgers.map((l) => ({
+    id: l.id,
+    name: l.name,
+    group: l.group as "CASH" | "BANK",
+    balancePaise: balanceOf.get(l.id) ?? 0n,
+    hasOpeningBalance: Boolean(l.cashAccount?.opening),
+  }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -100,15 +152,11 @@ export async function fundingAccounts() {
  */
 export async function driverLedgerBalance(client: Client, driverId: string) {
   const startDate = driverFinanceStartDate();
-  const ledger = await client.ledger.findUnique({
-    where: { driverId },
-    select: { id: true },
-  });
-  if (!ledger) return { ledgerId: null, balancePaise: 0n, startDate };
-
+  // ONE round trip: sum the lines of whichever ledger belongs to this driver
+  // (was: find the ledger, then sum it).
   const sums = await client.journalLine.aggregate({
     where: {
-      ledgerId: ledger.id,
+      ledger: { driverId },
       journalEntry: {
         // Live vouchers only: a reversed voucher and its reversal cancel out, but
         // the reversal is dated the day it was made — so across the go-live
@@ -121,7 +169,6 @@ export async function driverLedgerBalance(client: Client, driverId: string) {
     _sum: { debitPaise: true, creditPaise: true },
   });
   return {
-    ledgerId: ledger.id,
     balancePaise: (sums._sum.debitPaise ?? 0n) - (sums._sum.creditPaise ?? 0n),
     startDate,
   };
@@ -252,51 +299,95 @@ export const paidFromText = (accountName: string, mode: CreateDriverPayoutInput[
   ` · paid from ${accountName} (${MODE_LABEL[mode]})`;
 
 export async function branchCodeOf(branchId: string) {
-  const branch = await db.branch.findUnique({
-    where: { id: branchId },
-    select: { branchCode: true },
-  });
-  if (!branch) throw new NotFoundError("Branch not found");
-  return branch.branchCode;
+  return (await getBranchRef(branchId)).branchCode;
 }
 
 /* ------------------------------------------------------------------ */
 /* Salary advance                                                      */
 /* ------------------------------------------------------------------ */
 
+const namedUser = { select: { id: true, firstName: true, lastName: true } } as const;
+
+/** What the salary-advance screens show for one advance. */
+export const salaryAdvanceInclude = {
+  driver: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true, branchCode: true } },
+  fundingLedger: { select: { id: true, name: true } },
+  createdBy: namedUser,
+  reversedBy: namedUser,
+} satisfies Prisma.DriverSalaryAdvanceInclude;
+
 /**
  * Create a salary advance and post it (Dr Driver / Cr Cash-Bank) in one
  * transaction. A retry with the same clientRequestId returns the first
  * advance. The caller has already checked branch access for `input.branchId`.
+ *
+ * Every round trip costs ~130 ms against the remote database, so everything
+ * that can be read up front is read in ONE parallel step, and the reply is
+ * built from those reads instead of reloading the row.
  */
 export async function createDriverSalaryAdvance(
   input: CreateDriverSalaryAdvanceInput,
   actorId: string,
 ) {
-  const prior = await db.driverSalaryAdvance.findUnique({
-    where: { clientRequestId: input.clientRequestId },
-  });
+  assertOnOrAfterStart(input.paidAt, "Salary advance");
+  const fyCode = fyCodeFor(input.paidAt);
+
+  // With the branch code already cached, the number is reserved in the same
+  // parallel step. Numbers are gap-tolerant, so one reserved for a request
+  // that then fails a check (or is a double-click retry) is just a gap.
+  const cachedBranch = peekBranchRef(input.branchId);
+  const [prior, driver, accountName, branch, driverLedger, createdBy, earlyNumber] =
+    await Promise.all([
+      db.driverSalaryAdvance.findUnique({
+        where: { clientRequestId: input.clientRequestId },
+        include: salaryAdvanceInclude,
+      }),
+      requireDriver(db, input.driverId),
+      assertFundingMatchesMode(db, input.fundingLedgerId, input.mode),
+      cachedBranch ?? getBranchRef(input.branchId),
+      // Creates the driver's ledger on first use — outside the transaction
+      // that's harmless: an unused ledger with no entries.
+      getOrCreatePartyLedger(db, { driverId: input.driverId }),
+      db.user.findUniqueOrThrow({ where: { id: actorId }, ...namedUser }),
+      cachedBranch
+        ? reserveDriverFinanceNumber(db, "SALARY_ADVANCE", cachedBranch.branchCode, fyCode)
+        : null,
+    ]);
   if (prior) return prior;
 
-  const driver = await requireDriver(db, input.driverId);
-  assertOnOrAfterStart(input.paidAt, "Salary advance");
-  const accountName = await assertFundingMatchesMode(db, input.fundingLedgerId, input.mode);
-  const fyCode = fyCodeFor(input.paidAt);
-  const advanceNumber = await reserveDriverFinanceNumber(
-    db,
-    "SALARY_ADVANCE",
-    await branchCodeOf(input.branchId),
-    fyCode,
-  );
+  const advanceNumber =
+    earlyNumber ??
+    (await reserveDriverFinanceNumber(db, "SALARY_ADVANCE", branch.branchCode, fyCode));
 
-  return db.$transaction(async (tx) => {
-    await lockDriver(tx, input.driverId);
-    await assertEnoughMoney(tx, input.fundingLedgerId, input.amountPaise);
+  // The id is made here so the voucher can point at the advance before the
+  // advance row exists — the advance is then written once, already linked.
+  const advanceId = randomUUID();
 
-    let advance;
-    try {
-      advance = await tx.driverSalaryAdvance.create({
+  let created;
+  try {
+    created = await db.$transaction(async (tx) => {
+      await lockDriverAndCash(tx, input.driverId, input.fundingLedgerId);
+      await assertEnoughMoney(tx, input.fundingLedgerId, input.amountPaise, { alreadyLocked: true });
+
+      const journal = await postDriverSalaryAdvance(tx, {
+        sourceId: advanceId,
+        voucherNumber: advanceNumber,
+        driverId: input.driverId,
+        branchId: input.branchId,
+        fyCode,
+        paidAt: input.paidAt,
+        fundingLedgerId: input.fundingLedgerId,
+        fundingLedgerChecked: true,
+        driverLedgerId: driverLedger.id,
+        amountPaise: input.amountPaise,
+        narration: `Salary advance ${advanceNumber} — ${driver.name}${paidFromText(accountName, input.mode)}`,
+        createdById: actorId,
+      });
+
+      return tx.driverSalaryAdvance.create({
         data: {
+          id: advanceId,
           advanceNumber,
           driverId: input.driverId,
           branchId: input.branchId,
@@ -308,55 +399,64 @@ export async function createDriverSalaryAdvance(
           reason: input.reason ?? null,
           fundingLedgerId: input.fundingLedgerId,
           clientRequestId: input.clientRequestId,
+          journalEntryId: journal.id,
           createdById: actorId,
         },
       });
-    } catch (err) {
-      if (isUniqueConflict(err)) {
-        const already = await tx.driverSalaryAdvance.findUnique({
-          where: { clientRequestId: input.clientRequestId },
-        });
-        if (already) return already;
-      }
-      throw err;
+    }, TX_OPTIONS);
+  } catch (err) {
+    // A concurrent identical request won the clientRequestId race; its
+    // transaction committed and ours rolled back entirely (voucher included).
+    // Re-read OUTSIDE the failed transaction — Postgres refuses any query in
+    // a transaction after an error.
+    if (isUniqueConflict(err)) {
+      const already = await db.driverSalaryAdvance.findUnique({
+        where: { clientRequestId: input.clientRequestId },
+        include: salaryAdvanceInclude,
+      });
+      if (already) return already;
     }
+    throw err;
+  }
 
-    const journal = await postDriverSalaryAdvance(tx, {
-      sourceId: advance.id,
-      voucherNumber: advanceNumber,
-      driverId: input.driverId,
-      branchId: input.branchId,
-      fyCode,
-      paidAt: input.paidAt,
-      fundingLedgerId: input.fundingLedgerId,
-      amountPaise: input.amountPaise,
-      narration: `Salary advance ${advanceNumber} — ${driver.name}${paidFromText(accountName, input.mode)}`,
-      createdById: actorId,
-    });
-
-    return tx.driverSalaryAdvance.update({
-      where: { id: advance.id },
-      data: { journalEntryId: journal.id },
-    });
-  }, TX_OPTIONS);
+  return {
+    ...created,
+    driver: { id: driver.id, name: driver.name },
+    branch: { id: branch.id, name: branch.name, branchCode: branch.branchCode },
+    fundingLedger: { id: input.fundingLedgerId, name: accountName },
+    createdBy,
+    reversedBy: null,
+  };
 }
-
-/** Undo a wrong salary advance with a contra voucher. */
 export async function reverseDriverSalaryAdvance(
   id: string,
   reason: string,
   actorId: string,
+  driverId: string,
 ) {
   return db.$transaction(async (tx) => {
-    const advance = await tx.driverSalaryAdvance.findUnique({ where: { id } });
-    if (!advance) throw new NotFoundError("Salary advance not found");
-    await lockDriver(tx, advance.driverId);
+    await lockDriver(tx, driverId);
 
-    const fresh = await tx.driverSalaryAdvance.findUniqueOrThrow({ where: { id } });
-    if (fresh.status === "REVERSED")
+    const fresh = await tx.driverSalaryAdvance.findUniqueOrThrow({
+      where: { id },
+      select: {
+        driverId: true,
+        status: true,
+        journalEntryId: true,
+      },
+    });
+
+    if (fresh.driverId !== driverId) {
+      throw new BadRequestError("Driver changed; retry the reversal");
+    }
+
+    if (fresh.status === "REVERSED") {
       throw new BadRequestError("This salary advance is already reversed");
-    if (fresh.journalEntryId)
+    }
+
+    if (fresh.journalEntryId) {
       await reverseJournal(tx, fresh.journalEntryId, reason, actorId);
+    }
 
     return tx.driverSalaryAdvance.update({
       where: { id },
@@ -367,9 +467,8 @@ export async function reverseDriverSalaryAdvance(
         reverseReason: reason,
       },
     });
-  }, TX_OPTIONS);
+  });
 }
-
 /* ------------------------------------------------------------------ */
 /* Log slip payout status                                              */
 /* ------------------------------------------------------------------ */
@@ -421,15 +520,15 @@ export async function logSlipPayoutStatus(client: Client, logSlipId: string) {
   const salaryLine = settledBeforeStart
     ? null
     : await client.driverSalary.findFirst({
-        where: {
-          driverId: slip.driverId,
-          isActive: true,
-          month: { gte: slip.logSlipDate.toISOString().slice(0, 7) },
-          run: { status: { in: ["APPROVED", "PAID"] } },
-        },
-        select: { run: { select: { id: true, runNumber: true, month: true } } },
-        orderBy: { month: "asc" },
-      });
+      where: {
+        driverId: slip.driverId,
+        isActive: true,
+        month: { gte: slip.logSlipDate.toISOString().slice(0, 7) },
+        run: { status: { in: ["APPROVED", "PAID"] } },
+      },
+      select: { run: { select: { id: true, runNumber: true, month: true } } },
+      orderBy: { month: "asc" },
+    });
   const settledBySalaryRun = salaryLine?.run ?? null;
 
   const remaining =

@@ -262,9 +262,12 @@ const post = async <T>(url: string, body: unknown) =>
   unwrapApiResponse(await api.post<ApiResponse<T>>(url, body));
 
 export const driverFinanceApi = {
-  balance: async (driverId: string) =>
+  /** `lite` = the balance only (no unpaid log slips / approved salary). */
+  balance: async (driverId: string, lite = false) =>
     unwrapApiResponse(
-      await api.get<ApiResponse<DriverBalance>>(`/driver-finance/drivers/${driverId}/balance`),
+      await api.get<ApiResponse<DriverBalance>>(`/driver-finance/drivers/${driverId}/balance`, {
+        params: lite ? { lite: 1 } : undefined,
+      }),
     ),
 
   settings: async () =>

@@ -5,7 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconFileInvoice, IconArrowBackUp } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
-
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@skerp/ui/components/tooltip";
 import { Button } from "@skerp/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@skerp/ui/components/Card";
 import { Input } from "@skerp/ui/components/input";
@@ -50,6 +54,7 @@ type RegisterRow = {
 type RegisterProps<K extends "salary-advances" | "payouts"> = {
   kind: K;
   title: string;
+
   emptyText: string;
   detailHeading: string;
   toRow: (row: ReturnType<typeof useDriverFinanceList<K>>["rows"][number]) => RegisterRow;
@@ -138,7 +143,8 @@ export function DriverFinanceRegister<K extends "salary-advances" | "payouts">({
                   <TableRow>
                     <TableHead>Number</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Driver</TableHead>
+                    <TableHead >Driver</TableHead>
+
                     <TableHead>{detailHeading}</TableHead>
                     <TableHead>Paid from</TableHead>
                     <TableHead>Status</TableHead>
@@ -149,14 +155,52 @@ export function DriverFinanceRegister<K extends "salary-advances" | "payouts">({
                 <TableBody>
                   {view.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium">{row.number}</TableCell>
-                      <TableCell className="text-sm">{formatDate(row.paidAt)}</TableCell>
-                      <TableCell className="text-sm">{row.driverName}</TableCell>
-                      <TableCell className="max-w-56 truncate text-sm" title={row.detail}>
-                        {row.detail}
+                      <TableCell className="font-medium text-xs">{row.number}</TableCell>
+                      <TableCell className="text-xm">{formatDate(row.paidAt)}</TableCell>
+                      <TableCell className="text-xs">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              tabIndex={0}
+                              className="block max-w-40 truncate"
+                            >
+                              {row.driverName}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs break-words">
+                            {row.driverName}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+
+                      <TableCell className="text-sm">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span tabIndex={0} className="block w-32 truncate">
+                              {row.detail || "—"}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-sm break-words">
+                            {row.detail || "No reason provided"}
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {row.fundingName} · {PAYMENT_MODE_LABELS[row.mode]}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div tabIndex={0} className="w-28">
+                              <p className="truncate font-medium">
+                                {row.fundingName || "—"}
+                              </p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                {PAYMENT_MODE_LABELS[row.mode]}
+                              </p>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-sm break-words">
+                            {row.fundingName || "—"} · {PAYMENT_MODE_LABELS[row.mode]}
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
                       <TableCell>
                         <EntryStatusBadge status={row.status} />

@@ -212,10 +212,18 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
     enabled: selectionContext !== "default" && !disabled,
   });
 
+  // The full driver record is only needed to label a selected driver who is
+  // NOT in the loaded list (e.g. a pre-filled form). Picking from the list
+  // already has his name — don't fetch the whole record again.
+  const selectedInList = Boolean(
+    selectedId &&
+      (drivers.data?.pages.some((p) => p.data.some((d) => d.id === selectedId)) ||
+        tripChoices.data?.pages.some((p) => p.data.some((d) => d.id === selectedId))),
+  );
   const selectedDriver = useQuery({
     queryKey: driverKeys.detail(selectedId ?? ""),
     queryFn: () => driverApi.detail(selectedId!),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedId) && !selectedInList,
   });
 
   const options = React.useMemo<DriverComboboxOption[]>(() => {

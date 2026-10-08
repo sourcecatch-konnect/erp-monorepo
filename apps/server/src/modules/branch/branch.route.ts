@@ -14,6 +14,7 @@ import { NotFoundError, ValidationError } from "../../lib/error.js";
 import { can, canAny } from "../../auth/can.middleware.js";
 import { getParamId } from "../_shared/param.js";
 import { sendOk } from "../_shared/response.js";
+import { forgetBranchRef } from "./branch-ref.cache.js";
 
 const plural = (count: number, singular: string, pluralName?: string) =>
   `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
@@ -25,7 +26,13 @@ const router: Router = createCrudRouter({
   permissionKey: "masters.branch",
 
   hooks: {
+    // The branch code is cached for document numbers — drop the stale copy.
+    beforeUpdate: async (data, row) => {
+      forgetBranchRef((row as { id: string }).id);
+      return data;
+    },
     beforeDelete: async (id) => {
+      forgetBranchRef(id);
       const [
         branch,
         users,

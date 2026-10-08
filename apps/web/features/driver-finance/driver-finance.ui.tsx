@@ -124,7 +124,7 @@ export function FundingLedgerSelect({
       <SelectContent>
         {options.map((ledger) => (
           <SelectItem key={ledger.id} value={ledger.id}>
-            {ledger.name} · {money(ledger.balancePaise)}
+            {ledger.name}
           </SelectItem>
         ))}
       </SelectContent>
@@ -168,7 +168,8 @@ export function BranchSelect({
 }) {
   const branches = useQuery({
     queryKey: ["driver-finance", "branches"],
-    queryFn: () => branchApi.list({ page: 0, size: 100 }),
+    // ~10 branches today; 20 covers them with room to spare.
+    queryFn: () => branchApi.list({ page: 0, size: 20 }),
   });
   return (
     <Select value={value} onValueChange={onChange}>
