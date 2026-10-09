@@ -31,6 +31,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
+import { assertLicenceValid } from "../driver/driver-licence.js";
 import {
   buildTripName,
   summariseTripCargo,
@@ -409,7 +410,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
       fyCode: true,
       driverId: true,
       returnCityId: true,
-      driver: { select: { name: true } },
+      driver: { select: { name: true, licenseExpiryDate: true } },
     },
   });
 
@@ -422,6 +423,13 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         `This vehicle is on journey ${activeJourney.journeyNumber} with driver ${activeJourney.driver.name} — the trip must use the journey's driver`,
       );
     }
+    // The journey's driver may have started with a valid licence that has
+    // since expired — don't put him on another leg.
+    assertLicenceValid(
+      activeJourney.driver,
+      "adding another trip",
+      actualStart ?? plannedStart ?? now,
+    );
 
     // Cancelled legs keep their sequence slot, so number from the overall max
     // but validate the chain against the last non-cancelled leg.
@@ -604,11 +612,11 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
     if (!driver) throw new BadRequestError("Driver not found");
     if (driver.blackListed) throw new BadRequestError("Driver is blacklisted");
     if (driver.onLeave) throw new BadRequestError("Driver is on leave");
-    if (driver.licenseExpiryDate && driver.licenseExpiryDate < now) {
-      throw new BadRequestError(
-        `Driver's license expired on ${driver.licenseExpiryDate.toISOString().slice(0, 10)} — renew it before assigning a trip`,
-      );
-    }
+    assertLicenceValid(
+      driver,
+      "assigning a trip",
+      actualStart ?? plannedStart ?? now,
+    );
     if (driver.status !== "AVAILABLE") {
       throw new BadRequestError("Driver is already assigned to a trip");
     }
@@ -927,17 +935,24 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
       vehicleId: true,
       journeyId: true,
       sequenceNo: true,
+      driver: { select: { name: true, licenseExpiryDate: true } },
     },
   });
   if (!existing) throw new NotFoundError("Trip not found");
   if (existing.status !== "Planned") {
     throw new BadRequestError("Only a Planned trip can be dispatched");
   }
-
   const parsed = dispatchJourneyLegSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
+  // Planned while the licence was valid, dispatched after it expired —
+  // checked on the dispatch time entered.
+  assertLicenceValid(
+    existing.driver,
+    "dispatching this trip",
+    parsed.data.startDateTime,
+  );
   const me = actorId(req);
 
   // Operator-entered start time must not precede the previous leg's close.
@@ -954,7 +969,10 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
           select: { endDateTime: true },
         })
       : null;
-  if (prevLeg?.endDateTime && parsed.data.startDateTime <= prevLeg.endDateTime) {
+  if (
+    prevLeg?.endDateTime &&
+    parsed.data.startDateTime <= prevLeg.endDateTime
+  ) {
     throw new BadRequestError(
       "Start time must be after the previous leg's close time",
     );

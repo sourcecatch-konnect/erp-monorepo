@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@skerp/ui/components/tabs";
 import { Input } from "@skerp/ui/components/input";
@@ -34,6 +35,7 @@ import { StatementExportButton } from "./components/StatementExportButton";
 import { CompactMoney } from "./components/CompactMoney";
 import { downloadLedgerCsv } from "./components/exportLadgerCSV";
 import { recentFyCodes } from "./fy";
+import { DriverStatementPanel } from "@/features/driver-finance/DriverStatementPanel";
 
 const VENDOR_STATEMENT_KIND_BADGE: Record<string, string> = {
   ACCRUAL: "bg-blue-50 text-blue-700",
@@ -71,7 +73,7 @@ const cashTabs: Record<"bank" | "cash" | "creditor" | "driver" | "expense", Cash
   bank: { label: "Bank", description: "Every entry into/out of one bank account", partyKind: "account-bank", balanceConvention: "asset" },
   cash: { label: "Cash", description: "Every entry into/out of one cash account", partyKind: "account-cash", balanceConvention: "asset" },
   creditor: { label: "Creditor", description: "Everything paid to one creditor", partyKind: "creditor", balanceConvention: "liability" },
-  driver: { label: "Driver", description: "One driver's advance vs. settlement position, from posted Log Slips", partyKind: "driver", balanceConvention: "asset" },
+  driver: { label: "Driver", description: "One driver's statement: log slips, salary advances, payments and salary", partyKind: "driver", balanceConvention: "asset" },
   expense: { label: "Expense", description: "Every payment tagged as an expense, across all payees", partyKind: null, balanceConvention: null },
 };
 
@@ -174,8 +176,13 @@ function LedgerTotals({
 }
 /** Bank / Cash / Debtor / Creditor / Expense / Ageing ledger reports. */
 export function LedgerPage() {
-  const [tab, setTab] = React.useState<ReportTab>("bank");
-  const [partyId, setPartyId] = React.useState("");
+  // Deep link: /ledger?tab=driver&party=<driverId> (e.g. from a warning).
+  const searchParams = useSearchParams();
+  const linkedTab = searchParams.get("tab") as ReportTab | null;
+  const [tab, setTab] = React.useState<ReportTab>(
+    linkedTab && TAB_ORDER.includes(linkedTab) ? linkedTab : "bank",
+  );
+  const [partyId, setPartyId] = React.useState(searchParams.get("party") ?? "");
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
   const [branchId, setBranchId] = React.useState("ALL");
@@ -286,7 +293,7 @@ export function LedgerPage() {
               filters={statementFilters}
               disabled={!partyId || !statementQuery.data}
             />
-          ) : (
+          ) : tab === "driver" ? null : (
             <Button
               variant="outline"
               size="sm"
@@ -537,6 +544,15 @@ export function LedgerPage() {
                 </div>
               </div>
             </div>
+          )}
+        </TabsContent>
+
+        {/* ---- Driver: statement + Pay / Salary advance (Driver Lifecycle Phase 4) ---- */}
+        <TabsContent value="driver" className="space-y-3">
+          {!partyId ? (
+            <EmptyHint>Pick a driver to see their statement.</EmptyHint>
+          ) : (
+            <DriverStatementPanel driverId={partyId} from={from} to={to} />
           )}
         </TabsContent>
 

@@ -198,9 +198,18 @@ model User {
   cancelledVendorPaymentSlips       VendorPaymentSlip[]         @relation("CancelledVendorPaymentSlips")
   createdVendorPaymentDisbursements VendorPaymentDisbursement[] @relation("CreatedVendorPaymentDisbursements")
 
+  createdDriverSalaryRuns      DriverSalaryRun[]     @relation("CreatedDriverSalaryRuns")
+  approvedDriverSalaryRuns     DriverSalaryRun[]     @relation("ApprovedDriverSalaryRuns")
+  cancelledDriverSalaryRuns    DriverSalaryRun[]     @relation("CancelledDriverSalaryRuns")
+  createdDriverSalaryAdvances  DriverSalaryAdvance[] @relation("CreatedDriverSalaryAdvances")
+  reversedDriverSalaryAdvances DriverSalaryAdvance[] @relation("ReversedDriverSalaryAdvances")
+  createdDriverPayouts         DriverPayout[]        @relation("CreatedDriverPayouts")
+  reversedDriverPayouts        DriverPayout[]        @relation("ReversedDriverPayouts")
+
   tablePrefs UserTablePref[]
 
   passwordResetTokens PasswordResetToken[]
+  cashAccountOpenings CashAccountOpening[] @relation("CashAccountOpeningUpdatedBy")
 }
 
 /// Single-use, time-limited tokens for the "forgot password" flow. Only the
@@ -289,41 +298,44 @@ model Branch {
 
   homeJourneys VehicleJourney[] @relation("JourneyHomeBranch")
 
-  users              User[]
-  userBranches       UserBranch[]
-  city               City?                @relation(fields: [cityId], references: [id])
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  fromOrders         Order[]              @relation("FromBranch")
-  toOrders           Order[]              @relation("ToBranch")
-  originGroups       LRGroup[]            @relation("GroupOrigin")
-  destinationGroups  LRGroup[]            @relation("GroupDestination")
-  hubGroups          LRGroup[]            @relation("GroupHub")
-  railheadGroups     LRGroup[]            @relation("GroupRailhead")
-  vpSchedulesFrom    VPSchedule[]         @relation("VPScheduleFromBranch")
-  vpSchedulesTo      VPSchedule[]         @relation("VPScheduleToBranch")
-  railRakesFrom      RailRake[]           @relation("RailRakeFromBranch")
-  railRakesTo        RailRake[]           @relation("RailRakeToBranch")
-  railRakeOperations RailRakeOperation[]
-  deliveryChallans   DeliveryChallan[]    @relation("DeliveryChallanSourceBranch")
-  managedRailheads   BranchRailheadArea[]
-  creditors          Creditor[]           @relation("BranchCreditor")
-  cashPayments       CashPayment[]        @relation("BranchCashPayment")
-  bills              Bill[]
-  billCreditNotes    BillCreditNote[]
-  receipts           Receipt[]
-  ledgers            Ledger[]
-  journalEntries     JournalEntry[]
-  vendorPaymentSlips VendorPaymentSlip[]
-  purchaseOrders     PurchaseOrder[]
-  spareInwards       SpareInward[]
-  spareBatches       SpareBatch[]
-  stockLedgers       StockLedger[]
-  stockMovements     StockMovement[]
-  jobCards           JobCard[]
-  serviceBills       ServiceBill[]
-  replacementLists   ReplacementList[]
-  replacementInwards ReplacementInward[]
+  users                User[]
+  userBranches         UserBranch[]
+  city                 City?                 @relation(fields: [cityId], references: [id])
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  fromOrders           Order[]               @relation("FromBranch")
+  toOrders             Order[]               @relation("ToBranch")
+  originGroups         LRGroup[]             @relation("GroupOrigin")
+  destinationGroups    LRGroup[]             @relation("GroupDestination")
+  hubGroups            LRGroup[]             @relation("GroupHub")
+  railheadGroups       LRGroup[]             @relation("GroupRailhead")
+  vpSchedulesFrom      VPSchedule[]          @relation("VPScheduleFromBranch")
+  vpSchedulesTo        VPSchedule[]          @relation("VPScheduleToBranch")
+  railRakesFrom        RailRake[]            @relation("RailRakeFromBranch")
+  railRakesTo          RailRake[]            @relation("RailRakeToBranch")
+  railRakeOperations   RailRakeOperation[]
+  deliveryChallans     DeliveryChallan[]     @relation("DeliveryChallanSourceBranch")
+  managedRailheads     BranchRailheadArea[]
+  creditors            Creditor[]            @relation("BranchCreditor")
+  cashPayments         CashPayment[]         @relation("BranchCashPayment")
+  bills                Bill[]
+  billCreditNotes      BillCreditNote[]
+  receipts             Receipt[]
+  ledgers              Ledger[]
+  journalEntries       JournalEntry[]
+  vendorPaymentSlips   VendorPaymentSlip[]
+  driverSalaryRuns     DriverSalaryRun[]
+  driverSalaryAdvances DriverSalaryAdvance[]
+  driverPayouts        DriverPayout[]
+  purchaseOrders       PurchaseOrder[]
+  spareInwards         SpareInward[]
+  spareBatches         SpareBatch[]
+  stockLedgers         StockLedger[]
+  stockMovements       StockMovement[]
+  jobCards             JobCard[]
+  serviceBills         ServiceBill[]
+  replacementLists     ReplacementList[]
+  replacementInwards   ReplacementInward[]
 
   @@index([name])
   @@index([cityId])
@@ -774,7 +786,7 @@ model RateMatrix {
 }
 
 model Driver {
-  id                 String           @id @default(cuid())
+  id                 String                @id @default(cuid())
   name               String
   photoPath          String?
   type               String
@@ -785,6 +797,10 @@ model Driver {
   licenseDate        DateTime?
   licenseExpiryDate  DateTime?
   licenseCity        String?
+  /// Payroll: salary counts only from this day (null = before the ERP).
+  joiningDate        DateTime?
+  /// Payroll: salary counts only up to this day; no salary run after it.
+  leavingDate        DateTime?
   address            String?
   country            String?
   state              String?
@@ -795,17 +811,20 @@ model Driver {
   salary             BigInt?
   panNo              String?
   aadharCardNo       String?
-  onLeave            Boolean          @default(false)
-  blackListed        Boolean          @default(false)
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  status             DriverStatus     @default(AVAILABLE)
+  onLeave            Boolean               @default(false)
+  blackListed        Boolean               @default(false)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  status             DriverStatus          @default(AVAILABLE)
   VehicleTrip        VehicleTrip[]
   journeys           VehicleJourney[]
   advances           DriverAdvance[]
   logSlips           LogSlip[]
   jobCards           JobCard[]
   ledger             Ledger?
+  salaries           DriverSalary[]
+  salaryAdvances     DriverSalaryAdvance[]
+  payouts            DriverPayout[]
 
   @@index([name])
 }
@@ -3046,6 +3065,8 @@ model CashAccount {
   adjustments         CashAccountAdjustment[]
   receipts            Receipt[]
   ledgerEntries       LedgerEntry[]
+  /// Opening balance typed at go-live (see CashAccountOpening).
+  opening             CashAccountOpening?
   ledger              Ledger?
   serviceBillPayments ServiceBillPayment[]
 
@@ -3172,6 +3193,8 @@ model Ledger {
   sparePartSupplier          SparePartSupplier?          @relation(fields: [sparePartSupplierId], references: [id], onDelete: Restrict)
   lines                      JournalLine[]
   vendorPaymentDisbursements VendorPaymentDisbursement[]
+  driverSalaryAdvances       DriverSalaryAdvance[]
+  driverPayouts              DriverPayout[]
   driver                     Driver?                     @relation(fields: [driverId], references: [id], onDelete: Restrict)
   createdAt                  DateTime                    @default(now())
   updatedAt                  DateTime                    @updatedAt
@@ -3362,6 +3385,9 @@ model JournalEntry {
   vendorPaymentDisbursement VendorPaymentDisbursement?
   billCreditNote            BillCreditNote?
   logSlip                   LogSlip?
+  driverSalaryRun           DriverSalaryRun?
+  driverSalaryAdvance       DriverSalaryAdvance?
+  driverPayout              DriverPayout?
 
   @@unique([voucherType, sourceType, sourceId])
   @@unique([voucherType, voucherNumber])
@@ -4494,6 +4520,10 @@ enum JournalSourceType {
   SERVICE_BILL
   SUPPLIER_REPLACEMENT
   LOG_SLIP
+  DRIVER_SALARY
+  DRIVER_SALARY_ADVANCE
+  DRIVER_PAYOUT
+  OPENING_BALANCE
 }
 
 enum AllocationRefType {
@@ -4802,6 +4832,7 @@ model LogSlip {
   generatedBy        User?          @relation("GeneratedLogSlips", fields: [generatedById], references: [id])
   postedJournalEntry JournalEntry?  @relation(fields: [postedJournalEntryId], references: [id], onDelete: SetNull)
   lines              LogSlipLine[]
+  driverPayouts      DriverPayout[]
 
   @@index([status])
   @@index([fyCode])
@@ -4910,6 +4941,223 @@ enum DriverAdvanceStatus {
   REVERSED
 }
 
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Driver finance — salary run, salary advance, payout (Driver
+ */
+/**
+ * Lifecycle epic, Phase 1). Every money movement posts to the driver's
+ */
+/**
+ * party ledger (Ledger.driverId), the same ledger the Log Slip already
+ */
+/**
+ * posts the trip settlement to, so one balance answers "what do we owe
+ */
+/**
+ * this driver". Trip advances (DriverAdvance) are NOT part of this —
+ */
+/**
+ * they still settle through the Log Slip.
+ */
+/**
+ * ------------------------------------------------------------------
+ */
+
+enum DriverSalaryRunStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+/// Shared by salary advances and payouts: both post on create and can only
+/// be undone by a contra (reverse), never edited.
+enum DriverFinanceEntryStatus {
+  POSTED
+  REVERSED
+}
+
+enum DriverPayoutSource {
+  SALARY_RUN
+  LOG_SLIP
+  MANUAL
+}
+
+/// One month's salary for a set of drivers, generated, edited (absent days)
+/// and approved together. Approval posts ONE journal for the whole run:
+/// Dr Driver Salary Expense (total earned) / Cr each driver (earned).
+model DriverSalaryRun {
+  id          String                @id @default(cuid())
+  runNumber   String                @unique
+  /// Calendar month the salary is for, "YYYY-MM".
+  month       String
+  /// Calendar days in `month` (28-31) — salary is prorated over these.
+  daysInMonth Int
+  branchId    String
+  fyCode      String
+  status      DriverSalaryRunStatus @default(DRAFT)
+
+  totalEarnedPaise BigInt @default(0)
+  /// Sum of positive net pay only — a negative net carries forward, it is
+  /// never "paid".
+  totalNetPaise    BigInt @default(0)
+  paidPaise        BigInt @default(0)
+
+  journalEntryId String? @unique
+
+  createdById   String
+  approvedById  String?
+  approvedAt    DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy    User          @relation("CreatedDriverSalaryRuns", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy   User?         @relation("ApprovedDriverSalaryRuns", fields: [approvedById], references: [id], onDelete: SetNull)
+  cancelledBy  User?         @relation("CancelledDriverSalaryRuns", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  salaries DriverSalary[]
+  payouts  DriverPayout[]
+
+  @@index([month])
+  @@index([branchId, status])
+}
+
+/// One driver's line in a salary run. Amounts are a snapshot taken when the
+/// run is generated/edited/approved; the ledger stays the source of truth.
+///   earned = baseSalary × presentDays ÷ run.daysInMonth (rounded to ₹1)
+///   net    = earned − salaryAdvance − logSlipBalance − otherPayments
+///            − previousBalance
+/// The four deductions are one ledger figure (what the driver owes us at month
+/// end, since the driver-finance start date) split for display.
+/// Balances are signed: positive = the driver owes us.
+model DriverSalary {
+  id       String  @id @default(cuid())
+  runId    String
+  driverId String
+  /// Copied from the run so the "one active salary per driver per month"
+  /// partial unique index can live on this table (see migration).
+  month    String
+  /// false once the run is cancelled — frees the driver for a new run.
+  isActive Boolean @default(true)
+
+  baseSalaryPaise      BigInt
+  absentDays           Int    @default(0)
+  presentDays          Int
+  earnedPaise          BigInt
+  salaryAdvancePaise   BigInt @default(0)
+  logSlipBalancePaise  BigInt @default(0)
+  /// Other money paid to the driver in the month (manual payouts) — signed
+  /// like the balances: positive = reduces what we still owe him.
+  otherPaymentsPaise   BigInt @default(0)
+  previousBalancePaise BigInt @default(0)
+  netPaise             BigInt
+
+  remarks   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  run    DriverSalaryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  driver Driver          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+
+  @@index([runId])
+  @@index([driverId])
+}
+
+/// Money given to a driver against his salary — not linked to a journey and
+/// never part of the Log Slip. Posts on create: Dr Driver / Cr Cash-Bank.
+model DriverSalaryAdvance {
+  id              String                   @id @default(cuid())
+  advanceNumber   String                   @unique
+  driverId        String
+  branchId        String
+  fyCode          String
+  amountPaise     BigInt
+  paidAt          DateTime
+  mode            PaymentMode
+  referenceNo     String?
+  reason          String?
+  /// Must be a Ledger in group CASH or BANK.
+  fundingLedgerId String
+  status          DriverFinanceEntryStatus @default(POSTED)
+
+  /// Makes a retried create a no-op instead of a second advance.
+  clientRequestId String  @unique
+  journalEntryId  String? @unique
+
+  createdById   String
+  reversedById  String?
+  reversedAt    DateTime?
+  reverseReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  driver        Driver        @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  branch        Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  fundingLedger Ledger        @relation(fields: [fundingLedgerId], references: [id], onDelete: Restrict)
+  journalEntry  JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy     User          @relation("CreatedDriverSalaryAdvances", fields: [createdById], references: [id], onDelete: Restrict)
+  reversedBy    User?         @relation("ReversedDriverSalaryAdvances", fields: [reversedById], references: [id], onDelete: SetNull)
+
+  @@index([driverId, paidAt])
+  @@index([status])
+}
+
+/// Money paid to a driver: his salary (from a run), a Log Slip balance paid
+/// in cash at journey close, or a manual settlement. Posts on create:
+/// Dr Driver / Cr Cash-Bank.
+model DriverPayout {
+  id              String                   @id @default(cuid())
+  payoutNumber    String                   @unique
+  driverId        String
+  branchId        String
+  fyCode          String
+  source          DriverPayoutSource
+  salaryRunId     String?
+  logSlipId       String?
+  amountPaise     BigInt
+  paidAt          DateTime
+  mode            PaymentMode
+  referenceNo     String?
+  /// Must be a Ledger in group CASH or BANK.
+  fundingLedgerId String
+  status          DriverFinanceEntryStatus @default(POSTED)
+
+  /// Makes a retried payment a no-op instead of a second payment.
+  clientRequestId String  @unique
+  journalEntryId  String? @unique
+
+  createdById   String
+  reversedById  String?
+  reversedAt    DateTime?
+  reverseReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  driver        Driver           @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  branch        Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  salaryRun     DriverSalaryRun? @relation(fields: [salaryRunId], references: [id], onDelete: Restrict)
+  logSlip       LogSlip?         @relation(fields: [logSlipId], references: [id], onDelete: Restrict)
+  fundingLedger Ledger           @relation(fields: [fundingLedgerId], references: [id], onDelete: Restrict)
+  journalEntry  JournalEntry?    @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy     User             @relation("CreatedDriverPayouts", fields: [createdById], references: [id], onDelete: Restrict)
+  reversedBy    User?            @relation("ReversedDriverPayouts", fields: [reversedById], references: [id], onDelete: SetNull)
+
+  @@index([driverId, paidAt])
+  @@index([salaryRunId])
+  @@index([logSlipId])
+  @@index([status])
+}
+
 enum LogSlipStatus {
   DRAFT
   GENERATED
@@ -4926,4 +5174,22 @@ enum LogSlipLineType {
   EXPENSE
   DRIVER_SETTLEMENT
   ADJUSTMENT
+}
+
+/// The real balance of a cash / bank account as on a date, typed by the user.
+/// The ERP posts the difference to "Opening Balance (Suspense)" so its own
+/// balance matches from that date (journalEntryId = that adjustment; null
+/// when no adjustment was needed). Correcting it reverses and re-posts.
+model CashAccountOpening {
+  id             String      @id @default(cuid())
+  cashAccountId  String      @unique
+  cashAccount    CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  asOf           DateTime
+  /// Signed: negative = overdrawn bank.
+  amountPaise    BigInt
+  journalEntryId String?
+  updatedById    String
+  updatedBy      User        @relation("CashAccountOpeningUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 }

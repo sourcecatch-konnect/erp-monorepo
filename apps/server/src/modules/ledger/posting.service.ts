@@ -11,6 +11,10 @@ import {
   type VoucherType,
 } from "../../../generated/prisma/index.js";
 import { BadRequestError } from "../../lib/error.js";
+import {
+  buildDriverMoneyOutLines,
+  buildSalaryRunLines,
+} from "./driver-finance.lines.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -48,6 +52,24 @@ export async function getCashLedger(tx: Tx, cashAccountId: string) {
       cashAccountId: account.id,
     },
   });
+}
+
+/**
+ * The ledger money is paid out of — must exist and be in group CASH or BANK.
+ * The only "allowed funding source" check for payment vouchers; branch access
+ * is the calling route's job (CashAccount ledgers carry no branch).
+ */
+export async function requireFundingLedger(tx: Tx, fundingLedgerId: string) {
+  const fundingLedger = await tx.ledger.findUnique({
+    where: { id: fundingLedgerId },
+  });
+  if (!fundingLedger)
+    throw new BadRequestError("Funding ledger not found");
+  if (fundingLedger.group !== "CASH" && fundingLedger.group !== "BANK")
+    throw new BadRequestError(
+      "Funding ledger must be an allowed Cash or Bank account",
+    );
+  return fundingLedger;
 }
 
 export type PartyRef =
@@ -1548,15 +1570,7 @@ export async function postVendorDisbursement(tx: Tx, args: VendorDisbursementArg
     if (existing && existing.status === "POSTED") return existing;
   }
 
-  const fundingLedger = await tx.ledger.findUnique({
-    where: { id: args.fundingLedgerId },
-  });
-  if (!fundingLedger)
-    throw new BadRequestError("Funding ledger not found");
-  if (fundingLedger.group !== "CASH" && fundingLedger.group !== "BANK")
-    throw new BadRequestError(
-      "Funding ledger must be an allowed Cash or Bank account",
-    );
+  const fundingLedger = await requireFundingLedger(tx, args.fundingLedgerId);
 
   const payeeLedger = await getVendorPayeeLedger(tx, args);
   const lineNarration = `Vendor payment ${args.voucherNumber} — slip ${args.slipNumber}`;
@@ -1615,4 +1629,162 @@ export async function reverseVendorSlipAccrual(
   if (!slip.accrualJournalEntryId)
     throw new BadRequestError("Slip has no accrual to reverse");
   return reverseJournal(tx, slip.accrualJournalEntryId, reason, createdById);
+}
+
+/* ------------------------------------------------------------------ */
+/* Driver finance — salary advance, payout, salary run                 */
+/* ------------------------------------------------------------------ */
+
+// Debited on salary-run approval. Keep in sync with prisma/seed-ledger.ts.
+const DRIVER_SALARY_EXPENSE_CODE = "DRIVER_SALARY_EXPENSE";
+
+/** Returns the existing voucher when a retried request already posted one. */
+async function existingPostedJournal(tx: Tx, journalEntryId?: string | null) {
+  if (!journalEntryId) return null;
+  const existing = await tx.journalEntry.findUnique({ where: { id: journalEntryId } });
+  return existing && existing.status === "POSTED" ? existing : null;
+}
+
+export type DriverMoneyOutArgs = {
+  /** DriverSalaryAdvance.id / DriverPayout.id — the voucher's sourceId. */
+  sourceId: string;
+  /** advanceNumber / payoutNumber — also used as the voucher number. */
+  voucherNumber: string;
+  driverId: string;
+  branchId: string;
+  fyCode: string;
+  paidAt: Date;
+  fundingLedgerId: string;
+  amountPaise: bigint;
+  /** Shown on the voucher, e.g. "Salary advance SKT/DSADV/… — Sunil Kakade". */
+  narration: string;
+  /** Pass the row's journalEntryId — a retry returns that voucher unchanged. */
+  existingJournalEntryId?: string | null;
+  /** The driver's ledger, when the caller already resolved it (saves a round
+   *  trip inside the transaction). */
+  driverLedgerId?: string;
+  /** True when the caller already checked fundingLedgerId is a Cash/Bank
+   *  account (assertFundingMatchesMode) — skips the same check here. */
+  fundingLedgerChecked?: boolean;
+  createdById: string;
+};
+
+async function postDriverMoneyOut(
+  tx: Tx,
+  sourceType: "DRIVER_SALARY_ADVANCE" | "DRIVER_PAYOUT",
+  args: DriverMoneyOutArgs,
+) {
+  const already = await existingPostedJournal(tx, args.existingJournalEntryId);
+  if (already) return already;
+
+  const [fundingLedger, driverLedger] = await Promise.all([
+    args.fundingLedgerChecked
+      ? { id: args.fundingLedgerId }
+      : requireFundingLedger(tx, args.fundingLedgerId),
+    args.driverLedgerId
+      ? { id: args.driverLedgerId }
+      : getOrCreatePartyLedger(tx, { driverId: args.driverId }),
+  ]);
+
+  return postJournal(tx, {
+    voucherType: "PAYMENT",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.paidAt,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: args.narration,
+    sourceType,
+    sourceId: args.sourceId,
+    sourceNumber: args.voucherNumber,
+    createdById: args.createdById,
+    lines: buildDriverMoneyOutLines({
+      driverLedgerId: driverLedger.id,
+      fundingLedgerId: fundingLedger.id,
+      amountPaise: args.amountPaise,
+      narration: args.narration,
+    }),
+  });
+}
+
+/**
+ * Salary advance handed to a driver (not a trip advance — never on the Log
+ * Slip): Dr Driver / Cr Cash-Bank. Recovered automatically because the salary
+ * run's net pay reads the driver's ledger balance.
+ */
+export function postDriverSalaryAdvance(tx: Tx, args: DriverMoneyOutArgs) {
+  return postDriverMoneyOut(tx, "DRIVER_SALARY_ADVANCE", args);
+}
+
+/**
+ * Money paid to a driver — salary, a Log Slip balance paid in cash at journey
+ * close, or a manual settlement: Dr Driver / Cr Cash-Bank.
+ */
+export function postDriverPayout(tx: Tx, args: DriverMoneyOutArgs) {
+  return postDriverMoneyOut(tx, "DRIVER_PAYOUT", args);
+}
+
+export type DriverSalaryRunPostingArgs = {
+  runId: string;
+  runNumber: string;
+  branchId: string;
+  fyCode: string;
+  /** Normally the last day of the salary month. */
+  voucherDate: Date;
+  /** e.g. "Driver salary Aug 2026 — SKT/DSAL/…" */
+  narration: string;
+  lines: { driverId: string; earnedPaise: bigint }[];
+  /** Pass run.journalEntryId — a retried approval returns that voucher. */
+  existingJournalEntryId?: string | null;
+  createdById: string;
+};
+
+/**
+ * Salary-run approval — ONE journal for the whole run:
+ *   Dr Driver Salary Expense   Σ earned
+ *   Cr <each driver>           earned
+ * Net pay (after salary advances and the Log Slip balance) is not posted
+ * here: those already sit on the driver's ledger, so after this voucher the
+ * ledger balance IS the net pay. Paying it is a separate DriverPayout.
+ */
+export async function postDriverSalaryRun(tx: Tx, args: DriverSalaryRunPostingArgs) {
+  const already = await existingPostedJournal(tx, args.existingJournalEntryId);
+  if (already) return already;
+
+  const expenseLedger = await getGLLedger(tx, DRIVER_SALARY_EXPENSE_CODE);
+
+  // Resolve every driver ledger in one query; create only the missing ones
+  // (a driver who has never had a voucher yet) — a run has dozens of drivers.
+  const driverIds = [...new Set(args.lines.map((l) => l.driverId))];
+  const found = await tx.ledger.findMany({
+    where: { driverId: { in: driverIds } },
+    select: { id: true, driverId: true },
+  });
+  const ledgerIdByDriver = new Map(found.map((l) => [l.driverId!, l.id]));
+  for (const driverId of driverIds) {
+    if (ledgerIdByDriver.has(driverId)) continue;
+    const created = await getOrCreatePartyLedger(tx, { driverId });
+    ledgerIdByDriver.set(driverId, created.id);
+  }
+
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.runNumber,
+    voucherDate: args.voucherDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: args.narration,
+    sourceType: "DRIVER_SALARY",
+    sourceId: args.runId,
+    sourceNumber: args.runNumber,
+    createdById: args.createdById,
+    lines: buildSalaryRunLines({
+      expenseLedgerId: expenseLedger.id,
+      narration: args.narration,
+      lines: args.lines.map((l) => ({
+        driverId: l.driverId,
+        driverLedgerId: ledgerIdByDriver.get(l.driverId)!,
+        earnedPaise: l.earnedPaise,
+      })),
+    }),
+  });
 }

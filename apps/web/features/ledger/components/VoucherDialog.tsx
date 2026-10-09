@@ -67,9 +67,10 @@ function VoucherTableSkeleton() {
 }
 
 /**
- * Read-only view of a posted double-entry voucher — shared by Billing
- * (SALES voucher, one bill) and Receivables (RECEIPT voucher, one or more
- * bills settled by the same receipt).
+ * Read-only view of a posted double-entry voucher — shared by every module
+ * that posts one (Billing's SALES voucher, Receivables' RECEIPT voucher, vendor
+ * and driver payments, …). Bill-settling vouchers show their bills; the rest
+ * show the source document number.
  */
 export function VoucherDialog({
     open,
@@ -107,11 +108,15 @@ export function VoucherDialog({
     // several at once, so this list can carry more than one entry.
     const allocations = voucher?.allocations ?? [];
 
+    // Only allocations against a bill name a bill — a vendor-payment-slip
+    // allocation has no billId.
     const billNumbers = [
         ...new Set(
-            allocations.map(
-                (allocation) => allocation.bill?.billNumber ?? allocation.billId,
-            ),
+            allocations
+                .filter((allocation) => allocation.billId)
+                .map(
+                    (allocation) => allocation.bill?.billNumber ?? allocation.billId!,
+                ),
         ),
     ];
 
@@ -201,12 +206,14 @@ export function VoucherDialog({
                             <>
                                 {/* Important voucher information */}
                                 <div className="flex flex-col gap-3 border-b pb-3 sm:flex-row sm:items-end sm:justify-between">
-                                    {/* Linked bill(s) */}
+                                    {/* Linked bill(s), or the document that posted it */}
                                     <div className="min-w-0">
                                         <p className="text-xs font-medium text-muted-foreground">
                                             {billNumbers.length > 1
                                                 ? "Linked bills"
-                                                : "Linked bill"}
+                                                : billNumbers.length === 1
+                                                    ? "Linked bill"
+                                                    : "Source document"}
                                         </p>
 
                                         <p className="mt-0.5 break-all text-sm font-semibold text-foreground">
@@ -302,7 +309,7 @@ export function VoucherDialog({
                                                             </p>
 
                                                             <p className="text-[11px] text-muted-foreground">
-                                                                Amount receivable and deductions
+                                                                Accounts debited
                                                             </p>
                                                         </div>
                                                     </div>
@@ -369,7 +376,7 @@ export function VoucherDialog({
                                                             </p>
 
                                                             <p className="text-[11px] text-muted-foreground">
-                                                                Income, tax and other credits
+                                                                Accounts credited
                                                             </p>
                                                         </div>
                                                     </div>

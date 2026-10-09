@@ -14,6 +14,18 @@ const optionalDateString = z
     return new Date(value).toISOString();
   });
 
+/** A date the user can also clear: "" → null (so a leaving date can be
+ *  removed when a driver is taken back). */
+const clearableDateString = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((value): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (!value) return null;
+    return new Date(value).toISOString();
+  });
+
 const optionalPositiveNumber = (message: string) =>
   z
     .union([z.string(), z.number()])
@@ -97,6 +109,8 @@ export const driverSchema = z.object({
   licenseDate: z.string().nullable().optional(),
   licenseExpiryDate: z.string().nullable().optional(),
   licenseCity: z.string().nullable().optional(),
+  joiningDate: z.string().nullable().optional(),
+  leavingDate: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   state: z.string().nullable().optional(),
@@ -191,6 +205,8 @@ export const createDriverSchema = z.object({
     .transform((value) => (value ? value : undefined)),
 
   salary: optionalPositiveNumber("Salary must be a valid number"),
+  joiningDate: clearableDateString,
+  leavingDate: clearableDateString,
 
   panNo: z
     .string()
@@ -220,6 +236,17 @@ export const createDriverSchema = z.object({
       message: "License expiry must be after license issue date",
     });
   }
+  if (
+    data.joiningDate &&
+    data.leavingDate &&
+    new Date(data.leavingDate) < new Date(data.joiningDate)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["leavingDate"],
+      message: "Leaving date cannot be before the joining date",
+    });
+  }
 });
 
 export const updateDriverSchema = z
@@ -247,6 +274,8 @@ export const updateDriverSchema = z
     referenceContactNo: optionalString,
     otherDetails: optionalString,
     salary: optionalPositiveNumber("Salary must be a valid number"),
+    joiningDate: clearableDateString,
+    leavingDate: clearableDateString,
     panNo: optionalString,
     aadharCardNo: aadharNoSchema,
     onLeave: optionalBoolean,

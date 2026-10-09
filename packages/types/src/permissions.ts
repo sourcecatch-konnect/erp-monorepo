@@ -167,6 +167,13 @@ type AccountsPaymentPermissionKey =
   | "accounts.payment.disburse"
   | "accounts.payment.cancel";
 
+type DriverFinancePermissionKey =
+  | "driver_finance.salary_view"
+  | "driver_finance.salary_manage"
+  | "driver_finance.salary_approve"
+  | "driver_finance.advance_manage"
+  | "driver_finance.pay";
+
 type LedgerPermissionKey =
   | "ledger.view"
   | "ledger.voucher_view"
@@ -222,6 +229,7 @@ export type PermissionKey =
   | BillingPermissionKey
   | ReceiptPermissionKey
   | AccountsPaymentPermissionKey
+  | DriverFinancePermissionKey
   | LedgerPermissionKey
   | WorkshopPermissionKey
   | GRNPermissionKey
@@ -465,6 +473,13 @@ export const PERMS = {
       DISBURSE: "accounts.payment.disburse",
       CANCEL: "accounts.payment.cancel",
     },
+  },
+  DRIVER_FINANCE: {
+    SALARY_VIEW: "driver_finance.salary_view",
+    SALARY_MANAGE: "driver_finance.salary_manage",
+    SALARY_APPROVE: "driver_finance.salary_approve",
+    ADVANCE_MANAGE: "driver_finance.advance_manage",
+    PAY: "driver_finance.pay",
   },
   LEDGER: {
     VIEW: "ledger.view",

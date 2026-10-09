@@ -184,3 +184,10 @@ export type CreateManualJournalInput = z.infer<typeof createManualJournalSchema>
 export type DayBookQuery = z.infer<typeof dayBookQuerySchema>;
 export type CustomerStatementQuery = z.infer<typeof customerStatementQuerySchema>;
 export type AgeingQuery = z.infer<typeof ageingQuerySchema>;
+
+/** Opening balance of a cash / bank account (signed paise; negative = overdrawn). */
+export const setOpeningBalanceSchema = z.object({
+  asOf: z.coerce.date(),
+  amountPaise: z.coerce.bigint(),
+});
+export type SetOpeningBalanceInput = z.infer<typeof setOpeningBalanceSchema>;

@@ -18,6 +18,9 @@ export type MonthlyCosts = FixedCosts & {
 };
 
 export type VehicleCostRow = MonthlyCosts & {
+  /** Automatic: drivers' earned salary from approved salary runs, split by
+   *  days driven. Read-only — `salaryPaise` is other staff (cleaner/helper). */
+  driverSalaryPaise: string;
   vehicleId: string;
   vehicleNumber: string;
   hasMonthlyRow: boolean;
@@ -43,7 +46,10 @@ export type MonthlyPnlRow = {
   permitPaise: string;
   fitnessPaise: string;
   emiPaise: string;
+  /** Other staff (cleaner / helper), typed on Vehicle Costs. */
   salaryPaise: string;
+  /** Automatic driver salary from the approved salary run. */
+  driverSalaryPaise: string;
   fixedTotalPaise: string;
   repairsPaise: string;
   tyrePaise: string;

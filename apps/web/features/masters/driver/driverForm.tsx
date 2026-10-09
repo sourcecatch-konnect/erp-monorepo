@@ -25,7 +25,6 @@ import {
   IconTrash,
   IconUser,
   IconUserCheck,
-  IconUserStar,
 } from "@tabler/icons-react";
 
 import MasterFormDialog from "../_shared/MasterFormDialog";
@@ -72,9 +71,6 @@ const normalizeLicenseNo = (value: string) =>
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
     .slice(0, 15);
-
-const normalizeAadharNo = (value: string) =>
-  value.replace(/\D/g, "").slice(0, 12);
 const toDateInput = (value?: string | null) => {
   if (!value) return "";
 
@@ -103,6 +99,8 @@ const defaultValues: CreateDriverFormInput = {
   salary: "",
   panNo: "",
   aadharCardNo: "",
+  joiningDate: "",
+  leavingDate: "",
   onLeave: false,
   blackListed: false,
 };
@@ -174,7 +172,6 @@ export default function DriverForm({
     previousAddressState.current = addressState;
   }, [open, addressState, form]);
 
-  const [hasReference, setHasReference] = React.useState(false);
   const [photoPreviewUrl, setPhotoPreviewUrl] = React.useState("");
   const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
   const localPhotoPreviewRef = React.useRef<string | null>(null);
@@ -184,7 +181,6 @@ export default function DriverForm({
     const next = prefillDriver();
 
     form.reset(next);
-    setHasReference(true);
     setPhotoPreviewUrl("");
 
     if (localPhotoPreviewRef.current) {
@@ -219,11 +215,12 @@ export default function DriverForm({
       salary: row?.salary != null ? String(paiseToRupees(row.salary)) : "",
       panNo: row?.panNo ?? "",
       aadharCardNo: row?.aadharCardNo ?? "",
+      joiningDate: toDateInput(row?.joiningDate),
+      leavingDate: toDateInput(row?.leavingDate),
       onLeave: row?.onLeave ?? false,
       blackListed: row?.blackListed ?? false,
     });
 
-    setHasReference(Boolean(row?.referencePerson || row?.referenceContactNo));
   }, [form, open, row]);
   React.useEffect(() => {
     if (!open) return;
@@ -255,14 +252,6 @@ export default function DriverForm({
     };
   }, [open, row?.photoPath]);
 
-  const handleHasReferenceToggle = (checked: boolean) => {
-    setHasReference(checked);
-
-    if (!checked) {
-      form.setValue("referencePerson", "");
-      form.setValue("referenceContactNo", "");
-    }
-  };
   const handlePhotoUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -474,40 +463,6 @@ export default function DriverForm({
           hint="Used for trip & emergency contact"
         />
 
-        <Controller
-          control={form.control}
-          name="birthDate"
-          render={({ field, fieldState }) => (
-            <div className="grid gap-1.5">
-              <DatePicker
-                label="Date of Birth"
-                selected={field.value ? new Date(field.value) : undefined}
-                onSelect={(date) =>
-                  field.onChange(date ? date.toISOString().slice(0, 10) : "")
-                }
-              />
-              {fieldState.error?.message ? (
-                <p className="text-xs text-red-600">
-                  {fieldState.error.message}
-                </p>
-              ) : null}
-            </div>
-          )}
-        />
-
-        <Controller
-          control={form.control}
-          name="anniversaryDate"
-          render={({ field }) => (
-            <DatePicker
-              label="Anniversary Date"
-              selected={field.value ? new Date(field.value) : undefined}
-              onSelect={(date) =>
-                field.onChange(date ? date.toISOString().slice(0, 10) : "")
-              }
-            />
-          )}
-        />
       </FormSection>
 
       <FormSection
@@ -617,44 +572,9 @@ export default function DriverForm({
       </FormSection>
 
       <FormSection
-        icon={<IconUserStar size={18} />}
-        title="Reference"
-        description="Anyone who referred this driver?"
-      >
-        <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-md border border-dashed bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5 accent-primary"
-            checked={hasReference}
-            onChange={(event) => handleHasReferenceToggle(event.target.checked)}
-          />
-          Yes, a reference person referred this driver
-        </label>
-
-        {hasReference ? (
-          <>
-            <IconTextField<CreateDriverFormInput>
-              name="referencePerson"
-              label="Reference Person"
-              placeholder="Full name"
-              icon={<IconUser size={16} />}
-            />
-
-            <IconTextField<CreateDriverFormInput>
-              name="referenceContactNo"
-              label="Reference Contact"
-              placeholder="10-digit mobile"
-              prefix="+91"
-              maxLength={10}
-            />
-          </>
-        ) : null}
-      </FormSection>
-
-      <FormSection
         icon={<IconId size={18} />}
         title="Identification & Payroll"
-        description="PAN, Aadhar and salary details"
+        description="PAN, salary and employment dates"
       >
         <IconTextField<CreateDriverFormInput>
           name="panNo"
@@ -665,15 +585,6 @@ export default function DriverForm({
           onChangeTransform={(value) => value.toUpperCase()}
           hint="10-character PAN"
         />
-        <IconTextField<CreateDriverFormInput>
-          name="aadharCardNo"
-          label="Aadhar Number"
-          placeholder="12-digit Aadhar"
-          icon={<IconId size={16} />}
-          maxLength={12}
-          transformValue={normalizeAadharNo}
-          inputMode="numeric"
-        />
 
         <IconTextField<CreateDriverFormInput>
           name="salary"
@@ -681,6 +592,46 @@ export default function DriverForm({
           placeholder="0.00"
           icon={<IconCurrencyRupee size={16} />}
           type="number"
+        />
+
+        <Controller
+          control={form.control}
+          name="joiningDate"
+          render={({ field, fieldState }) => (
+            <div className="grid gap-1.5">
+              <DatePicker
+                label="Joining Date"
+                selected={field.value ? new Date(field.value) : undefined}
+                onSelect={(date) =>
+                  field.onChange(date ? date.toISOString().slice(0, 10) : "")
+                }
+              />
+              <p className="text-xs text-muted-foreground">Salary counts from this day. Leave empty for drivers already working.</p>
+              {fieldState.error?.message ? (
+                <p className="text-xs text-red-600">{fieldState.error.message}</p>
+              ) : null}
+            </div>
+          )}
+        />
+
+        <Controller
+          control={form.control}
+          name="leavingDate"
+          render={({ field, fieldState }) => (
+            <div className="grid gap-1.5">
+              <DatePicker
+                label="Leaving Date"
+                selected={field.value ? new Date(field.value) : undefined}
+                onSelect={(date) =>
+                  field.onChange(date ? date.toISOString().slice(0, 10) : "")
+                }
+              />
+              <p className="text-xs text-muted-foreground">Salary counts up to this day; not in salary runs after it.</p>
+              {fieldState.error?.message ? (
+                <p className="text-xs text-red-600">{fieldState.error.message}</p>
+              ) : null}
+            </div>
+          )}
         />
       </FormSection>
 

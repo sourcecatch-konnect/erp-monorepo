@@ -276,7 +276,7 @@ export function buildVehiclePerformancePdfHtml(
       <tbody>${rows}${totalRow}</tbody>
     </table>
     <div class="note">
-      Result = trip balance (freight − diesel − cash) − monthly fixed (tax, insurance, permit, fitness, EMI, salary) − monthly variable
+      Result = trip balance (freight − diesel − cash) − monthly fixed (tax, insurance, permit, fitness, EMI, driver & staff salary) − monthly variable
       (spare &amp; repairs from finalised Job Cards, tyre, other). Freight difference = booking freight billed on the LRs − onward freight
       credited to the vehicle; it is kept by the business, not by any vehicle. Worst vehicle first.
     </div>
@@ -311,6 +311,7 @@ export function buildVehicleDetailPdfHtml(
       costs.permitPaise +
       costs.fitnessPaise +
       costs.emiPaise +
+      costs.driverSalaryPaise +
       costs.salaryPaise
     : null;
   const variable =
@@ -354,7 +355,8 @@ export function buildVehicleDetailPdfHtml(
              ${kvRow("Permit", money(costs.permitPaise))}
              ${kvRow("Fitness", money(costs.fitnessPaise))}
              ${kvRow("EMI", money(costs.emiPaise))}
-             ${kvRow("Salary", money(costs.salaryPaise))}
+             ${kvRow("Driver salary", money(costs.driverSalaryPaise))}
+             ${kvRow("Other staff salary", money(costs.salaryPaise))}
              ${kvRow("Total fixed", money(fixed), "total")}`
           : `<tr><td colspan="2" class="muted">Tracked for own vehicles only.</td></tr>`
       }
@@ -551,14 +553,15 @@ function vehicleBlock(row: MonthlyPnlResult["rows"][number], slips: SheetSlip[])
   const totalExp = row.fixedTotalPaise + row.variableTotalPaise;
   const costs = `<table class="costs">
     <thead><tr>
-      <th>Mtly Fxd</th><th>Tax</th><th>Insurance</th><th>Permit</th><th>Fitness</th><th>EMI</th><th>Salary</th>
+      <th>Mtly Fxd</th><th>Tax</th><th>Insurance</th><th>Permit</th><th>Fitness</th><th>EMI</th><th>Driver salary</th><th>Other staff</th>
       <th>Mtly V'ble</th><th>Spare &amp; Repairs</th><th>Tyre</th><th>Other</th><th>Total Exp</th><th>G.Total</th>
     </tr></thead>
     <tbody><tr>
       <td></td>
       <td class="num">${money(row.taxPaise)}</td><td class="num">${money(row.insurancePaise)}</td>
       <td class="num">${money(row.permitPaise)}</td><td class="num">${money(row.fitnessPaise)}</td>
-      <td class="num">${money(row.emiPaise)}</td><td class="num">${money(row.salaryPaise)}</td>
+      <td class="num">${money(row.emiPaise)}</td><td class="num">${money(row.driverSalaryPaise)}</td>
+      <td class="num">${money(row.salaryPaise)}</td>
       <td></td>
       <td class="num">${money(row.repairsPaise)}</td><td class="num">${money(row.tyrePaise)}</td>
       <td class="num">${money(row.otherCostPaise)}</td><td class="num">${money(totalExp)}</td>
