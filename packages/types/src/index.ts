@@ -103,3 +103,4 @@ export * from "./log-slip/log-slip.type.js";
 export * from "./user/table-pref.type.js";
 export * from "./master/one-lap-tracker.type.js";
 export * from "./ledger/ledger.type.js";
+export * from "./permission-labels.js";

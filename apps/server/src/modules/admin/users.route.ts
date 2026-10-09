@@ -1,12 +1,16 @@
 import { Router } from "express";
-import { updateUserAccessSchema } from "@skerp/validators";
+import {
+  updateUserAccessSchema,
+  userAccessPageQuerySchema,
+} from "@skerp/validators";
+import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { PERMS } from "../../auth/permissions.js";
 import { invalidateUser } from "../../auth/permission-cache.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
-import { NotFoundError } from "../../lib/error.js";
+import { NotFoundError, ValidationError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 
 const router = Router();
@@ -27,12 +31,29 @@ const userListSelect = {
   userBranches: { select: { branchId: true } },
 } as const;
 
-router.get("/", async (_req, res) => {
-  const users = await db.user.findMany({
-    orderBy: { email: "asc" },
-    select: userListSelect,
-  });
-  sendOk(res, users);
+router.get("/", async (req, res) => {
+  const parsed = userAccessPageQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new ValidationError(
+      parsed.error.flatten().fieldErrors,
+      "Check the search and page and try again.",
+    );
+  }
+  const query = parsed.data;
+  const where: Prisma.UserWhereInput = query.search
+    ? { role: { name: { contains: query.search, mode: "insensitive" } } }
+    : {};
+  const [users, total] = await Promise.all([
+    db.user.findMany({
+      where,
+      orderBy: { email: "asc" },
+      skip: query.page * query.size,
+      take: query.size,
+      select: userListSelect,
+    }),
+    db.user.count({ where }),
+  ]);
+  sendOk(res, users, { total, page: query.page, size: query.size });
 });
 
 router.get("/:id/access", async (req, res) => {
@@ -48,7 +69,12 @@ router.get("/:id/access", async (req, res) => {
   if (!user) throw new NotFoundError("User not found");
   sendOk(res, {
     ...user,
-    branchIds: user.userBranches.map((b) => b.branchId),
+    branchIds:
+      user.userBranches.length > 0
+        ? user.userBranches.map((b) => b.branchId)
+        : user.branchScope === "ASSIGNED" && user.branchId
+          ? [user.branchId]
+          : [],
     overrides: user.userPermissions.map((up) => ({
       key: up.permission.key,
       effect: up.effect,
@@ -65,7 +91,10 @@ router.patch("/:id/access", async (req, res) => {
       role: { select: { id: true, name: true } },
       userBranches: { select: { branchId: true } },
       userPermissions: {
-        select: { effect: true, permission: { select: { id: true, key: true } } },
+        select: {
+          effect: true,
+          permission: { select: { id: true, key: true } },
+        },
       },
     },
   });
@@ -96,7 +125,7 @@ router.patch("/:id/access", async (req, res) => {
           entityId: user.id,
           before: { roleId: user.roleId },
           after: { roleId: body.roleId },
-        })
+        }),
       );
     }
 
@@ -125,8 +154,11 @@ router.patch("/:id/access", async (req, res) => {
           entity: "User",
           entityId: user.id,
           before: { branchIds: user.userBranches.map((b) => b.branchId) },
-          after: { branchIds: body.branchIds, branchScope: body.branchScope ?? user.branchScope },
-        })
+          after: {
+            branchIds: body.branchIds,
+            branchScope: body.branchScope ?? user.branchScope,
+          },
+        }),
       );
     }
 
@@ -157,7 +189,7 @@ router.patch("/:id/access", async (req, res) => {
           entityId: user.id,
           before: { overrides: auditBefore.overrides },
           after: { overrides: body.overrides },
-        })
+        }),
       );
     }
   });
@@ -169,7 +201,10 @@ router.patch("/:id/access", async (req, res) => {
     where: { id: user.id },
     select: userListSelect,
   });
-  sendOk(res, { ...fresh, branchIds: fresh.userBranches.map((b) => b.branchId) });
+  sendOk(res, {
+    ...fresh,
+    branchIds: fresh.userBranches.map((b) => b.branchId),
+  });
 });
 
 export default router;

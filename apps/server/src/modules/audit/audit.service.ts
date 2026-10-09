@@ -15,6 +15,8 @@ export type AuditAction =
   | "user.role.update"
   | "user.permissions.update"
   | "user.branches.update"
+  | "user.status.update"
+  | "user.delete"
   | "vendor_payment.submit"
   | "vendor_payment.approve"
   | "vendor_payment.reject"

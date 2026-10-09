@@ -1,7 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { IconArrowLeft } from "@tabler/icons-react";
+import { toast } from "sonner";
+import {
+  comparePermissionKeys,
+  permissionAreaLabel,
+  permissionLabel,
+} from "@skerp/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Accordion,
@@ -11,38 +18,64 @@ import {
 } from "@skerp/ui/components/accordion";
 import { Button } from "@skerp/ui/components/button";
 import { Checkbox } from "@skerp/ui/components/checkbox";
+import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import { cn } from "@/lib/utils";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { rbacApi } from "./rbac.service";
 import { rbacKeys } from "./rbac.keys";
 import type { PermissionDefDto, RoleDetail } from "./types";
 
-const titleizeIdentifier = (value: string): string =>
-  value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .split(/[\s._:-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
+type PermissionArea = { code: string; label: string; keys: string[] };
 
-const permissionActionLabel = (key: string): string => {
-  const action = key.split(".").at(-1) ?? key;
-  return titleizeIdentifier(action);
-};
+/** Areas sorted by name; within an area, View → Create → Edit → Delete → the rest. */
+function groupByArea(perms: PermissionDefDto[]): PermissionArea[] {
+  const byCode = new Map<string, string[]>();
+  for (const p of perms) {
+    const keys = byCode.get(p.moduleCode) ?? [];
+    keys.push(p.key);
+    byCode.set(p.moduleCode, keys);
+  }
+  return Array.from(byCode, ([code, keys]) => ({
+    code,
+    label: permissionAreaLabel(code),
+    keys: keys.sort(comparePermissionKeys),
+  })).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Every word must appear in the permission name or its area name. */
+function filterAreas(areas: PermissionArea[], search: string) {
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return areas;
+  const matches = (text: string) =>
+    words.every((word) => text.toLowerCase().includes(word));
+  return areas
+    .map((area) => ({
+      ...area,
+      keys: area.keys.filter((key) =>
+        matches(`${permissionLabel(key)} ${area.label}`),
+      ),
+    }))
+    .filter((area) => area.keys.length > 0);
+}
+
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
 
 export function RoleDetailPage({ roleId }: { roleId: string }) {
   const qc = useQueryClient();
   const { setLabel } = useBreadcrumbLabels();
 
-  const { data: role } = useQuery({
+  const roleQuery = useQuery({
     queryKey: rbacKeys.role(roleId),
     queryFn: () => rbacApi.getRole(roleId),
   });
-  const { data: modules = [] } = useQuery({
-    queryKey: rbacKeys.permissionModules,
-    queryFn: () => rbacApi.permissionModules(),
+  const catalogQuery = useQuery({
+    queryKey: rbacKeys.permissions,
+    queryFn: () => rbacApi.permissions(),
     staleTime: 10 * 60 * 1000,
   });
+  const role = roleQuery.data;
 
   const [granted, setGranted] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -55,272 +88,405 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
     return () => setLabel(href, null);
   }, [role?.name, roleId, setLabel]);
 
-  const [openModules, setOpenModules] = useState<string[]>([]);
+  const areas = useMemo(
+    () => groupByArea(catalogQuery.data ?? []),
+    [catalogQuery.data],
+  );
+  const [search, setSearch] = useState("");
+  const visibleAreas = useMemo(
+    () => filterAreas(areas, search),
+    [areas, search],
+  );
+  const [openAreas, setOpenAreas] = useState<string[]>([]);
+
+  const saved = useMemo(
+    () => new Set(role?.permissionKeys ?? []),
+    [role?.permissionKeys],
+  );
+  const added = [...granted].filter((key) => !saved.has(key)).length;
+  const removed = [...saved].filter((key) => !granted.has(key)).length;
+  const dirty = added + removed > 0;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   const saveMut = useMutation({
     mutationFn: () => rbacApi.setRolePermissions(roleId, Array.from(granted)),
     onSuccess: () => {
-      qc.setQueryData<RoleDetail>(rbacKeys.role(roleId), (old) => {
-        if (!old) return old;
-
-        return {
-          ...old,
-          permissionKeys: Array.from(granted),
-          _count: {
-            ...old._count,
-            rolePermissions: granted.size,
-          },
-        };
+      qc.setQueryData<RoleDetail>(rbacKeys.role(roleId), (old) =>
+        old
+          ? {
+              ...old,
+              permissionKeys: Array.from(granted),
+              _count: { ...old._count, rolePermissions: granted.size },
+            }
+          : old,
+      );
+      void qc.invalidateQueries({ queryKey: rbacKeys.roles });
+      // The Edit access drawer shows what each role allows.
+      void qc.invalidateQueries({
+        queryKey: [...rbacKeys.permissions, "page"],
       });
-
-      qc.invalidateQueries({ queryKey: rbacKeys.roles });
+      toast.success("Role permissions saved");
     },
   });
 
-  const readOnly = role?.isSystem ?? false;
-  const dirty =
-    !!role &&
-    (granted.size !== role.permissionKeys.length ||
-      role.permissionKeys.some((k) => !granted.has(k)));
-
-  if (!role) {
+  // Only when there's nothing to show: a failed background refetch must not
+  // replace the editor and throw away unsaved ticks.
+  if ((roleQuery.isError && !role) || (catalogQuery.isError && !catalogQuery.data)) {
     return (
-      <div className="space-y-6 p-6">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-7 w-48" />
-          <Skeleton className="h-4 w-64" />
-        </div>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div
-            key={i}
-            className="overflow-hidden rounded-sm border border-border bg-card"
+      <div className="space-y-4 p-6">
+        <BackLink />
+        <div role="alert" className="space-y-3 text-sm">
+          <p>Couldn&apos;t load this role. Check your connection and try again.</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void roleQuery.refetch();
+              void catalogQuery.refetch();
+            }}
           >
-            <div className="border-b border-border bg-muted/40 px-4 py-3">
-              <Skeleton className="h-4 w-32" />
-            </div>
-            <div className="space-y-3 p-4">
-              {Array.from({ length: 4 }).map((__, j) => (
-                <div key={j} className="flex items-center justify-between">
-                  <Skeleton className="h-4 w-56" />
-                  <Skeleton className="h-4 w-4" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+            Try again
+          </Button>
+        </div>
       </div>
     );
   }
 
+  if (!role || !catalogQuery.data) return <RoleDetailSkeleton />;
+
+  // Built-in roles are granted everything by the server, whatever is stored.
+  const readOnly = role.isSystem;
+  const isAllowed = (key: string) => readOnly || granted.has(key);
+  const totalPermissions = areas.reduce((n, a) => n + a.keys.length, 0);
+  const allowedCount = readOnly ? totalPermissions : granted.size;
+  const searching = search.trim().length > 0;
+  const allOpen =
+    visibleAreas.length > 0 &&
+    visibleAreas.every((a) => openAreas.includes(a.code));
+
+  const setMany = (keys: string[], on: boolean) =>
+    setGranted((prev) => {
+      const next = new Set(prev);
+      for (const key of keys) {
+        if (on) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+
+  const usedBy =
+    role._count.users === 0
+      ? "Not given to anyone yet"
+      : `Given to ${plural(role._count.users, "person", "people")}`;
+
   return (
-    <div className="space-y-6 p-6">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Link
-              href="/settings/roles"
-              className="text-sm text-muted-foreground hover:underline"
-            >
-              ← All roles
-            </Link>
-            <h1 className="mt-2 text-2xl font-semibold text-foreground">
+    <div className="flex min-h-full flex-col">
+      <div className="flex-1 space-y-6 p-6">
+        <header className="space-y-2">
+          <BackLink />
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold text-foreground">
               {role.name}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              {role.isSystem
-                ? "System role — managed by the seed script, not editable here."
-                : `${role._count.users} user${role._count.users === 1 ? "" : "s"} · ${granted.size} permission${granted.size === 1 ? "" : "s"}`}
-            </p>
+            {readOnly && (
+              <span className="rounded-sm border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                Built-in
+              </span>
+            )}
           </div>
-          <div className="flex gap-2">
-            {!readOnly && dirty && (
+          <p className="text-sm text-muted-foreground">
+            {usedBy} · {allowedCount} of {totalPermissions} permissions allowed
+          </p>
+        </header>
+
+        {readOnly && (
+          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            Built-in roles can&apos;t be changed. People with this role can do
+            everything. To make a role with fewer permissions, copy this one
+            from the{" "}
+            <Link href="/settings/roles" className="text-primary hover:underline">
+              Roles
+            </Link>{" "}
+            page.
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Input
+            aria-label="Search permissions"
+            placeholder="Search, e.g. approve payments"
+            className="sm:max-w-sm"
+            value={search}
+            onChange={(e) => {
+              const next = e.target.value;
+              setSearch(next);
+              // Open every area with a match so results are visible at once.
+              setOpenAreas(
+                next.trim()
+                  ? filterAreas(areas, next).map((a) => a.code)
+                  : [],
+              );
+            }}
+          />
+          {visibleAreas.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setOpenAreas(allOpen ? [] : visibleAreas.map((a) => a.code))
+              }
+            >
+              {allOpen ? "Collapse all" : "Expand all"}
+            </Button>
+          )}
+        </div>
+
+        {visibleAreas.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card px-4 py-12 text-center">
+            <p className="text-sm font-medium text-foreground">
+              No permissions match &quot;{search.trim()}&quot;.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Try a simpler word, like &quot;approve&quot; or &quot;bills&quot;.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearch("");
+                setOpenAreas([]);
+              }}
+            >
+              Clear search
+            </Button>
+          </div>
+        ) : (
+          <Accordion
+            type="multiple"
+            value={openAreas}
+            onValueChange={setOpenAreas}
+            className="overflow-hidden rounded-lg border border-border bg-card"
+          >
+            {visibleAreas.map((area) => {
+              const fullArea = areas.find((a) => a.code === area.code)!;
+              return (
+                <PermissionAreaSection
+                  key={area.code}
+                  area={area}
+                  areaTotal={fullArea.keys.length}
+                  areaAllowed={fullArea.keys.filter(isAllowed).length}
+                  areaChanged={
+                    fullArea.keys.filter(
+                      (key) => granted.has(key) !== saved.has(key),
+                    ).length
+                  }
+                  searching={searching}
+                  readOnly={readOnly}
+                  isAllowed={isAllowed}
+                  isChanged={(key) => granted.has(key) !== saved.has(key)}
+                  onToggle={(key, on) => setMany([key], on)}
+                  onToggleArea={(on) => setMany(area.keys, on)}
+                />
+              );
+            })}
+          </Accordion>
+        )}
+      </div>
+
+      {!readOnly && (
+        <div className="sticky bottom-0 z-20 border-t border-border bg-card px-6 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1 text-sm" aria-live="polite">
+              <p className={dirty ? "text-foreground" : "text-muted-foreground"}>
+                {dirty
+                  ? `${changeSummary(added, removed)} The role will have ${plural(granted.size, "permission", "permissions")}.`
+                  : "No unsaved changes."}
+              </p>
+              {saveMut.isError && (
+                <p role="alert" className="text-destructive">
+                  Couldn&apos;t save the role. {saveMut.error.message} Try
+                  again.
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 gap-2">
               <Button
                 variant="outline"
-                onClick={() => setGranted(new Set(role.permissionKeys))}
-              >
-                Discard
-              </Button>
-            )}
-            {!readOnly && (
-              <Button
-                onClick={() => saveMut.mutate()}
                 disabled={!dirty || saveMut.isPending}
+                onClick={() => {
+                  setGranted(new Set(role.permissionKeys));
+                  saveMut.reset();
+                }}
+              >
+                Discard changes
+              </Button>
+              <Button
+                disabled={!dirty || saveMut.isPending}
+                onClick={() => saveMut.mutate()}
               >
                 {saveMut.isPending ? "Saving…" : "Save changes"}
               </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {readOnly && (
-        <div className="rounded-sm border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          This role is locked. To change system-role permissions, edit
-          <code className="mx-1 rounded-sm bg-background px-1">
-            prisma/seed-admin.ts
-          </code>
-          and re-seed.
-        </div>
-      )}
-
-      <Accordion
-        type="multiple"
-        value={openModules}
-        onValueChange={setOpenModules}
-        className="space-y-3"
-      >
-        {modules.map((m) => (
-          <RolePermissionModule
-            key={m.moduleCode}
-            moduleCode={m.moduleCode}
-            moduleLabel={m.label}
-            permissionCount={m.permissionCount}
-            granted={granted}
-            setGranted={setGranted}
-            readOnly={readOnly}
-            isOpen={openModules.includes(m.moduleCode)}
-          />
-        ))}
-      </Accordion>
-      {!readOnly && dirty && (
-        <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-lg border bg-background/95 p-4 shadow-lg backdrop-blur">
-          <p className="text-sm text-muted-foreground">
-            You have unsaved permission changes.
-          </p>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setGranted(new Set(role.permissionKeys))}
-            >
-              Discard
-            </Button>
-
-            <Button
-              onClick={() => saveMut.mutate()}
-              disabled={saveMut.isPending}
-            >
-              {saveMut.isPending ? "Saving..." : "Save changes"}
-            </Button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
-function RolePermissionModule({
-  moduleCode,
-  moduleLabel,
-  permissionCount,
-  granted,
-  setGranted,
+
+function changeSummary(added: number, removed: number) {
+  if (added && removed)
+    return `Giving ${plural(added, "new permission", "new permissions")} and taking away ${removed}.`;
+  if (added) return `Giving ${plural(added, "new permission", "new permissions")}.`;
+  return `Taking away ${plural(removed, "permission", "permissions")}.`;
+}
+
+function PermissionAreaSection({
+  area,
+  areaTotal,
+  areaAllowed,
+  areaChanged,
+  searching,
   readOnly,
-  isOpen,
+  isAllowed,
+  isChanged,
+  onToggle,
+  onToggleArea,
 }: {
-  moduleCode: string;
-  moduleLabel: string;
-  permissionCount: number;
-  granted: Set<string>;
-  setGranted: React.Dispatch<React.SetStateAction<Set<string>>>;
+  area: PermissionArea;
+  areaTotal: number;
+  areaAllowed: number;
+  areaChanged: number;
+  searching: boolean;
   readOnly: boolean;
-  isOpen: boolean;
+  isAllowed: (key: string) => boolean;
+  isChanged: (key: string) => boolean;
+  onToggle: (key: string, on: boolean) => void;
+  onToggleArea: (on: boolean) => void;
 }) {
-  const { data: perms = [], isLoading } = useQuery<PermissionDefDto[]>({
-    queryKey: rbacKeys.permissionsByModule(moduleCode),
-    queryFn: () => rbacApi.permissions(moduleCode),
-    enabled: isOpen,
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const allOn = perms.length > 0 && perms.every((p) => granted.has(p.key));
-  const someOn = perms.some((p) => granted.has(p.key));
-  const selectedCount = perms.filter((p) => granted.has(p.key)).length;
-
-  const toggle = (key: string) => {
-    setGranted((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const toggleModule = (on: boolean) => {
-    setGranted((prev) => {
-      const next = new Set(prev);
-      for (const p of perms) {
-        if (on) next.add(p.key);
-        else next.delete(p.key);
-      }
-      return next;
-    });
-  };
+  const shownAllowed = area.keys.filter(isAllowed).length;
+  const allShownOn = shownAllowed === area.keys.length;
+  const status =
+    areaAllowed === 0
+      ? "None allowed"
+      : areaAllowed === areaTotal
+        ? `All ${areaTotal} allowed`
+        : `${areaAllowed} of ${areaTotal} allowed`;
 
   return (
-    <AccordionItem
-      value={moduleCode}
-      className="overflow-hidden rounded-lg border bg-card shadow-sm transition hover:shadow-md"
-    >
-      <div className="flex items-center gap-4 border-b bg-muted/30 px-5">
-        <AccordionTrigger className="flex-1 py-4 text-left hover:no-underline">
-          <span className="flex min-w-0 flex-col">
-            <span className="font-medium text-foreground">{moduleLabel}</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              {isOpen
-                ? `${selectedCount} of ${perms.length} permissions selected`
-                : `${permissionCount} permissions`}
+    <AccordionItem value={area.code} className="border-border">
+      <div className="flex items-center gap-4 pr-4 transition-colors duration-150 hover:bg-muted/40">
+        {/* The trigger renders inside Radix's header element, which needs the room. */}
+        <div className="min-w-0 flex-1">
+          <AccordionTrigger className="rounded-none px-4 py-3 hover:no-underline">
+            <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <span className="text-sm font-medium text-foreground">
+                {area.label}
+              </span>
+              <span className="text-sm font-normal text-muted-foreground">
+                {status}
+                {areaChanged > 0 && (
+                  <span className="text-primary">
+                    {" · "}
+                    {areaChanged} unsaved
+                  </span>
+                )}
+              </span>
             </span>
-          </span>
-        </AccordionTrigger>
-
-        {!readOnly && isOpen && (
-          <div className="flex shrink-0 items-center">
+          </AccordionTrigger>
+        </div>
+        {!readOnly && (
+          <label
+            className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-muted-foreground"
+            title={
+              searching
+                ? "Allow every permission shown here"
+                : "Allow every permission in this area"
+            }
+          >
             <Checkbox
-              checked={allOn ? true : someOn ? "indeterminate" : false}
-              onCheckedChange={(c) => toggleModule(c === true)}
+              aria-label={`Allow all${searching ? " shown" : ""} in ${area.label}`}
+              checked={
+                allShownOn ? true : shownAllowed > 0 ? "indeterminate" : false
+              }
+              onCheckedChange={(c) => onToggleArea(c === true)}
             />
-          </div>
+            All
+          </label>
         )}
       </div>
-
-      <AccordionContent className="p-0">
-        {isLoading ? (
-          <div className="space-y-3 p-4">
-            <Skeleton className="h-4 w-56" />
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {perms.map((p) => (
-              <li
-                key={p.key}
-                className="flex items-center justify-between gap-4 px-5 py-3 transition hover:bg-muted/40"
-              >
-                <div>
-                  <div className="text-sm font-medium text-foreground">
-                    {permissionActionLabel(p.key)}
-                  </div>
-                  <div className="mt-1 inline-flex rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                    {p.key}
-                  </div>
-                  {p.description && (
-                    <div className="text-xs text-muted-foreground">
-                      {p.description}
-                    </div>
+      <AccordionContent className="px-4 pb-4">
+        <ul className="grid gap-1 md:grid-cols-2 xl:grid-cols-3">
+          {area.keys.map((key) => {
+            const changed = isChanged(key);
+            return (
+              <li key={key}>
+                <label
+                  title={key}
+                  className={cn(
+                    "flex items-start gap-3 rounded-md px-3 py-2 text-sm text-foreground transition-colors duration-150",
+                    readOnly ? "cursor-default" : "cursor-pointer hover:bg-muted",
+                    changed && "bg-primary/5",
                   )}
-                </div>
-
-                <Checkbox
-                  checked={granted.has(p.key)}
-                  disabled={readOnly}
-                  onCheckedChange={() => toggle(p.key)}
-                />
+                >
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={isAllowed(key)}
+                    disabled={readOnly}
+                    onCheckedChange={(c) => onToggle(key, c === true)}
+                  />
+                  <span className="min-w-0 flex-1">{permissionLabel(key)}</span>
+                  {changed && (
+                    <span className="shrink-0 text-xs font-medium text-primary">
+                      Changed
+                    </span>
+                  )}
+                </label>
               </li>
-            ))}
-          </ul>
-        )}
+            );
+          })}
+        </ul>
       </AccordionContent>
     </AccordionItem>
+  );
+}
+
+function BackLink() {
+  return (
+    <Link
+      href="/settings/roles"
+      className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+    >
+      <IconArrowLeft size={16} aria-hidden="true" />
+      All roles
+    </Link>
+  );
+}
+
+function RoleDetailSkeleton() {
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-4 w-72" />
+      </div>
+      <Skeleton className="h-9 w-full sm:max-w-sm" />
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0"
+          >
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

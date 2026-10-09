@@ -20,6 +20,15 @@ export type Employee = {
   company: { id: string; name: string };
 };
 
+/** What `GET /employees/page` returns per row — just what the table shows. */
+export type EmployeeListRow = Pick<
+  Employee,
+  "id" | "firstName" | "middleName" | "lastName" | "email" | "status" | "role"
+> & { branch: { id: string; name: string } };
+
+/** Which user the detail dialog shows, and whether it opens straight into editing. */
+export type EmployeeDialogTarget = { id: string; mode: "view" | "edit" };
+
 export type CreateEmployeeInput = {
   firstName: string;
   middleName?: string;
