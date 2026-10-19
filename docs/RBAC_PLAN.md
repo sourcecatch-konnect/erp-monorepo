@@ -80,6 +80,7 @@ permission keys when needed.
 - `/auth/me` returns the resolved set so the frontend can hide buttons.
 
 Invalidation triggers (call `cache.invalidate(userId)`):
+
 - `User.roleId` change
 - `Role` mutation (invalidate every user of that role)
 - `RolePermission` change (invalidate every user of that role)
@@ -98,19 +99,20 @@ Invalidation triggers (call `cache.invalidate(userId)`):
   The resolver API does not change.
 
 Re-evaluate when:
+
 - Server is deployed to >1 instance, OR
 - Any service outside `apps/server` needs to check permissions.
 
 ## 3. What is explicitly deferred
 
-| Item | Defer until |
-|---|---|
-| User groups / nested roles | A real org-chart requirement appears |
-| Multi-role per user | A single role can't model a real position |
-| Row-level / ABAC rules | More than 3 such rules accumulate |
-| Per-field permissions | Never. Model as separate views instead |
-| External policy engine (Casbin, OPA) | Probably never |
-| Redis cache | Horizontal scaling lands |
+| Item                                 | Defer until                               |
+| ------------------------------------ | ----------------------------------------- |
+| User groups / nested roles           | A real org-chart requirement appears      |
+| Multi-role per user                  | A single role can't model a real position |
+| Row-level / ABAC rules               | More than 3 such rules accumulate         |
+| Per-field permissions                | Never. Model as separate views instead    |
+| External policy engine (Casbin, OPA) | Probably never                            |
+| Redis cache                          | Horizontal scaling lands                  |
 
 ## 4. Permission key conventions
 
@@ -127,16 +129,16 @@ Re-evaluate when:
 
 Tracked in the task list on this branch. Summary:
 
-| Phase | What ships |
-|---|---|
-| 0 | Permission registry, decision doc, audit-log scaffold |
-| 1 | Schema migration (additive). Old + new shape coexist |
-| 2 | Resolver + cache + new middleware. Compatibility shim keeps old `requirePermission(key, action)` working |
-| 3 | Branch scoping helper, applied through CRUD factory |
-| 4 | Admin APIs for roles / users / audit |
-| 5 | Admin UI (Roles, Users, Audit Log pages) |
-| 6 | Frontend `useCan` / `<Can>` + master gating |
-| 7 | Cleanup: delete shim, delete `ROLES.ADMIN` name-match bypass, delete old bool columns |
+| Phase | What ships                                                                                               |
+| ----- | -------------------------------------------------------------------------------------------------------- |
+| 0     | Permission registry, decision doc, audit-log scaffold                                                    |
+| 1     | Schema migration (additive). Old + new shape coexist                                                     |
+| 2     | Resolver + cache + new middleware. Compatibility shim keeps old `requirePermission(key, action)` working |
+| 3     | Branch scoping helper, applied through CRUD factory                                                      |
+| 4     | Admin APIs for roles / users / audit                                                                     |
+| 5     | Admin UI (Roles, Users, Audit Log pages)                                                                 |
+| 6     | Frontend `useCan` / `<Can>` + master gating                                                              |
+| 7     | Cleanup: delete shim, delete `ROLES.ADMIN` name-match bypass, delete old bool columns                    |
 
 ## 6. Open questions
 
