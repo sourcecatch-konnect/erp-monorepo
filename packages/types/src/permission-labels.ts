@@ -317,6 +317,11 @@ const labels = {
   "attachments.create": "Upload attachments",
   "attachments.download": "Download attachments",
   "attachments.delete": "Delete attachments",
+  "driver_finance.salary_view": "View driver salary, advances and payments",
+  "driver_finance.salary_manage": "Create and edit salary runs",
+  "driver_finance.salary_approve": "Approve or cancel salary runs",
+  "driver_finance.advance_manage": "Give and undo salary advances",
+  "driver_finance.pay": "Pay drivers",
 } satisfies Record<Leaves<typeof PERMS>, string>;
 const areas: Record<string, string> = {
   accounts: "Vendor payments",
@@ -326,6 +331,7 @@ const areas: Record<string, string> = {
   vehicle_journey: "Vehicle journeys",
   trip_expense: "Trip expenses",
   trip_advance: "Driver advances",
+  driver_finance: "Driver salary & payments",
   logslip: "Log slips",
   vp_schedule: "VP schedule",
   vp_loading: "VP loading",

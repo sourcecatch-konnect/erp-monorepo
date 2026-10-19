@@ -21,6 +21,7 @@ export type VendorPaymentStatus =
   | "CANCELLED";
 export type VendorPaymentSourceType =
   | "LR"
+  | "LR_GROUP"
   | "GRN_HAMALI"
   | "RAIL_BRANCH_GRN"
   | "VP_LOADING";
@@ -33,6 +34,42 @@ export type EligibleTransporterLR = {
   originBranchId: string;
   marketVehicleNumber: string | null;
   deliveredAt: string | null;
+  /** Only one LR per truck carries the truck's freight/advance/commission/
+   *  hamali/TDS; the group's other LRs show 0 for those (ERP-58). */
+  ownsTruckAmounts: boolean;
+  freightPaise: string;
+  detentionPaise: string;
+  advancePaise: string;
+  commissionPaise: string;
+  hamaliPaise: string;
+  tdsPaise: string;
+  damagePaise: string;
+  stationeryPaise: string;
+};
+
+/** One LR of a truck, as shown on a truck line. */
+export type TruckLR = {
+  lrId: string;
+  lrNumber: string;
+  status: string;
+  unloadingPoint: string | null;
+  deliveredAt: string | null;
+  detentionPaise: string;
+  damagePaise: string;
+};
+
+/** A market truck (LR group) the transporter is paid for — one slip line.
+ *  Freight/advance/commission/hamali/TDS are the truck's, counted once;
+ *  detention/damage are the sum of its LRs'. */
+export type EligibleTransporterTruck = {
+  groupId: string;
+  groupNumber: string;
+  originBranchId: string;
+  vehicleNumber: string | null;
+  /** Every LR delivered — only a ready truck can be paid. */
+  ready: boolean;
+  pendingLrNumbers: string[];
+  lrs: TruckLR[];
   freightPaise: string;
   detentionPaise: string;
   advancePaise: string;
@@ -67,10 +104,24 @@ export type VendorPaymentSlipLineInput = {
   stationeryPaise: string;
 };
 
+/** What a slip line pays for, resolved by the server. */
+export type VendorPaymentLineSource = {
+  label: string;
+  vehicleNumber: string | null;
+  lrs: Array<{
+    lrNumber: string;
+    unloadingPoint: string | null;
+    deliveredAt: string | null;
+    detentionPaise: string;
+    damagePaise: string;
+  }>;
+};
+
 export type VendorPaymentSlipLine = VendorPaymentSlipLineInput & {
   id: string;
   netPaise: string;
   isActive: boolean;
+  source?: VendorPaymentLineSource | null;
 };
 
 type NamedUser = { id: string; firstName: string; lastName: string } | null;
@@ -215,6 +266,11 @@ export const vendorPaymentApi = {
   eligibleTransporterLRs: (filters: EligibleChunkFilters & { transportId: string }) =>
     get<EligibleChunk<EligibleTransporterLR>>(
       "/vendor-payment/calculators/transporter",
+      { ...chunkParams(filters), transportId: filters.transportId },
+    ),
+  eligibleTransporterTrucks: (filters: EligibleChunkFilters & { transportId: string }) =>
+    get<EligibleChunk<EligibleTransporterTruck>>(
+      "/vendor-payment/calculators/transporter-trucks",
       { ...chunkParams(filters), transportId: filters.transportId },
     ),
   eligibleHamaliSources: (filters: EligibleChunkFilters & { labourId: string }) =>

@@ -24,6 +24,10 @@ export type EligibleTransporterLR = {
   originBranchId: string;
   marketVehicleNumber: string | null;
   deliveredAt: Date | null;
+  /** True for the one LR that carries the truck-level (LR group) amounts —
+   *  see TRUCK_AMOUNT_OWNER. The group's other LRs carry only their own
+   *  detention/damage. */
+  ownsTruckAmounts: boolean;
   // Prefilled from stored data — freight/advance/commission/hamali/TDS come
   // from LRGroup's market* fields (captured at LR-group creation for a
   // market vehicle); detention/damage come from the acknowledgement. These
@@ -57,31 +61,47 @@ const lrSelect = {
       marketCommissionAmount: true,
       marketHamaliAmount: true,
       marketTdsAmount: true,
+      // Freight/advance/commission/hamali/TDS are stored once per truck (LR
+      // group), but slip lines are per LR. Only this one LR carries them, or
+      // a truck with N LRs would be paid N times (ERP-58). Same owner rule
+      // as billing's base freight (billing.service.ts → ownsGroupFreight).
+      lorryReceipts: {
+        where: { deletedAt: null },
+        orderBy: [{ createdAt: "asc" }, { lrNumber: "asc" }],
+        take: 1,
+        select: { id: true },
+      },
     },
   },
   delivery: { select: { deliveredAt: true } },
   acknowledgement: { select: { detentionAmount: true, damageAmount: true } },
 } satisfies Prisma.LorryReceiptSelect;
 
-type LrRow = Prisma.LorryReceiptGetPayload<{ select: typeof lrSelect }>;
+export type LrRow = Prisma.LorryReceiptGetPayload<{ select: typeof lrSelect }>;
 
-const toEligible = (lr: LrRow): EligibleTransporterLR => ({
-  lrId: lr.id,
-  lrNumber: lr.lrNumber,
-  groupId: lr.groupId,
-  groupNumber: lr.group.groupNumber,
-  originBranchId: lr.group.originBranchId,
-  marketVehicleNumber: lr.group.marketVehicleNumber,
-  deliveredAt: lr.delivery?.deliveredAt ?? null,
-  freightPaise: lr.group.marketFreightAmount ?? 0n,
-  detentionPaise: lr.acknowledgement?.detentionAmount ?? 0n,
-  advancePaise: lr.group.marketAdvanceAmount ?? 0n,
-  commissionPaise: lr.group.marketCommissionAmount ?? 0n,
-  hamaliPaise: lr.group.marketHamaliAmount ?? 0n,
-  tdsPaise: lr.group.marketTdsAmount ?? 0n,
-  damagePaise: lr.acknowledgement?.damageAmount ?? 0n,
-  stationeryPaise: 0n,
-});
+export const toEligible = (lr: LrRow): EligibleTransporterLR => {
+  const ownsTruckAmounts = lr.group.lorryReceipts[0]?.id === lr.id;
+  const truckAmount = (paise: bigint | null) =>
+    ownsTruckAmounts ? (paise ?? 0n) : 0n;
+  return {
+    lrId: lr.id,
+    lrNumber: lr.lrNumber,
+    groupId: lr.groupId,
+    groupNumber: lr.group.groupNumber,
+    originBranchId: lr.group.originBranchId,
+    marketVehicleNumber: lr.group.marketVehicleNumber,
+    deliveredAt: lr.delivery?.deliveredAt ?? null,
+    ownsTruckAmounts,
+    freightPaise: truckAmount(lr.group.marketFreightAmount),
+    detentionPaise: lr.acknowledgement?.detentionAmount ?? 0n,
+    advancePaise: truckAmount(lr.group.marketAdvanceAmount),
+    commissionPaise: truckAmount(lr.group.marketCommissionAmount),
+    hamaliPaise: truckAmount(lr.group.marketHamaliAmount),
+    tdsPaise: truckAmount(lr.group.marketTdsAmount),
+    damagePaise: lr.acknowledgement?.damageAmount ?? 0n,
+    stationeryPaise: 0n,
+  };
+};
 
 export type FindEligibleTransporterLRsParams = {
   transportId: string;
@@ -163,12 +183,11 @@ export async function findEligibleTransporterLRs(
             take,
           }),
         dropClaimed: async (rows) => {
-          const claimed = await claimedAmong(
-            client,
-            ["LR"],
-            rows.map((row) => row.id),
-          );
-          return rows.filter((row) => !claimed.has(row.id));
+          const [claimed, claimedGroups] = await Promise.all([
+            claimedAmong(client, ["LR"], rows.map((row) => row.id)),
+            claimedAmong(client, ["LR_GROUP"], [...new Set(rows.map((row) => row.groupId))]),
+          ]);
+          return rows.filter((row) => !claimed.has(row.id) && !claimedGroups.has(row.groupId));
         },
       },
     ],
@@ -218,6 +237,21 @@ export async function reconcileTransporterLines(
   if (missing.length)
     throw new BadRequestError(
       `These LRs are not eligible for this transporter: ${missing.join(", ")}`,
+    );
+
+  // A truck already paid as a whole (LR_GROUP line) can't be paid again LR-wise.
+  const claimedGroups = await claimedAmong(
+    client,
+    ["LR_GROUP"],
+    [...new Set(lrs.map((lr) => lr.groupId))],
+    excludeSlipId,
+  );
+  const onTruckLine = lrs.filter((lr) => claimedGroups.has(lr.groupId));
+  if (onTruckLine.length)
+    throw new BadRequestError(
+      `These LRs' trucks are already on a vendor payment slip: ${onTruckLine
+        .map((lr) => lr.lrNumber)
+        .join(", ")}`,
     );
 
   return byId;

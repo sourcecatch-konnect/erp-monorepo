@@ -1,5 +1,6 @@
 import {
   IconActivity,
+  IconChecklist,
   IconClipboardList,
   IconDatabase,
   IconFileBarcode,
@@ -54,6 +55,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
     items: [
+      {
+        title: "My Work",
+        href: "/my-work",
+        icon: IconChecklist,
+        badgeKey: "myWork",
+      },
       {
         title: "Dashboard",
         href: "/dashboard",

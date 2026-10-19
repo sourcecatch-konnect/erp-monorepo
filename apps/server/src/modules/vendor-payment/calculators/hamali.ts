@@ -83,7 +83,7 @@ const grnFilters = (
         ]
       : []),
     ...(params.branchIds
-      ? [{ lorryReceipt: { group: { is: { originBranchId: { in: params.branchIds } } } } }]
+      ? [{ lorryReceipt: { group: { is: { railheadBranchId: { in: params.branchIds } } } } }]
       : []),
     ...(search ? [{ grnNumber: insensitive(search) }] : []),
   ];
@@ -158,8 +158,9 @@ const dropClaimedFor =
     return rows.filter((row) => !claimed.has(row.id));
   };
 
-/** Origin GRN hamali — GRN.labourCharge paid to GRN.labourId, branch-scoped
- *  via the LR's origin branch. Eligible once SUBMITTED. */
+/** Rail Head GRN hamali — GRN.labourCharge paid to GRN.labourId, branch-scoped
+ *  via the LR group's railhead branch (where the GRN is made, same scope as
+ *  grnRailheadBranchFilter). Eligible once SUBMITTED. */
 const grnSource = (
   client: DbClient,
   params: FindEligibleHamaliSourcesParams,
@@ -186,7 +187,7 @@ const grnSource = (
         outDateTime: true,
         inDateTime: true,
         createdAt: true,
-        lorryReceipt: { select: { group: { select: { originBranchId: true } } } },
+        lorryReceipt: { select: { group: { select: { railheadBranchId: true } } } },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take,
@@ -197,7 +198,7 @@ const grnSource = (
       sourceType: "GRN_HAMALI" as const,
       sourceId: r.id,
       label: r.grnNumber,
-      branchId: r.lorryReceipt.group.originBranchId,
+      branchId: r.lorryReceipt.group.railheadBranchId,
       occurredAt: r.outDateTime ?? r.inDateTime ?? r.createdAt,
       hamaliPaise: r.labourCharge ?? 0n,
     }));
