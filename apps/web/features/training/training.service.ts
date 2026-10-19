@@ -20,4 +20,11 @@ export const trainingApi = {
         body,
       ),
     ),
+
+  undoProgress: async (stepKey: string): Promise<{ stepKey: string }> =>
+    unwrapApiResponse(
+      await api.delete<ApiResponse<{ stepKey: string }>>(
+        `/training/progress/${encodeURIComponent(stepKey)}`,
+      ),
+    ),
 };

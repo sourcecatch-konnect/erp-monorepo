@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import {
+  IconArrowLeft,
   IconArrowRight,
   IconBuildingStore,
+  IconCircleCheck,
+  IconRoute,
   IconUserCircle,
 } from "@tabler/icons-react";
 import {
@@ -17,12 +20,17 @@ import {
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import { trainingKeys } from "./training.keys";
-import { trainingApi } from "./training.service";
-
-const STAGE_BY_KEY = new Map<TrainingStageKey, TrainingStage>(
-  TRAINING_STAGES.map((stage) => [stage.key, stage]),
-);
+import { ProgressBar } from "./components/ProgressBar";
+import { StageSheet } from "./components/StageSheet";
+import { TrainingNav } from "./components/TrainingNav";
+import { useTrainingMe } from "./hooks/useTraining";
+import {
+  STAGE_BY_KEY,
+  previousStages,
+  progressMap,
+  trackProgress,
+  type TrackProgress,
+} from "./lib/catalog-lookup";
 
 function YourRole({ me }: { me: TrainingMe }) {
   const branches =
@@ -37,21 +45,17 @@ function YourRole({ me }: { me: TrainingMe }) {
           <IconUserCircle className="size-6" aria-hidden />
         </span>
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">
-            You are signed in as
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">Your role</p>
           <p className="text-lg font-semibold text-foreground">{me.role.name}</p>
           <p className="text-sm text-muted-foreground">
             {me.profile?.summary ??
-              "Below are the steps of the business your role takes part in, and who picks up the work after you."}
+              "Below is the training for your role, the steps of the business you do, and who picks up the work after you."}
           </p>
         </div>
         <div className="flex items-start gap-2">
           <IconBuildingStore className="mt-0.5 size-4 text-muted-foreground" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              Branches you work in
-            </p>
+            <p className="text-xs font-medium text-muted-foreground">Branches you work in</p>
             <p className="text-sm text-foreground">{branches}</p>
           </div>
         </div>
@@ -68,40 +72,132 @@ function YourRole({ me }: { me: TrainingMe }) {
   );
 }
 
-function NextSteps({
+function TrackCard({ progress, primary }: { progress: TrackProgress; primary: boolean }) {
+  const complete = progress.current === undefined;
+  const action = complete ? "Review" : progress.finished === 0 ? "Start" : "Continue";
+  return (
+    <div className="flex flex-wrap items-center gap-4 rounded-md border border-border bg-card p-4">
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-foreground">{progress.track.title}</p>
+          {complete ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+              <IconCircleCheck className="size-3.5" aria-hidden />
+              Completed
+            </span>
+          ) : null}
+        </div>
+        <p className="text-sm text-muted-foreground">{progress.track.description}</p>
+        <div className="flex max-w-md items-center gap-3">
+          <ProgressBar percent={progress.percent} label={`${progress.track.title} progress`} />
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {progress.finished} of {progress.total} steps
+          </span>
+        </div>
+      </div>
+      <Button asChild variant={primary ? "default" : "outline"}>
+        <Link href={`/training/${progress.track.key}`}>{action}</Link>
+      </Button>
+    </div>
+  );
+}
+
+function YourTraining({ me }: { me: TrainingMe }) {
+  const entries = progressMap(me);
+  const all = me.tracks
+    .map((view) => trackProgress(view, entries))
+    .filter((item): item is TrackProgress => item !== null);
+  const required = all.filter((item) => item.view.assignment === "required");
+  const optional = all.filter((item) => item.view.assignment === "optional");
+  const firstOpen = required.find((item) => item.current !== undefined);
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold text-foreground">Your training</h2>
+        <p className="text-sm text-muted-foreground">
+          Short, step-by-step training for your role. Your progress is saved, so
+          you can stop and continue any time.
+        </p>
+      </div>
+      {required.map((item) => (
+        <TrackCard
+          key={item.track.key}
+          progress={item}
+          primary={item.track.key === firstOpen?.track.key}
+        />
+      ))}
+      {optional.length > 0 ? (
+        <details className="rounded-md border border-border bg-card px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            More training you can take ({optional.length})
+          </summary>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Not required for your role, but useful if you help out in these areas.
+          </p>
+          <div className="mt-3 space-y-3">
+            {optional.map((item) => (
+              <TrackCard key={item.track.key} progress={item} primary={false} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
+function Neighbours({
   stage,
   views,
 }: {
   stage: TrainingStage;
   views: Map<TrainingStageKey, TrainingStageView>;
 }) {
-  if (stage.next.length === 0) return null;
+  const who = (key: TrainingStageKey) => {
+    const view = views.get(key);
+    if (!view) return "";
+    if (view.owned) return "you do this too";
+    return view.owners.length > 0
+      ? `done by ${view.owners.join(", ")}`
+      : "not assigned to a role yet";
+  };
+  const before = previousStages(stage.key);
+  const after = stage.next
+    .map((key) => STAGE_BY_KEY.get(key))
+    .filter((next): next is TrainingStage => next !== undefined);
+  if (before.length === 0 && after.length === 0) return null;
+
   return (
     <ul className="space-y-1">
-      {stage.next.map((key) => {
-        const next = STAGE_BY_KEY.get(key);
-        const view = views.get(key);
-        if (!next || !view) return null;
-        const who = view.owned
-          ? "you do this too"
-          : view.owners.length > 0
-            ? `done by ${view.owners.join(", ")}`
-            : "not assigned to a role yet";
-        return (
-          <li key={key} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-            <IconArrowRight className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>
-              Next: <span className="font-medium text-foreground">{next.title}</span>{" "}
-              ({who})
-            </span>
-          </li>
-        );
-      })}
+      {before.map((prev) => (
+        <li key={`b-${prev.key}`} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <IconArrowLeft className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>
+            Before you: <span className="font-medium text-foreground">{prev.title}</span>{" "}
+            ({who(prev.key)})
+          </span>
+        </li>
+      ))}
+      {after.map((next) => (
+        <li key={`a-${next.key}`} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <IconArrowRight className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>
+            After you: <span className="font-medium text-foreground">{next.title}</span>{" "}
+            ({who(next.key)})
+          </span>
+        </li>
+      ))}
     </ul>
   );
 }
 
-function YourWork({ me }: { me: TrainingMe }) {
+function YourWork({
+  me,
+  onLearnMore,
+}: {
+  me: TrainingMe;
+  onLearnMore: (key: TrainingStageKey) => void;
+}) {
   const views = new Map(me.stages.map((view) => [view.key, view]));
   const lanes = TRAINING_LANES.map((lane) => ({
     lane,
@@ -112,12 +208,20 @@ function YourWork({ me }: { me: TrainingMe }) {
 
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">Your part of the work</h2>
-        <p className="text-sm text-muted-foreground">
-          These are the business steps your role does. Under each step you can
-          see what happens next and who does it.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Your part of the work</h2>
+          <p className="text-sm text-muted-foreground">
+            The business steps your role does, what you can do at each one, and
+            who works before and after you.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/training/process-map">
+            <IconRoute className="size-4" aria-hidden />
+            See the whole business
+          </Link>
+        </Button>
       </div>
 
       {lanes.length === 0 ? (
@@ -137,20 +241,46 @@ function YourWork({ me }: { me: TrainingMe }) {
               <p className="text-xs text-muted-foreground">{lane.description}</p>
             </div>
             <ol className="divide-y divide-border">
-              {stages.map((stage) => (
-                <li key={stage.key} className="flex flex-wrap items-start gap-4 px-5 py-4">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <p className="text-sm font-semibold text-foreground">{stage.title}</p>
-                    <p className="text-sm text-muted-foreground">{stage.summary}</p>
-                    <NextSteps stage={stage} views={views} />
-                  </div>
-                  {views.get(stage.key)?.canOpen ? (
-                    <Button asChild variant="outline">
-                      <Link href={stage.href}>Open screen</Link>
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
+              {stages.map((stage) => {
+                const view = views.get(stage.key);
+                return (
+                  <li key={stage.key} className="flex flex-wrap items-start gap-4 px-5 py-4">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p className="text-sm font-semibold text-foreground">{stage.title}</p>
+                      <p className="text-sm text-muted-foreground">{stage.summary}</p>
+                      {view && view.abilities.length > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            What you can do
+                          </p>
+                          <ul className="flex flex-wrap gap-1.5">
+                            {view.abilities.map((ability) => (
+                              <li
+                                key={ability}
+                                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
+                              >
+                                <IconCircleCheck className="size-3.5 text-primary" aria-hidden />
+                                {ability}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      <Neighbours stage={stage} views={views} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="ghost" onClick={() => onLearnMore(stage.key)}>
+                        Learn more
+                      </Button>
+                      {view?.canOpen ? (
+                        <Button asChild variant="outline">
+                          <Link href={stage.href}>Open screen</Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
           </div>
         ))
@@ -159,26 +289,29 @@ function YourWork({ me }: { me: TrainingMe }) {
   );
 }
 
-/** Training home (Phase 0): who you are in the ERP and which steps you own. */
+/** A2 — My Role: who you are in the ERP, your training, and your steps. */
 export function TrainingHomePage() {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: trainingKeys.me,
-    queryFn: trainingApi.me,
-  });
+  const { data, isLoading, isError, error } = useTrainingMe();
+  const [openStage, setOpenStage] = useState<TrainingStageKey | null>(null);
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-5xl space-y-6">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Training</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          My role & training
+        </h1>
         <p className="text-sm text-muted-foreground">
           Learn what your role does in the ERP and where your work fits in the
           business.
         </p>
       </header>
 
+      <TrainingNav />
+
       {isLoading ? (
         <div className="space-y-4">
-          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-24 w-full" />
           <Skeleton className="h-48 w-full" />
         </div>
       ) : null}
@@ -192,7 +325,14 @@ export function TrainingHomePage() {
       {data ? (
         <>
           <YourRole me={data} />
-          <YourWork me={data} />
+          <YourTraining me={data} />
+          <YourWork me={data} onLearnMore={setOpenStage} />
+          <StageSheet
+            stageKey={openStage}
+            me={data}
+            onOpenStage={setOpenStage}
+            onClose={() => setOpenStage(null)}
+          />
         </>
       ) : null}
     </div>

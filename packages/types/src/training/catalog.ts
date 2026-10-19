@@ -1,15 +1,20 @@
 import type { PermissionKey } from "../permissions.js";
 
 /**
- * Training catalog — the business flow described in plain language.
+ * Training catalog — the business flow and the role tracks, in plain language.
  *
- * Shared by server (which stages a user owns, who owns the others) and web
- * (what to show). Ownership is derived from permissions, never role names:
- * a user "owns" a stage when they hold any of its `permissions`.
+ * Shared by server (which stages a user owns, who owns the others, which
+ * tracks apply) and web (what to show). Ownership comes from permissions,
+ * never role names: a user "owns" a stage when they hold any of its actions.
  *
- * Wording rule: write for a branch operator, not a developer. One short
- * sentence per summary, no internal jargon beyond the glossary terms.
+ * Wording rule: write for a branch operator, not a developer. Short
+ * sentences, everyday words, glossary terms only where the screen uses them.
+ * Longer stage explanations live in apps/web/features/training/content/.
  */
+
+/* ------------------------------------------------------------------ */
+/* Lanes + stages (the business flow)                                  */
+/* ------------------------------------------------------------------ */
 
 export type TrainingLaneKey =
   | "setup"
@@ -93,6 +98,9 @@ export type TrainingStageKey =
   | "workshop.repair"
   | "cash.planning";
 
+/** One thing a user can do at a stage, phrased for "What you can do". */
+export type TrainingAction = { key: PermissionKey; label: string };
+
 export type TrainingStage = {
   key: TrainingStageKey;
   lane: TrainingLaneKey;
@@ -103,7 +111,7 @@ export type TrainingStage = {
   /** Needed to open `href`; the "Open" link hides without it. */
   viewPermission: PermissionKey;
   /** The user owns this stage if they hold ANY of these. */
-  permissions: readonly PermissionKey[];
+  actions: readonly TrainingAction[];
   /** What usually happens after this stage. */
   next: readonly TrainingStageKey[];
 };
@@ -117,13 +125,13 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Customers, routes, rates, vehicles and drivers that every order uses.",
     href: "/masters",
     viewPermission: "masters.customer.view",
-    permissions: [
-      "masters.customer.create",
-      "masters.route.create",
-      "masters.rate-matrix.create",
-      "masters.agreement.create",
-      "masters.vehicle.create",
-      "masters.driver.create",
+    actions: [
+      { key: "masters.customer.create", label: "Add and edit customers" },
+      { key: "masters.route.create", label: "Add routes" },
+      { key: "masters.rate-matrix.create", label: "Set freight rates (rate matrix)" },
+      { key: "masters.agreement.create", label: "Add customer agreements" },
+      { key: "masters.vehicle.create", label: "Add vehicles" },
+      { key: "masters.driver.create", label: "Add drivers" },
     ],
     next: ["booking.order"],
   },
@@ -135,7 +143,11 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Record a customer's request to move goods: from where, to where, when and how many trucks.",
     href: "/orders",
     viewPermission: "order.view",
-    permissions: ["order.create"],
+    actions: [
+      { key: "order.create", label: "Book new orders" },
+      { key: "order.update", label: "Change orders before approval" },
+      { key: "order.cancel", label: "Cancel orders" },
+    ],
     next: ["booking.order-approval"],
   },
   {
@@ -146,7 +158,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Check the freight worked out from the rate matrix, then confirm or reject the order.",
     href: "/orders",
     viewPermission: "order.view",
-    permissions: ["order.approve", "order.reject"],
+    actions: [
+      { key: "order.approve", label: "Confirm orders" },
+      { key: "order.reject", label: "Reject orders" },
+    ],
     next: ["booking.lr"],
   },
   {
@@ -157,7 +172,12 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Make a Lorry Receipt for each consignment: the legal document for the goods.",
     href: "/lorry-receipts",
     viewPermission: "lorry_receipt.view",
-    permissions: ["lorry_receipt.create"],
+    actions: [
+      { key: "lorry_receipt.create", label: "Create LRs" },
+      { key: "lorry_receipt.update", label: "Edit draft LRs" },
+      { key: "lorry_receipt.approve", label: "Finalise LRs" },
+      { key: "lorry_receipt.cancel", label: "Cancel LRs" },
+    ],
     next: ["booking.ewaybill", "road.trip", "rail.vp-schedule"],
   },
   {
@@ -168,7 +188,12 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Add the customer's e-way bill number and update Part-B with the vehicle.",
     href: "/ewaybills",
     viewPermission: "ewaybill.view",
-    permissions: ["ewaybill.create", "ewaybill.update"],
+    actions: [
+      { key: "ewaybill.create", label: "Attach e-way bills to LRs" },
+      { key: "ewaybill.update", label: "Update Part-B (vehicle details)" },
+      { key: "ewaybill.extend", label: "Extend e-way bill validity" },
+      { key: "ewaybill.cancel", label: "Cancel e-way bills" },
+    ],
     next: ["road.trip"],
   },
   {
@@ -178,7 +203,12 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     summary: "Assign a vehicle and driver and send the truck on its way.",
     href: "/trips",
     viewPermission: "trip.view",
-    permissions: ["trip.create", "vehicle_journey.create"],
+    actions: [
+      { key: "trip.create", label: "Plan trips" },
+      { key: "trip.update", label: "Change planned trips" },
+      { key: "vehicle_journey.create", label: "Start vehicle journeys" },
+      { key: "trip.cancel", label: "Cancel trips" },
+    ],
     next: ["road.expenses"],
   },
   {
@@ -189,7 +219,12 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Record diesel, toll and other spends, and cash given to the driver.",
     href: "/trips",
     viewPermission: "trip.view",
-    permissions: ["trip_expense.create", "trip_advance.create"],
+    actions: [
+      { key: "trip_expense.create", label: "Enter trip expenses" },
+      { key: "trip_expense.approve", label: "Approve trip expenses" },
+      { key: "trip_advance.create", label: "Give driver advances" },
+      { key: "trip_expense.reverse", label: "Reverse wrong expenses" },
+    ],
     next: ["road.close"],
   },
   {
@@ -200,7 +235,13 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Enter the end kilometres and close the trip. The Log Slip is ready straight away.",
     href: "/vehicle-journeys",
     viewPermission: "vehicle_journey.view",
-    permissions: ["trip.close", "vehicle_journey.close", "logslip.generate"],
+    actions: [
+      { key: "trip.close", label: "Close trips" },
+      { key: "vehicle_journey.close", label: "Close vehicle journeys" },
+      { key: "logslip.generate", label: "Generate Log Slips" },
+      { key: "logslip.post_accounts", label: "Post Log Slips to accounts" },
+      { key: "logslip.reopen", label: "Reopen Log Slips" },
+    ],
     next: ["delivery.deliver"],
   },
   {
@@ -211,7 +252,11 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Plan which wagon space (VP) on the rake each LR will travel in.",
     href: "/vp-management/vp-schedule",
     viewPermission: "vp_schedule.view",
-    permissions: ["vp_schedule.create"],
+    actions: [
+      { key: "vp_schedule.create", label: "Create VP schedules" },
+      { key: "vp_schedule.confirm", label: "Confirm VP schedules" },
+      { key: "vp_schedule.cancel", label: "Cancel VP schedules" },
+    ],
     next: ["rail.mrrr"],
   },
   {
@@ -222,7 +267,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Type in the Railway Receipt (RR) and Money Receipt (MR) from the paper copies.",
     href: "/vp-management/mrrr",
     viewPermission: "mrrr.view",
-    permissions: ["mrrr.create"],
+    actions: [
+      { key: "mrrr.create", label: "Enter MR / RR" },
+      { key: "mrrr.submit", label: "Submit MR / RR" },
+    ],
     next: ["rail.vp-loading"],
   },
   {
@@ -232,7 +280,13 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     summary: "Record the goods physically loaded into each wagon.",
     href: "/vp-management/vp-loading",
     viewPermission: "vp_loading.view",
-    permissions: ["vp_loading.create"],
+    actions: [
+      { key: "vp_loading.create", label: "Record VP loading" },
+      { key: "vp_loading.mark_loaded", label: "Mark wagons loaded" },
+      { key: "vp_loading.verify", label: "Verify loading" },
+      { key: "vp_loading.capacity_override", label: "Allow loading over capacity" },
+      { key: "vp_loading.assign_tracker", label: "Assign GPS trackers" },
+    ],
     next: ["rail.rail-head"],
   },
   {
@@ -240,10 +294,14 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     lane: "rail",
     title: "Rake and GRN at the rail head",
     summary:
-      "Record the rake's arrival and the goods received at the rail head, with demurrage and other charges.",
+      "Record the rake at the rail head with demurrage and other charges, and the goods received there.",
     href: "/vp-management/grn",
     viewPermission: "grn.view",
-    permissions: ["grn.create", "rake_at_rail_head.create"],
+    actions: [
+      { key: "rake_at_rail_head.create", label: "Record the rake at the rail head" },
+      { key: "grn.create", label: "Enter the GRN at the rail head" },
+      { key: "grn.submit", label: "Submit the rail head GRN" },
+    ],
     next: ["rail.branch"],
   },
   {
@@ -253,7 +311,11 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     summary: "Record the goods received at the destination branch.",
     href: "/vp-management/branch-grn",
     viewPermission: "rail_branch_grn.view",
-    permissions: ["rail_branch_grn.create", "rake_at_branch.create"],
+    actions: [
+      { key: "rake_at_branch.create", label: "Record the rake at the branch" },
+      { key: "rail_branch_grn.create", label: "Enter the GRN at the branch" },
+      { key: "rail_branch_grn.submit", label: "Submit the branch GRN" },
+    ],
     next: ["rail.dc"],
   },
   {
@@ -264,7 +326,11 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Hand the LRs over to the truck that does the last-mile delivery.",
     href: "/vp-management/delivery-challans",
     viewPermission: "delivery_challan.view",
-    permissions: ["delivery_challan.create", "delivery_challan.issue"],
+    actions: [
+      { key: "delivery_challan.create", label: "Create delivery challans" },
+      { key: "delivery_challan.issue", label: "Issue delivery challans" },
+      { key: "delivery_challan.cancel", label: "Cancel delivery challans" },
+    ],
     next: ["delivery.deliver"],
   },
   {
@@ -275,7 +341,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Mark the goods delivered, note any shortage or damage, and upload the signed POD.",
     href: "/lorry-receipts/deliveries",
     viewPermission: "lorry_receipt.view",
-    permissions: ["lorry_receipt.deliver", "lorry_receipt.acknowledge"],
+    actions: [
+      { key: "lorry_receipt.deliver", label: "Mark LRs delivered" },
+      { key: "lorry_receipt.acknowledge", label: "Confirm delivery with the POD" },
+    ],
     next: ["accounts.bill"],
   },
   {
@@ -286,7 +355,13 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Pick the delivered LRs and create the bill. GST is worked out for you.",
     href: "/accounts/lr-to-bill",
     viewPermission: "billing.view",
-    permissions: ["billing.create", "billing.finalise"],
+    actions: [
+      { key: "billing.create", label: "Create bills from delivered LRs" },
+      { key: "billing.approve", label: "Approve bills" },
+      { key: "billing.finalise", label: "Finalise bills" },
+      { key: "billing.credit_note_create", label: "Raise credit notes" },
+      { key: "billing.cancel", label: "Cancel bills" },
+    ],
     next: ["accounts.receipt"],
   },
   {
@@ -297,7 +372,11 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Record money received from the customer and match it to bills, including TDS.",
     href: "/accounts/receipts",
     viewPermission: "receipt.view",
-    permissions: ["receipt.create"],
+    actions: [
+      { key: "receipt.create", label: "Record customer payments" },
+      { key: "receipt.approve", label: "Approve receipts" },
+      { key: "receipt.cancel", label: "Cancel receipts" },
+    ],
     next: ["accounts.ledger"],
   },
   {
@@ -308,10 +387,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Raise, approve and pay slips for brokers, transporters and labour.",
     href: "/accounts/vendor-payments",
     viewPermission: "accounts.payment.view",
-    permissions: [
-      "accounts.payment.create",
-      "accounts.payment.approve",
-      "accounts.payment.disburse",
+    actions: [
+      { key: "accounts.payment.create", label: "Raise payment slips" },
+      { key: "accounts.payment.approve", label: "Approve payment slips" },
+      { key: "accounts.payment.disburse", label: "Pay approved slips" },
     ],
     next: ["accounts.ledger"],
   },
@@ -323,7 +402,12 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "See every posting by account and date, and add a manual journal when needed.",
     href: "/ledger",
     viewPermission: "ledger.view",
-    permissions: ["ledger.view", "ledger.journal_create"],
+    actions: [
+      { key: "ledger.view", label: "Read ledgers" },
+      { key: "ledger.voucher_view", label: "See the day book" },
+      { key: "ledger.journal_create", label: "Add manual journals" },
+      { key: "ledger.manage", label: "Manage the chart of accounts" },
+    ],
     next: [],
   },
   {
@@ -334,11 +418,14 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Buy spare parts, open job cards for repairs and pay service bills.",
     href: "/workshop/job-cards",
     viewPermission: "workshop.jobcard.view",
-    permissions: [
-      "workshop.po.manage",
-      "workshop.inward.manage",
-      "workshop.jobcard.manage",
-      "workshop.servicebill.manage",
+    actions: [
+      { key: "workshop.po.manage", label: "Raise purchase orders for parts" },
+      { key: "workshop.po.approve", label: "Approve purchase orders" },
+      { key: "workshop.inward.manage", label: "Receive parts into stock" },
+      { key: "workshop.jobcard.manage", label: "Open job cards" },
+      { key: "workshop.jobcard.finalise", label: "Finalise job cards" },
+      { key: "workshop.servicebill.manage", label: "Enter service bills" },
+      { key: "workshop.servicebill.pay", label: "Pay service bills" },
     ],
     next: [],
   },
@@ -350,16 +437,556 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       "Enter the day's cash position and planned payments, and get them approved.",
     href: "/cash-planning",
     viewPermission: "cashplanning.view",
-    permissions: ["cashplanning.enter", "cashplanning.approve"],
+    actions: [
+      { key: "cashplanning.enter", label: "Enter the day's cash plan" },
+      { key: "cashplanning.approve", label: "Approve cash plans" },
+      { key: "cashplanning.close", label: "Close the cash day" },
+    ],
     next: [],
   },
 ];
 
 /** Every permission key referenced by a stage — used to find stage owners. */
 export const TRAINING_STAGE_PERMISSION_KEYS: readonly PermissionKey[] =
-  Array.from(new Set(TRAINING_STAGES.flatMap((stage) => stage.permissions)));
+  Array.from(
+    new Set(
+      TRAINING_STAGES.flatMap((stage) => stage.actions.map((action) => action.key)),
+    ),
+  );
 
 export const isStageOwned = (
   stage: TrainingStage,
   has: (key: PermissionKey) => boolean,
-): boolean => stage.permissions.some(has);
+): boolean => stage.actions.some((action) => has(action.key));
+
+/* ------------------------------------------------------------------ */
+/* Tracks (role-based training checklists)                             */
+/* ------------------------------------------------------------------ */
+
+export type TrainingTrackKey =
+  | "basics"
+  | "ops"
+  | "branch-manager"
+  | "rail"
+  | "accounts"
+  | "workshop"
+  | "auditor"
+  | "admin";
+
+export type TrainingStep = {
+  /** Stored in TrainingProgress.stepKey — never rename a shipped key. */
+  key: string;
+  title: string;
+  /** What to do, in one or two short sentences. */
+  summary: string;
+  /** Screen to open for this step ("Open screen"). */
+  href?: string;
+  /** Hidden unless the user holds this. Omit for steps everyone can do. */
+  requires?: PermissionKey;
+};
+
+export type TrainingTrack = {
+  key: TrainingTrackKey;
+  title: string;
+  description: string;
+  /**
+   * Required for users holding ANY of these, until an admin assigns tracks to
+   * the role explicitly (TrainingRoleTrack). Empty = required for everyone.
+   */
+  suggestedFor: readonly PermissionKey[];
+  steps: readonly TrainingStep[];
+};
+
+export const TRAINING_TRACKS: readonly TrainingTrack[] = [
+  {
+    key: "basics",
+    title: "ERP basics",
+    description:
+      "How to move around the ERP and use the screens every role shares.",
+    suggestedFor: [],
+    steps: [
+      {
+        key: "basics.navigation",
+        title: "Find your way around",
+        summary:
+          "Use the menu on the left to open a module. The button at the top left makes the menu smaller or bigger.",
+        href: "/dashboard",
+      },
+      {
+        key: "basics.my-role",
+        title: "See what your role does",
+        summary:
+          "Open Training to see which steps of the business are yours and who does the step after you.",
+        href: "/training",
+      },
+      {
+        key: "basics.process-map",
+        title: "Look at the whole business",
+        summary:
+          "Open the process map to follow an order from booking all the way to payment.",
+        href: "/training/process-map",
+      },
+      {
+        key: "basics.lists",
+        title: "Search and filter a list",
+        summary:
+          "On any list, type in the search box, use the filters, and click a column heading to sort. You can hide columns you don't need.",
+      },
+      {
+        key: "basics.notifications",
+        title: "Check your notifications",
+        summary:
+          "The bell at the top shows alerts meant for you, such as an order waiting for approval.",
+        href: "/notifications",
+        requires: "notifications.view",
+      },
+      {
+        key: "basics.profile",
+        title: "Check your profile",
+        summary:
+          "Make sure your name, mobile number and notification choices are correct.",
+        href: "/settings/profile",
+      },
+      {
+        key: "basics.glossary",
+        title: "Learn the common words",
+        summary:
+          "LR, POD, VP, TBB… the glossary explains the words used across the ERP.",
+        href: "/training/glossary",
+      },
+    ],
+  },
+  {
+    key: "ops",
+    title: "Operations: from booking to delivery",
+    description:
+      "Book orders, make LRs, plan trips and confirm delivery.",
+    suggestedFor: ["order.create", "lorry_receipt.create"],
+    steps: [
+      {
+        key: "ops.masters",
+        title: "Check the master data you need",
+        summary:
+          "An order needs the customer, their locations, a route and a rate in the rate matrix. If one is missing, ask the person who manages masters.",
+        href: "/masters/customer",
+        requires: "masters.customer.view",
+      },
+      {
+        key: "ops.book-order",
+        title: "Book an order",
+        summary:
+          "Click New order, pick the customer, the from and to branch, the pickup date and the number of trucks. Save it to send it for approval.",
+        href: "/orders/new",
+        requires: "order.create",
+      },
+      {
+        key: "ops.order-status",
+        title: "Follow the order's approval",
+        summary:
+          "The order shows 'Pending approval' until a manager confirms it. Once it says 'Confirmed' you can make the LRs.",
+        href: "/orders",
+        requires: "order.view",
+      },
+      {
+        key: "ops.create-lr",
+        title: "Create the LRs",
+        summary:
+          "From a confirmed order, create the LR group and one LR for each consignment: consignor, consignee, goods and freight.",
+        href: "/lorry-receipts/new",
+        requires: "lorry_receipt.create",
+      },
+      {
+        key: "ops.ewaybill",
+        title: "Attach the e-way bill",
+        summary:
+          "Add the e-way bill number the customer gave you, and update Part-B with the vehicle number.",
+        href: "/ewaybills",
+        requires: "ewaybill.create",
+      },
+      {
+        key: "ops.trip",
+        title: "Plan the trip",
+        summary:
+          "Create a trip, pick the vehicle and driver, and attach the LRs it carries.",
+        href: "/trips/new",
+        requires: "trip.create",
+      },
+      {
+        key: "ops.expenses",
+        title: "Record trip expenses and advances",
+        summary:
+          "Open the trip and enter diesel, toll and other spends, and any cash given to the driver.",
+        href: "/trips",
+        requires: "trip_expense.create",
+      },
+      {
+        key: "ops.deliver",
+        title: "Mark delivery and upload the POD",
+        summary:
+          "When goods reach the consignee, mark the LR delivered, then upload the signed POD from the Pending POD tab.",
+        href: "/lorry-receipts/deliveries",
+        requires: "lorry_receipt.deliver",
+      },
+    ],
+  },
+  {
+    key: "branch-manager",
+    title: "Branch Manager: approvals and control",
+    description:
+      "Approve orders and expenses, close journeys and keep deliveries ready for billing.",
+    suggestedFor: ["order.approve"],
+    steps: [
+      {
+        key: "bm.approve-order",
+        title: "Approve or reject orders",
+        summary:
+          "Open an order that is 'Pending approval', check the freight and the contact person, then confirm or reject it.",
+        href: "/orders",
+        requires: "order.approve",
+      },
+      {
+        key: "bm.finalise-lr",
+        title: "Check and finalise LRs",
+        summary:
+          "Review LRs before they are finalised. A finalised LR gets its LR number and can't be freely changed.",
+        href: "/lorry-receipts",
+        requires: "lorry_receipt.approve",
+      },
+      {
+        key: "bm.trip-expenses",
+        title: "Approve trip expenses",
+        summary:
+          "Check the expenses entered on a trip and approve the ones that are correct.",
+        href: "/trips",
+        requires: "trip_expense.approve",
+      },
+      {
+        key: "bm.close-journey",
+        title: "Close the journey and get the Log Slip",
+        summary:
+          "When the vehicle is back, enter the end kilometres and close the journey. The Log Slip is created straight away, with no waiting.",
+        href: "/vehicle-journeys",
+        requires: "vehicle_journey.close",
+      },
+      {
+        key: "bm.confirm-delivery",
+        title: "Make sure deliveries have their POD",
+        summary:
+          "Delivered LRs need the signed POD before Accounts can bill them. Check the Pending POD tab.",
+        href: "/lorry-receipts/deliveries",
+        requires: "lorry_receipt.acknowledge",
+      },
+      {
+        key: "bm.approve-bills",
+        title: "Approve bills",
+        summary:
+          "Bills waiting for review are in the Billing Register. Check them and approve.",
+        href: "/accounts/bills",
+        requires: "billing.approve",
+      },
+    ],
+  },
+  {
+    key: "rail",
+    title: "Rail and VP operations",
+    description:
+      "Move goods by rake: schedule wagon space, load it and receive it at the other end.",
+    suggestedFor: [
+      "vp_schedule.create",
+      "mrrr.create",
+      "vp_loading.create",
+      "grn.create",
+    ],
+    steps: [
+      {
+        key: "rail.vp-schedule",
+        title: "Schedule the VP",
+        summary:
+          "Create a VP schedule for the rake and plan which LRs go into each wagon space (VP).",
+        href: "/vp-management/vp-schedule/new",
+        requires: "vp_schedule.create",
+      },
+      {
+        key: "rail.mrrr",
+        title: "Enter the MR / RR",
+        summary:
+          "Type in the Railway Receipt and Money Receipt from the paper copies, against the VP schedule.",
+        href: "/vp-management/mrrr/new",
+        requires: "mrrr.create",
+      },
+      {
+        key: "rail.vp-loading",
+        title: "Record the VP loading",
+        summary:
+          "Record the goods physically loaded into each wagon, then mark it loaded.",
+        href: "/vp-management/vp-loading/new",
+        requires: "vp_loading.create",
+      },
+      {
+        key: "rail.rake-rail-head",
+        title: "Record the rake at the rail head",
+        summary:
+          "Enter the rake's times and any demurrage, wharfage or waiver at the rail head.",
+        href: "/vp-management/rake-at-rail-head",
+        requires: "rake_at_rail_head.create",
+      },
+      {
+        key: "rail.grn-rail-head",
+        title: "Enter the GRN at the rail head",
+        summary: "Record the goods received at the rail head, then submit it.",
+        href: "/vp-management/grn/new",
+        requires: "grn.create",
+      },
+      {
+        key: "rail.grn-branch",
+        title: "Enter the GRN at the branch",
+        summary:
+          "When the goods reach the destination branch, record what was received.",
+        href: "/vp-management/branch-grn/new",
+        requires: "rail_branch_grn.create",
+      },
+      {
+        key: "rail.dc",
+        title: "Issue the Delivery Challan",
+        summary:
+          "Make one challan for the LRs going out on the same last-mile truck, then issue it.",
+        href: "/vp-management/delivery-challans/new",
+        requires: "delivery_challan.create",
+      },
+    ],
+  },
+  {
+    key: "accounts",
+    title: "Accounts: from bill to payment",
+    description:
+      "Bill delivered LRs, record customer payments, pay vendors and read the books.",
+    suggestedFor: [
+      "billing.create",
+      "receipt.create",
+      "accounts.payment.create",
+      "ledger.journal_create",
+    ],
+    steps: [
+      {
+        key: "acc.lr-to-bill",
+        title: "Bill delivered LRs",
+        summary:
+          "Open LR to Bill, choose who pays (consignor or consignee) and the client, tick the LRs and create the bill. GST is worked out for you.",
+        href: "/accounts/lr-to-bill",
+        requires: "billing.create",
+      },
+      {
+        key: "acc.finalise-bill",
+        title: "Check and finalise bills",
+        summary:
+          "In the Billing Register, open a draft bill, check the amounts and finalise it so it gets its bill number.",
+        href: "/accounts/bills",
+        requires: "billing.finalise",
+      },
+      {
+        key: "acc.receipt",
+        title: "Record a customer payment",
+        summary:
+          "Enter the amount received and match it to the customer's bills, including any TDS they deducted.",
+        href: "/accounts/receipts/new",
+        requires: "receipt.create",
+      },
+      {
+        key: "acc.payment-slip",
+        title: "Raise a payment slip",
+        summary:
+          "Create a slip to pay a broker, transporter or labour. It goes for approval before anyone pays it.",
+        href: "/accounts/vendor-payments/new",
+        requires: "accounts.payment.create",
+      },
+      {
+        key: "acc.approve-slips",
+        title: "Approve payment slips",
+        summary: "Check waiting slips and approve the ones that are correct.",
+        href: "/accounts/vendor-payments/approvals",
+        requires: "accounts.payment.approve",
+      },
+      {
+        key: "acc.disburse",
+        title: "Pay approved slips",
+        summary: "Record the payment for slips that have been approved.",
+        href: "/accounts/vendor-payments/disbursements",
+        requires: "accounts.payment.disburse",
+      },
+      {
+        key: "acc.ledger",
+        title: "Read a ledger and the day book",
+        summary:
+          "See every posting for an account, or everything posted on one day.",
+        href: "/ledger",
+        requires: "ledger.view",
+      },
+      {
+        key: "acc.cash-plan",
+        title: "Plan the day's cash",
+        summary:
+          "Enter today's cash position and planned payments, and send them for approval.",
+        href: "/cash-planning",
+        requires: "cashplanning.enter",
+      },
+    ],
+  },
+  {
+    key: "workshop",
+    title: "Workshop: repairs and spare parts",
+    description:
+      "Buy parts, repair vehicles with job cards and settle service bills.",
+    suggestedFor: [
+      "workshop.po.manage",
+      "workshop.inward.manage",
+      "workshop.jobcard.manage",
+      "workshop.servicebill.manage",
+    ],
+    steps: [
+      {
+        key: "ws.purchase-order",
+        title: "Raise a purchase order for parts",
+        summary: "Order spare parts from a supplier with a purchase order.",
+        href: "/workshop/purchase-orders",
+        requires: "workshop.po.manage",
+      },
+      {
+        key: "ws.inward",
+        title: "Receive parts into stock",
+        summary: "When parts arrive, record them so they show in stock.",
+        href: "/workshop/inward",
+        requires: "workshop.inward.manage",
+      },
+      {
+        key: "ws.job-card",
+        title: "Open a job card for a repair",
+        summary:
+          "Create a job card for the vehicle and add the work done and parts used.",
+        href: "/workshop/job-cards/new",
+        requires: "workshop.jobcard.manage",
+      },
+      {
+        key: "ws.finalise-job-card",
+        title: "Finalise the job card",
+        summary: "When the repair is complete, check the job card and finalise it.",
+        href: "/workshop/job-cards",
+        requires: "workshop.jobcard.finalise",
+      },
+      {
+        key: "ws.service-bill",
+        title: "Enter service bills",
+        summary: "Record bills from outside garages and service providers.",
+        href: "/workshop/service-bills",
+        requires: "workshop.servicebill.manage",
+      },
+      {
+        key: "ws.replacement",
+        title: "Handle supplier replacements",
+        summary: "Track faulty parts sent back to the supplier for replacement.",
+        href: "/workshop/supplier-replacement",
+        requires: "workshop.replacement.manage",
+      },
+    ],
+  },
+  {
+    key: "auditor",
+    title: "Finding information",
+    description:
+      "Look up orders, LRs, bills and ledgers, and see who changed what.",
+    suggestedFor: ["admin.audit_log.view"],
+    steps: [
+      {
+        key: "aud.orders",
+        title: "Look up an order",
+        summary:
+          "Search orders by number or customer and open one to see its LRs.",
+        href: "/orders",
+        requires: "order.view",
+      },
+      {
+        key: "aud.lr",
+        title: "Open an LR and its documents",
+        summary:
+          "Open any LR to see its goods, freight, delivery and attached documents such as the POD.",
+        href: "/lorry-receipts",
+        requires: "lorry_receipt.view",
+      },
+      {
+        key: "aud.bills",
+        title: "Check bills",
+        summary: "The Billing Register lists every bill with its status.",
+        href: "/accounts/bills",
+        requires: "billing.view",
+      },
+      {
+        key: "aud.ledger",
+        title: "Read a ledger",
+        summary: "See every posting for an account between two dates.",
+        href: "/ledger",
+        requires: "ledger.view",
+      },
+      {
+        key: "aud.day-book",
+        title: "See the day book",
+        summary: "See everything posted on a given day.",
+        href: "/accounts/day-book",
+        requires: "ledger.voucher_view",
+      },
+      {
+        key: "aud.audit-log",
+        title: "Check who changed what",
+        summary:
+          "The audit log records changes to users and roles, and important actions such as closing trips.",
+        href: "/settings/audit-log",
+        requires: "admin.audit_log.view",
+      },
+    ],
+  },
+  {
+    key: "admin",
+    title: "Administration",
+    description: "Add users, set up roles and decide who can see which branch.",
+    suggestedFor: ["admin.rbac.manage"],
+    steps: [
+      {
+        key: "admin.users",
+        title: "Add and manage users",
+        summary: "Create a login for a new employee and give them a role.",
+        href: "/settings/users",
+        requires: "admin.rbac.manage",
+      },
+      {
+        key: "admin.roles",
+        title: "Set up roles",
+        summary:
+          "A role is a set of permissions. Change a role once and everyone with it gets the change.",
+        href: "/settings/roles",
+        requires: "admin.rbac.manage",
+      },
+      {
+        key: "admin.access",
+        title: "Give branch access",
+        summary: "Choose which branches each user can see and work in.",
+        href: "/settings/access",
+        requires: "admin.rbac.manage",
+      },
+      {
+        key: "admin.notifications",
+        title: "Set notification rules",
+        summary: "Decide who gets told about events like a new order or a late trip.",
+        href: "/settings/notifications",
+        requires: "notifications.manage_rules",
+      },
+      {
+        key: "admin.audit-log",
+        title: "Check the audit log",
+        summary: "See who changed users, roles and other important records.",
+        href: "/settings/audit-log",
+        requires: "admin.audit_log.view",
+      },
+    ],
+  },
+];
+
+/** Step key for the one-time first-login welcome (A11). */
+export const TRAINING_WELCOME_STEP = "welcome";

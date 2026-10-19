@@ -63,8 +63,12 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         title: "Training",
-        href: "/training",
         icon: IconSchool,
+        items: [
+          { title: "My role & training", href: "/training" },
+          { title: "How the business works", href: "/training/process-map" },
+          { title: "Glossary", href: "/training/glossary" },
+        ],
       },
     ],
   },
