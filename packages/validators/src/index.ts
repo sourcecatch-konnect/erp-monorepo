@@ -142,3 +142,6 @@ export * from "./workshop/supplier-replacement.schema.js";
 export * from "./master/one-lap-tracker.js";
 export * from "./ledger/ledger.schema.js";
 export * from "./accounts/vendor-payment.schema.js";
+export * from "./training/training.schema.js";
+// remove-before-prod: in-app feedback (testing phase only).
+export * from "./feedback/feedback.schema.js";

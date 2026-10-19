@@ -188,7 +188,16 @@ type WorkshopPermissionKey =
   | "workshop.replacement.view"
   | "workshop.replacement.manage";
 
-type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
+type AdminPermissionKey =
+  | "admin.rbac.manage"
+  | "admin.audit_log.view"
+  | "admin.training.manage";
+
+/**
+ * In-app feedback — testing phase only (Jira label `remove-before-prod`).
+ * Kept as its own type + PERMS group so removing the feature is a clean revert.
+ */
+type FeedbackPermissionKey = "feedback.view" | "feedback.manage";
 
 type NotificationPermissionKey =
   | "notifications.view"
@@ -234,7 +243,8 @@ export type PermissionKey =
   | OneLapTrackerPermissionKey
   | MRRRPermissionKey
   | NotificationPermissionKey
-  | AttachmentPermissionKey;
+  | AttachmentPermissionKey
+  | FeedbackPermissionKey;
 
 type MasterPerms<Slug extends MasterSlug> = {
   VIEW: `masters.${Slug}.view`;
@@ -490,6 +500,7 @@ export const PERMS = {
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",
     AUDIT_LOG_VIEW: "admin.audit_log.view",
+    TRAINING_MANAGE: "admin.training.manage",
   },
   NOTIFICATIONS: {
     VIEW: "notifications.view",
@@ -502,6 +513,11 @@ export const PERMS = {
     CREATE: "attachments.create",
     DOWNLOAD: "attachments.download",
     DELETE: "attachments.delete",
+  },
+  // remove-before-prod: in-app feedback (testing phase only).
+  FEEDBACK: {
+    VIEW: "feedback.view",
+    MANAGE: "feedback.manage",
   },
 } as const;
 

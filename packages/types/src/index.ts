@@ -103,3 +103,7 @@ export * from "./log-slip/log-slip.type.js";
 export * from "./user/table-pref.type.js";
 export * from "./master/one-lap-tracker.type.js";
 export * from "./ledger/ledger.type.js";
+export * from "./training/catalog.js";
+export * from "./training/training.type.js";
+// remove-before-prod: in-app feedback (testing phase only).
+export * from "./feedback/feedback.type.js";

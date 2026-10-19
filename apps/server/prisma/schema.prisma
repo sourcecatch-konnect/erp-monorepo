@@ -61,6 +61,7 @@ model User {
   notificationSubscriptions UserNotificationSubscription[]
   userPermissions           UserPermission[]
   userBranches              UserBranch[]
+  trainingProgress          TrainingProgress[]
 
   branch  Branch  @relation(fields: [branchId], references: [id])
   company Company @relation(fields: [companyId], references: [id])
@@ -364,13 +365,15 @@ model Warehouse {
 }
 
 model Role {
-  id              String           @id @default(cuid())
-  name            String           @unique
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @default(now()) @updatedAt
-  isSystem        Boolean          @default(false)
+  id              String               @id @default(cuid())
+  name            String               @unique
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @default(now()) @updatedAt
+  isSystem        Boolean              @default(false)
   rolePermissions RolePermission[]
   users           User[]
+  trainingProfile TrainingRoleProfile?
+  trainingTracks  TrainingRoleTrack[]
 }
 
 model PermissionDef {
@@ -4926,4 +4929,119 @@ enum LogSlipLineType {
   EXPENSE
   DRIVER_SETTLEMENT
   ADJUSTMENT
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Training (role-based onboarding). Tracks are assigned to roles as data —
+// code never matches on role names. Stage/track content lives in
+// packages/types/src/training/catalog.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TrainingStepStatus {
+  DONE
+  SKIPPED
+}
+
+enum TrainingCompletedBy {
+  SELF
+  SYSTEM
+}
+
+/// Admin-written description of what a role does, shown on "My Role".
+model TrainingRoleProfile {
+  roleId           String   @id
+  summary          String
+  responsibilities String[] @default([])
+  updatedAt        DateTime @updatedAt
+  role             Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+}
+
+/// Which training tracks a role should take (trackKey from the catalog).
+model TrainingRoleTrack {
+  roleId    String
+  trackKey  String
+  required  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, trackKey])
+}
+
+/// One row per completed/skipped step per user ("ops.book-order", "welcome", …).
+model TrainingProgress {
+  userId      String
+  stepKey     String
+  status      TrainingStepStatus
+  completedBy TrainingCompletedBy
+  completedAt DateTime            @default(now())
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, stepKey])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// In-app feedback — TESTING PHASE ONLY (Jira label `remove-before-prod`).
+// Deliberately has NO relations to any other model: the reporter is stored as
+// a snapshot, so dropping these tables touches nothing else.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum FeedbackCategory {
+  BUG
+  FLOW
+  UI
+  FINDABILITY
+  SUGGESTION
+}
+
+enum FeedbackStatus {
+  NEW
+  TRIAGED
+  IN_PROGRESS
+  FIXED
+  WONT_FIX
+  DUPLICATE
+}
+
+enum FeedbackSeverity {
+  BLOCKER
+  MAJOR
+  MINOR
+}
+
+model Feedback {
+  id          String            @id @default(cuid())
+  /// Human reference, shown as FB-0042.
+  number      Int               @unique @default(autoincrement())
+  category    FeedbackCategory
+  title       String
+  description String?
+  /// Category-specific answers, validated by @skerp/validators feedbackFormSchema.
+  details     Json
+  severity    FeedbackSeverity?
+  status      FeedbackStatus    @default(NEW)
+
+  pagePath    String
+  pageTitle   String
+  moduleLabel String
+  entityId    String?
+  /// Browser, app version, recent API errors (never bodies/headers/cookies).
+  context     Json
+
+  reporterId     String
+  reporterName   String
+  reporterRole   String
+  reporterBranch String?
+
+  assignee    String?
+  devNotes    String?
+  externalRef String?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@index([category])
+  @@index([moduleLabel, pagePath])
+  @@index([reporterId])
+  @@index([createdAt])
 }

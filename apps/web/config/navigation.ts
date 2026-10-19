@@ -18,6 +18,7 @@ import {
   IconEdit,
   IconBoxSeam,
   IconChartBar,
+  IconSchool,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -59,6 +60,11 @@ export const NAV_SECTIONS: NavSection[] = [
         title: "Dashboard",
         href: "/dashboard",
         icon: IconLayoutDashboard,
+      },
+      {
+        title: "Training",
+        href: "/training",
+        icon: IconSchool,
       },
     ],
   },
@@ -500,6 +506,16 @@ export const NAV_SECTIONS: NavSection[] = [
             href: "/settings/audit-log",
             permission: PERMS.ADMIN.AUDIT_LOG_VIEW,
           },
+          // remove-before-prod: in-app feedback (testing phase only).
+          ...(process.env.NEXT_PUBLIC_FEEDBACK_ENABLED === "true"
+            ? [
+                {
+                  title: "Feedback",
+                  href: "/settings/feedback",
+                  permission: PERMS.FEEDBACK.VIEW,
+                },
+              ]
+            : []),
         ],
       },
     ],

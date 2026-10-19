@@ -10,6 +10,8 @@ import { AppSidebar } from "./AppSidebar";
 import { AppBreadcrumb } from "./AppBreadcrumb";
 import { BreadcrumbLabelsProvider } from "./breadcrumb-labels";
 import { NotificationBellButton } from "@/features/notifications/NotificationBellButton";
+// remove-before-prod: in-app feedback (testing phase only).
+import { FeedbackLauncher } from "@/features/feedback";
 
 /**
  * Authenticated app frame: collapsible sidebar + a top bar with the
@@ -29,7 +31,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="mr-2 data-[orientation=vertical]:h-4"
             />
             <AppBreadcrumb />
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <FeedbackLauncher />
               <NotificationBellButton />
             </div>
           </header>

@@ -13,4 +13,28 @@ export default [
       "@next/next/no-img-element": "off",
     },
   },
+  {
+    // remove-before-prod: in-app feedback may only be imported by its two
+    // mount points, so deleting the feature can never break another module.
+    files: ["**/*.{ts,tsx}"],
+    ignores: [
+      "features/feedback/**",
+      "components/layout/AppShell.tsx",
+      "app/(dashboard)/settings/feedback/**",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/features/feedback", "@/features/feedback/*"],
+              message:
+                "Feedback is temporary (remove-before-prod). Only AppShell and the settings/feedback route may import it.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
