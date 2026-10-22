@@ -2,11 +2,14 @@
 
 import * as React from "react";
 import { TableCell, TableRow } from "@skerp/ui/components/table";
+import { EmptyState } from "@skerp/ui/components/empty-state";
 import { IconDatabaseOff } from "@tabler/icons-react";
 
 type Props = {
   colSpan: number;
   message: string;
+  /** What to do next, or what has to exist first (shown under the message). */
+  description?: React.ReactNode;
   icon?: React.ComponentType<{ size?: number; className?: string }>;
 };
 
@@ -14,20 +17,18 @@ type Props = {
 export function TableEmptyState({
   colSpan,
   message,
+  description,
   icon: Icon = IconDatabaseOff,
 }: Props) {
   return (
     <TableRow>
-      <TableCell
-        colSpan={colSpan}
-        className="py-14 text-center text-muted-foreground"
-      >
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-            <Icon size={18} />
-          </div>
-          <span className="text-sm font-medium">{message}</span>
-        </div>
+      <TableCell colSpan={colSpan} className="whitespace-normal p-0">
+        <EmptyState
+          className="py-14"
+          icon={<Icon size={18} />}
+          title={message}
+          description={description}
+        />
       </TableCell>
     </TableRow>
   );

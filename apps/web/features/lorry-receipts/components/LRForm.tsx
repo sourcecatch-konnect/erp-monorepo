@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { LR_FORM_HELP } from "../help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -746,7 +749,10 @@ export default function LRForm({ orderId, tripId }: Props) {
           onSubmit={form.handleSubmit(onSubmit)}
           className="order-2 min-w-0 space-y-5 lg:order-1"
         >
-          <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
+          <div
+            data-tour="lr-header"
+            className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between"
+          >
             <div>
               <h1 className="text-lg font-semibold">
                 {source === "FROM_ORDER"
@@ -786,6 +792,7 @@ export default function LRForm({ orderId, tripId }: Props) {
                   </div>
                 )}
               />
+              <PageHelp content={LR_FORM_HELP} />
               <Button
                 type="button"
                 variant="outline"
@@ -797,7 +804,7 @@ export default function LRForm({ orderId, tripId }: Props) {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting} data-tour="lr-submit">
                 {submitting
                   ? "Creating…"
                   : plannedLrCount > 1
@@ -811,6 +818,7 @@ export default function LRForm({ orderId, tripId }: Props) {
             <FormSection
               icon={<IconRoute size={16} />}
               title="Truck & transport"
+              tourId="lr-truck"
               columns={2}
             >
               <Controller
@@ -949,6 +957,7 @@ export default function LRForm({ orderId, tripId }: Props) {
             <FormSection
               icon={<IconUsers size={16} />}
               title="Parties"
+              tourId="lr-parties"
               columns={2}
             >
               <ComboboxField
@@ -1003,6 +1012,7 @@ export default function LRForm({ orderId, tripId }: Props) {
           <FormSection
             icon={<IconPackage size={16} />}
             title="Consignments / LR Lines"
+            tourId="lr-lines"
             columns={1}
           >
             <div className="space-y-3">
@@ -1048,6 +1058,7 @@ export default function LRForm({ orderId, tripId }: Props) {
           <FormSection
             icon={<IconTruck size={16} />}
             title="Vehicle"
+            tourId="lr-vehicle"
             columns={1}
           >
             <Controller
@@ -1287,7 +1298,7 @@ export default function LRForm({ orderId, tripId }: Props) {
 
         </form>
 
-        <div className="order-1 lg:order-2">
+        <div data-tour="lr-summary" className="order-1 lg:order-2">
           <LRCreateSummary
             source={source}
             order={orderContext.data}

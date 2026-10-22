@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { RECEIPTS_HELP } from "./help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -60,9 +63,12 @@ export function ReceiptRegisterPage() {
         title="Client payment receivable"
         description="Record customer payments against outstanding bills, and track approvals for TDS, damage or rate-difference deductions."
         actions={
-          <Button onClick={() => router.push("/accounts/receipts/new")}>
-            New receipt
-          </Button>
+          <>
+            <PageHelp content={RECEIPTS_HELP} />
+            <Button onClick={() => router.push("/accounts/receipts/new")}>
+              New receipt
+            </Button>
+          </>
         }
       />
       {receipts.isLoading ? (

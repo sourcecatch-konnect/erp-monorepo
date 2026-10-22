@@ -566,6 +566,7 @@ export default function JourneyTable(props: Props) {
             <TableEmptyState
               colSpan={visibleColumnCount}
               message="No journeys found"
+              description="If you are searching, try clearing the filters. Start a journey when a vehicle leaves; its trips and expenses collect on it."
             />
           ) : (
             table.getRowModel().rows.map((row) => (

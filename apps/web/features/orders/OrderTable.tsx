@@ -496,6 +496,7 @@ export default function OrderTable(props: Props) {
             <TableEmptyState
               colSpan={visibleColumnCount}
               message="No orders found"
+              description="If you are searching, try clearing the filters. A new order needs the customer, a route between the branches and a rate in the rate matrix."
             />
           ) : (
             table.getRowModel().rows.map((row) => (

@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { VP_LOADING_FORM_HELP } from "./help";
+
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -599,7 +602,10 @@ export default function VPLoadingForm({ mode }: Props) {
         onSubmit={form.handleSubmit(onSubmit)}
         className="mx-auto w-full max-w-7xl space-y-5 p-4 pb-24"
       >
-        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+        <div
+          data-tour="vpl-header"
+          className="overflow-hidden rounded-lg border bg-card shadow-sm"
+        >
           <div className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
             <Button
               type="button"
@@ -612,9 +618,12 @@ export default function VPLoadingForm({ mode }: Props) {
               Back
             </Button>
 
-            <span className="rounded-md border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              VP Loading
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-md border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                VP Loading
+              </span>
+              <PageHelp content={VP_LOADING_FORM_HELP} />
+            </div>
           </div>
 
           <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -672,6 +681,7 @@ export default function VPLoadingForm({ mode }: Props) {
             <FormSection
               icon={<IconRoute size={16} />}
               title="Loading Selection"
+              tourId="vpl-selection"
               description="Choose the schedule, VP wagon, gate and LR/GRN."
               columns={2}
             >
@@ -753,6 +763,7 @@ export default function VPLoadingForm({ mode }: Props) {
             <FormSection
               icon={<IconPackage size={16} />}
               title="Goods Loading"
+              tourId="vpl-goods"
               columns={1}
             >
               <div className="overflow-hidden rounded-lg border bg-background">
@@ -874,6 +885,7 @@ export default function VPLoadingForm({ mode }: Props) {
             <FormSection
               icon={<IconUsers size={16} />}
               title={isExistingWagonLoading ? "Wagon Labour" : "Labour & Notes"}
+              tourId="vpl-labour"
               columns={3}
             >
               {isExistingWagonLoading ? (
@@ -955,7 +967,7 @@ export default function VPLoadingForm({ mode }: Props) {
             </FormSection>
           </div>
 
-          <aside className="space-y-4 xl:sticky xl:top-4">
+          <aside data-tour="vpl-summary" className="space-y-4 xl:sticky xl:top-4">
             <SummaryPanel
               title="Read-only summary"
               description="Selected schedule, wagon and LR."
@@ -1128,7 +1140,12 @@ export default function VPLoadingForm({ mode }: Props) {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={!canSubmit} className="min-w-40">
+              <Button
+                type="submit"
+                disabled={!canSubmit}
+                className="min-w-40"
+                data-tour="vpl-submit"
+              >
                 {isSaving ? "Adding..." : "Add GRN to Wagon"}
               </Button>
             </div>

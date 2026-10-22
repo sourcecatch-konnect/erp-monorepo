@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { LR_LIST_HELP } from "./help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -109,23 +112,26 @@ export default function LRListPage() {
             </p>
           </div>
         </div>
-        {canCreate ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => setOrderPickerOpen(true)}
-            >
-              <IconFileText size={17} /> Create from Order
-            </Button>
-            <Button
-              size="lg"
-              onClick={() => router.push("/lorry-receipts/new")}
-            >
-              <IconPlus size={17} /> Create Instant LR
-            </Button>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <PageHelp content={LR_LIST_HELP} />
+          {canCreate ? (
+            <>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => setOrderPickerOpen(true)}
+              >
+                <IconFileText size={17} /> Create from Order
+              </Button>
+              <Button
+                size="lg"
+                onClick={() => router.push("/lorry-receipts/new")}
+              >
+                <IconPlus size={17} /> Create Instant LR
+              </Button>
+            </>
+          ) : null}
+        </div>
       </div>
 
       <LRTable
