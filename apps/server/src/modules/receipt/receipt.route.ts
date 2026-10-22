@@ -467,35 +467,90 @@ router.post("/", can(PERMS.RECEIPT.CREATE), async (req, res) => {
 
   return sendOk(res, created, undefined, 201);
 });
-
 router.get("/", can(PERMS.RECEIPT.VIEW), async (req, res) => {
   const status =
     typeof req.query.status === "string"
       ? (req.query.status as ReceiptStatus)
       : undefined;
+
+  const search =
+    typeof req.query.search === "string"
+      ? req.query.search.trim().slice(0, 100)
+      : "";
+
   const query = parseListQuery(req);
-  const where = {
-    ...branchFilter(req),
-    ...(status ? { status } : {}),
+
+  const where: Prisma.ReceiptWhereInput = {
+    AND: [
+      branchFilter(req),
+
+      ...(status ? [{ status }] : []),
+
+      ...(search
+        ? [
+          {
+            OR: [
+              {
+                receiptNumber: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                customer: {
+                  is: {
+                    name: {
+                      contains: search,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ]
+        : []),
+    ],
   };
+
   const [data, total] = await Promise.all([
     db.receipt.findMany({
       where,
       include: {
-        customer: { select: { id: true, name: true } },
-        branch: { select: { name: true, branchCode: true } },
-        _count: { select: { allocations: true } },
+        customer: {
+          select: { id: true, name: true },
+        },
+        branch: {
+          select: { name: true, branchCode: true },
+        },
+        _count: {
+          select: { allocations: true },
+        },
         journalEntry: {
-          select: { id: true, voucherNumber: true, status: true, tallySyncStatus: true },
+          select: {
+            id: true,
+            voucherNumber: true,
+            status: true,
+            tallySyncStatus: true,
+          },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
       skip: query.page * query.size,
       take: query.size,
     }),
+
     db.receipt.count({ where }),
   ]);
-  return sendOk(res, data, { page: query.page, size: query.size, total });
+
+  return sendOk(res, data, {
+    page: query.page,
+    size: query.size,
+    total,
+  });
 });
 
 router.get("/:id", can(PERMS.RECEIPT.VIEW), async (req, res) => {

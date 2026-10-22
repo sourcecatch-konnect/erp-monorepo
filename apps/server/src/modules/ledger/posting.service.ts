@@ -1373,8 +1373,14 @@ export type VendorSlipAccrualArgs = {
   /** Pass slip.accrualJournalEntryId — short-circuits to the existing POSTED
    *  journal instead of re-posting when an approval request is retried. */
   existingAccrualJournalEntryId?: string | null;
+  /** What the slip pays for, e.g. "MH19AB1234: LR-1, LR-2" — appended to the
+   *  narration so the Day Book names the truck and its LRs. */
+  narrationDetail?: string | null;
   createdById: string;
 };
+
+const withDetail = (narration: string, detail?: string | null) =>
+  detail ? `${narration} — ${detail}` : narration;
 
 const sumLines = (lines: VendorSlipAccrualLine[]): VendorSlipAccrualLine =>
   lines.reduce(
@@ -1427,7 +1433,10 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
 
   const payeeLedger = await getVendorPayeeLedger(tx, args);
   const totals = sumLines(args.lines);
-  const lineNarration = `${args.type === "TRANSPORTER" ? "Transporter" : "Hamali"} accrual ${args.slipNumber}`;
+  const lineNarration = withDetail(
+    `${args.type === "TRANSPORTER" ? "Transporter" : "Hamali"} accrual ${args.slipNumber}`,
+    args.narrationDetail,
+  );
   const lines: DraftLine[] = [];
 
   // Every GL code this accrual could touch, resolved in one query instead of
@@ -1540,6 +1549,8 @@ export type VendorDisbursementArgs = {
   /** Pass disbursement.settlementJournalEntryId — short-circuits to the
    *  existing POSTED journal instead of re-posting on a retried request. */
   existingSettlementJournalEntryId?: string | null;
+  /** Same as VendorSlipAccrualArgs.narrationDetail. */
+  narrationDetail?: string | null;
   createdById: string;
 };
 
@@ -1573,7 +1584,10 @@ export async function postVendorDisbursement(tx: Tx, args: VendorDisbursementArg
   const fundingLedger = await requireFundingLedger(tx, args.fundingLedgerId);
 
   const payeeLedger = await getVendorPayeeLedger(tx, args);
-  const lineNarration = `Vendor payment ${args.voucherNumber} — slip ${args.slipNumber}`;
+  const lineNarration = withDetail(
+    `Vendor payment ${args.voucherNumber} — slip ${args.slipNumber}`,
+    args.narrationDetail,
+  );
 
   return postJournal(tx, {
     voucherType: "PAYMENT",

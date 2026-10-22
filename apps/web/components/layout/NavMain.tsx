@@ -28,12 +28,14 @@ import {
 } from "@/config/navigation";
 import { useAppSelector } from "@/store/hooks";
 import { useLowStockCount } from "@/features/stock/hooks/useLowStockCount";
+import { useMyWorkCount } from "@/features/my-work";
 
 /** Maps a nav item's `badgeKey` to the live count that feeds it — kept as a
  *  small lookup so navigation.ts itself stays free of feature-specific hooks. */
 function useNavBadgeCounts(): Record<string, number> {
   const stockLow = useLowStockCount();
-  return { stockLow };
+  const myWork = useMyWorkCount();
+  return { stockLow, myWork };
 }
 
 const filterNavItem = (

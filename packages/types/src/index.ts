@@ -104,3 +104,5 @@ export * from "./user/table-pref.type.js";
 export * from "./master/one-lap-tracker.type.js";
 export * from "./ledger/ledger.type.js";
 export * from "./permission-labels.js";
+export * from "./my-work/my-work.type.js";
+export * from "./dashboard/dashboard.type.js";

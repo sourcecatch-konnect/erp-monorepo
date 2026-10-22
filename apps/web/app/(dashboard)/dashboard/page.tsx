@@ -1,18 +1,13 @@
-"use client";
+import { Suspense } from "react";
+import { DashboardLoading, DashboardPage } from "@/features/dashboard";
 
-import { useAuth } from "@/features/auth";
-
-export default function DashboardPage() {
-  const { user } = useAuth();
-
+// DashboardPage keeps period and branch in the URL (?period=&branch=) with
+// useSearchParams, which needs a Suspense boundary during prerender. The
+// fallback is the real grid's skeleton, so the page never flashes blank.
+export default function Page() {
   return (
-    <div className="space-y-2">
-      <h1 className="text-lg font-semibold text-foreground">Dashboard</h1>
-      <p className="text-sm text-muted-foreground">
-        Signed in as{" "}
-        <span className="font-medium text-foreground">{user?.email}</span>.
-        Modules will appear here as they are built.
-      </p>
-    </div>
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardPage />
+    </Suspense>
   );
 }

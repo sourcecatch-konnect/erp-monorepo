@@ -37,6 +37,10 @@ import {
   LR_DELIVERY_STATS_CACHE,
   LR_DELIVERY_STATS_TTL_SECONDS,
 } from "./lr-delivery.cache.js";
+import {
+  assertLRsNotOnVendorSlip,
+  sameValue,
+} from "../vendor-payment/source-lock.js";
 
 /**
  * Delivery + acknowledgement actions on a single LR. Mounted on
@@ -74,7 +78,9 @@ const lrForAction = async (id: string) => {
           unloadingAt: true,
         },
       },
-      acknowledgement: { select: { id: true } },
+      acknowledgement: {
+        select: { id: true, detentionAmount: true, damageAmount: true },
+      },
       group: {
         select: {
           id: true,
@@ -869,6 +875,7 @@ router.post(
       throw new BadRequestError("This lorry receipt is not delivered");
     }
     assertBranchAccess(req, lr.group.destinationBranchId);
+    await assertLRsNotOnVendorSlip(db, [id], "undo this delivery");
     await assertFinalTripNotClosed(lr.group);
 
     const me = actorId(req);
@@ -1001,6 +1008,21 @@ router.patch(
     }
     const input = parsed.data;
 
+    // Detention and damage feed the transporter slip for this LR.
+    const ack = lr.acknowledgement;
+    const transporterPayChanged =
+      (input.detentionAmount !== undefined &&
+        !sameValue(BigInt(input.detentionAmount), ack.detentionAmount)) ||
+      (input.damageAmount !== undefined &&
+        !sameValue(BigInt(input.damageAmount), ack.damageAmount));
+    if (transporterPayChanged) {
+      await assertLRsNotOnVendorSlip(
+        db,
+        [id],
+        "change this acknowledgement's detention or damage amount",
+      );
+    }
+
     const goodsIds = new Set(lr.goods.map((g) => g.id));
     for (const item of input.items ?? []) {
       if (!goodsIds.has(item.lrGoodsId)) {
@@ -1092,6 +1114,7 @@ router.post(
         "Cancel every active draft/final bill for this LR before undoing acknowledgement",
       );
     }
+    await assertLRsNotOnVendorSlip(db, [id], "undo this acknowledgement");
 
     const me = actorId(req);
     await db.$transaction(async (tx) => {

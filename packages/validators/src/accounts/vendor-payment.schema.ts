@@ -12,6 +12,7 @@ export const vendorPaymentTypeSchema = z.enum([
 
 export const vendorPaymentSourceTypeSchema = z.enum([
   "LR",
+  "LR_GROUP",
   "GRN_HAMALI",
   "RAIL_BRANCH_GRN",
   "VP_LOADING",

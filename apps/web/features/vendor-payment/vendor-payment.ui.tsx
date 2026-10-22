@@ -89,7 +89,7 @@ export function PageHeader({
             </p>
           </div>
         </div>
-        {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap gap-2 print:hidden">{actions}</div> : null}
       </div>
     </div>
   );

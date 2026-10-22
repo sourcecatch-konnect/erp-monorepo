@@ -47,6 +47,10 @@ import {
   groupListSelect,
   groupDetailInclude,
 } from "./lr-group.service.js";
+import {
+  assertLRsNotOnVendorSlip,
+  sameValue,
+} from "../vendor-payment/source-lock.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -389,11 +393,32 @@ router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
 
   if (!group) throw new NotFoundError("Lorry receipt group not found");
 
-  const deliveryEligibility = await getLRDeliveryEligibilities(
-    group.lorryReceipts.map((lr) => lr.id),
-  );
+  const [deliveryEligibility, paymentLines] = await Promise.all([
+    getLRDeliveryEligibilities(group.lorryReceipts.map((lr) => lr.id)),
+    group.isMarketVehicle
+      ? db.vendorPaymentSlipLine.findMany({
+          where: {
+            isActive: true,
+            OR: [
+              { sourceType: "LR_GROUP", sourceId: group.id },
+              { sourceType: "LR", sourceId: { in: group.lorryReceipts.map((lr) => lr.id) } },
+            ],
+          },
+          select: { slip: { select: { id: true, slipNumber: true, status: true } } },
+        })
+      : [],
+  ]);
+  const transporterPayments = [
+    ...new Map(
+      paymentLines.map(({ slip }) => [
+        slip.id,
+        { slipId: slip.id, slipNumber: slip.slipNumber, status: slip.status },
+      ]),
+    ).values(),
+  ];
   return sendOk(res, {
     ...group,
+    transporterPayments,
     lorryReceipts: group.lorryReceipts.map((lr) => ({
       ...lr,
       deliveryEligibility: deliveryEligibility.get(lr.id),
@@ -1052,6 +1077,37 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
         `Vehicle ${nextMarketVehicleNumber} is already assigned to LR group ${busyVehicle.groupNumber}`,
       );
     }
+  }
+
+  // The transporter and market amounts are what a transporter slip pays.
+  // Once any LR of this group is on a slip, they are frozen.
+  const nextMarketPaise = (
+    value: number | undefined,
+    current: bigint | null,
+  ): bigint | null =>
+    nextIsMarketVehicle
+      ? value !== undefined
+        ? BigInt(value)
+        : current
+      : null;
+  const transporterPayChanged =
+    nextIsMarketVehicle !== existing.isMarketVehicle ||
+    !sameValue(nextMarketTransportId, existing.marketTransportId) ||
+    (
+      [
+        [input.marketFreightAmount, existing.marketFreightAmount],
+        [input.marketAdvanceAmount, existing.marketAdvanceAmount],
+        [input.marketCommissionAmount, existing.marketCommissionAmount],
+        [input.marketHamaliAmount, existing.marketHamaliAmount],
+        [input.marketTdsAmount, existing.marketTdsAmount],
+      ] as const
+    ).some(([value, current]) => !sameValue(nextMarketPaise(value, current), current));
+  if (transporterPayChanged) {
+    await assertLRsNotOnVendorSlip(
+      db,
+      existing.lorryReceipts.map((lr) => lr.id),
+      "change this truck's transporter or market amounts",
+    );
   }
 
   const updated = await db.lRGroup.update({

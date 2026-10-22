@@ -50,6 +50,19 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
   const [referenceNo, setReferenceNo] = React.useState("");
   const [fundingLedgerId, setFundingLedgerId] = React.useState("");
 
+  // Cash comes from a cash account; bank, UPI and cheque from a bank account
+  // (the server enforces the same rule).
+  const fundingGroup = mode === "CASH" ? "CASH" : "BANK";
+  const matchingLedgers = (fundingLedgers.data ?? []).filter(
+    (ledger) => ledger.group === fundingGroup,
+  );
+  const changeMode = (next: PaymentMode) => {
+    setMode(next);
+    const nextGroup = next === "CASH" ? "CASH" : "BANK";
+    const current = fundingLedgers.data?.find((ledger) => ledger.id === fundingLedgerId);
+    if (current && current.group !== nextGroup) setFundingLedgerId("");
+  };
+
   // Generated once per page visit and reused across retries of the *same*
   // attempt — this is the idempotency key. A fresh page visit (new mount)
   // gets a fresh id, which is correct: that's a genuinely new attempt.
@@ -166,7 +179,7 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
               ) : null}
             </Field>
             <Field label="Mode">
-              <Select value={mode} onValueChange={(v) => setMode(v as PaymentMode)}>
+              <Select value={mode} onValueChange={(v) => changeMode(v as PaymentMode)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -196,7 +209,7 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
                 <SelectValue placeholder="Select funding ledger" />
               </SelectTrigger>
               <SelectContent>
-                {(fundingLedgers.data ?? []).map((ledger) => (
+                {matchingLedgers.map((ledger) => (
                   <SelectItem key={ledger.id} value={ledger.id}>
                     {ledger.name}
                   </SelectItem>

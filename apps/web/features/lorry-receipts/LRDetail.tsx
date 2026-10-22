@@ -1015,6 +1015,27 @@ export default function LRDetail({ id }: { id: string }) {
                 </div>
               </div>
 
+              {g.transporterPayments?.length ? (
+                <div className="space-y-1 rounded-md border bg-muted/30 p-2.5 text-xs">
+                  {g.transporterPayments.map((payment) => (
+                    <p key={payment.slipId}>
+                      <span className="text-muted-foreground">Transporter paid on slip </span>
+                      <button
+                        type="button"
+                        className="font-medium text-primary underline-offset-2 hover:underline"
+                        onClick={() => router.push(`/accounts/vendor-payments/${payment.slipId}`)}
+                      >
+                        {payment.slipNumber}
+                      </button>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        ({payment.status.replaceAll("_", " ").toLowerCase()})
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+
               {/* Other details */}
               <div className="grid grid-cols-2 gap-x-6 border-t pt-3">
                 <Field label="Seal number" value={g.sealNumber} />

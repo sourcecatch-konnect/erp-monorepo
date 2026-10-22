@@ -4548,7 +4548,10 @@ enum VendorPaymentStatus {
 }
 
 enum VendorPaymentSourceType {
+  /// Legacy per-LR transporter line (slips made before LR_GROUP).
   LR
+  /// Transporter line for one truck (LR group) and all its LRs.
+  LR_GROUP
   GRN_HAMALI
   RAIL_BRANCH_GRN
   VP_LOADING

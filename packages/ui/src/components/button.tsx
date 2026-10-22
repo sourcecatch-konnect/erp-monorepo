@@ -21,6 +21,10 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        /* A call to action that is present but not loud: a light primary tint
+           that fills solid on hover. Use for "do the next step" buttons that
+           repeat down a list, so the single solid primary stays unique. */
+        soft: "border-primary/25 bg-primary/10 text-primary hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:border-primary dark:bg-primary/15",
       },
       size: {
         default:
