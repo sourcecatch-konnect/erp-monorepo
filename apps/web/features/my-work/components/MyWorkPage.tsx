@@ -1,295 +1,255 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { IconCircleCheck, IconRefresh } from "@tabler/icons-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { IconRefresh, IconTrain, IconTruck } from "@tabler/icons-react";
 import { Button } from "@skerp/ui/components/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
 import { Skeleton } from "@skerp/ui/components/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@skerp/ui/components/tabs";
-import type { MyWorkArea, MyWorkResponse } from "@skerp/types";
+import type {
+  MyWorkGoingOn,
+  MyWorkModule,
+  MyWorkQueue,
+  MyWorkQueueKey,
+} from "@skerp/types";
+import { useAuth } from "@/features/auth";
 import { cn } from "@/lib/utils";
 import { useMyWork } from "../hooks";
-import { MyWorkQueueCard } from "./MyWorkQueueCard";
-import { MyWorkRowItem } from "./MyWorkRowItem";
+import { AreaCards } from "./AreaCards";
+import { MODULES } from "./modules";
+import { WorkList, type View } from "./WorkList";
+import type { QuickAction } from "./quick";
 
-const AREA_LABEL: Record<MyWorkArea, string> = {
-  orders: "Orders",
-  "lorry-receipts": "Lorry receipts",
-  billing: "Billing",
-  trips: "Trips",
+// The dialogs pull in the order and LR screens, so load them only when a
+// quick action is actually opened.
+const QuickActions = dynamic(() => import("./QuickActions"), { ssr: false });
+
+const greeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 };
 
-const AREA_ORDER: MyWorkArea[] = ["orders", "lorry-receipts", "billing", "trips"];
+const updatedAgo = (at: number) => {
+  const mins = Math.floor((Date.now() - at) / 60_000);
+  if (mins < 1) return "just now";
+  return mins === 1 ? "1 min ago" : `${mins} min ago`;
+};
 
-type Tab = "all" | MyWorkArea | "stale";
+const MOVING_ICON: Record<MyWorkGoingOn["key"], typeof IconTruck> = {
+  trips_in_transit: IconTruck,
+  rakes_moving: IconTrain,
+};
 
-function StatTile({
-  label,
-  value,
-  hint,
-  tone = "default",
-}: {
-  label: string;
-  value: number;
-  hint: string;
-  tone?: "default" | "danger";
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "mt-1 text-2xl font-semibold tabular-nums",
-          tone === "danger" && value > 0
-            ? "text-destructive"
-            : "text-foreground",
-        )}
-      >
-        {value.toLocaleString("en-IN")}
-      </p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-    </div>
-  );
+const VIEWS: View[] = ["waiting", "late", "stale"];
+
+/**
+ * Branch, area, step and view are kept in the address
+ * (?branch=…&area=orders&step=…&show=late), so coming back from "Make LR" or a
+ * document lands on the same list, and a filtered list can be shared.
+ */
+function useListState() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const set = (next: Partial<Record<"branch" | "area" | "step" | "show", string | null>>) => {
+    const p = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(next)) {
+      if (v) p.set(k, v);
+      else p.delete(k);
+    }
+    const qs = p.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  return {
+    branch: params.get("branch"),
+    module: MODULES.find((m) => m.key === params.get("area"))?.key ?? null,
+    stepParam: params.get("step"),
+    view: VIEWS.find((v) => v === params.get("show")) ?? "waiting",
+    setBranch: (b: string | null) => set({ branch: b, step: null }),
+    // A new area starts with all its steps.
+    setModule: (m: MyWorkModule | null) => set({ area: m, step: null }),
+    setQueue: (q: MyWorkQueueKey | null) => set({ step: q }),
+    setView: (v: View) => set({ show: v === "waiting" ? null : v }),
+  };
 }
+
+/** A step only counts when the user has it and it sits in the picked area. */
+const pickStep = (
+  queues: MyWorkQueue[],
+  module: MyWorkModule | null,
+  step: string | null,
+) =>
+  queues.find((q) => q.key === step && (module === null || q.module === module))
+    ?.key ?? null;
 
 function PageSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-24 w-full" />
+    <div className="mx-auto w-full max-w-7xl space-y-4">
+      <Skeleton className="h-14 w-80" />
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 8 }, (_, i) => (
+          <Skeleton key={i} className="h-10 w-32" />
         ))}
       </div>
-      <Skeleton className="h-64 w-full" />
-      <Skeleton className="h-64 w-full" />
+      <Skeleton className="h-96 w-full" />
     </div>
   );
 }
 
-function DoToday({
-  items,
-  queues,
-}: {
-  items: MyWorkResponse["doToday"];
-  queues: MyWorkResponse["queues"];
-}) {
-  if (items.length === 0) return null;
-  const byKey = new Map(queues.map((q) => [q.key, q]));
-
-  return (
-    <section className="rounded-lg border bg-card">
-      <header className="border-b px-4 py-3">
-        <h2 className="text-sm font-semibold text-foreground">Do today</h2>
-        <p className="text-xs text-muted-foreground">
-          The most overdue items across everything you can act on.
-        </p>
-      </header>
-      <ul className="divide-y">
-        {items.map((item) => {
-          const queue = byKey.get(item.queueKey);
-          return (
-            <MyWorkRowItem
-              key={`${item.queueKey}:${item.id}`}
-              row={item}
-              actionLabel={item.actionLabel}
-              lateAfterDays={queue?.lateAfterDays ?? 1}
-              queueTitle={queue?.title}
-            />
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function GoingOn({ items }: { items: MyWorkResponse["goingOn"] }) {
-  if (items.length === 0) return null;
-  return (
-    <section>
-      <h2 className="mb-2 text-sm font-semibold text-foreground">
-        Going on <span className="font-normal text-muted-foreground">· just watching</span>
-      </h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {items.map((g) => (
-          <Link
-            key={g.key}
-            href={g.href}
-            className="flex items-baseline justify-between rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-muted"
-          >
-            <span className="text-sm text-foreground">{g.title}</span>
-            <span className="text-lg font-semibold tabular-nums text-foreground">
-              {g.count.toLocaleString("en-IN")}
-            </span>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AllCaughtUp() {
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border bg-card px-4 py-12 text-center">
-      <IconCircleCheck className="size-8 text-success" />
-      <p className="text-sm font-medium text-foreground">All caught up</p>
-      <p className="max-w-sm text-xs text-muted-foreground">
-        Nothing is waiting on you right now. New work shows up here as
-        orders, LRs and bills move forward.
-      </p>
-    </div>
-  );
-}
-
+/**
+ * My Work, top to bottom:
+ *   1. one sentence: how much needs you and how much is late
+ *   2. a card per work area (Orders, LR, Rail, Billing, …) — pick one to focus
+ *   3. the list of items, most urgent first, with the next-step button
+ */
 export function MyWorkPage() {
-  const { data, isPending, isError, isFetching, refetch } = useMyWork();
-  const [tab, setTab] = React.useState<Tab>("all");
+  const { user } = useAuth();
+  const list = useListState();
+  const { data, dataUpdatedAt, isPending, isError, isFetching, refetch } =
+    useMyWork(list.branch);
+  const [quick, setQuick] = React.useState<QuickAction | null>(null);
 
-  const queues = data?.queues ?? [];
-  const active = queues.filter((q) => q.waiting > 0);
-  const stale = queues.filter((q) => q.stale > 0);
+  if (isPending) return <PageSkeleton />;
 
-  const areaCounts = AREA_ORDER.map((area) => ({
-    area,
-    count: active
-      .filter((q) => q.area === area)
-      .reduce((n, q) => n + q.waiting, 0),
-  })).filter((a) => a.count > 0);
-
-  // If the selected tab vanishes after a refresh (work cleared), fall back.
-  const tabValid =
-    tab === "all" ||
-    (tab === "stale" ? stale.length > 0 : areaCounts.some((a) => a.area === tab));
-  const current: Tab = tabValid ? tab : "all";
-
-  const visibleActive =
-    current === "all" ? active : active.filter((q) => q.area === current);
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">My Work</h1>
-          <p className="text-sm text-muted-foreground">
-            {data
-              ? data.summary.needsYou > 0
-                ? `${data.summary.needsYou.toLocaleString("en-IN")} thing(s) need you. Oldest first. Clear the red ones before anything else.`
-                : "Nothing needs you right now."
-              : "Everything waiting on you, across the ERP."}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void refetch()}
-          disabled={isFetching}
-        >
-          <IconRefresh className={cn(isFetching && "animate-spin")} />
-          Refresh
+  if (isError || !data) {
+    return (
+      <div className="mx-auto w-full max-w-7xl rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+        Could not load your work.{" "}
+        <Button variant="link" size="sm" onClick={() => void refetch()}>
+          Try again
         </Button>
       </div>
+    );
+  }
 
-      {isPending ? (
-        <PageSkeleton />
-      ) : isError || !data ? (
-        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-          Could not load your work.{" "}
-          <Button variant="link" size="sm" onClick={() => void refetch()}>
-            Try again
+  const { summary, queues, goingOn, branches } = data;
+  const moving = goingOn.filter((g) => g.count > 0);
+  const queue = pickStep(queues, list.module, list.stepParam);
+
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold text-foreground">My Work</h1>
+          <p className="text-sm text-muted-foreground">
+            {greeting()}
+            {user?.role.name ? ` · ${user.role.name}` : ""}. Updated{" "}
+            {updatedAgo(dataUpdatedAt)}.
+          </p>
+          <p className="text-base text-foreground">
+            {summary.needsYou === 0 ? (
+              "Nothing needs you right now."
+            ) : (
+              <>
+                <b className="font-semibold tabular-nums">
+                  {summary.needsYou.toLocaleString("en-IN")}
+                </b>{" "}
+                {summary.needsYou === 1 ? "item needs" : "items need"} you
+                {summary.late > 0 ? (
+                  <>
+                    {", "}
+                    <b
+                      className={cn(
+                        "font-semibold tabular-nums",
+                        summary.veryLate > 0 ? "text-destructive" : "text-warning",
+                      )}
+                    >
+                      {summary.late.toLocaleString("en-IN")} late
+                    </b>
+                    .
+                  </>
+                ) : (
+                  ", all on time."
+                )}
+              </>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Only worth showing to people who cover more than one branch. */}
+          {branches.length > 1 && (
+            <Select
+              value={list.branch ?? "all"}
+              onValueChange={(v) => list.setBranch(v === "all" ? null : v)}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-44"
+                aria-label="Branch"
+                title="Trips, trip expenses and log slips have no branch, so they always show."
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All branches</SelectItem>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
+            <IconRefresh className={cn(isFetching && "animate-spin")} />
+            Refresh
           </Button>
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatTile
-              label="Needs you"
-              value={data.summary.needsYou}
-              hint={`across ${active.length} step(s)`}
-            />
-            <StatTile
-              label="Late"
-              value={data.summary.late}
-              hint="past their time limit"
-              tone="danger"
-            />
-            <StatTile
-              label="Going on"
-              value={data.summary.goingOn}
-              hint="moving, nothing to do yet"
-            />
-            <StatTile
-              label="Stale"
-              value={data.summary.stale}
-              hint="very old, needs cleanup"
-            />
-          </div>
+      </header>
 
-          {(areaCounts.length > 0 || stale.length > 0) && (
-            <Tabs value={current} onValueChange={(v) => setTab(v as Tab)}>
-              <TabsList>
-                <TabsTrigger value="all">
-                  All {data.summary.needsYou}
-                </TabsTrigger>
-                {areaCounts.map((a) => (
-                  <TabsTrigger key={a.area} value={a.area}>
-                    {AREA_LABEL[a.area]} {a.count}
-                  </TabsTrigger>
-                ))}
-                {stale.length > 0 && (
-                  <TabsTrigger value="stale">
-                    Stale {data.summary.stale}
-                  </TabsTrigger>
-                )}
-              </TabsList>
-            </Tabs>
-          )}
-
-          {current === "stale" ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                These have sat untouched far longer than normal. They are
-                probably leftovers. Finish them or close them so they stop
-                hiding real work.
-              </p>
-              {stale.map((q) => (
-                <MyWorkQueueCard key={q.key} queue={q} scope="stale" />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {current === "all" && (
-                <DoToday items={data.doToday} queues={data.queues} />
-              )}
-
-              {visibleActive.length === 0 ? (
-                <AllCaughtUp />
-              ) : current === "all" ? (
-                AREA_ORDER.map((area) => {
-                  const inArea = visibleActive.filter((q) => q.area === area);
-                  if (inArea.length === 0) return null;
-                  return (
-                    <div key={area} className="space-y-3">
-                      <h2 className="text-xs font-medium uppercase text-muted-foreground">
-                        {AREA_LABEL[area]}
-                      </h2>
-                      {inArea.map((q) => (
-                        <MyWorkQueueCard key={q.key} queue={q} scope="active" />
-                      ))}
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="space-y-3">
-                  {visibleActive.map((q) => (
-                    <MyWorkQueueCard key={q.key} queue={q} scope="active" />
-                  ))}
-                </div>
-              )}
-
-              {current === "all" && <GoingOn items={data.goingOn} />}
-            </div>
-          )}
-        </>
+      {moving.length > 0 && (
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span className="text-xs font-medium">Moving now, no action needed:</span>
+          {moving.map((g) => {
+            const IconCmp = MOVING_ICON[g.key];
+            return (
+              <Link
+                key={g.key}
+                href={g.href}
+                className="inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-primary hover:underline"
+              >
+                <IconCmp className="size-4 text-muted-foreground" />
+                <b className="font-semibold tabular-nums">{g.count}</b>
+                {g.key === "trips_in_transit" ? "trucks in transit" : "rakes moving"}
+              </Link>
+            );
+          })}
+        </p>
       )}
+
+      <AreaCards queues={queues} value={list.module} onChange={list.setModule} />
+
+      {/* Keyed so a new area starts on its first page with no step picked. */}
+      <WorkList
+        key={list.module ?? "all"}
+        queues={queues}
+        module={list.module}
+        branch={list.branch}
+        queue={queue}
+        view={list.view}
+        onQueue={list.setQueue}
+        onView={list.setView}
+        onQuick={setQuick}
+      />
+
+      <QuickActions action={quick} onClose={() => setQuick(null)} />
     </div>
   );
 }

@@ -922,20 +922,71 @@ router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
   );
   return sendOk(res, orderedBills, undefined, 201);
 });
-
 router.get("/bills", can(PERMS.BILLING.VIEW), async (req, res) => {
   const status =
     typeof req.query.status === "string"
       ? (req.query.status as BillStatus)
       : undefined;
+
+  const search =
+    typeof req.query.search === "string"
+      ? req.query.search.trim().slice(0, 100)
+      : "";
+
   const query = parseListQuery(req);
-  const where = { ...branchFilter(req), ...(status ? { status } : {}) };
+
+  const where: Prisma.BillWhereInput = {
+    AND: [
+      // Keep the user's branch restrictions.
+      branchFilter(req),
+
+      // Optional status filter.
+      ...(status ? [{ status }] : []),
+
+      // Optional search: bill number OR customer name.
+      ...(search
+        ? [
+          {
+            OR: [
+              {
+                billNumber: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                billingCustomer: {
+                  is: {
+                    name: {
+                      contains: search,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ]
+        : []),
+    ],
+  };
+
   const [data, total] = await Promise.all([
     db.bill.findMany({
       where,
       include: {
-        branch: { select: { name: true, branchCode: true } },
-        billingCustomer: { select: { id: true, name: true } },
+        branch: {
+          select: {
+            name: true,
+            branchCode: true,
+          },
+        },
+        billingCustomer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         placeOfSupplyState: true,
         journalEntry: {
           select: {
@@ -945,15 +996,29 @@ router.get("/bills", can(PERMS.BILLING.VIEW), async (req, res) => {
             tallySyncStatus: true,
           },
         },
-        _count: { select: { lines: true } },
+        _count: {
+          select: {
+            lines: true,
+          },
+        },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
       skip: query.page * query.size,
       take: query.size,
     }),
+
+    // Use the same filters so pagination totals stay accurate.
     db.bill.count({ where }),
   ]);
-  return sendOk(res, data, { page: query.page, size: query.size, total });
+
+  return sendOk(res, data, {
+    page: query.page,
+    size: query.size,
+    total,
+  });
 });
 
 router.get("/bills/:id", can(PERMS.BILLING.VIEW), async (req, res) => {

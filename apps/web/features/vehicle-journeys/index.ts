@@ -9,3 +9,4 @@ export { default as VehiclePnlPage } from "./VehiclePnlPage";
 export { default as VehiclePnlDetailPage } from "./VehiclePnlDetailPage";
 export { default as VehiclePnlMonthlyPage } from "./VehiclePnlMonthlyPage";
 export { default as VehicleCostsPage } from "./VehicleCostsPage";
+export { expenseApi } from "./journey.service";
