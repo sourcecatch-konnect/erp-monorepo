@@ -2,6 +2,12 @@ import { z } from "zod";
 import {
   feedbackBulkStatusSchema,
   feedbackCategorySchema,
+  feedbackCommentKindSchema,
+  feedbackCommentSchema,
+  feedbackCommentSideSchema,
+  feedbackConfirmSchema,
+  feedbackElementSchema,
+  feedbackScreenshotRequestSchema,
   feedbackContextSchema,
   feedbackFormSchema,
   feedbackPageSchema,
@@ -45,8 +51,15 @@ export type FeedbackListItem = {
   reporterName: string;
   reporterRole: string;
   reporterBranch: string | null;
+  reporterConfirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type FeedbackScreenshot = {
+  id: string;
+  /** Short-lived presigned download URL. */
+  url: string;
 };
 
 export type FeedbackDetail = FeedbackListItem & {
@@ -59,6 +72,7 @@ export type FeedbackDetail = FeedbackListItem & {
   devNotes: string | null;
   externalRef: string | null;
   resolvedAt: string | null;
+  screenshots: FeedbackScreenshot[];
 };
 
 export type MyFeedbackItem = Pick<
@@ -68,11 +82,35 @@ export type MyFeedbackItem = Pick<
   | "category"
   | "title"
   | "status"
+  | "pagePath"
   | "pageTitle"
   | "moduleLabel"
+  | "reporterConfirmedAt"
   | "createdAt"
   | "updatedAt"
 >;
+
+export type FeedbackElement = z.infer<typeof feedbackElementSchema>;
+export type FeedbackScreenshotRequest = z.infer<typeof feedbackScreenshotRequestSchema>;
+export type FeedbackCommentBody = z.infer<typeof feedbackCommentSchema>;
+export type FeedbackConfirmBody = z.infer<typeof feedbackConfirmSchema>;
+export type FeedbackCommentKind = z.infer<typeof feedbackCommentKindSchema>;
+export type FeedbackCommentSide = z.infer<typeof feedbackCommentSideSchema>;
+
+export type FeedbackComment = {
+  id: string;
+  authorName: string;
+  side: FeedbackCommentSide;
+  kind: FeedbackCommentKind;
+  body: string;
+  createdAt: string;
+};
+
+/** POST /feedback/:id/screenshots */
+export type FeedbackScreenshotUpload = { attachmentId: string; uploadUrl: string };
+
+/** GET /feedback/status */
+export type FeedbackStatusInfo = { enabled: boolean; screenshots: boolean };
 
 /** Grouped by page name (not URL) so every detail page of a screen counts together. */
 export type FeedbackTopPage = {

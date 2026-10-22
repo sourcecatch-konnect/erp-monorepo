@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import type { FeedbackElement } from "@skerp/types";
 import {
   Sheet,
   SheetContent,
@@ -9,6 +11,9 @@ import {
   SheetTitle,
 } from "@skerp/ui/components/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@skerp/ui/components/tabs";
+import { captureElement, pickElement } from "../lib/capture";
+import type { Screenshot } from "../lib/images";
+import { markFeedbackSeen, readSeenAt } from "../lib/seen";
 import { FeedbackForm } from "./FeedbackForm";
 import { MyFeedbackList } from "./MyFeedbackList";
 
@@ -22,14 +27,64 @@ const VIEW_TAB_CLASS =
 export default function FeedbackSheet({
   open,
   onOpenChange,
+  screenshotsEnabled,
+  updates,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  screenshotsEnabled: boolean;
+  /** Items with news since the user last looked at My feedback. */
+  updates: number;
 }) {
   const [view, setView] = useState<View>("new");
+  // Pictures + the picked element live here, not in the form: the form
+  // unmounts while the panel is hidden for "Point at the problem".
+  const [shots, setShots] = useState<Screenshot[]>([]);
+  const [element, setElement] = useState<FeedbackElement | null>(null);
+  const [picking, setPicking] = useState(false);
+  // When My feedback was last opened before now, so new items stay marked.
+  const [seenAtOnOpen, setSeenAtOnOpen] = useState(0);
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  const changeView = (next: View) => {
+    if (next === "mine") {
+      setSeenAtOnOpen(readSeenAt());
+      markFeedbackSeen();
+    }
+    setView(next);
+  };
+
+  // Closing the panel while on My feedback counts as having seen it.
+  useEffect(() => {
+    if (!open && viewRef.current === "mine") markFeedbackSeen();
+  }, [open]);
+
+  const startPick = async () => {
+    setPicking(true);
+    // Wait for the panel's 200ms exit animation: until it ends, Radix keeps
+    // pointer-events off the page and nothing could be pointed at.
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    try {
+      const picked = await pickElement();
+      if (picked) {
+        const shot = await captureElement(picked.element);
+        setShots((current) => [...current, shot]);
+        setElement(picked.info);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "We couldn't take that picture.",
+      );
+    } finally {
+      setPicking(false);
+    }
+  };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open && !picking} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="w-full gap-0 data-[side=right]:sm:max-w-xl"
@@ -42,7 +97,7 @@ export default function FeedbackSheet({
           </SheetDescription>
           <Tabs
             value={view}
-            onValueChange={(value) => setView(value as View)}
+            onValueChange={(value) => changeView(value as View)}
             className="mt-3"
           >
             <TabsList>
@@ -51,15 +106,28 @@ export default function FeedbackSheet({
               </TabsTrigger>
               <TabsTrigger value="mine" className={VIEW_TAB_CLASS}>
                 My feedback
+                {updates > 0 ? (
+                  <span className="ml-1 text-xs font-semibold text-primary">
+                    ({updates} new)
+                  </span>
+                ) : null}
               </TabsTrigger>
             </TabsList>
           </Tabs>
         </SheetHeader>
 
         {view === "new" ? (
-          <FeedbackForm onClose={() => onOpenChange(false)} />
+          <FeedbackForm
+            onClose={() => onOpenChange(false)}
+            screenshotsEnabled={screenshotsEnabled}
+            shots={shots}
+            element={element}
+            onShotsChange={setShots}
+            onElementChange={setElement}
+            onPick={startPick}
+          />
         ) : (
-          <MyFeedbackList />
+          <MyFeedbackList seenAt={seenAtOnOpen} />
         )}
       </SheetContent>
     </Sheet>

@@ -9,6 +9,7 @@ import { FEEDBACK_ENABLED } from "../feedback.flag";
 import { feedbackKeys } from "../feedback.keys";
 import { feedbackApi } from "../feedback.service";
 import { installActivityRecorder } from "../lib/activity-recorder";
+import { useFeedbackUpdates } from "../lib/seen";
 
 // Only fetched the first time someone opens feedback.
 const FeedbackSheet = dynamic(() => import("./FeedbackSheet"), { ssr: false });
@@ -46,6 +47,7 @@ function EnabledLauncher() {
     refetchOnWindowFocus: false,
   });
   const enabled = status.data?.enabled === true;
+  const updates = useFeedbackUpdates(enabled);
 
   useEffect(() => (enabled ? installActivityRecorder() : undefined), [enabled]);
 
@@ -56,6 +58,7 @@ function EnabledLauncher() {
       <Button
         variant="outline"
         aria-haspopup="dialog"
+        className="relative"
         onClick={() => {
           setMounted(true);
           setOpen(true);
@@ -63,8 +66,26 @@ function EnabledLauncher() {
       >
         <IconMessageReport className="size-4" aria-hidden />
         Feedback
+        {updates > 0 ? (
+          <>
+            <span
+              aria-hidden
+              className="absolute -right-1 -top-1 size-2.5 rounded-full bg-primary ring-2 ring-background"
+            />
+            <span className="sr-only">
+              , {updates} update{updates === 1 ? "" : "s"} on your feedback
+            </span>
+          </>
+        ) : null}
       </Button>
-      {mounted ? <FeedbackSheet open={open} onOpenChange={setOpen} /> : null}
+      {mounted ? (
+        <FeedbackSheet
+          open={open}
+          onOpenChange={setOpen}
+          screenshotsEnabled={status.data?.screenshots === true}
+          updates={updates}
+        />
+      ) : null}
     </>
   );
 }

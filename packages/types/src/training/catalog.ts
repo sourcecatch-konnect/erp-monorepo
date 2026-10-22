@@ -473,6 +473,41 @@ export type TrainingTrackKey =
   | "auditor"
   | "admin";
 
+/**
+ * Proof that a user really did something, checked against the records they
+ * created / approved (A6). Each key maps to one read-only lookup on the
+ * server (modules/training/training.verifiers.ts).
+ */
+export type TrainingVerifierKey =
+  | "order.created"
+  | "order.approved"
+  | "lr.created"
+  | "lr.finalised"
+  | "lr.delivered"
+  | "lr.acknowledged"
+  | "trip.created"
+  | "trip_expense.created"
+  | "trip_expense.approved"
+  | "journey.closed"
+  | "vp_schedule.created"
+  | "mrrr.created"
+  | "vp_loading.created"
+  | "rake.rail_head"
+  | "grn.created"
+  | "branch_grn.created"
+  | "delivery_challan.created"
+  | "bill.created"
+  | "bill.approved"
+  | "bill.finalised"
+  | "receipt.created"
+  | "payment_slip.created"
+  | "payment_slip.approved"
+  | "purchase_order.created"
+  | "inward.created"
+  | "job_card.created"
+  | "job_card.finalised"
+  | "service_bill.created";
+
 export type TrainingStep = {
   /** Stored in TrainingProgress.stepKey — never rename a shipped key. */
   key: string;
@@ -483,6 +518,10 @@ export type TrainingStep = {
   href?: string;
   /** Hidden unless the user holds this. Omit for steps everyone can do. */
   requires?: PermissionKey;
+  /** Ticked automatically once the user has really done it (A6). */
+  verifier?: TrainingVerifierKey;
+  /** Ticked as soon as the user opens `href` (for "look at this page" steps). */
+  completesOnVisit?: true;
 };
 
 export type TrainingTrack = {
@@ -514,6 +553,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "basics.my-role",
+        completesOnVisit: true,
         title: "See what your role does",
         summary:
           "Open Training to see which steps of the business are yours and who does the step after you.",
@@ -521,6 +561,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "basics.process-map",
+        completesOnVisit: true,
         title: "Look at the whole business",
         summary:
           "Open the process map to follow an order from booking all the way to payment.",
@@ -549,6 +590,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "basics.glossary",
+        completesOnVisit: true,
         title: "Learn the common words",
         summary:
           "LR, POD, VP, TBB… the glossary explains the words used across the ERP.",
@@ -573,6 +615,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ops.book-order",
+        verifier: "order.created",
         title: "Book an order",
         summary:
           "Click New order, pick the customer, the from and to branch, the pickup date and the number of trucks. Save it to send it for approval.",
@@ -589,6 +632,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ops.create-lr",
+        verifier: "lr.created",
         title: "Create the LRs",
         summary:
           "From a confirmed order, create the LR group and one LR for each consignment: consignor, consignee, goods and freight.",
@@ -605,6 +649,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ops.trip",
+        verifier: "trip.created",
         title: "Plan the trip",
         summary:
           "Create a trip, pick the vehicle and driver, and attach the LRs it carries.",
@@ -613,6 +658,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ops.expenses",
+        verifier: "trip_expense.created",
         title: "Record trip expenses and advances",
         summary:
           "Open the trip and enter diesel, toll and other spends, and any cash given to the driver.",
@@ -621,6 +667,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ops.deliver",
+        verifier: "lr.delivered",
         title: "Mark delivery and upload the POD",
         summary:
           "When goods reach the consignee, mark the LR delivered, then upload the signed POD from the Pending POD tab.",
@@ -638,6 +685,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
     steps: [
       {
         key: "bm.approve-order",
+        verifier: "order.approved",
         title: "Approve or reject orders",
         summary:
           "Open an order that is 'Pending approval', check the freight and the contact person, then confirm or reject it.",
@@ -646,6 +694,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "bm.finalise-lr",
+        verifier: "lr.finalised",
         title: "Check and finalise LRs",
         summary:
           "Review LRs before they are finalised. A finalised LR gets its LR number and can't be freely changed.",
@@ -654,6 +703,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "bm.trip-expenses",
+        verifier: "trip_expense.approved",
         title: "Approve trip expenses",
         summary:
           "Check the expenses entered on a trip and approve the ones that are correct.",
@@ -662,6 +712,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "bm.close-journey",
+        verifier: "journey.closed",
         title: "Close the journey and get the Log Slip",
         summary:
           "When the vehicle is back, enter the end kilometres and close the journey. The Log Slip is created straight away, with no waiting.",
@@ -670,6 +721,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "bm.confirm-delivery",
+        verifier: "lr.acknowledged",
         title: "Make sure deliveries have their POD",
         summary:
           "Delivered LRs need the signed POD before Accounts can bill them. Check the Pending POD tab.",
@@ -678,6 +730,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "bm.approve-bills",
+        verifier: "bill.approved",
         title: "Approve bills",
         summary:
           "Bills waiting for review are in the Billing Register. Check them and approve.",
@@ -700,6 +753,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
     steps: [
       {
         key: "rail.vp-schedule",
+        verifier: "vp_schedule.created",
         title: "Schedule the VP",
         summary:
           "Create a VP schedule for the rake and plan which LRs go into each wagon space (VP).",
@@ -708,6 +762,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "rail.mrrr",
+        verifier: "mrrr.created",
         title: "Enter the MR / RR",
         summary:
           "Type in the Railway Receipt and Money Receipt from the paper copies, against the VP schedule.",
@@ -716,6 +771,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "rail.vp-loading",
+        verifier: "vp_loading.created",
         title: "Record the VP loading",
         summary:
           "Record the goods physically loaded into each wagon, then mark it loaded.",
@@ -724,6 +780,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "rail.rake-rail-head",
+        verifier: "rake.rail_head",
         title: "Record the rake at the rail head",
         summary:
           "Enter the rake's times and any demurrage, wharfage or waiver at the rail head.",
@@ -732,6 +789,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "rail.grn-rail-head",
+        verifier: "grn.created",
         title: "Enter the GRN at the rail head",
         summary: "Record the goods received at the rail head, then submit it.",
         href: "/vp-management/grn/new",
@@ -739,6 +797,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "rail.grn-branch",
+        verifier: "branch_grn.created",
         title: "Enter the GRN at the branch",
         summary:
           "When the goods reach the destination branch, record what was received.",
@@ -747,6 +806,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "rail.dc",
+        verifier: "delivery_challan.created",
         title: "Issue the Delivery Challan",
         summary:
           "Make one challan for the LRs going out on the same last-mile truck, then issue it.",
@@ -769,6 +829,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
     steps: [
       {
         key: "acc.lr-to-bill",
+        verifier: "bill.created",
         title: "Bill delivered LRs",
         summary:
           "Open LR to Bill, choose who pays (consignor or consignee) and the client, tick the LRs and create the bill. GST is worked out for you.",
@@ -777,6 +838,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "acc.finalise-bill",
+        verifier: "bill.finalised",
         title: "Check and finalise bills",
         summary:
           "In the Billing Register, open a draft bill, check the amounts and finalise it so it gets its bill number.",
@@ -785,6 +847,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "acc.receipt",
+        verifier: "receipt.created",
         title: "Record a customer payment",
         summary:
           "Enter the amount received and match it to the customer's bills, including any TDS they deducted.",
@@ -793,6 +856,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "acc.payment-slip",
+        verifier: "payment_slip.created",
         title: "Raise a payment slip",
         summary:
           "Create a slip to pay a broker, transporter or labour. It goes for approval before anyone pays it.",
@@ -801,6 +865,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "acc.approve-slips",
+        verifier: "payment_slip.approved",
         title: "Approve payment slips",
         summary: "Check waiting slips and approve the ones that are correct.",
         href: "/accounts/vendor-payments/approvals",
@@ -845,6 +910,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
     steps: [
       {
         key: "ws.purchase-order",
+        verifier: "purchase_order.created",
         title: "Raise a purchase order for parts",
         summary: "Order spare parts from a supplier with a purchase order.",
         href: "/workshop/purchase-orders",
@@ -852,6 +918,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ws.inward",
+        verifier: "inward.created",
         title: "Receive parts into stock",
         summary: "When parts arrive, record them so they show in stock.",
         href: "/workshop/inward",
@@ -859,6 +926,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ws.job-card",
+        verifier: "job_card.created",
         title: "Open a job card for a repair",
         summary:
           "Create a job card for the vehicle and add the work done and parts used.",
@@ -867,6 +935,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ws.finalise-job-card",
+        verifier: "job_card.finalised",
         title: "Finalise the job card",
         summary: "When the repair is complete, check the job card and finalise it.",
         href: "/workshop/job-cards",
@@ -874,6 +943,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       },
       {
         key: "ws.service-bill",
+        verifier: "service_bill.created",
         title: "Enter service bills",
         summary: "Record bills from outside garages and service providers.",
         href: "/workshop/service-bills",

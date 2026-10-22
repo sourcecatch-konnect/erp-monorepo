@@ -142,6 +142,9 @@ export function FeedbackTable({
                 </TableCell>
                 <TableCell>
                   <FeedbackStatusBadge status={row.status} />
+                  {row.reporterConfirmedAt ? (
+                    <p className="mt-1 text-xs text-primary">Confirmed by tester</p>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {format(new Date(row.createdAt), "dd MMM yyyy, h:mm a")}

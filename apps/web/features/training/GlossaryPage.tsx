@@ -5,11 +5,13 @@ import { IconSearch } from "@tabler/icons-react";
 import { Input } from "@skerp/ui/components/input";
 import { TrainingNav } from "./components/TrainingNav";
 import { GLOSSARY } from "./content/glossary";
+import { useCompleteOnVisit } from "./hooks/useTraining";
 
 const SORTED = [...GLOSSARY].sort((a, b) => a.term.localeCompare(b.term));
 
 /** A3 — every ERP word in plain language, searchable. */
 export function GlossaryPage() {
+  useCompleteOnVisit("/training/glossary");
   const [query, setQuery] = useState("");
 
   const entries = useMemo(() => {

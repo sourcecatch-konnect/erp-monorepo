@@ -5032,16 +5032,48 @@ model Feedback {
   reporterRole   String
   reporterBranch String?
 
-  assignee    String?
-  devNotes    String?
-  externalRef String?
-  resolvedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  assignee            String?
+  devNotes            String?
+  externalRef         String?
+  resolvedAt          DateTime?
+  /// Set when the reporter checked a FIXED item and confirmed it works.
+  reporterConfirmedAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  comments FeedbackComment[]
 
   @@index([status])
   @@index([category])
   @@index([moduleLabel, pagePath])
   @@index([reporterId])
   @@index([createdAt])
+}
+
+enum FeedbackCommentKind {
+  COMMENT
+  STATUS_CHANGE
+  CONFIRMED_FIXED
+  STILL_BROKEN
+}
+
+enum FeedbackCommentSide {
+  REPORTER
+  TEAM
+}
+
+/// Reporter ↔ team conversation on one feedback item. Author is a snapshot
+/// (no FK to User) for the same reason as Feedback.reporter*.
+model FeedbackComment {
+  id         String              @id @default(cuid())
+  feedbackId String
+  authorId   String
+  authorName String
+  side       FeedbackCommentSide
+  kind       FeedbackCommentKind @default(COMMENT)
+  body       String
+  createdAt  DateTime            @default(now())
+  feedback   Feedback            @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackId, createdAt])
 }

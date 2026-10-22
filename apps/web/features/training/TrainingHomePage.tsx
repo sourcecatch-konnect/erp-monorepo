@@ -23,7 +23,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { ProgressBar } from "./components/ProgressBar";
 import { StageSheet } from "./components/StageSheet";
 import { TrainingNav } from "./components/TrainingNav";
-import { useTrainingMe } from "./hooks/useTraining";
+import { useCompleteOnVisit, useTrainingMe } from "./hooks/useTraining";
 import {
   STAGE_BY_KEY,
   previousStages,
@@ -292,6 +292,7 @@ function YourWork({
 /** A2 — My Role: who you are in the ERP, your training, and your steps. */
 export function TrainingHomePage() {
   const { data, isLoading, isError, error } = useTrainingMe();
+  useCompleteOnVisit("/training");
   const [openStage, setOpenStage] = useState<TrainingStageKey | null>(null);
 
   return (

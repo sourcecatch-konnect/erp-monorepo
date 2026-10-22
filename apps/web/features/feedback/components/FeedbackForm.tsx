@@ -5,17 +5,19 @@ import { usePathname } from "next/navigation";
 import { FormProvider, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   IconAlertTriangle,
   IconCircleCheck,
   IconInfoCircle,
   IconMapPin,
 } from "@tabler/icons-react";
-import { feedbackFormSchema } from "@skerp/validators";
+import { FEEDBACK_MAX_SCREENSHOTS, feedbackFormSchema } from "@skerp/validators";
 import {
   describeUserAgent,
   formatFeedbackNumber,
   type FeedbackCategory,
+  type FeedbackElement,
   type FeedbackFormInput,
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -36,8 +38,10 @@ import {
 } from "../form-values";
 import { snapshotActivity } from "../lib/activity-recorder";
 import { clearDraft, loadDraft, saveDraft } from "../lib/draft";
+import { fileToScreenshot, releaseScreenshot, type Screenshot } from "../lib/images";
 import { describeClient, describePage, type PageInfo } from "../lib/page-context";
 import { CategoryFields } from "./CategoryFields";
+import { ScreenshotSection } from "./ScreenshotSection";
 
 // The flat form state holds every tab's fields; the shared discriminated-union
 // schema validates the active tab and returns only its fields.
@@ -123,10 +127,12 @@ function WhatWeAttach({ page }: { page: PageInfo }) {
 
 function SentConfirmation({
   number,
+  failedPictures,
   onAnother,
   onClose,
 }: {
   number: number;
+  failedPictures: number;
   onAnother: () => void;
   onClose: () => void;
 }) {
@@ -146,6 +152,12 @@ function SentConfirmation({
           </span>
           . You can follow its progress under <strong>My feedback</strong>.
         </p>
+        {failedPictures > 0 ? (
+          <p className="text-sm text-destructive">
+            {failedPictures} picture{failedPictures === 1 ? "" : "s"} could not be
+            attached. Your feedback was still sent.
+          </p>
+        ) : null}
       </div>
       <div className="flex gap-2">
         <Button variant="outline" onClick={onAnother}>
@@ -157,12 +169,48 @@ function SentConfirmation({
   );
 }
 
-export function FeedbackForm({ onClose }: { onClose: () => void }) {
+/** Upload each picture: presign → PUT to storage → confirm. Returns how many failed. */
+async function uploadScreenshots(feedbackId: string, shots: Screenshot[]): Promise<number> {
+  let failed = 0;
+  for (const shot of shots) {
+    try {
+      const { attachmentId, uploadUrl } = await feedbackApi.requestScreenshot(feedbackId, {
+        mime: "image/jpeg",
+        sizeBytes: shot.blob.size,
+        width: shot.width,
+        height: shot.height,
+      });
+      await feedbackApi.uploadToStorage(uploadUrl, shot.blob);
+      await feedbackApi.completeScreenshot(feedbackId, attachmentId);
+    } catch {
+      failed += 1;
+    }
+  }
+  return failed;
+}
+
+export function FeedbackForm({
+  onClose,
+  screenshotsEnabled,
+  shots,
+  element,
+  onShotsChange,
+  onElementChange,
+  onPick,
+}: {
+  onClose: () => void;
+  screenshotsEnabled: boolean;
+  shots: Screenshot[];
+  element: FeedbackElement | null;
+  onShotsChange: (shots: Screenshot[]) => void;
+  onElementChange: (element: FeedbackElement | null) => void;
+  onPick: () => void;
+}) {
   const pathname = usePathname();
   const { labels } = useBreadcrumbLabels();
   const page = useMemo(() => describePage(pathname, labels), [pathname, labels]);
   const queryClient = useQueryClient();
-  const [sentNumber, setSentNumber] = useState<number | null>(null);
+  const [sent, setSent] = useState<{ number: number; failedPictures: number } | null>(null);
 
   const methods = useForm<FeedbackFormValues>({
     resolver,
@@ -182,8 +230,8 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
   }, [methods, page.path]);
 
   const submit = useMutation({
-    mutationFn: (feedback: FeedbackFormInput) =>
-      feedbackApi.submit({
+    mutationFn: async (feedback: FeedbackFormInput) => {
+      const created = await feedbackApi.submit({
         feedback,
         page: {
           path: clip(page.path, 300),
@@ -195,11 +243,19 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
           ...describeClient(),
           breadcrumb: page.breadcrumb.slice(0, 12).map((item) => clip(item, 160)),
           ...snapshotActivity(),
+          ...(element ? { element } : {}),
         },
-      }),
+      });
+      // The feedback is saved first; a failed picture never loses the report.
+      const failedPictures = await uploadScreenshots(created.id, shots);
+      return { ...created, failedPictures };
+    },
     onSuccess: (created) => {
       clearDraft(page.path);
-      setSentNumber(created.number);
+      shots.forEach(releaseScreenshot);
+      onShotsChange([]);
+      onElementChange(null);
+      setSent({ number: created.number, failedPictures: created.failedPictures });
       void queryClient.invalidateQueries({ queryKey: feedbackKeys.mine });
     },
   });
@@ -214,15 +270,31 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
     submit.mutate(values as unknown as FeedbackFormInput),
   );
 
-  if (sentNumber !== null) {
+  // Ctrl+V of a screenshot anywhere in the form adds it as a picture.
+  const onPaste = (event: React.ClipboardEvent<HTMLFormElement>) => {
+    if (!screenshotsEnabled || shots.length >= FEEDBACK_MAX_SCREENSHOTS) return;
+    const file = Array.from(event.clipboardData.items)
+      .find((item) => item.type.startsWith("image/"))
+      ?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    fileToScreenshot(file)
+      .then((shot) => onShotsChange([...shots, shot]))
+      .catch((error: unknown) =>
+        toast.error(error instanceof Error ? error.message : "We couldn't add that picture."),
+      );
+  };
+
+  if (sent !== null) {
     return (
       <SentConfirmation
-        number={sentNumber}
+        number={sent.number}
+        failedPictures={sent.failedPictures}
         onClose={onClose}
         onAnother={() => {
           methods.reset(EMPTY_FEEDBACK_VALUES);
           submit.reset();
-          setSentNumber(null);
+          setSent(null);
         }}
       />
     );
@@ -230,7 +302,12 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
+      <form
+        onSubmit={onSubmit}
+        onPaste={onPaste}
+        className="flex min-h-0 flex-1 flex-col"
+        noValidate
+      >
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
           <PageBanner page={page} />
 
@@ -273,6 +350,16 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
               </TabsContent>
             ))}
           </Tabs>
+
+          {category !== "" && screenshotsEnabled ? (
+            <ScreenshotSection
+              shots={shots}
+              element={element}
+              onShotsChange={onShotsChange}
+              onElementChange={onElementChange}
+              onPick={onPick}
+            />
+          ) : null}
 
           {category !== "" ? <WhatWeAttach page={page} /> : null}
 

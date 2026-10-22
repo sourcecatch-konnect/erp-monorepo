@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   trainingCompletedBySchema,
+  trainingRoleFormSchema,
+  trainingRoleUpdateSchema,
   trainingProgressSchema,
   trainingStepStatusSchema,
 } from "@skerp/validators";
@@ -51,3 +53,53 @@ export type TrainingMe = {
   tracks: TrainingTrackView[];
   progress: TrainingProgressEntry[];
 };
+
+/* ------------------------------------------------------------------ */
+/* Admin (A5)                                                          */
+/* ------------------------------------------------------------------ */
+
+export type TrainingRoleUpdateBody = z.infer<typeof trainingRoleUpdateSchema>;
+export type TrainingRoleFormValues = z.infer<typeof trainingRoleFormSchema>;
+
+export type TrainingAdminRoleTrack = {
+  key: TrainingTrackKey;
+  /** Steps this role can see in the track; 0 = track doesn't apply. */
+  stepCount: number;
+  /** What the permission-based suggestion would be. */
+  suggested: TrainingTrackAssignment | null;
+  /** What the admin chose, or null when the role uses the suggestion. */
+  configured: TrainingTrackAssignment | null;
+};
+
+/** GET /training/admin/roles */
+export type TrainingAdminRole = {
+  id: string;
+  name: string;
+  isSystem: boolean;
+  userCount: number;
+  profile: { summary: string; responsibilities: string[] } | null;
+  usesSuggested: boolean;
+  tracks: TrainingAdminRoleTrack[];
+};
+
+export type TrainingTeamTrack = {
+  key: TrainingTrackKey;
+  assignment: TrainingTrackAssignment;
+  finished: number;
+  total: number;
+};
+
+/** GET /training/admin/team (one row per active user) */
+export type TrainingTeamRow = {
+  userId: string;
+  name: string;
+  email: string;
+  roleName: string;
+  branchName: string | null;
+  tracks: TrainingTeamTrack[];
+  required: { finished: number; total: number };
+  lastActivity: string | null;
+};
+
+/** POST /training/verify/:trackKey */
+export type TrainingVerifyResult = { verified: string[] };

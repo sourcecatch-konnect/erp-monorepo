@@ -9,7 +9,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconDownload } from "@tabler/icons-react";
+import { IconDownload, IconFileText } from "@tabler/icons-react";
 import { FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS } from "@skerp/validators";
 import { PERMS, type FeedbackStatus } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -100,10 +100,15 @@ export function FeedbackAdminPage() {
     onError: (error) => toast.error(error.message),
   });
 
-  const exportXlsx = useMutation({
-    mutationFn: () => feedbackApi.exportXlsx(filters),
-    onSuccess: (blob) =>
-      downloadBlob(blob, `skerp-feedback-${new Date().toISOString().slice(0, 10)}.xlsx`),
+  const exportFile = useMutation({
+    mutationFn: async (format: "xlsx" | "docx") => ({
+      format,
+      blob: await (format === "xlsx"
+        ? feedbackApi.exportXlsx(filters)
+        : feedbackApi.exportDocx(filters)),
+    }),
+    onSuccess: ({ format, blob }) =>
+      downloadBlob(blob, `skerp-feedback-${new Date().toISOString().slice(0, 10)}.${format}`),
     onError: (error) => toast.error(`Export failed: ${error.message}`),
   });
 
@@ -135,11 +140,29 @@ export function FeedbackAdminPage() {
             and update its status.
           </p>
         </div>
-        <Button onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending}>
-          <IconDownload className="size-4" aria-hidden />
-          {exportXlsx.isPending ? "Preparing file…" : "Export to Excel"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => exportFile.mutate("docx")}
+            disabled={exportFile.isPending}
+          >
+            <IconFileText className="size-4" aria-hidden />
+            {exportFile.isPending && exportFile.variables === "docx"
+              ? "Preparing report…"
+              : "Export to Word"}
+          </Button>
+          <Button onClick={() => exportFile.mutate("xlsx")} disabled={exportFile.isPending}>
+            <IconDownload className="size-4" aria-hidden />
+            {exportFile.isPending && exportFile.variables === "xlsx"
+              ? "Preparing file…"
+              : "Export to Excel"}
+          </Button>
+        </div>
       </header>
+      <p className="-mt-3 text-xs text-muted-foreground">
+        Both exports follow the filters below. The Word report includes the
+        pictures and the conversation, for up to 300 items.
+      </p>
 
       <FeedbackSummaryCards
         summary={summary.data}

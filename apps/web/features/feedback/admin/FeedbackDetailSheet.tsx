@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { IconCopy, IconExternalLink } from "@tabler/icons-react";
+import { IconCircleCheck, IconCopy, IconExternalLink } from "@tabler/icons-react";
 import {
   describeUserAgent,
   formatFeedbackNumber,
@@ -33,6 +33,7 @@ import {
   FeedbackSeverityBadge,
   FeedbackStatusBadge,
 } from "../components/badges";
+import { CommentThread } from "../components/CommentThread";
 import { feedbackKeys } from "../feedback.keys";
 import { feedbackApi } from "../feedback.service";
 import { detailRows, feedbackAsJira } from "../lib/copy-as-jira";
@@ -214,6 +215,12 @@ export function FeedbackDetailSheet({
                 <FeedbackCategoryBadge category={item.category} />
                 {item.severity ? <FeedbackSeverityBadge severity={item.severity} /> : null}
                 <FeedbackStatusBadge status={item.status} />
+                {item.reporterConfirmedAt ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                    <IconCircleCheck className="size-3.5" aria-hidden />
+                    Tester confirmed the fix
+                  </span>
+                ) : null}
               </div>
               <SheetTitle className="text-lg">{item.title}</SheetTitle>
               <SheetDescription>
@@ -242,6 +249,16 @@ export function FeedbackDetailSheet({
                     ...(item.entityId
                       ? ([["Record", item.entityId]] as [string, string][])
                       : []),
+                    ...(item.context.element
+                      ? ([
+                          [
+                            "Pointed at",
+                            item.context.element.text
+                              ? `"${item.context.element.text}"`
+                              : item.context.element.selector,
+                          ],
+                        ] as [string, string][])
+                      : []),
                   ]}
                 />
               </Section>
@@ -257,7 +274,42 @@ export function FeedbackDetailSheet({
                 />
               </Section>
 
+              {item.screenshots.length > 0 ? (
+                <Section title={`Pictures (${item.screenshots.length})`}>
+                  <ul className="grid gap-3 sm:grid-cols-2">
+                    {item.screenshots.map((shot, index) => (
+                      <li key={shot.id}>
+                        <a
+                          href={shot.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block overflow-hidden rounded-md border border-border transition-colors duration-150 hover:border-primary"
+                        >
+                          {/* Presigned storage URL — next/image can't optimise it. */}
+                          <img
+                            src={shot.url}
+                            alt={`Picture ${index + 1} from the reporter`}
+                            className="h-40 w-full object-cover object-top"
+                          />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-muted-foreground">
+                    Click a picture to open it full size.
+                  </p>
+                </Section>
+              ) : null}
+
               <TechnicalDetails item={item} />
+
+              <Section title="Conversation with the reporter">
+                <CommentThread
+                  feedbackId={item.id}
+                  canPost={canManage}
+                  emptyText="No messages yet. Ask the reporter a question here; they see it under My feedback."
+                />
+              </Section>
 
               <Section title="Team notes">
                 {canManage ? (

@@ -267,7 +267,21 @@ const feedbackClientErrorSchema = z.object({
   at: z.string().max(40),
 });
 
+/** The part of the screen picked with "Point at the problem" (B6). */
+export const feedbackElementSchema = z.object({
+  selector: z.string().max(500),
+  tag: z.string().max(40),
+  text: z.string().max(120).optional(),
+  rect: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number().nonnegative(),
+    height: z.number().nonnegative(),
+  }),
+});
+
 export const feedbackContextSchema = z.object({
+  element: feedbackElementSchema.optional(),
   appVersion: z.string().max(64).optional(),
   userAgent: z.string().max(400).optional(),
   viewport: z.string().max(32).optional(),
@@ -319,4 +333,59 @@ export const feedbackTriageSchema = z.object({
 export const feedbackBulkStatusSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(200),
   status: feedbackStatusSchema,
+});
+
+/* ------------------------------------------------------------------ */
+/* Screenshots (B6)                                                    */
+/* ------------------------------------------------------------------ */
+
+export const FEEDBACK_MAX_SCREENSHOTS = 3;
+export const FEEDBACK_MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
+export const FEEDBACK_SCREENSHOT_MIMES = ["image/jpeg", "image/png"] as const;
+
+/** Presign request for one screenshot, sent after the feedback is created. */
+export const feedbackScreenshotRequestSchema = z.object({
+  mime: z.enum(FEEDBACK_SCREENSHOT_MIMES),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(FEEDBACK_MAX_SCREENSHOT_BYTES, "Pictures must be smaller than 5 MB"),
+  width: z.number().int().positive().max(10_000),
+  height: z.number().int().positive().max(20_000),
+});
+
+/* ------------------------------------------------------------------ */
+/* Conversation + fix confirmation (B8)                                */
+/* ------------------------------------------------------------------ */
+
+export const FEEDBACK_COMMENT_KINDS = [
+  "COMMENT",
+  "STATUS_CHANGE",
+  "CONFIRMED_FIXED",
+  "STILL_BROKEN",
+] as const;
+export const feedbackCommentKindSchema = z.enum(FEEDBACK_COMMENT_KINDS);
+
+export const FEEDBACK_COMMENT_SIDES = ["REPORTER", "TEAM"] as const;
+export const feedbackCommentSideSchema = z.enum(FEEDBACK_COMMENT_SIDES);
+
+export const feedbackCommentSchema = z.object({
+  body: z
+    .string({ required_error: "Write a message first" })
+    .trim()
+    .min(1, "Write a message first")
+    .max(2000, "Please keep your message under 2000 characters"),
+});
+
+export const FEEDBACK_CONFIRM_OUTCOMES = ["CONFIRMED_FIXED", "STILL_BROKEN"] as const;
+
+/** The reporter's answer when the team marks their item FIXED. */
+export const feedbackConfirmSchema = z.object({
+  outcome: z.enum(FEEDBACK_CONFIRM_OUTCOMES),
+  comment: z
+    .string()
+    .trim()
+    .max(2000, "Please keep your message under 2000 characters")
+    .optional(),
 });

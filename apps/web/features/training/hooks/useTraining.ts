@@ -1,8 +1,13 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { TrainingMe, TrainingStepStatus } from "@skerp/types";
+import {
+  TRAINING_TRACKS,
+  type TrainingMe,
+  type TrainingStepStatus,
+} from "@skerp/types";
 import { trainingKeys } from "../training.keys";
 import { trainingApi } from "../training.service";
 
@@ -57,4 +62,61 @@ export function useStepProgress() {
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: trainingKeys.me }),
   });
+}
+
+const VISIT_STEPS = TRAINING_TRACKS.flatMap((track) => track.steps).filter(
+  (step) => step.completesOnVisit,
+);
+
+/** Ticks "go and look at this page" steps the moment that page is opened. */
+export function useCompleteOnVisit(path: string) {
+  const { data: me } = useTrainingMe();
+  const { mutate } = useStepProgress();
+  const sent = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!me) return;
+    const visible = new Set(me.tracks.flatMap((track) => track.stepKeys));
+    const done = new Set(me.progress.map((entry) => entry.stepKey));
+    for (const step of VISIT_STEPS) {
+      if (
+        step.href === path &&
+        visible.has(step.key) &&
+        !done.has(step.key) &&
+        !sent.current.has(step.key)
+      ) {
+        sent.current.add(step.key);
+        mutate({ stepKey: step.key, status: "DONE" });
+      }
+    }
+  }, [me, path, mutate]);
+}
+
+/**
+ * A6 — when a track opens, ask the server to tick the steps the user has
+ * already done for real (e.g. they have booked an order before).
+ */
+export function useVerifyTrack(trackKey: string, enabled: boolean) {
+  const queryClient = useQueryClient();
+  const { mutate } = useMutation({
+    mutationFn: () => trainingApi.verify(trackKey),
+    onSuccess: ({ verified }) => {
+      if (verified.length === 0) return;
+      const n = verified.length;
+      toast.success(
+        `${n} step${n === 1 ? " was" : "s were"} ticked for you, because you have already done ${
+          n === 1 ? "it" : "them"
+        } in the ERP.`,
+      );
+      void queryClient.invalidateQueries({ queryKey: trainingKeys.me });
+    },
+  });
+  const ranFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (enabled && ranFor.current !== trackKey) {
+      ranFor.current = trackKey;
+      mutate();
+    }
+  }, [enabled, trackKey, mutate]);
 }

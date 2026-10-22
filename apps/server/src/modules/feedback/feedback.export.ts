@@ -43,12 +43,13 @@ export type FeedbackExportRow = {
   assignee: string | null;
   devNotes: string | null;
   externalRef: string | null;
+  reporterConfirmedAt: Date | null;
   createdAt: Date;
 };
 
 const OPEN: readonly FeedbackStatus[] = ["NEW", "TRIAGED", "IN_PROGRESS"];
 
-const fmtDateTime = (date: Date): string =>
+export const fmtDateTime = (date: Date): string =>
   new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
@@ -57,7 +58,7 @@ const fmtDateTime = (date: Date): string =>
     minute: "2-digit",
   }).format(date);
 
-const asRecord = (value: unknown): Record<string, unknown> =>
+export const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
 /** "What they were doing: …" lines, labels and choice values made readable. */
@@ -77,7 +78,7 @@ export const describeDetails = (
   return lines.join("\n");
 };
 
-const describeApiErrors = (context: FeedbackContext): string =>
+export const describeApiErrors = (context: FeedbackContext): string =>
   (context.recentApi ?? [])
     .filter((call) => call.status === null || call.status >= 400)
     .map(
@@ -120,6 +121,7 @@ export async function buildFeedbackXlsx(
     { header: "Type", key: "category", width: 14 },
     { header: "Severity", key: "severity", width: 10 },
     { header: "Status", key: "status", width: 13 },
+    { header: "Confirmed by tester", key: "confirmed", width: 18 },
     { header: "Title", key: "title", width: 40 },
     { header: "Module", key: "moduleLabel", width: 28 },
     { header: "Page", key: "pageTitle", width: 24 },
@@ -147,6 +149,7 @@ export async function buildFeedbackXlsx(
       category: FEEDBACK_CATEGORY_LABELS[row.category],
       severity: row.severity ? FEEDBACK_SEVERITY_LABELS[row.severity] : "",
       status: FEEDBACK_STATUS_LABELS[row.status],
+      confirmed: row.reporterConfirmedAt ? fmtDateTime(row.reporterConfirmedAt) : "",
       title: row.title,
       moduleLabel: row.moduleLabel,
       pageTitle: row.pageTitle,

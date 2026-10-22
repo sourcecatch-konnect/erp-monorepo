@@ -14,7 +14,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { cn } from "@skerp/ui/lib/util";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { ProgressBar } from "./components/ProgressBar";
-import { useStepProgress, useTrainingMe } from "./hooks/useTraining";
+import { useStepProgress, useTrainingMe, useVerifyTrack } from "./hooks/useTraining";
 import {
   TRACK_BY_KEY,
   findTrackView,
@@ -80,7 +80,9 @@ function StepItem({
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-semibold text-foreground">{step.title}</p>
           {entry?.status === "DONE" ? (
-            <span className="text-xs font-medium text-primary">Done</span>
+            <span className="text-xs font-medium text-primary">
+              {entry.completedBy === "SYSTEM" ? "Done automatically" : "Done"}
+            </span>
           ) : null}
           {entry?.status === "SKIPPED" ? (
             <span className="text-xs font-medium text-muted-foreground">Skipped</span>
@@ -100,7 +102,11 @@ function StepItem({
               </Link>
             </Button>
           ) : null}
-          {entry ? (
+          {entry?.completedBy === "SYSTEM" ? (
+            <span className="self-center text-xs text-muted-foreground">
+              The ERP saw that you have already done this.
+            </span>
+          ) : entry ? (
             <Button
               variant="ghost"
               disabled={busy}
@@ -146,6 +152,7 @@ export function TrackPage({ trackKey }: { trackKey: string }) {
   }, [trackKey, catalogTrack?.title, setLabel]);
 
   const view = me ? findTrackView(me, trackKey) : undefined;
+  useVerifyTrack(trackKey, view !== undefined);
   const progress = me && view ? trackProgress(view, progressMap(me)) : null;
   const entries = me ? progressMap(me) : new Map<string, TrainingProgressEntry>();
 
@@ -201,7 +208,8 @@ export function TrackPage({ trackKey }: { trackKey: string }) {
             </div>
             <p className="text-sm text-muted-foreground">
               Open each screen, try the step, then come back and press{" "}
-              <span className="font-medium text-foreground">I&apos;ve done this</span>. Your
+              <span className="font-medium text-foreground">I&apos;ve done this</span>. Many
+              steps tick themselves once the ERP sees you have done the work. Your
               progress is saved, so you can stop and continue later.
             </p>
           </header>

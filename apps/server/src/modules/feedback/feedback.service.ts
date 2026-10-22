@@ -1,8 +1,11 @@
 import {
   FEEDBACK_CATEGORIES,
+  FEEDBACK_CATEGORY_LABELS,
   FEEDBACK_DETAIL_FIELDS,
   FEEDBACK_SEVERITIES,
+  FEEDBACK_SEVERITY_LABELS,
   FEEDBACK_STATUSES,
+  FEEDBACK_STATUS_LABELS,
   type feedbackFormSchema,
 } from "@skerp/validators";
 import type {
@@ -52,9 +55,19 @@ export const listSelect = {
   reporterName: true,
   reporterRole: true,
   reporterBranch: true,
+  reporterConfirmedAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.FeedbackSelect;
+
+export const commentSelect = {
+  id: true,
+  authorName: true,
+  side: true,
+  kind: true,
+  body: true,
+  createdAt: true,
+} satisfies Prisma.FeedbackCommentSelect;
 
 const startOfDay = (iso: string): Date | null => {
   const date = new Date(`${iso}T00:00:00`);
@@ -161,6 +174,32 @@ export const reporterSnapshot = async (userId: string) => {
     reporterRole: user.role.name,
     reporterBranch: user.branch?.name ?? null,
   };
+};
+
+/** Readable status-change line for the conversation thread. */
+export const statusChangeText = (from: FeedbackStatus, to: FeedbackStatus) =>
+  `Status changed from ${FEEDBACK_STATUS_LABELS[from]} to ${FEEDBACK_STATUS_LABELS[to]}.`;
+
+/** Human-readable summary of the export filters, printed on the Word cover. */
+export const describeFilters = (query: ListQuery): string => {
+  const { filter, search } = query;
+  const parts = [
+    filter.status === "OPEN"
+      ? "Status: Open"
+      : isOneOf(FEEDBACK_STATUSES, filter.status)
+        ? `Status: ${FEEDBACK_STATUS_LABELS[filter.status]}`
+        : null,
+    isOneOf(FEEDBACK_CATEGORIES, filter.category)
+      ? `Type: ${FEEDBACK_CATEGORY_LABELS[filter.category]}`
+      : null,
+    isOneOf(FEEDBACK_SEVERITIES, filter.severity)
+      ? `Severity: ${FEEDBACK_SEVERITY_LABELS[filter.severity]}`
+      : null,
+    filter.module ? `Module: ${filter.module}` : null,
+    filter.pageTitle ? `Page: ${filter.pageTitle}` : null,
+    search ? `Search: "${search}"` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "All feedback";
 };
 
 /* ------------------------------------------------------------------ */

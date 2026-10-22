@@ -7,4 +7,5 @@ export const feedbackKeys = {
   summary: ["feedback", "summary"] as const,
   list: (params: FeedbackListParams) => ["feedback", "list", params] as const,
   detail: (id: string) => ["feedback", "detail", id] as const,
+  comments: (id: string) => ["feedback", "comments", id] as const,
 };

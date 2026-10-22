@@ -1,16 +1,91 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { IconInbox } from "@tabler/icons-react";
-import { formatFeedbackNumber } from "@skerp/types";
+import { IconChevronDown, IconInbox } from "@tabler/icons-react";
+import { formatFeedbackNumber, type MyFeedbackItem } from "@skerp/types";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import { cn } from "@skerp/ui/lib/util";
 import { feedbackKeys } from "../feedback.keys";
 import { feedbackApi } from "../feedback.service";
+import { isUpdatedSince } from "../lib/seen";
 import { FeedbackCategoryBadge, FeedbackStatusBadge } from "./badges";
+import { CommentThread } from "./CommentThread";
+import { ConfirmFix } from "./ConfirmFix";
+
+function MyFeedbackRow({
+  item,
+  updated,
+  open,
+  onToggle,
+}: {
+  item: MyFeedbackItem;
+  updated: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const panelId = `my-feedback-${item.id}`;
+  return (
+    <article
+      className={cn(
+        "rounded-md border bg-card",
+        item.status === "FIXED" && !item.reporterConfirmedAt ? "border-primary/40" : "border-border",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex w-full items-start gap-3 p-4 text-left transition-colors duration-150 hover:bg-muted"
+      >
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">
+              {formatFeedbackNumber(item.number)}
+            </span>
+            <FeedbackCategoryBadge category={item.category} />
+            <FeedbackStatusBadge status={item.status} />
+            {updated ? (
+              <span className="text-xs font-medium text-primary">New update</span>
+            ) : null}
+          </div>
+          <p className="text-sm font-medium text-foreground">{item.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {item.pageTitle} · sent{" "}
+            {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+          </p>
+        </div>
+        <IconChevronDown
+          className={cn(
+            "mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open ? (
+        <div id={panelId} className="space-y-4 border-t border-border p-4">
+          <ConfirmFix item={item} />
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Conversation with the team</p>
+            <CommentThread
+              feedbackId={item.id}
+              canPost
+              emptyText="No messages yet. The team will write here if they have a question."
+            />
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
 
 /** What the signed-in user has sent, newest first, with its current status. */
-export function MyFeedbackList() {
+export function MyFeedbackList({ seenAt }: { seenAt: number }) {
+  const [openId, setOpenId] = useState<string | null>(null);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: feedbackKeys.mine,
     queryFn: feedbackApi.mine,
@@ -19,7 +94,8 @@ export function MyFeedbackList() {
   return (
     <div className="flex-1 space-y-3 overflow-y-auto px-6 py-5">
       <p className="text-sm text-muted-foreground">
-        Everything you have sent. The team updates the status as they work on it.
+        Everything you have sent. Open one to see the team&apos;s replies, or to
+        tell us whether a fix works.
       </p>
 
       {isLoading
@@ -51,22 +127,13 @@ export function MyFeedbackList() {
       ) : null}
 
       {data?.map((item) => (
-        <article key={item.id} className="space-y-2 rounded-md border border-border bg-card p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground">
-                {formatFeedbackNumber(item.number)}
-              </span>
-              <FeedbackCategoryBadge category={item.category} />
-            </div>
-            <FeedbackStatusBadge status={item.status} />
-          </div>
-          <p className="text-sm font-medium text-foreground">{item.title}</p>
-          <p className="text-xs text-muted-foreground">
-            {item.pageTitle} · sent{" "}
-            {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
-          </p>
-        </article>
+        <MyFeedbackRow
+          key={item.id}
+          item={item}
+          updated={isUpdatedSince(item, seenAt)}
+          open={openId === item.id}
+          onToggle={() => setOpenId((current) => (current === item.id ? null : item.id))}
+        />
       ))}
     </div>
   );

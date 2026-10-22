@@ -13,7 +13,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { ProcessMap, type Highlight } from "./components/ProcessMap";
 import { StageSheet } from "./components/StageSheet";
 import { TrainingNav } from "./components/TrainingNav";
-import { useTrainingMe } from "./hooks/useTraining";
+import { useCompleteOnVisit, useTrainingMe } from "./hooks/useTraining";
 
 const MINE = "__mine__";
 const NONE = "__none__";
@@ -21,6 +21,7 @@ const NONE = "__none__";
 /** A3 — the whole business on one screen, with "whose step is this?" highlighting. */
 export function ProcessMapPage() {
   const { data: me, isLoading, isError, error } = useTrainingMe();
+  useCompleteOnVisit("/training/process-map");
   const [mode, setMode] = useState<string>(MINE);
   const [openStage, setOpenStage] = useState<TrainingStageKey | null>(null);
 

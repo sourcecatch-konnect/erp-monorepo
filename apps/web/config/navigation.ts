@@ -510,6 +510,11 @@ export const NAV_SECTIONS: NavSection[] = [
             href: "/settings/audit-log",
             permission: PERMS.ADMIN.AUDIT_LOG_VIEW,
           },
+          {
+            title: "Training",
+            href: "/settings/training",
+            permission: PERMS.ADMIN.TRAINING_MANAGE,
+          },
           // remove-before-prod: in-app feedback (testing phase only).
           ...(process.env.NEXT_PUBLIC_FEEDBACK_ENABLED === "true"
             ? [
