@@ -9,6 +9,7 @@ import {
   cancelTripSchema,
   closeJourneyLegSchema,
   dispatchJourneyLegSchema,
+  EMPTY_TRIP_FREIGHT_MESSAGE,
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
@@ -30,6 +31,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
+import { assertLicenceValid } from "../driver/driver-licence.js";
 import {
   buildTripName,
   summariseTripCargo,
@@ -60,11 +62,14 @@ router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
-/** Journey legs are lifecycle-managed by their journey, not the trips module. */
+// A journey leg's fields (freight, route, KM, etc.) ARE editable via
+// PATCH /:id while Planned — see that handler. Only delete/cancel are
+// blocked here, since removing a leg directly would corrupt the journey's
+// leg sequence; use the vehicle journey's own leg controls instead.
 const assertNotJourneyLeg = (trip: { journeyId: string | null }) => {
   if (trip.journeyId) {
     throw new BadRequestError(
-      "This trip is a journey leg — manage it from its vehicle journey",
+      "This trip is a journey leg and can't be deleted or cancelled directly — manage it from its vehicle journey",
       "TRIP_IS_JOURNEY_LEG",
     );
   }
@@ -394,12 +399,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
   const plannedStart = bornInTransit
     ? null
     : (data.plannedStartDateTime ?? null);
-  // Milestones already reached when an already-running trip is entered late.
-  // Status stays InTransit — these only back-fill the timestamps.
-  const backfillArrival = bornInTransit ? (data.arrivalDateTime ?? null) : null;
-  const backfillUnloading = bornInTransit
-    ? (data.unloadingCompletedAt ?? null)
-    : null;
   const initialStatus: TripStatus = bornInTransit ? "InTransit" : "Planned";
   const initialCreatedAs = bornInTransit ? "BACKFILLED_IN_TRANSIT" : "PLANNED";
 
@@ -411,7 +410,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
       fyCode: true,
       driverId: true,
       returnCityId: true,
-      driver: { select: { name: true } },
+      driver: { select: { name: true, licenseExpiryDate: true } },
     },
   });
 
@@ -424,6 +423,13 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         `This vehicle is on journey ${activeJourney.journeyNumber} with driver ${activeJourney.driver.name} — the trip must use the journey's driver`,
       );
     }
+    // The journey's driver may have started with a valid licence that has
+    // since expired — don't put him on another leg.
+    assertLicenceValid(
+      activeJourney.driver,
+      "adding another trip",
+      actualStart ?? plannedStart ?? now,
+    );
 
     // Cancelled legs keep their sequence slot, so number from the overall max
     // but validate the chain against the last non-cancelled leg.
@@ -515,8 +521,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           status: initialStatus,
           startDateTime: actualStart ?? null,
           plannedStartDateTime: plannedStart,
-          arrivalDateTime: backfillArrival,
-          unloadingCompletedAt: backfillUnloading,
           createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
@@ -571,6 +575,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           status: true,
           blackListed: true,
           onLeave: true,
+          licenseExpiryDate: true,
         },
       }),
       getHeadOffice(),
@@ -578,6 +583,26 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
 
     if (vehicle.status !== "AVAILABLE") {
       throw new BadRequestError("Vehicle is not available (already on trip)");
+    }
+    // vehicle.status only flips to ON_TRIP at actual dispatch — a Planned
+    // trip leaves it "AVAILABLE" by design. The activeJourney branch above
+    // already blocks re-picking this vehicle via the previous-leg check, but
+    // that only fires when the vehicle's open trip sits on a journey whose
+    // status is exactly "ACTIVE". Check directly for any open trip on this
+    // vehicle so a journey stuck in another open state can't let it be
+    // double-booked onto a second trip here.
+    const openTripOnVehicle = await db.vehicleTrip.findFirst({
+      where: {
+        vehicleId: data.vehicleId,
+        deletedAt: null,
+        status: { in: ["Planned", "InTransit"] },
+      },
+      select: { tripNumber: true, status: true },
+    });
+    if (openTripOnVehicle) {
+      throw new BadRequestError(
+        `Vehicle already has an open trip (${openTripOnVehicle.tripNumber}, ${openTripOnVehicle.status}) — close or dispatch it first`,
+      );
     }
     if (vehicle.insuranceDueDate && vehicle.insuranceDueDate < now) {
       throw new BadRequestError(
@@ -587,6 +612,11 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
     if (!driver) throw new BadRequestError("Driver not found");
     if (driver.blackListed) throw new BadRequestError("Driver is blacklisted");
     if (driver.onLeave) throw new BadRequestError("Driver is on leave");
+    assertLicenceValid(
+      driver,
+      "assigning a trip",
+      actualStart ?? plannedStart ?? now,
+    );
     if (driver.status !== "AVAILABLE") {
       throw new BadRequestError("Driver is already assigned to a trip");
     }
@@ -649,7 +679,10 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           returnCityId: ho.cityId,
           currentCityId: route.sourceCityId,
           openingKm: data.openingKm,
-          startedAt: now,
+          // A back-dated (already-dispatched) leg 1 means the journey really
+          // began at that dispatch moment, not at the time this record was
+          // entered — mirrors the dedicated /vehicle-journeys start endpoint.
+          startedAt: actualStart ?? now,
           status: "ACTIVE",
           settlementStatus: "NOT_READY",
           createdById: me,
@@ -664,8 +697,6 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
           status: initialStatus,
           startDateTime: actualStart ?? null,
           plannedStartDateTime: plannedStart,
-          arrivalDateTime: backfillArrival,
-          unloadingCompletedAt: backfillUnloading,
           createdAs: initialCreatedAs,
           tripType: data.tripType,
           legType,
@@ -746,8 +777,10 @@ router.patch("/:id", can(PERMS.TRIP.UPDATE), async (req, res) => {
     );
   }
 
-  assertNotJourneyLeg(existing);
-
+  // Journey legs ARE editable here while Planned — everything below already
+  // re-validates chain continuity and keeps the journey in sync (see
+  // isFirstLeg / existing.journeyId branches). Only delete/cancel are
+  // blocked for legs, since those affect the journey's leg sequence.
   if (existing.status !== "Planned") {
     throw new BadRequestError("Only a Planned trip can be edited");
   }
@@ -902,17 +935,24 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
       vehicleId: true,
       journeyId: true,
       sequenceNo: true,
+      driver: { select: { name: true, licenseExpiryDate: true } },
     },
   });
   if (!existing) throw new NotFoundError("Trip not found");
   if (existing.status !== "Planned") {
     throw new BadRequestError("Only a Planned trip can be dispatched");
   }
-
   const parsed = dispatchJourneyLegSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
+  // Planned while the licence was valid, dispatched after it expired —
+  // checked on the dispatch time entered.
+  assertLicenceValid(
+    existing.driver,
+    "dispatching this trip",
+    parsed.data.startDateTime,
+  );
   const me = actorId(req);
 
   // Operator-entered start time must not precede the previous leg's close.
@@ -929,7 +969,10 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
           select: { endDateTime: true },
         })
       : null;
-  if (prevLeg?.endDateTime && parsed.data.startDateTime <= prevLeg.endDateTime) {
+  if (
+    prevLeg?.endDateTime &&
+    parsed.data.startDateTime <= prevLeg.endDateTime
+  ) {
     throw new BadRequestError(
       "Start time must be after the previous leg's close time",
     );
@@ -946,6 +989,18 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
       },
       select: { id: true, status: true, version: true },
     });
+    if (existing.journeyId && existing.sequenceNo === 1) {
+      // Leg 1's actual dispatch IS the journey's own start moment — keep
+      // startedAt (Total Days, journey PDF/detail) from drifting away from it.
+      await tx.vehicleJourney.update({
+        where: { id: existing.journeyId },
+        data: {
+          startedAt: parsed.data.startDateTime,
+          updatedById: me,
+          version: { increment: 1 },
+        },
+      });
+    }
     await tx.vehicle.update({
       where: { id: existing.vehicleId },
       data: { status: "ON_TRIP" },
@@ -1027,6 +1082,8 @@ router.post(
         id: true,
         status: true,
         startDateTime: true,
+        onwardFreight: true,
+        isTripEmpty: true,
         journeyId: true,
         sequenceNo: true,
         version: true,
@@ -1035,6 +1092,9 @@ router.post(
     if (!existing) throw new NotFoundError("Trip not found");
     if (existing.status !== "InTransit") {
       throw new BadRequestError("Only an InTransit trip can be corrected here");
+    }
+    if (existing.isTripEmpty && (data.onwardFreight ?? 0) > 0) {
+      throw new BadRequestError(EMPTY_TRIP_FREIGHT_MESSAGE);
     }
     if (data.version !== undefined && data.version !== existing.version) {
       throw new ConflictError(
@@ -1066,11 +1126,27 @@ router.post(
         where: { id },
         data: {
           startDateTime: data.startDateTime,
+          ...(data.onwardFreight !== undefined
+            ? { onwardFreight: data.onwardFreight }
+            : {}),
           updatedById: me,
           version: { increment: 1 },
         },
         select: { id: true, status: true, version: true },
       });
+
+      if (existing.journeyId && existing.sequenceNo === 1) {
+        // Leg 1's dispatch time IS the journey's own start moment — keep
+        // startedAt (Total Days, journey PDF/detail) from drifting away from it.
+        await tx.vehicleJourney.update({
+          where: { id: existing.journeyId },
+          data: {
+            startedAt: data.startDateTime,
+            updatedById: me,
+            version: { increment: 1 },
+          },
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -1078,9 +1154,15 @@ router.post(
           action: "trip.correct_in_transit",
           entity: "VehicleTrip",
           entityId: id,
-          before: { startDateTime: existing.startDateTime?.toISOString() ?? null },
+          before: {
+            startDateTime: existing.startDateTime?.toISOString() ?? null,
+            onwardFreight: existing.onwardFreight?.toString() ?? null,
+          },
           after: {
             startDateTime: data.startDateTime.toISOString(),
+            ...(data.onwardFreight !== undefined
+              ? { onwardFreight: data.onwardFreight.toString() }
+              : {}),
             correctionReason: data.correctionReason,
           },
         },
@@ -1105,6 +1187,26 @@ router.post("/:id/close", can(PERMS.TRIP.CLOSE), async (req, res) => {
 
   if (existing.status !== "InTransit") {
     throw new BadRequestError("Only an InTransit trip can be closed");
+  }
+
+  // An LR trip that was born In Transit (the "already dispatched" path, or a
+  // raw dispatch call) can otherwise reach Closed having never gone through
+  // the LR form — no consignment record, no proof of what was shipped. Gate
+  // it here rather than at dispatch, since "dispatch now, attach the LR
+  // while In Transit" is a legitimate, already-supported order of steps.
+  if (existing.tripType === "lr" && !existing.isTripEmpty) {
+    const lrGroupCount = await db.lRGroup.count({
+      where: {
+        deletedAt: null,
+        OR: [{ primaryTripId: id }, { secondaryTripId: id }],
+      },
+    });
+    if (lrGroupCount === 0) {
+      throw new BadRequestError(
+        "This LR trip has no LR attached — create/attach an LR before closing it",
+        "TRIP_CLOSE_NO_LR",
+      );
+    }
   }
 
   // Delivery gate ("Way 1", docs/LR_DELIVERY_ACK_PLAN.md §4): a trip that is
@@ -1253,6 +1355,7 @@ router.post(
         journeyId: true,
         sequenceNo: true,
         isReturnLeg: true,
+        isTripEmpty: true,
         vehicleId: true,
         version: true,
         journey: {
@@ -1266,6 +1369,9 @@ router.post(
     if (!existing) throw new NotFoundError("Trip not found");
     if (existing.status !== "Closed") {
       throw new BadRequestError("Only a Closed trip can be corrected");
+    }
+    if (existing.isTripEmpty && data.onwardFreight > 0) {
+      throw new BadRequestError(EMPTY_TRIP_FREIGHT_MESSAGE);
     }
     if (data.version !== undefined && data.version !== existing.version) {
       throw new ConflictError(
@@ -1404,15 +1510,25 @@ router.post(
           where: { id: existing.vehicleId },
           data: { currentKM: data.closingKm },
         });
+      }
+
+      // Leg 1's dispatch time IS the journey's own start moment — keep
+      // startedAt (Total Days, journey PDF/detail) from drifting away from
+      // it even when the correction is to a Closed leg 1. Folded into one
+      // update alongside the return-to-base fields so a leg that is both
+      // leg 1 and the current leg doesn't get written twice.
+      const isFirstLeg = existing.sequenceNo === 1;
+      if (existing.journey && (isCurrentLeg || isFirstLeg)) {
         await tx.vehicleJourney.update({
           where: { id: existing.journey.id },
           data: {
-            ...(existing.isReturnLeg
+            ...(isCurrentLeg && existing.isReturnLeg
               ? {
                   closingKm: data.closingKm,
                   closedAt: data.endDateTime,
                 }
               : {}),
+            ...(isFirstLeg ? { startedAt: data.startDateTime } : {}),
             updatedById: me,
             version: { increment: 1 },
           },

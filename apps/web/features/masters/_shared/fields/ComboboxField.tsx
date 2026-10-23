@@ -1,6 +1,12 @@
 "use client";
 
-import { FieldValues, Path, PathValue, useFormContext } from "react-hook-form";
+import {
+  FieldValues,
+  Path,
+  PathValue,
+  get,
+  useFormContext,
+} from "react-hook-form";
 import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
 
 type Props<TFormValues extends FieldValues> = {
@@ -52,7 +58,8 @@ export default function ComboboxField<TFormValues extends FieldValues>({
   } = useFormContext<TFormValues>();
 
   const value = watch(name);
-  const error = errors[name]?.message;
+  // `get` resolves nested paths too (e.g. `lrs.0.loadingLocationId`).
+  const error = get(errors, name)?.message;
 
   return (
     <div className="grid gap-1.5">

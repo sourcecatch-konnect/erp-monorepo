@@ -3,6 +3,7 @@ import "./env.js";
 import express from "express";
 import { createServer } from "http";
 import cors from "cors";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import authRoute from "./router/auth/auth.route.js";
 import employeeRoute from "./router/employee/employee.route.js";
@@ -35,8 +36,11 @@ import tripExpenseRoute from "./modules/trip-expense/trip-expense.route.js";
 import tripExpenseTypeRoute from "./modules/trip-expense/trip-expense-type.route.js";
 import driverAdvanceRoute from "./modules/trip-expense/driver-advance.route.js";
 import logSlipRoute from "./modules/log-slip/log-slip.route.js";
+import vehicleCostRoute from "./modules/vehicle-cost/vehicle-cost.route.js";
 import lorryReceiptRoute from "./modules/lorry-receipt/lorry-receipt.route.js";
 import lrDeliveryRoute from "./modules/lorry-receipt/lr-delivery.route.js";
+import myWorkRoute from "./modules/my-work/my-work.route.js";
+import dashboardRoute from "./modules/dashboard/dashboard.route.js";
 import lrGroupRoute from "./modules/lr-group/lr-group.route.js";
 import CompanyRoute from "./modules/company/company.route.js";
 import BranchRoute from "./modules/branch/branch.route.js";
@@ -55,6 +59,7 @@ import { initNotificationRealtime } from "./modules/notifications/realtime.js";
 import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
 import { startDeliverySweeps } from "./modules/lorry-receipt/lr-delivery.sweeps.js";
+import { startDriverLicenseExpirySweep } from "./modules/driver/driver.sweeps.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
 import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
 import MRRRRoute from "./modules/mrrr/mrrr.route.js";
@@ -71,6 +76,13 @@ import tablePrefRoute from "./modules/user-pref/table-pref.route.js";
 import oneLapTrackerRoute from "./modules/one-lap-tracker/one-lap-tracker.route.js";
 import billingRoute from "./modules/billing/billing.route.js";
 import receiptRoute from "./modules/receipt/receipt.route.js";
+import purchaseOrderRoute from "./modules/purchase-order/purchase-order.route.js";
+import spareInwardRoute from "./modules/spare-inward/spare-inward.route.js";
+import jobCardRoute from "./modules/job-card/job-card.route.js";
+import serviceBillRoute from "./modules/service-bill/service-bill.route.js";
+import supplierReplacementRoute from "./modules/supplier-replacement/supplier-replacement.route.js";
+import vendorPaymentRoute from "./modules/vendor-payment/vendor-payment.route.js";
+import driverFinanceRoute from "./modules/driver-finance/driver-finance.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -81,10 +93,17 @@ app.use(
     credentials: true, // IMPORTANT
   }),
 );
+// gzip/deflate JSON and CSV responses (list endpoints are the bulk of the
+// bytes); the middleware skips already-compressed types such as PDFs.
+app.use(compression());
 app.use(
   express.json({
     verify: (req, _res, buf) => {
-      (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      // Only the WhatsApp webhook needs the raw bytes (HMAC signature check);
+      // copying every request body — bulk imports can be MBs — is wasted work.
+      if (req.url?.startsWith("/notifications/whatsapp/webhook")) {
+        (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      }
     },
   }),
 );
@@ -106,6 +125,7 @@ app.use("/trip-expenses", tripExpenseRoute);
 app.use("/trip-expense-types", tripExpenseTypeRoute);
 app.use("/driver-advances", driverAdvanceRoute);
 app.use("/log-slips", logSlipRoute);
+app.use("/vehicle-costs", vehicleCostRoute);
 app.use("/tracking", trackingRoute);
 // Delivery/ack router first: it owns literal subpaths (e.g. /worklists/...)
 // that the main router's GET /:id would otherwise swallow.
@@ -136,6 +156,8 @@ app.use("/ledger", ledgerRoute);
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);
+app.use("/my-work", myWorkRoute);
+app.use("/dashboard", dashboardRoute);
 app.use("/attachments", attachmentRoute);
 app.use("/vp-schedules", vpScheduleRoute);
 app.use("/mrrr", MRRRRoute);
@@ -151,6 +173,13 @@ app.use("/admin/queues", authMiddleware, createQueueDashboard("/admin/queues"));
 app.use("/one-lap-trackers", oneLapTrackerRoute);
 app.use("/billing", billingRoute);
 app.use("/receipt", receiptRoute);
+app.use("/purchase-order", purchaseOrderRoute);
+app.use("/spare-inward", spareInwardRoute);
+app.use("/job-card", jobCardRoute);
+app.use("/service-bill", serviceBillRoute);
+app.use("/supplier-replacement", supplierReplacementRoute);
+app.use("/vendor-payment", vendorPaymentRoute);
+app.use("/driver-finance", driverFinanceRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>
@@ -166,6 +195,7 @@ async function bootstrap() {
   initTrackingRealtime(io);
   startNotificationWorkers();
   startDeliverySweeps();
+  startDriverLicenseExpirySweep();
 
   seedNotificationDefaults().catch((error) => {
     console.error("[notifications] Failed to seed defaults:", error);

@@ -51,7 +51,7 @@ export default function CorrectClosedTripDialog({
     unknown,
     CorrectClosedTripBody
   >({
-    resolver: zodResolver(correctClosedTripSchema),
+    resolver: zodResolver(correctClosedTripSchema, undefined, { raw: true }),
     mode: "onChange",
   });
 

@@ -67,6 +67,23 @@ export type ResetEmployeePasswordInput = z.infer<
 export type UpdateEmployeeStatusInput = z.infer<
   typeof updateEmployeeStatusSchema
 >;
+
+/* ------------------------------------------------------------------ */
+/* Password reset (forgot password)                                   */
+/* ------------------------------------------------------------------ */
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().min(1, "Email is required").email("Invalid email format"),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: employeePasswordSchema,
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
 export * from "./master/state.schema.js";
 export * from "./master/city.schema.js";
 export * from "./master/area.schema.js";
@@ -116,5 +133,13 @@ export * from "./log-slip/log-slip.schema.js";
 export * from "./user/table-pref.schema.js";
 export * from "./billing/billing.schema.js";
 export * from "./receipt/receipt.schema.js";
+export * from "./workshop/purchase-order.schema.js";
+export * from "./workshop/spare-inward.schema.js";
+export * from "./workshop/job-card.schema.js";
+export * from "./workshop/job-card-removed-part.schema.js";
+export * from "./workshop/service-bill.schema.js";
+export * from "./workshop/supplier-replacement.schema.js";
 export * from "./master/one-lap-tracker.js";
 export * from "./ledger/ledger.schema.js";
+export * from "./accounts/vendor-payment.schema.js";
+export * from "./driver-finance/driver-finance.schema.js";

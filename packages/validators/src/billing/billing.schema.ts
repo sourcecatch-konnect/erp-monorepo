@@ -70,7 +70,10 @@ const billDraftFieldsSchema = z.object({
   placeOfSupplyStateId: id.optional(),
   billDate: isoDate,
   billingCutoffDate: isoDate.optional().nullable(),
-  dueDate: isoDate.optional().nullable(),
+  // Required — Ageing buckets by dueDate, falling back to billDate when
+  // absent. Every live bill had a null dueDate before this was enforced,
+  // which silently aged bills from their bill date instead of real terms.
+  dueDate: isoDate,
   remarks: z.string().trim().max(1000).optional().nullable(),
   lrChargeIds: z.array(id).min(1).max(500),
 });
@@ -111,6 +114,14 @@ export const cancelBillSchema = z.object({
   reason: optionalReason,
 });
 
+export const billCreditNoteTypeSchema = z.enum(["CREDIT_NOTE", "DEBIT_NOTE"]);
+
+export const createBillCreditNoteSchema = z.object({
+  noteType: billCreditNoteTypeSchema,
+  amountPaise: z.coerce.bigint().positive(),
+  reason: z.string().trim().min(3).max(500),
+});
+
 export const billingTaxRuleSchema = z.object({
   name: z.string().trim().min(2).max(120),
   billType: billTypeSchema,
@@ -129,3 +140,4 @@ export type CreateBillDraftInput = z.infer<typeof createBillDraftSchema>;
 export type AddBillChargesInput = z.infer<typeof addBillChargesSchema>;
 export type UpdateBillDraftInput = z.infer<typeof updateBillDraftSchema>;
 export type BillingTaxRuleInput = z.infer<typeof billingTaxRuleSchema>;
+export type CreateBillCreditNoteInput = z.infer<typeof createBillCreditNoteSchema>;

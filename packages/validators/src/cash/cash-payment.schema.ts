@@ -49,6 +49,7 @@ export const cashPaymentSchema = z.object({
   approvedById: z.string().nullable().optional(),
   approvedAt: z.date().nullable().optional(),
   createdById: z.string().nullable().optional(),
+  journalEntryId: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

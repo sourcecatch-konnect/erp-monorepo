@@ -151,7 +151,8 @@ type BillingPermissionKey =
   | "billing.cancel"
   | "billing.print"
   | "billing.charge_approve"
-  | "billing.tax_rule_manage";
+  | "billing.tax_rule_manage"
+  | "billing.credit_note_create";
 
 type ReceiptPermissionKey =
   | "receipt.view"
@@ -159,7 +160,40 @@ type ReceiptPermissionKey =
   | "receipt.approve"
   | "receipt.cancel";
 
-type LedgerPermissionKey = "ledger.view";
+type AccountsPaymentPermissionKey =
+  | "accounts.payment.view"
+  | "accounts.payment.create"
+  | "accounts.payment.approve"
+  | "accounts.payment.disburse"
+  | "accounts.payment.cancel";
+
+type DriverFinancePermissionKey =
+  | "driver_finance.salary_view"
+  | "driver_finance.salary_manage"
+  | "driver_finance.salary_approve"
+  | "driver_finance.advance_manage"
+  | "driver_finance.pay";
+
+type LedgerPermissionKey =
+  | "ledger.view"
+  | "ledger.voucher_view"
+  | "ledger.manage"
+  | "ledger.journal_create";
+
+type WorkshopPermissionKey =
+  | "workshop.po.view"
+  | "workshop.po.manage"
+  | "workshop.po.approve"
+  | "workshop.inward.view"
+  | "workshop.inward.manage"
+  | "workshop.jobcard.view"
+  | "workshop.jobcard.manage"
+  | "workshop.jobcard.finalise"
+  | "workshop.servicebill.view"
+  | "workshop.servicebill.manage"
+  | "workshop.servicebill.pay"
+  | "workshop.replacement.view"
+  | "workshop.replacement.manage";
 
 type AdminPermissionKey = "admin.rbac.manage" | "admin.audit_log.view";
 
@@ -194,7 +228,10 @@ export type PermissionKey =
   | CashPlanningPermissionKey
   | BillingPermissionKey
   | ReceiptPermissionKey
+  | AccountsPaymentPermissionKey
+  | DriverFinancePermissionKey
   | LedgerPermissionKey
+  | WorkshopPermissionKey
   | GRNPermissionKey
   | RailBranchGRNPermissionKey
   | DeliveryChallanPermissionKey
@@ -420,6 +457,7 @@ export const PERMS = {
     PRINT: "billing.print",
     CHARGE_APPROVE: "billing.charge_approve",
     TAX_RULE_MANAGE: "billing.tax_rule_manage",
+    CREDIT_NOTE_CREATE: "billing.credit_note_create",
   },
   RECEIPT: {
     VIEW: "receipt.view",
@@ -427,8 +465,42 @@ export const PERMS = {
     APPROVE: "receipt.approve",
     CANCEL: "receipt.cancel",
   },
+  ACCOUNTS: {
+    PAYMENT: {
+      VIEW: "accounts.payment.view",
+      CREATE: "accounts.payment.create",
+      APPROVE: "accounts.payment.approve",
+      DISBURSE: "accounts.payment.disburse",
+      CANCEL: "accounts.payment.cancel",
+    },
+  },
+  DRIVER_FINANCE: {
+    SALARY_VIEW: "driver_finance.salary_view",
+    SALARY_MANAGE: "driver_finance.salary_manage",
+    SALARY_APPROVE: "driver_finance.salary_approve",
+    ADVANCE_MANAGE: "driver_finance.advance_manage",
+    PAY: "driver_finance.pay",
+  },
   LEDGER: {
     VIEW: "ledger.view",
+    VOUCHER_VIEW: "ledger.voucher_view",
+    MANAGE: "ledger.manage",
+    JOURNAL_CREATE: "ledger.journal_create",
+  },
+  WORKSHOP: {
+    PO_VIEW: "workshop.po.view",
+    PO_MANAGE: "workshop.po.manage",
+    PO_APPROVE: "workshop.po.approve",
+    INWARD_VIEW: "workshop.inward.view",
+    INWARD_MANAGE: "workshop.inward.manage",
+    JOBCARD_VIEW: "workshop.jobcard.view",
+    JOBCARD_MANAGE: "workshop.jobcard.manage",
+    JOBCARD_FINALISE: "workshop.jobcard.finalise",
+    SERVICEBILL_VIEW: "workshop.servicebill.view",
+    SERVICEBILL_MANAGE: "workshop.servicebill.manage",
+    SERVICEBILL_PAY: "workshop.servicebill.pay",
+    REPLACEMENT_VIEW: "workshop.replacement.view",
+    REPLACEMENT_MANAGE: "workshop.replacement.manage",
   },
   ADMIN: {
     RBAC_MANAGE: "admin.rbac.manage",
@@ -466,6 +538,29 @@ export const ALL_PERMISSION_KEYS: readonly PermissionKey[] = (() => {
   walk(PERMS);
   return Array.from(keys).sort() as PermissionKey[];
 })();
+
+const registryOrder = (() => {
+  const order = new Map<string, number>();
+  const walk = (node: unknown) => {
+    if (typeof node === "string") {
+      if (!order.has(node)) order.set(node, order.size);
+      return;
+    }
+    if (node && typeof node === "object") {
+      for (const v of Object.values(node as Record<string, unknown>)) walk(v);
+    }
+  };
+  walk(PERMS);
+  return order;
+})();
+
+/**
+ * Sorts keys in the order PERMS declares them, so an area reads
+ * View → Create → Edit → Delete → its special actions. Unknown keys go last.
+ */
+export const comparePermissionKeys = (a: string, b: string): number =>
+  (registryOrder.get(a) ?? Infinity) - (registryOrder.get(b) ?? Infinity) ||
+  a.localeCompare(b);
 
 /**
  * Derive the module code from a permission key. The module is the first two

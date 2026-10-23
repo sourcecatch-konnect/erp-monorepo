@@ -8,6 +8,7 @@ import {
   IconBuilding,
   IconCalendar,
   IconCheck,
+  IconEye,
   IconUser,
   IconWallet,
   IconX,
@@ -32,6 +33,8 @@ import {
 import { Skeleton } from "@skerp/ui/components/skeleton";
 
 import { useCan } from "@/features/auth";
+import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
+import { JournalStatusBadge } from "@/features/ledger/components/journalStatusBadge";
 import { receiptApi } from "./receipt.service";
 import {
   PAYMENT_MODE_LABELS,
@@ -47,12 +50,20 @@ export function ReceiptDetailPage({ receiptId }: { receiptId: string }) {
   const queryClient = useQueryClient();
   const canApprove = useCan(PERMS.RECEIPT.APPROVE);
   const canCancel = useCan(PERMS.RECEIPT.CANCEL);
+  const canViewVoucher = useCan(PERMS.LEDGER.VOUCHER_VIEW);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [cancelReason, setCancelReason] = React.useState("");
+  const [voucherOpen, setVoucherOpen] = React.useState(false);
 
   const receipt = useQuery({
     queryKey: ["receivables", "receipt", receiptId],
     queryFn: () => receiptApi.receipt(receiptId),
+  });
+
+  const voucher = useQuery({
+    queryKey: ["receivables", "receipt", receiptId, "voucher"],
+    queryFn: () => receiptApi.voucher(receiptId),
+    enabled: voucherOpen && Boolean(receipt.data?.journalEntryId),
   });
 
   const invalidate = () => {
@@ -316,6 +327,48 @@ export function ReceiptDetailPage({ receiptId }: { receiptId: string }) {
               </CardContent>
             </Card>
 
+            {data.journalEntry ? (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-3 border-b bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <CardTitle>Accounting</CardTitle>
+                    <JournalStatusBadge status={data.journalEntry.status} />
+                  </div>
+                  {canViewVoucher ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setVoucherOpen(true)}
+                    >
+                      <IconEye size={15} className="mr-1" /> View voucher
+                    </Button>
+                  ) : null}
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Voucher type</span>
+                    <span className="font-medium">Receipt</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Voucher number</span>
+                    <span className="font-medium">
+                      {data.journalEntry.voucherNumber}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Tally</span>
+                    <span className="font-medium">
+                      {data.journalEntry.tallySyncStatus === "SYNCED"
+                        ? "Synced"
+                        : data.journalEntry.tallySyncStatus === "FAILED"
+                          ? "Sync failed"
+                          : "Not synced"}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
             {data.status === "PENDING_APPROVAL" || data.status === "POSTED" ? (
               <Card>
                 <CardHeader className="border-b bg-muted/20">
@@ -391,6 +444,18 @@ export function ReceiptDetailPage({ receiptId }: { receiptId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <VoucherDialog
+        open={voucherOpen}
+        onOpenChange={setVoucherOpen}
+        voucher={voucher.data}
+        isLoading={voucher.isLoading}
+        isError={voucher.isError}
+        errorMessage={
+          voucher.error instanceof Error ? voucher.error.message : undefined
+        }
+        fallbackVoucherNumber={data?.journalEntry?.voucherNumber}
+      />
     </div>
   );
 }

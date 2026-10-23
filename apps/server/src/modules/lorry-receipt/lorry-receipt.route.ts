@@ -181,6 +181,9 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
         ...(input.invoiceAmount !== undefined
           ? { invoiceAmount: input.invoiceAmount ?? null }
           : {}),
+        ...(input.invoiceRemark !== undefined
+          ? { invoiceRemark: input.invoiceRemark ?? null }
+          : {}),
         ...(input.goods
           ? {
             goods: {

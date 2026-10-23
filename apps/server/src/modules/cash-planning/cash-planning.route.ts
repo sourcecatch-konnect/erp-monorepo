@@ -3,7 +3,6 @@ import type { Request } from "express";
 
 import {
   openCashDaySchema,
-  upsertCashBalancesSchema,
   createCashPaymentSchema,
   updateCashPaymentSchema,
   cashPaymentStatusUpdateSchema,
@@ -17,7 +16,7 @@ import {
 } from "@skerp/validators";
 import { PERMS } from "@skerp/types";
 
-import { Prisma } from "../../../generated/prisma/index.js";
+import { Prisma, type CreditorCategory } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
@@ -30,15 +29,18 @@ import {
 } from "../../lib/error.js";
 import {
   accountTotals,
-  buildDayView,
+  dayView,
   buildLedgerView,
   buildReceivablesView,
   dayInclude,
   findDay,
   poolTotals,
-  priorClosings,
+  booksOpenings,
+  syncOpenDayFromBooks,
 } from "./cash-planning.service.js";
 import { recordLedgerEntry } from "../ledger/ledger.service.js";
+import { postPaymentVoucher, reverseJournal } from "../ledger/posting.service.js";
+import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
 
 const parseReceivableDate = (value?: string): Date | null =>
   value ? new Date(`${value}T00:00:00.000Z`) : null;
@@ -47,6 +49,77 @@ const router: Router = Router();
 router.use(authMiddleware);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
+
+/**
+ * Post the double-entry PAYMENT voucher for a just-approved CashPayment and
+ * return its JournalEntry id (to store on `payment.journalEntryId`).
+ *
+ * Returns null — no voucher — when the payment has no branch or no source
+ * account: `JournalEntry.branchId` is required and there's nothing to credit,
+ * so those stay on the legacy `LedgerEntry` log only, same as before 8a.
+ *
+ * `sourceId` is suffixed on re-approval (`<id>#2`, `#3`, …) so a payment that
+ * bounces APPROVED → HOLD → APPROVED doesn't collide on
+ * `@@unique([voucherType, sourceType, sourceId])` with its earlier, now
+ * REVERSED voucher.
+ */
+async function postPaymentVoucherFor(
+  tx: Prisma.TransactionClient,
+  payment: {
+    id: string;
+    branchId: string | null;
+    fromAccountId: string | null;
+    amount: bigint;
+    creditorId: string | null;
+    category: CreditorCategory;
+    payeeName: string;
+    note: string | null;
+  },
+  occurredAt: Date,
+  createdById: string,
+): Promise<string | null> {
+  if (!payment.branchId || !payment.fromAccountId) return null;
+
+  const branch = await tx.branch.findUnique({
+    where: { id: payment.branchId },
+    select: { branchCode: true },
+  });
+  if (!branch) return null;
+
+  const fyCode = fyCodeFor(occurredAt);
+  const seq = await nextSequence(tx, branch.branchCode, fyCode, "PV");
+  const paymentNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/PV");
+
+  const priorVouchers = await tx.journalEntry.count({
+    where: {
+      voucherType: "PAYMENT",
+      sourceType: "VENDOR_PAYMENT",
+      OR: [
+        { sourceId: payment.id },
+        { sourceId: { startsWith: `${payment.id}#` } },
+      ],
+    },
+  });
+  const sourceId =
+    priorVouchers === 0 ? payment.id : `${payment.id}#${priorVouchers + 1}`;
+
+  const voucher = await postPaymentVoucher(tx, {
+    paymentId: payment.id,
+    sourceId,
+    paymentNumber,
+    paymentDate: occurredAt,
+    branchId: payment.branchId,
+    fyCode,
+    cashAccountId: payment.fromAccountId,
+    amountPaise: payment.amount,
+    creditorId: payment.creditorId,
+    category: payment.category,
+    payeeName: payment.payeeName,
+    narration: payment.note,
+    createdById,
+  });
+  return voucher.id;
+}
 
 /** Parse a YYYY-MM-DD path/body value into a UTC-midnight Date. */
 const parseDate = (value: string): Date => {
@@ -86,12 +159,12 @@ router.get(
   can(PERMS.CASH_PLANNING.VIEW),
   async (req: Request, res) => {
     const date = parseDate(req.params.date as string);
-    const day = await db.cashPlanDay.findUnique({
-      where: { date },
-      include: dayInclude,
-    });
-    if (!day) return sendOk(res, null);
-    return sendOk(res, buildDayView(day));
+    const found = await db.cashPlanDay.findUnique({ where: { date }, select: { id: true } });
+    if (!found) return sendOk(res, null);
+    // Openings come from the accounting books — refresh while the day is open.
+    await syncOpenDayFromBooks(db, found.id);
+    const day = await findDay(found.id);
+    return sendOk(res, (await dayView(db, day!.id))!);
   },
 );
 
@@ -110,14 +183,19 @@ router.post("/days", can(PERMS.CASH_PLANNING.ENTER), async (req, res) => {
     where: { isActive: true, deletedAt: null },
     select: { id: true },
   });
-  const carried = await priorClosings(date);
+  // Each account's balance in the accounting books at the start of the day.
+  const openings = await booksOpenings(
+    db,
+    date,
+    accounts.map((a) => a.id),
+  );
 
   const created = await db.cashPlanDay.create({
     data: {
       date,
       balances: {
         create: accounts.map((a) => {
-          const seed = carried.get(a.id) ?? 0;
+          const seed = openings.get(a.id) ?? 0;
           return {
             accountId: a.id,
             openingBalance: BigInt(seed),
@@ -129,43 +207,22 @@ router.post("/days", can(PERMS.CASH_PLANNING.ENTER), async (req, res) => {
     include: dayInclude,
   });
 
-  return sendOk(res, buildDayView(created), undefined, 201);
+  return sendOk(res, (await dayView(db, created.id))!, undefined, 201);
 });
 
-// Upsert opening balances for a day
+// Typed opening balances are no longer accepted: a day's openings come from
+// the accounting books (balance at the start of the day). Money is added with
+// "Add money"; a starting balance is set once on Finance → Opening Balances.
 router.put(
   "/days/:id/balances",
   can(PERMS.CASH_PLANNING.ENTER),
-  async (req, res) => {
-    const id = getParamId(req);
-    const day = await loadDayOr404(id);
-    assertOpen(day.status);
-
-    const parsed = upsertCashBalancesSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
-
-    await db.$transaction(
-      parsed.data.balances.map((b) =>
-        db.cashAccountBalance.upsert({
-          where: { dayId_accountId: { dayId: id, accountId: b.accountId } },
-          update: { openingBalance: BigInt(b.openingBalance) },
-          create: {
-            dayId: id,
-            accountId: b.accountId,
-            openingBalance: BigInt(b.openingBalance),
-          },
-        }),
-      ),
+  async () => {
+    throw new BadRequestError(
+      "Opening balances come from the accounting books and can't be typed — use Add money, or set the starting balance in Finance → Opening Balances",
     );
-
-    const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
   },
 );
 
-// Close a day
 router.post(
   "/days/:id/close",
   can(PERMS.CASH_PLANNING.CLOSE),
@@ -185,7 +242,7 @@ router.post(
     });
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -241,7 +298,7 @@ router.post(
     });
 
     const fresh = await findDay(id);
-    return sendOk(res, { payment: { ...payment, amount: Number(payment.amount) }, day: buildDayView(fresh!) }, undefined, 201);
+    return sendOk(res, { payment: { ...payment, amount: Number(payment.amount) }, day: (await dayView(db, fresh!.id))! }, undefined, 201);
   },
 );
 
@@ -287,7 +344,7 @@ router.patch(
     });
 
     const fresh = await findDay(payment.dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -327,12 +384,23 @@ router.delete(
           description: `Reversal: payment to ${payment.payeeName} deleted`,
           createdById: actorId(req),
         });
+        // Reverse the double-entry voucher too. It survives the row delete
+        // (CashPayment has no cascade onto JournalEntry), keeping the audit
+        // trail: original POSTED -> REVERSED, plus its contra.
+        if (payment.journalEntryId) {
+          await reverseJournal(
+            tx,
+            payment.journalEntryId,
+            `Payment to ${payment.payeeName} deleted`,
+            actorId(req),
+          );
+        }
       }
       await tx.cashPayment.delete({ where: { id } });
     });
 
     const fresh = await findDay(payment.dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -347,6 +415,8 @@ router.post(
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
     const { status, note } = parsed.data;
+    const owner = await db.cashPayment.findUnique({ where: { id }, select: { dayId: true } });
+    if (owner) await syncOpenDayFromBooks(db, owner.dayId);
 
     const dayId = await db.$transaction(async (tx) => {
       const payment = await tx.cashPayment.findUnique({
@@ -399,6 +469,26 @@ router.post(
         }
       }
 
+      // Post / reverse the double-entry PAYMENT voucher on the same edges.
+      // `undefined` = leave journalEntryId untouched (no approval-state change).
+      let nextJournalEntryId: string | null | undefined = undefined;
+      if (willApprove && !wasApproved) {
+        nextJournalEntryId = await postPaymentVoucherFor(
+          tx,
+          payment,
+          new Date(),
+          actorId(req),
+        );
+      } else if (!willApprove && wasApproved && payment.journalEntryId) {
+        await reverseJournal(
+          tx,
+          payment.journalEntryId,
+          `Payment ${status.toLowerCase()}`,
+          actorId(req),
+        );
+        nextJournalEntryId = null;
+      }
+
       await tx.cashPayment.update({
         where: { id },
         data: {
@@ -406,6 +496,9 @@ router.post(
           note: note ?? payment.note,
           approvedById: willApprove ? actorId(req) : null,
           approvedAt: willApprove ? new Date() : null,
+          ...(nextJournalEntryId !== undefined
+            ? { journalEntryId: nextJournalEntryId }
+            : {}),
         },
       });
 
@@ -441,7 +534,7 @@ router.post(
     });
 
     const fresh = await findDay(dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -454,6 +547,7 @@ router.post(
   can(PERMS.CASH_PLANNING.APPROVE),
   async (req, res) => {
     const id = getParamId(req);
+    await syncOpenDayFromBooks(db, id);
     const day = await loadDayOr404(id);
     assertOpen(day.status);
 
@@ -471,38 +565,19 @@ router.post(
 
     if (toApprove.length > 0) {
       await db.$transaction(async (tx) => {
-        const pool = await poolTotals(tx, id);
-        let running = pool.approvedTotal;
-        const poolCeiling = pool.totalOpening + pool.totalAdjustments;
+        // Ceilings from the same books-based view the day shows: each
+        // account's closing balance (approved payments already taken off),
+        // and the pool's available cash. Payments approved in this loop are
+        // counted on top.
+        const view = (await dayView(tx, id))!;
+        let running = 0;
+        const poolCeiling = view.availableCash;
         const approvedAt = new Date();
         const approvedById = actorId(req);
-
-        // Per-account running totals, seeded from what's already approved
-        // today for each account — a payment can be pool-affordable overall
-        // but still overdraw the one account it's tagged to. The ceiling per
-        // account includes both its opening balance and any adjustments
-        // (manual top-ups or receipt credits) posted to it today.
-        const adjustedByAccount = new Map<string, number>();
-        for (const a of day.adjustments) {
-          adjustedByAccount.set(
-            a.accountId,
-            (adjustedByAccount.get(a.accountId) ?? 0) + Number(a.amountPaise),
-          );
-        }
         const ceilingByAccount = new Map(
-          day.balances.map((b) => [
-            b.accountId,
-            Number(b.openingBalance) + (adjustedByAccount.get(b.accountId) ?? 0),
-          ]),
+          view.balances.map((b) => [b.accountId, b.closingBalance]),
         );
         const approvedByAccount = new Map<string, number>();
-        for (const p of day.payments) {
-          if (p.status !== "APPROVED" || !p.fromAccountId) continue;
-          approvedByAccount.set(
-            p.fromAccountId,
-            (approvedByAccount.get(p.fromAccountId) ?? 0) + Number(p.amount),
-          );
-        }
 
         for (const p of toApprove) {
           const amount = Number(p.amount);
@@ -528,9 +603,15 @@ router.post(
               data: { outstandingBalance: { decrement: p.amount } },
             });
           }
+          const journalEntryId = await postPaymentVoucherFor(
+            tx,
+            p,
+            approvedAt,
+            approvedById,
+          );
           await tx.cashPayment.update({
             where: { id: p.id },
-            data: { status: "APPROVED", approvedById, approvedAt },
+            data: { status: "APPROVED", approvedById, approvedAt, journalEntryId },
           });
           await recordLedgerEntry(tx, {
             direction: "OUT",
@@ -549,7 +630,7 @@ router.post(
     }
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -589,7 +670,7 @@ router.put(
     `;
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -643,7 +724,7 @@ router.post(
     });
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 

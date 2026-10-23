@@ -16,6 +16,8 @@ import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can, canAny } from "../../auth/can.middleware.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
+import { invalidateCacheOnWrite } from "../_shared/cache.js";
+import { LR_DELIVERY_STATS_CACHE } from "../lorry-receipt/lr-delivery.cache.js";
 import { getParamId } from "../_shared/param.js";
 import { fyCodeFor } from "../_shared/doc-number.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
@@ -45,9 +47,16 @@ import {
   groupListSelect,
   groupDetailInclude,
 } from "./lr-group.service.js";
+import {
+  assertLRsNotOnVendorSlip,
+  sameValue,
+} from "../vendor-payment/source-lock.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
+// Finalising a group and delivering its LRs both move the dashboard's
+// delivery counts (GET /lorry-receipts/worklists/delivery-stats).
+router.use(invalidateCacheOnWrite(LR_DELIVERY_STATS_CACHE));
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
@@ -384,11 +393,32 @@ router.get("/:id", can(PERMS.LORRY_RECEIPT.VIEW), async (req, res) => {
 
   if (!group) throw new NotFoundError("Lorry receipt group not found");
 
-  const deliveryEligibility = await getLRDeliveryEligibilities(
-    group.lorryReceipts.map((lr) => lr.id),
-  );
+  const [deliveryEligibility, paymentLines] = await Promise.all([
+    getLRDeliveryEligibilities(group.lorryReceipts.map((lr) => lr.id)),
+    group.isMarketVehicle
+      ? db.vendorPaymentSlipLine.findMany({
+          where: {
+            isActive: true,
+            OR: [
+              { sourceType: "LR_GROUP", sourceId: group.id },
+              { sourceType: "LR", sourceId: { in: group.lorryReceipts.map((lr) => lr.id) } },
+            ],
+          },
+          select: { slip: { select: { id: true, slipNumber: true, status: true } } },
+        })
+      : [],
+  ]);
+  const transporterPayments = [
+    ...new Map(
+      paymentLines.map(({ slip }) => [
+        slip.id,
+        { slipId: slip.id, slipNumber: slip.slipNumber, status: slip.status },
+      ]),
+    ).values(),
+  ];
   return sendOk(res, {
     ...group,
+    transporterPayments,
     lorryReceipts: group.lorryReceipts.map((lr) => ({
       ...lr,
       deliveryEligibility: deliveryEligibility.get(lr.id),
@@ -1049,6 +1079,37 @@ router.patch("/:id", can(PERMS.LORRY_RECEIPT.UPDATE), async (req, res) => {
     }
   }
 
+  // The transporter and market amounts are what a transporter slip pays.
+  // Once any LR of this group is on a slip, they are frozen.
+  const nextMarketPaise = (
+    value: number | undefined,
+    current: bigint | null,
+  ): bigint | null =>
+    nextIsMarketVehicle
+      ? value !== undefined
+        ? BigInt(value)
+        : current
+      : null;
+  const transporterPayChanged =
+    nextIsMarketVehicle !== existing.isMarketVehicle ||
+    !sameValue(nextMarketTransportId, existing.marketTransportId) ||
+    (
+      [
+        [input.marketFreightAmount, existing.marketFreightAmount],
+        [input.marketAdvanceAmount, existing.marketAdvanceAmount],
+        [input.marketCommissionAmount, existing.marketCommissionAmount],
+        [input.marketHamaliAmount, existing.marketHamaliAmount],
+        [input.marketTdsAmount, existing.marketTdsAmount],
+      ] as const
+    ).some(([value, current]) => !sameValue(nextMarketPaise(value, current), current));
+  if (transporterPayChanged) {
+    await assertLRsNotOnVendorSlip(
+      db,
+      existing.lorryReceipts.map((lr) => lr.id),
+      "change this truck's transporter or market amounts",
+    );
+  }
+
   const updated = await db.lRGroup.update({
     where: { id },
     data: {
@@ -1250,9 +1311,6 @@ router.post(
         missingFields.push("invoice number");
       }
 
-      if (lr.invoiceAmount == null) {
-        missingFields.push("invoice amount");
-      }
 
       if (!lr.ewayBill) {
         missingFields.push("e-way bill");
@@ -1266,15 +1324,19 @@ router.post(
     }
 
     await db.$transaction(async (tx) => {
-      for (const line of lrs) {
-        await tx.lorryReceipt.update({
-          where: { id: line.lrId },
-          data: {
-            status: "FINALISED",
-            updatedById: me,
-            version: { increment: 1 },
-          },
-        });
+      const lrIds = [...new Set(lrs.map((line) => line.lrId))];
+      const finalised = await tx.lorryReceipt.updateMany({
+        where: { id: { in: lrIds } },
+        data: {
+          status: "FINALISED",
+          updatedById: me,
+          version: { increment: 1 },
+        },
+      });
+      if (finalised.count !== lrIds.length) {
+        throw new BadRequestError(
+          "One or more LRs changed while finalising — please retry",
+        );
       }
 
       await tx.lRGroup.update({
@@ -1554,23 +1616,20 @@ router.post(
       for (const lrId of selectedLrIds) {
         assertLRDeliveryEligible(currentEligibility.get(lrId)!);
       }
-      for (const line of input.lrs) {
-        await tx.lRDelivery.create({
-          data: {
-            lrId: line.lrId,
-            deliveredAt: input.deliveredAt,
-            unloadingAt: input.unloadingAt ?? null,
-            receiverName: input.receiverName ?? null,
-            receiverPhone: input.receiverPhone ?? null,
-            unloadingCharges: existing.isMarketVehicle
-              ? (line.unloadingCharges ?? input.unloadingCharges ?? null)
-              : null,
-            remark: line.remark ?? input.remark ?? null,
-            createdById: me,
-          },
-          select: { id: true },
-        });
-      }
+      await tx.lRDelivery.createMany({
+        data: input.lrs.map((line) => ({
+          lrId: line.lrId,
+          deliveredAt: input.deliveredAt,
+          unloadingAt: input.unloadingAt ?? null,
+          receiverName: input.receiverName ?? null,
+          receiverPhone: input.receiverPhone ?? null,
+          unloadingCharges: existing.isMarketVehicle
+            ? (line.unloadingCharges ?? input.unloadingCharges ?? null)
+            : null,
+          remark: line.remark ?? input.remark ?? null,
+          createdById: me,
+        })),
+      });
       await tx.lorryReceipt.updateMany({
         where: { id: { in: input.lrs.map((line) => line.lrId) } },
         data: { status: "DELIVERED", updatedById: me },

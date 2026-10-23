@@ -1,6 +1,16 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListQuery,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
+import type {
+  JournalStatus,
+  TallySyncStatus,
+  Voucher,
+} from "@/features/ledger/voucher.types";
 
 export type ReceiptPaymentMode = "CASH" | "CHEQUE" | "BANK" | "UPI";
 export type ReceiptStatus =
@@ -30,7 +40,8 @@ export type OutstandingBillsFilters = {
   lrNumber?: string;
   uptoDate?: string;
   billNumber?: string;
-
+  page?: number;
+  size?: number;
 };
 
 export type ReceiptAllocationInput = {
@@ -38,6 +49,7 @@ export type ReceiptAllocationInput = {
   amountAppliedPaise: string;
   tdsAmountPaise: string;
   tdsSection?: string;
+  tdsCertNumber?: string;
   damageAmountPaise: string;
   rateDiffAmountPaise: string;
 };
@@ -107,6 +119,13 @@ export type Receipt = {
   cancelledBy: NamedUser;
   allocations: ReceiptAllocation[];
   statusHistory: ReceiptStatusHistoryEntry[];
+  journalEntryId?: string | null;
+  journalEntry?: {
+    id: string;
+    voucherNumber: string;
+    status: JournalStatus;
+    tallySyncStatus?: TallySyncStatus;
+  } | null;
 };
 
 /**
@@ -126,6 +145,12 @@ export type ReceiptListItem = {
   customer: { id: string; name: string };
   branch: { name: string; branchCode: string };
   _count: { allocations: number };
+  journalEntry?: {
+    id: string;
+    voucherNumber: string;
+    status: JournalStatus;
+    tallySyncStatus?: TallySyncStatus;
+  } | null;
 };
 
 const get = async <T>(
@@ -141,13 +166,47 @@ const post = async <T>(url: string, body?: unknown) => {
   return unwrapApiResponse(response);
 };
 
+export type ReceiptListQuery = ListQuery & { status?: ReceiptStatus };
+
+const listReceipts = async (
+  query?: ReceiptListQuery,
+): Promise<ListResult<ReceiptListItem>> => {
+  const { status, ...listQuery } = query ?? {};
+  const response = await api.get<ApiResponse<ReceiptListItem[]>>("/receipt", {
+    params: {
+      ...(status ? { status } : {}),
+      ...(listQuery.page !== undefined ? { page: listQuery.page } : {}),
+      ...(listQuery.size !== undefined ? { size: listQuery.size } : {}),
+      ...(listQuery.search ? { search: listQuery.search } : {}),
+      ...(listQuery.sort ? { sort: listQuery.sort } : {}),
+      ...(listQuery.filter ? { filter: listQuery.filter } : {}),
+    },
+  });
+  return unwrapListResponse(response);
+};
+
+const outstandingBills = async (
+  filters: OutstandingBillsFilters,
+): Promise<ListResult<OutstandingBill>> => {
+  const { page, size, ...rest } = filters;
+  const response = await api.get<ApiResponse<OutstandingBill[]>>(
+    "/receipt/outstanding-bills",
+    {
+      params: {
+        ...rest,
+        page: page === undefined ? undefined : String(page),
+        size: size === undefined ? undefined : String(size),
+      },
+    },
+  );
+  return unwrapListResponse(response);
+};
+
 export const receiptApi = {
-  outstandingBills: (filters: OutstandingBillsFilters) =>
-    get<OutstandingBill[]>("/receipt/outstanding-bills", filters),
+  outstandingBills,
   create: (body: CreateReceiptDraft) =>
     post<ReceiptStatusPatch>("/receipt", body),
-  list: (status?: ReceiptStatus) =>
-    get<ReceiptListItem[]>("/receipt", status ? { status } : undefined),
+  list: listReceipts,
   receipt: (id: string) => get<Receipt>(`/receipt/${id}`),
   approve: (id: string, reason?: string) =>
     post<ReceiptStatusPatch>(
@@ -156,4 +215,5 @@ export const receiptApi = {
     ),
   cancel: (id: string, reason: string) =>
     post<ReceiptStatusPatch>(`/receipt/${id}/cancel`, { reason }),
+  voucher: (id: string) => get<Voucher>(`/receipt/${id}/voucher`),
 };

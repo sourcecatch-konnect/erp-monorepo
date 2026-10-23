@@ -19,6 +19,7 @@ import {
 import { lrLookups, lrLookupKeys } from "../lorry-receipt.service";
 import { SuggestInput } from "@skerp/ui/components/suggest-input";
 import { useUnitOfMeasureOptions } from "@/features/masters/unitOfMeasure/useUnitOfMeasureOptions";
+import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 
 export type LinePayload = {
   loadingLocationId?: string;
@@ -35,6 +36,7 @@ export type LinePayload = {
 
   invoiceNumber?: string;
   invoiceAmount?: number;
+  invoiceRemark?: string;
 };
 type GoodsFormLine = {
   name: string;
@@ -52,6 +54,7 @@ type FormShape = {
 
   invoiceNumber: string;
   invoiceAmount: string;
+  invoiceRemark: string;
 };
 type Props = {
   open: boolean;
@@ -94,6 +97,7 @@ export default function LRLineDialog({
       goods: [],
       invoiceNumber: "",
       invoiceAmount: "",
+      invoiceRemark: "",
     },
   });
   const { fields, append, remove } = useFieldArray({
@@ -125,6 +129,7 @@ export default function LRLineDialog({
           : [],
         invoiceNumber: initial?.invoiceNumber ?? "",
         invoiceAmount: initial?.invoiceAmount ?? "",
+        invoiceRemark: initial?.invoiceRemark ?? "",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,7 +172,7 @@ export default function LRLineDialog({
 
     const invoiceAmount =
       v.invoiceAmount === "" ? undefined : Number(v.invoiceAmount);
-
+    const invoiceRemark = v.invoiceRemark.trim() || undefined;
     if (mode === "edit" && !invoiceNumber) {
       form.setError("invoiceNumber", {
         type: "required",
@@ -176,18 +181,21 @@ export default function LRLineDialog({
       return;
     }
 
+    // Invoice amount is optional; only reject a value that was entered but isn't
+    // a positive number (blank / undefined is allowed).
     if (
       mode === "edit" &&
-      (invoiceAmount === undefined ||
-        !Number.isFinite(invoiceAmount) ||
-        invoiceAmount <= 0)
+      invoiceAmount !== undefined &&
+      (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0)
     ) {
       form.setError("invoiceAmount", {
-        type: "required",
-        message: "Invoice amount must be greater than 0",
+        type: "validate",
+        message: "Enter a valid amount greater than 0, or leave it blank",
       });
       return;
     }
+
+
     onSubmit({
       loadingLocationId: v.loadingLocationId || undefined,
       unloadingLocationId: v.unloadingLocationId || undefined,
@@ -199,6 +207,7 @@ export default function LRLineDialog({
 
       invoiceNumber: mode === "edit" ? invoiceNumber : undefined,
       invoiceAmount: mode === "edit" ? invoiceAmount : undefined,
+      invoiceRemark: mode === "edit" ? invoiceRemark : undefined,
     });
   };
 
@@ -265,6 +274,15 @@ export default function LRLineDialog({
                 <IconPlus size={14} className="mr-1" /> Add goods row
               </Button>
             </div>
+            {goodsMaster.isError ? (
+              <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                Couldn&apos;t load the goods list ({getErrorMessage(
+                  goodsMaster.error,
+                )}
+                ) — you can still type a goods name directly below, or ask
+                your admin to check your Goods master permission.
+              </p>
+            ) : null}
             {fields.length === 0 ? (
               <div className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
                 No goods added yet. This LR can stay draft, but the group cannot
@@ -294,7 +312,9 @@ export default function LRLineDialog({
                               placeholder={
                                 goodsMaster.isLoading
                                   ? "Loading goods..."
-                                  : "Select or type goods"
+                                  : goodsMaster.isError
+                                    ? "Type goods name (list unavailable)"
+                                    : "Select or type goods"
                               }
                               invalid={Boolean(
                                 form.formState.errors.goods?.[index]?.name?.message,
@@ -400,6 +420,7 @@ export default function LRLineDialog({
                 <Input
                   {...form.register("invoiceNumber")}
                   className="h-9"
+                  placeholder="Enter Invoice Number"
                 />
 
                 {form.formState.errors.invoiceNumber?.message ? (
@@ -411,15 +432,20 @@ export default function LRLineDialog({
 
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Invoice amount (₹) <span className="text-red-600">*</span>
+                  Invoice amount (₹)
                 </label>
 
                 <Input
                   {...form.register("invoiceAmount")}
                   type="number"
-                  min={0.01}
                   step="0.01"
+                  placeholder="Enter invoice amount (optional)"
                   className="h-9"
+                  onKeyDown={(event) => {
+                    if (event.key === "-" || event.key === "e") {
+                      event.preventDefault();
+                    }
+                  }}
                 />
 
                 {form.formState.errors.invoiceAmount?.message ? (
@@ -427,6 +453,19 @@ export default function LRLineDialog({
                     {form.formState.errors.invoiceAmount.message}
                   </p>
                 ) : null}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Invoice remark
+                </label>
+
+                <Input
+                  {...form.register("invoiceRemark")}
+                  type="text"
+                  placeholder="As per invoice"
+                  className="h-9"
+                />
               </div>
             </div>
           )}

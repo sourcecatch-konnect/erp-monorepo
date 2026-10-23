@@ -6,10 +6,11 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "lint": "eslint . --max-warnings 0",
     "check-types": "tsc --noEmit",
+    "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:status": "prisma migrate status",
@@ -29,9 +30,11 @@
     "@skerp/validators": "workspace:*",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.77.6",
+    "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "ioredis": "^5.11.0",
     "jsonwebtoken": "^9.0.3",
@@ -46,6 +49,7 @@
     "@skerp/eslint-config": "workspace:*",
     "@skerp/typescript-config": "workspace:*",
     "@types/bcryptjs": "^3.0.0",
+    "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
@@ -54,6 +58,7 @@
     "@types/ws": "^8.18.1",
     "eslint": "^9.39.1",
     "tsx": "^4.20.6",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "vitest": "^4.1.6"
   }
 }

@@ -1,5 +1,11 @@
 export const today = () => new Date().toISOString().slice(0, 10);
 
+export const addDays = (isoDate: string, days: number) => {
+    const date = new Date(isoDate);
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
+};
+
 export const money = (paise: string | bigint) =>
     new Intl.NumberFormat("en-IN", {
         style: "currency",

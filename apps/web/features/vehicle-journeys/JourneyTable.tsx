@@ -52,7 +52,139 @@ import {
   SETTLEMENT_LABELS,
   formatDateTime,
 } from "./journey-ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@skerp/ui/components/popver";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@skerp/ui/components/tooltip";
+const getRouteCities = (journey: VehicleJourney): string[] => {
+  const cities: string[] = [];
 
+  if (journey.startCity?.name) {
+    cities.push(journey.startCity.name);
+  }
+
+  for (const trip of journey.trips ?? []) {
+    if (trip.toCity?.name) {
+      cities.push(trip.toCity.name);
+    }
+  }
+
+  return cities;
+};
+function DriverNameCell({ name }: { name?: string | null }) {
+  if (!name) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="block w-40 cursor-default truncate text-sm">
+            {name}
+          </span>
+        </TooltipTrigger>
+
+        <TooltipContent side="top" className="max-w-xs">
+          <p className="break-words">{name}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+function RouteChainPopover({
+  journey,
+}: {
+  journey: VehicleJourney;
+}) {
+  const cities = getRouteCities(journey);
+  const visibleCities = cities.slice(0, 2);
+  const remainingCount = Math.max(cities.length - 2, 0);
+
+  if (cities.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  if (remainingCount === 0) {
+    return (
+      <span className="whitespace-nowrap text-sm">
+        {cities.join(" → ")}
+      </span>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1 whitespace-nowrap"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <span className="text-sm">
+        {visibleCities.join(" → ")}
+      </span>
+
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-primary hover:bg-muted/80"
+          >
+            +{remainingCount} more
+          </button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          align="start"
+          className="w-72 p-0"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="border-b px-4 py-3">
+            <p className="text-sm font-semibold">Complete Route Chain</p>
+
+            <p className="text-xs text-muted-foreground">
+              {cities.length} cities in this journey
+            </p>
+          </div>
+
+          <div
+            className="max-h-[min(420px,60vh)] overflow-y-auto overscroll-contain px-4 py-3"
+            onWheel={(event) => event.stopPropagation()}
+          >
+            <ol className="relative border-l border-border">
+              {cities.map((city, index) => {
+                const isFirst = index === 0;
+                const isLast = index === cities.length - 1;
+
+                return (
+                  <li
+                    key={`${city}-${index}`}
+                    className="relative pb-4 pl-5 last:pb-0"
+                  >
+                    <span
+                      className={cn(
+                        "absolute -left-[5px] top-1 size-2.5 rounded-full ring-2 ring-background",
+                        isFirst && "bg-emerald-500",
+                        isLast && "bg-red-500",
+                        !isFirst && !isLast && "bg-blue-500",
+                      )}
+                    />
+
+                    <p className="text-sm font-medium">{city}</p>
+
+                    <p className="text-xs text-muted-foreground">
+                      {isFirst
+                        ? "Starting point"
+                        : isLast
+                          ? "Final destination"
+                          : `Stop ${index}`}
+                    </p>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 type Props = {
   data: VehicleJourney[];
   total: number;
@@ -78,7 +210,7 @@ type Props = {
   onColumnOrderChange: (order: string[]) => void;
   counts: Record<string, number>;
   isLoading?: boolean;
-  onRowClick: (journey: VehicleJourney) => void;
+
 };
 
 /**
@@ -124,13 +256,7 @@ const SKELETON_WIDTHS: Record<string, string> = {
 };
 
 /** "Jalgaon → Pune → Howrah" built from the journey's ordered legs. */
-const routeChain = (j: VehicleJourney) => {
-  const cities: string[] = [j.startCity?.name ?? "?"];
-  for (const leg of j.trips ?? []) {
-    if (leg.toCity?.name) cities.push(leg.toCity.name);
-  }
-  return cities.join(" → ");
-};
+
 
 const lastClosingKm = (j: VehicleJourney) => {
   const closed = (j.trips ?? []).filter((l) => l.closingKm !== null);
@@ -162,7 +288,6 @@ export default function JourneyTable(props: Props) {
     onColumnOrderChange,
     counts,
     isLoading,
-    onRowClick,
   } = props;
 
   const columns = React.useMemo<ColumnDef<VehicleJourney>[]>(
@@ -231,13 +356,17 @@ export default function JourneyTable(props: Props) {
       {
         id: "driver",
         header: "Driver",
-        cell: ({ row }) => row.original.driver?.name ?? "—",
+        size: 180,
+        cell: ({ row }) => (
+          <DriverNameCell name={row.original.driver?.name} />
+        ),
       },
       {
         id: "route",
         header: "Route chain",
+        size: 260,
         cell: ({ row }) => (
-          <span className="text-sm">{routeChain(row.original)}</span>
+          <RouteChainPopover journey={row.original} />
         ),
       },
       {
@@ -443,7 +572,7 @@ export default function JourneyTable(props: Props) {
               <TableRow
                 key={row.id}
                 className="group/row cursor-pointer"
-                onClick={() => onRowClick(row.original)}
+
               >
                 {row.getVisibleCells().map((cell) => {
                   const pinned = cell.column.getIsPinned() === "right";
@@ -454,7 +583,7 @@ export default function JourneyTable(props: Props) {
                       className={cn(
                         "h-12 text-sm",
                         pinned &&
-                          `sticky z-10 ${PIN_CELL_BG} transition-colors`,
+                        `sticky z-10 ${PIN_CELL_BG} transition-colors`,
                         cell.column.id === "status" && "border-l border-border",
                       )}
                     >

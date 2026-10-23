@@ -1,6 +1,18 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
-import { unwrapApiResponse } from "@/features/masters/_shared/master-api";
+import {
+  unwrapApiResponse,
+  unwrapListResponse,
+  type ListQuery,
+  type ListResult,
+} from "@/features/masters/_shared/master-api";
+import type {
+  VoucherType,
+  JournalStatus,
+  TallySyncStatus,
+  JournalLine,
+  Voucher,
+} from "@/features/ledger/voucher.types";
 
 export type BillType = "ROAD" | "ROAD_RAIL" | "ROAD_GTA";
 export type BillPartyType = "CONSIGNOR" | "CONSIGNEE";
@@ -170,17 +182,51 @@ export type BillLRDetail = {
   };
 };
 
+// Voucher types are shared with Receivables (both view the same JournalEntry
+// shape) — defined once in features/ledger and re-exported here so every
+// existing `import { Voucher, ... } from "./billing.service"` keeps working.
+export type {
+  VoucherType,
+  JournalStatus,
+  TallySyncStatus,
+  JournalLine,
+  JournalAllocation,
+  Voucher,
+} from "@/features/ledger/voucher.types";
+
+export type BillCreditNoteType = "CREDIT_NOTE" | "DEBIT_NOTE";
+
+export type BillCreditNote = {
+  id: string;
+  noteType: BillCreditNoteType;
+  noteNumber: string;
+  amountPaise: string;
+  reason: string;
+  createdAt: string;
+  createdBy: { id: string; firstName: string; lastName: string };
+};
+
 export type Bill = {
   id: string;
   version: number;
   billNumber: string | null;
   status: string;
+  journalEntryId?: string | null;
+  journalEntry?: {
+    id: string;
+    voucherType?: VoucherType;
+    voucherNumber: string;
+    status: JournalStatus;
+    tallySyncStatus?: TallySyncStatus;
+    lines?: JournalLine[];
+  } | null;
   billType: BillType;
   billingPartyType: BillPartyType;
   chargeMechanism: ChargeMechanism;
   taxTreatment: string;
   billDate: string;
   billingCutoffDate?: string | null;
+  dueDate?: string | null;
   billingPartyNameSnapshot: string;
   billingGstinSnapshot: string | null;
   billingAddressSnapshot: string | null;
@@ -287,6 +333,7 @@ export type CreateBillDraft = {
   chargeMechanism?: ChargeMechanism;
   billDate: string;
   billingCutoffDate?: string | null;
+  dueDate: string;
   remarks?: string | null;
   lrChargeIds: string[];
 };
@@ -297,6 +344,25 @@ const get = async <T>(
 ) => {
   const response = await api.get<ApiResponse<T>>(url, { params });
   return unwrapApiResponse(response);
+};
+
+export type BillListQuery = ListQuery & { status?: string };
+
+const listBills = async (
+  query?: BillListQuery,
+): Promise<ListResult<Bill>> => {
+  const { status, ...listQuery } = query ?? {};
+  const response = await api.get<ApiResponse<Bill[]>>("/billing/bills", {
+    params: {
+      ...(status ? { status } : {}),
+      ...(listQuery.page !== undefined ? { page: listQuery.page } : {}),
+      ...(listQuery.size !== undefined ? { size: listQuery.size } : {}),
+      ...(listQuery.search ? { search: listQuery.search } : {}),
+      ...(listQuery.sort ? { sort: listQuery.sort } : {}),
+      ...(listQuery.filter ? { filter: listQuery.filter } : {}),
+    },
+  });
+  return unwrapListResponse(response);
 };
 
 const post = async <T>(url: string, body?: unknown) => {
@@ -331,8 +397,9 @@ export const billingApi = {
   cancelCharge: (id: string, reason: string) =>
     post<{ id: string }>(`/billing/charges/${id}/cancel`, { reason }),
   createBill: (body: CreateBillDraft) => post<Bill[]>("/billing/bills", body),
-  listBills: () => get<Bill[]>("/billing/bills"),
+  listBills,
   bill: (id: string) => get<Bill>(`/billing/bills/${id}`),
+  voucher: (id: string) => get<Voucher>(`/billing/bills/${id}/voucher`),
   availableBillCharges: (id: string) =>
     get<AvailableBillCharge[]>(`/billing/bills/${id}/available-charges`),
   addBillCharges: (id: string, lrChargeIds: string[], version: number) =>
@@ -354,6 +421,12 @@ export const billingApi = {
   ) => post<Bill>(`/billing/bills/${id}/${action}`),
   cancel: (id: string, reason: string) =>
     post<BillStatusPatch>(`/billing/bills/${id}/cancel`, { reason }),
+  creditNotes: (id: string) =>
+    get<BillCreditNote[]>(`/billing/bills/${id}/credit-notes`),
+  createCreditNote: (
+    id: string,
+    body: { noteType: BillCreditNoteType; amountPaise: string; reason: string },
+  ) => post<BillCreditNote>(`/billing/bills/${id}/credit-notes`, body),
   taxRules: () =>
     get<Array<Record<string, string | number | boolean | null>>>(
       "/billing/tax-rules",

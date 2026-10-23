@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconAlertTriangle,
@@ -37,6 +37,7 @@ import {
 } from "@skerp/ui/components/table";
 import { customerApi } from "@/features/masters/Customer/customer.service";
 import { cashAccountApi } from "@/features/masters/cash-account/cash-account.service";
+import { LoadMoreFooter, SkeletonTableRows } from "@/components/data-table";
 import {
   receiptApi,
   type OutstandingBill,
@@ -65,6 +66,7 @@ type AllocationDraft = {
   amountApplied: string;
   tds: string;
   tdsSection: string;
+  tdsCertNumber: string;
   damage: string;
   rateDiff: string;
 };
@@ -76,6 +78,9 @@ const settledPaise = (a: AllocationDraft) =>
   BigInt(rupeesToPaise(a.tds || "0")) +
   BigInt(rupeesToPaise(a.damage || "0")) +
   BigInt(rupeesToPaise(a.rateDiff || "0"));
+
+// Outstanding bills are fetched a chunk at a time — never the whole set.
+const OUTSTANDING_BILLS_CHUNK_SIZE = 25;
 
 function AmountInput({
   value,
@@ -141,7 +146,12 @@ export function ReceiptWizard() {
     (c) => ({ label: c.name, value: c.id }),
   );
 
-  const outstanding = useQuery({
+  // Chunked, server-side: each request returns one chunk plus a running total,
+  // and every filter (including the bill/LR/truck number "search" fields) is
+  // matched in the database — not just the chunks already loaded in the
+  // browser. Selections live in `selected`/`allocations` keyed by bill id, so
+  // loading another chunk never drops one.
+  const outstanding = useInfiniteQuery({
     queryKey: [
       "receivables",
       "outstanding-bills",
@@ -149,16 +159,24 @@ export function ReceiptWizard() {
       truckNumber,
       lrNumber,
       uptoDate,
-      billNumber
+      billNumber,
     ],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       receiptApi.outstandingBills({
         customerId,
         truckNumber: truckNumber.trim() || undefined,
         lrNumber: lrNumber.trim() || undefined,
         uptoDate: uptoDate || undefined,
         billNumber: billNumber.trim() || undefined,
+        page: pageParam,
+        size: OUTSTANDING_BILLS_CHUNK_SIZE,
       }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.data.length, 0);
+      return loaded < (lastPage.meta?.total ?? 0) ? allPages.length : undefined;
+    },
+    placeholderData: keepPreviousData,
     enabled: searched && Boolean(customerId),
   });
   const toggleBill = (bill: OutstandingBill, checked: boolean) => {
@@ -184,6 +202,7 @@ export function ReceiptWizard() {
             amountApplied: (Number(receivedPaise) / 100).toFixed(2),
             tds: (Number(tdsPaise) / 100).toFixed(2),
             tdsSection: "",
+            tdsCertNumber: "",
             damage: "0",
             rateDiff: "0",
           },
@@ -221,8 +240,12 @@ export function ReceiptWizard() {
       return { ...prev, [billId]: updated };
     });
   };
-  const bills = outstanding.data ?? [];
+  const bills = React.useMemo(
+    () => outstanding.data?.pages.flatMap((page) => page.data) ?? [],
+    [outstanding.data],
+  );
   const billById = new Map(bills.map((bill) => [bill.id, bill]));
+  const totalBills = outstanding.data?.pages.at(-1)?.meta?.total ?? 0;
 
   const totals = React.useMemo(() => {
     let received = 0n;
@@ -255,6 +278,10 @@ export function ReceiptWizard() {
     const a = allocations[billId];
     return !a || settledPaise(a) <= 0n;
   });
+  const missingTdsSectionBillIds = [...selected].filter((billId) => {
+    const a = allocations[billId];
+    return a && Number(a.tds || "0") > 0 && !a.tdsSection.trim();
+  });
   const selectedBranchIds = new Set(
     [...selected]
       .map((billId) => billById.get(billId)?.branchId)
@@ -269,6 +296,7 @@ export function ReceiptWizard() {
     Boolean(receivedIntoAccountId) &&
     overAllocatedBillIds.length === 0 &&
     zeroAllocationBillIds.length === 0 &&
+    missingTdsSectionBillIds.length === 0 &&
     Boolean(derivedBranchId);
 
   const createReceipt = useMutation({
@@ -291,6 +319,7 @@ export function ReceiptWizard() {
             amountAppliedPaise: rupeesToPaise(a.amountApplied || "0"),
             tdsAmountPaise: rupeesToPaise(a.tds || "0"),
             tdsSection: a.tdsSection.trim() || undefined,
+            tdsCertNumber: a.tdsCertNumber.trim() || undefined,
             damageAmountPaise: rupeesToPaise(a.damage || "0"),
             rateDiffAmountPaise: rupeesToPaise(a.rateDiff || "0"),
           };
@@ -393,9 +422,9 @@ export function ReceiptWizard() {
                 title="Select bills and enter amounts"
                 description={`Outstanding bills for ${customerLabel || "this client"}. Check a bill, then enter what was received against it.`}
               />
-              {bills.length ? (
+              {totalBills ? (
                 <span className="rounded-sm border bg-background px-3 py-1 text-xs font-medium">
-                  {bills.length} outstanding bill{bills.length === 1 ? "" : "s"}
+                  {totalBills} outstanding bill{totalBills === 1 ? "" : "s"}
                 </span>
               ) : null}
             </div>
@@ -403,6 +432,18 @@ export function ReceiptWizard() {
           <CardContent className="space-y-4">
             {outstanding.isLoading ? (
               <Skeleton className="h-40" />
+            ) : outstanding.isError ? (
+              <div className="py-10 text-center">
+                <p className="font-medium">Could not load outstanding bills</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => outstanding.refetch()}
+                >
+                  Try again
+                </Button>
+              </div>
             ) : !bills.length ? (
               <div className="py-10 text-center">
                 <span className="mx-auto flex size-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
@@ -414,6 +455,10 @@ export function ReceiptWizard() {
                 </p>
               </div>
             ) : (
+              <div
+                aria-busy={outstanding.isPlaceholderData}
+                className={outstanding.isPlaceholderData ? "opacity-60" : undefined}
+              >
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -491,6 +536,39 @@ export function ReceiptWizard() {
                                 updateAllocation(bill.id, "tds", value)
                               }
                             />
+                            {checked && Number(a?.tds || "0") > 0 ? (
+                              <div className="mt-1 space-y-1">
+                                <Input
+                                  className="h-7 text-xs"
+                                  placeholder="TDS section (e.g. 194C)"
+                                  value={a?.tdsSection ?? ""}
+                                  onChange={(event) =>
+                                    updateAllocation(
+                                      bill.id,
+                                      "tdsSection",
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                                <Input
+                                  className="h-7 text-xs"
+                                  placeholder="Cert no. (optional)"
+                                  value={a?.tdsCertNumber ?? ""}
+                                  onChange={(event) =>
+                                    updateAllocation(
+                                      bill.id,
+                                      "tdsCertNumber",
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                                {!a?.tdsSection?.trim() ? (
+                                  <p className="text-[10px] font-medium text-destructive">
+                                    Section required
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             <AmountInput
@@ -518,8 +596,19 @@ export function ReceiptWizard() {
                         </TableRow>
                       );
                     })}
+                    {outstanding.isFetchingNextPage ? (
+                      <SkeletonTableRows columns={10} />
+                    ) : null}
                   </TableBody>
                 </Table>
+              </div>
+              <LoadMoreFooter
+                shown={bills.length}
+                total={totalBills}
+                hasNextPage={Boolean(outstanding.hasNextPage)}
+                isFetchingNextPage={outstanding.isFetchingNextPage}
+                onLoadMore={() => outstanding.fetchNextPage()}
+              />
               </div>
             )}
           </CardContent>

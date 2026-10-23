@@ -227,30 +227,30 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
   const totalWeight =
     order.orderType === "Truck"
       ? (order.consignments?.reduce((sum, consignment) => {
-          const lineWeight = Number(consignment.totalWeight ?? 0);
-          if (!Number.isNaN(lineWeight) && lineWeight > 0) {
-            return sum + lineWeight;
-          }
+        const lineWeight = Number(consignment.totalWeight ?? 0);
+        if (!Number.isNaN(lineWeight) && lineWeight > 0) {
+          return sum + lineWeight;
+        }
 
-          const goodsWeight =
-            consignment.goods?.reduce((goodsSum, item) => {
-              const weight = Number(item.weight ?? 0);
-              return goodsSum + (Number.isNaN(weight) ? 0 : weight);
-            }, 0) ?? 0;
+        const goodsWeight =
+          consignment.goods?.reduce((goodsSum, item) => {
+            const weight = Number(item.weight ?? 0);
+            return goodsSum + (Number.isNaN(weight) ? 0 : weight);
+          }, 0) ?? 0;
 
-          return sum + goodsWeight;
-        }, 0) ?? 0)
+        return sum + goodsWeight;
+      }, 0) ?? 0)
       : (order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0);
 
   const weightUnits =
     order.orderType === "Truck"
       ? Array.from(
-          new Set(
-            (order.consignments ?? [])
-              .map((c) => c.unit)
-              .filter((u): u is string => Boolean(u)),
-          ),
-        )
+        new Set(
+          (order.consignments ?? [])
+            .map((c) => c.unit)
+            .filter((u): u is string => Boolean(u)),
+        ),
+      )
       : [];
 
   const totalWeightUnit =
@@ -417,11 +417,10 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                       label="LRs created"
                       value={
                         <span
-                          className={`font-medium ${
-                            (lrCountsQuery.data ?? 0) >= order.truckQuantity
+                          className={`font-medium ${(lrCountsQuery.data ?? 0) >= order.truckQuantity
                               ? "text-red-600"
                               : "text-foreground"
-                          }`}
+                            }`}
                         >
                           {lrCountsQuery.data ?? "—"} / {order.truckQuantity}
                           {(lrCountsQuery.data ?? 0) >= order.truckQuantity && (
@@ -491,8 +490,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               </div>
 
               {freightWasEdited &&
-              autoFreight != null &&
-              approvedFreight != null ? (
+                autoFreight != null &&
+                approvedFreight != null ? (
                 <div className="mt-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div>
@@ -536,7 +535,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
           </CardSection>
 
           {order.orderType === "Truck" &&
-          (order.consignments?.length ?? 0) > 0 ? (
+            (order.consignments?.length ?? 0) > 0 ? (
             <CardSection
               title="Consignment Lines"
               icon={<IconPackage size={14} />}

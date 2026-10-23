@@ -4,8 +4,10 @@ import { can } from "../../auth/can.middleware.js";
 import { PERMS } from "../../auth/permissions.js";
 import {
   createEmployeeController,
+  deleteEmployeeController,
   getEmployeeController,
   listEmployeesController,
+  listEmployeesPageController,
   resetEmployeePasswordController,
   updateEmployeeController,
   updateEmployeeStatusController,
@@ -13,14 +15,18 @@ import {
 
 const router = Router();
 
-// Employee management is available to users with RBAC management permission.
+// Every route, including delete, needs a signed-in user with RBAC management
+// permission; the service adds self- and last-admin guards on top.
 router.use(authMiddleware, can(PERMS.ADMIN.RBAC_MANAGE));
 
 router.post("/", createEmployeeController);
 router.get("/", listEmployeesController);
+// Before "/:id", which would otherwise treat "page" as a user id.
+router.get("/page", listEmployeesPageController);
 router.get("/:id", getEmployeeController);
 router.patch("/:id", updateEmployeeController);
 router.patch("/:id/password", resetEmployeePasswordController);
 router.patch("/:id/status", updateEmployeeStatusController);
+router.delete("/:id", deleteEmployeeController);
 
 export default router;

@@ -131,6 +131,7 @@ export const lrListSelect = {
   groupId: true,
   invoiceNumber: true,
   invoiceAmount: true,
+  invoiceRemark: true,
   loadingLocation: { select: locationSelect },
   unloadingLocation: { select: locationSelect },
   group: { select: groupRefSelect },

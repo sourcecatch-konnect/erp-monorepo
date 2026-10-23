@@ -37,6 +37,8 @@ import {
 import { useCan } from "@/features/auth";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import ConfirmDialog from "@/components/feedback/ConfirmDialog";
+import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
+import { LogSlipDriverPayoutPanel } from "@/features/driver-finance";
 import { formatPaise } from "@/lib/money";
 import { toValidDate } from "@/lib/date";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -123,11 +125,13 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
   const queryClient = useQueryClient();
   const [reopenOpen, setReopenOpen] = React.useState(false);
   const [postOpen, setPostOpen] = React.useState(false);
+  const [voucherOpen, setVoucherOpen] = React.useState(false);
 
   const canGenerate = useCan(PERMS.LOGSLIP.GENERATE);
   const canPost = useCan(PERMS.LOGSLIP.POST_ACCOUNTS);
   const canReopen = useCan(PERMS.LOGSLIP.REOPEN);
   const canPrint = useCan(PERMS.LOGSLIP.PRINT);
+  const canViewVoucher = useCan(PERMS.LEDGER.VOUCHER_VIEW);
 
   const journeyQuery = useQuery({
     queryKey: journeyKeys.detail(journeyId),
@@ -137,9 +141,9 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
 
   const frozenSlipId =
     journey?.logSlip &&
-    ["GENERATED", "POSTED_TO_ACCOUNTS", "TALLY_SYNCED"].includes(
-      journey.logSlip.status,
-    )
+      ["GENERATED", "POSTED_TO_ACCOUNTS", "TALLY_SYNCED"].includes(
+        journey.logSlip.status,
+      )
       ? journey.logSlip.id
       : null;
 
@@ -155,8 +159,14 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
     enabled: Boolean(journey) && !frozenSlipId,
   });
 
+  const voucherQuery = useQuery({
+    queryKey: ["log-slips", frozenSlipId, "voucher"],
+    queryFn: () => logSlipApi.voucher(frozenSlipId!),
+    enabled: voucherOpen && Boolean(frozenSlipId),
+  });
+
   const form = useForm<GenerateLogSlipFormInput, unknown, GenerateLogSlipBody>({
-    resolver: zodResolver(generateLogSlipSchema),
+    resolver: zodResolver(generateLogSlipSchema, undefined, { raw: true }),
     defaultValues: { previousDieselQty: 0 },
   });
 
@@ -282,6 +292,11 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
             {slip && slip.status === "GENERATED" && canPost ? (
               <Button onClick={() => setPostOpen(true)}>
                 <IconBuildingBank size={16} className="mr-1" /> Post to Accounts
+              </Button>
+            ) : null}
+            {slip && slip.postedJournalEntryId && canViewVoucher ? (
+              <Button variant="outline" onClick={() => setVoucherOpen(true)}>
+                <IconBuildingBank size={16} className="mr-1" /> View Voucher
               </Button>
             ) : null}
             {slip && canReopen ? (
@@ -424,19 +439,23 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
             <div key={item.label} className="rounded-lg border bg-card p-3">
               <p className="text-xs text-muted-foreground">{item.label}</p>
               <p
-                className={`mt-1 text-base font-semibold ${
-                  item.accent === undefined
+                className={`mt-1 text-base font-semibold ${item.accent === undefined
                     ? ""
                     : item.accent
                       ? "text-green-700"
                       : "text-destructive"
-                }`}
+                  }`}
               >
                 {item.value}
               </p>
             </div>
           ))}
         </div>
+      ) : null}
+
+      {/* Cash handed to the driver for a "payable to driver" balance */}
+      {slip && driverPayable > 0 ? (
+        <LogSlipDriverPayoutPanel logSlipId={slip.id} />
       ) : null}
 
       {/* Diesel account (frozen slip only — needs previous qty & averages) */}
@@ -490,7 +509,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
         open={postOpen}
         onOpenChange={setPostOpen}
         title="Post log slip to accounts?"
-        description="The journey is settled. Journal entries will flow to Tally once the accounts ledger is live."
+        description="The journey is settled and a journal voucher is posted for freight, expenses, and the driver settlement."
         confirmLabel="Post to accounts"
         pendingLabel="Posting..."
         isPending={post.isPending}
@@ -506,6 +525,20 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
         destructive
         isPending={reopen.isPending}
         onConfirm={(reason) => reopen.mutate(reason)}
+      />
+
+      <VoucherDialog
+        open={voucherOpen}
+        onOpenChange={setVoucherOpen}
+        voucher={voucherQuery.data}
+        isLoading={voucherQuery.isLoading}
+        isError={voucherQuery.isError}
+        errorMessage={
+          voucherQuery.error instanceof Error
+            ? voucherQuery.error.message
+            : undefined
+        }
+        fallbackVoucherNumber={slip?.logSlipNumber ?? undefined}
       />
     </div>
   );

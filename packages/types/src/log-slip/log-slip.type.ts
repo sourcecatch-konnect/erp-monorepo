@@ -9,7 +9,11 @@ import {
 export type LogSlipStatus = z.infer<typeof logSlipStatusSchema>;
 export type LogSlipLineType = z.infer<typeof logSlipLineTypeSchema>;
 
-export type GenerateLogSlipBody = z.output<typeof generateLogSlipSchema>;
+// z.input, not z.output: LogSlipWorkbench uses a `raw: true` resolver, which
+// submits the untransformed (rupees) shape for dieselRate — the server is
+// the sole rupees -> paise boundary. Same fix as CreateTripBody /
+// CreateDriverAdvanceBody / etc.
+export type GenerateLogSlipBody = z.input<typeof generateLogSlipSchema>;
 export type GenerateLogSlipFormInput = z.input<typeof generateLogSlipSchema>;
 export type ReopenLogSlipBody = z.output<typeof reopenLogSlipSchema>;
 

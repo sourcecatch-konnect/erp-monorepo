@@ -52,6 +52,7 @@ import LRCreateSummary from "./LRCreateSummary";
 import { FieldLabel, MoneyField } from "./moneyField";
 import CreateTripDialog from "@/features/trips/CreateTripDialog";
 import { branchApi } from "@/features/masters/branch/branch.service";
+import { useScrollToFirstError } from "@/hooks/useScrollToFirstError";
 
 type Props = {
   orderId?: string;
@@ -162,6 +163,7 @@ function InstantLRLineCard({
   goodsSuggestions,
   watchConsignor,
   watchConsignee,
+  unloadingRequired,
   onRemove,
 }: {
   form: LRFormApi;
@@ -173,6 +175,8 @@ function InstantLRLineCard({
   goodsSuggestions: { value: string; hint?: string }[];
   watchConsignor: unknown;
   watchConsignee: unknown;
+  /** INSTANT requires the drop point; FROM_ORDER may leave it open. */
+  unloadingRequired: boolean;
   onRemove: () => void;
 }) {
   const base = `lrs.${idx}` as const;
@@ -187,8 +191,6 @@ function InstantLRLineCard({
   const lineErr = (
     form.formState.errors as {
       lrs?: {
-        loadingLocationId?: { message?: string };
-        unloadingLocationId?: { message?: string };
         totalWeight?: { message?: string };
         totalWeightUnit?: { message?: string };
         goods?: {
@@ -223,24 +225,13 @@ function InstantLRLineCard({
         <ComboboxField
           name={`${base}.unloadingLocationId`}
           label="Unloading point"
-
+          required={unloadingRequired}
           options={unloadingOptions}
           emptyText={
             watchConsignee ? "No saved locations" : "Pick a consignee first"
           }
         />
       </div>
-
-      {lineErr?.loadingLocationId?.message ? (
-        <p className="mt-1 text-xs text-red-600">
-          {lineErr.loadingLocationId.message}
-        </p>
-      ) : null}
-      {lineErr?.unloadingLocationId?.message ? (
-        <p className="mt-1 text-xs text-red-600">
-          {lineErr.unloadingLocationId.message}
-        </p>
-      ) : null}
 
       <div className="mt-3 rounded-md bg-background/70 p-3">
         <div className="mb-2 flex items-center justify-between gap-3">
@@ -437,8 +428,12 @@ export default function LRForm({ orderId, tripId }: Props) {
     enabled: source === "FROM_ORDER" && Boolean(orderId),
   });
 
+  const formRef = React.useRef<HTMLFormElement>(null);
   const form = useForm<CreateLRGroupFormInput, unknown, CreateLRGroupBody>({
     resolver: zodResolver(createLRGroupSchema, undefined, { raw: true }),
+    // useScrollToFirstError handles this — RHF alone can't focus the
+    // Combobox/Select fields and would jump to a later registered input.
+    shouldFocusError: false,
     defaultValues:
       source === "FROM_ORDER"
         ? {
@@ -454,6 +449,13 @@ export default function LRForm({ orderId, tripId }: Props) {
         }
         : {
           source: "INSTANT",
+          // "" rather than undefined: a missing value aborts the Zod parse
+          // before the schema's superRefine runs, which would hide the trip
+          // and loading/unloading errors until a second submit.
+          consignorId: "",
+          consigneeId: "",
+          originBranchId: "",
+          destinationBranchId: "",
           paymentMode: "TO_BE_BILLED",
           priority: "Normal",
           isMarketVehicle: false,
@@ -491,6 +493,7 @@ export default function LRForm({ orderId, tripId }: Props) {
     name: "lrs",
   });
   const errors = form.formState.errors;
+  useScrollToFirstError(formRef, form.formState);
 
   const [
     watchIsMarket,
@@ -517,11 +520,11 @@ export default function LRForm({ orderId, tripId }: Props) {
   });
   const activeConsignorId =
     source === "INSTANT"
-      ? ((watchConsignor as string | undefined) ?? undefined)
+      ? ((watchConsignor as string | undefined) || undefined)
       : (orderContext.data?.consignorId ?? undefined);
   const activeConsigneeId =
     source === "INSTANT"
-      ? ((watchConsignee as string | undefined) ?? undefined)
+      ? ((watchConsignee as string | undefined) || undefined)
       : (orderContext.data?.consigneeId ?? undefined);
 
   const trips = useQuery({
@@ -743,6 +746,7 @@ export default function LRForm({ orderId, tripId }: Props) {
     <FormProvider {...form}>
       <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <form
+          ref={formRef}
           onSubmit={form.handleSubmit(onSubmit)}
           className="order-2 min-w-0 space-y-5 lg:order-1"
         >
@@ -1030,6 +1034,7 @@ export default function LRForm({ orderId, tripId }: Props) {
                     goodsSuggestions={goodsSuggestions}
                     watchConsignor={activeConsignorId}
                     watchConsignee={activeConsigneeId}
+                    unloadingRequired={source === "INSTANT"}
                     onRemove={() => remove(idx)}
                   />
                 );
@@ -1175,6 +1180,12 @@ export default function LRForm({ orderId, tripId }: Props) {
                           ))}
                         </SelectContent>
                       </Select>
+                      {typeof errors.marketTransportId?.message ===
+                        "string" ? (
+                        <p className="mt-1 text-xs text-red-600">
+                          {errors.marketTransportId.message}
+                        </p>
+                      ) : null}
                     </div>
                   )}
                 />

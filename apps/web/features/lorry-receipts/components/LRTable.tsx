@@ -46,6 +46,8 @@ import {
 } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
+import { ReportPrintMenu } from "@/components/ReportPrintMenu";
+import { lorryReceiptApi } from "../lorry-receipt.service";
 import { formatDate } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
 import {
@@ -140,6 +142,24 @@ const SKELETON_WIDTHS: Record<string, string> = {
   actions: "ml-auto w-8",
 };
 
+/** Print / PDF for one LR — the same six options as the LR detail page
+ * (download, print or preview, with or without letterhead). */
+function LRPrintButton({ lr }: { lr: { id: string; lrNumber: string } }) {
+  return (
+    <ReportPrintMenu
+      compact
+      label={`Print / PDF ${lr.lrNumber}`}
+      downloadPdf={(withLetterhead) =>
+        lorryReceiptApi.downloadPdf(lr.id, withLetterhead)
+      }
+      previewPath={(withLetterhead) =>
+        `/lorry-receipts/${encodeURIComponent(lr.id)}/print-preview?letterhead=${withLetterhead}`
+      }
+      fileName={lr.lrNumber.replaceAll("/", "-")}
+    />
+  );
+}
+
 /** Nested per-LR breakdown shown when a group row is expanded. */
 function LRChildRows({ group }: { group: LRGroupListItem }) {
   const childRows = group.lorryReceipts ?? [];
@@ -167,6 +187,9 @@ function LRChildRows({ group }: { group: LRGroupListItem }) {
                 </TableHead>
               ),
             )}
+            <TableHead className="h-11 w-12 text-right text-sm font-semibold text-foreground">
+              Print
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -237,6 +260,9 @@ function LRChildRows({ group }: { group: LRGroupListItem }) {
               </TableCell>
               <TableCell>
                 <LRStatusBadge status={lr.status} />
+              </TableCell>
+              <TableCell className="text-right">
+                <LRPrintButton lr={lr} />
               </TableCell>
             </TableRow>
           ))}
@@ -541,17 +567,22 @@ export default function LRTable(props: Props) {
       {
         id: "actions",
         header: () => <span className="block text-right">Actions</span>,
-        size: 72,
+        size: 96,
         enableHiding: false,
         cell: ({ row }) => {
           const g = row.original;
           const d = lrGroupDisplay(g);
           const cancellable = canCancel && g.status === "DRAFT";
+          // A single-LR group prints straight from the row; a multi-LR
+          // truckload prints each LR from its expanded consignment rows.
+          const onlyLr =
+            g.lorryReceipts?.length === 1 ? g.lorryReceipts[0] : undefined;
           return (
             <div
-              className="flex items-center justify-end"
+              className="flex items-center justify-end gap-0.5"
               onClick={(e) => e.stopPropagation()}
             >
+              {onlyLr ? <LRPrintButton lr={onlyLr} /> : null}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button

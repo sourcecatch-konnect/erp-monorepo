@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -18,7 +17,7 @@ import JourneyTable, { DEFAULT_JOURNEY_COLUMN_ORDER } from "./JourneyTable";
 import StartJourneyDialog from "./StartJourneyDialog";
 
 export default function VehicleJourneyListPage() {
-  const router = useRouter();
+
   const [page, setPage] = React.useState(0);
   const [size, setSize] = React.useState(10);
   const [search, setSearch] = React.useState("");
@@ -110,7 +109,6 @@ export default function VehicleJourneyListPage() {
         onColumnOrderChange={setColumnOrder}
         counts={counts.data ?? {}}
         isLoading={journeys.isLoading}
-        onRowClick={(j) => router.push(`/vehicle-journeys/${j.id}`)}
       />
 
       <StartJourneyDialog open={startOpen} onOpenChange={setStartOpen} />

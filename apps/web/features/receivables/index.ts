@@ -1,3 +1,4 @@
 export { ReceiptRegisterPage } from "./ReceiptRegisterPage";
 export { ReceiptCreatePage } from "./ReceiptCreatePage";
 export { ReceiptDetailPage } from "./ReceiptDetailPage";
+export { receiptApi } from "./receipt.service";

@@ -19,9 +19,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@skerp/ui/components/dialog";
+import { Input } from "@skerp/ui/components/input";
 import { Textarea } from "@skerp/ui/components/textarea";
 
 import { toLocalDateTimeValue, toValidDate } from "@/lib/date";
+import { paiseToRupees } from "@/lib/money";
 
 type Props = {
   open: boolean;
@@ -48,7 +50,9 @@ export default function CorrectInTransitTripDialog({
     unknown,
     CorrectInTransitTripBody
   >({
-    resolver: zodResolver(correctInTransitTripSchema),
+    resolver: zodResolver(correctInTransitTripSchema, undefined, {
+      raw: true,
+    }),
     mode: "onChange",
   });
 
@@ -56,6 +60,9 @@ export default function CorrectInTransitTripDialog({
     if (!open || !trip) return;
     form.reset({
       startDateTime: dateInput(trip.startDateTime),
+      onwardFreight: trip.onwardFreight
+        ? paiseToRupees(Number(trip.onwardFreight))
+        : undefined,
       correctionReason: "",
       version: trip.version,
     });
@@ -67,11 +74,11 @@ export default function CorrectInTransitTripDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            Correct start time — {trip?.tripNumber ?? ""}
-          </DialogTitle>
+          <DialogTitle>Correct trip — {trip?.tripNumber ?? ""}</DialogTitle>
           <DialogDescription>
-            The reason and changed value are recorded in the audit log.
+            While a trip is in transit only its start time and freight can be
+            corrected. The reason and changed values are recorded in the
+            audit log.
           </DialogDescription>
         </DialogHeader>
 
@@ -99,6 +106,25 @@ export default function CorrectInTransitTripDialog({
               </div>
             )}
           />
+
+          <div className="grid gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Onward freight (₹)
+            </label>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Leave blank to keep unchanged"
+              aria-invalid={Boolean(errors.onwardFreight)}
+              {...form.register("onwardFreight")}
+            />
+            {errors.onwardFreight?.message ? (
+              <p className="text-xs text-red-600">
+                {String(errors.onwardFreight.message)}
+              </p>
+            ) : null}
+          </div>
 
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">

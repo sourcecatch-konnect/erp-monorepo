@@ -79,6 +79,7 @@ import {
   StatTile,
   StatusTimeline,
   tripBlockingLrNumbers,
+  tripMissingLR,
   TripLifecycleStepper,
   UnloadingPointsCard,
   VehicleCard,
@@ -256,7 +257,10 @@ export default function TripDetail({ id }: { id: string }) {
 
   // Same "Way 1" gate the server enforces — disable Close and explain why.
   const blockingLrs = closeable ? tripBlockingLrNumbers(t) : [];
-  const closeBlocked = blockingLrs.length > 0;
+  // Mirrors the server's TRIP_CLOSE_NO_LR gate: an LR trip that skipped the
+  // LR form (e.g. created "already dispatched") can't close with no LR on it.
+  const missingLR = closeable && tripMissingLR(t);
+  const closeBlocked = blockingLrs.length > 0 || missingLR;
 
   const groups = [
     ...(t.primaryGroups ?? []).map((g) => ({
@@ -326,9 +330,11 @@ export default function TripDetail({ id }: { id: string }) {
             <Button
               disabled={closeBlocked}
               title={
-                closeBlocked
-                  ? "LRs on this trip are not delivered yet — see the notice below"
-                  : undefined
+                missingLR
+                  ? "This LR trip has no LR attached — see the notice below"
+                  : closeBlocked
+                    ? "LRs on this trip are not delivered yet — see the notice below"
+                    : undefined
               }
               onClick={() => setCloseOpen(true)}
             >
@@ -351,6 +357,15 @@ export default function TripDetail({ id }: { id: string }) {
               <IconEdit size={16} className="mr-1" /> Correct Trip
             </Button>
           ) : null}
+          {canCorrectInTransit && t.status === "InTransit" ? (
+            <Button
+              variant="outline"
+              onClick={() => setCorrectInTransitOpen(true)}
+              title="You don't have to wait for the trip to close — the dispatch time and freight can be corrected right now."
+            >
+              <IconEdit size={16} className="mr-1" /> Correct Trip
+            </Button>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="icon-sm" variant="ghost" aria-label="Trip actions">
@@ -368,13 +383,6 @@ export default function TripDetail({ id }: { id: string }) {
               {canUpdate && t.status === "Planned" ? (
                 <DropdownMenuItem onClick={() => setRescheduleOpen(true)}>
                   <IconCalendar size={16} className="mr-2" /> Reschedule
-                </DropdownMenuItem>
-              ) : null}
-              {canCorrectInTransit && t.status === "InTransit" ? (
-                <DropdownMenuItem
-                  onClick={() => setCorrectInTransitOpen(true)}
-                >
-                  <IconEdit size={16} className="mr-2" /> Edit start time
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem onClick={() => handleDownloadPdf(t)}>
@@ -411,7 +419,9 @@ export default function TripDetail({ id }: { id: string }) {
       {t.status === "Cancelled" ? (
         <CancelledBanner reason={t.cancelReason} />
       ) : null}
-      {closeBlocked ? <CloseBlockedBanner lrNumbers={blockingLrs} /> : null}
+      {closeBlocked ? (
+        <CloseBlockedBanner lrNumbers={blockingLrs} missingLR={missingLR} />
+      ) : null}
 
       {/* ---- Lifecycle stepper ---- */}
       <DetailCard>

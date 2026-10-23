@@ -21,7 +21,6 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import {
-  IconAlertTriangle,
   IconBuildingStore,
   IconBuildingWarehouse,
   IconCalendar,
@@ -55,6 +54,7 @@ import { useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { daysSince, lrGroupDisplay } from "./lorry-receipt-ui";
 import AcknowledgeDialog from "./components/AcknowledgeDialog";
+import { RailShipmentCell } from "./components/RailShipmentPopover";
 import { ACK_SCAN_ENTITY } from "./components/DeliverySection";
 import type {
   AcknowledgeLRFormInput,
@@ -244,37 +244,23 @@ function WorklistTable<T>({
 
 const PENDING_DELIVERY_ORDER = [
   "lr",
-  "rake",
-  "vp",
-  "branchGrn",
-  "received",
-  "loss",
-  "dc",
-  "issued",
-  "balance",
   "group",
   "route",
   "consignee",
   "vehicle",
   "unloading",
+  "rail",
   "age",
 ] as const;
 
 const PENDING_DELIVERY_META: ColumnMeta = {
   lr: { label: "LR", icon: IconFileDescription },
-  rake: { label: "Rake ID", icon: IconTruck },
-  vp: { label: "VP number", icon: IconFileDescription },
-  branchGrn: { label: "Branch GRN", icon: IconHash },
-  received: { label: "Received qty", icon: IconClipboardCheck },
-  loss: { label: "Damage / shortage", icon: IconAlertTriangle },
-  dc: { label: "DC numbers", icon: IconFileDescription },
-  issued: { label: "Issued DC qty", icon: IconTruckDelivery },
-  balance: { label: "Balance qty", icon: IconClockHour4 },
   group: { label: "Group", icon: IconHash },
   route: { label: "Route", icon: IconMapPin },
   consignee: { label: "Consignee", icon: IconBuildingStore },
   vehicle: { label: "Vehicle", icon: IconTruck },
   unloading: { label: "Unloading point", icon: IconLocation },
+  rail: { label: "Rail shipment", icon: IconTruck },
   age: { label: "In transit", icon: IconClockHour4 },
 };
 
@@ -312,6 +298,16 @@ const PENDING_DELIVERY_COLUMNS: ColumnDef<PendingDeliveryRow>[] = [
     cell: ({ row }) => row.original.unloadingLocation?.name ?? "—",
   },
   {
+    id: "rail",
+    header: "Rail shipment",
+    cell: ({ row }) => (
+      <RailShipmentCell
+        lrNumber={row.original.lrNumber}
+        eligibility={row.original.deliveryEligibility}
+      />
+    ),
+  },
+  {
     id: "age",
     header: "In transit",
     cell: ({ row }) => (
@@ -320,64 +316,6 @@ const PENDING_DELIVERY_COLUMNS: ColumnDef<PendingDeliveryRow>[] = [
         overdueDays={OVERDUE_DELIVERY_DAYS}
       />
     ),
-  },
-  {
-    id: "rake",
-    header: "Rake ID",
-    cell: ({ row }) =>
-      row.original.deliveryEligibility.railwayDetails?.rakeNumbers.join(", ") ??
-      "—",
-  },
-  {
-    id: "vp",
-    header: "VP number",
-    cell: ({ row }) =>
-      row.original.deliveryEligibility.railwayDetails?.vpNumbers.join(", ") ??
-      "—",
-  },
-  {
-    id: "branchGrn",
-    header: "Branch GRN",
-    cell: ({ row }) => {
-      const ids =
-        row.original.deliveryEligibility.railwayDetails?.branchGrnIds ?? [];
-      return ids.length
-        ? ids.map((id) => `BR-GRN-${id.slice(-8).toUpperCase()}`).join(", ")
-        : "—";
-    },
-  },
-  {
-    id: "received",
-    header: "Received qty",
-    cell: ({ row }) =>
-      row.original.deliveryEligibility.railwayDetails?.receivedQuantity ?? "—",
-  },
-  {
-    id: "loss",
-    header: "Damage / shortage",
-    cell: ({ row }) => {
-      const rail = row.original.deliveryEligibility.railwayDetails;
-      return rail ? `${rail.damageQuantity} / ${rail.shortageQuantity}` : "—";
-    },
-  },
-  {
-    id: "dc",
-    header: "DC numbers",
-    cell: ({ row }) =>
-      row.original.deliveryEligibility.railwayDetails?.dcNumbers.join(", ") ??
-      "—",
-  },
-  {
-    id: "issued",
-    header: "Issued DC qty",
-    cell: ({ row }) =>
-      row.original.deliveryEligibility.railwayDetails?.issuedQuantity ?? "—",
-  },
-  {
-    id: "balance",
-    header: "Balance qty",
-    cell: ({ row }) =>
-      row.original.deliveryEligibility.railwayDetails?.balanceQuantity ?? "—",
   },
 ];
 

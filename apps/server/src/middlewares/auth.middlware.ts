@@ -49,7 +49,7 @@ const ctx = await getPermissionContext(decoded.userId);
   if (!ctx) {
     return sendError(res, 401, {
       code: "UNAUTHORIZED",
-      message: "User no longer exists",
+      message: "Your account is no longer active",
     });
   }
   req.ctx = ctx;

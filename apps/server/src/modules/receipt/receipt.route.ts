@@ -18,12 +18,14 @@ import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
 import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
+import { parseListQuery } from "../_shared/list.query.js";
 import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
 import {
   creditAccountForReceipt,
   reverseAccountAdjustmentsForReceipt,
 } from "../cash-planning/cash-planning.service.js";
 import { recordLedgerEntry } from "../ledger/ledger.service.js";
+import { postReceiptVoucher, reverseJournal } from "../ledger/posting.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -72,6 +74,9 @@ const receiptDetailInclude = {
     },
   },
   statusHistory: { orderBy: { changedAt: "asc" as const } },
+  journalEntry: {
+    select: { id: true, voucherNumber: true, status: true, tallySyncStatus: true },
+  },
 } satisfies Prisma.ReceiptInclude;
 
 router.get(
@@ -120,58 +125,66 @@ router.get(
         ],
       };
 
-    const bills = await db.bill.findMany({
-      where: {
-        ...(input.branchId
-          ? { branchId: input.branchId }
-          : branchFilter(req, "branchId")),
-        billingCustomerId: input.customerId,
-        status: { in: RECEIVABLE_BILL_STATUSES },
-        outstandingAmountPaise: { gt: 0n },
-        // A bill with a receipt awaiting approval is "reserved" — its
-        // outstanding amount hasn't been reduced yet (that only happens once
-        // the receipt posts), so without this it would stay pickable and let
-        // someone create a second, conflicting receipt against it.
-        receiptAllocations: {
-          none: { receipt: { status: "PENDING_APPROVAL" } },
-        },
-        ...(input.uptoDate ? { billDate: { lte: input.uptoDate } } : {}),
-        ...(input.billNumber
-          ? { billNumber: { contains: input.billNumber, mode: "insensitive" } }
-          : {}),
-        ...(Object.keys(lrFilter).length > 0
-          ? { lines: { some: { lr: lrFilter } } }
-          : {}),
+    const where: Prisma.BillWhereInput = {
+      ...(input.branchId
+        ? { branchId: input.branchId }
+        : branchFilter(req, "branchId")),
+      billingCustomerId: input.customerId,
+      status: { in: RECEIVABLE_BILL_STATUSES },
+      outstandingAmountPaise: { gt: 0n },
+      // A bill with a receipt awaiting approval is "reserved" — its
+      // outstanding amount hasn't been reduced yet (that only happens once
+      // the receipt posts), so without this it would stay pickable and let
+      // someone create a second, conflicting receipt against it.
+      receiptAllocations: {
+        none: { receipt: { status: "PENDING_APPROVAL" } },
       },
-      include: {
-        branch: { select: { name: true } },
-        lines: {
-          take: 1,
-          orderBy: { lineNumber: "asc" },
-          include: {
-            lr: {
-              select: {
-                lrNumber: true,
-                group: {
-                  select: {
-                    marketVehicleNumber: true,
-                    primaryTrip: {
-                      select: { vehicle: { select: { vehicleNumber: true } } },
-                    },
-                    secondaryTrip: {
-                      select: { vehicle: { select: { vehicleNumber: true } } },
+      ...(input.uptoDate ? { billDate: { lte: input.uptoDate } } : {}),
+      ...(input.billNumber
+        ? { billNumber: { contains: input.billNumber, mode: "insensitive" } }
+        : {}),
+      ...(Object.keys(lrFilter).length > 0
+        ? { lines: { some: { lr: lrFilter } } }
+        : {}),
+    };
+
+    const [bills, total] = await Promise.all([
+      db.bill.findMany({
+        where,
+        include: {
+          branch: { select: { name: true } },
+          lines: {
+            take: 1,
+            orderBy: { lineNumber: "asc" },
+            include: {
+              lr: {
+                select: {
+                  lrNumber: true,
+                  group: {
+                    select: {
+                      marketVehicleNumber: true,
+                      primaryTrip: {
+                        select: { vehicle: { select: { vehicleNumber: true } } },
+                      },
+                      secondaryTrip: {
+                        select: { vehicle: { select: { vehicleNumber: true } } },
+                      },
                     },
                   },
                 },
               },
             },
           },
+          _count: { select: { lines: true } },
         },
-        _count: { select: { lines: true } },
-      },
-      orderBy: { billDate: "asc" },
-      take: 500,
-    });
+        // billDate alone isn't unique — the id tiebreak keeps paging stable
+        // (no repeated/skipped rows) when several bills share a date.
+        orderBy: [{ billDate: "asc" }, { id: "asc" }],
+        skip: input.page * input.size,
+        take: input.size,
+      }),
+      db.bill.count({ where }),
+    ]);
     const data = bills.map((bill) => {
       const firstLine = bill.lines[0];
       const vehicle =
@@ -193,7 +206,7 @@ router.get(
         taxableAmountPaise: bill.taxableAmountPaise,
       };
     });
-    return sendOk(res, data);
+    return sendOk(res, data, { page: input.page, size: input.size, total });
   },
 );
 
@@ -333,6 +346,8 @@ router.post("/", can(PERMS.RECEIPT.CREATE), async (req, res) => {
             amountAppliedPaise: a.amountAppliedPaise,
             tdsAmountPaise: a.tdsAmountPaise,
             tdsSection: a.tdsSection,
+            tdsCertNumber: a.tdsCertNumber,
+            tdsCertDate: a.tdsCertDate,
             damageAmountPaise: a.damageAmountPaise,
             rateDiffAmountPaise: a.rateDiffAmountPaise,
           })),
@@ -343,6 +358,22 @@ router.post("/", can(PERMS.RECEIPT.CREATE), async (req, res) => {
     });
 
     if (status === "POSTED") {
+      const voucher = await postReceiptVoucher(tx, {
+        receiptId: receipt.id,
+        receiptNumber: receiptNumber!,
+        receivedAt: input.receivedAt,
+        branchId: input.branchId,
+        fyCode,
+        customerId: input.customerId,
+        cashAccountId: input.receivedIntoAccountId,
+        allocations: input.allocations,
+        createdById: me,
+      });
+      await tx.receipt.update({
+        where: { id: receipt.id },
+        data: { journalEntryId: voucher.id },
+      });
+
       // Bill updates: Prisma has no "update many rows, different values
       // each" call, so this still runs once per bill — but concurrently
       // instead of a sequential for-await loop, and with the increment
@@ -436,26 +467,90 @@ router.post("/", can(PERMS.RECEIPT.CREATE), async (req, res) => {
 
   return sendOk(res, created, undefined, 201);
 });
-
 router.get("/", can(PERMS.RECEIPT.VIEW), async (req, res) => {
   const status =
     typeof req.query.status === "string"
       ? (req.query.status as ReceiptStatus)
       : undefined;
-  const data = await db.receipt.findMany({
-    where: {
-      ...branchFilter(req),
-      ...(status ? { status } : {}),
-    },
-    include: {
-      customer: { select: { id: true, name: true } },
-      branch: { select: { name: true, branchCode: true } },
-      _count: { select: { allocations: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 200,
+
+  const search =
+    typeof req.query.search === "string"
+      ? req.query.search.trim().slice(0, 100)
+      : "";
+
+  const query = parseListQuery(req);
+
+  const where: Prisma.ReceiptWhereInput = {
+    AND: [
+      branchFilter(req),
+
+      ...(status ? [{ status }] : []),
+
+      ...(search
+        ? [
+          {
+            OR: [
+              {
+                receiptNumber: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                customer: {
+                  is: {
+                    name: {
+                      contains: search,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ]
+        : []),
+    ],
+  };
+
+  const [data, total] = await Promise.all([
+    db.receipt.findMany({
+      where,
+      include: {
+        customer: {
+          select: { id: true, name: true },
+        },
+        branch: {
+          select: { name: true, branchCode: true },
+        },
+        _count: {
+          select: { allocations: true },
+        },
+        journalEntry: {
+          select: {
+            id: true,
+            voucherNumber: true,
+            status: true,
+            tallySyncStatus: true,
+          },
+        },
+      },
+      orderBy: [
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+
+    db.receipt.count({ where }),
+  ]);
+
+  return sendOk(res, data, {
+    page: query.page,
+    size: query.size,
+    total,
   });
-  return sendOk(res, data);
 });
 
 router.get("/:id", can(PERMS.RECEIPT.VIEW), async (req, res) => {
@@ -467,6 +562,45 @@ router.get("/:id", can(PERMS.RECEIPT.VIEW), async (req, res) => {
   assertBranchAccess(req, receipt.branchId);
   return sendOk(res, receipt);
 });
+
+// The RECEIPT voucher posted for this receipt — header + Dr/Cr lines + bill
+// allocations. 404 until the receipt reaches POSTED.
+router.get(
+  "/:id/voucher",
+  can(PERMS.LEDGER.VOUCHER_VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const receipt = await db.receipt.findUnique({
+      where: { id },
+      select: { branchId: true, journalEntryId: true },
+    });
+    if (!receipt) throw new NotFoundError("Receipt not found");
+    assertBranchAccess(req, receipt.branchId);
+    if (!receipt.journalEntryId)
+      throw new NotFoundError("No voucher posted for this receipt yet");
+    const voucher = await db.journalEntry.findUniqueOrThrow({
+      where: { id: receipt.journalEntryId },
+      include: {
+        branch: { select: { id: true, name: true, branchCode: true } },
+        createdBy: { select: { id: true, firstName: true, lastName: true } },
+        lines: {
+          orderBy: { lineNumber: "asc" },
+          include: {
+            ledger: {
+              select: { id: true, name: true, code: true, kind: true, group: true },
+            },
+          },
+        },
+        allocations: {
+          include: {
+            bill: { select: { id: true, billNumber: true } },
+          },
+        },
+      },
+    });
+    return sendOk(res, voucher);
+  },
+);
 
 router.post("/:id/approve", can(PERMS.RECEIPT.APPROVE), async (req, res) => {
   const id = getParamId(req);
@@ -520,6 +654,23 @@ router.post("/:id/approve", can(PERMS.RECEIPT.APPROVE), async (req, res) => {
       "SKT/RCPT",
     );
 
+    // Older receipts created before receivedIntoAccountId existed have no
+    // account on file — nothing to post a voucher against for those, same
+    // gap already handled below for the cash-account credit.
+    const voucher = receipt.receivedIntoAccountId
+      ? await postReceiptVoucher(tx, {
+        receiptId: receipt.id,
+        receiptNumber,
+        receivedAt: receipt.receivedAt,
+        branchId: receipt.branchId,
+        fyCode: receipt.fyCode,
+        customerId: receipt.customerId,
+        cashAccountId: receipt.receivedIntoAccountId,
+        allocations: receipt.allocations,
+        createdById: me,
+      })
+      : null;
+
     await tx.receipt.update({
       where: { id, version: receipt.version },
       data: {
@@ -528,6 +679,7 @@ router.post("/:id/approve", can(PERMS.RECEIPT.APPROVE), async (req, res) => {
         approvedById: me,
         approvedAt: new Date(),
         version: { increment: 1 },
+        journalEntryId: voucher?.id,
         statusHistory: {
           create: {
             fromStatus: "PENDING_APPROVAL",
@@ -631,6 +783,14 @@ router.post("/:id/cancel", can(PERMS.RECEIPT.CANCEL), async (req, res) => {
     if (wasPosted) {
       for (const billId of billIds)
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${billId}))`;
+
+      if (receipt.journalEntryId)
+        await reverseJournal(
+          tx,
+          receipt.journalEntryId,
+          input.reason,
+          me,
+        );
 
       const bills = await tx.bill.findMany({
         where: { id: { in: billIds } },

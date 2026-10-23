@@ -42,6 +42,8 @@ import {
 import { useCan } from "@/features/auth";
 import { useDebouncedValue } from "@/features/masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
+import { ReportPrintMenu } from "@/components/ReportPrintMenu";
+import { railBranchGrnApi } from "./rail-branch-grn.service";
 
 import { useDeleteRailBranchGRN, useRailBranchGRNs } from "./useRailBranchGRN";
 import { RailBranchGRNStatusBadge } from "./RailBranchGRNStatusBadge";
@@ -131,7 +133,7 @@ export default function RailBranchGRNList() {
               <TableHead className="text-right">Received</TableHead>
               <TableHead className="text-right">Damage</TableHead>
               <TableHead className="text-right">Shortage</TableHead>
-              <TableHead className="w-16 text-right">Actions</TableHead>
+              <TableHead className="w-20 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -198,46 +200,59 @@ export default function RailBranchGRNList() {
                     {formatNumber(grn.totalShortageQty)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="Branch GRN actions"
-                        >
-                          <IconDotsVertical size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/vp-management/branch-grn/${grn.id}`}>
-                            <IconListDetails size={16} className="mr-2" />
-                            View details
-                          </Link>
-                        </DropdownMenuItem>
-                        {canUpdate &&
-                          ["DRAFT", "SUBMITTED"].includes(grn.status) ? (
+                    <div className="flex justify-end gap-0.5">
+                      <ReportPrintMenu
+                        compact
+                        label={`Print / PDF Branch GRN ${grn.railRake.rakeNumber}`}
+                        downloadPdf={(withLetterhead) =>
+                          railBranchGrnApi.downloadPdf(grn.id, withLetterhead)
+                        }
+                        previewPath={(withLetterhead) =>
+                          `/rail-branch-grns/${encodeURIComponent(grn.id)}/print-preview?letterhead=${withLetterhead}`
+                        }
+                        fileName={`branch-grn-${grn.railRake.rakeNumber}-${grn.vpWagonLoading.mrRrRow.vpNo || grn.id.slice(-6)}`.replaceAll("/", "-")}
+                      />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label="Branch GRN actions"
+                          >
+                            <IconDotsVertical size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link href={`/vp-management/branch-grn/${grn.id}/edit`}>
-                              <IconEdit size={16} className="mr-2" />
-                              {grn.status === "SUBMITTED" ? "Correct GRN" : "Edit"}
+                            <Link href={`/vp-management/branch-grn/${grn.id}`}>
+                              <IconListDetails size={16} className="mr-2" />
+                              View details
                             </Link>
                           </DropdownMenuItem>
-                        ) : null}
-                        {canDelete && grn.status === "DRAFT" ? (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDelete(grn.id)}
-                            >
-                              <IconTrash size={16} className="mr-2" />
-                              Delete draft
+                          {canUpdate &&
+                            ["DRAFT", "SUBMITTED"].includes(grn.status) ? (
+                            <DropdownMenuItem asChild>
+                              <Link href={`/vp-management/branch-grn/${grn.id}/edit`}>
+                                <IconEdit size={16} className="mr-2" />
+                                {grn.status === "SUBMITTED" ? "Correct GRN" : "Edit"}
+                              </Link>
                             </DropdownMenuItem>
-                          </>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          ) : null}
+                          {canDelete && grn.status === "DRAFT" ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleDelete(grn.id)}
+                              >
+                                <IconTrash size={16} className="mr-2" />
+                                Delete draft
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

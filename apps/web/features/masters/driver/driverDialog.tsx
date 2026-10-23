@@ -244,35 +244,11 @@ export default function DriverDetailDialog({
       icon={<IconUser size={12} />}
     />
 
-    <Field
-      label="Birth Date"
-      value={formatDate(data?.birthDate)}
-      icon={<IconCalendar size={12} />}
-    />
-
-    <Field
-      label="Anniversary Date"
-      value={formatDate(data?.anniversaryDate)}
-      icon={<IconCalendar size={12} />}
-    />
   </div>
 </div>
 
             <div className="mx-5 border-t" />
 
-            {/* Contact Information */}
-            <div className="px-5 py-5">
-              <SectionLabel>Contact Information</SectionLabel>
-
-              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
-                
-                
-                <Field label="Reference Person" value={display(data?.referencePerson)} icon={<IconUser size={12} />} />
-                <Field label="Reference Contact" value={display(data?.referenceContactNo)} icon={<IconPhone size={12} />} />
-              </div>
-            </div>
-
-            <div className="mx-5 border-t" />
 
             {/* License Information */}
             <div className="px-5 py-5">
@@ -308,8 +284,9 @@ export default function DriverDetailDialog({
 
               <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
                 <Field label="PAN Number" value={display(data?.panNo)} icon={<IconIdBadge2 size={12} />} />
-                <Field label="Aadhar Number" value={display(data?.aadharCardNo)} icon={<IconId size={12} />} />
                 <Field label="Monthly Salary" value={formatCurrency(data?.salary)} icon={<IconCurrencyRupee size={12} />} />
+                <Field label="Joining Date" value={formatDate(data?.joiningDate)} icon={<IconCalendar size={12} />} />
+                <Field label="Leaving Date" value={formatDate(data?.leavingDate)} icon={<IconCalendar size={12} />} />
               </div>
             </div>
 

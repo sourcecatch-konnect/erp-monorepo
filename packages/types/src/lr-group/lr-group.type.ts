@@ -61,6 +61,7 @@ export type LRGroupListReceipt = {
   unloadingLocation: LocationRef | null;
   invoiceNumber: string | null;
   invoiceAmount: number | null;
+  invoiceRemark: string | null;
   goods?: { id: string }[];
   ewayBill: EwayBill | null;
   delivery?: { deliveredAt: string } | null;
@@ -146,6 +147,9 @@ export type LRGroup = Omit<LRGroupListItem, "lorryReceipts"> & {
   updatedAt: string;
   deletedAt: string | null;
   lorryReceipts: LorryReceipt[];
+  /** Active vendor-payment slips paying this market truck (truck line or a
+   *  legacy per-LR line) — normally zero or one. */
+  transporterPayments?: Array<{ slipId: string; slipNumber: string; status: string }>;
   createdBy: UserRef | null;
   updatedBy: UserRef | null;
   finalisedBy: UserRef | null;

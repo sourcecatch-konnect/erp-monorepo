@@ -109,6 +109,10 @@
     "./ledger": {
       "types": "./src/ledger/ledger.schema.ts",
       "import": "./dist/ledger/ledger.schema.js"
+    },
+    "./accounts/vendor-payment": {
+      "types": "./src/accounts/vendor-payment.schema.ts",
+      "import": "./dist/accounts/vendor-payment.schema.js"
     }
   },
   "scripts": {

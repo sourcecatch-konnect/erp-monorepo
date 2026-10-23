@@ -121,7 +121,12 @@ api.interceptors.response.use(
     // Endpoints where a 401 is expected and must NOT trigger a refresh.
     const isRefresh = url.includes("/auth/refresh");
     const isLogin = url.includes("/login");
-    const skipRefresh = isRefresh || isLogin || url.includes("/auth/logout");
+    const skipRefresh =
+      isRefresh ||
+      isLogin ||
+      url.includes("/auth/logout") ||
+      url.includes("/auth/forgot-password") ||
+      url.includes("/auth/reset-password");
 
     if (status === 401 && original && !original._retry && !skipRefresh) {
       original._retry = true;

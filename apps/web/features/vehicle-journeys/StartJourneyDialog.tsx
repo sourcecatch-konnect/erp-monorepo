@@ -94,7 +94,7 @@ export default function StartJourneyDialog({ open, onOpenChange }: Props) {
   });
 
   const form = useForm<StartJourneyFormInput, unknown, StartJourneyBody>({
-    resolver: zodResolver(startJourneySchema),
+    resolver: zodResolver(startJourneySchema, undefined, { raw: true }),
     defaultValues: {
       firstLeg: { legType: "LR", isTripEmpty: false },
     },

@@ -8,6 +8,8 @@ export { AuthBootstrap } from "./components/AuthBootstrap";
 export { ProtectedRoute } from "./components/ProtectedRoute";
 export { Can } from "./components/Can";
 export { LoginForm } from "./components/LoginForm";
+export { ForgotPasswordForm } from "./components/ForgotPasswordForm";
+export { ResetPasswordForm } from "./components/ResetPasswordForm";
 export {
   login,
   logout,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { rupeesToPaise } from "../_shared/money.js";
+import { EMPTY_TRIP_FREIGHT_MESSAGE } from "../trip/trip.schema.js";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -77,6 +78,13 @@ const legBaseShape = {
   onwardFreight: rupeesToPaise("Onward freight", { allowZero: true }),
   isTripEmpty: z.boolean().optional().default(false),
   openingKm: positiveIntField("Opening KM"),
+  // Dispatch state at creation — mirrors createTripSchema's alreadyDispatched:
+  //   alreadyDispatched = false -> leg is born Planned. `startDateTime` here
+  //     is only a schedule/ETA and is stored as plannedStartDateTime.
+  //   alreadyDispatched = true  -> the truck already left. `startDateTime` is
+  //     the real (possibly back-dated) dispatch moment and the leg is born
+  //     InTransit, skipping Planned.
+  alreadyDispatched: z.boolean().optional().default(false),
   startDateTime: optionalDate,
   // Reason the operator broke city/KM/time continuity with the previous leg.
   // Required by the server whenever the chain check fails.
@@ -108,9 +116,52 @@ const legTypeRefinement = (
   }
 };
 
+const legDispatchRefinement = (
+  data: { alreadyDispatched?: boolean; startDateTime?: Date },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.alreadyDispatched) {
+    if (!data.startDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Actual dispatch date and time is required when the truck has already left",
+        path: ["startDateTime"],
+      });
+    } else if (data.startDateTime.getTime() > Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Dispatch time can't be in the future",
+        path: ["startDateTime"],
+      });
+    }
+  }
+};
+
+// An EMPTY leg (or one ticked empty) carries no load, so it earns no freight.
+const legEmptyFreightRefinement = (
+  data: {
+    legType: z.infer<typeof tripLegTypeSchema>;
+    isTripEmpty?: boolean;
+    onwardFreight?: number | bigint;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  const empty = data.legType === "EMPTY" || data.isTripEmpty;
+  if (empty && Number(data.onwardFreight ?? 0) > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: EMPTY_TRIP_FREIGHT_MESSAGE,
+      path: ["onwardFreight"],
+    });
+  }
+};
+
 export const addJourneyLegSchema = z
   .object(legBaseShape)
-  .superRefine(legTypeRefinement);
+  .superRefine(legTypeRefinement)
+  .superRefine(legDispatchRefinement)
+  .superRefine(legEmptyFreightRefinement);
 
 export const closeJourneyLegSchema = z.object({
   closingKm: positiveIntField("Closing KM"),
@@ -121,13 +172,18 @@ export const closeJourneyLegSchema = z.object({
 });
 
 export const dispatchJourneyLegSchema = z.object({
-  // Operator-entered — the server no longer defaults this to "now".
+  // Operator-entered — the server no longer defaults this to "now". This is
+  // the actual dispatch moment (not a schedule), so it can't be in the future.
   startDateTime: z
     .union([z.string(), z.date()])
     .transform((value) => new Date(value))
     .refine(
       (value) => !Number.isNaN(value.getTime()),
       "Enter a valid start date and time",
+    )
+    .refine(
+      (value) => value.getTime() <= Date.now(),
+      "Start date and time can't be in the future",
     ),
 });
 
@@ -135,17 +191,29 @@ export const dispatchJourneyLegSchema = z.object({
 /* Journey                                                            */
 /* ------------------------------------------------------------------ */
 
-export const startJourneySchema = z.object({
-  vehicleId: z.string().min(1, "Vehicle is required"),
-  driverId: z.string().min(1, "Driver is required"),
-  homeBranchId: z.string().min(1, "Home branch is required"),
-  startCityId: z.string().min(1, "Start city is required"),
-  returnCityId: z.string().min(1, "Return city is required"),
-  openingKm: positiveIntField("Opening KM"),
-  startedAt: optionalDate,
-  remarks: optionalString,
-  firstLeg: z.object(legBaseShape).superRefine(legTypeRefinement),
-});
+export const startJourneySchema = z
+  .object({
+    vehicleId: z.string().min(1, "Vehicle is required"),
+    driverId: z.string().min(1, "Driver is required"),
+    homeBranchId: z.string().min(1, "Home branch is required"),
+    startCityId: z.string().min(1, "Start city is required"),
+    returnCityId: z.string().min(1, "Return city is required"),
+    openingKm: positiveIntField("Opening KM"),
+    // The actual moment the journey started (not a schedule) — can't be in
+    // the future. Defaults to now on the server when omitted.
+    startedAt: optionalDate,
+    remarks: optionalString,
+    firstLeg: z.object(legBaseShape).superRefine(legTypeRefinement),
+  })
+  .superRefine((data, ctx) => {
+    if (data.startedAt && data.startedAt.getTime() > Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Start date/time can't be in the future",
+        path: ["startedAt"],
+      });
+    }
+  });
 
 export const cancelJourneySchema = z.object({
   reason: z

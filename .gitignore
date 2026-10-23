@@ -38,6 +38,10 @@ yarn-error.log*
 .DS_Store
 *.pem
 
+# Generated documentation copies (PDF / Word / Excel), rebuilt by docs/tools/build_docs.py
+docs/exports/
+__pycache__/
+
 *storybook.log
 storybook-static
 __pycache__/

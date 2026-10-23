@@ -1,10 +1,16 @@
 import { Request, Response } from "express";
+import { forgotPasswordSchema, resetPasswordSchema } from "@skerp/validators";
 import {
   adminLoginService,
   employeeLoginService,
   getMeService,
   webLoginService,
 } from "../../Services/auth/auth.services.js";
+import {
+  requestPasswordResetService,
+  resetPasswordService,
+} from "../../Services/auth/password-reset.services.js";
+import { ValidationError } from "../../lib/error.js";
 import {
   accessCookieOptions,
   generateAccessToken,
@@ -58,6 +64,36 @@ export const employeeLoginController = async (req: Request, res: Response) => {
     data: result.user,
   });
 };
+
+export const forgotPasswordController = async (req: Request, res: Response) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+
+  await requestPasswordResetService(parsed.data.email);
+
+  // Same response whether or not the address is registered.
+  return res.json({
+    success: true,
+    message: "If that email is registered, a password reset link has been sent.",
+  });
+};
+
+export const resetPasswordController = async (req: Request, res: Response) => {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+
+  await resetPasswordService(parsed.data.token, parsed.data.password);
+
+  return res.json({
+    success: true,
+    message: "Your password has been reset. You can now sign in.",
+  });
+};
+
 export const logout = async (req: Request, res: Response) => {
   res.clearCookie("accessToken", {
     httpOnly: true,

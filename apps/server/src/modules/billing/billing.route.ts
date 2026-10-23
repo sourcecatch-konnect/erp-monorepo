@@ -5,6 +5,7 @@ import {
   billingTaxRuleSchema,
   cancelBillSchema,
   cancelLRChargeSchema,
+  createBillCreditNoteSchema,
   createBillDraftSchema,
   createManualLRChargeSchema,
   eligibleClientQuerySchema,
@@ -26,22 +27,35 @@ import {
 } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
+import { parseListQuery } from "../_shared/list.query.js";
+import { cached, invalidateCacheOnWrite } from "../_shared/cache.js";
 import {
   fyCodeFor,
   formatDocNumber,
   nextSequence,
 } from "../_shared/doc-number.js";
 import {
+  BILLING_ELIGIBILITY_CACHE,
+  BILLING_ELIGIBILITY_TTL_SECONDS,
+} from "./billing.cache.js";
+import {
   billDetailInclude,
   calculateBill,
   evaluateBillingForLR,
   refreshLRBillingStatus,
 } from "./billing.service.js";
+import {
+  postBillCreditNoteVoucher,
+  postSalesVoucher,
+  reverseJournal,
+} from "../ledger/posting.service.js";
+import { RECEIVABLE_BILL_STATUSES } from "../ledger/customer-statement.compute.js";
 import { buildBillPdfHtml, billPdfInclude } from "./billing.pdf.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
 const router: Router = Router();
 router.use(authMiddleware);
+router.use(invalidateCacheOnWrite(BILLING_ELIGIBILITY_CACHE));
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 const LR_RESERVING_BILL_STATUSES: BillStatus[] = [
@@ -115,116 +129,169 @@ router.get("/options", can(PERMS.BILLING.VIEW), async (req, res) => {
   return sendOk(res, { branches, states });
 });
 
+// Page size for the eligible-clients scan below. Kept modest — each row
+// carries nested billableCharges/billLines — while still resolving in a
+// handful of round trips for realistic volumes.
+const ELIGIBLE_CLIENTS_PAGE_SIZE = 1000;
+// Circuit breaker only — protects against pathological data growth. At this
+// page size that's 200k LRs scanned before giving up on this request.
+const ELIGIBLE_CLIENTS_MAX_PAGES = 200;
+
+type EligibleClientRow = {
+  id: string;
+  name: string;
+  stateId: string;
+  splitBillsByChargeType: boolean;
+};
+
+const scanEligibleClients = async (
+  where: Prisma.LorryReceiptWhereInput,
+  billingPartyType: "CONSIGNOR" | "CONSIGNEE",
+): Promise<EligibleClientRow[]> => {
+  const unique = new Map<string, EligibleClientRow>();
+
+  // "Eligible" isn't a stored column — it's derived per LR from its charges,
+  // so it can't be pushed down to a single DISTINCT query without duplicating
+  // that math in raw SQL. Instead, page through *every* matching LR (a plain
+  // `take: 1000` with no `orderBy` silently dropped any customer whose only
+  // qualifying LRs fell outside that arbitrary window) — eligibility logic
+  // per LR is unchanged, only the fetch is now exhaustive and deterministic.
+  let cursor: string | undefined;
+  for (let page = 0; page < ELIGIBLE_CLIENTS_MAX_PAGES; page++) {
+    const lrs = await db.lorryReceipt.findMany({
+      where,
+      select: {
+        id: true,
+        billingStatus: true,
+        acknowledgement: {
+          select: { detentionAmount: true, damageAmount: true },
+        },
+        delivery: { select: { unloadingCharges: true } },
+        billableCharges: {
+          where: { status: { in: ["APPROVED", "PARTIALLY_BILLED"] } },
+          select: {
+            amountPaise: true,
+            approvedAmountPaise: true,
+            billLines: {
+              where: { bill: { status: { not: "CANCELLED" } } },
+              select: { amountPaise: true },
+            },
+          },
+        },
+        billLines: {
+          where: {
+            bill: { status: { in: LR_RESERVING_BILL_STATUSES } },
+          },
+          select: { id: true },
+          take: 1,
+        },
+        group: {
+          select: {
+            baseFreightAmount: true,
+            consignor: {
+              select: {
+                id: true,
+                name: true,
+                stateId: true,
+                splitBillsByChargeType: true,
+              },
+            },
+            consignee: {
+              select: {
+                id: true,
+                name: true,
+                stateId: true,
+                splitBillsByChargeType: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { id: "asc" },
+      take: ELIGIBLE_CLIENTS_PAGE_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+
+    for (const lr of lrs) {
+      const hasRemainingCharge = lr.billableCharges.some((charge) => {
+        const target = charge.approvedAmountPaise ?? charge.amountPaise;
+        const allocated = charge.billLines.reduce(
+          (sum, line) => sum + line.amountPaise,
+          0n,
+        );
+        return allocated < target;
+      });
+      const hasSourceCharge =
+        (lr.group.baseFreightAmount ?? 0n) > 0n ||
+        (lr.acknowledgement?.detentionAmount ?? 0n) > 0n ||
+        (lr.acknowledgement?.damageAmount ?? 0n) > 0n ||
+        (lr.delivery?.unloadingCharges ?? 0n) > 0n;
+      if (
+        !hasRemainingCharge &&
+        !(lr.billingStatus === "NOT_BILLABLE" && hasSourceCharge)
+      )
+        continue;
+      const customer =
+        billingPartyType === "CONSIGNOR"
+          ? lr.group.consignor
+          : lr.group.consignee;
+      if (!customer.splitBillsByChargeType && lr.billLines.length > 0)
+        continue;
+      unique.set(customer.id, customer);
+    }
+
+    if (lrs.length < ELIGIBLE_CLIENTS_PAGE_SIZE) break;
+    cursor = lrs[lrs.length - 1]!.id;
+    if (page === ELIGIBLE_CLIENTS_MAX_PAGES - 1)
+      console.warn(
+        `/billing/eligible-clients: hit the ${ELIGIBLE_CLIENTS_MAX_PAGES}-page scan limit; results may be incomplete`,
+      );
+  }
+
+  return [...unique.values()];
+};
+
 router.get("/eligible-clients", can(PERMS.BILLING.VIEW), async (req, res) => {
   const input = validate(eligibleClientQuerySchema.safeParse(req.query));
   if (input.branchId) assertBranchAccess(req, input.branchId);
-  const lrs = await db.lorryReceipt.findMany({
-    where: {
-      status: "ACKNOWLEDGED",
-      billingStatus: {
-        in: ["NOT_BILLABLE", "READY_TO_BILL", "PARTIALLY_BILLED"],
-      },
-      ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
-      group: {
-        is: {
-          ...(input.branchId
-            ? { originBranchId: input.branchId }
-            : branchFilter(req, "originBranchId")),
-          transportType: transportWhere(input.billType),
-          paymentMode: paymentModeForBillType(input.billType),
-        },
+
+  const where: Prisma.LorryReceiptWhereInput = {
+    status: "ACKNOWLEDGED",
+    billingStatus: {
+      in: ["NOT_BILLABLE", "READY_TO_BILL", "PARTIALLY_BILLED"],
+    },
+    ...(input.cutoffDate ? { createdAt: { lte: input.cutoffDate } } : {}),
+    group: {
+      is: {
+        ...(input.branchId
+          ? { originBranchId: input.branchId }
+          : branchFilter(req, "originBranchId")),
+        transportType: transportWhere(input.billType),
+        paymentMode: paymentModeForBillType(input.billType),
       },
     },
-    select: {
-      billingStatus: true,
-      acknowledgement: {
-        select: { detentionAmount: true, damageAmount: true },
-      },
-      delivery: { select: { unloadingCharges: true } },
-      billableCharges: {
-        where: { status: { in: ["APPROVED", "PARTIALLY_BILLED"] } },
-        select: {
-          amountPaise: true,
-          approvedAmountPaise: true,
-          billLines: {
-            where: { bill: { status: { not: "CANCELLED" } } },
-            select: { amountPaise: true },
-          },
-        },
-      },
-      billLines: {
-        where: {
-          bill: { status: { in: LR_RESERVING_BILL_STATUSES } },
-        },
-        select: { id: true },
-        take: 1,
-      },
-      group: {
-        select: {
-          baseFreightAmount: true,
-          consignor: {
-            select: {
-              id: true,
-              name: true,
-              stateId: true,
-              splitBillsByChargeType: true,
-            },
-          },
-          consignee: {
-            select: {
-              id: true,
-              name: true,
-              stateId: true,
-              splitBillsByChargeType: true,
-            },
-          },
-        },
-      },
-    },
-    take: 1000,
-  });
-  const unique = new Map<
-    string,
+  };
+
+  // The whole exhaustive scan is cached (keyed by the resolved filter, which
+  // already embeds the caller's branch scope); `search` narrows the cached
+  // list afterwards, so typing in a search box never triggers a re-scan.
+  const eligible = await cached(
     {
-      id: string;
-      name: string;
-      stateId: string;
-      splitBillsByChargeType: boolean;
-    }
-  >();
-  for (const lr of lrs) {
-    const hasRemainingCharge = lr.billableCharges.some((charge) => {
-      const target = charge.approvedAmountPaise ?? charge.amountPaise;
-      const allocated = charge.billLines.reduce(
-        (sum, line) => sum + line.amountPaise,
-        0n,
-      );
-      return allocated < target;
-    });
-    const hasSourceCharge =
-      (lr.group.baseFreightAmount ?? 0n) > 0n ||
-      (lr.acknowledgement?.detentionAmount ?? 0n) > 0n ||
-      (lr.acknowledgement?.damageAmount ?? 0n) > 0n ||
-      (lr.delivery?.unloadingCharges ?? 0n) > 0n;
-    if (
-      !hasRemainingCharge &&
-      !(lr.billingStatus === "NOT_BILLABLE" && hasSourceCharge)
-    )
-      continue;
-    const customer =
-      input.billingPartyType === "CONSIGNOR"
-        ? lr.group.consignor
-        : lr.group.consignee;
-    if (!customer.splitBillsByChargeType && lr.billLines.length > 0) continue;
-    if (
-      !input.search ||
-      customer.name.toLowerCase().includes(input.search.toLowerCase())
-    )
-      unique.set(customer.id, customer);
-  }
+      namespace: BILLING_ELIGIBILITY_CACHE,
+      key: { where, billingPartyType: input.billingPartyType },
+      ttlSeconds: BILLING_ELIGIBILITY_TTL_SECONDS,
+    },
+    () => scanEligibleClients(where, input.billingPartyType),
+  );
+
+  const needle = input.search?.toLowerCase();
+  const matching = needle
+    ? eligible.filter((customer) => customer.name.toLowerCase().includes(needle))
+    : eligible;
+
   return sendOk(
     res,
-    [...unique.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    [...matching].sort((a, b) => a.name.localeCompare(b.name)),
   );
 });
 
@@ -855,24 +922,103 @@ router.post("/bills", can(PERMS.BILLING.CREATE), async (req, res) => {
   );
   return sendOk(res, orderedBills, undefined, 201);
 });
-
 router.get("/bills", can(PERMS.BILLING.VIEW), async (req, res) => {
   const status =
     typeof req.query.status === "string"
       ? (req.query.status as BillStatus)
       : undefined;
-  const data = await db.bill.findMany({
-    where: { ...branchFilter(req), ...(status ? { status } : {}) },
-    include: {
-      branch: { select: { name: true, branchCode: true } },
-      billingCustomer: { select: { id: true, name: true } },
-      placeOfSupplyState: true,
-      _count: { select: { lines: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 200,
+
+  const search =
+    typeof req.query.search === "string"
+      ? req.query.search.trim().slice(0, 100)
+      : "";
+
+  const query = parseListQuery(req);
+
+  const where: Prisma.BillWhereInput = {
+    AND: [
+      // Keep the user's branch restrictions.
+      branchFilter(req),
+
+      // Optional status filter.
+      ...(status ? [{ status }] : []),
+
+      // Optional search: bill number OR customer name.
+      ...(search
+        ? [
+          {
+            OR: [
+              {
+                billNumber: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                billingCustomer: {
+                  is: {
+                    name: {
+                      contains: search,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ]
+        : []),
+    ],
+  };
+
+  const [data, total] = await Promise.all([
+    db.bill.findMany({
+      where,
+      include: {
+        branch: {
+          select: {
+            name: true,
+            branchCode: true,
+          },
+        },
+        billingCustomer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        placeOfSupplyState: true,
+        journalEntry: {
+          select: {
+            id: true,
+            voucherNumber: true,
+            status: true,
+            tallySyncStatus: true,
+          },
+        },
+        _count: {
+          select: {
+            lines: true,
+          },
+        },
+      },
+      orderBy: [
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
+      skip: query.page * query.size,
+      take: query.size,
+    }),
+
+    // Use the same filters so pagination totals stay accurate.
+    db.bill.count({ where }),
+  ]);
+
+  return sendOk(res, data, {
+    page: query.page,
+    size: query.size,
+    total,
   });
-  return sendOk(res, data);
 });
 
 router.get("/bills/:id", can(PERMS.BILLING.VIEW), async (req, res) => {
@@ -884,6 +1030,45 @@ router.get("/bills/:id", can(PERMS.BILLING.VIEW), async (req, res) => {
   assertBranchAccess(req, bill.branchId);
   return sendOk(res, bill);
 });
+
+// The SALES voucher posted for this bill at finalisation — header + Dr/Cr
+// lines + bill allocations. 404 until the bill is finalised.
+router.get(
+  "/bills/:id/voucher",
+  can(PERMS.LEDGER.VOUCHER_VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const bill = await db.bill.findUnique({
+      where: { id },
+      select: { branchId: true, journalEntryId: true },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    if (!bill.journalEntryId)
+      throw new NotFoundError("No voucher posted for this bill yet");
+    const voucher = await db.journalEntry.findUniqueOrThrow({
+      where: { id: bill.journalEntryId },
+      include: {
+        branch: { select: { id: true, name: true, branchCode: true } },
+        createdBy: { select: { id: true, firstName: true, lastName: true } },
+        lines: {
+          orderBy: { lineNumber: "asc" },
+          include: {
+            ledger: {
+              select: { id: true, name: true, code: true, kind: true, group: true },
+            },
+          },
+        },
+        allocations: {
+          include: {
+            bill: { select: { id: true, billNumber: true } },
+          },
+        },
+      },
+    });
+    return sendOk(res, voucher);
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Bill PDF / print-preview (tax invoice)                              */
@@ -1278,6 +1463,14 @@ router.post(
     }
     if (bill.status !== "APPROVED")
       throw new BadRequestError("Only an approved bill can be finalised");
+    // Ageing buckets by dueDate, falling back to billDate when absent —
+    // a bill with no due date silently ages from its bill date instead of
+    // its real payment terms. Creation now requires it; this guard catches
+    // drafts started before that validation existed.
+    if (!bill.dueDate)
+      throw new BadRequestError(
+        "This bill has no due date and predates the required-due-date rule. Cancel it and recreate the draft with a due date before finalising.",
+      );
     for (const line of bill.lines) {
       const approved =
         line.lrCharge.approvedAmountPaise ?? line.lrCharge.amountPaise;
@@ -1316,11 +1509,35 @@ router.post(
     );
     const me = actorId(req);
     await db.$transaction(async (tx) => {
+      // Post the SALES voucher first — a posting failure (unbalanced, or the
+      // chart of accounts not seeded) must roll the whole finalise back so a
+      // FINALISED bill always carries a POSTED voucher.
+      const voucher = await postSalesVoucher(tx, {
+        billId: id,
+        billNumber,
+        billDate: bill.billDate,
+        branchId: bill.branchId,
+        fyCode: bill.fyCode,
+        customerId: bill.billingCustomerId,
+        totalAmountPaise: calculation.totalAmountPaise,
+        roundOffPaise: calculation.roundOffPaise,
+        lines: bill.lines.map((line) => ({
+          chargeType: line.chargeTypeSnapshot,
+          effect: line.effectSnapshot,
+          amountPaise: line.amountPaise,
+        })),
+        taxLines: calculation.taxLines.map((line) => ({
+          taxType: line.taxType,
+          taxAmountPaise: line.taxAmountPaise,
+        })),
+        createdById: me,
+      });
       await tx.bill.update({
         where: { id, version: bill.version },
         data: {
           billNumber,
           status: "FINALISED",
+          journalEntryId: voucher.id,
           taxTreatment: calculation.taxTreatment,
           taxRuleId: calculation.taxRuleId,
           subtotalAmountPaise: calculation.subtotalAmountPaise,
@@ -1392,6 +1609,15 @@ router.post(
       throw new BadRequestError("A paid bill cannot be cancelled");
     const me = actorId(req);
     await db.$transaction(async (tx) => {
+      // Reverse the SALES voucher, if one was posted (bill reached FINALISED).
+      // Posts a contra JOURNAL and closes the bill's outstanding reference.
+      if (bill.journalEntryId)
+        await reverseJournal(
+          tx,
+          bill.journalEntryId,
+          `Bill ${bill.billNumber ?? id} cancelled: ${input.reason}`,
+          me,
+        );
       await tx.bill.update({
         where: { id },
         data: {
@@ -1399,6 +1625,12 @@ router.post(
           cancellationReason: input.reason,
           cancelledById: me,
           cancelledAt: new Date(),
+          // A cancelled bill owes nothing — the guard above already blocks
+          // cancelling a PARTIALLY_PAID/PAID bill, so this is always 0 -> 0
+          // in the valid case. Without this, outstandingAmountPaise keeps
+          // its pre-cancel value forever, so Ageing/Customer Statement keep
+          // counting cancelled bills as real debt.
+          outstandingAmountPaise: 0n,
           statusHistory: {
             create: {
               fromStatus: bill.status,
@@ -1433,6 +1665,133 @@ router.post(
         select: { id: true, version: true, status: true },
       }),
     );
+  },
+);
+
+router.get(
+  "/bills/:id/credit-notes",
+  can(PERMS.BILLING.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const bill = await db.bill.findUnique({
+      where: { id },
+      select: { branchId: true },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    return sendOk(
+      res,
+      await db.billCreditNote.findMany({
+        where: { billId: id },
+        orderBy: { createdAt: "desc" },
+        include: { createdBy: { select: { id: true, firstName: true, lastName: true } } },
+      }),
+    );
+  },
+);
+
+router.post(
+  "/bills/:id/credit-notes",
+  can(PERMS.BILLING.CREDIT_NOTE_CREATE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(createBillCreditNoteSchema.safeParse(req.body));
+    const bill = await db.bill.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        billNumber: true,
+        branchId: true,
+        billingCustomerId: true,
+        status: true,
+        outstandingAmountPaise: true,
+      },
+    });
+    if (!bill) throw new NotFoundError("Bill not found");
+    assertBranchAccess(req, bill.branchId);
+    // GST freezes an invoice once issued — a note only makes sense against a
+    // bill that actually reached the customer as a real receivable.
+    if (!(RECEIVABLE_BILL_STATUSES as readonly BillStatus[]).includes(bill.status))
+      throw new BadRequestError(
+        `A ${bill.status} bill cannot carry a credit/debit note`,
+      );
+    // A credit note can only give back what's still outstanding — it never
+    // manufactures a negative debt. A debit note has no such ceiling.
+    if (input.noteType === "CREDIT_NOTE" && input.amountPaise > bill.outstandingAmountPaise)
+      throw new BadRequestError(
+        "Credit note amount exceeds the bill's outstanding amount",
+      );
+    const me = actorId(req);
+    const noteDate = new Date();
+    const fyCode = fyCodeFor(noteDate);
+    const branch = await db.branch.findUniqueOrThrow({
+      where: { id: bill.branchId },
+      select: { branchCode: true },
+    });
+
+    const note = await db.$transaction(async (tx) => {
+      const seq = await nextSequence(
+        tx,
+        branch.branchCode,
+        fyCode,
+        input.noteType === "CREDIT_NOTE" ? "CN" : "DN",
+      );
+      const noteNumber = formatDocNumber(
+        branch.branchCode,
+        fyCode,
+        seq,
+        input.noteType === "CREDIT_NOTE" ? "SKT/CN" : "SKT/DN",
+      );
+
+      const created = await tx.billCreditNote.create({
+        data: {
+          noteType: input.noteType,
+          noteNumber,
+          fyCode,
+          branchId: bill.branchId,
+          billId: id,
+          customerId: bill.billingCustomerId,
+          amountPaise: input.amountPaise,
+          reason: input.reason,
+          createdById: me,
+        },
+      });
+
+      const voucher = await postBillCreditNoteVoucher(tx, {
+        billCreditNoteId: created.id,
+        noteType: input.noteType,
+        noteNumber,
+        noteDate,
+        branchId: bill.branchId,
+        fyCode,
+        customerId: bill.billingCustomerId,
+        amountPaise: input.amountPaise,
+        createdById: me,
+      });
+      await tx.billCreditNote.update({
+        where: { id: created.id },
+        data: { journalEntryId: voucher.id },
+      });
+
+      const delta =
+        input.noteType === "CREDIT_NOTE" ? -input.amountPaise : input.amountPaise;
+      const newOutstanding = bill.outstandingAmountPaise + delta;
+      await tx.bill.update({
+        where: { id },
+        data: {
+          outstandingAmountPaise: newOutstanding,
+          status:
+            input.noteType === "CREDIT_NOTE" && newOutstanding <= 0n
+              ? "PAID"
+              : bill.status === "PAID" && newOutstanding > 0n
+                ? "PARTIALLY_PAID"
+                : bill.status,
+        },
+      });
+
+      return created;
+    });
+    return sendOk(res, note);
   },
 );
 

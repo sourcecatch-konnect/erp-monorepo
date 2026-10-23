@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rupeesToPaise } from "../_shared/money.js";
+import { rupeesToPaise, optionalRupeesToPaise } from "../_shared/money.js";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -71,12 +71,6 @@ const tripBaseShape = {
   alreadyDispatched: z.boolean().optional().default(false),
   startDateTime: optionalDate,
   plannedStartDateTime: optionalDate,
-  // Milestones already reached by the time an already-dispatched trip is
-  // entered. Optional, only meaningful when alreadyDispatched = true, and
-  // ordered startDateTime <= arrivalDateTime <= unloadingCompletedAt <= now.
-  // The trip stays InTransit — these only back-fill the timestamps.
-  arrivalDateTime: optionalDate,
-  unloadingCompletedAt: optionalDate,
 };
 
 /**
@@ -87,8 +81,6 @@ const tripDispatchRefinement = (
   data: {
     alreadyDispatched?: boolean;
     startDateTime?: Date;
-    arrivalDateTime?: Date;
-    unloadingCompletedAt?: Date;
   },
   ctx: z.RefinementCtx,
 ) => {
@@ -116,54 +108,13 @@ const tripDispatchRefinement = (
     } else {
       notFuture(data.startDateTime, "startDateTime", "Dispatch time");
     }
-
-    notFuture(data.arrivalDateTime, "arrivalDateTime", "Arrival time");
-    notFuture(
-      data.unloadingCompletedAt,
-      "unloadingCompletedAt",
-      "Unloading time",
-    );
-
-    if (
-      data.startDateTime &&
-      data.arrivalDateTime &&
-      data.arrivalDateTime < data.startDateTime
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Arrival can't be before dispatch",
-        path: ["arrivalDateTime"],
-      });
-    }
-    const unloadingFloor = data.arrivalDateTime ?? data.startDateTime;
-    if (
-      data.unloadingCompletedAt &&
-      unloadingFloor &&
-      data.unloadingCompletedAt < unloadingFloor
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Unloading can't be before arrival / dispatch",
-        path: ["unloadingCompletedAt"],
-      });
-    }
-  } else {
-    if (data.startDateTime) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Remove the actual dispatch time, or tick 'Truck already dispatched'",
-        path: ["startDateTime"],
-      });
-    }
-    if (data.arrivalDateTime || data.unloadingCompletedAt) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Arrival / unloading times need 'Truck already dispatched' ticked",
-        path: [data.arrivalDateTime ? "arrivalDateTime" : "unloadingCompletedAt"],
-      });
-    }
+  } else if (data.startDateTime) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Remove the actual dispatch time, or tick 'Truck already dispatched'",
+      path: ["startDateTime"],
+    });
   }
 };
 
@@ -188,14 +139,33 @@ const tripTypeRefinement = (
   }
 };
 
+/** An empty trip carries no load, so it earns no freight (₹0 on the Log Slip). */
+export const EMPTY_TRIP_FREIGHT_MESSAGE =
+  "An empty trip can't have onward freight — set it to 0 or untick 'Empty trip'";
+
+const emptyTripFreightRefinement = (
+  data: { isTripEmpty?: boolean; onwardFreight?: number | bigint },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.isTripEmpty && Number(data.onwardFreight ?? 0) > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: EMPTY_TRIP_FREIGHT_MESSAGE,
+      path: ["onwardFreight"],
+    });
+  }
+};
+
 export const createTripSchema = z
   .object(tripBaseShape)
   .superRefine(tripTypeRefinement)
-  .superRefine(tripDispatchRefinement);
+  .superRefine(tripDispatchRefinement)
+  .superRefine(emptyTripFreightRefinement);
 
 export const updateTripSchema = z
   .object(tripBaseShape)
-  .superRefine(tripTypeRefinement);
+  .superRefine(tripTypeRefinement)
+  .superRefine(emptyTripFreightRefinement);
 
 /* ------------------------------------------------------------------ */
 /* Transitions                                                        */
@@ -242,9 +212,13 @@ export const correctClosedTripSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 
-/** Limited, audited correction of the start time on an InTransit trip. */
+/** Limited, audited correction of the start time and freight on an InTransit trip. */
 export const correctInTransitTripSchema = z.object({
   startDateTime: requiredDateField("trip start date and time"),
+  // Entered in rupees, stored as paise. Optional — most corrections are just
+  // the start time; freight is included so an entry mistake doesn't have to
+  // wait until the trip closes to be fixed.
+  onwardFreight: optionalRupeesToPaise("Onward freight", { allowZero: true }),
   correctionReason: z
     .string()
     .trim()
