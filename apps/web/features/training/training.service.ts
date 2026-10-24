@@ -5,7 +5,11 @@ import type {
   TrainingMe,
   TrainingProgressBody,
   TrainingProgressEntry,
+  TrainingQuizResult,
+  TrainingQuizSubmitBody,
+  TrainingQuizView,
   TrainingRoleUpdateBody,
+  TrainingMissionView,
   TrainingTeamRow,
   TrainingVerifyResult,
 } from "@skerp/types";
@@ -96,4 +100,35 @@ export const trainingApi = {
     });
     return res.data;
   },
+};
+
+/* ---- A10: quizzes ---- */
+
+export const quizApi = {
+  get: async (trackKey: string): Promise<TrainingQuizView> =>
+    unwrapApiResponse(
+      await api.get<ApiResponse<TrainingQuizView>>(
+        `/training/quiz/${encodeURIComponent(trackKey)}`,
+      ),
+    ),
+
+  submit: async (
+    trackKey: string,
+    body: TrainingQuizSubmitBody,
+  ): Promise<TrainingQuizResult> =>
+    unwrapApiResponse(
+      await api.post<ApiResponse<TrainingQuizResult>>(
+        `/training/quiz/${encodeURIComponent(trackKey)}`,
+        body,
+      ),
+    ),
+};
+
+/* ---- A9: practice missions (training environment only) ---- */
+
+export const missionsApi = {
+  list: async (): Promise<TrainingMissionView[]> =>
+    unwrapApiResponse(
+      await api.get<ApiResponse<TrainingMissionView[]>>("/training/missions"),
+    ),
 };

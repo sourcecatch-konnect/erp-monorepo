@@ -1,4 +1,5 @@
 import { BadRequestError } from "../../lib/error.js";
+import { isTrainingEnvironment } from "../../lib/environment.js";
 
 /**
  * Thin wrapper around the Meta Graph API for WhatsApp message-template management
@@ -13,7 +14,9 @@ export const getManagementToken = () =>
   process.env.META_WHATSAPP_MANAGEMENT_TOKEN ||
   process.env.META_WHATSAPP_ACCESS_TOKEN;
 
+// Training environment: report "not configured" so nothing is sent to Meta.
 export const isMetaConfigured = () =>
+  !isTrainingEnvironment() &&
   Boolean(apiBaseUrl() && wabaId() && getManagementToken());
 
 export type MetaTemplateStatus =
@@ -41,6 +44,11 @@ type MetaComponent =
   | { type: "FOOTER"; text: string };
 
 const requireConfig = () => {
+  if (isTrainingEnvironment()) {
+    throw new BadRequestError(
+      "WhatsApp is switched off in the training environment, so templates are not sent to Meta."
+    );
+  }
   const base = apiBaseUrl();
   const id = wabaId();
   const token = getManagementToken();

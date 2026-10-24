@@ -4,9 +4,11 @@ import {
   trainingRoleFormSchema,
   trainingRoleUpdateSchema,
   trainingProgressSchema,
+  trainingQuizSubmitSchema,
   trainingStepStatusSchema,
 } from "@skerp/validators";
 import type { TrainingStageKey, TrainingTrackKey } from "./catalog.js";
+import type { TrainingQuizQuestion } from "./quizzes.js";
 
 export type TrainingStepStatus = z.infer<typeof trainingStepStatusSchema>;
 export type TrainingCompletedBy = z.infer<typeof trainingCompletedBySchema>;
@@ -52,6 +54,8 @@ export type TrainingMe = {
   /** Required first, then optional; tracks with no visible steps are left out. */
   tracks: TrainingTrackView[];
   progress: TrainingProgressEntry[];
+  /** Best quiz result per track the user has tried. */
+  certifications: TrainingCertification[];
 };
 
 /* ------------------------------------------------------------------ */
@@ -87,6 +91,8 @@ export type TrainingTeamTrack = {
   assignment: TrainingTrackAssignment;
   finished: number;
   total: number;
+  /** Has passed this track's quiz. */
+  certified: boolean;
 };
 
 /** GET /training/admin/team (one row per active user) */
@@ -103,3 +109,56 @@ export type TrainingTeamRow = {
 
 /** POST /training/verify/:trackKey */
 export type TrainingVerifyResult = { verified: string[] };
+
+/* ------------------------------------------------------------------ */
+/* Quizzes (A10)                                                       */
+/* ------------------------------------------------------------------ */
+
+export type TrainingQuizSubmitBody = z.infer<typeof trainingQuizSubmitSchema>;
+
+/** A user's best result on one track's quiz. */
+export type TrainingCertification = {
+  trackKey: TrainingTrackKey;
+  passed: boolean;
+  bestScore: number;
+  total: number;
+  /** When they first passed, if they have. */
+  passedAt: string | null;
+};
+
+/** GET /training/quiz/:trackKey */
+export type TrainingQuizView = {
+  trackKey: TrainingTrackKey;
+  questions: TrainingQuizQuestion[];
+  passPercent: number;
+  attempts: number;
+  best: TrainingCertification | null;
+};
+
+/** POST /training/quiz/:trackKey — the graded attempt. */
+export type TrainingQuizResult = {
+  score: number;
+  total: number;
+  percent: number;
+  passed: boolean;
+  results: {
+    id: string;
+    chosen: number | null;
+    answer: number;
+    correct: boolean;
+    explain: string;
+  }[];
+};
+
+/* ------------------------------------------------------------------ */
+/* Practice missions (A9, training environment only)                   */
+/* ------------------------------------------------------------------ */
+
+/** GET /training/missions — one row per mission in the user's tracks. */
+export type TrainingMissionView = {
+  key: string;
+  /** All checks passed, or marked done by the trainee. */
+  done: boolean;
+  /** Per verifier: has the ERP seen this work? (empty for self-marked missions) */
+  checks: { verifier: string; done: boolean }[];
+};

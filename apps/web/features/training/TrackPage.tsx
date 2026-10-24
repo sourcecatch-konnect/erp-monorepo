@@ -14,6 +14,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { cn } from "@skerp/ui/lib/util";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { ProgressBar } from "./components/ProgressBar";
+import { QuizPanel } from "./components/QuizPanel";
 import { useStepProgress, useTrainingMe, useVerifyTrack } from "./hooks/useTraining";
 import {
   TRACK_BY_KEY,
@@ -239,6 +240,8 @@ export function TrackPage({ trackKey }: { trackKey: string }) {
               />
             ))}
           </ol>
+
+          <QuizPanel trackKey={progress.track.key} primary={progress.current === undefined} />
         </>
       ) : null}
     </div>

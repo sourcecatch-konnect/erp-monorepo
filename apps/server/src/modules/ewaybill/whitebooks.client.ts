@@ -10,6 +10,8 @@
  * upstream callers stay unchanged.
  */
 
+import { isTrainingEnvironment } from "../../lib/environment.js";
+
 type WbConfig = {
   baseUrl: string;
   clientId: string;
@@ -21,6 +23,8 @@ type WbConfig = {
 };
 
 const cfg = (): WbConfig | null => {
+  // Training environment: behave exactly as if the portal is not set up.
+  if (isTrainingEnvironment()) return null;
   const baseUrl = process.env.WB_EWAY_BASE_URL;
   const clientId = process.env.WB_EWAY_CLIENT_ID;
   const clientSecret = process.env.WB_EWAY_CLIENT_SECRET;

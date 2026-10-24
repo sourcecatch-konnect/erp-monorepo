@@ -6,4 +6,6 @@ export const trainingKeys = {
   adminRoles: ["training", "admin", "roles"] as const,
   adminBranches: ["training", "admin", "branches"] as const,
   adminTeam: (params: TrainingTeamParams) => ["training", "admin", "team", params] as const,
+  quiz: (trackKey: string) => ["training", "quiz", trackKey] as const,
+  missions: ["training", "missions"] as const,
 };

@@ -68,6 +68,10 @@ export const NAV_SECTIONS: NavSection[] = [
           { title: "My role & training", href: "/training" },
           { title: "How the business works", href: "/training/process-map" },
           { title: "Glossary", href: "/training/glossary" },
+          // Practice missions use demo data — training copy of the ERP only.
+          ...(process.env.NEXT_PUBLIC_APP_ENVIRONMENT === "training"
+            ? [{ title: "Practice missions", href: "/training/missions" }]
+            : []),
         ],
       },
     ],

@@ -10,6 +10,7 @@ import { AppSidebar } from "./AppSidebar";
 import { AppBreadcrumb } from "./AppBreadcrumb";
 import { BreadcrumbLabelsProvider } from "./breadcrumb-labels";
 import { NotificationBellButton } from "@/features/notifications/NotificationBellButton";
+import { TrainingEnvironmentBadge } from "@/features/training";
 // remove-before-prod: in-app feedback (testing phase only).
 import { FeedbackLauncher } from "@/features/feedback";
 
@@ -31,6 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="mr-2 data-[orientation=vertical]:h-4"
             />
             <AppBreadcrumb />
+            <TrainingEnvironmentBadge />
             <div className="ml-auto flex items-center gap-2">
               <FeedbackLauncher />
               <NotificationBellButton />

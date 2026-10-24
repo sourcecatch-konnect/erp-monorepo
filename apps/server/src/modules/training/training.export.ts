@@ -28,6 +28,7 @@ export async function buildTeamXlsx(
     { header: "Required steps done", key: "done", width: 12 },
     { header: "Required steps total", key: "total", width: 12 },
     { header: "Progress %", key: "percent", width: 11 },
+    { header: "Required quizzes passed", key: "quizzes", width: 14 },
     { header: "Last activity", key: "last", width: 14 },
     ...TRAINING_TRACKS.map((track) => ({
       header: track.title,
@@ -38,6 +39,7 @@ export async function buildTeamXlsx(
 
   for (const row of rows) {
     const byTrack = new Map(row.tracks.map((track) => [track.key, track]));
+    const required = row.tracks.filter((track) => track.assignment === "required");
     sheet.addRow({
       name: row.name,
       email: row.email,
@@ -49,13 +51,23 @@ export async function buildTeamXlsx(
         row.required.total === 0
           ? 0
           : Math.round((row.required.finished / row.required.total) * 100),
+      quizzes: `${required.filter((track) => track.certified).length} / ${required.length}`,
       last: fmtDate(row.lastActivity),
       ...Object.fromEntries(
         TRAINING_TRACKS.map((track) => {
           const t = byTrack.get(track.key);
+          if (!t) return [track.key, ""];
+          const quiz =
+            t.assignment === "required"
+              ? t.certified
+                ? " · quiz passed"
+                : " · quiz not passed"
+              : t.certified
+                ? " · quiz passed"
+                : "";
           return [
             track.key,
-            t ? `${t.finished} / ${t.total}${t.assignment === "required" ? " (required)" : ""}` : "",
+            `${t.finished} / ${t.total}${t.assignment === "required" ? " (required)" : ""}${quiz}`,
           ];
         }),
       ),

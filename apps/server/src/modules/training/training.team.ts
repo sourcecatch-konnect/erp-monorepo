@@ -7,6 +7,7 @@ import {
 
 import { db } from "../../../prisma/prisma.js";
 import { getPermissionContext } from "../../auth/permission-cache.js";
+import { certificationsFor } from "./training.quiz.js";
 import { resolveTracks } from "./training.tracks.js";
 
 /* ------------------------------------------------------------------ */
@@ -101,7 +102,7 @@ export async function buildTeamRows(users: TeamUser[]): Promise<TrainingTeamRow[
   const userIds = users.map((user) => user.id);
   const roleIds = [...new Set(users.map((user) => user.roleId))];
 
-  const [contexts, progress, roleTracks] = await Promise.all([
+  const [contexts, progress, roleTracks, certifications] = await Promise.all([
     inBatches(userIds, 20, (userId) => getPermissionContext(userId)),
     db.trainingProgress.findMany({
       where: { userId: { in: userIds } },
@@ -111,6 +112,7 @@ export async function buildTeamRows(users: TeamUser[]): Promise<TrainingTeamRow[
       where: { roleId: { in: roleIds } },
       select: { roleId: true, trackKey: true, required: true },
     }),
+    certificationsFor(userIds),
   ]);
 
   const progressByUser = new Map<string, Map<string, Date>>();
@@ -129,11 +131,13 @@ export async function buildTeamRows(users: TeamUser[]): Promise<TrainingTeamRow[
       ctx?.isSystemRole ?? false,
       roleTracks.filter((row) => row.roleId === user.roleId),
     );
+    const passed = certifications.get(user.id);
     const tracks = views.map((view) => ({
       key: view.key,
       assignment: view.assignment,
       finished: view.stepKeys.filter((key) => steps.has(key)).length,
       total: view.stepKeys.length,
+      certified: passed?.get(view.key)?.passed ?? false,
     }));
     const required = tracks.filter((track) => track.assignment === "required");
     const last = [...steps.values()].sort((a, b) => b.getTime() - a.getTime())[0];

@@ -72,7 +72,15 @@ function YourRole({ me }: { me: TrainingMe }) {
   );
 }
 
-function TrackCard({ progress, primary }: { progress: TrackProgress; primary: boolean }) {
+function TrackCard({
+  progress,
+  primary,
+  quizPassed,
+}: {
+  progress: TrackProgress;
+  primary: boolean;
+  quizPassed: boolean;
+}) {
   const complete = progress.current === undefined;
   const action = complete ? "Review" : progress.finished === 0 ? "Start" : "Continue";
   return (
@@ -84,6 +92,12 @@ function TrackCard({ progress, primary }: { progress: TrackProgress; primary: bo
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               <IconCircleCheck className="size-3.5" aria-hidden />
               Completed
+            </span>
+          ) : null}
+          {quizPassed ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+              <IconCircleCheck className="size-3.5" aria-hidden />
+              Quiz passed
             </span>
           ) : null}
         </div>
@@ -110,6 +124,9 @@ function YourTraining({ me }: { me: TrainingMe }) {
   const required = all.filter((item) => item.view.assignment === "required");
   const optional = all.filter((item) => item.view.assignment === "optional");
   const firstOpen = required.find((item) => item.current !== undefined);
+  const passed = new Set(
+    me.certifications.filter((cert) => cert.passed).map((cert) => cert.trackKey),
+  );
 
   return (
     <section className="space-y-3">
@@ -125,6 +142,7 @@ function YourTraining({ me }: { me: TrainingMe }) {
           key={item.track.key}
           progress={item}
           primary={item.track.key === firstOpen?.track.key}
+          quizPassed={passed.has(item.track.key)}
         />
       ))}
       {optional.length > 0 ? (
@@ -137,7 +155,12 @@ function YourTraining({ me }: { me: TrainingMe }) {
           </p>
           <div className="mt-3 space-y-3">
             {optional.map((item) => (
-              <TrackCard key={item.track.key} progress={item} primary={false} />
+              <TrackCard
+                key={item.track.key}
+                progress={item}
+                primary={false}
+                quizPassed={passed.has(item.track.key)}
+              />
             ))}
           </div>
         </details>

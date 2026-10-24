@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { IconDownload, IconSearch } from "@tabler/icons-react";
+import { IconCircleCheck, IconCircleDashed, IconDownload, IconSearch } from "@tabler/icons-react";
 import { TRAINING_TRACKS, type TrainingTeamRow } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@skerp/ui/components/table";
+import { cn } from "@skerp/ui/lib/util";
 import { downloadBlob } from "@/features/masters/_shared/master-api";
 import { ProgressBar } from "../components/ProgressBar";
 import { trainingKeys } from "../training.keys";
@@ -39,6 +40,7 @@ import { trainingApi } from "../training.service";
 const PAGE_SIZE = 20;
 const ALL = "__all__";
 const COLUMNS = 5;
+const TRACK_TITLE = new Map<string, string>(TRAINING_TRACKS.map((item) => [item.key, item.title]));
 
 function FilterSelect({
   id,
@@ -77,19 +79,47 @@ function FilterSelect({
   );
 }
 
+function QuizStatus({ title, certified }: { title?: string; certified: boolean }) {
+  const Icon = certified ? IconCircleCheck : IconCircleDashed;
+  const status = certified ? "quiz passed" : "quiz not passed";
+  return (
+    <li className={cn("flex items-center gap-1 text-xs", certified ? "text-primary" : "text-muted-foreground")}>
+      <Icon className="size-3.5 shrink-0" aria-hidden />
+      {title ? `${title}: ${status}` : status.charAt(0).toUpperCase() + status.slice(1)}
+    </li>
+  );
+}
+
 function ProgressCell({ row, track }: { row: TrainingTeamRow; track: string }) {
-  const progress =
-    track === ALL ? row.required : row.tracks.find((item) => item.key === track);
+  const single = track === ALL ? undefined : row.tracks.find((item) => item.key === track);
+  const progress = track === ALL ? row.required : single;
   if (!progress) {
     return <span className="text-sm text-muted-foreground">Not part of their role</span>;
   }
   const percent = progress.total === 0 ? 100 : Math.round((progress.finished / progress.total) * 100);
+  // A10: certified / not certified per required track (or for the one picked).
+  const quizzes = single
+    ? [single]
+    : row.tracks.filter((item) => item.assignment === "required");
   return (
-    <div className="flex min-w-48 items-center gap-3">
-      <ProgressBar percent={percent} label={`${row.name} training progress`} className="max-w-32" />
-      <span className="shrink-0 text-xs text-muted-foreground">
-        {progress.finished} of {progress.total} steps
-      </span>
+    <div className="space-y-1">
+      <div className="flex min-w-48 items-center gap-3">
+        <ProgressBar percent={percent} label={`${row.name} training progress`} className="max-w-32" />
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {progress.finished} of {progress.total} steps
+        </span>
+      </div>
+      {quizzes.length > 0 ? (
+        <ul className="space-y-0.5">
+          {quizzes.map((item) => (
+            <QuizStatus
+              key={item.key}
+              title={single ? undefined : TRACK_TITLE.get(item.key)}
+              certified={item.certified}
+            />
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

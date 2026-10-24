@@ -71,3 +71,15 @@ export const trainingRoleFormSchema = z.object({
   useSuggested: z.boolean(),
   requiredTracks: z.array(trainingTrackKeySchema),
 });
+
+/* ------------------------------------------------------------------ */
+/* Quizzes (A10)                                                       */
+/* ------------------------------------------------------------------ */
+
+/** POST /training/quiz/:trackKey — questionId → chosen option index. */
+export const trainingQuizSubmitSchema = z.object({
+  answers: z.record(
+    z.string().regex(/^[a-z0-9.-]{1,40}$/, "Invalid question"),
+    z.number().int().min(0).max(9),
+  ),
+});

@@ -17,7 +17,10 @@ import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
+import { isTrainingEnvironment } from "../../lib/environment.js";
 import adminRoute from "./training.admin.route.js";
+import missionsRoute from "./training.missions.js";
+import quizRoute, { certificationsFor } from "./training.quiz.js";
 import { resolveTracks } from "./training.tracks.js";
 import { VERIFIERS } from "./training.verifiers.js";
 
@@ -30,6 +33,9 @@ import { VERIFIERS } from "./training.verifiers.js";
 const router: Router = Router();
 router.use(authMiddleware);
 router.use("/admin", adminRoute);
+router.use("/quiz", quizRoute);
+// Missions use the demo data, which only exists in the training environment.
+if (isTrainingEnvironment()) router.use("/missions", missionsRoute);
 
 const progressSelect = {
   stepKey: true,
@@ -42,7 +48,7 @@ router.get("/me", async (req, res) => {
   const ctx = req.ctx!;
   const has = (key: PermissionKey) => ctx.permissions.has(key);
 
-  const [user, profile, branches, ownerRows, roleTracks, progress] =
+  const [user, profile, branches, ownerRows, roleTracks, progress, certifications] =
     await Promise.all([
       db.user.findUniqueOrThrow({
         where: { id: ctx.userId },
@@ -85,6 +91,7 @@ router.get("/me", async (req, res) => {
         select: progressSelect,
         orderBy: { completedAt: "asc" },
       }),
+      certificationsFor([ctx.userId]),
     ]);
 
   const rolesByKey = new Map<string, Set<string>>();
@@ -125,6 +132,7 @@ router.get("/me", async (req, res) => {
       ...entry,
       completedAt: entry.completedAt.toISOString(),
     })),
+    certifications: [...(certifications.get(ctx.userId)?.values() ?? [])],
   };
   return sendOk(res, body);
 });

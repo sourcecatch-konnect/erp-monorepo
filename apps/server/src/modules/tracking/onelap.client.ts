@@ -10,6 +10,7 @@
  * a separate /positions fetch + join. Verified live: speed is in knots; a device
  * that has never reported sits at 0,0.
  */
+import { isTrainingEnvironment } from "../../lib/environment.js";
 import type {
   FleetVehicle,
   DevicePosition,
@@ -47,6 +48,9 @@ export type OneLapDevice = {
 };
 /** Stateless Basic auth header: base64(phoneNumber:password). */
 function authHeader(): string {
+  if (isTrainingEnvironment()) {
+    throw new Error("OneLap GPS is switched off in the training environment");
+  }
   if (!EMAIL || !PASSWORD) {
     throw new Error("ONELAP_EMAIL / ONELAP_PASSWORD are not configured");
   }
@@ -174,6 +178,9 @@ export async function getHistory(
 
 /** Log in via /api/session and return the `JSESSIONID=…` cookie for the WS. */
 export async function loginForSocket(): Promise<string> {
+  if (isTrainingEnvironment()) {
+    throw new Error("OneLap GPS is switched off in the training environment");
+  }
   if (!EMAIL || !PASSWORD) {
     throw new Error("ONELAP_EMAIL / ONELAP_PASSWORD are not configured");
   }

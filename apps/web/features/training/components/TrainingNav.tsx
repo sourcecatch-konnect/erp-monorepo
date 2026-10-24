@@ -2,16 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconBook, IconRoute, IconUserCircle } from "@tabler/icons-react";
+import { IconBook, IconRoute, IconTargetArrow, IconUserCircle } from "@tabler/icons-react";
 import { cn } from "@skerp/ui/lib/util";
+import { IS_TRAINING_ENVIRONMENT } from "../environment";
 
 const LINKS = [
   { href: "/training", label: "My role & training", icon: IconUserCircle },
   { href: "/training/process-map", label: "How the business works", icon: IconRoute },
   { href: "/training/glossary", label: "Glossary", icon: IconBook },
-] as const;
+  // Missions use the demo data, so they only exist on the training copy.
+  ...(IS_TRAINING_ENVIRONMENT
+    ? [{ href: "/training/missions", label: "Practice missions", icon: IconTargetArrow }]
+    : []),
+];
 
-/** The three training screens, always one click apart. */
+/** The training screens, always one click apart. */
 export function TrainingNav() {
   const pathname = usePathname();
   const isActive = (href: string) =>
