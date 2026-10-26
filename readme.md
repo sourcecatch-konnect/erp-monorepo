@@ -1,3 +1,5 @@
+**Documentation:** start at [docs/README.md](docs/README.md). It tells you which files to read for your role.
+
 # Storybook
 
 From the repository root, run:

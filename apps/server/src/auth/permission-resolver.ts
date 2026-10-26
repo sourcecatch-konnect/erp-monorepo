@@ -28,6 +28,7 @@ export const resolvePermissions = async (
     select: {
       id: true,
       roleId: true,
+      status: true,
       branchScope: true,
       branchId: true,
       role: {
@@ -50,7 +51,9 @@ export const resolvePermissions = async (
     },
   });
 
-  if (!user || !user.role) return null;
+  // A deactivated user keeps a valid token (and can refresh it), so this is
+  // where access actually stops: no context means every request gets a 401.
+  if (!user || !user.status || !user.role) return null;
 
   let permissions: Set<string>;
  if (user.role.isSystem) {

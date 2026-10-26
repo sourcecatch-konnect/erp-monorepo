@@ -23,8 +23,11 @@ const adapter = new PrismaPg({
   // Connection timeout (also bounds the wait for a free pooled connection)
   connectionTimeoutMillis: 5000,
 
-  // Idle timeout
-  idleTimeoutMillis: 10000,
+  // How long an unused connection stays open. Opening a new one (TCP + TLS +
+  // auth to the pooler) costs far more than a query — 0.5–1 s when the DB is
+  // in another region — so with 10 s every action after a short pause paid
+  // that again. Default 5 min; tune with DB_IDLE_TIMEOUT_MS.
+  idleTimeoutMillis: positiveInt(process.env.DB_IDLE_TIMEOUT_MS, 300_000),
 });
 
 const globalForPrisma = globalThis as unknown as {

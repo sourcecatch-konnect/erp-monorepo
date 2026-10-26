@@ -308,4 +308,9 @@ export type TripDriverChoice = {
   vehicleNumber: string | null;
   lastTripNumber: string | null;
   lastTripSequenceNo: number | null;
+  /** YYYY-MM-DD, or null when not recorded. */
+  licenseExpiryDate: string | null;
+  /** Licence expired as of today — shown as a red badge. The driver stays
+   *  selectable for a back-dated trip; the server checks the trip's date. */
+  licenceExpired: boolean;
 };

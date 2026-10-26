@@ -1,4 +1,5 @@
 import { db } from "../../../prisma/prisma.js";
+import { driverSalaryByVehicle } from "../driver-finance/driver-salary-allocation.js";
 
 /* ------------------------------------------------------------------ */
 /* Monthly vehicle costs (reporting only — nothing posts to accounts)  */
@@ -23,11 +24,18 @@ export type FixedCosts = {
   emiPaise: bigint;
 };
 
+/** What is typed on Vehicle Costs and stored. `salaryPaise` is other staff
+ *  (cleaner / helper) — driver salary is not typed, see EffectiveCosts. */
 export type MonthlyCosts = FixedCosts & {
   salaryPaise: bigint;
   tyrePaise: bigint;
   otherPaise: bigint;
 };
+
+/** MonthlyCosts plus the automatic driver salary: each driver's earned pay
+ *  from an approved salary run, split across the vehicles he drove (see
+ *  driver-salary-allocation.ts). Never stored or typed. */
+export type EffectiveCosts = MonthlyCosts & { driverSalaryPaise: bigint };
 
 export const ZERO_FIXED: FixedCosts = {
   taxPaise: 0n,
@@ -45,7 +53,7 @@ const pickFixed = (row: FixedCosts): FixedCosts => ({
   emiPaise: row.emiPaise,
 });
 
-export type VehicleCostRow = MonthlyCosts & {
+export type VehicleCostRow = EffectiveCosts & {
   vehicleId: string;
   vehicleNumber: string;
   /** True when a saved row exists for this month (else defaults apply). */
@@ -61,6 +69,7 @@ export type VehicleCostRow = MonthlyCosts & {
  * are charged whether or not the truck ran.
  */
 export async function listMonthlyCosts(month: string): Promise<VehicleCostRow[]> {
+  const driverSalary = (await driverSalaryByVehicle([month])).byMonth.get(month)!;
   const vehicles = await db.vehicle.findMany({
     where: { ownershipType: "Own_Vehicle" },
     select: {
@@ -81,6 +90,7 @@ export async function listMonthlyCosts(month: string): Promise<VehicleCostRow[]>
       hasMonthlyRow: Boolean(saved),
       remarks: saved?.remarks ?? null,
       defaults,
+      driverSalaryPaise: driverSalary.get(v.id) ?? 0n,
       ...(saved
         ? {
             ...pickFixed(saved),
@@ -101,18 +111,20 @@ export async function listMonthlyCosts(month: string): Promise<VehicleCostRow[]>
 export async function costsForVehicleMonths(
   vehicleId: string,
   months: string[],
-): Promise<Map<string, MonthlyCosts>> {
-  const [costDefault, saved] = await Promise.all([
+): Promise<Map<string, EffectiveCosts>> {
+  const [costDefault, saved, driverSalary] = await Promise.all([
     db.vehicleCostDefault.findUnique({ where: { vehicleId } }),
     db.vehicleMonthlyCost.findMany({
       where: { vehicleId, month: { in: months } },
     }),
+    driverSalaryByVehicle(months),
   ]);
   const defaults = costDefault ? pickFixed(costDefault) : ZERO_FIXED;
   const savedByMonth = new Map(saved.map((row) => [row.month, row]));
   return new Map(
     months.map((month) => {
       const row = savedByMonth.get(month);
+      const driverSalaryPaise = driverSalary.byMonth.get(month)?.get(vehicleId) ?? 0n;
       return [
         month,
         row
@@ -121,15 +133,17 @@ export async function costsForVehicleMonths(
               salaryPaise: row.salaryPaise,
               tyrePaise: row.tyrePaise,
               otherPaise: row.otherPaise,
+              driverSalaryPaise,
             }
-          : { ...defaults, salaryPaise: 0n, tyrePaise: 0n, otherPaise: 0n },
+          : { ...defaults, salaryPaise: 0n, tyrePaise: 0n, otherPaise: 0n, driverSalaryPaise },
       ];
     }),
   );
 }
 
-/** Everything entered on Vehicle Costs for a month, as one amount. */
-export const totalMonthlyCosts = (c: MonthlyCosts) =>
+/** Everything on Vehicle Costs for a month (typed + driver salary), as one amount. */
+export const totalMonthlyCosts = (c: EffectiveCosts) =>
+  c.driverSalaryPaise +
   c.taxPaise +
   c.insurancePaise +
   c.permitPaise +

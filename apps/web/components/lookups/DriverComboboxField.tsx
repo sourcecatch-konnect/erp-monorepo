@@ -138,6 +138,7 @@ const tripChoiceHint = (choice: TripDriverChoice) => {
   if (choice.selectionState === "BLACKLISTED") {
     return "Driver is blacklisted";
   }
+
   return "Not eligible for another trip";
 };
 
@@ -211,10 +212,18 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
     enabled: selectionContext !== "default" && !disabled,
   });
 
+  // The full driver record is only needed to label a selected driver who is
+  // NOT in the loaded list (e.g. a pre-filled form). Picking from the list
+  // already has his name — don't fetch the whole record again.
+  const selectedInList = Boolean(
+    selectedId &&
+      (drivers.data?.pages.some((p) => p.data.some((d) => d.id === selectedId)) ||
+        tripChoices.data?.pages.some((p) => p.data.some((d) => d.id === selectedId))),
+  );
   const selectedDriver = useQuery({
     queryKey: driverKeys.detail(selectedId ?? ""),
     queryFn: () => driverApi.detail(selectedId!),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedId) && !selectedInList,
   });
 
   const options = React.useMemo<DriverComboboxOption[]>(() => {
@@ -225,15 +234,19 @@ export default function DriverComboboxField<TFormValues extends FieldValues>({
         (choice) => ({
           value: choice.id,
           label: choice.name,
-          hint: tripChoiceHint(choice),
-          badge:
-            highlightDriverId && choice.id === highlightDriverId
+          hint: choice.licenceExpired
+            ? `Licence expired on ${choice.licenseExpiryDate ?? "—"} — only a trip dated before that is allowed`
+            : tripChoiceHint(choice),
+          badge: choice.licenceExpired
+            ? "Licence expired"
+            : highlightDriverId && choice.id === highlightDriverId
               ? "Journey driver"
               : selectionContext === "journey"
                 ? journeyChoiceBadge(choice)
                 : tripChoiceBadge(choice),
-          badgeTone:
-            highlightDriverId && choice.id === highlightDriverId
+          badgeTone: choice.licenceExpired
+            ? "danger"
+            : highlightDriverId && choice.id === highlightDriverId
               ? "info"
               : tripChoiceTone(choice),
           disabled:

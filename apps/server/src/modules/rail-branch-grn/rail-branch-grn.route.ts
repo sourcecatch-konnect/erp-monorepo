@@ -33,6 +33,10 @@ import {
   railBranchGrnPdfInclude,
 } from "./rail-branch-grn.pdf.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
+import {
+  assertNotOnVendorSlip,
+  sameValue,
+} from "../vendor-payment/source-lock.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -1203,6 +1207,25 @@ router.patch("/:id", can(PERMS.RAIL_BRANCH_GRN.UPDATE), async (req, res) => {
   if (existing.version !== parsed.data.version) {
     throw new ConflictError(
       "Branch GRN changed. Please refresh before saving.",
+    );
+  }
+
+  // The labour leader and labour charge are what a hamali slip pays. This
+  // route writes both as a full replace (undefined → null), so compare the
+  // values it is about to write.
+  const nextLabourCharge =
+    parsed.data.labourCharge === undefined
+      ? null
+      : BigInt(rupeesToPaise(parsed.data.labourCharge));
+  if (
+    !sameValue(parsed.data.labourLeaderId, existing.labourLeaderId) ||
+    !sameValue(nextLabourCharge, existing.labourCharge)
+  ) {
+    await assertNotOnVendorSlip(
+      db,
+      "RAIL_BRANCH_GRN",
+      [existing.id],
+      "change this Branch GRN's labour leader or labour charge",
     );
   }
 

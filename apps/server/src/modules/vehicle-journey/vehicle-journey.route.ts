@@ -27,6 +27,10 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
+import {
+  assertLicenceValid,
+  isLicenceExpired,
+} from "../driver/driver-licence.js";
 import { buildTripName, writeTripStatus } from "../trip/trip.service.js";
 import { undeliveredLRNumbersForTrip } from "../lorry-receipt/lr-delivery.service.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
@@ -380,6 +384,7 @@ router.get("/trip-driver-options", can(PERMS.TRIP.VIEW), async (req, res) => {
         status: true,
         onLeave: true,
         blackListed: true,
+        licenseExpiryDate: true,
         journeys: {
           where: {
             deletedAt: null,
@@ -442,6 +447,11 @@ router.get("/trip-driver-options", can(PERMS.TRIP.VIEW), async (req, res) => {
       vehicleNumber: journey?.vehicle.vehicleNumber ?? null,
       lastTripNumber: lastTrip?.tripNumber ?? null,
       lastTripSequenceNo: lastTrip?.sequenceNo ?? null,
+      licenseExpiryDate:
+        driver.licenseExpiryDate?.toISOString().slice(0, 10) ?? null,
+      // Expired as of today. Still selectable — a back-dated trip from
+      // before the expiry is valid; the server checks the trip's own date.
+      licenceExpired: isLicenceExpired(driver.licenseExpiryDate),
     };
   });
 
@@ -641,11 +651,7 @@ router.post("/", can(PERMS.VEHICLE_JOURNEY.CREATE), async (req, res) => {
   if (!driver) throw new BadRequestError("Driver not found");
   if (driver.blackListed) throw new BadRequestError("Driver is blacklisted");
   if (driver.onLeave) throw new BadRequestError("Driver is on leave");
-  if (driver.licenseExpiryDate && driver.licenseExpiryDate < now) {
-    throw new BadRequestError(
-      `Driver's license expired on ${driver.licenseExpiryDate.toISOString().slice(0, 10)} — renew it before starting a journey`,
-    );
-  }
+  assertLicenceValid(driver, "starting a journey", startedAt);
   if (driver.status !== "AVAILABLE") {
     throw new BadRequestError("Driver is already assigned to a trip");
   }
@@ -833,6 +839,7 @@ router.post(
         driverId: true,
         fyCode: true,
         vehicle: { select: { vehicleNumber: true } },
+        driver: { select: { name: true, licenseExpiryDate: true } },
       },
     });
     if (!journey) throw new NotFoundError("Journey not found");
@@ -877,6 +884,12 @@ router.post(
     //   bornInTransit -> the truck already left; `startDateTime` is the real,
     //   possibly back-dated, dispatch moment and the leg skips Planned.
     const bornInTransit = leg.alreadyDispatched === true;
+    // The leg's own date: actual dispatch, else the planned start, else now.
+    assertLicenceValid(
+      journey.driver,
+      "adding another trip",
+      leg.startDateTime ?? new Date(),
+    );
     if (
       bornInTransit &&
       leg.startDateTime &&
@@ -1026,7 +1039,12 @@ router.post(
 
     const trip = await db.vehicleTrip.findFirst({
       where: { id: tripId, journeyId: id, deletedAt: null },
-      select: { id: true, status: true, sequenceNo: true },
+      select: {
+        id: true,
+        status: true,
+        sequenceNo: true,
+        driver: { select: { name: true, licenseExpiryDate: true } },
+      },
     });
     if (!trip) throw new NotFoundError("Journey leg not found");
     if (trip.status !== "Planned") {
@@ -1037,6 +1055,11 @@ router.post(
     if (!parsed.success) {
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
+    assertLicenceValid(
+      trip.driver,
+      "dispatching this trip",
+      parsed.data.startDateTime,
+    );
 
     // Operator-entered start time must not precede the previous leg's close.
     const prevLeg =

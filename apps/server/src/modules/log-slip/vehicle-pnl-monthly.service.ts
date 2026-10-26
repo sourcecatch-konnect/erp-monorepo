@@ -38,8 +38,11 @@ export type MonthlyPnlRow = {
   permitPaise: bigint;
   fitnessPaise: bigint;
   emiPaise: bigint;
+  /** Other staff (cleaner / helper), typed on Vehicle Costs. */
   salaryPaise: bigint;
-  /** Sum of the six fixed/monthly lines above ("Mtly Fxd"). */
+  /** Driver salary from the approved salary run, split by days driven. */
+  driverSalaryPaise: bigint;
+  /** Sum of the seven fixed/monthly lines above ("Mtly Fxd"). */
   fixedTotalPaise: bigint;
 
   /** Finalised Job Card cost in the month (auto). */
@@ -122,6 +125,7 @@ const BIGINT_KEYS = [
   "fitnessPaise",
   "emiPaise",
   "salaryPaise",
+  "driverSalaryPaise",
   "fixedTotalPaise",
   "repairsPaise",
   "tyrePaise",
@@ -355,7 +359,8 @@ async function computeMonthRows(month: string): Promise<MonthlyPnlRow[]> {
       c.permitPaise +
       c.fitnessPaise +
       c.emiPaise +
-      c.salaryPaise;
+      c.salaryPaise +
+      c.driverSalaryPaise;
     const variableTotal = repairs + c.tyrePaise + c.otherPaise;
     return {
       vehicleId: c.vehicleId,
@@ -376,6 +381,7 @@ async function computeMonthRows(month: string): Promise<MonthlyPnlRow[]> {
       fitnessPaise: c.fitnessPaise,
       emiPaise: c.emiPaise,
       salaryPaise: c.salaryPaise,
+      driverSalaryPaise: c.driverSalaryPaise,
       fixedTotalPaise: fixedTotal,
       repairsPaise: repairs,
       tyrePaise: c.tyrePaise,

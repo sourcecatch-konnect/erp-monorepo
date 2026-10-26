@@ -109,3 +109,6 @@ export * from "./training/quizzes.js";
 export * from "./training/missions.js";
 // remove-before-prod: in-app feedback (testing phase only).
 export * from "./feedback/feedback.type.js";
+export * from "./permission-labels.js";
+export * from "./my-work/my-work.type.js";
+export * from "./dashboard/dashboard.type.js";

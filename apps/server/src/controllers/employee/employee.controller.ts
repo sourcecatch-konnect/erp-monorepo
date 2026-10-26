@@ -1,14 +1,18 @@
 import { Request, Response } from "express";
 import {
   createEmployeeSchema,
+  employeePageQuerySchema,
   resetEmployeePasswordSchema,
   updateEmployeeSchema,
   updateEmployeeStatusSchema,
 } from "@skerp/validators";
 import { ValidationError } from "../../lib/error.js";
+import { sendOk } from "../../modules/_shared/response.js";
 import {
   createEmployeeService,
+  deleteEmployeeService,
   getEmployeeService,
+  listEmployeesPageService,
   listEmployeesService,
   resetEmployeePasswordService,
   updateEmployeeService,
@@ -35,20 +39,34 @@ export const createEmployeeController = async (req: Request, res: Response) => {
     loginUrl: loginUrl(),
   });
 
-  return res.status(201).json({
-    success: true,
-    data: { employee, emailSent },
-  });
+  return sendOk(res, { employee, emailSent }, undefined, 201);
 };
 
 export const listEmployeesController = async (_req: Request, res: Response) => {
-  const employees = await listEmployeesService();
-  return res.json({ success: true, data: employees });
+  return sendOk(res, await listEmployeesService());
+};
+
+export const listEmployeesPageController = async (
+  req: Request,
+  res: Response,
+) => {
+  const parsed = employeePageQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new ValidationError(
+      parsed.error.flatten().fieldErrors,
+      "Check the search and page and try again.",
+    );
+  }
+  const { items, total } = await listEmployeesPageService(parsed.data);
+  return sendOk(res, items, {
+    total,
+    page: parsed.data.page,
+    size: parsed.data.size,
+  });
 };
 
 export const getEmployeeController = async (req: Request, res: Response) => {
-  const employee = await getEmployeeService(req.params.id as string);
-  return res.json({ success: true, data: employee });
+  return sendOk(res, await getEmployeeService(req.params.id as string));
 };
 
 export const updateEmployeeController = async (req: Request, res: Response) => {
@@ -61,7 +79,7 @@ export const updateEmployeeController = async (req: Request, res: Response) => {
     req.params.id as string,
     parsed.data,
   );
-  return res.json({ success: true, data: employee });
+  return sendOk(res, employee);
 };
 
 export const resetEmployeePasswordController = async (
@@ -86,10 +104,7 @@ export const resetEmployeePasswordController = async (
     loginUrl: loginUrl(),
   });
 
-  return res.json({
-    success: true,
-    data: { employee, emailSent },
-  });
+  return sendOk(res, { employee, emailSent });
 };
 
 export const updateEmployeeStatusController = async (
@@ -104,6 +119,14 @@ export const updateEmployeeStatusController = async (
   const employee = await updateEmployeeStatusService(
     req.params.id as string,
     parsed.data.status,
+    req.ctx!.userId,
   );
-  return res.json({ success: true, data: employee });
+  return sendOk(res, employee);
+};
+
+export const deleteEmployeeController = async (req: Request, res: Response) => {
+  return sendOk(
+    res,
+    await deleteEmployeeService(req.params.id as string, req.ctx!.userId),
+  );
 };

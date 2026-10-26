@@ -2,7 +2,7 @@ import { db } from "../../../prisma/prisma.js";
 import {
   costsForVehicleMonths,
   totalMonthlyCosts,
-  type MonthlyCosts,
+  type EffectiveCosts,
 } from "../vehicle-cost/vehicle-cost.service.js";
 import {
   freightDiffByVehicle,
@@ -84,7 +84,7 @@ export type VehiclePnlRow = {
   trueProfitPaise: bigint | null;
   /** Each Vehicle Costs line summed over the months in range (same rule as
    *  fixedCostsPaise); null unless a single own vehicle. */
-  costs: MonthlyCosts | null;
+  costs: EffectiveCosts | null;
   /** Booking vs onward freight on the loaded trips (see freightDiffByVehicle);
    *  null unless the report was run for a single vehicle. */
   freightDiff: FreightDiff | null;
@@ -197,7 +197,7 @@ async function applyVehicleCosts(row: VehiclePnlRow, filters: VehiclePnlFilters)
   const byMonth = new Map(row.monthly.map((m) => [m.month, m]));
 
   let fixedTotal = 0n;
-  const lines: MonthlyCosts = {
+  const lines: EffectiveCosts = {
     taxPaise: 0n,
     insurancePaise: 0n,
     permitPaise: 0n,
@@ -206,11 +206,12 @@ async function applyVehicleCosts(row: VehiclePnlRow, filters: VehiclePnlFilters)
     salaryPaise: 0n,
     tyrePaise: 0n,
     otherPaise: 0n,
+    driverSalaryPaise: 0n,
   };
   row.monthly = months.map((key) => {
     const m = byMonth.get(key) ?? emptyMonth(key);
     const monthCosts = costs.get(key)!;
-    for (const k of Object.keys(lines) as (keyof MonthlyCosts)[])
+    for (const k of Object.keys(lines) as (keyof EffectiveCosts)[])
       lines[k] += monthCosts[k];
     const fixed = totalMonthlyCosts(monthCosts);
     fixedTotal += fixed;

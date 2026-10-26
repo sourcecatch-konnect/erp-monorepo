@@ -34,6 +34,10 @@ import {
   ValidationError,
 } from "../../lib/error.js";
 import { buildGrnPdfHtml, grnPdfInclude } from "./grn.pdf.js";
+import {
+  assertNotOnVendorSlip,
+  sameValue,
+} from "../vendor-payment/source-lock.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
 
 const router: Router = Router();
@@ -886,6 +890,21 @@ router.put("/:id", can(PERMS.GRN.UPDATE), async (req, res) => {
     existing.lorryReceipt.goods,
   );
 
+  // The labour and labour charge are what a hamali slip pays.
+  const hamaliChanged =
+    (writeData.labourId !== undefined &&
+      !sameValue(writeData.labourId, existing.labourId)) ||
+    (writeData.labourCharge !== undefined &&
+      !sameValue(writeData.labourCharge, existing.labourCharge));
+  if (hamaliChanged) {
+    await assertNotOnVendorSlip(
+      db,
+      "GRN_HAMALI",
+      [existing.id],
+      "change this GRN's labour or labour charge",
+    );
+  }
+
   const grn = await db.$transaction(
     async (tx) => {
       await tx.gRNGoods.deleteMany({
@@ -1077,6 +1096,7 @@ router.post("/:id/cancel", can(PERMS.GRN.CANCEL), async (req, res) => {
       "GRN cannot be cancelled after VP Loading is created",
     );
   }
+  await assertNotOnVendorSlip(db, "GRN_HAMALI", [existing.id], "cancel this GRN");
 
   const grn = await db.gRN.update({
     where: { id: existing.id },

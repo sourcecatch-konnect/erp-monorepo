@@ -132,6 +132,23 @@ export type AgeingFilters = {
   asOf?: string;
 };
 
+/** One cash / bank account with its opening balance and balance now (paise
+ *  as strings; signed — negative = overdrawn / short). */
+export type OpeningBalanceRow = {
+  id: string;
+  name: string;
+  type: "CASH" | "BANK";
+  bankName: string | null;
+  accountLast4: string | null;
+  opening: {
+    asOf: string;
+    amountPaise: string;
+    updatedAt: string;
+    updatedBy: { firstName: string; lastName: string } | null;
+  } | null;
+  balancePaise: string;
+};
+
 const get = async <T>(url: string, params?: Record<string, string | undefined>) => {
   const response = await api.get<ApiResponse<T>>(url, { params });
   return unwrapApiResponse(response);
@@ -251,6 +268,16 @@ export const ledgerApi = {
     });
     return res.data as Blob;
   },
+
+  // --- Opening balances of cash / bank accounts ---
+  openingBalances: () => get<OpeningBalanceRow[]>("/ledger/opening-balances"),
+  setOpeningBalance: async (cashAccountId: string, body: { asOf: string; amountPaise: string }) =>
+    unwrapApiResponse(
+      await api.put<ApiResponse<OpeningBalanceRow[]>>(
+        `/ledger/opening-balances/${cashAccountId}`,
+        body,
+      ),
+    ),
 
   // --- Phase 4: chart of accounts / manual journal / day book ---
 

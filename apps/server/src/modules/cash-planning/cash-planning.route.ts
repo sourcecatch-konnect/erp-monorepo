@@ -3,7 +3,6 @@ import type { Request } from "express";
 
 import {
   openCashDaySchema,
-  upsertCashBalancesSchema,
   createCashPaymentSchema,
   updateCashPaymentSchema,
   cashPaymentStatusUpdateSchema,
@@ -30,13 +29,14 @@ import {
 } from "../../lib/error.js";
 import {
   accountTotals,
-  buildDayView,
+  dayView,
   buildLedgerView,
   buildReceivablesView,
   dayInclude,
   findDay,
   poolTotals,
-  priorClosings,
+  booksOpenings,
+  syncOpenDayFromBooks,
 } from "./cash-planning.service.js";
 import { recordLedgerEntry } from "../ledger/ledger.service.js";
 import { postPaymentVoucher, reverseJournal } from "../ledger/posting.service.js";
@@ -159,12 +159,12 @@ router.get(
   can(PERMS.CASH_PLANNING.VIEW),
   async (req: Request, res) => {
     const date = parseDate(req.params.date as string);
-    const day = await db.cashPlanDay.findUnique({
-      where: { date },
-      include: dayInclude,
-    });
-    if (!day) return sendOk(res, null);
-    return sendOk(res, buildDayView(day));
+    const found = await db.cashPlanDay.findUnique({ where: { date }, select: { id: true } });
+    if (!found) return sendOk(res, null);
+    // Openings come from the accounting books — refresh while the day is open.
+    await syncOpenDayFromBooks(db, found.id);
+    const day = await findDay(found.id);
+    return sendOk(res, (await dayView(db, day!.id))!);
   },
 );
 
@@ -183,14 +183,19 @@ router.post("/days", can(PERMS.CASH_PLANNING.ENTER), async (req, res) => {
     where: { isActive: true, deletedAt: null },
     select: { id: true },
   });
-  const carried = await priorClosings(date);
+  // Each account's balance in the accounting books at the start of the day.
+  const openings = await booksOpenings(
+    db,
+    date,
+    accounts.map((a) => a.id),
+  );
 
   const created = await db.cashPlanDay.create({
     data: {
       date,
       balances: {
         create: accounts.map((a) => {
-          const seed = carried.get(a.id) ?? 0;
+          const seed = openings.get(a.id) ?? 0;
           return {
             accountId: a.id,
             openingBalance: BigInt(seed),
@@ -202,43 +207,22 @@ router.post("/days", can(PERMS.CASH_PLANNING.ENTER), async (req, res) => {
     include: dayInclude,
   });
 
-  return sendOk(res, buildDayView(created), undefined, 201);
+  return sendOk(res, (await dayView(db, created.id))!, undefined, 201);
 });
 
-// Upsert opening balances for a day
+// Typed opening balances are no longer accepted: a day's openings come from
+// the accounting books (balance at the start of the day). Money is added with
+// "Add money"; a starting balance is set once on Finance → Opening Balances.
 router.put(
   "/days/:id/balances",
   can(PERMS.CASH_PLANNING.ENTER),
-  async (req, res) => {
-    const id = getParamId(req);
-    const day = await loadDayOr404(id);
-    assertOpen(day.status);
-
-    const parsed = upsertCashBalancesSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.flatten().fieldErrors);
-    }
-
-    await db.$transaction(
-      parsed.data.balances.map((b) =>
-        db.cashAccountBalance.upsert({
-          where: { dayId_accountId: { dayId: id, accountId: b.accountId } },
-          update: { openingBalance: BigInt(b.openingBalance) },
-          create: {
-            dayId: id,
-            accountId: b.accountId,
-            openingBalance: BigInt(b.openingBalance),
-          },
-        }),
-      ),
+  async () => {
+    throw new BadRequestError(
+      "Opening balances come from the accounting books and can't be typed — use Add money, or set the starting balance in Finance → Opening Balances",
     );
-
-    const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
   },
 );
 
-// Close a day
 router.post(
   "/days/:id/close",
   can(PERMS.CASH_PLANNING.CLOSE),
@@ -258,7 +242,7 @@ router.post(
     });
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -314,7 +298,7 @@ router.post(
     });
 
     const fresh = await findDay(id);
-    return sendOk(res, { payment: { ...payment, amount: Number(payment.amount) }, day: buildDayView(fresh!) }, undefined, 201);
+    return sendOk(res, { payment: { ...payment, amount: Number(payment.amount) }, day: (await dayView(db, fresh!.id))! }, undefined, 201);
   },
 );
 
@@ -360,7 +344,7 @@ router.patch(
     });
 
     const fresh = await findDay(payment.dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -416,7 +400,7 @@ router.delete(
     });
 
     const fresh = await findDay(payment.dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -431,6 +415,8 @@ router.post(
       throw new ValidationError(parsed.error.flatten().fieldErrors);
     }
     const { status, note } = parsed.data;
+    const owner = await db.cashPayment.findUnique({ where: { id }, select: { dayId: true } });
+    if (owner) await syncOpenDayFromBooks(db, owner.dayId);
 
     const dayId = await db.$transaction(async (tx) => {
       const payment = await tx.cashPayment.findUnique({
@@ -548,7 +534,7 @@ router.post(
     });
 
     const fresh = await findDay(dayId);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -561,6 +547,7 @@ router.post(
   can(PERMS.CASH_PLANNING.APPROVE),
   async (req, res) => {
     const id = getParamId(req);
+    await syncOpenDayFromBooks(db, id);
     const day = await loadDayOr404(id);
     assertOpen(day.status);
 
@@ -578,38 +565,19 @@ router.post(
 
     if (toApprove.length > 0) {
       await db.$transaction(async (tx) => {
-        const pool = await poolTotals(tx, id);
-        let running = pool.approvedTotal;
-        const poolCeiling = pool.totalOpening + pool.totalAdjustments;
+        // Ceilings from the same books-based view the day shows: each
+        // account's closing balance (approved payments already taken off),
+        // and the pool's available cash. Payments approved in this loop are
+        // counted on top.
+        const view = (await dayView(tx, id))!;
+        let running = 0;
+        const poolCeiling = view.availableCash;
         const approvedAt = new Date();
         const approvedById = actorId(req);
-
-        // Per-account running totals, seeded from what's already approved
-        // today for each account — a payment can be pool-affordable overall
-        // but still overdraw the one account it's tagged to. The ceiling per
-        // account includes both its opening balance and any adjustments
-        // (manual top-ups or receipt credits) posted to it today.
-        const adjustedByAccount = new Map<string, number>();
-        for (const a of day.adjustments) {
-          adjustedByAccount.set(
-            a.accountId,
-            (adjustedByAccount.get(a.accountId) ?? 0) + Number(a.amountPaise),
-          );
-        }
         const ceilingByAccount = new Map(
-          day.balances.map((b) => [
-            b.accountId,
-            Number(b.openingBalance) + (adjustedByAccount.get(b.accountId) ?? 0),
-          ]),
+          view.balances.map((b) => [b.accountId, b.closingBalance]),
         );
         const approvedByAccount = new Map<string, number>();
-        for (const p of day.payments) {
-          if (p.status !== "APPROVED" || !p.fromAccountId) continue;
-          approvedByAccount.set(
-            p.fromAccountId,
-            (approvedByAccount.get(p.fromAccountId) ?? 0) + Number(p.amount),
-          );
-        }
 
         for (const p of toApprove) {
           const amount = Number(p.amount);
@@ -662,7 +630,7 @@ router.post(
     }
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -702,7 +670,7 @@ router.put(
     `;
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 
@@ -756,7 +724,7 @@ router.post(
     });
 
     const fresh = await findDay(id);
-    return sendOk(res, buildDayView(fresh!));
+    return sendOk(res, (await dayView(db, fresh!.id))!);
   },
 );
 

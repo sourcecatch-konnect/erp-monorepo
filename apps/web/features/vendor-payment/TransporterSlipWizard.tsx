@@ -34,60 +34,50 @@ import { branchApi } from "@/features/masters/branch/branch.service";
 import { transportApi } from "@/features/masters/transport/transport.service";
 import {
   vendorPaymentApi,
-  type EligibleTransporterLR,
+  type EligibleTransporterTruck,
 } from "./vendor-payment.service";
 import {
   Field,
   LoadMoreFooter,
   SkeletonTableRows,
   StepHeading,
+  formatDate,
   money,
   rupeesToPaise,
   today,
 } from "./vendor-payment.ui";
 
-// Eligible LRs are fetched a chunk at a time — never the whole set.
+// Eligible trucks are fetched a chunk at a time — never the whole set.
 const ELIGIBLE_CHUNK_SIZE = 25;
 
-type LineDraft = {
-  freight: string;
-  detention: string;
-  advance: string;
-  commission: string;
-  hamali: string;
-  tds: string;
-  damage: string;
+/** A selected truck: the server's figures plus the one amount typed here. */
+type TruckDraft = {
+  truck: EligibleTransporterTruck;
   stationery: string;
 };
 
-const lineNetPaise = (l: LineDraft) =>
-  BigInt(rupeesToPaise(l.freight || "0")) +
-  BigInt(rupeesToPaise(l.detention || "0")) -
-  BigInt(rupeesToPaise(l.advance || "0")) -
-  BigInt(rupeesToPaise(l.commission || "0")) -
-  BigInt(rupeesToPaise(l.hamali || "0")) -
-  BigInt(rupeesToPaise(l.tds || "0")) -
-  BigInt(rupeesToPaise(l.damage || "0")) -
-  BigInt(rupeesToPaise(l.stationery || "0"));
+const big = (paise: string) => BigInt(paise);
 
-function AmountInput({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
+/** Freight + detention, before deductions. */
+const truckGrossPaise = (t: EligibleTransporterTruck) =>
+  big(t.freightPaise) + big(t.detentionPaise);
+
+const truckNetPaise = ({ truck: t, stationery }: TruckDraft) =>
+  truckGrossPaise(t) -
+  big(t.advancePaise) -
+  big(t.commissionPaise) -
+  big(t.hamaliPaise) -
+  big(t.tdsPaise) -
+  big(t.damagePaise) -
+  BigInt(rupeesToPaise(stationery || "0"));
+
+/** Read-only amount cell — the server derives it from the truck and its LRs. */
+function AmountCell({ paise, minus }: { paise: string; minus?: boolean }) {
+  const zero = big(paise) === 0n;
   return (
-    <Input
-      inputMode="decimal"
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder="0.00"
-      className="h-8 w-20 text-right text-xs"
-    />
+    <span className={zero ? "text-muted-foreground" : undefined}>
+      {zero ? "—" : `${minus ? "− " : ""}${money(paise)}`}
+    </span>
   );
 }
 
@@ -105,8 +95,9 @@ export function TransporterSlipWizard() {
   const [lrSearch, setLrSearch] = React.useState("");
   const debouncedLrSearch = useDebouncedValue(lrSearch.trim(), 400);
 
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
-  const [lines, setLines] = React.useState<Record<string, LineDraft>>({});
+  // Selected trucks, keyed by LR group id.
+  const [drafts, setDrafts] = React.useState<Record<string, TruckDraft>>({});
+  const selectedIds = Object.keys(drafts);
 
   const branches = useQuery({
     queryKey: ["vendor-payment", "branches"],
@@ -127,14 +118,14 @@ export function TransporterSlipWizard() {
   );
 
   // Chunked, server-side: each request returns one chunk plus a cursor for the
-  // next, and the search term is matched in the database against every
-  // eligible LR — not just the chunks already on screen. Selected LRs and
-  // their amounts live in `selected`/`lines`, so changing the search or
-  // loading more never drops a selection.
+  // next, and the search term is matched in the database against every truck
+  // (LR no., group no. or vehicle no.) — not just the chunks already on
+  // screen. Selections live in `drafts`, so changing the search or loading
+  // more never drops one.
   const eligible = useInfiniteQuery({
     queryKey: [
       "vendor-payment",
-      "eligible-transporter-lrs",
+      "eligible-transporter-trucks",
       transportId,
       branchId,
       from,
@@ -142,7 +133,7 @@ export function TransporterSlipWizard() {
       debouncedLrSearch,
     ],
     queryFn: ({ pageParam }) =>
-      vendorPaymentApi.eligibleTransporterLRs({
+      vendorPaymentApi.eligibleTransporterTrucks({
         transportId,
         branchId: branchId || undefined,
         from: from || undefined,
@@ -156,87 +147,63 @@ export function TransporterSlipWizard() {
     placeholderData: keepPreviousData,
     enabled: searched && Boolean(transportId),
   });
-  const lrs = React.useMemo(
+  const trucks = React.useMemo(
     () => eligible.data?.pages.flatMap((page) => page.items) ?? [],
     [eligible.data],
   );
 
-  const toLineDraft = (lr: EligibleTransporterLR): LineDraft => ({
-    freight: (Number(BigInt(lr.freightPaise)) / 100).toFixed(2),
-    detention: (Number(BigInt(lr.detentionPaise)) / 100).toFixed(2),
-    advance: (Number(BigInt(lr.advancePaise)) / 100).toFixed(2),
-    commission: (Number(BigInt(lr.commissionPaise)) / 100).toFixed(2),
-    hamali: (Number(BigInt(lr.hamaliPaise)) / 100).toFixed(2),
-    tds: (Number(BigInt(lr.tdsPaise)) / 100).toFixed(2),
-    damage: (Number(BigInt(lr.damagePaise)) / 100).toFixed(2),
-    stationery: (Number(BigInt(lr.stationeryPaise)) / 100).toFixed(2),
-  });
-
-  const toggleLR = (lr: EligibleTransporterLR, checked: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(lr.lrId);
-      else next.delete(lr.lrId);
-      return next;
-    });
-    setLines((prev) => {
+  const toggleTruck = (truck: EligibleTransporterTruck, checked: boolean) => {
+    setDrafts((prev) => {
       if (checked) {
-        if (prev[lr.lrId]) return prev;
-        return { ...prev, [lr.lrId]: toLineDraft(lr) };
+        if (prev[truck.groupId]) return prev;
+        return { ...prev, [truck.groupId]: { truck, stationery: "" } };
       }
       const next = { ...prev };
-      delete next[lr.lrId];
+      delete next[truck.groupId];
       return next;
     });
   };
 
-  const updateLine = (lrId: string, field: keyof LineDraft, value: string) => {
-    setLines((prev) => ({ ...prev, [lrId]: { ...prev[lrId]!, [field]: value } }));
+  const updateStationery = (groupId: string, value: string) => {
+    setDrafts((prev) => ({ ...prev, [groupId]: { ...prev[groupId]!, stationery: value } }));
   };
 
   const totals = React.useMemo(() => {
     let gross = 0n;
-    let deductions = 0n;
     let net = 0n;
-    for (const lrId of selected) {
-      const l = lines[lrId];
-      if (!l) continue;
-      const g = BigInt(rupeesToPaise(l.freight || "0")) + BigInt(rupeesToPaise(l.detention || "0"));
-      const n = lineNetPaise(l);
-      gross += g;
-      deductions += g - n;
-      net += n;
+    for (const draft of Object.values(drafts)) {
+      gross += truckGrossPaise(draft.truck);
+      net += truckNetPaise(draft);
     }
-    return { gross, deductions, net };
-  }, [selected, lines]);
+    return { gross, deductions: gross - net, net };
+  }, [drafts]);
 
-  const negativeLineLrIds = [...selected].filter((lrId) => {
-    const l = lines[lrId];
-    return l ? lineNetPaise(l) < 0n : false;
-  });
+  const negativeTrucks = Object.values(drafts).filter((draft) => truckNetPaise(draft) < 0n);
 
   const canSave =
-    selected.size > 0 && Boolean(branchId) && Boolean(transportId) && negativeLineLrIds.length === 0;
+    selectedIds.length > 0 &&
+    Boolean(branchId) &&
+    Boolean(transportId) &&
+    negativeTrucks.length === 0;
 
+  // Amounts other than stationery are sent as a prefill only — the server
+  // re-derives every one of them from the truck and its LRs.
   const buildBody = () => ({
     type: "TRANSPORTER" as const,
     branchId,
     transportId,
-    lines: [...selected].map((lrId) => {
-      const l = lines[lrId]!;
-      return {
-        sourceType: "LR" as const,
-        sourceId: lrId,
-        freightPaise: rupeesToPaise(l.freight || "0"),
-        detentionPaise: rupeesToPaise(l.detention || "0"),
-        advancePaise: rupeesToPaise(l.advance || "0"),
-        commissionPaise: rupeesToPaise(l.commission || "0"),
-        hamaliPaise: rupeesToPaise(l.hamali || "0"),
-        tdsPaise: rupeesToPaise(l.tds || "0"),
-        damagePaise: rupeesToPaise(l.damage || "0"),
-        stationeryPaise: rupeesToPaise(l.stationery || "0"),
-      };
-    }),
+    lines: Object.values(drafts).map(({ truck: t, stationery }) => ({
+      sourceType: "LR_GROUP" as const,
+      sourceId: t.groupId,
+      freightPaise: t.freightPaise,
+      detentionPaise: t.detentionPaise,
+      advancePaise: t.advancePaise,
+      commissionPaise: t.commissionPaise,
+      hamaliPaise: t.hamaliPaise,
+      tdsPaise: t.tdsPaise,
+      damagePaise: t.damagePaise,
+      stationeryPaise: rupeesToPaise(stationery || "0"),
+    })),
   });
 
   const saveDraft = useMutation({
@@ -273,7 +240,7 @@ export function TransporterSlipWizard() {
           <StepHeading
             step={1}
             title="Select transporter"
-            description="Choose the branch and market-vehicle transporter, then load their delivered, unclaimed LRs."
+            description="Choose the branch and market-vehicle transporter, then load their trucks. A truck is paid once, with all its LRs."
           />
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -314,7 +281,7 @@ export function TransporterSlipWizard() {
               disabled={!transportId || !branchId}
               onClick={() => setSearched(true)}
             >
-              Search eligible LRs
+              Find trucks
             </Button>
           </div>
         </CardContent>
@@ -326,12 +293,12 @@ export function TransporterSlipWizard() {
             <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
               <StepHeading
                 step={2}
-                title="Select LRs and confirm amounts"
-                description="Delivered LRs for this transporter with no active claim. Amounts are prefilled from the LR group's market-vehicle figures and the acknowledgement — adjust as needed."
+                title="Select trucks"
+                description="Each row is one truck with its LRs. Freight, advance, commission, hamali and TDS are the truck's, counted once; detention and damage come from each LR's signed copy. A truck can be paid once all its LRs are delivered."
               />
-              {selected.size ? (
+              {selectedIds.length ? (
                 <span className="rounded-sm border bg-background px-3 py-1 text-xs font-medium">
-                  {selected.size} selected
+                  {selectedIds.length} truck{selectedIds.length === 1 ? "" : "s"} selected
                 </span>
               ) : null}
             </div>
@@ -341,30 +308,30 @@ export function TransporterSlipWizard() {
               value={lrSearch}
               onChange={(event) => setLrSearch(event.target.value)}
               placeholder="Search by LR no., group no. or vehicle no..."
-              aria-label="Search eligible LRs"
+              aria-label="Search trucks"
               className="sm:max-w-sm"
             />
             {eligible.isLoading ? (
               <Skeleton className="h-40" />
             ) : eligible.isError ? (
               <div className="py-10 text-center">
-                <p className="font-medium">Could not load eligible LRs</p>
+                <p className="font-medium">Could not load trucks</p>
                 <Button variant="outline" className="mt-3" onClick={() => eligible.refetch()}>
                   Try again
                 </Button>
               </div>
-            ) : !lrs.length ? (
+            ) : !trucks.length ? (
               <div className="py-10 text-center">
                 <span className="mx-auto flex size-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
                   <IconTruck size={20} />
                 </span>
                 <p className="mt-3 font-medium">
-                  {debouncedLrSearch ? "No matching LRs" : "No eligible LRs"}
+                  {debouncedLrSearch ? "No matching trucks" : "No trucks to pay"}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {debouncedLrSearch
-                    ? "No eligible LR matches that LR no., group no. or vehicle no."
-                    : "Nothing delivered and unclaimed for this transporter in the selected range."}
+                    ? "No unpaid truck matches that LR no., group no. or vehicle no."
+                    : "No delivered, unpaid truck for this transporter in the selected range."}
                 </p>
               </div>
             ) : (
@@ -377,7 +344,7 @@ export function TransporterSlipWizard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10">Select</TableHead>
-                      <TableHead>LR</TableHead>
+                      <TableHead>Truck / LR</TableHead>
                       <TableHead>Delivered</TableHead>
                       <TableHead className="text-right">Freight</TableHead>
                       <TableHead className="text-right">Detention</TableHead>
@@ -391,94 +358,114 @@ export function TransporterSlipWizard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lrs.map((lr) => {
-                      const checked = selected.has(lr.lrId);
-                      const l = lines[lr.lrId];
-                      const negative = l ? lineNetPaise(l) < 0n : false;
+                    {trucks.map((truck) => {
+                      const draft = drafts[truck.groupId];
+                      const checked = Boolean(draft);
+                      const net = draft ? truckNetPaise(draft) : null;
                       return (
-                        <TableRow key={lr.lrId} className={checked ? "bg-primary/5" : undefined}>
-                          <TableCell>
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={(v) => toggleLR(lr, v === true)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <p className="font-medium">{lr.lrNumber}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {lr.marketVehicleNumber ?? "—"}
-                            </p>
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {lr.deliveredAt
-                              ? new Date(lr.deliveredAt).toLocaleDateString("en-IN")
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.freight ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "freight", v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.detention ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "detention", v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.advance ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "advance", v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.commission ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "commission", v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.hamali ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "hamali", v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.tds ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "tds", v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.damage ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "damage", v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <AmountInput
-                              value={l?.stationery ?? ""}
-                              disabled={!checked}
-                              onChange={(v) => updateLine(lr.lrId, "stationery", v)}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right text-sm font-medium">
-                            {l ? money(lineNetPaise(l)) : "—"}
-                            {negative ? (
-                              <p className="mt-1 text-right text-[10px] font-medium text-destructive">
-                                Negative net
+                        <React.Fragment key={truck.groupId}>
+                          <TableRow
+                            className={
+                              checked
+                                ? "bg-primary/5"
+                                : truck.ready
+                                  ? undefined
+                                  : "text-muted-foreground"
+                            }
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={checked}
+                                disabled={!truck.ready}
+                                aria-label={`Select truck ${truck.groupNumber}`}
+                                onCheckedChange={(v) => toggleTruck(truck, v === true)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-medium">
+                                {truck.vehicleNumber ?? "—"} · {truck.groupNumber}
                               </p>
-                            ) : null}
-                          </TableCell>
-                        </TableRow>
+                              <p className="text-xs text-muted-foreground">
+                                {truck.lrs.length} LR{truck.lrs.length === 1 ? "" : "s"}:{" "}
+                                {truck.lrs.map((lr) => lr.lrNumber).join(", ")}
+                              </p>
+                              {!truck.ready ? (
+                                <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                                  Waiting on {truck.pendingLrNumbers.join(", ")} to be delivered
+                                </p>
+                              ) : null}
+                            </TableCell>
+                            <TableCell />
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={truck.freightPaise} />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={truck.detentionPaise} />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={truck.advancePaise} minus />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={truck.commissionPaise} minus />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={truck.hamaliPaise} minus />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={truck.tdsPaise} minus />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={truck.damagePaise} minus />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                inputMode="decimal"
+                                value={draft?.stationery ?? ""}
+                                disabled={!checked}
+                                onChange={(event) =>
+                                  updateStationery(truck.groupId, event.target.value)
+                                }
+                                placeholder="0.00"
+                                aria-label={`Stationery for ${truck.groupNumber}`}
+                                className="ml-auto h-8 w-20 text-right text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-medium">
+                              {net === null ? "—" : money(net)}
+                              {net !== null && net < 0n ? (
+                                <p className="mt-1 text-right text-[10px] font-medium text-destructive">
+                                  Negative net
+                                </p>
+                              ) : null}
+                            </TableCell>
+                          </TableRow>
+                          {truck.lrs.map((lr) => (
+                            <TableRow
+                              key={lr.lrId}
+                              className={checked ? "bg-primary/5 text-xs" : "text-xs"}
+                            >
+                              <TableCell />
+                              <TableCell className="pl-6">
+                                <p className="font-medium">{lr.lrNumber}</p>
+                                {lr.unloadingPoint ? (
+                                  <p className="text-muted-foreground">{lr.unloadingPoint}</p>
+                                ) : null}
+                              </TableCell>
+                              <TableCell>
+                                {lr.deliveredAt ? formatDate(lr.deliveredAt) : "Not delivered"}
+                              </TableCell>
+                              <TableCell />
+                              <TableCell className="text-right">
+                                <AmountCell paise={lr.detentionPaise} />
+                              </TableCell>
+                              <TableCell colSpan={4} />
+                              <TableCell className="text-right">
+                                <AmountCell paise={lr.damagePaise} minus />
+                              </TableCell>
+                              <TableCell colSpan={2} />
+                            </TableRow>
+                          ))}
+                        </React.Fragment>
                       );
                     })}
                     {eligible.isFetchingNextPage ? <SkeletonTableRows columns={12} /> : null}
@@ -486,7 +473,7 @@ export function TransporterSlipWizard() {
                 </Table>
                 </div>
                 <LoadMoreFooter
-                  shown={lrs.length}
+                  shown={trucks.length}
                   hasNextPage={Boolean(eligible.hasNextPage)}
                   isFetchingNextPage={eligible.isFetchingNextPage}
                   onLoadMore={() => eligible.fetchNextPage()}
@@ -497,7 +484,7 @@ export function TransporterSlipWizard() {
         </Card>
       ) : null}
 
-      {selected.size > 0 ? (
+      {selectedIds.length > 0 ? (
         <Card>
           <CardHeader className="border-b bg-muted/20">
             <StepHeading
@@ -507,11 +494,11 @@ export function TransporterSlipWizard() {
             />
           </CardHeader>
           <CardContent className="space-y-5">
-            {negativeLineLrIds.length > 0 ? (
+            {negativeTrucks.length > 0 ? (
               <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
                 <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
                 <p>
-                  {negativeLineLrIds.length} selected LR{negativeLineLrIds.length === 1 ? " has" : "s have"}{" "}
+                  {negativeTrucks.length} selected truck{negativeTrucks.length === 1 ? " has" : "s have"}{" "}
                   deductions exceeding its freight + detention — fix before saving.
                 </p>
               </div>

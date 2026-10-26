@@ -281,7 +281,7 @@ LR Acknowledgement + Delivery handled inside the LR module (see §4.2).
 
 ### 5.3 Accounts (Tally Bridge + Lite Ledger)
 
-**Authority:** ERP maintains a **lite double-entry ledger** for internal P&L, customer + vendor balances, vehicle P&L, pump credit balance. **Tally remains statutory source** for GST/IT/ROC filings. ERP exports voucher XML to Tally.
+**Authority:** ERP maintains a **lite double-entry ledger** for internal P&L, customer + vendor balances, vehicle P&L, HPCL fuel-wallet balance (SK does not buy diesel on pump credit — see `G5_DIESEL_HPCL_WALLET_PLAN.md`). **Tally remains statutory source** for GST/IT/ROC filings. ERP exports voucher XML to Tally.
 
 **Entities:**
 
@@ -519,6 +519,7 @@ These don't block the plan but need a 1-pager when their phase begins:
 - Tally bridge protocol (HTTP API on the Tally host vs. shared XML drop folder) — choose at Phase B start based on what SK's Tally setup supports.
 - WhatsApp template list + approval timeline (Meta Cloud API requires pre-approved templates for non-session messages).
 - Broker vs Transport master overlap — confirm during Phase C whether to merge or keep separate.
+- **Diesel via HPCL Fleet Wallet (G5, revised) — planned, build later.** Wallet account, top-up, OTP fill posting, HPCL statement reconciliation. Full plan, screens and pending inputs: `G5_DIESEL_HPCL_WALLET_PLAN.md`.
 
 ---
 

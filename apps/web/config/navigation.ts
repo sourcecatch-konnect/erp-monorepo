@@ -1,5 +1,6 @@
 import {
   IconActivity,
+  IconChecklist,
   IconClipboardList,
   IconDatabase,
   IconFileBarcode,
@@ -12,13 +13,12 @@ import {
   IconUser,
   IconWallet,
   IconCashBanknote,
-  IconBook2,
   IconBooks,
-  IconCalendarWeek,
-  IconEdit,
   IconBoxSeam,
   IconChartBar,
   IconSchool,
+  IconUserDollar,
+  IconFileInvoice,
   type Icon,
 } from "@tabler/icons-react";
 import { PERMS, type PermissionKey } from "@skerp/types";
@@ -56,6 +56,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
     items: [
+      {
+        title: "My Work",
+        href: "/my-work",
+        icon: IconChecklist,
+        badgeKey: "myWork",
+      },
       {
         title: "Dashboard",
         href: "/dashboard",
@@ -192,6 +198,8 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    // One "Masters" folder; items ordered so related ones sit together:
+    // places → fleet → parties → rates & rail → goods & spares → company.
     label: "Master Data",
     items: [
       {
@@ -199,25 +207,35 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/masters",
         icon: IconDatabase,
         items: [
+          // Places
+          { title: "States", href: "/masters/state", permission: PERMS.MASTERS.STATE.VIEW },
+          { title: "Cities", href: "/masters/city", permission: PERMS.MASTERS.CITY.VIEW },
+          { title: "Areas", href: "/masters/area", permission: PERMS.MASTERS.AREA.VIEW },
+          { title: "Routes", href: "/masters/route", permission: PERMS.MASTERS.ROUTE.VIEW },
+          { title: "Branches", href: "/masters/branch", permission: PERMS.MASTERS.BRANCH.VIEW },
           {
-            title: "States",
-            href: "/masters/state",
-            permission: PERMS.MASTERS.STATE.VIEW,
+            title: "Warehouses",
+            href: "/masters/warehouse",
+            permission: PERMS.MASTERS.WAREHOUSE.VIEW,
           },
+          // Fleet
+          { title: "Vehicles", href: "/masters/vehicle", permission: PERMS.MASTERS.VEHICLE.VIEW },
           {
-            title: "Cities",
-            href: "/masters/city",
-            permission: PERMS.MASTERS.CITY.VIEW,
+            title: "Vehicle Types",
+            href: "/masters/vehicle-type",
+            permission: PERMS.MASTERS.VEHICLE_TYPE.VIEW,
           },
+          { title: "Drivers", href: "/masters/driver", permission: PERMS.MASTERS.DRIVER.VIEW },
           {
-            title: "Areas",
-            href: "/masters/area",
-            permission: PERMS.MASTERS.AREA.VIEW,
+            title: "OneLap Trackers",
+            href: "/masters/one-lap-trackers",
+            permission: PERMS.MASTERS.ONE_LAP_TRACKER.VIEW,
           },
+          // Parties
           {
-            title: "Drivers",
-            href: "/masters/driver",
-            permission: PERMS.MASTERS.DRIVER.VIEW,
+            title: "Customers",
+            href: "/masters/customer",
+            permission: PERMS.MASTERS.CUSTOMER.VIEW,
           },
           {
             title: "Transports",
@@ -225,90 +243,18 @@ export const NAV_SECTIONS: NavSection[] = [
             permission: PERMS.MASTERS.TRANSPORT.VIEW,
           },
           {
-            title: "Vehicles",
-            href: "/masters/vehicle",
-            permission: PERMS.MASTERS.VEHICLE.VIEW,
+            title: "Creditors",
+            href: "/masters/creditor",
+            permission: PERMS.MASTERS.CREDITOR.VIEW,
           },
+          { title: "Labours", href: "/masters/labour", permission: PERMS.MASTERS.LABOUR.VIEW },
+          { title: "Pumps", href: "/masters/pumps", permission: PERMS.MASTERS.PUMP.VIEW },
           {
-            title: "OneLap Trackers",
-            href: "/masters/one-lap-trackers",
-            permission: PERMS.MASTERS.ONE_LAP_TRACKER.VIEW,
-          },
-          {
-            title: "Vehicle Types",
-            href: "/masters/vehicle-type",
-            permission: PERMS.MASTERS.VEHICLE_TYPE.VIEW,
-          },
-          {
-            title: "Spare Parts",
-            href: "/masters/spare-parts",
-            permission: PERMS.MASTERS.SPARE_PART.VIEW,
-          },
-          {
-            title: "Spare Categories",
-            href: "/masters/spare-category",
-            permission: PERMS.MASTERS.SPARE_CATEGORY.VIEW,
-          },
-          {
-            title: "Spare Part Supplier",
+            title: "Spare Part Suppliers",
             href: "/masters/spare-part-supplier",
             permission: PERMS.MASTERS.SPARE_PART_SUPPLIER.VIEW,
           },
-          {
-            title: "Customer",
-            href: "/masters/customer",
-            permission: PERMS.MASTERS.CUSTOMER.VIEW,
-          },
-          {
-            title: "Company",
-            href: "/masters/company",
-            permission: PERMS.MASTERS.COMPANY.VIEW,
-          },
-          {
-            title: "Branches",
-            href: "/masters/branch",
-            permission: PERMS.MASTERS.BRANCH.VIEW,
-          },
-          {
-            title: "Routes",
-            href: "/masters/route",
-            permission: PERMS.MASTERS.ROUTE.VIEW,
-          },
-          {
-            title: "Warehouses",
-            href: "/masters/warehouse",
-            permission: PERMS.MASTERS.WAREHOUSE.VIEW,
-          },
-          {
-            title: "Labours",
-            href: "/masters/labour",
-            permission: PERMS.MASTERS.LABOUR.VIEW,
-          },
-          {
-            title: "Goods",
-            href: "/masters/goods",
-            permission: PERMS.MASTERS.GOODS.VIEW,
-          },
-          {
-            title: "Units of Measure",
-            href: "/masters/unit-of-measure",
-            permission: PERMS.MASTERS.UNIT_OF_MEASURE.VIEW,
-          },
-          {
-            title: "Pumps",
-            href: "/masters/pumps",
-            permission: PERMS.MASTERS.PUMP.VIEW,
-          },
-          {
-            title: "Wagons",
-            href: "/masters/wagons",
-            permission: PERMS.MASTERS.WAGON.VIEW,
-          },
-          {
-            title: "Railway Freight",
-            href: "/masters/railway-freight",
-            permission: PERMS.MASTERS.RAILWAY_FREIGHT.VIEW,
-          },
+          // Rates & rail
           {
             title: "Agreements",
             href: "/masters/agreement",
@@ -320,10 +266,30 @@ export const NAV_SECTIONS: NavSection[] = [
             permission: PERMS.MASTERS.RATE_MATRIX.VIEW,
           },
           {
-            title: "Creditors",
-            href: "/masters/creditor",
-            permission: PERMS.MASTERS.CREDITOR.VIEW,
+            title: "Railway Freight",
+            href: "/masters/railway-freight",
+            permission: PERMS.MASTERS.RAILWAY_FREIGHT.VIEW,
           },
+          { title: "Wagons", href: "/masters/wagons", permission: PERMS.MASTERS.WAGON.VIEW },
+          // Goods & spares
+          { title: "Goods", href: "/masters/goods", permission: PERMS.MASTERS.GOODS.VIEW },
+          {
+            title: "Units of Measure",
+            href: "/masters/unit-of-measure",
+            permission: PERMS.MASTERS.UNIT_OF_MEASURE.VIEW,
+          },
+          {
+            title: "Spare Parts",
+            href: "/masters/spare-parts",
+            permission: PERMS.MASTERS.SPARE_PART.VIEW,
+          },
+          {
+            title: "Spare Categories",
+            href: "/masters/spare-category",
+            permission: PERMS.MASTERS.SPARE_CATEGORY.VIEW,
+          },
+          // Company & accounts
+          { title: "Company", href: "/masters/company", permission: PERMS.MASTERS.COMPANY.VIEW },
           {
             title: "Cash Accounts",
             href: "/masters/cash-account",
@@ -334,91 +300,136 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    // Grouped by job — the 18 links used to sit in one flat list. Same pages
+    // and addresses; only the menu grouping (and two shorter names) changed.
     label: "Finance",
     items: [
       {
-        title: "Cash Planning",
-        href: "/cash-planning",
+        title: "Billing & Receipts",
+        icon: IconFileInvoice,
+        items: [
+          {
+            title: "LR to Bill",
+            href: "/accounts/lr-to-bill",
+            permission: PERMS.BILLING.VIEW,
+          },
+          {
+            title: "Billing Register",
+            href: "/accounts/bills",
+            permission: PERMS.BILLING.VIEW,
+          },
+          {
+            title: "Client Receipts",
+            href: "/accounts/receipts",
+            permission: PERMS.RECEIPT.VIEW,
+          },
+        ],
+      },
+      {
+        title: "Vendor Payments",
+        icon: IconWallet,
+        items: [
+          {
+            title: "Payment Slips",
+            href: "/accounts/vendor-payments",
+            permission: PERMS.ACCOUNTS.PAYMENT.VIEW,
+          },
+          {
+            title: "Approvals",
+            href: "/accounts/vendor-payments/approvals",
+            permission: PERMS.ACCOUNTS.PAYMENT.APPROVE,
+          },
+          {
+            title: "Disbursements",
+            href: "/accounts/vendor-payments/disbursements",
+            permission: PERMS.ACCOUNTS.PAYMENT.DISBURSE,
+          },
+        ],
+      },
+      {
+        title: "Driver Payments",
+        icon: IconUserDollar,
+        items: [
+          {
+            title: "Salary Runs",
+            href: "/accounts/driver-salary-runs",
+            permission: PERMS.DRIVER_FINANCE.SALARY_VIEW,
+          },
+          {
+            title: "Salary Advances",
+            href: "/accounts/driver-salary-advances",
+            permission: PERMS.DRIVER_FINANCE.SALARY_VIEW,
+          },
+          {
+            title: "Driver Payments",
+            href: "/accounts/driver-payments",
+            permission: PERMS.DRIVER_FINANCE.SALARY_VIEW,
+          },
+        ],
+      },
+      {
+        title: "Cash & Bank",
         icon: IconCashBanknote,
-        permission: PERMS.CASH_PLANNING.VIEW,
+        items: [
+          {
+            title: "Cash Planning",
+            href: "/cash-planning",
+            permission: PERMS.CASH_PLANNING.VIEW,
+          },
+          {
+            title: "Opening Balances",
+            href: "/accounts/opening-balances",
+            permission: PERMS.LEDGER.VIEW,
+          },
+        ],
       },
       {
-        title: "Ledgers",
-        href: "/ledger",
-        icon: IconBook2,
-        permission: PERMS.LEDGER.VIEW,
-      },
-      {
-        title: "LR to Bill",
-        href: "/accounts/lr-to-bill",
-        icon: IconWallet,
-        permission: PERMS.BILLING.VIEW,
-      },
-      {
-        title: "Billing Register",
-        href: "/accounts/bills",
-        icon: IconWallet,
-        permission: PERMS.BILLING.VIEW,
-      },
-      {
-        title: "Client Payment Receivable",
-        href: "/accounts/receipts",
-        icon: IconReceipt2,
-        permission: PERMS.RECEIPT.VIEW,
-      },
-      {
-        title: "Payment Slips",
-        href: "/accounts/vendor-payments",
-        icon: IconWallet,
-        permission: PERMS.ACCOUNTS.PAYMENT.VIEW,
-      },
-      {
-        title: "Payment Approvals",
-        href: "/accounts/vendor-payments/approvals",
-        icon: IconClipboardList,
-        permission: PERMS.ACCOUNTS.PAYMENT.APPROVE,
-      },
-      {
-        title: "Payment Disbursements",
-        href: "/accounts/vendor-payments/disbursements",
-        icon: IconCashBanknote,
-        permission: PERMS.ACCOUNTS.PAYMENT.DISBURSE,
-      },
-      {
-        title: "Chart of Accounts",
-        href: "/accounts/chart-of-accounts",
+        title: "Books of Account",
         icon: IconBooks,
-        permission: PERMS.LEDGER.VIEW,
+        items: [
+          { title: "Ledgers", href: "/ledger", permission: PERMS.LEDGER.VIEW },
+          {
+            title: "Day Book",
+            href: "/accounts/day-book",
+            permission: PERMS.LEDGER.VOUCHER_VIEW,
+          },
+          {
+            title: "Manual Journal",
+            href: "/accounts/journal",
+            permission: PERMS.LEDGER.JOURNAL_CREATE,
+          },
+          {
+            title: "Chart of Accounts",
+            href: "/accounts/chart-of-accounts",
+            permission: PERMS.LEDGER.VIEW,
+          },
+        ],
       },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
       {
-        title: "Day Book",
-        href: "/accounts/day-book",
-        icon: IconCalendarWeek,
-        permission: PERMS.LEDGER.VOUCHER_VIEW,
-      },
-      {
-        title: "Manual Journal",
-        href: "/accounts/journal",
-        icon: IconEdit,
-        permission: PERMS.LEDGER.JOURNAL_CREATE,
-      },
-      {
-        title: "Vehicle P&L",
-        href: "/vehicle-journeys/vehicle-pnl",
+        title: "Vehicle Reports",
         icon: IconChartBar,
-        permission: PERMS.LOGSLIP.VIEW,
-      },
-      {
-        title: "Vehicle Performance",
-        href: "/vehicle-journeys/vehicle-pnl/monthly",
-        icon: IconChartBar,
-        permission: PERMS.LOGSLIP.VIEW,
-      },
-      {
-        title: "Vehicle Costs",
-        href: "/vehicle-journeys/vehicle-costs",
-        icon: IconReceipt2,
-        permission: PERMS.LOGSLIP.VIEW,
+        items: [
+          {
+            title: "Vehicle P&L",
+            href: "/vehicle-journeys/vehicle-pnl",
+            permission: PERMS.LOGSLIP.VIEW,
+          },
+          {
+            title: "Vehicle Performance",
+            href: "/vehicle-journeys/vehicle-pnl/monthly",
+            permission: PERMS.LOGSLIP.VIEW,
+          },
+          {
+            title: "Vehicle Costs",
+            href: "/vehicle-journeys/vehicle-costs",
+            permission: PERMS.LOGSLIP.VIEW,
+          },
+        ],
       },
     ],
   },
@@ -522,12 +533,12 @@ export const NAV_SECTIONS: NavSection[] = [
           // remove-before-prod: in-app feedback (testing phase only).
           ...(process.env.NEXT_PUBLIC_FEEDBACK_ENABLED === "true"
             ? [
-                {
-                  title: "Feedback",
-                  href: "/settings/feedback",
-                  permission: PERMS.FEEDBACK.VIEW,
-                },
-              ]
+              {
+                title: "Feedback",
+                href: "/settings/feedback",
+                permission: PERMS.FEEDBACK.VIEW,
+              },
+            ]
             : []),
         ],
       },

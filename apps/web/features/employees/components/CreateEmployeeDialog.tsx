@@ -211,10 +211,7 @@ export function CreateEmployeeDialog({
                 name="companyId"
                 rules={{ required: "Company is required" }}
                 render={({ field }) => (
-                  <Select
-                    value={field.value}
-                    onValueChange={field.onChange}
-                  >
+                  <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select company" />
                     </SelectTrigger>
@@ -247,9 +244,7 @@ export function CreateEmployeeDialog({
                     <SelectTrigger>
                       <SelectValue
                         placeholder={
-                          companyId
-                            ? "Select branch"
-                            : "Select a company first"
+                          companyId ? "Select branch" : "Select a company first"
                         }
                       />
                     </SelectTrigger>

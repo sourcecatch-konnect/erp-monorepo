@@ -40,6 +40,10 @@ import {
   replaceOneLapTracker,
 } from "../one-lap-tracker/one-lap-tracker.assignment.service.js";
 import {
+  assertNotOnVendorSlip,
+  sameValue,
+} from "../vendor-payment/source-lock.js";
+import {
   allocationInclude,
   assertGRNCompatibleWithRow,
   branchSelect,
@@ -2190,6 +2194,8 @@ router.patch(
           id: true,
           status: true,
           version: true,
+          labourId: true,
+          labourCharge: true,
 
           mrRrRow: {
             select: {
@@ -2216,6 +2222,23 @@ router.patch(
 
       if (current.mrRrRow.mrRr.vpSchedule.status === "FINALISED") {
         throw new BadRequestError("A finalised VP Schedule cannot be changed");
+      }
+
+      // The labour and labour charge are what a hamali slip pays.
+      const nextLabourCharge =
+        parsed.data.labourCharge === undefined
+          ? null
+          : BigInt(Math.round(parsed.data.labourCharge * 100));
+      if (
+        !sameValue(parsed.data.labourId, current.labourId) ||
+        !sameValue(nextLabourCharge, current.labourCharge)
+      ) {
+        await assertNotOnVendorSlip(
+          tx,
+          "VP_LOADING",
+          [current.id],
+          "change this wagon's labour or labour charge",
+        );
       }
 
       await assertLoadingSupervisor(
@@ -2351,6 +2374,11 @@ router.post(
       if (!markLoaded && current.status !== "COMPLETED") {
         throw new BadRequestError("Only a loaded wagon can be reopened");
       }
+      if (!markLoaded) {
+        // A reopened wagon drops out of the hamali-eligible pool while its
+        // slip line still holds the labour charge.
+        await assertNotOnVendorSlip(tx, "VP_LOADING", [current.id], "reopen this wagon");
+      }
 
       assertVersion(
         parsed.data.version,
@@ -2481,6 +2509,7 @@ router.post(
       if (current.status === "CANCELLED") {
         throw new BadRequestError("Wagon is already cancelled");
       }
+      await assertNotOnVendorSlip(tx, "VP_LOADING", [current.id], "cancel this wagon");
 
       const hasActiveAllocations = current.allocations.some(
         (allocation) => allocation.status !== "CANCELLED",

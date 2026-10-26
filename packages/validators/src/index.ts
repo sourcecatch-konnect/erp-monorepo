@@ -145,3 +145,4 @@ export * from "./accounts/vendor-payment.schema.js";
 export * from "./training/training.schema.js";
 // remove-before-prod: in-app feedback (testing phase only).
 export * from "./feedback/feedback.schema.js";
+export * from "./driver-finance/driver-finance.schema.js";

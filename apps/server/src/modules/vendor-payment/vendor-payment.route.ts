@@ -47,11 +47,17 @@ import {
   reconcileTransporterLines,
 } from "./calculators/transporter.js";
 import {
+  findEligibleTransporterTrucks,
+  reconcileTransporterTrucks,
+} from "./calculators/transporter-truck.js";
+import { describeSlipSources, withLineSources } from "./slip-sources.js";
+import {
   findEligibleHamaliSources,
   reconcileHamaliLines,
   type HamaliSourceType,
 } from "./calculators/hamali.js";
 import { SLIP_LIST_ORDER_BY, buildSlipListWhere } from "./slip-list.query.js";
+import { assertFundingMatchesMode } from "../driver-finance/driver-finance.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -82,11 +88,14 @@ const slipDetailInclude = {
   disbursements: { orderBy: { createdAt: "asc" as const } },
 } satisfies Prisma.VendorPaymentSlipInclude;
 
-const loadSlipDetail = (id: string) =>
-  db.vendorPaymentSlip.findUniqueOrThrow({
-    where: { id },
-    include: slipDetailInclude,
-  });
+const loadSlipDetail = async (id: string) =>
+  withLineSources(
+    db,
+    await db.vendorPaymentSlip.findUniqueOrThrow({
+      where: { id },
+      include: slipDetailInclude,
+    }),
+  );
 
 /* ------------------------------------------------------------------ */
 /* Server-authoritative totals. Two stages:                            */
@@ -132,20 +141,29 @@ async function buildServerLines(
     if (!payee.transportId)
       throw new BadRequestError("A transporter slip needs transportId");
 
-    const sourceIds = lines
-      .filter((l) => l.sourceType === "LR")
+    const truckIds = lines
+      .filter((l) => l.sourceType === "LR_GROUP")
       .map((l) => l.sourceId);
-    const reconciled = await reconcileTransporterLines(
-      client,
-      payee.transportId,
-      sourceIds,
-      excludeSlipId,
-    );
+    const lrIds = lines.filter((l) => l.sourceType === "LR").map((l) => l.sourceId);
+    if (lines.some((l) => l.sourceType !== "LR_GROUP" && l.sourceType !== "LR"))
+      throw new BadRequestError("A transporter slip takes truck lines only");
+
+    const [trucks, legacyLrs] = await Promise.all([
+      reconcileTransporterTrucks(client, payee.transportId, truckIds, excludeSlipId),
+      reconcileTransporterLines(client, payee.transportId, lrIds, excludeSlipId),
+    ]);
+    // The same truck can't be on this slip both whole and LR-wise.
+    const doubled = [...legacyLrs.values()].filter((lr) => trucks.has(lr.groupId));
+    if (doubled.length)
+      throw new BadRequestError(
+        `These LRs' trucks are already on this slip: ${doubled.map((lr) => lr.lrNumber).join(", ")}`,
+      );
 
     return lines.map((line) => {
-      const server = reconciled.get(line.sourceId);
+      const server =
+        line.sourceType === "LR_GROUP" ? trucks.get(line.sourceId) : legacyLrs.get(line.sourceId);
       if (!server)
-        throw new BadRequestError(`Source ${line.sourceId} is not a valid LR line`);
+        throw new BadRequestError(`Source ${line.sourceId} is not a valid transporter line`);
       return {
         sourceType: line.sourceType,
         sourceId: line.sourceId,
@@ -306,6 +324,31 @@ router.get(
   },
 );
 
+// Transporter slips are made per truck: one row per LR group with all its LRs
+// (see calculators/transporter-truck.ts). Same query as the per-LR list.
+router.get(
+  "/calculators/transporter-trucks",
+  can(PERMS.ACCOUNTS.PAYMENT.CREATE),
+  async (req, res) => {
+    const input = validate(eligibleTransporterLRQuerySchema.safeParse(req.query));
+    if (input.branchId) assertBranchAccess(req, input.branchId);
+    const branchWhere: Prisma.LRGroupWhereInput = input.branchId
+      ? { originBranchId: input.branchId }
+      : branchFilter(req, "originBranchId");
+
+    const page = await findEligibleTransporterTrucks(db, {
+      transportId: input.transportId,
+      branchWhere,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      cursor: input.cursor,
+      size: input.size,
+    });
+    return sendOk(res, page);
+  },
+);
+
 router.get(
   "/calculators/hamali",
   can(PERMS.ACCOUNTS.PAYMENT.CREATE),
@@ -343,6 +386,10 @@ router.get(
 router.post("/slips", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) => {
   const input = validate(createVendorPaymentSlipSchema.safeParse(req.body));
   assertBranchAccess(req, input.branchId);
+  if (input.type === "TRANSPORTER" && input.lines.some((l) => l.sourceType !== "LR_GROUP"))
+    throw new BadRequestError(
+      "Transporter slips are made per truck — select trucks, not single LRs",
+    );
 
   const branch = await db.branch.findUnique({
     where: { id: input.branchId },
@@ -514,6 +561,7 @@ async function approveAndAccrue(
   }
 
   const journal = await postVendorSlipAccrual(tx, {
+    narrationDetail: await describeSlipSources(tx, approved.id),
     slipId: approved.id,
     slipNumber: approved.slipNumber,
     type: approved.type,
@@ -692,7 +740,7 @@ router.post(
 
     const forAccess = await db.vendorPaymentSlip.findUnique({
       where: { id },
-      select: { branchId: true, fyCode: true },
+      select: { branchId: true },
     });
     if (!forAccess) throw new NotFoundError("Vendor payment slip not found");
     assertBranchAccess(req, forAccess.branchId);
@@ -711,19 +759,26 @@ router.post(
       return sendOk(res, await loadSlipDetail(priorAttempt.slipId));
     }
 
-    // branchId/fyCode are set once at slip creation and never updated by any
-    // route, so it's safe to resolve the branch and reserve a voucher number
-    // now, against `db`, rather than inside the lock below — one less round
-    // trip held while the advisory lock is open, same as the create route.
+    // Cash must come from a cash account; bank/UPI/cheque from a bank one.
+    await assertFundingMatchesMode(db, input.fundingLedgerId, input.mode);
+
+    // The payment voucher belongs to the financial year it is paid in, not
+    // the slip's — a March slip paid in April is an April voucher.
+    const paymentFyCode = fyCodeFor(input.paidAt);
+
+    // branchId is set once at slip creation and never updated by any route,
+    // so it's safe to resolve the branch and reserve a voucher number now,
+    // against `db`, rather than inside the lock below — one less round trip
+    // held while the advisory lock is open, same as the create route.
     const branch = await db.branch.findUnique({
       where: { id: forAccess.branchId },
       select: { branchCode: true },
     });
     if (!branch) throw new NotFoundError("Branch not found");
-    const seq = await nextSequence(db, branch.branchCode, forAccess.fyCode, "VPAY-PMT");
+    const seq = await nextSequence(db, branch.branchCode, paymentFyCode, "VPAY-PMT");
     const voucherNumber = formatDocNumber(
       branch.branchCode,
-      forAccess.fyCode,
+      paymentFyCode,
       seq,
       "SKT/VPAY/PMT",
     );
@@ -777,13 +832,14 @@ router.post(
         }
 
         const journal = await postVendorDisbursement(tx, {
+          narrationDetail: await describeSlipSources(tx, slip.id),
           disbursementId: disbursement.id,
           voucherNumber,
           slipId: slip.id,
           slipNumber: slip.slipNumber,
           paidAt: input.paidAt,
           branchId: slip.branchId,
-          fyCode: slip.fyCode,
+          fyCode: paymentFyCode,
           transportId: slip.transportId,
           labourId: slip.labourId,
           fundingLedgerId: input.fundingLedgerId,
@@ -971,7 +1027,7 @@ router.get("/slips/:id", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {
   });
   if (!slip) throw new NotFoundError("Vendor payment slip not found");
   assertBranchAccess(req, slip.branchId);
-  return sendOk(res, slip);
+  return sendOk(res, await withLineSources(db, slip));
 });
 
 export default router;

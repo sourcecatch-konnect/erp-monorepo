@@ -21,12 +21,48 @@ import { useCan } from "@/features/auth";
 import { PERMS } from "@skerp/types";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
-import { vendorPaymentApi } from "./vendor-payment.service";
+import { vendorPaymentApi, type VendorPaymentSlipLine } from "./vendor-payment.service";
 import { RejectSlipDialog } from "./RejectSlipDialog";
 import { CancelSlipDialog } from "./CancelSlipDialog";
 import { PageHeader, VendorPaymentStatusBadge, formatDate, money } from "./vendor-payment.ui";
 
 const CANCELLABLE_STATUSES = new Set(["DRAFT", "PENDING_APPROVAL", "APPROVED"]);
+
+const SOURCE_TYPE_LABELS: Record<VendorPaymentSlipLine["sourceType"], string> = {
+  LR_GROUP: "Truck",
+  LR: "LR",
+  GRN_HAMALI: "GRN at Rail Head",
+  RAIL_BRANCH_GRN: "GRN at Branch",
+  VP_LOADING: "VP loading",
+};
+
+/** "MH19AB1234 · G-0045 · LR-1, LR-2" for a truck; the document no. otherwise. */
+function SourceLabel({ line }: { line: VendorPaymentSlipLine }) {
+  const source = line.source;
+  if (!source) return <span>{SOURCE_TYPE_LABELS[line.sourceType]}</span>;
+  if (line.sourceType === "LR_GROUP") {
+    return (
+      <>
+        <p className="font-medium text-sm">
+          {source.vehicleNumber ?? "—"} · {source.label}
+        </p>
+        <p className="text-muted-foreground">
+          {source.lrs.length} LR{source.lrs.length === 1 ? "" : "s"}:{" "}
+          {source.lrs.map((lr) => lr.lrNumber).join(", ")}
+        </p>
+      </>
+    );
+  }
+  return (
+    <>
+      <p className="font-medium text-sm">{source.label}</p>
+      <p className="text-muted-foreground">
+        {SOURCE_TYPE_LABELS[line.sourceType]}
+        {source.vehicleNumber ? ` · ${source.vehicleNumber}` : ""}
+      </p>
+    </>
+  );
+}
 
 export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
   const router = useRouter();
@@ -166,6 +202,9 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                 Cancel slip
               </Button>
             ) : null}
+            <Button variant="outline" onClick={() => window.print()}>
+              Print slip
+            </Button>
             <Button variant="outline" onClick={() => router.push("/accounts/vendor-payments")}>
               Back to register
             </Button>
@@ -192,7 +231,12 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
       ) : null}
 
       {slip.accrualJournalEntryId ? (
-        <Button variant="outline" size="sm" onClick={() => openVoucher(slip.accrualJournalEntryId!)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="print:hidden"
+          onClick={() => openVoucher(slip.accrualJournalEntryId!)}
+        >
           View accrual voucher
         </Button>
       ) : null}
@@ -245,7 +289,7 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
 
       <Card className="overflow-hidden">
         <CardHeader className="border-b bg-muted/20">
-          <CardTitle>Source lines</CardTitle>
+          <CardTitle>{slip.type === "TRANSPORTER" ? "Trucks" : "Source lines"}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -265,20 +309,38 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
             </TableHeader>
             <TableBody>
               {(slip.lines ?? []).map((line) => (
-                <TableRow key={line.id}>
-                  <TableCell className="text-xs">
-                    {line.sourceType} · {line.sourceId}
-                  </TableCell>
-                  <TableCell className="text-right">{money(line.freightPaise)}</TableCell>
-                  <TableCell className="text-right">{money(line.detentionPaise)}</TableCell>
-                  <TableCell className="text-right">{money(line.advancePaise)}</TableCell>
-                  <TableCell className="text-right">{money(line.commissionPaise)}</TableCell>
-                  <TableCell className="text-right">{money(line.hamaliPaise)}</TableCell>
-                  <TableCell className="text-right">{money(line.tdsPaise)}</TableCell>
-                  <TableCell className="text-right">{money(line.damagePaise)}</TableCell>
-                  <TableCell className="text-right">{money(line.stationeryPaise)}</TableCell>
-                  <TableCell className="text-right font-medium">{money(line.netPaise)}</TableCell>
-                </TableRow>
+                <React.Fragment key={line.id}>
+                  <TableRow>
+                    <TableCell className="text-xs">
+                      <SourceLabel line={line} />
+                    </TableCell>
+                    <TableCell className="text-right">{money(line.freightPaise)}</TableCell>
+                    <TableCell className="text-right">{money(line.detentionPaise)}</TableCell>
+                    <TableCell className="text-right">{money(line.advancePaise)}</TableCell>
+                    <TableCell className="text-right">{money(line.commissionPaise)}</TableCell>
+                    <TableCell className="text-right">{money(line.hamaliPaise)}</TableCell>
+                    <TableCell className="text-right">{money(line.tdsPaise)}</TableCell>
+                    <TableCell className="text-right">{money(line.damagePaise)}</TableCell>
+                    <TableCell className="text-right">{money(line.stationeryPaise)}</TableCell>
+                    <TableCell className="text-right font-medium">{money(line.netPaise)}</TableCell>
+                  </TableRow>
+                  {line.sourceType === "LR_GROUP"
+                    ? (line.source?.lrs ?? []).map((lr) => (
+                        <TableRow key={lr.lrNumber} className="text-xs text-muted-foreground">
+                          <TableCell className="pl-6">
+                            <span className="font-medium text-foreground">{lr.lrNumber}</span>
+                            {lr.unloadingPoint ? ` · ${lr.unloadingPoint}` : ""}
+                            {lr.deliveredAt ? ` · delivered ${formatDate(lr.deliveredAt)}` : ""}
+                          </TableCell>
+                          <TableCell />
+                          <TableCell className="text-right">{money(lr.detentionPaise)}</TableCell>
+                          <TableCell colSpan={4} />
+                          <TableCell className="text-right">{money(lr.damagePaise)}</TableCell>
+                          <TableCell colSpan={2} />
+                        </TableRow>
+                      ))
+                    : null}
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>

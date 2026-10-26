@@ -108,11 +108,65 @@ function buildLedgerView(rows: LedgerRow[], range: LedgerDateRange) {
 
 const orderChronological = [{ occurredAt: "asc" as const }, { createdAt: "asc" as const }];
 
-/** Bank or Cash ledger — which one it "is" is just this account's own `type`. */
+/**
+ * Bank or Cash ledger — which one it "is" is just this account's own `type`.
+ * Reads the real double-entry `JournalLine`s on the account's GL ledger
+ * (Ledger.cashAccountId), like the Creditor fix: the legacy `LedgerEntry`
+ * table only ever got Receipts and Cash Planning, so vendor disbursements,
+ * driver salary / advances / payments and every other voucher that moves
+ * cash or bank were missing. Receipts post a voucher too, so they still show.
+ * A debit is money in (`IN`), a credit money out (`OUT`). Reversed vouchers
+ * and their reversals are both counted — they cancel out.
+ */
 export async function ledgerForAccount(accountId: string, range: LedgerDateRange = {}) {
-  const rows = await db.ledgerEntry.findMany({
+  const ledger = await db.ledger.findUnique({
     where: { cashAccountId: accountId },
-    orderBy: orderChronological,
+    select: { id: true },
+  });
+  if (!ledger) return buildLedgerView([], range);
+  const lines = await db.journalLine.findMany({
+    where: {
+      ledgerId: ledger.id,
+      journalEntry: { status: { in: ["POSTED", "REVERSED"] } },
+    },
+    select: {
+      id: true,
+      debitPaise: true,
+      creditPaise: true,
+      narration: true,
+      lineNumber: true,
+      journalEntry: {
+        select: {
+          voucherDate: true,
+          voucherType: true,
+          voucherNumber: true,
+          narration: true,
+          sourceType: true,
+          sourceId: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: [
+      { journalEntry: { voucherDate: "asc" } },
+      { journalEntry: { createdAt: "asc" } },
+      { lineNumber: "asc" },
+    ],
+  });
+  // On the same date the opening balance comes first, so the running balance
+  // starts from it.
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  lines.sort((a, b) => {
+    const byDay = day(a.journalEntry.voucherDate).localeCompare(day(b.journalEntry.voucherDate));
+    if (byDay) return byDay;
+    const aOpen = a.journalEntry.sourceType === "OPENING_BALANCE" ? 0 : 1;
+    const bOpen = b.journalEntry.sourceType === "OPENING_BALANCE" ? 0 : 1;
+    return aOpen - bOpen;
+  });
+  // Asset account: the mapper's liability reading is flipped (debit = in).
+  const rows = lines.map((l) => {
+    const row = journalLineToLedgerRow(l);
+    return { ...row, cashAccountId: accountId, direction: row.direction === "IN" ? "OUT" : "IN" } as const;
   });
   return buildLedgerView(rows, range);
 }
@@ -142,7 +196,10 @@ export async function ledgerForCreditor(ledgerId: string, range: LedgerDateRange
   const lines = await db.journalLine.findMany({
     where: {
       ledgerId,
-      journalEntry: { status: "POSTED" },
+      // POSTED *and* REVERSED: a reversed voucher and its contra cancel out.
+      // Counting POSTED only kept the contra alone, so a reversal swung the
+      // balance the wrong way instead of back to zero.
+      journalEntry: { status: { in: ["POSTED", "REVERSED"] } },
     },
     select: {
       id: true,
@@ -182,7 +239,10 @@ export async function ledgerForCreditor(ledgerId: string, range: LedgerDateRange
 export async function ledgerForExpenseCategory(range: LedgerDateRange = {}) {
   const lines = await db.journalLine.findMany({
     where: {
-      journalEntry: { status: "POSTED" },
+      // POSTED *and* REVERSED: a reversed voucher and its contra cancel out.
+      // Counting POSTED only kept the contra alone, so a reversal swung the
+      // balance the wrong way instead of back to zero.
+      journalEntry: { status: { in: ["POSTED", "REVERSED"] } },
       ledger: { group: { in: ["DIRECT_EXPENSE", "INDIRECT_EXPENSE"] } },
     },
     select: {
@@ -240,7 +300,12 @@ type JournalLineForLedger = {
  * reads as ADJUSTMENT, same as non-cash entries already do on the legacy tabs.
  */
 function journalSourceTypeToLedgerSourceType(sourceType: string): LedgerSourceType {
-  if (sourceType === "VENDOR_PAYMENT") return "PAYMENT";
+  if (
+    sourceType === "VENDOR_PAYMENT" ||
+    sourceType === "DRIVER_PAYOUT" ||
+    sourceType === "DRIVER_SALARY_ADVANCE"
+  )
+    return "PAYMENT";
   if (sourceType === "RECEIPT") return "RECEIPT";
   return "ADJUSTMENT";
 }

@@ -39,6 +39,8 @@ import logSlipRoute from "./modules/log-slip/log-slip.route.js";
 import vehicleCostRoute from "./modules/vehicle-cost/vehicle-cost.route.js";
 import lorryReceiptRoute from "./modules/lorry-receipt/lorry-receipt.route.js";
 import lrDeliveryRoute from "./modules/lorry-receipt/lr-delivery.route.js";
+import myWorkRoute from "./modules/my-work/my-work.route.js";
+import dashboardRoute from "./modules/dashboard/dashboard.route.js";
 import lrGroupRoute from "./modules/lr-group/lr-group.route.js";
 import CompanyRoute from "./modules/company/company.route.js";
 import BranchRoute from "./modules/branch/branch.route.js";
@@ -83,6 +85,7 @@ import vendorPaymentRoute from "./modules/vendor-payment/vendor-payment.route.js
 import trainingRoute from "./modules/training/training.route.js";
 // remove-before-prod: in-app feedback (testing phase only).
 import feedbackRoute, { isFeedbackEnabled } from "./modules/feedback/feedback.route.js";
+import driverFinanceRoute from "./modules/driver-finance/driver-finance.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -156,6 +159,8 @@ app.use("/ledger", ledgerRoute);
 app.use("/ewaybills", ewaybillRoute);
 app.use("/admin", adminRoute);
 app.use("/notifications", notificationRoute);
+app.use("/my-work", myWorkRoute);
+app.use("/dashboard", dashboardRoute);
 app.use("/attachments", attachmentRoute);
 app.use("/vp-schedules", vpScheduleRoute);
 app.use("/mrrr", MRRRRoute);
@@ -180,6 +185,7 @@ app.use("/vendor-payment", vendorPaymentRoute);
 app.use("/training", trainingRoute);
 // remove-before-prod: FEEDBACK_ENABLED=false → every /feedback/* 404s.
 if (isFeedbackEnabled()) app.use("/feedback", feedbackRoute);
+app.use("/driver-finance", driverFinanceRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>

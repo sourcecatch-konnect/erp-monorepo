@@ -386,7 +386,10 @@ export type VehiclePnlRow = {
     permitPaise: string;
     fitnessPaise: string;
     emiPaise: string;
+    /** Other staff (cleaner / helper). */
     salaryPaise: string;
+    /** Automatic, from approved driver salary runs. */
+    driverSalaryPaise: string;
     tyrePaise: string;
     otherPaise: string;
   } | null;

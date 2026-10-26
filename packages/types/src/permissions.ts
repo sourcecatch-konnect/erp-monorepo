@@ -167,6 +167,13 @@ type AccountsPaymentPermissionKey =
   | "accounts.payment.disburse"
   | "accounts.payment.cancel";
 
+type DriverFinancePermissionKey =
+  | "driver_finance.salary_view"
+  | "driver_finance.salary_manage"
+  | "driver_finance.salary_approve"
+  | "driver_finance.advance_manage"
+  | "driver_finance.pay";
+
 type LedgerPermissionKey =
   | "ledger.view"
   | "ledger.voucher_view"
@@ -231,6 +238,7 @@ export type PermissionKey =
   | BillingPermissionKey
   | ReceiptPermissionKey
   | AccountsPaymentPermissionKey
+  | DriverFinancePermissionKey
   | LedgerPermissionKey
   | WorkshopPermissionKey
   | GRNPermissionKey
@@ -476,6 +484,13 @@ export const PERMS = {
       CANCEL: "accounts.payment.cancel",
     },
   },
+  DRIVER_FINANCE: {
+    SALARY_VIEW: "driver_finance.salary_view",
+    SALARY_MANAGE: "driver_finance.salary_manage",
+    SALARY_APPROVE: "driver_finance.salary_approve",
+    ADVANCE_MANAGE: "driver_finance.advance_manage",
+    PAY: "driver_finance.pay",
+  },
   LEDGER: {
     VIEW: "ledger.view",
     VOUCHER_VIEW: "ledger.voucher_view",
@@ -539,6 +554,29 @@ export const ALL_PERMISSION_KEYS: readonly PermissionKey[] = (() => {
   walk(PERMS);
   return Array.from(keys).sort() as PermissionKey[];
 })();
+
+const registryOrder = (() => {
+  const order = new Map<string, number>();
+  const walk = (node: unknown) => {
+    if (typeof node === "string") {
+      if (!order.has(node)) order.set(node, order.size);
+      return;
+    }
+    if (node && typeof node === "object") {
+      for (const v of Object.values(node as Record<string, unknown>)) walk(v);
+    }
+  };
+  walk(PERMS);
+  return order;
+})();
+
+/**
+ * Sorts keys in the order PERMS declares them, so an area reads
+ * View → Create → Edit → Delete → its special actions. Unknown keys go last.
+ */
+export const comparePermissionKeys = (a: string, b: string): number =>
+  (registryOrder.get(a) ?? Infinity) - (registryOrder.get(b) ?? Infinity) ||
+  a.localeCompare(b);
 
 /**
  * Derive the module code from a permission key. The module is the first two

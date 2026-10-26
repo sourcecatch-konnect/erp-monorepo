@@ -36,13 +36,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
+import { Skeleton } from "@skerp/ui/components/skeleton";
+import { toast } from "sonner";
 import {
   useBranches,
   useCompanies,
+  useEmployee,
   useRoles,
   useUpdateEmployee,
 } from "../hooks/useEmployees";
-import type { Employee } from "../types";
+import type { Employee, EmployeeDialogTarget } from "../types";
 
 type FormValues = {
   firstName: string;
@@ -170,14 +173,15 @@ function PrefToggleRow({
 }
 
 export function EmployeeDetailDialog({
-  employee,
+  target,
   onClose,
-  onUpdated,
 }: {
-  employee: Employee | null;
+  target: EmployeeDialogTarget | null;
   onClose: () => void;
-  onUpdated: (employee: Employee) => void;
 }) {
+  // The list only carries a few columns; the dialog loads the full record.
+  const employeeQuery = useEmployee(target?.id);
+  const employee = target ? employeeQuery.data : undefined;
   const [editing, setEditing] = useState(false);
   const updateMutation = useUpdateEmployee();
   const companies = useCompanies();
@@ -195,14 +199,18 @@ export function EmployeeDetailDialog({
   const companyId = watch("companyId");
   const branches = useBranches(companyId);
 
+  // Initialise once per opening. Values are reset before the edit form
+  // mounts, so its selects start with the real role/company/branch rather
+  // than changing right after mount (which makes Radix Select report "").
+  const [readyFor, setReadyFor] = useState<EmployeeDialogTarget | null>(null);
   useEffect(() => {
-    if (employee) {
-      reset(toFormValues(employee));
-      setEditing(false);
-      updateMutation.reset();
-    }
+    if (!target || !employee || readyFor === target) return;
+    reset(toFormValues(employee));
+    setEditing(target.mode === "edit");
+    updateMutation.reset();
+    setReadyFor(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employee, reset]);
+  }, [target, employee, readyFor, reset]);
 
   useEffect(() => {
     if (employee && companyId && companyId !== employee.companyId) {
@@ -210,36 +218,87 @@ export function EmployeeDetailDialog({
     }
   }, [companyId, employee, setValue]);
 
-  if (!employee) return null;
+  if (!target) return null;
+
+  if (!employee || readyFor !== target) {
+    return (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+      >
+        <DialogContent className="rounded-sm sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>User details</DialogTitle>
+            <DialogDescription>
+              {employeeQuery.isError
+                ? "Couldn't load this user."
+                : "Loading this user's details."}
+            </DialogDescription>
+          </DialogHeader>
+          {employeeQuery.isError ? (
+            <div role="alert" className="space-y-3 text-sm">
+              <p>{employeeQuery.error.message} Try again.</p>
+              <Button
+                variant="outline"
+                onClick={() => void employeeQuery.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-11 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-4 w-56" />
+                </div>
+              </div>
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   const fullName = [employee.firstName, employee.middleName, employee.lastName]
     .filter(Boolean)
     .join(" ");
 
-  const submit = handleSubmit(async (values) => {
-    const updated = await updateMutation.mutateAsync({
-      id: employee.id,
-      data: {
-        firstName: values.firstName.trim(),
-        middleName: values.middleName.trim(),
-        lastName: values.lastName.trim(),
-        email: values.email.trim(),
-        roleId: values.roleId,
-        mobile: values.mobile.trim() ? `+91${values.mobile.trim()}` : null,
-        companyId: values.companyId,
-        branchId: values.branchId,
-        whatsappOptIn: values.whatsappOptIn,
-        emailOptIn: values.emailOptIn,
+  const submit = handleSubmit((values) =>
+    updateMutation.mutate(
+      {
+        id: employee.id,
+        data: {
+          firstName: values.firstName.trim(),
+          middleName: values.middleName.trim(),
+          lastName: values.lastName.trim(),
+          email: values.email.trim(),
+          roleId: values.roleId,
+          mobile: values.mobile.trim() ? `+91${values.mobile.trim()}` : null,
+          companyId: values.companyId,
+          branchId: values.branchId,
+          whatsappOptIn: values.whatsappOptIn,
+          emailOptIn: values.emailOptIn,
+        },
       },
-    });
-    onUpdated(updated);
-    reset(toFormValues(updated));
-    setEditing(false);
-  });
+      {
+        onSuccess: (updated) => {
+          reset(toFormValues(updated));
+          setEditing(false);
+          toast.success("User details saved");
+        },
+      },
+    ),
+  );
 
   return (
     <Dialog
-      open={Boolean(employee)}
+      open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
@@ -280,217 +339,222 @@ export function EmployeeDetailDialog({
         {editing ? (
           <form onSubmit={submit} noValidate>
             <div className="space-y-6 px-5 py-5">
-            <Section title="Profile" icon={<IconUser size={15} />}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="editFirstName">First name</Label>
-                  <Input
-                    id="editFirstName"
-                    {...register("firstName", {
-                      required: "First name is required",
-                    })}
-                  />
-                  {errors.firstName && (
-                    <p className={fieldError}>{errors.firstName.message}</p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="editLastName">Last name</Label>
-                  <Input
-                    id="editLastName"
-                    {...register("lastName", {
-                      required: "Last name is required",
-                    })}
-                  />
-                  {errors.lastName && (
-                    <p className={fieldError}>{errors.lastName.message}</p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="editMiddleName">Middle name (optional)</Label>
-                  <Input id="editMiddleName" {...register("middleName")} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="editEmail">Email</Label>
-                  <Input
-                    id="editEmail"
-                    type="email"
-                    {...register("email", {
-                      required: "Email is required",
-                      pattern: {
-                        value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                        message: "Enter a valid email address",
-                      },
-                    })}
-                  />
-                  {errors.email && (
-                    <p className={fieldError}>{errors.email.message}</p>
-                  )}
-                </div>
-              </div>
-            </Section>
-
-            <Section title="Contact" icon={<IconPhone size={16} />}>
-              <div className="space-y-1.5">
-                <Label htmlFor="editMobile">Phone number (optional)</Label>
-                <div className="flex">
-                  <span className="inline-flex select-none items-center rounded-l-sm border border-r-0 border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
-                    +91
-                  </span>
-                  <Input
-                    id="editMobile"
-                    inputMode="numeric"
-                    autoComplete="tel-national"
-                    maxLength={10}
-                    placeholder="9999999999"
-                    className="rounded-l-none"
-                    aria-invalid={errors.mobile ? true : undefined}
-                    {...register("mobile", {
-                      onChange: (e) => {
-                        e.target.value = e.target.value
-                          .replace(/\D/g, "")
-                          .slice(0, 10);
-                      },
-                      validate: (value) =>
-                        !value ||
-                        /^\d{10}$/.test(value) ||
-                        "Enter a 10-digit phone number",
-                    })}
-                  />
-                </div>
-                {errors.mobile && (
-                  <p className={fieldError}>{errors.mobile.message}</p>
-                )}
-              </div>
-            </Section>
-
-            <Section title="Assignment" icon={<IconBuilding size={16} />}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Role</Label>
-                  <Controller
-                    control={control}
-                    name="roleId"
-                    rules={{ required: "Role is required" }}
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={roles.isLoading}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roles.data?.map((role) => (
-                            <SelectItem key={role.id} value={role.id}>
-                              {role.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  {errors.roleId && (
-                    <p className={fieldError}>{errors.roleId.message}</p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Company</Label>
-                  <Controller
-                    control={control}
-                    name="companyId"
-                    rules={{ required: "Company is required" }}
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select company" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {companies.data?.map((company) => (
-                            <SelectItem key={company.id} value={company.id}>
-                              {company.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  {errors.companyId && (
-                    <p className={fieldError}>{errors.companyId.message}</p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Branch</Label>
-                  <Controller
-                    control={control}
-                    name="branchId"
-                    rules={{ required: "Branch is required" }}
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={!companyId || branches.isLoading}
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              companyId
-                                ? "Select branch"
-                                : "Select a company first"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {branches.data?.map((branch) => (
-                            <SelectItem key={branch.id} value={branch.id}>
-                              {branch.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  {errors.branchId && (
-                    <p className={fieldError}>{errors.branchId.message}</p>
-                  )}
-                </div>
-              </div>
-            </Section>
-
-            <Section title="Notification Preferences" icon={<IconBell size={15} />}>
-              <div className="overflow-hidden rounded-sm border border-border bg-card">
-                <Controller
-                  control={control}
-                  name="whatsappOptIn"
-                  render={({ field }) => (
-                    <PrefToggleRow
-                      icon={<IconBrandWhatsapp size={16} />}
-                      title="WhatsApp notifications"
-                      description="Send alerts to this employee's phone over WhatsApp."
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
+              <Section title="Profile" icon={<IconUser size={15} />}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="editFirstName">First name</Label>
+                    <Input
+                      id="editFirstName"
+                      {...register("firstName", {
+                        required: "First name is required",
+                      })}
                     />
-                  )}
-                />
-                <Controller
-                  control={control}
-                  name="emailOptIn"
-                  render={({ field }) => (
-                    <PrefToggleRow
-                      icon={<IconMail size={16} />}
-                      title="Email notifications"
-                      description="Send alerts to this employee's email inbox."
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
+                    {errors.firstName && (
+                      <p className={fieldError}>{errors.firstName.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="editLastName">Last name</Label>
+                    <Input
+                      id="editLastName"
+                      {...register("lastName", {
+                        required: "Last name is required",
+                      })}
                     />
+                    {errors.lastName && (
+                      <p className={fieldError}>{errors.lastName.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="editMiddleName">
+                      Middle name (optional)
+                    </Label>
+                    <Input id="editMiddleName" {...register("middleName")} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="editEmail">Email</Label>
+                    <Input
+                      id="editEmail"
+                      type="email"
+                      {...register("email", {
+                        required: "Email is required",
+                        pattern: {
+                          value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                          message: "Enter a valid email address",
+                        },
+                      })}
+                    />
+                    {errors.email && (
+                      <p className={fieldError}>{errors.email.message}</p>
+                    )}
+                  </div>
+                </div>
+              </Section>
+
+              <Section title="Contact" icon={<IconPhone size={16} />}>
+                <div className="space-y-1.5">
+                  <Label htmlFor="editMobile">Phone number (optional)</Label>
+                  <div className="flex">
+                    <span className="inline-flex select-none items-center rounded-l-sm border border-r-0 border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                      +91
+                    </span>
+                    <Input
+                      id="editMobile"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={10}
+                      placeholder="9999999999"
+                      className="rounded-l-none"
+                      aria-invalid={errors.mobile ? true : undefined}
+                      {...register("mobile", {
+                        onChange: (e) => {
+                          e.target.value = e.target.value
+                            .replace(/\D/g, "")
+                            .slice(0, 10);
+                        },
+                        validate: (value) =>
+                          !value ||
+                          /^\d{10}$/.test(value) ||
+                          "Enter a 10-digit phone number",
+                      })}
+                    />
+                  </div>
+                  {errors.mobile && (
+                    <p className={fieldError}>{errors.mobile.message}</p>
                   )}
-                />
-              </div>
-            </Section>
+                </div>
+              </Section>
+
+              <Section title="Assignment" icon={<IconBuilding size={16} />}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Role</Label>
+                    <Controller
+                      control={control}
+                      name="roleId"
+                      rules={{ required: "Role is required" }}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={(v) => v && field.onChange(v)}
+                          disabled={roles.isLoading}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roles.data?.map((role) => (
+                              <SelectItem key={role.id} value={role.id}>
+                                {role.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.roleId && (
+                      <p className={fieldError}>{errors.roleId.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Company</Label>
+                    <Controller
+                      control={control}
+                      name="companyId"
+                      rules={{ required: "Company is required" }}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={(v) => v && field.onChange(v)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select company" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {companies.data?.map((company) => (
+                              <SelectItem key={company.id} value={company.id}>
+                                {company.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.companyId && (
+                      <p className={fieldError}>{errors.companyId.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Branch</Label>
+                    <Controller
+                      control={control}
+                      name="branchId"
+                      rules={{ required: "Branch is required" }}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={(v) => v && field.onChange(v)}
+                          disabled={!companyId || branches.isLoading}
+                        >
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={
+                                companyId
+                                  ? "Select branch"
+                                  : "Select a company first"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {branches.data?.map((branch) => (
+                              <SelectItem key={branch.id} value={branch.id}>
+                                {branch.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.branchId && (
+                      <p className={fieldError}>{errors.branchId.message}</p>
+                    )}
+                  </div>
+                </div>
+              </Section>
+
+              <Section
+                title="Notification Preferences"
+                icon={<IconBell size={15} />}
+              >
+                <div className="overflow-hidden rounded-sm border border-border bg-card">
+                  <Controller
+                    control={control}
+                    name="whatsappOptIn"
+                    render={({ field }) => (
+                      <PrefToggleRow
+                        icon={<IconBrandWhatsapp size={16} />}
+                        title="WhatsApp notifications"
+                        description="Send alerts to this employee's phone over WhatsApp."
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    )}
+                  />
+                  <Controller
+                    control={control}
+                    name="emailOptIn"
+                    render={({ field }) => (
+                      <PrefToggleRow
+                        icon={<IconMail size={16} />}
+                        title="Email notifications"
+                        description="Send alerts to this employee's email inbox."
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    )}
+                  />
+                </div>
+              </Section>
 
               {updateMutation.isError && (
                 <div className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

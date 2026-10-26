@@ -7,6 +7,7 @@ import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
 
 import { customerApi } from "../../masters/Customer/customer.service";
 import { cashAccountApi } from "../../masters/cash-account/cash-account.service";
+import { driverApi } from "../../masters/driver/driver.service";
 import { useDebouncedValue } from "../../masters/_shared/hooks/useDebouncedValue";
 import { ledgerApi, vendorTypeOf, type LedgerAccount, type VendorType } from "../api/ledger.service";
 
@@ -89,13 +90,12 @@ export function LedgerPartyPicker({
         return data.map((row) => ({ label: row.name, value: row.id }));
       }
       if (kind === "driver") {
-        // Every driver's own party ledger — CURRENT_ASSET is only used by
-        // driver ledgers today (getOrCreatePartyLedger lazily creates one
-        // the first time a Log Slip posts, see posting.service.ts).
-        const data = await ledgerApi.chartOfAccounts({
-          kind: "PARTY",
-          group: "CURRENT_ASSET",
-          isActive: true,
+        // Driver master id (not the ledger id): the driver statement reads
+        // the driver's ledger itself, and a driver with no posting yet has
+        // no ledger but can still be paid a salary advance.
+        const { data } = await driverApi.lookup({
+          page: 0,
+          size: 20,
           search: debouncedSearch || undefined,
         });
         return data.map((row) => ({ label: row.name, value: row.id }));

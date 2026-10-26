@@ -30,7 +30,8 @@ export type JournalLine = {
 
 export type JournalAllocation = {
   id: string;
-  billId: string;
+  /** null for a vendor-payment-slip allocation (not a bill). */
+  billId: string | null;
   refType: "NEW_REF" | "AGAINST_REF";
   amountPaise: string;
   bill?: { id: string; billNumber: string | null };

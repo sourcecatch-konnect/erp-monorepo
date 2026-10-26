@@ -167,7 +167,7 @@ function StatementTable({
             </TableCell>
             <TableCell className="text-right">
               <span className="inline-flex items-baseline gap-1">
-                <CompactMoney className="text-sm font-medium" value={statementOpeningPaise} />
+                <CompactMoney className="text-sm font-medium" value={Math.abs(statementOpeningPaise)} />
                 <span className="text-[10px] font-semibold uppercase text-muted-foreground">
                   {suffixFor(statementOpeningPaise)}
                 </span>
@@ -230,7 +230,7 @@ function StatementTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <span className="inline-flex items-baseline gap-1">
-                    <CompactMoney className="text-sm font-semibold" value={r.runningBalancePaise} />
+                    <CompactMoney className="text-sm font-semibold" value={Math.abs(r.runningBalancePaise)} />
                     <span className="text-[10px] font-semibold uppercase text-muted-foreground">
                       {suffixFor(r.runningBalancePaise)}
                     </span>

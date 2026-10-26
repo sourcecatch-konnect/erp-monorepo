@@ -15,11 +15,22 @@ export type AuditAction =
   | "user.role.update"
   | "user.permissions.update"
   | "user.branches.update"
+  | "user.status.update"
+  | "user.delete"
   | "vendor_payment.submit"
   | "vendor_payment.approve"
   | "vendor_payment.reject"
   | "vendor_payment.disburse"
-  | "vendor_payment.cancel";
+  | "vendor_payment.cancel"
+  | "driver_finance.salary_advance.create"
+  | "driver_finance.salary_advance.reverse"
+  | "driver_finance.payout.create"
+  | "driver_finance.payout.reverse"
+  | "driver_finance.salary_run.create"
+  | "driver_finance.salary_run.approve"
+  | "driver_finance.salary_run.pay"
+  | "driver_finance.salary_run.cancel"
+  | "driver_finance.salary_run.update_master_salary";
 
 export type AuditEntry = {
   actor: { id: string };
