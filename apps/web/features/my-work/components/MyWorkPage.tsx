@@ -23,7 +23,7 @@ import type {
 import { useAuth } from "@/features/auth";
 import { cn } from "@/lib/utils";
 import { useMyWork } from "../hooks";
-import { AreaCards } from "./AreaCards";
+import { DoFirst } from "./DoFirst";
 import { MODULES } from "./modules";
 import { WorkList, type View } from "./WorkList";
 import type { QuickAction } from "./quick";
@@ -111,8 +111,12 @@ function PageSkeleton() {
 /**
  * My Work, top to bottom:
  *   1. one sentence: how much needs you and how much is late
- *   2. a card per work area (Orders, LR, Rail, Billing, …) — pick one to focus
- *   3. the list of items, most urgent first, with the next-step button
+ *   2. the work itself, grouped by area, in the main column
+ *   3. a rail beside it: "Do first", then what is already moving
+ *
+ * Steps 2 and 4 read the same endpoint and the same ranking; the difference is
+ * only that 2 never filters by area. An item can appear in both, which is the
+ * intent — the block answers "what now", the list answers "what else".
  */
 export function MyWorkPage() {
   const { user } = useAuth();
@@ -214,40 +218,74 @@ export function MyWorkPage() {
         </div>
       </header>
 
-      {moving.length > 0 && (
-        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          <span className="text-xs font-medium">Moving now, no action needed:</span>
-          {moving.map((g) => {
-            const IconCmp = MOVING_ICON[g.key];
-            return (
-              <Link
-                key={g.key}
-                href={g.href}
-                className="inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-primary hover:underline"
-              >
-                <IconCmp className="size-4 text-muted-foreground" />
-                <b className="font-semibold tabular-nums">{g.count}</b>
-                {g.key === "trips_in_transit" ? "trucks in transit" : "rakes moving"}
-              </Link>
-            );
-          })}
-        </p>
-      )}
+      {/*
+        Two columns on a wide screen: the work itself keeps the main column, so
+        its rows never have to truncate an action button, and the rail holds
+        what should stay in sight. The rail sticks and scrolls inside itself —
+        on a short laptop screen it must never push the list down or trap it.
 
-      <AreaCards queues={queues} value={list.module} onChange={list.setModule} />
+        Below lg the rail moves above the list, because on a phone "what do I
+        do next" is the whole reason the page was opened. "Moving now" drops to
+        the bottom there: it is reference, not work.
+      */}
+      <div className="grid items-start gap-4 lg:grid-cols-12">
+        <div className="min-w-0 lg:col-span-8">
+          {/* Keyed so a new area starts on its first page with no step picked. */}
+          <WorkList
+            key={list.module ?? "all"}
+            queues={queues}
+            module={list.module}
+            branch={list.branch}
+            queue={queue}
+            view={list.view}
+            onQueue={list.setQueue}
+            onView={list.setView}
+            onArea={list.setModule}
+            onQuick={setQuick}
+          />
+        </div>
 
-      {/* Keyed so a new area starts on its first page with no step picked. */}
-      <WorkList
-        key={list.module ?? "all"}
-        queues={queues}
-        module={list.module}
-        branch={list.branch}
-        queue={queue}
-        view={list.view}
-        onQueue={list.setQueue}
-        onView={list.setView}
-        onQuick={setQuick}
-      />
+        <aside className="order-first flex min-w-0 flex-col gap-4 lg:order-none lg:sticky lg:top-4 lg:col-span-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+          {/* Only while looking at every area on the waiting view: once a user
+              has narrowed to one area or to leftovers they have already chosen
+              what to work on, and a cross-area ranking is then just noise. */}
+          {list.module === null && list.view === "waiting" ? (
+            <DoFirst branch={list.branch} onQuick={setQuick} />
+          ) : null}
+
+          {moving.length > 0 && (
+            <section className="order-last rounded-lg border bg-card lg:order-none">
+              <h2 className="border-b px-4 py-2.5 text-sm font-semibold text-foreground">
+                Moving now
+              </h2>
+              <p className="px-4 pt-2.5 text-xs text-muted-foreground">
+                No action needed — this is where freight already is.
+              </p>
+              <ul className="px-4 pb-3 pt-1">
+                {moving.map((g) => {
+                  const IconCmp = MOVING_ICON[g.key];
+                  return (
+                    <li key={g.key}>
+                      <Link
+                        href={g.href}
+                        className="flex items-center gap-2 py-1.5 text-sm text-foreground transition-colors duration-150 hover:text-primary"
+                      >
+                        <IconCmp className="size-4 shrink-0 text-muted-foreground" />
+                        <b className="font-semibold tabular-nums">{g.count}</b>
+                        <span className="truncate">
+                          {g.key === "trips_in_transit"
+                            ? "trucks in transit"
+                            : "rakes moving"}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+        </aside>
+      </div>
 
       <QuickActions action={quick} onClose={() => setQuick(null)} />
     </div>

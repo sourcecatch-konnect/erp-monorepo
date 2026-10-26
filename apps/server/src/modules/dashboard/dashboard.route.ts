@@ -65,30 +65,41 @@ router.get("/", async (req, res) => {
     vehicle: perms.has(PERMS.MASTERS.VEHICLE.VIEW),
   };
 
-  // The funnel spans orders, LRs and billing. Showing it with a step the
+  // Operations spans orders, LRs and billing. Showing it with a step the
   // viewer cannot see would read as a drop-off that isn't there, so it needs
   // all three.
-  const canSeeFunnel = can.order && can.lr && can.billing;
+  const canSeeOperations = can.order && can.lr && can.billing;
   const canSeeGlance = can.billing || can.receipt || can.trip;
   const canSeeAttention = can.lr || can.billing || can.rail;
+
+  // Branch performance compares branches, so it is only meaningful to a viewer
+  // who can see more than one and has not narrowed the page to a single one.
+  const branchCount =
+    req.ctx?.branchScope === "ALL" ? Infinity : (req.ctx?.branchIds.length ?? 0);
+  const canSeeBranchPerformance =
+    can.billing && branchCount > 1 && !req.query.branch;
 
   const [
     revenue,
     glance,
-    funnel,
+    operations,
     ageing,
     topCustomers,
     fleet,
     attention,
+    branchPerformance,
     branches,
   ] = await Promise.all([
-    can.billing ? widgets.revenue(scoped, window, now) : null,
+    can.billing ? widgets.revenue(scoped, window, now, can.receipt) : null,
     canSeeGlance ? widgets.glance(scoped, window, now, can) : null,
-    canSeeFunnel ? widgets.funnel(scoped, window) : null,
+    canSeeOperations ? widgets.operations(scoped, window) : null,
     can.billing ? widgets.ageing(scoped, now) : null,
     can.billing ? widgets.topCustomers(scoped, window) : null,
     can.vehicle ? widgets.fleet() : null,
     canSeeAttention ? widgets.attention(scoped, now, can) : null,
+    canSeeBranchPerformance
+      ? widgets.branchPerformance(scoped, window, now, can.receipt)
+      : null,
     db.branch.findMany({
       where:
         req.ctx?.branchScope === "ALL"
@@ -105,11 +116,12 @@ router.get("/", async (req, res) => {
     branches,
     revenue,
     glance,
-    funnel,
+    operations,
     ageing,
     topCustomers,
     fleet,
     attention,
+    branchPerformance,
   };
   return sendOk(res, body);
 });

@@ -22,12 +22,19 @@ const LORRY_RECEIPTS = "/lorry-receipts";
 /** Card-level drill-ins, used for the header arrow on each widget. */
 export const DASHBOARD_ROUTES = {
   revenue: BILLS,
+  receipts: "/accounts/receipts",
   ageing: BILLS,
+  branches: "/masters/branch",
   fleet: "/masters/vehicle",
   customers: "/masters/customer",
   myWork: "/my-work",
 } as const;
 
+/**
+ * Cohort steps only — "orders" and "lr" are headline figures on the card now
+ * rather than steps, but they keep their keys so the union stays the single
+ * list of everything Operations can drill into.
+ */
 export const FUNNEL_ROUTES: Record<DashboardFunnelKey, string> = {
   orders: "/orders",
   lr: LORRY_RECEIPTS,

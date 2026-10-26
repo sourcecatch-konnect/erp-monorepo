@@ -23,11 +23,13 @@ import { cn } from "@/lib/utils";
 import { useDashboard } from "../hooks";
 import { AgeingCard } from "./AgeingCard";
 import { AttentionCard } from "./AttentionCard";
+import { BranchPerformanceCard } from "./BranchPerformanceCard";
 import { FleetCard } from "./FleetCard";
-import { FunnelCard } from "./FunnelCard";
-import { GlanceCard } from "./GlanceCard";
-import { RevenueCard } from "./RevenueCard";
+import { MoneyCards } from "./MoneyCards";
+import { OperationsCard } from "./OperationsCard";
+import { QuickCreate } from "./QuickCreate";
 import { TopCustomersCard } from "./TopCustomersCard";
+import { TrendCard } from "./TrendCard";
 import { WidgetPanel, WidgetSkeleton } from "./WidgetCard";
 import { DASHBOARD_ROUTES } from "../routes";
 
@@ -87,11 +89,12 @@ export function DashboardPage() {
     ? Boolean(
         data.revenue ??
         data.glance ??
-        data.funnel ??
+        data.operations ??
         data.ageing ??
         data.topCustomers ??
         data.fleet ??
-        data.attention,
+        data.attention ??
+        data.branchPerformance,
       )
     : false;
 
@@ -176,6 +179,8 @@ export function DashboardPage() {
         </div>
       </header>
 
+      <QuickCreate />
+
       {isError && !data ? (
         <WidgetPanel
           icon={IconAlertTriangle}
@@ -215,42 +220,51 @@ export function DashboardPage() {
           role covers none of them. Your own queue is on My Work.
         </WidgetPanel>
       ) : (
-        <div className="grid auto-rows-[108px] grid-cols-2 gap-3 md:grid-cols-8 xl:grid-cols-12">
-          {data.revenue ? (
-            <RevenueCard
-              data={data.revenue}
-              periodLabel={periodLabel}
-              previousLabel={previousLabel}
-              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-4"
-            />
-          ) : null}
-
-          {data.glance ? (
-            <GlanceCard
-              data={data.glance}
-              periodLabel={periodLabel}
-              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-4"
-            />
-          ) : null}
-
-          {data.funnel ? (
-            <FunnelCard
-              steps={data.funnel}
-              periodLabel={periodLabel}
-              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-4"
-            />
-          ) : null}
+        <div className="grid auto-rows-[104px] grid-cols-2 gap-3 md:grid-cols-8 xl:grid-cols-12">
+          {/* One mosaic, not a stack of full-width rows: cards tile at
+              different widths and heights on a shared row unit, so the page
+              stays short and nothing has to fill a line on its own. */}
+          <MoneyCards
+            revenue={data.revenue}
+            glance={data.glance}
+            periodLabel={periodLabel}
+            previousLabel={previousLabel}
+          />
 
           {data.attention ? (
             <AttentionCard
               rows={data.attention}
-              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-5"
+              className="col-span-2 row-span-3 md:col-span-8 xl:col-span-5"
+            />
+          ) : null}
+
+          {data.operations ? (
+            <OperationsCard
+              data={data.operations}
+              glance={data.glance}
+              periodLabel={periodLabel}
+              className="col-span-2 row-span-3 md:col-span-4 xl:col-span-4"
             />
           ) : null}
 
           {data.ageing ? (
             <AgeingCard
               data={data.ageing}
+              className="col-span-2 row-span-3 md:col-span-4 xl:col-span-3"
+            />
+          ) : null}
+
+          {data.revenue ? (
+            <TrendCard
+              series={data.revenue.series}
+              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-4"
+            />
+          ) : null}
+
+          {data.branchPerformance ? (
+            <BranchPerformanceCard
+              rows={data.branchPerformance}
+              periodLabel={periodLabel}
               className="col-span-2 row-span-2 md:col-span-4 xl:col-span-4"
             />
           ) : null}
@@ -258,7 +272,7 @@ export function DashboardPage() {
           {data.fleet ? (
             <FleetCard
               data={data.fleet}
-              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-3"
+              className="col-span-2 row-span-2 md:col-span-8 xl:col-span-4"
             />
           ) : null}
 
@@ -301,17 +315,21 @@ function errorMessage(error: unknown): string {
   return "Something went wrong while loading these figures. Try again in a moment.";
 }
 
-/** Same spans as the real grid, so nothing moves when the data lands. */
+/** Same spans as the real mosaic, so nothing moves when the data lands. */
 export function LoadingGrid() {
   return (
-    <div className="grid auto-rows-[108px] grid-cols-2 gap-3 md:grid-cols-8 xl:grid-cols-12">
+    <div className="grid auto-rows-[104px] grid-cols-2 gap-3 md:grid-cols-8 xl:grid-cols-12">
       {[
+        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
+        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
+        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
+        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
+        "col-span-2 row-span-3 md:col-span-8 xl:col-span-5",
+        "col-span-2 row-span-3 md:col-span-4 xl:col-span-4",
+        "col-span-2 row-span-3 md:col-span-4 xl:col-span-3",
         "col-span-2 row-span-2 md:col-span-4 xl:col-span-4",
         "col-span-2 row-span-2 md:col-span-4 xl:col-span-4",
-        "col-span-2 row-span-2 md:col-span-4 xl:col-span-4",
-        "col-span-2 row-span-2 md:col-span-4 xl:col-span-5",
-        "col-span-2 row-span-2 md:col-span-4 xl:col-span-4",
-        "col-span-2 row-span-2 md:col-span-4 xl:col-span-3",
+        "col-span-2 row-span-2 md:col-span-8 xl:col-span-4",
         "col-span-2 row-span-2 md:col-span-8 xl:col-span-12",
       ].map((span, i) => (
         <WidgetSkeleton key={i} className={span} />
