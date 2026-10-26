@@ -1,32 +1,25 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
-  IconArrowLeft,
   IconArrowRight,
   IconBuildingStore,
   IconCircleCheck,
+  IconPlayerPlayFilled,
   IconRoute,
   IconUserCircle,
+  type Icon,
 } from "@tabler/icons-react";
-import {
-  TRAINING_LANES,
-  TRAINING_STAGES,
-  type TrainingMe,
-  type TrainingStage,
-  type TrainingStageKey,
-  type TrainingStageView,
-} from "@skerp/types";
+import { TRAINING_STAGES, type TrainingMe } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import { cn } from "@skerp/ui/lib/util";
+import { TRACK_ICONS } from "./content/track-icons";
 import { ProgressBar } from "./components/ProgressBar";
-import { StageSheet } from "./components/StageSheet";
+import { ProgressRing } from "./components/ProgressRing";
 import { TrainingNav } from "./components/TrainingNav";
 import { useCompleteOnVisit, useTrainingMe } from "./hooks/useTraining";
 import {
-  STAGE_BY_KEY,
-  previousStages,
   progressMap,
   trackProgress,
   type TrackProgress,
@@ -46,16 +39,23 @@ function YourRole({ me }: { me: TrainingMe }) {
         </span>
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Your role</p>
-          <p className="text-lg font-semibold text-foreground">{me.role.name}</p>
+          <p className="text-lg font-semibold text-foreground">
+            {me.role.name}
+          </p>
           <p className="text-sm text-muted-foreground">
             {me.profile?.summary ??
               "Below is the training for your role, the steps of the business you do, and who picks up the work after you."}
           </p>
         </div>
         <div className="flex items-start gap-2">
-          <IconBuildingStore className="mt-0.5 size-4 text-muted-foreground" aria-hidden />
+          <IconBuildingStore
+            className="mt-0.5 size-4 text-muted-foreground"
+            aria-hidden
+          />
           <div>
-            <p className="text-xs font-medium text-muted-foreground">Branches you work in</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              Branches you work in
+            </p>
             <p className="text-sm text-foreground">{branches}</p>
           </div>
         </div>
@@ -72,7 +72,15 @@ function YourRole({ me }: { me: TrainingMe }) {
   );
 }
 
-function TrackCard({
+const trackAction = (progress: TrackProgress) =>
+  progress.current === undefined
+    ? "Review"
+    : progress.finished === 0
+      ? "Start"
+      : "Continue";
+
+/** A required track: a wide row, because it is what the user has to do. */
+function TrackRow({
   progress,
   primary,
   quizPassed,
@@ -82,37 +90,140 @@ function TrackCard({
   quizPassed: boolean;
 }) {
   const complete = progress.current === undefined;
-  const action = complete ? "Review" : progress.finished === 0 ? "Start" : "Continue";
+  const RowIcon: Icon = TRACK_ICONS[progress.track.key];
+
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-md border border-border bg-card p-4">
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-md",
+          complete
+            ? "bg-success/15 text-success"
+            : "bg-primary/10 text-primary",
+        )}
+      >
+        <RowIcon className="size-5" aria-hidden />
+      </span>
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-semibold text-foreground">{progress.track.title}</p>
+          <p className="text-sm font-semibold text-foreground">
+            {progress.track.title}
+          </p>
           {complete ? (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+            <span className="inline-flex items-center gap-1 rounded-full border border-success/35 bg-success/12 px-2 py-0.5 text-xs font-semibold text-success">
               <IconCircleCheck className="size-3.5" aria-hidden />
               Completed
             </span>
-          ) : null}
+          ) : (
+            <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              Required
+            </span>
+          )}
           {quizPassed ? (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-              <IconCircleCheck className="size-3.5" aria-hidden />
+            <span className="rounded-full border border-success/35 bg-success/12 px-2 py-0.5 text-xs font-semibold text-success">
               Quiz passed
             </span>
           ) : null}
         </div>
-        <p className="text-sm text-muted-foreground">{progress.track.description}</p>
+        <p className="text-sm text-muted-foreground">
+          {progress.track.description}
+        </p>
         <div className="flex max-w-md items-center gap-3">
-          <ProgressBar percent={progress.percent} label={`${progress.track.title} progress`} />
+          <ProgressBar
+            percent={progress.percent}
+            label={`${progress.track.title} progress`}
+          />
           <span className="shrink-0 text-xs text-muted-foreground">
-            {progress.finished} of {progress.total} steps
+            {progress.finished} of {progress.total} lessons
           </span>
         </div>
       </div>
       <Button asChild variant={primary ? "default" : "outline"}>
-        <Link href={`/training/${progress.track.key}`}>{action}</Link>
+        <Link href={`/training/${progress.track.key}`}>
+          {trackAction(progress)}
+        </Link>
       </Button>
     </div>
+  );
+}
+
+/** An optional track: a quieter card in a grid, so the shape says "extra". */
+function TrackCard({ progress }: { progress: TrackProgress }) {
+  const CardIcon: Icon = TRACK_ICONS[progress.track.key];
+  const complete = progress.current === undefined;
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-md border border-border bg-card p-4 transition-colors duration-150 hover:border-primary/40">
+      <div className="flex items-start justify-between gap-3">
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-md",
+            complete
+              ? "bg-success/15 text-success"
+              : "bg-primary/10 text-primary",
+          )}
+        >
+          <CardIcon className="size-[18px]" aria-hidden />
+        </span>
+        <ProgressRing
+          percent={progress.percent}
+          label={`${progress.track.title} progress`}
+          size={40}
+        />
+      </div>
+      <p className="text-sm font-semibold text-foreground">
+        {progress.track.title}
+      </p>
+      <p className="flex-1 text-xs text-muted-foreground">
+        {progress.track.description}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        {progress.total} {progress.total === 1 ? "lesson" : "lessons"}
+      </p>
+      <Button asChild variant="outline" className="self-start">
+        <Link href={`/training/${progress.track.key}`}>
+          {trackAction(progress)}
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
+/** One obvious next action, instead of making the user choose between cards. */
+function ResumeCard({ progress }: { progress: TrackProgress }) {
+  const step = progress.current;
+  if (!step) return null;
+
+  return (
+    <Link
+      href={`/training/${progress.track.key}`}
+      className="flex flex-wrap items-center gap-4 rounded-md border border-primary/30 bg-primary/5 p-4 transition-colors duration-150 hover:bg-primary/10"
+    >
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+        <IconPlayerPlayFilled className="size-[18px]" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1 space-y-1">
+        <span className="block text-xs font-semibold uppercase tracking-tight text-primary">
+          Pick up where you left off
+        </span>
+        <span className="block text-base font-semibold text-foreground">
+          {step.title}
+        </span>
+        <span className="block text-xs text-muted-foreground">
+          {progress.track.title} · lesson {progress.finished + 1} of{" "}
+          {progress.total}
+        </span>
+        <ProgressBar
+          percent={progress.percent}
+          label={`${progress.track.title} progress`}
+          className="max-w-xs"
+        />
+      </span>
+      <span className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">
+        Continue
+        <IconArrowRight className="size-4" aria-hidden />
+      </span>
+    </Link>
   );
 }
 
@@ -125,190 +236,95 @@ function YourTraining({ me }: { me: TrainingMe }) {
   const optional = all.filter((item) => item.view.assignment === "optional");
   const firstOpen = required.find((item) => item.current !== undefined);
   const passed = new Set(
-    me.certifications.filter((cert) => cert.passed).map((cert) => cert.trackKey),
+    me.certifications
+      .filter((cert) => cert.passed)
+      .map((cert) => cert.trackKey),
   );
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">Your training</h2>
-        <p className="text-sm text-muted-foreground">
-          Short, step-by-step training for your role. Your progress is saved, so
-          you can stop and continue any time.
-        </p>
-      </div>
-      {required.map((item) => (
-        <TrackCard
-          key={item.track.key}
-          progress={item}
-          primary={item.track.key === firstOpen?.track.key}
-          quizPassed={passed.has(item.track.key)}
-        />
-      ))}
-      {optional.length > 0 ? (
-        <details className="rounded-md border border-border bg-card px-4 py-3">
-          <summary className="cursor-pointer text-sm font-medium text-foreground">
-            More training you can take ({optional.length})
-          </summary>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Not required for your role, but useful if you help out in these areas.
+    <>
+      {firstOpen ? <ResumeCard progress={firstOpen} /> : null}
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-semibold text-foreground">
+            Training for your role
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            {required.length} {required.length === 1 ? "track" : "tracks"} ·
+            required
+          </span>
+          <p className="w-full text-sm text-muted-foreground">
+            Everyone in your role does these. Your progress is saved, so you can
+            stop and continue any time.
           </p>
-          <div className="mt-3 space-y-3">
+        </div>
+        {required.map((item) => (
+          <TrackRow
+            key={item.track.key}
+            progress={item}
+            primary={item.track.key === firstOpen?.track.key}
+            quizPassed={passed.has(item.track.key)}
+          />
+        ))}
+      </section>
+
+      {optional.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-base font-semibold text-foreground">
+              More training you can take
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              {optional.length} {optional.length === 1 ? "track" : "tracks"}
+            </span>
+            <p className="w-full text-sm text-muted-foreground">
+              Not required for your role, but useful if you help out in these
+              areas.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {optional.map((item) => (
-              <TrackCard
-                key={item.track.key}
-                progress={item}
-                primary={false}
-                quizPassed={passed.has(item.track.key)}
-              />
+              <TrackCard key={item.track.key} progress={item} />
             ))}
           </div>
-        </details>
+        </section>
       ) : null}
-    </section>
+    </>
   );
 }
 
-function Neighbours({
-  stage,
-  views,
-}: {
-  stage: TrainingStage;
-  views: Map<TrainingStageKey, TrainingStageView>;
-}) {
-  const who = (key: TrainingStageKey) => {
-    const view = views.get(key);
-    if (!view) return "";
-    if (view.owned) return "you do this too";
-    return view.owners.length > 0
-      ? `done by ${view.owners.join(", ")}`
-      : "not assigned to a role yet";
-  };
-  const before = previousStages(stage.key);
-  const after = stage.next
-    .map((key) => STAGE_BY_KEY.get(key))
-    .filter((next): next is TrainingStage => next !== undefined);
-  if (before.length === 0 && after.length === 0) return null;
+/**
+ * Where your work sits in the business is a whole screen of its own
+ * ("How the business works", which highlights your own steps), so this page
+ * only points at it.
+ */
+function WhereYouFit({ me }: { me: TrainingMe }) {
+  const mine = me.stages.filter((stage) => stage.owned).length;
 
   return (
-    <ul className="space-y-1">
-      {before.map((prev) => (
-        <li key={`b-${prev.key}`} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-          <IconArrowLeft className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span>
-            Before you: <span className="font-medium text-foreground">{prev.title}</span>{" "}
-            ({who(prev.key)})
-          </span>
-        </li>
-      ))}
-      {after.map((next) => (
-        <li key={`a-${next.key}`} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-          <IconArrowRight className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span>
-            After you: <span className="font-medium text-foreground">{next.title}</span>{" "}
-            ({who(next.key)})
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function YourWork({
-  me,
-  onLearnMore,
-}: {
-  me: TrainingMe;
-  onLearnMore: (key: TrainingStageKey) => void;
-}) {
-  const views = new Map(me.stages.map((view) => [view.key, view]));
-  const lanes = TRAINING_LANES.map((lane) => ({
-    lane,
-    stages: TRAINING_STAGES.filter(
-      (stage) => stage.lane === lane.key && views.get(stage.key)?.owned,
-    ),
-  })).filter((group) => group.stages.length > 0);
-
-  return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Your part of the work</h2>
-          <p className="text-sm text-muted-foreground">
-            The business steps your role does, what you can do at each one, and
-            who works before and after you.
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/training/process-map">
-            <IconRoute className="size-4" aria-hidden />
-            See the whole business
-          </Link>
-        </Button>
-      </div>
-
-      {lanes.length === 0 ? (
-        <div className="rounded-md border border-border bg-card px-5 py-10 text-center">
-          <p className="text-sm font-medium text-foreground">
-            Your role doesn&apos;t do any of the main business steps yet
-          </p>
-          <p className="text-sm text-muted-foreground">
-            If this looks wrong, ask your administrator to check your role.
-          </p>
-        </div>
-      ) : (
-        lanes.map(({ lane, stages }) => (
-          <div key={lane.key} className="rounded-md border border-border bg-card">
-            <div className="border-b border-border px-5 py-3">
-              <h3 className="text-sm font-semibold text-foreground">{lane.title}</h3>
-              <p className="text-xs text-muted-foreground">{lane.description}</p>
-            </div>
-            <ol className="divide-y divide-border">
-              {stages.map((stage) => {
-                const view = views.get(stage.key);
-                return (
-                  <li key={stage.key} className="flex flex-wrap items-start gap-4 px-5 py-4">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <p className="text-sm font-semibold text-foreground">{stage.title}</p>
-                      <p className="text-sm text-muted-foreground">{stage.summary}</p>
-                      {view && view.abilities.length > 0 ? (
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            What you can do
-                          </p>
-                          <ul className="flex flex-wrap gap-1.5">
-                            {view.abilities.map((ability) => (
-                              <li
-                                key={ability}
-                                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
-                              >
-                                <IconCircleCheck className="size-3.5 text-primary" aria-hidden />
-                                {ability}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      <Neighbours stage={stage} views={views} />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="ghost" onClick={() => onLearnMore(stage.key)}>
-                        Learn more
-                      </Button>
-                      {view?.canOpen ? (
-                        <Button asChild variant="outline">
-                          <Link href={stage.href}>Open screen</Link>
-                        </Button>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        ))
-      )}
-    </section>
+    <Link
+      href="/training/process-map"
+      className="flex flex-wrap items-center gap-4 rounded-md border border-border bg-card p-4 transition-colors duration-150 hover:border-primary/40"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <IconRoute className="size-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">
+          See where your work fits in the business
+        </span>
+        <span className="block text-sm text-muted-foreground">
+          {mine === 0
+            ? "Follow an order from booking to payment and see who does each step."
+            : `${mine} of the ${TRAINING_STAGES.length} business steps are yours. See what comes before you and who picks up after you.`}
+        </span>
+      </span>
+      <IconArrowRight
+        className="size-4 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
+    </Link>
   );
 }
 
@@ -316,10 +332,9 @@ function YourWork({
 export function TrainingHomePage() {
   const { data, isLoading, isError, error } = useTrainingMe();
   useCompleteOnVisit("/training");
-  const [openStage, setOpenStage] = useState<TrainingStageKey | null>(null);
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           My role & training
@@ -350,13 +365,7 @@ export function TrainingHomePage() {
         <>
           <YourRole me={data} />
           <YourTraining me={data} />
-          <YourWork me={data} onLearnMore={setOpenStage} />
-          <StageSheet
-            stageKey={openStage}
-            me={data}
-            onOpenStage={setOpenStage}
-            onClose={() => setOpenStage(null)}
-          />
+          <WhereYouFit me={data} />
         </>
       ) : null}
     </div>
