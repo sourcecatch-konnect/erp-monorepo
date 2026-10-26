@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { JOURNEYS_HELP } from "./help";
+
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PERMS } from "@skerp/types";
@@ -76,11 +79,14 @@ export default function VehicleJourneyListPage() {
             Full truck cycles — legs, expenses and log slip settlement.
           </p>
         </div>
-        {canCreate ? (
-          <Button onClick={() => setStartOpen(true)}>
-            <IconPlus size={16} className="mr-1" /> Start Journey
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <PageHelp content={JOURNEYS_HELP} />
+          {canCreate ? (
+            <Button onClick={() => setStartOpen(true)}>
+              <IconPlus size={16} className="mr-1" /> Start Journey
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <JourneyTable

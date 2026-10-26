@@ -2,6 +2,7 @@ import {
   SendEmailCommand,
   SESv2Client,
 } from "@aws-sdk/client-sesv2";
+import { isTrainingEnvironment, logOutboundSkipped } from "../../lib/environment.js";
 
 type EmployeeCredentialsEmail = {
   to: string;
@@ -55,6 +56,11 @@ export const sendEmployeeCredentialsEmail = async (
     `Please keep these credentials safe and change your password after`,
     `your first login if prompted.`,
   ].join("\n");
+
+  if (isTrainingEnvironment()) {
+    logOutboundSkipped("Email", `to ${args.to}`);
+    return false;
+  }
 
   if (!sesConfigured()) {
     console.info(
@@ -129,6 +135,11 @@ export const sendPasswordResetEmail = async (
     `If you didn't request this, you can ignore this email — your password`,
     `will not change.`,
   ].join("\n");
+
+  if (isTrainingEnvironment()) {
+    logOutboundSkipped("Email", `to ${args.to}`);
+    return false;
+  }
 
   if (!sesConfigured()) {
     console.info(

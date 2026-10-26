@@ -1,0 +1,33 @@
+import type { TrainingVerifierKey } from "@skerp/types";
+
+/** What each automatic check means, for mission cards (A9). */
+export const VERIFIER_LABELS: Record<TrainingVerifierKey, string> = {
+  "order.created": "You booked an order",
+  "order.approved": "You approved an order",
+  "lr.created": "You created an LR",
+  "lr.finalised": "You finalised an LR",
+  "lr.delivered": "You marked an LR delivered",
+  "lr.acknowledged": "You confirmed a delivery with its POD",
+  "trip.created": "You planned a trip",
+  "trip_expense.created": "You entered a trip expense",
+  "trip_expense.approved": "You approved a trip expense",
+  "journey.closed": "You closed a journey and generated its Log Slip",
+  "vp_schedule.created": "You created a VP schedule",
+  "mrrr.created": "You entered an MR / RR",
+  "vp_loading.created": "You recorded a VP loading",
+  "rake.rail_head": "You recorded a rake at the rail head",
+  "grn.created": "You entered a GRN at the rail head",
+  "branch_grn.created": "You entered a GRN at the branch",
+  "delivery_challan.created": "You created a delivery challan",
+  "bill.created": "You created a bill",
+  "bill.approved": "You approved a bill",
+  "bill.finalised": "You finalised a bill",
+  "receipt.created": "You recorded a customer payment",
+  "payment_slip.created": "You raised a payment slip",
+  "payment_slip.approved": "You approved a payment slip",
+  "purchase_order.created": "You raised a purchase order",
+  "inward.created": "You received parts into stock",
+  "job_card.created": "You opened a job card",
+  "job_card.finalised": "You finalised a job card",
+  "service_bill.created": "You entered a service bill",
+};

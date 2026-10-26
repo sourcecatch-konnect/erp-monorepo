@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { VP_LOADING_HELP } from "./help";
+
 import * as React from "react";
 import Link from "next/link";
 import { IconPlus } from "@tabler/icons-react";
@@ -121,17 +124,20 @@ export default function VPLoadingListPage() {
           </p>
         </div>
 
-        {canCreate ? (
-          <Button asChild>
-            <Link href="/vp-management/vp-loading/new">
-              <IconPlus
-                size={16}
-                className="mr-1"
-              />
-              Create VP Loading
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <PageHelp content={VP_LOADING_HELP} />
+          {canCreate ? (
+            <Button asChild>
+              <Link href="/vp-management/vp-loading/new">
+                <IconPlus
+                  size={16}
+                  className="mr-1"
+                />
+                Create VP Loading
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <VPLoadingTable

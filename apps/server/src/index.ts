@@ -82,6 +82,9 @@ import jobCardRoute from "./modules/job-card/job-card.route.js";
 import serviceBillRoute from "./modules/service-bill/service-bill.route.js";
 import supplierReplacementRoute from "./modules/supplier-replacement/supplier-replacement.route.js";
 import vendorPaymentRoute from "./modules/vendor-payment/vendor-payment.route.js";
+import trainingRoute from "./modules/training/training.route.js";
+// remove-before-prod: in-app feedback (testing phase only).
+import feedbackRoute, { isFeedbackEnabled } from "./modules/feedback/feedback.route.js";
 import driverFinanceRoute from "./modules/driver-finance/driver-finance.route.js";
 const app = express();
 
@@ -179,6 +182,9 @@ app.use("/job-card", jobCardRoute);
 app.use("/service-bill", serviceBillRoute);
 app.use("/supplier-replacement", supplierReplacementRoute);
 app.use("/vendor-payment", vendorPaymentRoute);
+app.use("/training", trainingRoute);
+// remove-before-prod: FEEDBACK_ENABLED=false → every /feedback/* 404s.
+if (isFeedbackEnabled()) app.use("/feedback", feedbackRoute);
 app.use("/driver-finance", driverFinanceRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
