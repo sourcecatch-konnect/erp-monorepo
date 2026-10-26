@@ -31,24 +31,9 @@ export function TableEmptyState({
           icon={<Icon size={18} />}
           title={message}
           description={description}
+          action={action}
         />
-        <TableCell
-          colSpan={colSpan}
-          className="py-14 text-center text-muted-foreground"
-        >
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-              <Icon size={18} />
-            </div>
-            <span className="text-sm font-medium">{message}</span>
-            {description ? (
-              <span className="max-w-md whitespace-normal text-sm">
-                {description}
-              </span>
-            ) : null}
-            {action ? <div className="mt-2">{action}</div> : null}
-          </div>
-        </TableCell>
+      </TableCell>
     </TableRow>
   );
 }

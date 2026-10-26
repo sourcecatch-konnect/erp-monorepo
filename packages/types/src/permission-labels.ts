@@ -316,6 +316,7 @@ const labels = {
   "workshop.replacement.manage": "Create and edit supplier replacements",
   "admin.rbac.manage": "Manage roles and user access",
   "admin.audit_log.view": "View the audit log",
+  "admin.training.manage": "Manage role training and see everyone's progress",
   "notifications.view": "View notifications",
   "notifications.manage_rules": "Set who gets notified, and when",
   "notifications.manage_templates": "Edit notification messages",
@@ -329,6 +330,9 @@ const labels = {
   "driver_finance.salary_approve": "Approve or cancel salary runs",
   "driver_finance.advance_manage": "Give and undo salary advances",
   "driver_finance.pay": "Pay drivers",
+  // remove-before-prod: in-app feedback (testing phase only).
+  "feedback.view": "View feedback reports",
+  "feedback.manage": "Triage and update feedback reports",
 } satisfies Record<Leaves<typeof PERMS>, string>;
 const areas: Record<string, string> = {
   accounts: "Vendor payments",
@@ -359,6 +363,7 @@ const areas: Record<string, string> = {
   admin: "Administration",
   notifications: "Notifications",
   attachments: "Attachments",
+  feedback: "Feedback (testing)",
   "masters.one-lap-tracker": "Master data: OneLap trackers",
   "masters.state": "Master data: States",
   "masters.city": "Master data: Cities",

@@ -5183,6 +5183,24 @@ enum LogSlipLineType {
   ADJUSTMENT
 }
 
+/// The real balance of a cash / bank account as on a date, typed by the user.
+/// The ERP posts the difference to "Opening Balance (Suspense)" so its own
+/// balance matches from that date (journalEntryId = that adjustment; null
+/// when no adjustment was needed). Correcting it reverses and re-posts.
+model CashAccountOpening {
+  id             String      @id @default(cuid())
+  cashAccountId  String      @unique
+  cashAccount    CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  asOf           DateTime
+  /// Signed: negative = overdrawn bank.
+  amountPaise    BigInt
+  journalEntryId String?
+  updatedById    String
+  updatedBy      User        @relation("CashAccountOpeningUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Training (role-based onboarding). Tracks are assigned to roles as data —
 // code never matches on role names. Stage/track content lives in
@@ -5334,31 +5352,15 @@ enum FeedbackCommentSide {
 /// Reporter ↔ team conversation on one feedback item. Author is a snapshot
 /// (no FK to User) for the same reason as Feedback.reporter*.
 model FeedbackComment {
-  id             String              @id @default(cuid())
-  feedbackId     String
-  authorId       String
-  authorName     String
-  side           FeedbackCommentSide
-  kind           FeedbackCommentKind @default(COMMENT)
-  body           String
-  createdAt      DateTime            @default(now())
-  feedback       Feedback            @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
-  /// The real balance of a cash / bank account as on a date, typed by the user.
-  /// The ERP posts the difference to "Opening Balance (Suspense)" so its own
-  /// balance matches from that date (journalEntryId = that adjustment; null
-  /// when no adjustment was needed). Correcting it reverses and re-posts.
-  model CashAccountOpening {
-  id             String              @id @default(cuid())
-  cashAccountId  String              @unique
-  cashAccount    CashAccount         @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
-  asOf           DateTime
-  /// Signed: negative = overdrawn bank.
-  amountPaise    BigInt
-  journalEntryId String?
-  updatedById    String
-  updatedBy      User                @relation("CashAccountOpeningUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id         String              @id @default(cuid())
+  feedbackId String
+  authorId   String
+  authorName String
+  side       FeedbackCommentSide
+  kind       FeedbackCommentKind @default(COMMENT)
+  body       String
+  createdAt  DateTime            @default(now())
+  feedback   Feedback            @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
 
   @@index([feedbackId, createdAt])
 }
