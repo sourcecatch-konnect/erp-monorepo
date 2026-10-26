@@ -33,15 +33,22 @@ const push = <T>(list: T[], item: T, max: number) => {
 const clip = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text;
 
+type ErrorBody = { error?: { message?: string }; message?: string };
+
+/** Inside the adapter the body is still raw text: axios parses JSON afterwards. */
+const parseBody = (data: unknown): ErrorBody | undefined => {
+  if (typeof data !== "string") return data as ErrorBody | undefined;
+  try {
+    return JSON.parse(data) as ErrorBody;
+  } catch {
+    return undefined;
+  }
+};
+
 const serverMessage = (error: unknown): string | undefined => {
-  const axiosError = error as AxiosError<{
-    error?: { message?: string };
-    message?: string;
-  }>;
-  const message =
-    axiosError.response?.data?.error?.message ??
-    axiosError.response?.data?.message ??
-    axiosError.message;
+  const axiosError = error as AxiosError;
+  const body = parseBody(axiosError.response?.data);
+  const message = body?.error?.message ?? body?.message ?? axiosError.message;
   return message ? clip(String(message), 300) : undefined;
 };
 

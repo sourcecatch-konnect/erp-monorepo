@@ -290,7 +290,39 @@ async function main() {
   }
   await seedLedger(db);
 
-  /* ---- One demo user per canonical role ---- */
+  /* ---- A demo rail role ---- */
+  // None of the canonical roles holds the rail permissions, so without this
+  // only Admin could practise the Rail track and its mission. Training copy
+  // only; built from the permission catalog so new rail actions are included.
+  const RAIL_PREFIXES = [
+    "vp_schedule.",
+    "mrrr.",
+    "vp_loading.",
+    "grn.",
+    "rail_branch_grn.",
+    "delivery_challan.",
+    "rail_rake_operation.",
+    "rake_at_rail_head.",
+    "rake_at_branch.",
+  ];
+  const railPermissions = (await db.permissionDef.findMany({ select: { id: true, key: true } })).filter(
+    ({ key }) =>
+      RAIL_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
+      key === "order.view" ||
+      key === "lorry_receipt.view" ||
+      /^masters\.[^.]+\.view$/.test(key),
+  );
+  const railRole = await db.role.upsert({
+    where: { name: "Rail Operations (Demo)" },
+    create: { name: "Rail Operations (Demo)" },
+    update: {},
+  });
+  await db.rolePermission.createMany({
+    data: railPermissions.map((permission) => ({ roleId: railRole.id, permissionId: permission.id })),
+    skipDuplicates: true,
+  });
+
+  /* ---- One demo user per canonical role, plus the rail role ---- */
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD!, 10);
   const trainees: {
     userName: string;
@@ -303,6 +335,7 @@ async function main() {
     { userName: "trainee.accounts", firstName: "Accounts", role: "Accounts", branchScope: "ALL" },
     { userName: "trainee.auditor", firstName: "Auditor", role: "Read-Only Auditor", branchScope: "ALL" },
     { userName: "trainee.admin", firstName: "Admin", role: "Admin", branchScope: "ALL" },
+    { userName: "trainee.rail", firstName: "Rail", role: "Rail Operations (Demo)", branchScope: "ASSIGNED" },
   ];
   for (const trainee of trainees) {
     const role = await db.role.findFirst({ where: { name: trainee.role } });
@@ -338,7 +371,7 @@ async function main() {
 
   console.log(
     `seed-training: demo data ready — ${trainees.length} trainee users (password from TRAINING_DEMO_PASSWORD), ` +
-      `3 demo branches (Demo Pune is head office), 2 rail heads, 2 customers, 2 vehicles, 2 drivers, ` +
+      `a Rail Operations (Demo) role, 3 demo branches (Demo Pune is head office), 2 rail heads, 2 customers, 2 vehicles, 2 drivers, ` +
       `1 road rate, 1 wagon + rail freight, 1 workshop supplier + part, 2 cash accounts, chart of accounts.`,
   );
 }

@@ -420,9 +420,11 @@ removal PR. **No other module may depend on it.**
 
 ## Isolation contract (Epic-level acceptance criteria)
 
-1. **All code lives in four folders:**
+1. **All code lives in five folders:**
    `apps/server/src/modules/feedback/` · `apps/web/features/feedback/` ·
-   `apps/web/app/(dashboard)/settings/feedback/` · `packages/validators/src/feedback/`
+   `apps/web/app/(dashboard)/settings/feedback/` · `packages/validators/src/feedback/` ·
+   `packages/types/src/feedback/`
+   (Not `apps/web/components/feedback/`: that is the unrelated shared dialogs folder.)
 2. **Touch points outside those folders.** This is the complete list, and the removal PR reverts exactly these:
 
    | File | Change |
@@ -434,8 +436,9 @@ removal PR. **No other module may depend on it.**
    | `packages/validators` index + `package.json` | re-export + `./feedback` subpath |
    | `packages/types/src/index.ts` | re-export inferred types |
    | `apps/server/prisma/schema.prisma` | `Feedback` model + enums (+ migration) |
-   | `apps/web/eslint.config.js` | `no-restricted-imports` guard (below) |
+   | `apps/web/eslint.config.js`, `apps/server/eslint.config.js` | `no-restricted-imports` guards (below) |
    | `turbo.json`, `.env.example` | `FEEDBACK_ENABLED`, `NEXT_PUBLIC_FEEDBACK_ENABLED`, `NEXT_PUBLIC_APP_VERSION` |
+   | `docs/TRAINING_ENVIRONMENT.md` | Feedback stays on in the training copy (A9) |
 
 3. **One-way dependencies only.** Feedback may import shared things (`@/lib/api`, `@/features/auth`,
    `@skerp/ui`, `config/navigation`, `attachment.service`). Nothing imports feedback except the touch points.
@@ -736,12 +739,14 @@ as the list apply.
 
 **Summary:** Turn feedback off at go-live, archive the data, then remove the module cleanly.
 
-**Runbook**
-1. **Archive:** final Excel + Word export of all feedback; store with the release docs.
+**Runbook:** the step-by-step version, with the exact file list and SQL, is
+`docs/FEEDBACK_GO_LIVE.md`. Summary:
+1. **Archive:** `pnpm exec tsx src/modules/feedback/feedback.archive.ts` writes Excel, Word (300 items per
+   file), a lossless JSON and every attached file; store it with the release docs.
 2. **Switch off (go-live day):** `FEEDBACK_ENABLED=false` on the server (feedback disappears immediately via
    the status probe), and `NEXT_PUBLIC_FEEDBACK_ENABLED=false` in the next web build.
 3. **Remove (after a stabilisation window, e.g. 30 days):** one PR that
-   - deletes the four feedback folders;
+   - deletes the five feedback folders;
    - reverts every touch point in the isolation-contract table;
    - adds a migration dropping `Feedback`, `FeedbackComment` and the feedback enums;
    - deletes `PermissionDef` rows `feedback.*` (`RolePermission` cascades on delete);
@@ -750,7 +755,7 @@ as the list apply.
    only unrelated matches; smoke-test Order → LR → Trip → Bill → Receipt.
 
 **Acceptance criteria**
-- [ ] Removal PR touches only the listed files + the four folders.
+- [ ] Removal PR touches only the listed files + the five folders.
 - [ ] No other module's behaviour changes (smoke test passes).
 
 ---

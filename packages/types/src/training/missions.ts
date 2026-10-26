@@ -72,7 +72,7 @@ export const TRAINING_MISSIONS: readonly TrainingMission[] = [
     story:
       "A Demo Appliances LR from Pune to Guwahati is going by rake instead of road.",
     before:
-      "A Demo Appliances LR booked as Road & Rail, rail heads Demo Pune Rail Head → Demo Guwahati Rail Head.",
+      "A Demo Appliances LR booked as Road & Rail (rail heads Demo Pune Rail Head → Demo Guwahati Rail Head) by the operations trainee.",
     steps: [
       "Create a VP schedule from Demo Pune to Demo Guwahati, rail heads Demo Pune Rail Head → Demo Guwahati Rail Head, with 1 Demo BCN Wagon.",
       "Enter the MR / RR for that VP.",

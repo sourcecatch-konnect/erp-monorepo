@@ -38,7 +38,7 @@ const DEMO_DATA: [string, string][] = [
   ["Accounts", "Demo Bank Account, Demo Cash"],
   [
     "Trainee logins",
-    "trainee.ops, trainee.manager, trainee.accounts, trainee.auditor, trainee.admin (all @training.local; ask your trainer for the password)",
+    "trainee.ops, trainee.manager, trainee.accounts, trainee.auditor, trainee.rail, trainee.admin (all @training.local; ask your trainer for the password)",
   ],
 ];
 

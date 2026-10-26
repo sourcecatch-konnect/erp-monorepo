@@ -49,7 +49,13 @@ function EnabledLauncher() {
   const enabled = status.data?.enabled === true;
   const updates = useFeedbackUpdates(enabled);
 
-  useEffect(() => (enabled ? installActivityRecorder() : undefined), [enabled]);
+  // Record from the first render, not once the probe answers: a page's first
+  // API calls (often the failing ones) happen before /feedback/status returns.
+  // Stops again if the server says feedback is off.
+  useEffect(
+    () => (status.isError ? undefined : installActivityRecorder()),
+    [status.isError],
+  );
 
   if (!enabled) return null;
 

@@ -82,7 +82,13 @@ nightly reset.
 - Trainee logins (password = `TRAINING_DEMO_PASSWORD`):
   `trainee.ops@training.local`, `trainee.manager@training.local`,
   `trainee.accounts@training.local`, `trainee.auditor@training.local`,
-  `trainee.admin@training.local`
+  `trainee.rail@training.local`, `trainee.admin@training.local`
+- Role **Rail Operations (Demo)** for `trainee.rail`: VP schedule, MR/RR, VP
+  loading, rake, GRN and delivery challan actions. None of the five standard
+  roles holds rail permissions, so without it only Admin could practise rail.
+- seed-admin's own login (`admin@sktranslines.com`, default password) also
+  exists on the training copy; change its password after the first load if
+  the training copy is reachable from outside.
 
 ## Nightly reset
 
@@ -115,5 +121,5 @@ you start** line. For a group session, run them in this order:
 2. **Accounts** acknowledges the delivered LR, bills it and records the payment.
 3. **Auditor** follows the paper trail of that bill.
 
-Rail needs a Demo Appliances LR booked as Road & Rail (an operations trainee
-can book one first). Workshop, Admin and Basics stand alone.
+Rail (`trainee.rail`) needs a Demo Appliances LR booked as Road & Rail, which
+the operations trainee books first. Workshop, Admin and Basics stand alone.

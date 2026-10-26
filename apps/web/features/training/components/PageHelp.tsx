@@ -61,11 +61,21 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
   // First visit: offer the tour once the page's parts have rendered.
   useEffect(() => {
     if (!tour || !tourStepKey || tourSeen || offered.current) return;
+    const offerId = `tour-offer-${tourStepKey}`;
+    // A panel or dialog (Feedback, Help, a form) opens in the corner the offer
+    // sits in, so the offer steps aside instead of covering its buttons.
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof Element && event.target.closest('[role="dialog"]')) {
+        toast.dismiss(offerId);
+      }
+    };
     const timer = setTimeout(() => {
       const ready = tour.steps.some((step) => document.querySelector(step.target));
       if (!ready) return;
       offered.current = true;
+      document.addEventListener("focusin", onFocusIn);
       toast(`New to ${content.title}?`, {
+        id: offerId,
         description: "Take a one-minute tour of the main parts of this screen.",
         duration: 20_000,
         action: { label: "Show me", onClick: () => setTouring(true) },
@@ -75,7 +85,12 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
         },
       });
     }, TOUR_OFFER_DELAY_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("focusin", onFocusIn);
+      // The offer is about this screen; don't carry it to the next one.
+      toast.dismiss(offerId);
+    };
   }, [tour, tourStepKey, tourSeen, content.title, mutate]);
 
   const closeTour = (reason: TourCloseReason) => {

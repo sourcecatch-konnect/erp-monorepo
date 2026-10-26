@@ -69,6 +69,23 @@ export const commentSelect = {
   createdAt: true,
 } satisfies Prisma.FeedbackCommentSelect;
 
+/** Attachment entityType for feedback pictures (S3 prefix attachments/Feedback/). */
+export const ATTACHMENT_ENTITY = "Feedback";
+
+/** Clean, uploaded pictures for these items, oldest first. */
+export const findScreenshots = (feedbackIds: string[]) =>
+  db.attachment.findMany({
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: { in: feedbackIds },
+      uploaded: true,
+      deletedAt: null,
+      antivirusStatus: "CLEAN",
+    },
+    orderBy: { uploadedAt: "asc" },
+    select: { id: true, entityId: true, s3Key: true, sizeBytes: true, originalName: true },
+  });
+
 const startOfDay = (iso: string): Date | null => {
   const date = new Date(`${iso}T00:00:00`);
   return Number.isNaN(date.getTime()) ? null : date;

@@ -11,6 +11,7 @@
  * that has never reported sits at 0,0.
  */
 import { isTrainingEnvironment } from "../../lib/environment.js";
+import { AppError } from "../../lib/error.js";
 import type {
   FleetVehicle,
   DevicePosition,
@@ -46,11 +47,17 @@ export type OneLapDevice = {
   speed?: number | null;
   course?: number | null;
 };
+/** Readable 503 instead of a generic server error on the tracking screens. */
+const trainingSwitchedOff = () =>
+  new AppError(
+    "GPS tracking is switched off in the training environment",
+    503,
+    "TRAINING_ENVIRONMENT",
+  );
+
 /** Stateless Basic auth header: base64(phoneNumber:password). */
 function authHeader(): string {
-  if (isTrainingEnvironment()) {
-    throw new Error("OneLap GPS is switched off in the training environment");
-  }
+  if (isTrainingEnvironment()) throw trainingSwitchedOff();
   if (!EMAIL || !PASSWORD) {
     throw new Error("ONELAP_EMAIL / ONELAP_PASSWORD are not configured");
   }
@@ -178,9 +185,7 @@ export async function getHistory(
 
 /** Log in via /api/session and return the `JSESSIONID=…` cookie for the WS. */
 export async function loginForSocket(): Promise<string> {
-  if (isTrainingEnvironment()) {
-    throw new Error("OneLap GPS is switched off in the training environment");
-  }
+  if (isTrainingEnvironment()) throw trainingSwitchedOff();
   if (!EMAIL || !PASSWORD) {
     throw new Error("ONELAP_EMAIL / ONELAP_PASSWORD are not configured");
   }

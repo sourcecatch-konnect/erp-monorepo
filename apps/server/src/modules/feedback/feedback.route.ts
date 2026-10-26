@@ -36,10 +36,12 @@ import {
 import { buildFeedbackDocx, imageSize, type DocxImage } from "./feedback.docx.js";
 import { buildFeedbackXlsx } from "./feedback.export.js";
 import {
+  ATTACHMENT_ENTITY,
   buildFeedbackOrderBy,
   buildFeedbackWhere,
   commentSelect,
   describeFilters,
+  findScreenshots,
   getFeedbackSummary,
   isResolved,
   listSelect,
@@ -63,7 +65,6 @@ import {
 export const isFeedbackEnabled = (): boolean =>
   process.env.FEEDBACK_ENABLED === "true";
 
-const ATTACHMENT_ENTITY = "Feedback";
 const MAX_CONTEXT_CHARS = 32_000;
 const MAX_EXPORT_ROWS = 5_000;
 const MAX_DOCX_ROWS = 300;
@@ -90,19 +91,6 @@ const loadForCaller = async (
   if (!isReporter && !allowTeam(req)) throw new ForbiddenError();
   return { item, isReporter };
 };
-
-const listScreenshots = (feedbackId: string) =>
-  db.attachment.findMany({
-    where: {
-      entityType: ATTACHMENT_ENTITY,
-      entityId: feedbackId,
-      uploaded: true,
-      deletedAt: null,
-      antivirusStatus: "CLEAN",
-    },
-    orderBy: { uploadedAt: "asc" },
-    select: { id: true, entityId: true, s3Key: true },
-  });
 
 /** Lets the web widget hide itself when the server flag is off (404). */
 router.get("/status", (_req, res) =>
@@ -237,17 +225,7 @@ router.get("/export/docx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
   let usedBytes = 0;
   let skippedImages = 0;
   if (rows.length > 0 && isS3Configured()) {
-    const attachments = await db.attachment.findMany({
-      where: {
-        entityType: ATTACHMENT_ENTITY,
-        entityId: { in: rows.map((row) => row.id) },
-        uploaded: true,
-        deletedAt: null,
-        antivirusStatus: "CLEAN",
-      },
-      orderBy: { uploadedAt: "asc" },
-      select: { entityId: true, s3Key: true, sizeBytes: true },
-    });
+    const attachments = await findScreenshots(rows.map((row) => row.id));
     for (const attachment of attachments) {
       if (usedBytes + attachment.sizeBytes > MAX_DOCX_IMAGE_BYTES) {
         skippedImages += 1;
@@ -333,7 +311,7 @@ router.get("/:id", async (req, res) => {
   }
   const screenshots = isS3Configured()
     ? await Promise.all(
-        (await listScreenshots(item.id)).map(async (shot) => ({
+        (await findScreenshots([item.id])).map(async (shot) => ({
           id: shot.id,
           url: await getDownloadUrl(shot.id),
         })),
