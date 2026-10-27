@@ -18,4 +18,23 @@ export default [
       ],
     },
   },
+  {
+    // remove-before-prod: only index.ts may mount the feedback module.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/modules/feedback/**", "src/index.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/modules/feedback/*", "./feedback/*", "../feedback/*"],
+              message:
+                "Feedback is temporary (remove-before-prod). Only src/index.ts may import it.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

@@ -16,6 +16,7 @@ import {
   IconBooks,
   IconBoxSeam,
   IconChartBar,
+  IconSchool,
   IconUserDollar,
   IconFileInvoice,
   type Icon,
@@ -65,6 +66,19 @@ export const NAV_SECTIONS: NavSection[] = [
         title: "Dashboard",
         href: "/dashboard",
         icon: IconLayoutDashboard,
+      },
+      {
+        title: "Training",
+        icon: IconSchool,
+        items: [
+          { title: "My role & training", href: "/training" },
+          { title: "How the business works", href: "/training/process-map" },
+          { title: "Glossary", href: "/training/glossary" },
+          // Practice missions use demo data — training copy of the ERP only.
+          ...(process.env.NEXT_PUBLIC_APP_ENVIRONMENT === "training"
+            ? [{ title: "Practice missions", href: "/training/missions" }]
+            : []),
+        ],
       },
     ],
   },
@@ -511,6 +525,21 @@ export const NAV_SECTIONS: NavSection[] = [
             href: "/settings/audit-log",
             permission: PERMS.ADMIN.AUDIT_LOG_VIEW,
           },
+          {
+            title: "Training",
+            href: "/settings/training",
+            permission: PERMS.ADMIN.TRAINING_MANAGE,
+          },
+          // remove-before-prod: in-app feedback (testing phase only).
+          ...(process.env.NEXT_PUBLIC_FEEDBACK_ENABLED === "true"
+            ? [
+              {
+                title: "Feedback",
+                href: "/settings/feedback",
+                permission: PERMS.FEEDBACK.VIEW,
+              },
+            ]
+            : []),
         ],
       },
     ],

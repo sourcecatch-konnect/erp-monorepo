@@ -722,6 +722,7 @@ export default function LRTable(props: Props) {
             <TableEmptyState
               colSpan={visibleColumnCount}
               message="No lorry receipts found"
+              description="If you are searching, try clearing the filters. LRs are made from a confirmed order, or as an instant LR for walk-in freight."
             />
           ) : (
             table.getRowModel().rows.map((row) => {

@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { LR_LIST_HELP } from "./help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -110,6 +113,7 @@ export default function LRListPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <PageHelp content={LR_LIST_HELP} />
           {canCreate ? (
             <>
               <Button
