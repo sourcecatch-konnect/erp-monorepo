@@ -1,14 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { IconChevronDown, IconPlus } from "@tabler/icons-react";
-import { Button } from "@skerp/ui/components/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@skerp/ui/components/dropdown";
+import { IconPlus } from "@tabler/icons-react";
 import { useCan } from "@/features/auth";
 import { cn } from "@/lib/utils";
 import { CREATE_ACTIONS, type CreateAction } from "../create-actions";
@@ -40,39 +33,20 @@ const TONES = [
 
 export function QuickCreate() {
   const allowed = useAllowedActions();
-  const inline = allowed.filter((a) => !a.overflow);
-  const overflow = allowed.filter((a) => a.overflow);
 
   if (allowed.length === 0) return null;
 
   return (
     <section aria-label="Create" className="rounded-lg border bg-card p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-foreground">Start something</h2>
-        {overflow.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost">
-                More
-                <IconChevronDown className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {overflow.map((action) => (
-                <DropdownMenuItem key={action.href} asChild>
-                  <Link href={action.href}>
-                    <action.icon className="size-4 text-muted-foreground" />
-                    {action.label}
-                  </Link>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-      </div>
+      <h2 className="text-sm font-medium text-foreground">Start something</h2>
 
+      {/*
+        Every action the viewer may create is on the row. There were six at
+        most and two of them sat behind a "More" menu, which hid a job card
+        behind a click to save a tile's worth of space.
+      */}
       <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {inline.map((action, index) => (
+        {allowed.map((action, index) => (
           <Link
             key={action.href}
             href={action.href}

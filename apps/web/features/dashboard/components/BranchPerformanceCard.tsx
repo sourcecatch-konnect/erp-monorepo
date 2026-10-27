@@ -50,7 +50,7 @@ export function BranchPerformanceCard({
       {active.length === 0 ? (
         <WidgetEmpty>No branches in your access.</WidgetEmpty>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-5">
           {active.map((row) => {
             const weak =
               row.collectionPct !== null &&

@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { IconCircleCheck } from "@tabler/icons-react";
+
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import type { MyWorkPriorityRow } from "@skerp/types";
 import { formatPaiseCompact } from "@/lib/money";
@@ -12,7 +12,11 @@ import { myWorkKeys } from "../my-work.keys";
 import { ActionButton } from "./ActionButton";
 import { QUICK_BY_QUEUE, type QuickAction } from "./quick";
 import { dueText, rowUrgency } from "./urgency";
-
+import {
+  IconBolt,
+  IconCircleCheck,
+  IconClock,
+} from "@tabler/icons-react";
 /**
  * Three, because this is a decision and not a list. A fourth row would push
  * the rail past a laptop viewport, and the grouped areas already hold the rest.
@@ -115,18 +119,39 @@ export function DoFirst({
       </section>
     );
   }
-
   return (
     <section
-      aria-label="Do first"
-      className={cn("overflow-hidden rounded-lg border bg-card", className)}
+      aria-labelledby="do-first-heading"
+      className={cn(
+        "overflow-hidden rounded-xl border bg-card",
+        className,
+      )}
     >
-      <header className="flex items-baseline justify-between gap-2 border-b bg-primary/5 px-4 py-2.5">
-        <h2 className="text-sm font-semibold text-foreground">Do first</h2>
-        <p className="text-xs text-muted-foreground">Across every area</p>
-      </header>
+      <header className="flex items-start gap-3 border-b px-4 py-4">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <IconBolt className="size-5" aria-hidden="true" />
+        </span>
 
-      <ol className="divide-y">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <h2
+              id="do-first-heading"
+              className="text-sm font-semibold text-foreground"
+            >
+              Do first
+            </h2>
+
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+              {picked.length} tasks
+            </span>
+          </div>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            Your next priorities across every area.
+          </p>
+        </div>
+      </header>
+      <ol className="space-y-3 bg-muted/20 p-3">
         {picked.map((row, i) => (
           <RailRow
             key={`${row.queueKey}:${row.id}`}
@@ -140,7 +165,6 @@ export function DoFirst({
     </section>
   );
 }
-
 function RailRow({
   row,
   rank,
@@ -152,66 +176,108 @@ function RailRow({
   primary: boolean;
   onQuick: (action: QuickAction) => void;
 }) {
-  const urgency = rowUrgency(row.ageDays, row.lateAfterDays, row.isLate);
-  const late = urgency === "late" || urgency === "verylate";
+  const urgency = rowUrgency(
+    row.ageDays,
+    row.lateAfterDays,
+    row.isLate,
+  );
+
+  const timing = dueText(
+    row.ageDays,
+    row.lateAfterDays,
+    row.isLate,
+  );
+
   const kind = QUICK_BY_QUEUE[row.queueKey];
+
   const amount =
     row.amountPaise !== null
       ? formatPaiseCompact(Number(row.amountPaise))
       : null;
 
   return (
-    <li className={cn("px-4 py-3", primary && "bg-primary/5")}>
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-          {rank}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-          {row.queueTitle}
-        </span>
+    <li
+      className={cn(
+        "min-w-0 rounded-lg border bg-card p-4",
+        primary ? "border-primary/30" : "border-border",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        {/* Priority number */}
         <span
           className={cn(
-            "shrink-0 rounded-sm px-1.5 text-xs font-medium tabular-nums",
-            late
-              ? "bg-destructive/10 text-destructive"
+            "flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums",
+            primary
+              ? "bg-primary/10 text-primary"
               : "bg-muted text-muted-foreground",
           )}
-          title={dueText(row.ageDays, row.lateAfterDays, row.isLate)}
         >
-          {row.ageDays}d
+          <span className="sr-only">Priority </span>
+          {rank}
         </span>
+
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold leading-5 text-foreground">
+            {row.queueTitle}
+          </h3>
+
+          <span
+            className={cn(
+              "mt-1 inline-block rounded px-1.5 py-0.5 text-xs font-medium",
+              urgency === "verylate"
+                ? "bg-destructive/10 text-destructive"
+                : urgency === "late"
+                  ? "bg-warning/10 text-warning"
+                  : "bg-muted text-muted-foreground",
+            )}
+          >
+            {timing}
+          </span>
+        </div>
       </div>
 
-      <p className="mt-1 truncate text-sm text-foreground" title={row.party}>
+      {/* Task details */}
+      <p className="mt-3 break-words text-sm leading-5 text-foreground">
         {row.party}
       </p>
 
-      <p className="truncate text-xs text-muted-foreground">
-        <Link
-          href={row.recordHref}
-          className="transition-colors duration-150 hover:text-primary hover:underline"
-        >
-          {row.number}
-        </Link>
-        {amount ? ` · ${amount}` : ""}
-      </p>
+      <Link
+        href={row.recordHref}
+        className="mt-1 block break-all text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {row.number}
+      </Link>
 
-      <div className="mt-2.5 [&>*]:w-full">
-        {kind ? (
-          <ActionButton
-            label={row.actionLabel}
-            primary={primary}
-            onClick={() =>
-              onQuick({ kind, id: row.id, number: row.number, row })
-            }
-          />
-        ) : (
-          <ActionButton
-            label={row.actionLabel}
-            href={row.href}
-            primary={primary}
-          />
-        )}
+      {/* Amount and visible action */}
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-3 border-t pt-3">
+        {amount ? (
+          <span className="mr-auto text-sm font-semibold tabular-nums text-foreground">
+            {amount}
+          </span>
+        ) : null}
+
+        <div className="[&>*]:min-h-9 [&>*]:min-w-24 [&>*]:rounded-md [&>*]:px-4">
+          {kind ? (
+            <ActionButton
+              label={row.actionLabel}
+              primary={primary}
+              onClick={() =>
+                onQuick({
+                  kind,
+                  id: row.id,
+                  number: row.number,
+                  row,
+                })
+              }
+            />
+          ) : (
+            <ActionButton
+              label={row.actionLabel}
+              href={row.href}
+              primary={primary}
+            />
+          )}
+        </div>
       </div>
     </li>
   );

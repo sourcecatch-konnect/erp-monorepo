@@ -5,6 +5,9 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   IconAlertTriangle,
+  IconArrowDown,
+  IconArrowRight,
+  IconBook2,
   IconHelpCircle,
   IconPlayerPlay,
   IconRoute,
@@ -24,7 +27,11 @@ import {
   TRACK_BY_KEY,
   previousStages,
 } from "../lib/catalog-lookup";
+import { GLOSSARY } from "../content/glossary";
+import { STAGE_OUTPUT } from "../content/stages";
 import { Term } from "./Term";
+
+const GLOSSARY_BY_ID = new Map(GLOSSARY.map((entry) => [entry.id, entry]));
 
 /** A guided tour for one screen. Seen state is saved as training step `tour.<key>`. */
 export type PageTour = { key: string; steps: TourStep[] };
@@ -124,6 +131,10 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
         .map((key) => STAGE_BY_KEY.get(key))
         .filter((s) => s !== undefined)
     : [];
+  const terms = (content.terms ?? [])
+    .map((id) => GLOSSARY_BY_ID.get(id))
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+
   const practiceTrack =
     content.trainingStep && me
       ? me.tracks.find((view) => view.stepKeys.includes(content.trainingStep!))
@@ -131,13 +142,26 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
 
   return (
     <>
+      {/*
+        Tinted rather than another grey outline button: on a toolbar of
+        Export / Filter / New, plain "Help" disappears, and the one control
+        that explains the screen is the one a new joiner has to find.
+      */}
       <Button
         variant="outline"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
+        className="border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary"
       >
         <IconHelpCircle className="size-4" aria-hidden />
         Help
+        {!tourSeen ? (
+          <span
+            aria-hidden
+            className="ml-0.5 size-1.5 rounded-full bg-primary"
+            title="There is a guided tour for this screen"
+          />
+        ) : null}
       </Button>
 
       <HelpSheet
@@ -165,74 +189,157 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
           </>
         }
       >
+        {content.howTo && content.howTo.length > 0 ? (
+          <HelpSection
+            title="Do this, in this order"
+            icon={<IconArrowRight className="size-4" />}
+          >
+            {/* Numbered circles joined by a line, the same shape the training
+                lessons use — a bare <ol> read as a paragraph with digits. */}
+            <ol className="mt-1">
+              {content.howTo.map((line, index) => {
+                const last = index === content.howTo!.length - 1;
+                return (
+                  <li
+                    key={line}
+                    className="relative flex gap-3.5 pb-4 last:pb-0"
+                  >
+                    {!last ? (
+                      <span
+                        aria-hidden
+                        className="absolute bottom-0 left-[15px] top-8 w-0.5 bg-border"
+                      />
+                    ) : null}
+                    <span className="relative z-[1] flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 pt-1 text-sm text-foreground">
+                      {line}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </HelpSection>
+        ) : null}
+
         {stage ? (
           <HelpSection
-            title="Where this fits in the business"
+            title="Where this fits"
             icon={<IconRoute className="size-4" />}
           >
-            <p>
-              This screen is the step{" "}
-              <span className="font-medium">{stage.title}</span>.{" "}
-              {stage.summary}
-            </p>
-            {before.length > 0 ? (
-              <p className="text-muted-foreground">
-                Before it: {before.map((s) => s.title).join(", ")}.
-              </p>
-            ) : null}
-            {after.length > 0 ? (
-              <p className="text-muted-foreground">
-                After it: {after.map((s) => s!.title).join(", ")}.
-              </p>
-            ) : null}
+            {/* The handover as a chain: who hands it to you, what you make,
+                who picks it up. Same block as the process map's detail panel. */}
+            <ol className="space-y-1.5">
+              <li className="rounded-lg border border-border bg-background px-3 py-2">
+                <p className="text-xs text-muted-foreground">Comes before</p>
+                <p className="mt-0.5 text-sm font-medium text-foreground">
+                  {before.length > 0
+                    ? before.map((s) => s.title).join(", ")
+                    : "Nothing — this starts the chain"}
+                </p>
+              </li>
+              <li
+                aria-hidden
+                className="flex justify-center text-muted-foreground"
+              >
+                <IconArrowDown className="size-4" />
+              </li>
+              <li className="rounded-lg border border-primary/35 bg-primary/5 px-3 py-2">
+                <p className="text-xs font-medium text-primary">
+                  This screen produces
+                </p>
+                <p className="mt-0.5 text-sm font-medium text-foreground">
+                  {STAGE_OUTPUT[stage.key]}
+                </p>
+              </li>
+              <li
+                aria-hidden
+                className="flex justify-center text-muted-foreground"
+              >
+                <IconArrowDown className="size-4" />
+              </li>
+              <li className="rounded-lg border border-border bg-background px-3 py-2">
+                <p className="text-xs text-muted-foreground">Comes next</p>
+                <p className="mt-0.5 text-sm font-medium text-foreground">
+                  {after.length > 0
+                    ? after.map((s) => s!.title).join(", ")
+                    : "Nothing — the flow ends here"}
+                </p>
+              </li>
+            </ol>
             <Link
               href="/training/process-map"
-              className="inline-block text-sm font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >
+              <IconRoute className="size-4" aria-hidden />
               See it on the process map
             </Link>
           </HelpSection>
         ) : null}
 
-        {content.howTo && content.howTo.length > 0 ? (
-          <HelpSection title="How to use it">
-            <ol className="list-decimal space-y-1.5 pl-5">
-              {content.howTo.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ol>
-          </HelpSection>
-        ) : null}
-
         {content.next ? (
-          <HelpSection title="What happens next">
-            <p>{content.next}</p>
+          <HelpSection
+            title="What happens next"
+            icon={<IconArrowRight className="size-4" />}
+          >
+            <p className="rounded-lg border border-border bg-background px-3 py-2">
+              {content.next}
+            </p>
           </HelpSection>
         ) : null}
 
         {content.mistakes && content.mistakes.length > 0 ? (
           <HelpSection
-            title="Common mistakes"
+            title={`Watch out — ${content.mistakes.length} ${
+              content.mistakes.length === 1 ? "thing" : "things"
+            }`}
             icon={<IconAlertTriangle className="size-4" />}
           >
-            <ul className="list-disc space-y-1.5 pl-5">
+            {/* Mistakes cost money here, so they get their own tone rather
+                than a bullet in the same grey as everything else. */}
+            <ul className="space-y-1.5">
               {content.mistakes.map((line) => (
-                <li key={line}>{line}</li>
+                <li
+                  key={line}
+                  className="flex items-start gap-2.5 rounded-lg border border-warning/35 bg-warning/8 px-3 py-2"
+                >
+                  <IconAlertTriangle
+                    className="mt-0.5 size-4 shrink-0 text-warning"
+                    aria-hidden
+                  />
+                  <span className="text-sm text-foreground">{line}</span>
+                </li>
               ))}
             </ul>
           </HelpSection>
         ) : null}
 
-        {content.terms && content.terms.length > 0 ? (
-          <HelpSection title="Words used here">
-            <p className="flex flex-wrap gap-x-4 gap-y-1">
-              {content.terms.map((id) => (
-                <Term key={id} id={id} />
+        {terms.length > 0 ? (
+          <HelpSection
+            title="Words used here"
+            icon={<IconBook2 className="size-4" />}
+          >
+            {/* The meaning, not just a clickable chip: a reader who does not
+                already know the word should not have to click to find out. */}
+            <dl className="space-y-2">
+              {terms.map((entry) => (
+                <div key={entry.id}>
+                  <dt className="text-sm font-semibold text-foreground">
+                    <Term id={entry.id}>{entry.term}</Term>
+                    {entry.fullName ? (
+                      <span className="font-normal text-muted-foreground">
+                        {" "}
+                        · {entry.fullName}
+                      </span>
+                    ) : null}
+                  </dt>
+                  <dd className="text-xs text-muted-foreground">
+                    {entry.meaning}
+                  </dd>
+                </div>
               ))}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Click a word to see what it means.
-            </p>
+            </dl>
           </HelpSection>
         ) : null}
 

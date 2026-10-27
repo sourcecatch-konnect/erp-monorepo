@@ -4,16 +4,24 @@ import * as React from "react";
 
 import { cn } from "../lib/util";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "./sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./dialog";
 
 /**
- * Side panel that explains a screen in plain words. Compose it from
+ * Centred panel that explains a screen in plain words. Compose it from
  * HelpSection blocks; the content itself belongs to each feature.
+ *
+ * A dialog rather than a side drawer: help is something you stop and read,
+ * not something you keep open beside your work, and a drawer pinned to one
+ * edge made a short explanation sit in a tall narrow column. The name is kept
+ * so every feature's call site stays unchanged.
+ *
+ * Header and footer are fixed; only the middle scrolls, so the title and the
+ * "Take the guided tour" button never scroll out of reach.
  */
 function HelpSheet({
   open,
@@ -31,25 +39,32 @@ function HelpSheet({
   children: React.ReactNode;
 }) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
         data-slot="help-sheet"
-        className="w-full gap-0 data-[side=right]:sm:max-w-lg"
+        className="grid max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-lg p-0 sm:max-w-4xl"
       >
-        <SheetHeader className="gap-1 border-b border-border px-6 py-4 pr-12">
-          <p className="text-xs font-medium text-muted-foreground">Help</p>
-          <SheetTitle className="text-lg">{title}</SheetTitle>
-          {description ? <SheetDescription>{description}</SheetDescription> : null}
-        </SheetHeader>
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">{children}</div>
+        <DialogHeader className="gap-1 border-b border-border bg-primary/5 px-5 py-4 pr-12 text-left">
+          <p className="text-xs font-semibold uppercase tracking-tight text-primary">
+            Help
+          </p>
+          <DialogTitle className="text-lg">{title}</DialogTitle>
+          {description ? (
+            <DialogDescription>{description}</DialogDescription>
+          ) : null}
+        </DialogHeader>
+
+        <div className="min-h-0 space-y-5 overflow-y-auto px-5 py-5">
+          {children}
+        </div>
+
         {footer ? (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-6 py-4">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border bg-background px-5 py-3.5">
             {footer}
           </div>
         ) : null}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
