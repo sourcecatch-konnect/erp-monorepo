@@ -27,6 +27,8 @@ import { BranchPerformanceCard } from "./BranchPerformanceCard";
 import { FleetCard } from "./FleetCard";
 import { MoneyCards } from "./MoneyCards";
 import { OperationsCard } from "./OperationsCard";
+import { PayablesCard } from "./PayablesCard";
+import { ProfitCard } from "./ProfitCard";
 import { QuickCreate } from "./QuickCreate";
 import { TopCustomersCard } from "./TopCustomersCard";
 import { TrendCard } from "./TrendCard";
@@ -39,7 +41,46 @@ const PERIODS: { key: DashboardPeriod; label: string }[] = [
   { key: "month", label: "Month" },
   { key: "quarter", label: "Quarter" },
 ];
+function DashboardRow({
+  children,
+  wideFirst = false,
+}: {
+  children: React.ReactNode;
+  wideFirst?: boolean;
+}) {
+  const cards = React.Children.toArray(children);
+  if (cards.length === 0) return null;
 
+  return (
+    <div
+      className={cn(
+        "grid items-stretch gap-4",
+        cards.length === 2 && "md:grid-cols-2",
+        cards.length >= 3 && "md:grid-cols-2 xl:grid-cols-3",
+        wideFirst && cards.length === 2 && "xl:grid-cols-3",
+      )}
+    >
+      {cards.map((card, index) => (
+        <div
+          key={
+            React.isValidElement(card)
+              ? card.key ?? index
+              : index
+          }
+          className={cn(
+            "flex min-w-0 flex-col [&>*]:flex-1",
+            wideFirst &&
+            cards.length === 2 &&
+            index === 0 &&
+            "xl:col-span-2",
+          )}
+        >
+          {card}
+        </div>
+      ))}
+    </div>
+  );
+}
 /**
  * Period and branch live in the address (?period=month&branch=…), so a view
  * can be shared and coming back from a drill-in lands on the same figures.
@@ -87,15 +128,17 @@ export function DashboardPage() {
   // none of the module permissions would otherwise get an empty grid.
   const hasAnyCard = data
     ? Boolean(
-        data.revenue ??
-        data.glance ??
-        data.operations ??
-        data.ageing ??
-        data.topCustomers ??
-        data.fleet ??
-        data.attention ??
-        data.branchPerformance,
-      )
+      data.revenue ??
+      data.glance ??
+      data.operations ??
+      data.ageing ??
+      data.topCustomers ??
+      data.fleet ??
+      data.attention ??
+      data.branchPerformance ??
+      data.profit ??
+      data.payables,
+    )
     : false;
 
   const periodLabel = data?.range.label ?? "";
@@ -220,68 +263,136 @@ export function DashboardPage() {
           role covers none of them. Your own queue is on My Work.
         </WidgetPanel>
       ) : (
-        <div className="grid auto-rows-[104px] grid-cols-2 gap-3 md:grid-cols-8 xl:grid-cols-12">
-          {/* One mosaic, not a stack of full-width rows: cards tile at
-              different widths and heights on a shared row unit, so the page
-              stays short and nothing has to fill a line on its own. */}
-          <MoneyCards
-            revenue={data.revenue}
-            glance={data.glance}
-            periodLabel={periodLabel}
-            previousLabel={previousLabel}
-          />
-
-          {data.attention ? (
-            <AttentionCard
-              rows={data.attention}
-              className="col-span-2 row-span-3 md:col-span-8 xl:col-span-5"
-            />
-          ) : null}
-
-          {data.operations ? (
-            <OperationsCard
-              data={data.operations}
+        /*
+          A spine, not a mosaic. The old grid put every card on a 104px row
+          unit and gave it a height from its row-span, so a card whose content
+          outgrew its span had to clip — which is why "Needs attention" ended
+          up scrolling behind a hidden scrollbar. Cards now size to their
+          content and the page reads in order of importance: the money, then
+          what is slipping, then the rest.
+        */
+        <div className="flex min-w-0 flex-col gap-4">
+          {/* Money overview */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MoneyCards
+              revenue={data.revenue}
               glance={data.glance}
               periodLabel={periodLabel}
-              className="col-span-2 row-span-3 md:col-span-4 xl:col-span-4"
+              previousLabel={previousLabel}
             />
+          </div>
+
+          {/* Needs attention stays full width */}
+          {data.attention ? (
+            <AttentionCard rows={data.attention} />
           ) : null}
 
-          {data.ageing ? (
-            <AgeingCard
-              data={data.ageing}
-              className="col-span-2 row-span-3 md:col-span-4 xl:col-span-3"
-            />
+          {/* Financial overview */}
+          {data.revenue ||
+            data.ageing ||
+            data.profit ||
+            data.payables ||
+            data.topCustomers ? (
+            <section
+              aria-labelledby="financial-overview-heading"
+              className="flex min-w-0 flex-col gap-4"
+            >
+              <h2
+                id="financial-overview-heading"
+                className="text-sm font-semibold tracking-tight"
+              >
+                Financial overview
+              </h2>
+
+              {/* Wide chart + ageing */}
+              <DashboardRow wideFirst>
+                {data.revenue ? (
+                  <TrendCard
+                    key="trend"
+                    series={data.revenue.series}
+                  />
+                ) : null}
+
+                {data.ageing ? (
+                  <AgeingCard
+                    key="ageing"
+                    data={data.ageing}
+                  />
+                ) : null}
+              </DashboardRow>
+
+              {/* Compact financial details */}
+              <DashboardRow>
+                {data.profit ? (
+                  <ProfitCard
+                    key="profit"
+                    data={data.profit}
+                    periodLabel={periodLabel}
+                    branchFiltered={Boolean(branch)}
+                  />
+                ) : null}
+
+                {data.payables ? (
+                  <PayablesCard
+                    key="payables"
+                    data={data.payables}
+                  />
+                ) : null}
+
+                {data.topCustomers ? (
+                  <TopCustomersCard
+                    key="top-customers"
+                    rows={data.topCustomers}
+                    periodLabel={periodLabel}
+                  />
+                ) : null}
+              </DashboardRow>
+            </section>
           ) : null}
 
-          {data.revenue ? (
-            <TrendCard
-              series={data.revenue.series}
-              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-4"
-            />
-          ) : null}
+          {/* Operations and network */}
+          {data.operations ||
+            data.branchPerformance ||
+            data.fleet ? (
+            <section
+              aria-labelledby="operations-network-heading"
+              className="flex min-w-0 flex-col gap-4"
+            >
+              <h2
+                id="operations-network-heading"
+                className="text-sm font-semibold tracking-tight"
+              >
+                Operations &amp; network
+              </h2>
 
-          {data.branchPerformance ? (
-            <BranchPerformanceCard
-              rows={data.branchPerformance}
-              periodLabel={periodLabel}
-              className="col-span-2 row-span-2 md:col-span-4 xl:col-span-4"
-            />
-          ) : null}
+              <DashboardRow>
+                {data.operations ? (
+                  <OperationsCard
+                    key="operations"
+                    data={data.operations}
+                    glance={data.glance}
+                    periodLabel={periodLabel}
+                  />
+                ) : null}
 
-          {data.fleet ? (
-            <FleetCard
-              data={data.fleet}
-              className="col-span-2 row-span-2 md:col-span-8 xl:col-span-4"
-            />
-          ) : null}
+                {data.branchPerformance ? (
+                  <BranchPerformanceCard
+                    key="branches"
+                    rows={data.branchPerformance}
+                    periodLabel={periodLabel}
+                  />
+                ) : null}
 
-          {data.topCustomers ? (
-            <TopCustomersCard
-              rows={data.topCustomers}
-              periodLabel={periodLabel}
-              className="col-span-2 row-span-2 md:col-span-8 xl:col-span-12"
-            />
+                {data.fleet ? (
+                  <FleetCard
+                    key="fleet"
+                    data={data.fleet}
+                    branchFiltered={Boolean(branch)}
+                    className="!flex-none"
+                  />
+                ) : null}
+              </DashboardRow>
+            </section>
           ) : null}
         </div>
       )}
@@ -318,22 +429,19 @@ function errorMessage(error: unknown): string {
 /** Same spans as the real mosaic, so nothing moves when the data lands. */
 export function LoadingGrid() {
   return (
-    <div className="grid auto-rows-[104px] grid-cols-2 gap-3 md:grid-cols-8 xl:grid-cols-12">
-      {[
-        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
-        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
-        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
-        "col-span-1 row-span-1 md:col-span-4 xl:col-span-3",
-        "col-span-2 row-span-3 md:col-span-8 xl:col-span-5",
-        "col-span-2 row-span-3 md:col-span-4 xl:col-span-4",
-        "col-span-2 row-span-3 md:col-span-4 xl:col-span-3",
-        "col-span-2 row-span-2 md:col-span-4 xl:col-span-4",
-        "col-span-2 row-span-2 md:col-span-4 xl:col-span-4",
-        "col-span-2 row-span-2 md:col-span-8 xl:col-span-4",
-        "col-span-2 row-span-2 md:col-span-8 xl:col-span-12",
-      ].map((span, i) => (
-        <WidgetSkeleton key={i} className={span} />
-      ))}
+    /* Mirrors the real spine, so nothing jumps when the data lands. */
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <WidgetSkeleton key={`money-${i}`} className="h-24" />
+        ))}
+      </div>
+      <WidgetSkeleton className="h-64" />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <WidgetSkeleton key={`card-${i}`} className="h-56" />
+        ))}
+      </div>
     </div>
   );
 }

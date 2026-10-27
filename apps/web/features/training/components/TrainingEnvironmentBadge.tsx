@@ -19,7 +19,7 @@ export function TrainingEnvironmentBadge() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary transition-colors duration-150 hover:bg-primary/15"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary transition-colors duration-150 hover:bg-primary/15"
         >
           <IconSchool className="size-4" aria-hidden />
           <span className="hidden sm:inline">Training environment</span>
@@ -27,7 +27,9 @@ export function TrainingEnvironmentBadge() {
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-80 space-y-1.5 text-sm">
-        <p className="font-semibold text-foreground">This is the training copy of the ERP</p>
+        <p className="font-semibold text-foreground">
+          This is the training copy of the ERP
+        </p>
         <p className="text-muted-foreground">
           Practise freely: everything here is made up and is reset every night.
           Emails, WhatsApp, the e-way bill portal and GPS tracking are switched

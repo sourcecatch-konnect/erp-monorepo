@@ -35,7 +35,10 @@ export function Term({ id, children }: { id: string; children?: ReactNode }) {
         <p className="font-semibold text-foreground">
           {entry.term}
           {entry.fullName ? (
-            <span className="font-normal text-muted-foreground"> · {entry.fullName}</span>
+            <span className="font-normal text-muted-foreground">
+              {" "}
+              · {entry.fullName}
+            </span>
           ) : null}
         </p>
         <p className="text-muted-foreground">{entry.meaning}</p>

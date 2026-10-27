@@ -105,9 +105,7 @@ export function BranchPerformanceCard({
           <li className="mt-0.5 flex items-center gap-2 border-t pt-1.5 text-xs text-muted-foreground">
             <span className="w-20 shrink-0">Branch</span>
             <span className="min-w-0 flex-1">
-              {silent > 0
-                ? `${silent} billed nothing`
-                : "Billed"}
+              {silent > 0 ? `${silent} billed nothing` : "Billed"}
             </span>
             <span className="w-10 shrink-0 text-right">Coll.</span>
             <span className="w-16 shrink-0 text-right">Overdue</span>

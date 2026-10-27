@@ -71,11 +71,14 @@ router.get("/", async (req, res) => {
   const canSeeOperations = can.order && can.lr && can.billing;
   const canSeeGlance = can.billing || can.receipt || can.trip;
   const canSeeAttention = can.lr || can.billing || can.rail;
+  const canSeePayables = perms.has(PERMS.ACCOUNTS.PAYMENT.VIEW);
 
   // Branch performance compares branches, so it is only meaningful to a viewer
   // who can see more than one and has not narrowed the page to a single one.
   const branchCount =
-    req.ctx?.branchScope === "ALL" ? Infinity : (req.ctx?.branchIds.length ?? 0);
+    req.ctx?.branchScope === "ALL"
+      ? Infinity
+      : (req.ctx?.branchIds.length ?? 0);
   const canSeeBranchPerformance =
     can.billing && branchCount > 1 && !req.query.branch;
 
@@ -88,6 +91,8 @@ router.get("/", async (req, res) => {
     fleet,
     attention,
     branchPerformance,
+    profit,
+    payables,
     branches,
   ] = await Promise.all([
     can.billing ? widgets.revenue(scoped, window, now, can.receipt) : null,
@@ -100,6 +105,9 @@ router.get("/", async (req, res) => {
     canSeeBranchPerformance
       ? widgets.branchPerformance(scoped, window, now, can.receipt)
       : null,
+    // Journey profit comes from log slips, which belong to trips.
+    can.trip ? widgets.profit(window) : null,
+    canSeePayables ? widgets.payables(scoped) : null,
     db.branch.findMany({
       where:
         req.ctx?.branchScope === "ALL"
@@ -122,6 +130,8 @@ router.get("/", async (req, res) => {
     fleet,
     attention,
     branchPerformance,
+    profit,
+    payables,
   };
   return sendOk(res, body);
 });

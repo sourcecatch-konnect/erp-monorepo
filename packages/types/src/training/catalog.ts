@@ -24,7 +24,10 @@ export type TrainingLaneKey =
   | "delivery"
   | "accounts"
   | "workshop"
-  | "cash";
+  | "driver"
+  | "cash"
+  | "admin"
+  | "daily";
 
 export type TrainingLane = {
   key: TrainingLaneKey;
@@ -69,9 +72,24 @@ export const TRAINING_LANES: readonly TrainingLane[] = [
     description: "Vehicle repairs, spare parts and service bills.",
   },
   {
+    key: "driver",
+    title: "Driver pay",
+    description: "Advances, monthly salary runs and payouts to drivers.",
+  },
+  {
     key: "cash",
     title: "Cash planning",
     description: "The day's cash position and planned payments.",
+  },
+  {
+    key: "admin",
+    title: "Administration",
+    description: "Users, roles, branch access and the audit log.",
+  },
+  {
+    key: "daily",
+    title: "Every day",
+    description: "The screens you open whatever your role is.",
   },
 ];
 
@@ -95,8 +113,19 @@ export type TrainingStageKey =
   | "accounts.receipt"
   | "accounts.vendor-payment"
   | "accounts.ledger"
-  | "workshop.repair"
-  | "cash.planning";
+  | "workshop.purchase-order"
+  | "workshop.inward"
+  | "workshop.job-card"
+  | "workshop.service-bill"
+  | "workshop.replacement"
+  | "driver.advance"
+  | "driver.salary-run"
+  | "driver.payout"
+  | "cash.planning"
+  | "admin.access"
+  | "admin.audit"
+  | "daily.my-work"
+  | "daily.tracking";
 
 /** One thing a user can do at a stage, phrased for "What you can do". */
 export type TrainingAction = { key: PermissionKey; label: string };
@@ -108,8 +137,12 @@ export type TrainingStage = {
   summary: string;
   /** Screen where the work is done (same hrefs as the sidebar). */
   href: string;
-  /** Needed to open `href`; the "Open" link hides without it. */
-  viewPermission: PermissionKey;
+  /**
+   * Needed to open `href`; the "Open" link hides without it. `null` for the
+   * few screens every signed-in user can open (My Work), so the map does not
+   * have to invent a permission that does not exist in the registry.
+   */
+  viewPermission: PermissionKey | null;
   /** The user owns this stage if they hold ANY of these. */
   actions: readonly TrainingAction[];
   /** What usually happens after this stage. */
@@ -128,7 +161,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     actions: [
       { key: "masters.customer.create", label: "Add and edit customers" },
       { key: "masters.route.create", label: "Add routes" },
-      { key: "masters.rate-matrix.create", label: "Set freight rates (rate matrix)" },
+      {
+        key: "masters.rate-matrix.create",
+        label: "Set freight rates (rate matrix)",
+      },
       { key: "masters.agreement.create", label: "Add customer agreements" },
       { key: "masters.vehicle.create", label: "Add vehicles" },
       { key: "masters.driver.create", label: "Add drivers" },
@@ -248,8 +284,7 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     key: "rail.vp-schedule",
     lane: "rail",
     title: "Schedule the VP",
-    summary:
-      "Plan which wagon space (VP) on the rake each LR will travel in.",
+    summary: "Plan which wagon space (VP) on the rake each LR will travel in.",
     href: "/vp-management/vp-schedule",
     viewPermission: "vp_schedule.view",
     actions: [
@@ -284,7 +319,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
       { key: "vp_loading.create", label: "Record VP loading" },
       { key: "vp_loading.mark_loaded", label: "Mark wagons loaded" },
       { key: "vp_loading.verify", label: "Verify loading" },
-      { key: "vp_loading.capacity_override", label: "Allow loading over capacity" },
+      {
+        key: "vp_loading.capacity_override",
+        label: "Allow loading over capacity",
+      },
       { key: "vp_loading.assign_tracker", label: "Assign GPS trackers" },
     ],
     next: ["rail.rail-head"],
@@ -298,7 +336,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     href: "/vp-management/grn",
     viewPermission: "grn.view",
     actions: [
-      { key: "rake_at_rail_head.create", label: "Record the rake at the rail head" },
+      {
+        key: "rake_at_rail_head.create",
+        label: "Record the rake at the rail head",
+      },
       { key: "grn.create", label: "Enter the GRN at the rail head" },
       { key: "grn.submit", label: "Submit the rail head GRN" },
     ],
@@ -322,8 +363,7 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     key: "rail.dc",
     lane: "rail",
     title: "Issue the Delivery Challan",
-    summary:
-      "Hand the LRs over to the truck that does the last-mile delivery.",
+    summary: "Hand the LRs over to the truck that does the last-mile delivery.",
     href: "/vp-management/delivery-challans",
     viewPermission: "delivery_challan.view",
     actions: [
@@ -343,7 +383,10 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     viewPermission: "lorry_receipt.view",
     actions: [
       { key: "lorry_receipt.deliver", label: "Mark LRs delivered" },
-      { key: "lorry_receipt.acknowledge", label: "Confirm delivery with the POD" },
+      {
+        key: "lorry_receipt.acknowledge",
+        label: "Confirm delivery with the POD",
+      },
     ],
     next: ["accounts.bill"],
   },
@@ -411,22 +454,112 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     next: [],
   },
   {
-    key: "workshop.repair",
+    key: "workshop.purchase-order",
     lane: "workshop",
-    title: "Workshop",
+    title: "Order spare parts",
     summary:
-      "Buy spare parts, open job cards for repairs and pay service bills.",
-    href: "/workshop/job-cards",
-    viewPermission: "workshop.jobcard.view",
+      "Raise a purchase order on a parts supplier and get it approved before the parts are bought.",
+    href: "/workshop/purchase-orders",
+    viewPermission: "workshop.po.view",
     actions: [
       { key: "workshop.po.manage", label: "Raise purchase orders for parts" },
       { key: "workshop.po.approve", label: "Approve purchase orders" },
+    ],
+    next: ["workshop.inward"],
+  },
+  {
+    key: "workshop.inward",
+    lane: "workshop",
+    title: "Receive parts into stock",
+    summary:
+      "Book the parts in against the purchase order so the stock count and the part cost are right.",
+    href: "/workshop/inward",
+    viewPermission: "workshop.inward.view",
+    actions: [
       { key: "workshop.inward.manage", label: "Receive parts into stock" },
+    ],
+    next: ["workshop.job-card", "workshop.replacement"],
+  },
+  {
+    key: "workshop.job-card",
+    lane: "workshop",
+    title: "Repair on a job card",
+    summary:
+      "Open a job card for the vehicle, add the parts used and the labour, then finalise it.",
+    href: "/workshop/job-cards",
+    viewPermission: "workshop.jobcard.view",
+    actions: [
       { key: "workshop.jobcard.manage", label: "Open job cards" },
       { key: "workshop.jobcard.finalise", label: "Finalise job cards" },
+    ],
+    next: ["workshop.service-bill"],
+  },
+  {
+    key: "workshop.service-bill",
+    lane: "workshop",
+    title: "Outside garage bills",
+    summary:
+      "Enter the bill from an outside garage for work done there, and pay it.",
+    href: "/workshop/service-bills",
+    viewPermission: "workshop.servicebill.view",
+    actions: [
       { key: "workshop.servicebill.manage", label: "Enter service bills" },
       { key: "workshop.servicebill.pay", label: "Pay service bills" },
     ],
+    next: [],
+  },
+  {
+    key: "workshop.replacement",
+    lane: "workshop",
+    title: "Send a faulty part back",
+    summary:
+      "Return a part that failed to its supplier and track the replacement or the credit note.",
+    href: "/workshop/supplier-replacement",
+    viewPermission: "workshop.replacement.view",
+    actions: [
+      {
+        key: "workshop.replacement.manage",
+        label: "Send faulty parts back to the supplier",
+      },
+    ],
+    next: [],
+  },
+  {
+    key: "driver.advance",
+    lane: "driver",
+    title: "Driver advances",
+    summary:
+      "Money paid to a driver before payday, which is recovered from the next salary run.",
+    href: "/accounts/driver-salary-advances",
+    viewPermission: "driver_finance.salary_view",
+    actions: [
+      { key: "driver_finance.advance_manage", label: "Give driver advances" },
+    ],
+    next: ["driver.salary-run"],
+  },
+  {
+    key: "driver.salary-run",
+    lane: "driver",
+    title: "Monthly salary run",
+    summary:
+      "Work out each driver's pay for the month, less the advances already taken, and get it approved.",
+    href: "/accounts/driver-salary-runs",
+    viewPermission: "driver_finance.salary_view",
+    actions: [
+      { key: "driver_finance.salary_manage", label: "Prepare salary runs" },
+      { key: "driver_finance.salary_approve", label: "Approve salary runs" },
+    ],
+    next: ["driver.payout"],
+  },
+  {
+    key: "driver.payout",
+    lane: "driver",
+    title: "Pay the driver",
+    summary:
+      "Hand over or transfer the approved amount, which posts to the books.",
+    href: "/accounts/driver-payments",
+    viewPermission: "driver_finance.salary_view",
+    actions: [{ key: "driver_finance.pay", label: "Pay drivers" }],
     next: [],
   },
   {
@@ -444,13 +577,63 @@ export const TRAINING_STAGES: readonly TrainingStage[] = [
     ],
     next: [],
   },
+  {
+    key: "admin.access",
+    lane: "admin",
+    title: "Users, roles and branch access",
+    summary:
+      "Add people, give them a role, and decide which branches they can see.",
+    href: "/settings/access",
+    viewPermission: "admin.rbac.manage",
+    actions: [
+      { key: "admin.rbac.manage", label: "Manage users, roles and access" },
+    ],
+    next: ["admin.audit"],
+  },
+  {
+    key: "admin.audit",
+    lane: "admin",
+    title: "Audit log",
+    summary:
+      "Who changed what, and when. The record you check when a number does not look right.",
+    href: "/settings/audit-log",
+    viewPermission: "admin.audit_log.view",
+    actions: [{ key: "admin.audit_log.view", label: "Read the audit log" }],
+    next: [],
+  },
+  {
+    key: "daily.my-work",
+    lane: "daily",
+    title: "My Work",
+    summary:
+      "Everything waiting on you, across every module, in one list. Most days start here.",
+    href: "/my-work",
+    // Open to every signed-in user; the list itself only shows work they
+    // already have permission to see.
+    viewPermission: null,
+    actions: [],
+    next: [],
+  },
+  {
+    key: "daily.tracking",
+    lane: "daily",
+    title: "Vehicle tracking",
+    summary:
+      "Where the trucks are now, so you can answer a customer without ringing the driver.",
+    href: "/tracking",
+    viewPermission: "tracking.view",
+    actions: [{ key: "tracking.view", label: "See where vehicles are" }],
+    next: [],
+  },
 ];
 
 /** Every permission key referenced by a stage — used to find stage owners. */
 export const TRAINING_STAGE_PERMISSION_KEYS: readonly PermissionKey[] =
   Array.from(
     new Set(
-      TRAINING_STAGES.flatMap((stage) => stage.actions.map((action) => action.key)),
+      TRAINING_STAGES.flatMap((stage) =>
+        stage.actions.map((action) => action.key),
+      ),
     ),
   );
 
@@ -601,8 +784,7 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
   {
     key: "ops",
     title: "Operations: from booking to delivery",
-    description:
-      "Book orders, make LRs, plan trips and confirm delivery.",
+    description: "Book orders, make LRs, plan trips and confirm delivery.",
     suggestedFor: ["order.create", "lorry_receipt.create"],
     steps: [
       {
@@ -937,7 +1119,8 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
         key: "ws.finalise-job-card",
         verifier: "job_card.finalised",
         title: "Finalise the job card",
-        summary: "When the repair is complete, check the job card and finalise it.",
+        summary:
+          "When the repair is complete, check the job card and finalise it.",
         href: "/workshop/job-cards",
         requires: "workshop.jobcard.finalise",
       },
@@ -952,7 +1135,8 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       {
         key: "ws.replacement",
         title: "Handle supplier replacements",
-        summary: "Track faulty parts sent back to the supplier for replacement.",
+        summary:
+          "Track faulty parts sent back to the supplier for replacement.",
         href: "/workshop/supplier-replacement",
         requires: "workshop.replacement.manage",
       },
@@ -1043,7 +1227,8 @@ export const TRAINING_TRACKS: readonly TrainingTrack[] = [
       {
         key: "admin.notifications",
         title: "Set notification rules",
-        summary: "Decide who gets told about events like a new order or a late trip.",
+        summary:
+          "Decide who gets told about events like a new order or a late trip.",
         href: "/settings/notifications",
         requires: "notifications.manage_rules",
       },

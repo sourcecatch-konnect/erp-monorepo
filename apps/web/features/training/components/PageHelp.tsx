@@ -13,9 +13,17 @@ import {
 import type { TrainingStageKey } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { HelpSection, HelpSheet } from "@skerp/ui/components/help-sheet";
-import { Tour, type TourCloseReason, type TourStep } from "@skerp/ui/components/tour";
+import {
+  Tour,
+  type TourCloseReason,
+  type TourStep,
+} from "@skerp/ui/components/tour";
 import { useStepProgress, useTrainingMe } from "../hooks/useTraining";
-import { STAGE_BY_KEY, TRACK_BY_KEY, previousStages } from "../lib/catalog-lookup";
+import {
+  STAGE_BY_KEY,
+  TRACK_BY_KEY,
+  previousStages,
+} from "../lib/catalog-lookup";
 import { Term } from "./Term";
 
 /** A guided tour for one screen. Seen state is saved as training step `tour.<key>`. */
@@ -56,7 +64,9 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
   const tour = content.tour;
   const tourStepKey = tour ? `tour.${tour.key}` : null;
   const tourSeen =
-    !tourStepKey || !me || me.progress.some((entry) => entry.stepKey === tourStepKey);
+    !tourStepKey ||
+    !me ||
+    me.progress.some((entry) => entry.stepKey === tourStepKey);
 
   // First visit: offer the tour once the page's parts have rendered.
   useEffect(() => {
@@ -65,12 +75,17 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
     // A panel or dialog (Feedback, Help, a form) opens in the corner the offer
     // sits in, so the offer steps aside instead of covering its buttons.
     const onFocusIn = (event: FocusEvent) => {
-      if (event.target instanceof Element && event.target.closest('[role="dialog"]')) {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"]')
+      ) {
         toast.dismiss(offerId);
       }
     };
     const timer = setTimeout(() => {
-      const ready = tour.steps.some((step) => document.querySelector(step.target));
+      const ready = tour.steps.some((step) =>
+        document.querySelector(step.target),
+      );
       if (!ready) return;
       offered.current = true;
       document.addEventListener("focusin", onFocusIn);
@@ -96,13 +111,18 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
   const closeTour = (reason: TourCloseReason) => {
     setTouring(false);
     if (!tourStepKey || reason === "unavailable") return;
-    mutate({ stepKey: tourStepKey, status: reason === "finished" ? "DONE" : "SKIPPED" });
+    mutate({
+      stepKey: tourStepKey,
+      status: reason === "finished" ? "DONE" : "SKIPPED",
+    });
   };
 
   const stage = content.stage ? STAGE_BY_KEY.get(content.stage) : undefined;
   const before = stage ? previousStages(stage.key) : [];
   const after = stage
-    ? stage.next.map((key) => STAGE_BY_KEY.get(key)).filter((s) => s !== undefined)
+    ? stage.next
+        .map((key) => STAGE_BY_KEY.get(key))
+        .filter((s) => s !== undefined)
     : [];
   const practiceTrack =
     content.trainingStep && me
@@ -111,7 +131,11 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)} aria-haspopup="dialog">
+      <Button
+        variant="outline"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+      >
         <IconHelpCircle className="size-4" aria-hidden />
         Help
       </Button>
@@ -142,9 +166,13 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
         }
       >
         {stage ? (
-          <HelpSection title="Where this fits in the business" icon={<IconRoute className="size-4" />}>
+          <HelpSection
+            title="Where this fits in the business"
+            icon={<IconRoute className="size-4" />}
+          >
             <p>
-              This screen is the step <span className="font-medium">{stage.title}</span>.{" "}
+              This screen is the step{" "}
+              <span className="font-medium">{stage.title}</span>.{" "}
               {stage.summary}
             </p>
             {before.length > 0 ? (
@@ -183,7 +211,10 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
         ) : null}
 
         {content.mistakes && content.mistakes.length > 0 ? (
-          <HelpSection title="Common mistakes" icon={<IconAlertTriangle className="size-4" />}>
+          <HelpSection
+            title="Common mistakes"
+            icon={<IconAlertTriangle className="size-4" />}
+          >
             <ul className="list-disc space-y-1.5 pl-5">
               {content.mistakes.map((line) => (
                 <li key={line}>{line}</li>
@@ -199,12 +230,17 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
                 <Term key={id} id={id} />
               ))}
             </p>
-            <p className="text-xs text-muted-foreground">Click a word to see what it means.</p>
+            <p className="text-xs text-muted-foreground">
+              Click a word to see what it means.
+            </p>
           </HelpSection>
         ) : null}
 
         {practiceTrack ? (
-          <HelpSection title="Practise it" icon={<IconSchool className="size-4" />}>
+          <HelpSection
+            title="Practise it"
+            icon={<IconSchool className="size-4" />}
+          >
             <Link
               href={`/training/${practiceTrack.key}`}
               className="text-sm font-medium text-primary hover:underline"
@@ -215,7 +251,9 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
         ) : null}
       </HelpSheet>
 
-      {tour ? <Tour steps={tour.steps} open={touring} onClose={closeTour} /> : null}
+      {tour ? (
+        <Tour steps={tour.steps} open={touring} onClose={closeTour} />
+      ) : null}
     </>
   );
 }

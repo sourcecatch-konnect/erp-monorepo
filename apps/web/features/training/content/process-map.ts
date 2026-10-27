@@ -3,7 +3,10 @@ import {
   IconCashBanknote,
   IconClipboardList,
   IconDatabase,
+  IconLayoutGrid,
+  IconShieldLock,
   IconTool,
+  IconUserDollar,
   IconTrain,
   IconTruck,
   IconTruckDelivery,
@@ -58,7 +61,8 @@ export const MAIN_FLOW: MapSection[] = [
   {
     key: "transport",
     title: "Transport",
-    description: "Short distances go by road. Long distances usually go by rail.",
+    description:
+      "Short distances go by road. Long distances usually go by rail.",
     icon: IconTruck,
     paths: [
       {
@@ -88,21 +92,31 @@ export const MAIN_FLOW: MapSection[] = [
     paths: [{ stages: ["delivery.deliver"] }],
   },
   {
+    // "Books" used to be a sixth section holding one stage. A whole numbered
+    // part of the business for one screen read as more than it was, so the
+    // ledger now sits here, as the third thing money does.
     key: "accounts",
     title: "Accounts",
-    description: "Money comes in from customers and goes out to vendors.",
+    description:
+      "Money comes in from customers, goes out to vendors, and is recorded.",
     icon: IconWallet,
     paths: [
-      { label: "Money coming in", stages: ["accounts.bill", "accounts.receipt"] },
-      { label: "Money going out", stages: ["accounts.vendor-payment"] },
+      {
+        label: "Money coming in",
+        icon: IconCashBanknote,
+        stages: ["accounts.bill", "accounts.receipt"],
+      },
+      {
+        label: "Money going out",
+        icon: IconWallet,
+        stages: ["accounts.vendor-payment"],
+      },
+      {
+        label: "Into the books",
+        icon: IconBuildingBank,
+        stages: ["accounts.ledger"],
+      },
     ],
-  },
-  {
-    key: "books",
-    title: "Books",
-    description: "Every bill, receipt and payment ends up in the ledgers.",
-    icon: IconBuildingBank,
-    paths: [{ stages: ["accounts.ledger"] }],
   },
 ];
 
@@ -111,9 +125,34 @@ export const SIDE_FLOWS: MapSection[] = [
   {
     key: "workshop",
     title: "Workshop",
-    description: "Keeps SK's own vehicles running.",
+    description:
+      "Keeps SK's own vehicles running — parts in, repairs done, bills paid.",
     icon: IconTool,
-    paths: [{ stages: ["workshop.repair"] }],
+    paths: [
+      {
+        label: "Parts and repairs",
+        icon: IconTool,
+        stages: [
+          "workshop.purchase-order",
+          "workshop.inward",
+          "workshop.job-card",
+        ],
+      },
+      {
+        label: "Bills and returns",
+        icon: IconCashBanknote,
+        stages: ["workshop.service-bill", "workshop.replacement"],
+      },
+    ],
+  },
+  {
+    key: "driver",
+    title: "Driver pay",
+    description: "What the drivers are owed, and when they are paid.",
+    icon: IconUserDollar,
+    paths: [
+      { stages: ["driver.advance", "driver.salary-run", "driver.payout"] },
+    ],
   },
   {
     key: "cash",
@@ -122,4 +161,37 @@ export const SIDE_FLOWS: MapSection[] = [
     icon: IconCashBanknote,
     paths: [{ stages: ["cash.planning"] }],
   },
+  {
+    key: "admin",
+    title: "Administration",
+    description: "Who can do what, and the record of what they did.",
+    icon: IconShieldLock,
+    paths: [{ stages: ["admin.access", "admin.audit"] }],
+  },
+  {
+    key: "daily",
+    title: "Every day",
+    description: "The screens you open whatever your role is.",
+    icon: IconLayoutGrid,
+    paths: [{ stages: ["daily.my-work", "daily.tracking"] }],
+  },
 ];
+
+/**
+ * One learning accent per section, so the map reads as distinct parts of the
+ * business rather than one long blue column. Keys match MAIN_FLOW /
+ * SIDE_FLOWS; anything missing falls back to the primary tone.
+ */
+export const SECTION_TONES: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = {
+  setup: 6,
+  booking: 4,
+  transport: 1,
+  delivery: 2,
+  accounts: 5,
+  books: 5,
+  workshop: 3,
+  driver: 5,
+  cash: 2,
+  admin: 6,
+  daily: 4,
+};

@@ -47,7 +47,7 @@ function ReferenceRow({
       <CollapsibleTrigger className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors duration-150 hover:bg-muted">
         <span
           className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-md",
+            "flex size-7 shrink-0 items-center justify-center rounded-lg",
             tone === "success"
               ? "bg-success/15 text-success"
               : tone === "warning"
@@ -96,7 +96,7 @@ export function LessonReference({ content }: { content: LessonContent }) {
     return null;
 
   return (
-    <div className="h-fit w-full overflow-hidden rounded-md border border-border">
+    <div className="h-fit w-full overflow-hidden rounded-lg border border-border">
       {needs.length > 0 ? (
         <ReferenceRow
           icon={IconListCheck}
@@ -168,7 +168,7 @@ export function LessonReference({ content }: { content: LessonContent }) {
             {terms.map((entry) => (
               <span
                 key={entry.id}
-                className="rounded-md border border-dashed border-border bg-background px-2.5 py-1 text-xs text-muted-foreground"
+                className="rounded-lg border border-dashed border-border bg-background px-2.5 py-1 text-xs text-muted-foreground"
               >
                 <Term id={entry.id}>
                   <span className="font-semibold text-foreground">

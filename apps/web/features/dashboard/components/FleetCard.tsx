@@ -29,9 +29,12 @@ const SEGMENTS = [
  */
 export function FleetCard({
   data,
+  branchFiltered = false,
   className,
 }: {
   data: DashboardFleet;
+  /** The page is narrowed to one branch, but vehicles are not branch data. */
+  branchFiltered?: boolean;
   className?: string;
 }) {
   const counts: Record<(typeof SEGMENTS)[number]["key"], number> = {
@@ -58,16 +61,26 @@ export function FleetCard({
     <WidgetCard
       title="Own fleet"
       icon={IconTruck}
-      meta={data.total > 0 ? `${count(data.total)} trucks` : undefined}
+      meta={
+        data.total > 0
+          ? `${count(data.total)} trucks${branchFiltered ? " · all branches" : ""}`
+          : undefined
+      }
       href={DASHBOARD_ROUTES.fleet}
       className={className}
-      bodyClassName="flex items-center gap-4"
+
+
     >
       {data.total === 0 ? (
         <WidgetEmpty>No own vehicles on the master yet.</WidgetEmpty>
       ) : (
-        <>
-          <div className="relative size-24 shrink-0">
+        <div className="flex w-full flex-wrap items-center gap-5">
+          {/* Fleet utilisation */}
+          <div
+            className="relative size-32 shrink-0"
+            role="img"
+            aria-label={`${data.utilisationPct}% on trip. ${count(data.running)} running, ${count(data.idle)} idle, ${count(data.workshop)} in workshop.`}
+          >
             <svg
               viewBox="0 0 100 100"
               className="size-full -rotate-90"
@@ -79,8 +92,9 @@ export function FleetCard({
                 r={R}
                 fill="none"
                 stroke="var(--muted)"
-                strokeWidth="11"
+                strokeWidth="10"
               />
+
               {arcs.map((arc) =>
                 arc.length > 0 ? (
                   <circle
@@ -90,39 +104,54 @@ export function FleetCard({
                     r={R}
                     fill="none"
                     stroke={arc.color}
-                    strokeWidth="11"
+                    strokeWidth="10"
                     strokeDasharray={`${arc.length} ${CIRCUMFERENCE - arc.length}`}
                     strokeDashoffset={-arc.offset}
                   />
                 ) : null,
               )}
             </svg>
-            <span className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-lg font-semibold tabular-nums text-foreground">
+
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-1"
+              aria-hidden="true"
+            >
+              <span className="text-3xl font-semibold tracking-tight tabular-nums text-foreground">
                 {data.utilisationPct}%
               </span>
-              <span className="text-xs text-muted-foreground">on trip</span>
-            </span>
+              <span className="text-xs text-muted-foreground">
+                On trip
+              </span>
+            </div>
           </div>
-          <ul className="flex min-w-0 flex-col gap-2">
+
+          {/* Fleet breakdown */}
+          <ul className="min-w-32 flex-1 space-y-3">
             {arcs.map((arc) => (
-              <li key={arc.key} className="flex items-center gap-2 text-sm">
-                <span
-                  className="size-2 shrink-0 rounded-sm"
-                  style={{ background: arc.color }}
-                  aria-hidden="true"
-                />
-                <span className="font-medium tabular-nums text-foreground">
+              <li
+                key={arc.key}
+                className="flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: arc.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="text-sm capitalize text-muted-foreground">
+                    {arc.label}
+                  </span>
+                </div>
+
+                <span className="text-lg font-semibold tabular-nums">
                   {count(arc.value)}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {arc.label}
                 </span>
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
     </WidgetCard>
   );
+
 }

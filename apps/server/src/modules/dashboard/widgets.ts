@@ -10,6 +10,8 @@ import type {
   DashboardGlance,
   DashboardOperations,
   DashboardMonthPoint,
+  DashboardPayables,
+  DashboardProfit,
   DashboardPeriod,
   DashboardRange,
   DashboardRevenue,
@@ -574,10 +576,7 @@ export const branchPerformance = async (
     billed.map((b) => [b.branchId, Number(b._sum.totalAmountPaise ?? 0)]),
   );
   const collectedBy = new Map(
-    (collected ?? []).map((c) => [
-      c.branchId,
-      Number(c._sum.amountPaise ?? 0),
-    ]),
+    (collected ?? []).map((c) => [c.branchId, Number(c._sum.amountPaise ?? 0)]),
   );
   const overdueBy = new Map(
     overdue.map((o) => [
@@ -671,68 +670,103 @@ export const attention = async (
   const railBefore = new Date(now.getTime() - DELIVERY_DAYS.Rail * DAY_MS);
   const unbilledBefore = new Date(now.getTime() - UNBILLED_DAYS * DAY_MS);
 
-  const [lateTransit, readyToBill, awaitingAck, breaches, rakeCharges] =
-    await Promise.all([
-      can.lr
-        ? db.lorryReceipt.count({
-            where: {
-              ...lrBranch,
-              deletedAt: null,
-              status: "FINALISED",
-              OR: [
-                {
-                  group: {
-                    is: {
-                      transportType: "Road",
-                      finalisedAt: { lt: roadBefore },
-                    },
+  /**
+   * What the unbilled LRs are actually worth. A count cannot be ranked
+   * against another count, so the rule that is most often the biggest number
+   * on the page gets a rupee figure behind it. One grouped aggregate, because
+   * a charge can add to or deduct from the LR's value.
+   */
+  const unbilledWhere: Prisma.LorryReceiptWhereInput = {
+    ...lrBranch,
+    deletedAt: null,
+    status: { in: ["DELIVERED", "ACKNOWLEDGED"] },
+    billingStatus: "READY_TO_BILL",
+    createdAt: { lt: unbilledBefore },
+  };
+
+  const [
+    lateTransit,
+    readyToBill,
+    awaitingAck,
+    breaches,
+    rakeCharges,
+    unbilledValue,
+  ] = await Promise.all([
+    can.lr
+      ? db.lorryReceipt.count({
+          where: {
+            ...lrBranch,
+            deletedAt: null,
+            status: "FINALISED",
+            OR: [
+              {
+                group: {
+                  is: {
+                    transportType: "Road",
+                    finalisedAt: { lt: roadBefore },
                   },
                 },
-                {
-                  group: {
-                    is: {
-                      transportType: { in: SLOWER_MODES },
-                      finalisedAt: { lt: railBefore },
-                    },
+              },
+              {
+                group: {
+                  is: {
+                    transportType: { in: SLOWER_MODES },
+                    finalisedAt: { lt: railBefore },
                   },
                 },
-              ],
-            },
-          })
-        : null,
-      can.billing
-        ? db.lorryReceipt.count({
-            where: {
-              ...lrBranch,
-              deletedAt: null,
-              status: { in: ["DELIVERED", "ACKNOWLEDGED"] },
-              billingStatus: "READY_TO_BILL",
-              createdAt: { lt: unbilledBefore },
-            },
-          })
-        : null,
-      can.lr
-        ? db.lorryReceipt.count({
-            where: {
-              ...lrBranch,
-              deletedAt: null,
-              status: "DELIVERED",
-              acknowledgement: { is: null },
-            },
-          })
-        : null,
-      can.billing ? creditBreaches(req) : null,
-      can.rail
-        ? db.railRakeCharge.aggregate({
-            where: {
-              balanceAmount: { gt: 0 },
-              status: { in: ["ASSESSED", "PARTIALLY_SETTLED"] },
-            },
-            _sum: { balanceAmount: true },
-            _count: true,
-          })
-        : null,
-    ]);
+              },
+            ],
+          },
+        })
+      : null,
+    can.billing
+      ? db.lorryReceipt.count({
+          where: {
+            ...lrBranch,
+            deletedAt: null,
+            status: { in: ["DELIVERED", "ACKNOWLEDGED"] },
+            billingStatus: "READY_TO_BILL",
+            createdAt: { lt: unbilledBefore },
+          },
+        })
+      : null,
+    can.lr
+      ? db.lorryReceipt.count({
+          where: {
+            ...lrBranch,
+            deletedAt: null,
+            status: "DELIVERED",
+            acknowledgement: { is: null },
+          },
+        })
+      : null,
+    can.billing ? creditBreaches(req) : null,
+    can.rail
+      ? db.railRakeCharge.aggregate({
+          where: {
+            balanceAmount: { gt: 0 },
+            status: { in: ["ASSESSED", "PARTIALLY_SETTLED"] },
+          },
+          _sum: { balanceAmount: true },
+          _count: true,
+        })
+      : null,
+    can.billing
+      ? db.lRCharge.groupBy({
+          by: ["effect"],
+          where: { status: { not: "CANCELLED" }, lr: { is: unbilledWhere } },
+          _sum: { amountPaise: true },
+        })
+      : null,
+  ]);
+
+  const unbilledPaise = (unbilledValue ?? []).reduce(
+    (total, row) =>
+      row.effect === "DEDUCTION"
+        ? total - (row._sum?.amountPaise ?? 0n)
+        : total + (row._sum?.amountPaise ?? 0n),
+    0n,
+  );
 
   const rows: DashboardAttentionRow[] = [];
 
@@ -753,6 +787,7 @@ export const attention = async (
       title: `${readyToBill} LRs delivered, not billed`,
       detail: `Ready to bill for over ${UNBILLED_DAYS} days`,
       value: String(readyToBill),
+      valuePaise: unbilledPaise > 0n ? unbilledPaise.toString() : undefined,
     });
   }
 
@@ -837,4 +872,110 @@ const formatLakh = (paise: number): string => {
   const rupees = paise / 100;
   if (rupees >= 10_000_000) return `₹${(rupees / 10_000_000).toFixed(2)} Cr`;
   return `₹${(rupees / 100_000).toFixed(2)} L`;
+};
+
+/**
+ * Card 12 — did we make money? Revenue alone cannot answer that, and the
+ * figure already exists: every closed journey posts a log slip carrying its
+ * freight, its costs and the net result. This sums the posted ones in the
+ * period.
+ *
+ * Log slips have no branch of their own (a journey is not a branch document),
+ * so this is a company figure whatever the page's branch filter says — the
+ * card labels itself accordingly, the way Own fleet does.
+ */
+export const profit = async (window: {
+  from: Date;
+  to: Date;
+}): Promise<DashboardProfit> => {
+  const [current, previous] = await Promise.all([
+    db.logSlip.aggregate({
+      where: {
+        status: { in: ["POSTED_TO_ACCOUNTS", "TALLY_SYNCED"] },
+        logSlipDate: { gte: window.from, lt: window.to },
+      },
+      _sum: {
+        totalFreightPaise: true,
+        totalExpensePaise: true,
+        netVehicleResultPaise: true,
+      },
+      _count: true,
+    }),
+    db.logSlip.aggregate({
+      where: {
+        status: { in: ["POSTED_TO_ACCOUNTS", "TALLY_SYNCED"] },
+        logSlipDate: {
+          gte: new Date(
+            window.from.getTime() -
+              (window.to.getTime() - window.from.getTime()),
+          ),
+          lt: window.from,
+        },
+      },
+      _sum: { netVehicleResultPaise: true },
+    }),
+  ]);
+
+  const freightPaise = current._sum.totalFreightPaise ?? 0n;
+  const expensePaise = current._sum.totalExpensePaise ?? 0n;
+  const netPaise = current._sum.netVehicleResultPaise ?? 0n;
+  const prevNet = previous._sum.netVehicleResultPaise ?? 0n;
+
+  return {
+    freightPaise: freightPaise.toString(),
+    expensePaise: expensePaise.toString(),
+    netPaise: netPaise.toString(),
+    journeyCount: current._count,
+    // Margin on the freight the journeys actually earned.
+    marginPct:
+      freightPaise > 0n
+        ? Math.round((Number(netPaise) / Number(freightPaise)) * 100)
+        : null,
+    deltaPct:
+      prevNet !== 0n
+        ? Math.round(
+            ((Number(netPaise) - Number(prevNet)) / Math.abs(Number(prevNet))) *
+              100,
+          )
+        : null,
+  };
+};
+
+/**
+ * Card 13 — what we owe. Outstanding and Overdue are what customers owe us;
+ * without the other side an owner cannot read their position. Approved and
+ * part-paid slips are a real commitment; drafts and pending approvals are not
+ * yet, so they are left out.
+ */
+export const payables = async (req: Request): Promise<DashboardPayables> => {
+  const branch = branchFilter(req);
+
+  const [slips, overdue] = await Promise.all([
+    db.vendorPaymentSlip.aggregate({
+      where: { ...branch, status: { in: ["APPROVED", "PARTIALLY_PAID"] } },
+      _sum: { netPayablePaise: true, paidPaise: true },
+      _count: true,
+    }),
+    db.vendorPaymentSlip.aggregate({
+      where: {
+        ...branch,
+        status: { in: ["APPROVED", "PARTIALLY_PAID"] },
+        createdAt: { lt: new Date(Date.now() - 30 * DAY_MS) },
+      },
+      _sum: { netPayablePaise: true, paidPaise: true },
+      _count: true,
+    }),
+  ]);
+
+  const owed =
+    (slips._sum.netPayablePaise ?? 0n) - (slips._sum.paidPaise ?? 0n);
+  const owedOverdue =
+    (overdue._sum.netPayablePaise ?? 0n) - (overdue._sum.paidPaise ?? 0n);
+
+  return {
+    outstandingPaise: (owed > 0n ? owed : 0n).toString(),
+    slipCount: slips._count,
+    overduePaise: (owedOverdue > 0n ? owedOverdue : 0n).toString(),
+    overdueCount: overdue._count,
+  };
 };

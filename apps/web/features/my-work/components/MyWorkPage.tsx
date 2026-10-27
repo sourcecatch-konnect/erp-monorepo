@@ -4,7 +4,15 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { IconRefresh, IconTrain, IconTruck } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconClockExclamation,
+  IconInbox,
+  IconRefresh,
+  IconTrain,
+  IconTruck,
+} from "@tabler/icons-react";
+import { StatTile } from "@skerp/ui/components/stat-tile";
 import { Button } from "@skerp/ui/components/button";
 import {
   Select,
@@ -62,7 +70,9 @@ function useListState() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const set = (next: Partial<Record<"branch" | "area" | "step" | "show", string | null>>) => {
+  const set = (
+    next: Partial<Record<"branch" | "area" | "step" | "show", string | null>>,
+  ) => {
     const p = new URLSearchParams(params.toString());
     for (const [k, v] of Object.entries(next)) {
       if (v) p.set(k, v);
@@ -96,7 +106,7 @@ const pickStep = (
 
 function PageSkeleton() {
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4">
+    <div className="w-full space-y-4">
       <Skeleton className="h-14 w-80" />
       <div className="flex flex-wrap gap-2">
         {Array.from({ length: 8 }, (_, i) => (
@@ -129,7 +139,7 @@ export function MyWorkPage() {
 
   if (isError || !data) {
     return (
-      <div className="mx-auto w-full max-w-7xl rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+      <div className="w-full rounded-lg border bg-card p-6 text-sm text-muted-foreground">
         Could not load your work.{" "}
         <Button variant="link" size="sm" onClick={() => void refetch()}>
           Try again
@@ -142,43 +152,19 @@ export function MyWorkPage() {
   const moving = goingOn.filter((g) => g.count > 0);
   const queue = pickStep(queues, list.module, list.stepParam);
 
+  const movingCount = moving.reduce((total, item) => total + item.count, 0);
+
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4">
+    <div className="w-full space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">My Work</h1>
+        <div className="space-y-0.5">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            My Work
+          </h1>
           <p className="text-sm text-muted-foreground">
             {greeting()}
             {user?.role.name ? ` · ${user.role.name}` : ""}. Updated{" "}
             {updatedAgo(dataUpdatedAt)}.
-          </p>
-          <p className="text-base text-foreground">
-            {summary.needsYou === 0 ? (
-              "Nothing needs you right now."
-            ) : (
-              <>
-                <b className="font-semibold tabular-nums">
-                  {summary.needsYou.toLocaleString("en-IN")}
-                </b>{" "}
-                {summary.needsYou === 1 ? "item needs" : "items need"} you
-                {summary.late > 0 ? (
-                  <>
-                    {", "}
-                    <b
-                      className={cn(
-                        "font-semibold tabular-nums",
-                        summary.veryLate > 0 ? "text-destructive" : "text-warning",
-                      )}
-                    >
-                      {summary.late.toLocaleString("en-IN")} late
-                    </b>
-                    .
-                  </>
-                ) : (
-                  ", all on time."
-                )}
-              </>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -217,6 +203,42 @@ export function MyWorkPage() {
           </Button>
         </div>
       </header>
+
+      {/*
+        Four numbers instead of a sentence. "12 items need you, 3 late" is a
+        line you read; these are read at a glance, and they match how the
+        training screens now open.
+      */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          icon={IconInbox}
+          tone={summary.needsYou === 0 ? "success" : "primary"}
+          label="Needs you"
+          value={summary.needsYou.toLocaleString("en-IN")}
+          hint={summary.needsYou === 0 ? "All clear" : "Waiting on you"}
+        />
+        <StatTile
+          icon={IconClockExclamation}
+          tone={summary.late > 0 ? "warning" : "muted"}
+          label="Late"
+          value={summary.late.toLocaleString("en-IN")}
+          hint={summary.late === 0 ? "Everything on time" : "Past its limit"}
+        />
+        <StatTile
+          icon={IconAlertTriangle}
+          tone={summary.veryLate > 0 ? "destructive" : "muted"}
+          label="Very late"
+          value={summary.veryLate.toLocaleString("en-IN")}
+          hint={summary.veryLate === 0 ? "None" : "Deal with these first"}
+        />
+        <StatTile
+          icon={IconTruck}
+          tone="muted"
+          label="Moving now"
+          value={movingCount.toLocaleString("en-IN")}
+          hint="No action needed"
+        />
+      </div>
 
       {/*
         Two columns on a wide screen: the work itself keeps the main column, so

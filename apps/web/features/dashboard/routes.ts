@@ -28,6 +28,7 @@ export const DASHBOARD_ROUTES = {
   fleet: "/masters/vehicle",
   customers: "/masters/customer",
   myWork: "/my-work",
+  vendorPayments: "/accounts/vendor-payments",
 } as const;
 
 /**

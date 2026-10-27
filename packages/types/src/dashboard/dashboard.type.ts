@@ -165,6 +165,13 @@ export interface DashboardAttentionRow {
   detail: string;
   /** Already formatted — a count, a percentage or an amount. */
   value: string;
+  /**
+   * Money at risk behind this row, when the rule can put a figure on it.
+   * A count alone cannot be ranked against another count — "12 LRs unbilled"
+   * only matters once you know whether that is ₹40,000 or ₹18 lakh. Serialised
+   * as a string because it is BigInt paise on the server.
+   */
+  valuePaise?: string;
 }
 
 export interface DashboardResponse {
@@ -180,4 +187,35 @@ export interface DashboardResponse {
   topCustomers: DashboardCustomerRow[] | null;
   fleet: DashboardFleet | null;
   attention: DashboardAttentionRow[] | null;
+  profit: DashboardProfit | null;
+  payables: DashboardPayables | null;
+}
+
+/**
+ * Did the work make money? Revenue says what we billed; this says what was
+ * left after the journey's own costs. Sourced from posted log slips, which
+ * carry freight, expenses and the net result per journey.
+ *
+ * Log slips carry no branch, so this is always a company figure — the card
+ * says so when the page is filtered to one branch.
+ */
+export interface DashboardProfit {
+  /** BigInt paise as strings. */
+  freightPaise: string;
+  expensePaise: string;
+  netPaise: string;
+  journeyCount: number;
+  /** Net as a percentage of freight earned; null when nothing was earned. */
+  marginPct: number | null;
+  /** Against the previous period of the same length; null with nothing to compare. */
+  deltaPct: number | null;
+}
+
+/** What SK owes vendors — the other half of Outstanding / Overdue. */
+export interface DashboardPayables {
+  outstandingPaise: string;
+  slipCount: number;
+  /** Approved for more than 30 days and still not fully paid. */
+  overduePaise: string;
+  overdueCount: number;
 }

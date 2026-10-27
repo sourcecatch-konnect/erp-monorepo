@@ -70,9 +70,7 @@ export function MoneyCards({
         href={DASHBOARD_ROUTES.receipts}
         foot={
           billed > 0 ? (
-            <span
-              title="Received this period against what was billed this period. A receipt can settle an older bill, so this is not a completion rate."
-            >
+            <span title="Received this period against what was billed this period. A receipt can settle an older bill, so this is not a completion rate.">
               {Math.round((glance.collectedPaise / billed) * 100)}% of billed
             </span>
           ) : null
@@ -81,7 +79,10 @@ export function MoneyCards({
     );
   }
 
-  if (glance?.outstandingPaise !== null && glance?.outstandingPaise !== undefined) {
+  if (
+    glance?.outstandingPaise !== null &&
+    glance?.outstandingPaise !== undefined
+  ) {
     cards.push(
       <MoneyCard
         key="outstanding"
@@ -120,7 +121,7 @@ export function MoneyCards({
 }
 
 /** One row unit tall, a quarter of the grid wide. */
-const TILE_SPAN = "col-span-1 row-span-1 md:col-span-4 xl:col-span-3";
+const TILE_SPAN = "col-span-1";
 
 function MoneyCard({
   label,

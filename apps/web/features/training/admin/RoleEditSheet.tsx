@@ -98,7 +98,10 @@ export function RoleEditSheet({
         if (!open) onClose();
       }}
     >
-      <SheetContent side="right" className="w-full gap-0 data-[side=right]:sm:max-w-xl">
+      <SheetContent
+        side="right"
+        className="w-full gap-0 data-[side=right]:sm:max-w-xl"
+      >
         <SheetHeader className="gap-1 border-b border-border px-6 py-4 pr-12">
           <SheetTitle className="text-lg">{role?.name ?? "Role"}</SheetTitle>
           <SheetDescription>
@@ -125,16 +128,21 @@ export function RoleEditSheet({
                 <TextAreaField<TrainingRoleFormValues>
                   name="responsibilitiesText"
                   label="Main responsibilities (one per line, optional)"
-                  placeholder={"Book orders the same day the customer calls\nAttach the e-way bill before the truck leaves"}
+                  placeholder={
+                    "Book orders the same day the customer calls\nAttach the e-way bill before the truck leaves"
+                  }
                   rows={5}
                 />
               </section>
 
               <section className="space-y-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Training for this role</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Training for this role
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    Everyone also takes ERP basics. Other training stays available as optional.
+                    Everyone also takes ERP basics. Other training stays
+                    available as optional.
                   </p>
                 </div>
                 <Controller
@@ -143,7 +151,9 @@ export function RoleEditSheet({
                   render={({ field }) => (
                     <RadioGroup
                       value={field.value ? "suggested" : "custom"}
-                      onValueChange={(value) => field.onChange(value === "suggested")}
+                      onValueChange={(value) =>
+                        field.onChange(value === "suggested")
+                      }
                     >
                       {[
                         {
@@ -160,7 +170,7 @@ export function RoleEditSheet({
                         <label
                           key={option.value}
                           htmlFor={`role-training-${option.value}`}
-                          className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card px-3 py-2.5 transition-colors duration-150 hover:bg-muted has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5 transition-colors duration-150 hover:bg-muted has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
                         >
                           <RadioGroupItem
                             id={`role-training-${option.value}`}
@@ -168,8 +178,12 @@ export function RoleEditSheet({
                             className={cn("mt-0.5", CHECKED)}
                           />
                           <span className="grid gap-0.5">
-                            <span className="text-sm font-medium text-foreground">{option.label}</span>
-                            <span className="text-xs text-muted-foreground">{option.hint}</span>
+                            <span className="text-sm font-medium text-foreground">
+                              {option.label}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {option.hint}
+                            </span>
                           </span>
                         </label>
                       ))}
@@ -181,9 +195,11 @@ export function RoleEditSheet({
                   control={methods.control}
                   name="requiredTracks"
                   render={({ field }) => (
-                    <ul className="divide-y divide-border rounded-md border border-border bg-card">
+                    <ul className="divide-y divide-border rounded-lg border border-border bg-card">
                       {TRAINING_TRACKS.map((track) => {
-                        const info = role.tracks.find((item) => item.key === track.key);
+                        const info = role.tracks.find(
+                          (item) => item.key === track.key,
+                        );
                         const applies = (info?.stepCount ?? 0) > 0;
                         const isBasics = track.key === "basics";
                         const checked = useSuggested
@@ -191,7 +207,13 @@ export function RoleEditSheet({
                           : isBasics || field.value.includes(track.key);
                         const id = `role-track-${track.key}`;
                         return (
-                          <li key={track.key} className={cn("flex items-start gap-3 px-3 py-3", !applies && "opacity-60")}>
+                          <li
+                            key={track.key}
+                            className={cn(
+                              "flex items-start gap-3 px-3 py-3",
+                              !applies && "opacity-60",
+                            )}
+                          >
                             <Checkbox
                               id={id}
                               className={cn("mt-0.5", CHECKED)}
@@ -201,7 +223,9 @@ export function RoleEditSheet({
                                 field.onChange(
                                   next === true
                                     ? [...field.value, track.key]
-                                    : field.value.filter((key) => key !== track.key),
+                                    : field.value.filter(
+                                        (key) => key !== track.key,
+                                      ),
                                 )
                               }
                             />
@@ -209,7 +233,9 @@ export function RoleEditSheet({
                               <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
                                 {track.title}
                                 {info?.suggested === "required" && !isBasics ? (
-                                  <span className="text-xs font-normal text-primary">Suggested</span>
+                                  <span className="text-xs font-normal text-primary">
+                                    Suggested
+                                  </span>
                                 ) : null}
                               </span>
                               <span className="text-xs text-muted-foreground">
@@ -235,7 +261,11 @@ export function RoleEditSheet({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" form={FORM_ID} disabled={save.isPending || !role}>
+          <Button
+            type="submit"
+            form={FORM_ID}
+            disabled={save.isPending || !role}
+          >
             {save.isPending ? "Saving…" : "Save"}
           </Button>
         </div>

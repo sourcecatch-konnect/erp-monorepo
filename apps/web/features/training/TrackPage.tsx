@@ -18,6 +18,7 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { cn } from "@skerp/ui/lib/util";
 import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { LESSON_CONTENT, type LessonContent } from "./content/lessons";
+import { TRACK_ICONS } from "./content/track-icons";
 import { LessonList, type LessonListItem } from "./components/LessonList";
 import { LessonReference } from "./components/LessonReference";
 import { LessonStepper } from "./components/LessonStepper";
@@ -59,85 +60,107 @@ function LessonBody({
   const LessonIcon: Icon = content.icon;
 
   return (
-    <div className="space-y-5 px-5 pt-5">
+    <div className="space-y-5 px-5 pb-1 pt-5">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-tight text-primary">
           Lesson {index + 1} of {total} · {content.group}
         </p>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-foreground">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <LessonIcon className="size-[18px]" aria-hidden />
             </span>
             {step.title}
           </h1>
-          {step.href ? (
-            <Button asChild variant="outline">
-              <Link href={step.href}>
-                <IconExternalLink className="size-4" aria-hidden />
-                Open the screen
-              </Link>
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {entry ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold",
+                  entry.status === "DONE"
+                    ? "border-success/35 bg-success/12 text-success"
+                    : "border-border bg-muted text-muted-foreground",
+                )}
+              >
+                {entry.status === "DONE" ? (
+                  <>
+                    <IconCircleCheck className="size-3.5" aria-hidden />
+                    Done
+                  </>
+                ) : (
+                  "Skipped"
+                )}
+              </span>
+            ) : null}
+            {step.href ? (
+              <Button asChild variant="outline">
+                <Link href={step.href}>
+                  <IconExternalLink className="size-4" aria-hidden />
+                  Open the screen
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </div>
         <p className="max-w-[66ch] text-sm text-muted-foreground">
           {content.intro ?? step.summary}
         </p>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:gap-8">
-        {content.does.length > 0 ? (
-          <div>
-            <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-tight text-muted-foreground">
-              <IconArrowRight className="size-3.5" aria-hidden />
-              Do this, in this order
-            </p>
-            <ol>
-              {content.does.map((action, actionIndex) => {
-                const ActionIcon: Icon = action.icon;
-                const last = actionIndex === content.does.length - 1;
-                return (
-                  <li key={action.title} className="relative flex gap-3 pb-4">
-                    {!last ? (
-                      <span
-                        aria-hidden
-                        className="absolute bottom-0 left-[14px] top-[30px] w-0.5 bg-border"
-                      />
-                    ) : null}
-                    <span className="relative z-[1] flex size-[30px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                      <ActionIcon className="size-[15px]" aria-hidden />
-                      <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full border border-primary bg-card text-[10px] font-bold text-primary">
-                        {actionIndex + 1}
-                      </span>
+      {content.does.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <p className="flex items-center gap-1.5 border-b border-border bg-background px-4 py-2.5 text-xs font-semibold uppercase tracking-tight text-muted-foreground">
+            <IconArrowRight className="size-3.5" aria-hidden />
+            Do this, in this order
+          </p>
+          <ol className="px-4 py-4">
+            {content.does.map((action, actionIndex) => {
+              const ActionIcon: Icon = action.icon;
+              const last = actionIndex === content.does.length - 1;
+              return (
+                <li
+                  key={action.title}
+                  className={cn("relative flex gap-3.5", last ? null : "pb-5")}
+                >
+                  {!last ? (
+                    <span
+                      aria-hidden
+                      className="absolute bottom-0 left-[15px] top-[34px] w-0.5 bg-border"
+                    />
+                  ) : null}
+                  <span className="relative z-[1] flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <ActionIcon className="size-4" aria-hidden />
+                    <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full border border-primary bg-card text-[10px] font-bold text-primary">
+                      {actionIndex + 1}
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-foreground">
-                        {action.title}
-                      </span>
-                      <span className="block text-sm text-muted-foreground">
-                        {action.detail}
-                      </span>
+                  </span>
+                  <span className="min-w-0 flex-1 pt-0.5">
+                    <span className="block text-sm font-semibold text-foreground">
+                      {action.title}
                     </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        ) : (
-          <div className="flex items-start gap-2.5 self-start rounded-md border border-dashed border-border bg-background px-4 py-3">
-            <IconListCheck
-              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-              aria-hidden
-            />
-            <p className="text-sm text-muted-foreground">
-              Open the screen, try it once, then come back and mark this lesson
-              done.
-            </p>
-          </div>
-        )}
+                    <span className="block max-w-[80ch] text-sm text-muted-foreground">
+                      {action.detail}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-lg border border-dashed border-border bg-background px-4 py-3">
+          <IconListCheck
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <p className="text-sm text-muted-foreground">
+            Open the screen, try it once, then come back and mark this lesson
+            done.
+          </p>
+        </div>
+      )}
 
-        <LessonReference content={content} />
-      </div>
+      <LessonReference content={content} />
 
       {entry?.completedBy === "SYSTEM" ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -177,6 +200,7 @@ function LessonShell({ progress }: { progress: TrackProgress }) {
 
   if (!lesson) return null;
 
+  const TrackIcon: Icon = TRACK_ICONS[progress.track.key];
   const entry = entries.get(lesson.step.key);
   const busy =
     saveProgress.isPending &&
@@ -202,15 +226,21 @@ function LessonShell({ progress }: { progress: TrackProgress }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-4 py-3.5">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">
-            {progress.track.title}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {progress.total} lessons · {progress.track.description}
-          </p>
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-primary/5 px-4 py-3.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <TrackIcon className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-foreground">
+              {progress.track.title}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {progress.finished} of {progress.total} lessons done ·{" "}
+              {progress.track.description}
+            </p>
+          </div>
         </div>
         <ProgressRing
           percent={progress.percent}
@@ -247,7 +277,7 @@ function LessonShell({ progress }: { progress: TrackProgress }) {
             entry={entry}
           />
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-2.5 border-t border-border bg-background px-5 py-3">
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2.5 border-t border-border bg-background px-5 py-3">
             <Button
               variant="outline"
               disabled={bounded === 0}
@@ -349,13 +379,13 @@ export function TrackPage({ trackKey }: { trackKey: string }) {
       ) : null}
 
       {isError ? (
-        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           We couldn&apos;t load this training: {error.message}
         </p>
       ) : null}
 
       {me && !progress ? (
-        <div className="rounded-md border border-border bg-card px-5 py-10 text-center">
+        <div className="rounded-lg border border-border bg-card px-5 py-10 text-center">
           <p className="text-sm font-medium text-foreground">
             This training isn&apos;t part of your role
           </p>
@@ -370,7 +400,7 @@ export function TrackPage({ trackKey }: { trackKey: string }) {
           {progress.current === undefined ? (
             <div
               className={cn(
-                "flex items-start gap-3 rounded-md border border-success/30 px-4 py-3",
+                "flex items-start gap-3 rounded-lg border border-success/30 px-4 py-3",
                 "bg-success/5",
               )}
             >

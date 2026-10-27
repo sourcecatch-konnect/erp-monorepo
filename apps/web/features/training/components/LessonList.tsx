@@ -78,7 +78,7 @@ export function LessonList({
                       onClick={() => onPick(index)}
                       aria-current={current ? "step" : undefined}
                       className={cn(
-                        "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors duration-150",
+                        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-150",
                         current
                           ? "bg-primary/10 text-foreground"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",

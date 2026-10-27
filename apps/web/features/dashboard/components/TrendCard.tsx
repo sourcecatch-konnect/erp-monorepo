@@ -45,7 +45,10 @@ export function TrendCard({
   const path = (pick: (p: DashboardMonthPoint) => number, upto: number) =>
     series
       .slice(0, upto)
-      .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(pick(p)).toFixed(1)}`)
+      .map(
+        (p, i) =>
+          `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(pick(p)).toFixed(1)}`,
+      )
       .join(" ");
 
   // The last point is the month in progress: solid up to it, dashed into it.
