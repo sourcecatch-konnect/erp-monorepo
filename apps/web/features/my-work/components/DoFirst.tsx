@@ -15,7 +15,6 @@ import { dueText, rowUrgency } from "./urgency";
 import {
   IconBolt,
   IconCircleCheck,
-  IconClock,
 } from "@tabler/icons-react";
 /**
  * Three, because this is a decision and not a list. A fourth row would push
