@@ -32,14 +32,19 @@ function AreaChip({
   onClick,
 }: ChipProps) {
   const empty = waiting === 0;
+  const detail = empty
+    ? `${hint} — nothing waiting`
+    : late > 0
+      ? `${hint} — ${waiting} waiting, ${late} late`
+      : `${hint} — ${waiting} waiting, all on time`;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      title={hint}
+      title={detail}
       className={cn(
-        "inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border bg-card px-3 text-sm transition-colors hover:bg-muted/50",
+        "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border bg-card px-2.5 text-sm transition-colors duration-150 hover:bg-muted/50",
         selected && "border-primary bg-primary/10 hover:bg-primary/10",
       )}
     >
@@ -59,7 +64,13 @@ function AreaChip({
       <span
         className={cn(
           "font-semibold tabular-nums",
-          empty ? "text-muted-foreground" : "text-foreground",
+          empty
+            ? "text-muted-foreground"
+            : veryLate > 0
+              ? "text-destructive"
+              : late > 0
+                ? "text-warning"
+                : "text-foreground",
         )}
       >
         {waiting.toLocaleString("en-IN")}
@@ -69,21 +80,7 @@ function AreaChip({
           className="size-4 shrink-0 text-success"
           aria-label="Nothing waiting"
         />
-      ) : late > 0 ? (
-        // Red only when something is badly late; a little late is orange.
-        <span
-          className={cn(
-            "rounded-sm px-1.5 text-xs font-medium tabular-nums",
-            veryLate > 0
-              ? "bg-destructive/10 text-destructive"
-              : "bg-warning/15 text-warning",
-          )}
-        >
-          {late.toLocaleString("en-IN")} late
-        </span>
-      ) : (
-        <span className="text-xs text-success">on time</span>
-      )}
+      ) : null}
     </button>
   );
 }
@@ -118,7 +115,7 @@ export function AreaCards({
   }).filter((a) => a.present);
 
   return (
-    <nav aria-label="Work areas" className="flex flex-wrap gap-2">
+    <nav aria-label="Work areas" className="flex flex-wrap items-center gap-2">
       <AreaChip
         label="All work"
         hint="Everything waiting on you, most urgent first"
@@ -142,6 +139,11 @@ export function AreaCards({
           onClick={() => onChange(value === a.key ? null : a.key)}
         />
       ))}
+      <span className="ms-1 text-xs text-muted-foreground">
+        A number in <span className="font-medium text-warning">amber</span> or{" "}
+        <span className="font-medium text-destructive">red</span> has late work
+        in it.
+      </span>
     </nav>
   );
 }

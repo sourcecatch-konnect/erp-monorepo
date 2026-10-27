@@ -48,7 +48,9 @@ export function TrainingWelcome() {
   const progress = useStepProgress();
   const [dismissed, setDismissed] = useState(false);
 
-  const seen = me?.progress.some((entry) => entry.stepKey === TRAINING_WELCOME_STEP);
+  const seen = me?.progress.some(
+    (entry) => entry.stepKey === TRAINING_WELCOME_STEP,
+  );
   const open = me !== undefined && !seen && !dismissed;
 
   const finish = (seeRole: boolean) => {
@@ -71,7 +73,7 @@ export function TrainingWelcome() {
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader className="gap-2">
-          <span className="flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <IconSchool className="size-6" aria-hidden />
           </span>
           <DialogTitle className="text-lg">
@@ -79,10 +81,16 @@ export function TrainingWelcome() {
           </DialogTitle>
           <DialogDescription className="text-sm">
             You are signed in as{" "}
-            <span className="font-semibold text-foreground">{me.role.name}</span>
+            <span className="font-semibold text-foreground">
+              {me.role.name}
+            </span>
             {me.homeBranch ? (
               <>
-                {" "}at <span className="font-semibold text-foreground">{me.homeBranch.name}</span>
+                {" "}
+                at{" "}
+                <span className="font-semibold text-foreground">
+                  {me.homeBranch.name}
+                </span>
               </>
             ) : null}
             . Here is how to get started.
@@ -92,7 +100,10 @@ export function TrainingWelcome() {
         <ul className="space-y-3">
           {POINTS.map(({ icon: PointIcon, title, text }) => (
             <li key={title} className="flex items-start gap-3">
-              <PointIcon className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+              <PointIcon
+                className="mt-0.5 size-5 shrink-0 text-primary"
+                aria-hidden
+              />
               <div>
                 <p className="text-sm font-medium text-foreground">{title}</p>
                 <p className="text-sm text-muted-foreground">{text}</p>

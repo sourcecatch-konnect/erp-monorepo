@@ -23,8 +23,8 @@ export function TrainingAdminPage() {
       <header>
         <h1 className="text-2xl font-semibold text-foreground">Training</h1>
         <p className="text-sm text-muted-foreground">
-          Describe each role, choose the training it must take, and see how
-          your team is getting on.
+          Describe each role, choose the training it must take, and see how your
+          team is getting on.
         </p>
       </header>
 

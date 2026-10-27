@@ -12,10 +12,14 @@ import { DASHBOARD_ROUTES } from "../routes";
  * is severity, not decoration (design.md §3).
  */
 const BUCKET_COLOR: Record<DashboardAgeingBucketKey, string> = {
-  "0-30": "var(--primary)",
-  "31-60": "var(--warning)",
-  "61-90": "color-mix(in oklab, var(--destructive) 62%, transparent)",
+  // Not-due and no-due-date are neutral: neither is a problem, and colouring
+  // them would make two thirds of the bar look like debt.
+  not_due: "var(--muted-foreground)",
+  "0-30": "var(--warning)",
+  "31-60": "color-mix(in oklab, var(--warning) 70%, var(--destructive))",
+  "61-90": "color-mix(in oklab, var(--destructive) 75%, transparent)",
   "90+": "var(--destructive)",
+  unknown: "color-mix(in oklab, var(--muted-foreground) 45%, transparent)",
 };
 
 export function AgeingCard({

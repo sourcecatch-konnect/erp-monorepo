@@ -12,6 +12,7 @@ import { db } from "../../../prisma/prisma.js";
 import { ForbiddenError } from "../../lib/error.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { sendError, sendOk } from "../_shared/response.js";
+import { getCachedCount } from "./count-cache.js";
 import { GOING_ON, QUEUES } from "./queues.js";
 
 /**
@@ -65,7 +66,9 @@ router.get("/", async (req, res) => {
     // The branches this user may pick in the page's branch filter.
     db.branch.findMany({
       where:
-        req.ctx?.branchScope === "ALL" ? {} : { id: { in: req.ctx?.branchIds ?? [] } },
+        req.ctx?.branchScope === "ALL"
+          ? {}
+          : { id: { in: req.ctx?.branchIds ?? [] } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -110,15 +113,27 @@ router.get("/count", async (req, res) => {
       message: "Not authenticated",
     });
   }
-  const now = new Date();
-  const counts = await Promise.all(
-    QUEUES.filter((q) => perms.has(q.permission)).map((q) =>
-      q.waitingCount(req, now),
-    ),
-  );
-  const body: MyWorkCountResponse = {
-    needsYou: counts.reduce((n, c) => n + c, 0),
-  };
+  const userId = req.ctx?.userId;
+  if (!userId) {
+    return sendError(res, 401, {
+      code: "UNAUTHORIZED",
+      message: "Not authenticated",
+    });
+  }
+
+  // Cached for a minute per user: this fans out to one count per queue and
+  // runs on every screen in the app. See count-cache.ts.
+  const needsYou = await getCachedCount(userId, null, async () => {
+    const now = new Date();
+    const counts = await Promise.all(
+      QUEUES.filter((q) => perms.has(q.permission)).map((q) =>
+        q.waitingCount(req, now),
+      ),
+    );
+    return counts.reduce((n, c) => n + c, 0);
+  });
+
+  const body: MyWorkCountResponse = { needsYou };
   return sendOk(res, body);
 });
 
@@ -159,10 +174,16 @@ router.get("/priority", async (req, res) => {
         ? req.query.search.trim().slice(0, 100)
         : "",
   };
-  const skip = Math.max(0, Number.parseInt(String(req.query.skip ?? "0"), 10) || 0);
+  const skip = Math.max(
+    0,
+    Number.parseInt(String(req.query.skip ?? "0"), 10) || 0,
+  );
   const size = Math.min(
     MAX_PAGE_SIZE,
-    Math.max(1, Number.parseInt(String(req.query.size ?? ""), 10) || DEFAULT_PAGE_SIZE),
+    Math.max(
+      1,
+      Number.parseInt(String(req.query.size ?? ""), 10) || DEFAULT_PAGE_SIZE,
+    ),
   );
   const need = Math.min(skip + size, MAX_PRIORITY_DEPTH);
   const now = new Date();

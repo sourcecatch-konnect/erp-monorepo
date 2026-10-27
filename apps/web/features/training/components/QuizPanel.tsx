@@ -42,7 +42,9 @@ function QuestionStep({
   const chosen = answers[question.id];
   return (
     <fieldset className="space-y-3">
-      <legend className="mb-3 text-base font-medium text-foreground">{question.question}</legend>
+      <legend className="mb-3 text-base font-medium text-foreground">
+        {question.question}
+      </legend>
       <RadioGroup
         value={chosen === undefined ? "" : String(chosen)}
         onValueChange={(value) => onAnswer(question.id, Number(value))}
@@ -53,11 +55,17 @@ function QuestionStep({
             <label
               key={id}
               htmlFor={id}
-              className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card px-3 py-3 transition-colors duration-150 hover:bg-muted has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+              className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-3 py-3 transition-colors duration-150 hover:bg-muted has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
             >
-              <RadioGroupItem id={id} value={String(optionIndex)} className={cn("mt-0.5", CHECKED)} />
+              <RadioGroupItem
+                id={id}
+                value={String(optionIndex)}
+                className={cn("mt-0.5", CHECKED)}
+              />
               <span className="text-sm text-foreground">
-                <span className="mr-2 font-semibold text-muted-foreground">{LETTERS[optionIndex]}</span>
+                <span className="mr-2 font-semibold text-muted-foreground">
+                  {LETTERS[optionIndex]}
+                </span>
                 {option}
               </span>
             </label>
@@ -82,14 +90,22 @@ function ResultView({
     <div className="space-y-4">
       <div
         className={cn(
-          "flex items-start gap-3 rounded-md border px-4 py-3",
-          result.passed ? "border-primary/30 bg-primary/5" : "border-border bg-muted/40",
+          "flex items-start gap-3 rounded-lg border px-4 py-3",
+          result.passed
+            ? "border-primary/30 bg-primary/5"
+            : "border-border bg-muted/40",
         )}
       >
         {result.passed ? (
-          <IconCircleCheck className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden />
+          <IconCircleCheck
+            className="mt-0.5 size-6 shrink-0 text-primary"
+            aria-hidden
+          />
         ) : (
-          <IconListCheck className="mt-0.5 size-6 shrink-0 text-muted-foreground" aria-hidden />
+          <IconListCheck
+            className="mt-0.5 size-6 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
         )}
         <div>
           <p className="text-base font-semibold text-foreground">
@@ -109,12 +125,21 @@ function ResultView({
           const question = quiz.questions.find((q) => q.id === item.id);
           if (!question) return null;
           return (
-            <li key={item.id} className="space-y-1.5 rounded-md border border-border bg-card p-4">
+            <li
+              key={item.id}
+              className="space-y-1.5 rounded-lg border border-border bg-card p-4"
+            >
               <p className="flex items-start gap-2 text-sm font-medium text-foreground">
                 {item.correct ? (
-                  <IconCircleCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-label="Correct" />
+                  <IconCircleCheck
+                    className="mt-0.5 size-4 shrink-0 text-primary"
+                    aria-label="Correct"
+                  />
                 ) : (
-                  <IconCircleX className="mt-0.5 size-4 shrink-0 text-destructive" aria-label="Not correct" />
+                  <IconCircleX
+                    className="mt-0.5 size-4 shrink-0 text-destructive"
+                    aria-label="Not correct"
+                  />
                 )}
                 {index + 1}. {question.question}
               </p>
@@ -124,9 +149,14 @@ function ResultView({
                 </p>
               ) : null}
               <p className="pl-6 text-sm text-foreground">
-                Right answer: <span className="font-medium">{question.options[item.answer]}</span>
+                Right answer:{" "}
+                <span className="font-medium">
+                  {question.options[item.answer]}
+                </span>
               </p>
-              <p className="pl-6 text-sm text-muted-foreground">{item.explain}</p>
+              <p className="pl-6 text-sm text-muted-foreground">
+                {item.explain}
+              </p>
             </li>
           );
         })}
@@ -145,14 +175,24 @@ function ResultView({
 }
 
 /** A10 — a short quiz at the end of a track. Informational: never blocks access. */
-export function QuizPanel({ trackKey, primary }: { trackKey: string; primary: boolean }) {
+export function QuizPanel({
+  trackKey,
+  primary,
+}: {
+  trackKey: string;
+  primary: boolean;
+}) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>("intro");
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<TrainingQuizResult | null>(null);
 
-  const { data: quiz, isLoading, isError } = useQuery({
+  const {
+    data: quiz,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: trainingKeys.quiz(trackKey),
     queryFn: () => quizApi.get(trackKey),
   });
@@ -164,7 +204,8 @@ export function QuizPanel({ trackKey, primary }: { trackKey: string; primary: bo
       setMode("result");
       void queryClient.invalidateQueries({ queryKey: trainingKeys.all });
     },
-    onError: (error) => toast.error(`We couldn't check your answers: ${error.message}`),
+    onError: (error) =>
+      toast.error(`We couldn't check your answers: ${error.message}`),
   });
 
   const start = () => {
@@ -177,18 +218,27 @@ export function QuizPanel({ trackKey, primary }: { trackKey: string; primary: bo
   if (isError) return null;
 
   return (
-    <section className="space-y-4 rounded-md border border-border bg-card p-5" aria-labelledby="quiz-title">
+    <section
+      className="space-y-4 rounded-lg border border-border bg-card p-5"
+      aria-labelledby="quiz-title"
+    >
       <div className="flex items-start gap-3">
-        <IconListCheck className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+        <IconListCheck
+          className="mt-0.5 size-5 shrink-0 text-primary"
+          aria-hidden
+        />
         <div>
-          <h2 id="quiz-title" className="text-base font-semibold text-foreground">
+          <h2
+            id="quiz-title"
+            className="text-base font-semibold text-foreground"
+          >
             Check what you have learned
           </h2>
           {quiz ? (
             <p className="text-sm text-muted-foreground">
               {quiz.questions.length} short questions. You need{" "}
-              {Math.ceil((quiz.passPercent / 100) * quiz.questions.length)} right to pass,
-              and you can try as many times as you like.
+              {Math.ceil((quiz.passPercent / 100) * quiz.questions.length)}{" "}
+              right to pass, and you can try as many times as you like.
             </p>
           ) : null}
         </div>
@@ -226,7 +276,9 @@ export function QuizPanel({ trackKey, primary }: { trackKey: string; primary: bo
             quiz={quiz}
             index={index}
             answers={answers}
-            onAnswer={(id, option) => setAnswers((current) => ({ ...current, [id]: option }))}
+            onAnswer={(id, option) =>
+              setAnswers((current) => ({ ...current, [id]: option }))
+            }
           />
           <div className="flex justify-between gap-2">
             <Button

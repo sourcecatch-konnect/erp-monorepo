@@ -27,7 +27,10 @@ export interface DashboardMonthPoint {
   month: string;
   /** Single-letter month initial, for the axis. */
   label: string;
+  /** Billed in that month. */
   valuePaise: number;
+  /** Received in that month. null when the viewer cannot see receipts. */
+  collectedPaise: number | null;
 }
 
 export interface DashboardRevenue {
@@ -49,6 +52,9 @@ export interface DashboardGlance {
   collectedPaise: number | null;
   /** Live total across every open bill — not period-filtered. */
   outstandingPaise: number | null;
+  /** Of the outstanding, the part already past its due date. Live, not period-filtered. */
+  overduePaise: number | null;
+  overdueCount: number | null;
   tripsRunning: number | null;
   tripsClosingToday: number | null;
   billsPendingReview: number | null;
@@ -68,7 +74,18 @@ export interface DashboardFunnelStep {
   count: number;
 }
 
-export type DashboardAgeingBucketKey = "0-30" | "31-60" | "61-90" | "90+";
+/**
+ * `not_due` is a bill whose due date has not arrived — it is outstanding but
+ * not late, and must never be mixed into an overdue bucket. `unknown` is a
+ * bill with no due date at all, which cannot be aged either way.
+ */
+export type DashboardAgeingBucketKey =
+  | "not_due"
+  | "0-30"
+  | "31-60"
+  | "61-90"
+  | "90+"
+  | "unknown";
 
 export interface DashboardAgeingBucket {
   key: DashboardAgeingBucketKey;
@@ -80,6 +97,30 @@ export interface DashboardAgeingBucket {
 export interface DashboardAgeing {
   totalPaise: number;
   buckets: DashboardAgeingBucket[];
+}
+
+/**
+ * Order-to-bill. `ordersConfirmed` counts orders by their own creation date,
+ * so it is a different population from the LR cohort and is deliberately kept
+ * out of it — the two must not be drawn as one funnel. The cohort is the LRs
+ * created in the period, narrowing step by step.
+ */
+export interface DashboardOperations {
+  ordersConfirmed: number;
+  lrCreated: number;
+  cohort: DashboardFunnelStep[];
+}
+
+/** One branch, for the owner-facing comparison. */
+export interface DashboardBranchRow {
+  branchId: string;
+  name: string;
+  lrCount: number;
+  billedPaise: number;
+  collectedPaise: number;
+  /** null when nothing was billed, so no rate can be stated. */
+  collectionPct: number | null;
+  overduePaise: number;
 }
 
 export interface DashboardCustomerRow {
@@ -124,6 +165,13 @@ export interface DashboardAttentionRow {
   detail: string;
   /** Already formatted — a count, a percentage or an amount. */
   value: string;
+  /**
+   * Money at risk behind this row, when the rule can put a figure on it.
+   * A count alone cannot be ranked against another count — "12 LRs unbilled"
+   * only matters once you know whether that is ₹40,000 or ₹18 lakh. Serialised
+   * as a string because it is BigInt paise on the server.
+   */
+  valuePaise?: string;
 }
 
 export interface DashboardResponse {
@@ -133,9 +181,41 @@ export interface DashboardResponse {
   branches: { id: string; name: string }[];
   revenue: DashboardRevenue | null;
   glance: DashboardGlance | null;
-  funnel: DashboardFunnelStep[] | null;
+  operations: DashboardOperations | null;
+  branchPerformance: DashboardBranchRow[] | null;
   ageing: DashboardAgeing | null;
   topCustomers: DashboardCustomerRow[] | null;
   fleet: DashboardFleet | null;
   attention: DashboardAttentionRow[] | null;
+  profit: DashboardProfit | null;
+  payables: DashboardPayables | null;
+}
+
+/**
+ * Did the work make money? Revenue says what we billed; this says what was
+ * left after the journey's own costs. Sourced from posted log slips, which
+ * carry freight, expenses and the net result per journey.
+ *
+ * Log slips carry no branch, so this is always a company figure — the card
+ * says so when the page is filtered to one branch.
+ */
+export interface DashboardProfit {
+  /** BigInt paise as strings. */
+  freightPaise: string;
+  expensePaise: string;
+  netPaise: string;
+  journeyCount: number;
+  /** Net as a percentage of freight earned; null when nothing was earned. */
+  marginPct: number | null;
+  /** Against the previous period of the same length; null with nothing to compare. */
+  deltaPct: number | null;
+}
+
+/** What SK owes vendors — the other half of Outstanding / Overdue. */
+export interface DashboardPayables {
+  outstandingPaise: string;
+  slipCount: number;
+  /** Approved for more than 30 days and still not fully paid. */
+  overduePaise: string;
+  overdueCount: number;
 }

@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { IconCircleCheck, IconCircleDashed, IconDownload, IconSearch } from "@tabler/icons-react";
+import {
+  IconCircleCheck,
+  IconCircleDashed,
+  IconDownload,
+  IconSearch,
+} from "@tabler/icons-react";
 import { TRAINING_TRACKS, type TrainingTeamRow } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
@@ -40,7 +45,9 @@ import { trainingApi } from "../training.service";
 const PAGE_SIZE = 20;
 const ALL = "__all__";
 const COLUMNS = 5;
-const TRACK_TITLE = new Map<string, string>(TRAINING_TRACKS.map((item) => [item.key, item.title]));
+const TRACK_TITLE = new Map<string, string>(
+  TRAINING_TRACKS.map((item) => [item.key, item.title]),
+);
 
 function FilterSelect({
   id,
@@ -79,24 +86,45 @@ function FilterSelect({
   );
 }
 
-function QuizStatus({ title, certified }: { title?: string; certified: boolean }) {
+function QuizStatus({
+  title,
+  certified,
+}: {
+  title?: string;
+  certified: boolean;
+}) {
   const Icon = certified ? IconCircleCheck : IconCircleDashed;
   const status = certified ? "quiz passed" : "quiz not passed";
   return (
-    <li className={cn("flex items-center gap-1 text-xs", certified ? "text-primary" : "text-muted-foreground")}>
+    <li
+      className={cn(
+        "flex items-center gap-1 text-xs",
+        certified ? "text-primary" : "text-muted-foreground",
+      )}
+    >
       <Icon className="size-3.5 shrink-0" aria-hidden />
-      {title ? `${title}: ${status}` : status.charAt(0).toUpperCase() + status.slice(1)}
+      {title
+        ? `${title}: ${status}`
+        : status.charAt(0).toUpperCase() + status.slice(1)}
     </li>
   );
 }
 
 function ProgressCell({ row, track }: { row: TrainingTeamRow; track: string }) {
-  const single = track === ALL ? undefined : row.tracks.find((item) => item.key === track);
+  const single =
+    track === ALL ? undefined : row.tracks.find((item) => item.key === track);
   const progress = track === ALL ? row.required : single;
   if (!progress) {
-    return <span className="text-sm text-muted-foreground">Not part of their role</span>;
+    return (
+      <span className="text-sm text-muted-foreground">
+        Not part of their role
+      </span>
+    );
   }
-  const percent = progress.total === 0 ? 100 : Math.round((progress.finished / progress.total) * 100);
+  const percent =
+    progress.total === 0
+      ? 100
+      : Math.round((progress.finished / progress.total) * 100);
   // A10: certified / not certified per required track (or for the one picked).
   const quizzes = single
     ? [single]
@@ -104,7 +132,11 @@ function ProgressCell({ row, track }: { row: TrainingTeamRow; track: string }) {
   return (
     <div className="space-y-1">
       <div className="flex min-w-48 items-center gap-3">
-        <ProgressBar percent={percent} label={`${row.name} training progress`} className="max-w-32" />
+        <ProgressBar
+          percent={percent}
+          label={`${row.name} training progress`}
+          className="max-w-32"
+        />
         <span className="shrink-0 text-xs text-muted-foreground">
           {progress.finished} of {progress.total} steps
         </span>
@@ -148,8 +180,14 @@ export function TeamTab() {
   };
   const params = { page, size: PAGE_SIZE, ...filters };
 
-  const roles = useQuery({ queryKey: trainingKeys.adminRoles, queryFn: trainingApi.adminRoles });
-  const branches = useQuery({ queryKey: trainingKeys.adminBranches, queryFn: trainingApi.adminBranches });
+  const roles = useQuery({
+    queryKey: trainingKeys.adminRoles,
+    queryFn: trainingApi.adminRoles,
+  });
+  const branches = useQuery({
+    queryKey: trainingKeys.adminBranches,
+    queryFn: trainingApi.adminBranches,
+  });
   const team = useQuery({
     queryKey: trainingKeys.adminTeam(params),
     queryFn: () => trainingApi.team(params),
@@ -159,7 +197,10 @@ export function TeamTab() {
   const exportXlsx = useMutation({
     mutationFn: () => trainingApi.exportTeam(filters),
     onSuccess: (blob) =>
-      downloadBlob(blob, `skerp-training-${new Date().toISOString().slice(0, 10)}.xlsx`),
+      downloadBlob(
+        blob,
+        `skerp-training-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      ),
     onError: (error) => toast.error(`Export failed: ${error.message}`),
   });
 
@@ -171,9 +212,12 @@ export function TeamTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-card p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-4">
         <div className="grid min-w-56 flex-1 gap-1.5">
-          <label htmlFor="team-search" className="text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="team-search"
+            className="text-xs font-medium text-muted-foreground"
+          >
             Search
           </label>
           <div className="relative">
@@ -195,7 +239,10 @@ export function TeamTab() {
           label="Role"
           value={roleId}
           allLabel="All roles"
-          options={(roles.data ?? []).map((role) => ({ value: role.id, label: role.name }))}
+          options={(roles.data ?? []).map((role) => ({
+            value: role.id,
+            label: role.name,
+          }))}
           onChange={(value) => {
             setRoleId(value);
             setPage(0);
@@ -206,7 +253,10 @@ export function TeamTab() {
           label="Home branch"
           value={branchId}
           allLabel="All branches"
-          options={(branches.data ?? []).map((branch) => ({ value: branch.id, label: branch.name }))}
+          options={(branches.data ?? []).map((branch) => ({
+            value: branch.id,
+            label: branch.name,
+          }))}
           onChange={(value) => {
             setBranchId(value);
             setPage(0);
@@ -217,10 +267,17 @@ export function TeamTab() {
           label="Show progress for"
           value={track}
           allLabel="All required training"
-          options={TRAINING_TRACKS.map((item) => ({ value: item.key, label: item.title }))}
+          options={TRAINING_TRACKS.map((item) => ({
+            value: item.key,
+            label: item.title,
+          }))}
           onChange={setTrack}
         />
-        <Button className="h-10" onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending}>
+        <Button
+          className="h-10"
+          onClick={() => exportXlsx.mutate()}
+          disabled={exportXlsx.isPending}
+        >
           <IconDownload className="size-4" aria-hidden />
           {exportXlsx.isPending ? "Preparing file…" : "Export to Excel"}
         </Button>
@@ -250,7 +307,10 @@ export function TeamTab() {
             : null}
           {!team.isLoading && rows?.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={COLUMNS} className="py-10 text-center text-muted-foreground">
+              <TableCell
+                colSpan={COLUMNS}
+                className="py-10 text-center text-muted-foreground"
+              >
                 No people match these filters.
               </TableCell>
             </TableRow>
@@ -263,7 +323,9 @@ export function TeamTab() {
                     <p className="text-xs text-muted-foreground">{row.email}</p>
                   </TableCell>
                   <TableCell>{row.roleName}</TableCell>
-                  <TableCell className="text-muted-foreground">{row.branchName ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {row.branchName ?? "—"}
+                  </TableCell>
                   <TableCell>
                     <ProgressCell row={row} track={track} />
                   </TableCell>
@@ -279,7 +341,9 @@ export function TeamTab() {
       </Table>
 
       <footer className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>{team.data ? `${total} ${total === 1 ? "person" : "people"}` : ""}</span>
+        <span>
+          {team.data ? `${total} ${total === 1 ? "person" : "people"}` : ""}
+        </span>
         <Pagination className="mx-0 w-auto justify-end">
           <PaginationContent>
             <PaginationItem>

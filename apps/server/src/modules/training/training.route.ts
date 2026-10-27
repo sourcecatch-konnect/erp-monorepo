@@ -15,7 +15,11 @@ import {
 
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
-import { BadRequestError, NotFoundError, ValidationError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { isTrainingEnvironment } from "../../lib/environment.js";
 import adminRoute from "./training.admin.route.js";
@@ -48,51 +52,58 @@ router.get("/me", async (req, res) => {
   const ctx = req.ctx!;
   const has = (key: PermissionKey) => ctx.permissions.has(key);
 
-  const [user, profile, branches, ownerRows, roleTracks, progress, certifications] =
-    await Promise.all([
-      db.user.findUniqueOrThrow({
-        where: { id: ctx.userId },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          branch: { select: { id: true, name: true } },
-        },
-      }),
-      db.trainingRoleProfile.findUnique({
-        where: { roleId: ctx.roleId },
-        select: { summary: true, responsibilities: true },
-      }),
-      ctx.branchScope === "ALL"
-        ? Promise.resolve([])
-        : db.branch.findMany({
-            where: { id: { in: ctx.branchIds } },
-            select: { id: true, name: true },
-            orderBy: { name: "asc" },
-          }),
-      // System roles (Admin) can do everything — listing them under every
-      // stage says nothing, so "done by" only names regular roles.
-      db.rolePermission.findMany({
-        where: {
-          role: { isSystem: false },
-          permission: { key: { in: [...TRAINING_STAGE_PERMISSION_KEYS] } },
-        },
-        select: {
-          role: { select: { name: true } },
-          permission: { select: { key: true } },
-        },
-      }),
-      db.trainingRoleTrack.findMany({
-        where: { roleId: ctx.roleId },
-        select: { trackKey: true, required: true },
-      }),
-      db.trainingProgress.findMany({
-        where: { userId: ctx.userId },
-        select: progressSelect,
-        orderBy: { completedAt: "asc" },
-      }),
-      certificationsFor([ctx.userId]),
-    ]);
+  const [
+    user,
+    profile,
+    branches,
+    ownerRows,
+    roleTracks,
+    progress,
+    certifications,
+  ] = await Promise.all([
+    db.user.findUniqueOrThrow({
+      where: { id: ctx.userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        branch: { select: { id: true, name: true } },
+      },
+    }),
+    db.trainingRoleProfile.findUnique({
+      where: { roleId: ctx.roleId },
+      select: { summary: true, responsibilities: true },
+    }),
+    ctx.branchScope === "ALL"
+      ? Promise.resolve([])
+      : db.branch.findMany({
+          where: { id: { in: ctx.branchIds } },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        }),
+    // System roles (Admin) can do everything — listing them under every
+    // stage says nothing, so "done by" only names regular roles.
+    db.rolePermission.findMany({
+      where: {
+        role: { isSystem: false },
+        permission: { key: { in: [...TRAINING_STAGE_PERMISSION_KEYS] } },
+      },
+      select: {
+        role: { select: { name: true } },
+        permission: { select: { key: true } },
+      },
+    }),
+    db.trainingRoleTrack.findMany({
+      where: { roleId: ctx.roleId },
+      select: { trackKey: true, required: true },
+    }),
+    db.trainingProgress.findMany({
+      where: { userId: ctx.userId },
+      select: progressSelect,
+      orderBy: { completedAt: "asc" },
+    }),
+    certificationsFor([ctx.userId]),
+  ]);
 
   const rolesByKey = new Map<string, Set<string>>();
   for (const row of ownerRows) {
@@ -120,7 +131,9 @@ router.get("/me", async (req, res) => {
       return {
         key: stage.key,
         owned: isStageOwned(stage, has),
-        canOpen: has(stage.viewPermission),
+        // A stage with no viewPermission is a screen everyone can open.
+        canOpen:
+          stage.viewPermission === null ? true : has(stage.viewPermission),
         owners: [...owners].sort(),
         abilities: stage.actions
           .filter((action) => has(action.key))
@@ -150,7 +163,10 @@ router.post("/progress", async (req, res) => {
     update: { status, completedBy: "SELF", completedAt: new Date() },
     select: progressSelect,
   });
-  return sendOk(res, { ...entry, completedAt: entry.completedAt.toISOString() });
+  return sendOk(res, {
+    ...entry,
+    completedAt: entry.completedAt.toISOString(),
+  });
 });
 
 /**
@@ -174,15 +190,22 @@ router.post("/verify/:trackKey", async (req, res) => {
   const existing = new Map(
     (
       await db.trainingProgress.findMany({
-        where: { userId: ctx.userId, stepKey: { in: candidates.map((s) => s.key) } },
+        where: {
+          userId: ctx.userId,
+          stepKey: { in: candidates.map((s) => s.key) },
+        },
         select: { stepKey: true, status: true },
       })
     ).map((row) => [row.stepKey, row.status]),
   );
-  const pending = candidates.filter((step) => existing.get(step.key) !== "DONE");
+  const pending = candidates.filter(
+    (step) => existing.get(step.key) !== "DONE",
+  );
   const checks = await Promise.all(
     pending.map(async (step) =>
-      step.verifier && (await VERIFIERS[step.verifier](ctx.userId)) ? step.key : null,
+      step.verifier && (await VERIFIERS[step.verifier](ctx.userId))
+        ? step.key
+        : null,
     ),
   );
   const verified = checks.filter((key): key is string => key !== null);
@@ -202,7 +225,11 @@ router.post("/verify/:trackKey", async (req, res) => {
       }),
       db.trainingProgress.updateMany({
         where: { userId: ctx.userId, stepKey: { in: upgraded } },
-        data: { status: "DONE", completedBy: "SYSTEM", completedAt: new Date() },
+        data: {
+          status: "DONE",
+          completedBy: "SYSTEM",
+          completedAt: new Date(),
+        },
       }),
     ]);
   }

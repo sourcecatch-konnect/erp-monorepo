@@ -2,17 +2,32 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconBook, IconRoute, IconTargetArrow, IconUserCircle } from "@tabler/icons-react";
+import {
+  IconBook,
+  IconRoute,
+  IconTargetArrow,
+  IconUserCircle,
+} from "@tabler/icons-react";
 import { cn } from "@skerp/ui/lib/util";
 import { IS_TRAINING_ENVIRONMENT } from "../environment";
 
 const LINKS = [
   { href: "/training", label: "My role & training", icon: IconUserCircle },
-  { href: "/training/process-map", label: "How the business works", icon: IconRoute },
+  {
+    href: "/training/process-map",
+    label: "How the business works",
+    icon: IconRoute,
+  },
   { href: "/training/glossary", label: "Glossary", icon: IconBook },
   // Missions use the demo data, so they only exist on the training copy.
   ...(IS_TRAINING_ENVIRONMENT
-    ? [{ href: "/training/missions", label: "Practice missions", icon: IconTargetArrow }]
+    ? [
+        {
+          href: "/training/missions",
+          label: "Practice missions",
+          icon: IconTargetArrow,
+        },
+      ]
     : []),
 ];
 
@@ -21,11 +36,16 @@ export function TrainingNav() {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/training"
-      ? !LINKS.some((link) => link.href !== "/training" && pathname.startsWith(link.href))
+      ? !LINKS.some(
+          (link) => link.href !== "/training" && pathname.startsWith(link.href),
+        )
       : pathname.startsWith(href);
 
   return (
-    <nav aria-label="Training" className="flex flex-wrap gap-1 border-b border-border">
+    <nav
+      aria-label="Training"
+      className="flex flex-wrap gap-1 border-b border-border"
+    >
       {LINKS.map(({ href, label, icon: LinkIcon }) => {
         const active = isActive(href);
         return (
