@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { NextStep } from "@skerp/ui/components/next-step";
+import { lrNextStep } from "./help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -582,6 +586,10 @@ export default function LRDetail({ id }: { id: string }) {
     !hasDeliveredLr &&
     !g.hubId &&
     !g.secondaryTripId;
+  const nextHint = lrNextStep(g.status, {
+    canFinalise: canApprove,
+    blocked: cannotFinalise,
+  });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
@@ -768,6 +776,21 @@ export default function LRDetail({ id }: { id: string }) {
           />
         </div>
       </header>
+
+      {nextHint ? (
+        <NextStep
+          title={nextHint.title}
+          action={
+            nextHint.action ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={nextHint.action.href}>{nextHint.action.label}</Link>
+              </Button>
+            ) : undefined
+          }
+        >
+          {nextHint.text}
+        </NextStep>
+      ) : null}
 
       {cannotFinalise && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">

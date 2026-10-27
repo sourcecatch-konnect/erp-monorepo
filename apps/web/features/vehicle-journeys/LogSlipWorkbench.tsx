@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { LOG_SLIP_HELP } from "./help";
+
 import * as React from "react";
 import Link from "next/link";
 import { Controller, useForm, FormProvider } from "react-hook-form";
@@ -245,7 +248,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
   return (
     <div className="space-y-4 p-4">
       {/* Header */}
-      <div className="rounded-lg border bg-card p-4">
+      <div data-tour="logslip-header" className="rounded-lg border bg-card p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -278,7 +281,8 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
           </div>
 
           {/* One primary action by status */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div data-tour="logslip-actions" className="flex flex-wrap items-center gap-2">
+            <PageHelp content={LOG_SLIP_HELP} />
             {slip && canPrint ? (
               <Button
                 variant={
@@ -327,6 +331,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
         <FormProvider {...form}>
           <form
             onSubmit={form.handleSubmit((values) => generate.mutate(values))}
+            data-tour="logslip-generate"
             className="rounded-lg border bg-card p-4"
           >
             <h3 className="text-sm font-semibold">Generate Log Slip</h3>
@@ -411,7 +416,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
 
       {/* Totals */}
       {totals ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div data-tour="logslip-totals" className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
             {
               label: "Total freight",
@@ -493,7 +498,7 @@ export default function LogSlipWorkbench({ journeyId }: { journeyId: string }) {
       {previewQuery.isLoading || (frozenSlipId && slipQuery.isLoading) ? (
         <Skeleton className="h-64 w-full" />
       ) : (
-        <div className="space-y-3">
+        <div data-tour="logslip-lines" className="space-y-3">
           <LineTable title="Trip Freight" lines={linesOf("TRIP_FREIGHT")} />
           <LineTable title="Advances" lines={linesOf("ADVANCE")} />
           <LineTable title="Diesel" lines={linesOf("DIESEL")} showQty />

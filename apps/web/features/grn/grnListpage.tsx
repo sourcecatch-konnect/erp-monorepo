@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { GRN_HELP } from "./help";
+
 import * as React from "react";
 import Link from "next/link";
 import { IconPlus } from "@tabler/icons-react";
@@ -68,14 +71,17 @@ export default function GrnListPage() {
           </p>
         </div>
 
-        {canCreate ? (
-          <Button asChild>
-            <Link href="/vp-management/grn/new">
-              <IconPlus size={16} className="mr-1" />
-              Create GRN
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <PageHelp content={GRN_HELP} />
+          {canCreate ? (
+            <Button asChild>
+              <Link href="/vp-management/grn/new">
+                <IconPlus size={16} className="mr-1" />
+                Create GRN
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <GRNTable

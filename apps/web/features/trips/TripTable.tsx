@@ -641,6 +641,7 @@ export default function TripTable(props: Props) {
             <TableEmptyState
               colSpan={visibleColumnCount}
               message="No trips found"
+              description="If you are searching, try clearing the filters. A new trip needs finalised LRs to carry, a free vehicle and a driver."
             />
           ) : (
             table.getRowModel().rows.map((row) => (

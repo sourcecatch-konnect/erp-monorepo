@@ -3,11 +3,15 @@ import type {
   DashboardAgeing,
   DashboardAgeingBucket,
   DashboardAttentionRow,
+  DashboardBranchRow,
   DashboardCustomerRow,
   DashboardFleet,
   DashboardFunnelStep,
   DashboardGlance,
+  DashboardOperations,
   DashboardMonthPoint,
+  DashboardPayables,
+  DashboardProfit,
   DashboardPeriod,
   DashboardRange,
   DashboardRevenue,
@@ -28,6 +32,15 @@ import { branchFilter } from "../../auth/branch-scope.js";
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long freight is allowed to be in transit before it counts as late, by
+ * mode. Same numbers as my-work/queues.ts DELIVERY_DAYS — a rail LR is not
+ * late at the road limit, and counting it as such made the Dashboard disagree
+ * with My Work for every rake.
+ */
+const DELIVERY_DAYS = { Road: 7, Rail: 15, RoadAndRail: 15 } as const;
+const SLOWER_MODES: ("Rail" | "RoadAndRail")[] = ["Rail", "RoadAndRail"];
 
 /**
  * A bill counts as revenue once it is past review. DRAFT and PENDING_REVIEW
@@ -67,6 +80,15 @@ const lrBranchWhere = (req: Request): Prisma.LorryReceiptWhereInput => {
     },
   };
 };
+
+/**
+ * An open bill the customer has actually missed the date on. A bill with no
+ * due date is deliberately excluded: no date was promised, so nothing is late.
+ */
+const overdueBillWhere = (req: Request, now: Date): Prisma.BillWhereInput => ({
+  ...openBillWhere(req),
+  dueDate: { not: null, lt: now },
+});
 
 const MONTH_INITIALS = "JFMAMJJASOND";
 const MONTH_NAMES = [
@@ -165,6 +187,7 @@ export const revenue = async (
   req: Request,
   window: DashboardWindow,
   now: Date,
+  canReceipt: boolean,
 ): Promise<DashboardRevenue> => {
   const branch = branchFilter(req, "branchId");
   const statuses = { in: [...REVENUE_STATUSES] };
@@ -173,7 +196,7 @@ export const revenue = async (
   // with the month in progress.
   const seriesFrom = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-  const [current, previous, monthly] = await Promise.all([
+  const [current, previous, monthly, monthlyReceipts] = await Promise.all([
     db.bill.aggregate({
       where: {
         ...branch,
@@ -195,6 +218,19 @@ export const revenue = async (
       where: { ...branch, status: statuses, billDate: { gte: seriesFrom } },
       select: { billDate: true, totalAmountPaise: true },
     }),
+    // Money actually received, bucketed the same way. A receipt can settle a
+    // bill raised months earlier, so this is not a share of the bars above it
+    // — the two series are independent, which is the point of the card.
+    canReceipt
+      ? db.receipt.findMany({
+          where: {
+            ...branch,
+            status: "POSTED",
+            receivedAt: { gte: seriesFrom },
+          },
+          select: { receivedAt: true, amountPaise: true },
+        })
+      : null,
   ]);
 
   const totals = new Map<string, number>();
@@ -203,13 +239,21 @@ export const revenue = async (
     totals.set(key, (totals.get(key) ?? 0) + Number(bill.totalAmountPaise));
   }
 
+  const received = new Map<string, number>();
+  for (const receipt of monthlyReceipts ?? []) {
+    const key = monthKey(receipt.receivedAt);
+    received.set(key, (received.get(key) ?? 0) + Number(receipt.amountPaise));
+  }
+
   const series: DashboardMonthPoint[] = [];
   for (let i = 0; i < 12; i += 1) {
     const month = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+    const key = monthKey(month);
     series.push({
-      month: monthKey(month),
+      month: key,
       label: MONTH_INITIALS[month.getMonth()] ?? "",
-      valuePaise: totals.get(monthKey(month)) ?? 0,
+      valuePaise: totals.get(key) ?? 0,
+      collectedPaise: monthlyReceipts ? (received.get(key) ?? 0) : null,
     });
   }
 
@@ -238,8 +282,8 @@ export const glance = async (
   const endOfToday = new Date(now);
   endOfToday.setHours(23, 59, 59, 999);
 
-  const [collected, outstanding, running, closing, pending] = await Promise.all(
-    [
+  const [collected, outstanding, overdue, running, closing, pending] =
+    await Promise.all([
       can.receipt
         ? db.receipt.aggregate({
             where: {
@@ -254,6 +298,13 @@ export const glance = async (
         ? db.bill.aggregate({
             where: openBillWhere(req),
             _sum: { outstandingAmountPaise: true },
+          })
+        : null,
+      can.billing
+        ? db.bill.aggregate({
+            where: overdueBillWhere(req, now),
+            _sum: { outstandingAmountPaise: true },
+            _count: true,
           })
         : null,
       can.trip
@@ -280,14 +331,17 @@ export const glance = async (
             },
           })
         : null,
-    ],
-  );
+    ]);
 
   return {
     collectedPaise: collected ? Number(collected._sum.amountPaise ?? 0) : null,
     outstandingPaise: outstanding
       ? Number(outstanding._sum.outstandingAmountPaise ?? 0)
       : null,
+    overduePaise: overdue
+      ? Number(overdue._sum.outstandingAmountPaise ?? 0)
+      : null,
+    overdueCount: overdue ? overdue._count : null,
     tripsRunning: running,
     tripsClosingToday: closing,
     billsPendingReview: pending,
@@ -295,15 +349,27 @@ export const glance = async (
 };
 
 /**
- * Card 3 — order to bill. Each step is a count on a real status in the
- * period; the gap between two steps is the point of the card.
+ * Card 3 — operations.
+ *
+ * `ordersConfirmed` counts orders by the ORDER's own creation date; the cohort
+ * counts LRs by the LR's creation date. They are different populations — an LR
+ * raised this month often belongs to last month's order — so the step from one
+ * to the other is not a conversion rate and the two are returned apart rather
+ * than as one funnel.
+ *
+ * Within the cohort every step is a subset of the one before it, so it can be
+ * drawn as a narrowing bar. `billed` is clamped to ACKNOWLEDGED for that
+ * reason: `billingStatus` is orthogonal to `status`, and without the clamp an
+ * LR billed before its signed copy arrived would make the last step wider than
+ * the one above it.
  */
-export const funnel = async (
+export const operations = async (
   req: Request,
   window: DashboardWindow,
-): Promise<DashboardFunnelStep[]> => {
+): Promise<DashboardOperations> => {
   const created = { gte: window.from, lte: window.to };
   const lrBranch = lrBranchWhere(req);
+  const lrBase = { ...lrBranch, deletedAt: null, createdAt: created };
 
   const [orders, lrs, dispatched, delivered, acknowledged, billed] =
     await Promise.all([
@@ -315,89 +381,98 @@ export const funnel = async (
           createdAt: created,
         },
       }),
-      db.lorryReceipt.count({
-        where: { ...lrBranch, deletedAt: null, createdAt: created },
-      }),
+      db.lorryReceipt.count({ where: lrBase }),
       db.lorryReceipt.count({
         where: {
-          ...lrBranch,
-          deletedAt: null,
-          createdAt: created,
+          ...lrBase,
           status: { in: ["FINALISED", "DELIVERED", "ACKNOWLEDGED"] },
         },
       }),
       db.lorryReceipt.count({
-        where: {
-          ...lrBranch,
-          deletedAt: null,
-          createdAt: created,
-          status: { in: ["DELIVERED", "ACKNOWLEDGED"] },
-        },
+        where: { ...lrBase, status: { in: ["DELIVERED", "ACKNOWLEDGED"] } },
       }),
+      db.lorryReceipt.count({ where: { ...lrBase, status: "ACKNOWLEDGED" } }),
       db.lorryReceipt.count({
         where: {
-          ...lrBranch,
-          deletedAt: null,
-          createdAt: created,
+          ...lrBase,
           status: "ACKNOWLEDGED",
-        },
-      }),
-      db.lorryReceipt.count({
-        where: {
-          ...lrBranch,
-          deletedAt: null,
-          createdAt: created,
           billingStatus: { in: ["PARTIALLY_BILLED", "BILLED"] },
         },
       }),
     ]);
 
-  return [
-    { key: "orders", label: "Orders confirmed", count: orders },
-    { key: "lr", label: "LR created", count: lrs },
-    { key: "dispatched", label: "Dispatched", count: dispatched },
-    { key: "delivered", label: "Delivered", count: delivered },
-    { key: "acknowledged", label: "Acknowledged", count: acknowledged },
-    { key: "billed", label: "Billed", count: billed },
-  ];
+  return {
+    ordersConfirmed: orders,
+    lrCreated: lrs,
+    cohort: [
+      { key: "dispatched", label: "Dispatched", count: dispatched },
+      { key: "delivered", label: "Delivered", count: delivered },
+      { key: "acknowledged", label: "Acknowledged", count: acknowledged },
+      { key: "billed", label: "Billed", count: billed },
+    ] satisfies DashboardFunnelStep[],
+  };
 };
 
-/** Card 4 — receivables ageing, bucketed on how far past due each bill is. */
+/**
+ * Card 4 — receivables ageing.
+ *
+ * A bill is bucketed on how far past its DUE date it is. The earlier version
+ * aged from `dueDate ?? billDate` and put everything with `days <= 30` in the
+ * first bucket, which silently swept bills that are not due yet in with ones
+ * up to a month late — so the card could not answer "how much is actually
+ * overdue". Not-due and no-due-date now have buckets of their own, and the
+ * four overdue bands hold only bills that have genuinely missed their date.
+ */
 export const ageing = async (
   req: Request,
   now: Date,
 ): Promise<DashboardAgeing> => {
   const bills = await db.bill.findMany({
     where: openBillWhere(req),
-    select: { dueDate: true, billDate: true, outstandingAmountPaise: true },
+    select: { dueDate: true, outstandingAmountPaise: true },
   });
 
   const buckets: DashboardAgeingBucket[] = [
+    // Short labels: the card is a narrow tile in the grid, and the word
+    // "overdue" is already carried by the card's own subtitle.
+    { key: "not_due", label: "Not due", amountPaise: 0, billCount: 0 },
     { key: "0-30", label: "0–30 days", amountPaise: 0, billCount: 0 },
     { key: "31-60", label: "31–60 days", amountPaise: 0, billCount: 0 },
     { key: "61-90", label: "61–90 days", amountPaise: 0, billCount: 0 },
     { key: "90+", label: "90+ days", amountPaise: 0, billCount: 0 },
+    { key: "unknown", label: "No due date", amountPaise: 0, billCount: 0 },
+  ];
+  const [notDue, b30, b60, b90, b90plus, unknown] = buckets as [
+    DashboardAgeingBucket,
+    DashboardAgeingBucket,
+    DashboardAgeingBucket,
+    DashboardAgeingBucket,
+    DashboardAgeingBucket,
+    DashboardAgeingBucket,
   ];
 
   let totalPaise = 0;
   for (const bill of bills) {
-    // A bill with no due date ages from its own date, so nothing is dropped.
-    const from = bill.dueDate ?? bill.billDate;
-    const days = Math.floor((now.getTime() - from.getTime()) / DAY_MS);
-    const slot =
-      days <= 30
-        ? buckets[0]
-        : days <= 60
-          ? buckets[1]
-          : days <= 90
-            ? buckets[2]
-            : buckets[3];
     const amount = Number(bill.outstandingAmountPaise);
-    if (slot) {
-      slot.amountPaise += amount;
-      slot.billCount += 1;
-    }
     totalPaise += amount;
+
+    let slot: DashboardAgeingBucket;
+    if (!bill.dueDate) {
+      // No date was promised, so the bill can be neither current nor late.
+      slot = unknown;
+    } else {
+      const days = Math.floor(
+        (now.getTime() - bill.dueDate.getTime()) / DAY_MS,
+      );
+      if (days <= 0) slot = notDue;
+      else if (days <= 30) slot = b30;
+      else if (days <= 60) slot = b60;
+      else if (days <= 90) slot = b90;
+      else slot = b90plus;
+    }
+
+    slot.amountPaise += amount;
+    slot.billCount += 1;
   }
 
   return { totalPaise, buckets };
@@ -442,6 +517,102 @@ export const topCustomers = async (
 };
 
 /**
+ * Card 6 — branch performance, for head office.
+ *
+ * One row per branch the viewer may see: what it billed and collected in the
+ * period, and what of its open bills is now overdue. Billing and receipts
+ * carry `branchId` directly. LRs do not — their branches live on the group —
+ * so they are counted by their ORIGIN branch, the one that raised them, and
+ * tallied in memory rather than grouped in SQL.
+ */
+export const branchPerformance = async (
+  req: Request,
+  window: DashboardWindow,
+  now: Date,
+  canReceipt: boolean,
+): Promise<DashboardBranchRow[]> => {
+  const ctx = req.ctx;
+  const scope =
+    !ctx || ctx.branchScope === "ALL" ? {} : { id: { in: ctx.branchIds } };
+
+  const [branches, billed, collected, overdue, lrs] = await Promise.all([
+    db.branch.findMany({ where: scope, select: { id: true, name: true } }),
+    db.bill.groupBy({
+      by: ["branchId"],
+      where: {
+        ...branchFilter(req, "branchId"),
+        status: { in: [...REVENUE_STATUSES] },
+        billDate: { gte: window.from, lte: window.to },
+      },
+      _sum: { totalAmountPaise: true },
+    }),
+    canReceipt
+      ? db.receipt.groupBy({
+          by: ["branchId"],
+          where: {
+            ...branchFilter(req, "branchId"),
+            status: "POSTED",
+            receivedAt: { gte: window.from, lte: window.to },
+          },
+          _sum: { amountPaise: true },
+        })
+      : null,
+    db.bill.groupBy({
+      by: ["branchId"],
+      where: overdueBillWhere(req, now),
+      _sum: { outstandingAmountPaise: true },
+    }),
+    db.lorryReceipt.findMany({
+      where: {
+        ...lrBranchWhere(req),
+        deletedAt: null,
+        createdAt: { gte: window.from, lte: window.to },
+      },
+      select: { group: { select: { originBranchId: true } } },
+    }),
+  ]);
+
+  const billedBy = new Map(
+    billed.map((b) => [b.branchId, Number(b._sum.totalAmountPaise ?? 0)]),
+  );
+  const collectedBy = new Map(
+    (collected ?? []).map((c) => [c.branchId, Number(c._sum.amountPaise ?? 0)]),
+  );
+  const overdueBy = new Map(
+    overdue.map((o) => [
+      o.branchId,
+      Number(o._sum.outstandingAmountPaise ?? 0),
+    ]),
+  );
+  const lrBy = new Map<string, number>();
+  for (const lr of lrs) {
+    const id = lr.group?.originBranchId;
+    if (id) lrBy.set(id, (lrBy.get(id) ?? 0) + 1);
+  }
+
+  return branches
+    .map((branch) => {
+      const billedPaise = billedBy.get(branch.id) ?? 0;
+      const collectedPaise = collectedBy.get(branch.id) ?? 0;
+      return {
+        branchId: branch.id,
+        name: branch.name,
+        lrCount: lrBy.get(branch.id) ?? 0,
+        billedPaise,
+        collectedPaise,
+        // Collected can exceed billed when old bills are settled this period,
+        // so this is a ratio of two independent figures, not a completion.
+        collectionPct:
+          billedPaise > 0
+            ? Math.round((collectedPaise / billedPaise) * 100)
+            : null,
+        overduePaise: overdueBy.get(branch.id) ?? 0,
+      };
+    })
+    .sort((a, b) => b.billedPaise - a.billedPaise);
+};
+
+/**
  * Card 6 — own fleet. `Vehicle.status` only distinguishes AVAILABLE from
  * ON_TRIP, so workshop is derived from job cards and takes precedence: a truck
  * being worked on is never also counted as running. A job card means the truck
@@ -479,7 +650,6 @@ export const fleet = async (): Promise<DashboardFleet> => {
   };
 };
 
-const LATE_IN_TRANSIT_DAYS = 7;
 const UNBILLED_DAYS = 15;
 
 /**
@@ -492,54 +662,111 @@ export const attention = async (
   can: { lr: boolean; billing: boolean; rail: boolean },
 ): Promise<DashboardAttentionRow[]> => {
   const lrBranch = lrBranchWhere(req);
-  const lateBefore = new Date(now.getTime() - LATE_IN_TRANSIT_DAYS * DAY_MS);
+  // Lateness runs from the moment the LR was finalised — when the freight
+  // actually started moving — not from when the record was created, and each
+  // mode gets its own limit. My Work's late_deliveries queue uses the same two
+  // rules, so the two screens now agree on which LRs are late.
+  const roadBefore = new Date(now.getTime() - DELIVERY_DAYS.Road * DAY_MS);
+  const railBefore = new Date(now.getTime() - DELIVERY_DAYS.Rail * DAY_MS);
   const unbilledBefore = new Date(now.getTime() - UNBILLED_DAYS * DAY_MS);
 
-  const [lateTransit, readyToBill, awaitingAck, breaches, rakeCharges] =
-    await Promise.all([
-      can.lr
-        ? db.lorryReceipt.count({
-            where: {
-              ...lrBranch,
-              deletedAt: null,
-              status: "FINALISED",
-              createdAt: { lt: lateBefore },
-            },
-          })
-        : null,
-      can.billing
-        ? db.lorryReceipt.count({
-            where: {
-              ...lrBranch,
-              deletedAt: null,
-              status: { in: ["DELIVERED", "ACKNOWLEDGED"] },
-              billingStatus: "READY_TO_BILL",
-              createdAt: { lt: unbilledBefore },
-            },
-          })
-        : null,
-      can.lr
-        ? db.lorryReceipt.count({
-            where: {
-              ...lrBranch,
-              deletedAt: null,
-              status: "DELIVERED",
-              acknowledgement: { is: null },
-            },
-          })
-        : null,
-      can.billing ? creditBreaches(req) : null,
-      can.rail
-        ? db.railRakeCharge.aggregate({
-            where: {
-              balanceAmount: { gt: 0 },
-              status: { in: ["ASSESSED", "PARTIALLY_SETTLED"] },
-            },
-            _sum: { balanceAmount: true },
-            _count: true,
-          })
-        : null,
-    ]);
+  /**
+   * What the unbilled LRs are actually worth. A count cannot be ranked
+   * against another count, so the rule that is most often the biggest number
+   * on the page gets a rupee figure behind it. One grouped aggregate, because
+   * a charge can add to or deduct from the LR's value.
+   */
+  const unbilledWhere: Prisma.LorryReceiptWhereInput = {
+    ...lrBranch,
+    deletedAt: null,
+    status: { in: ["DELIVERED", "ACKNOWLEDGED"] },
+    billingStatus: "READY_TO_BILL",
+    createdAt: { lt: unbilledBefore },
+  };
+
+  const [
+    lateTransit,
+    readyToBill,
+    awaitingAck,
+    breaches,
+    rakeCharges,
+    unbilledValue,
+  ] = await Promise.all([
+    can.lr
+      ? db.lorryReceipt.count({
+          where: {
+            ...lrBranch,
+            deletedAt: null,
+            status: "FINALISED",
+            OR: [
+              {
+                group: {
+                  is: {
+                    transportType: "Road",
+                    finalisedAt: { lt: roadBefore },
+                  },
+                },
+              },
+              {
+                group: {
+                  is: {
+                    transportType: { in: SLOWER_MODES },
+                    finalisedAt: { lt: railBefore },
+                  },
+                },
+              },
+            ],
+          },
+        })
+      : null,
+    can.billing
+      ? db.lorryReceipt.count({
+          where: {
+            ...lrBranch,
+            deletedAt: null,
+            status: { in: ["DELIVERED", "ACKNOWLEDGED"] },
+            billingStatus: "READY_TO_BILL",
+            createdAt: { lt: unbilledBefore },
+          },
+        })
+      : null,
+    can.lr
+      ? db.lorryReceipt.count({
+          where: {
+            ...lrBranch,
+            deletedAt: null,
+            status: "DELIVERED",
+            acknowledgement: { is: null },
+          },
+        })
+      : null,
+    can.billing ? creditBreaches(req) : null,
+    can.rail
+      ? db.railRakeCharge.aggregate({
+          where: {
+            balanceAmount: { gt: 0 },
+            status: { in: ["ASSESSED", "PARTIALLY_SETTLED"] },
+          },
+          _sum: { balanceAmount: true },
+          _count: true,
+        })
+      : null,
+    can.billing
+      ? db.lRCharge.groupBy({
+          by: ["effect"],
+          where: { status: { not: "CANCELLED" }, lr: { is: unbilledWhere } },
+          _sum: { amountPaise: true },
+        })
+      : null,
+  ]);
+
+  const unbilledPaise = (unbilledValue ?? []).reduce(
+    (total, row) =>
+      row.effect === "DEDUCTION"
+        ? total - (row._sum?.amountPaise ?? 0n)
+        : total + (row._sum?.amountPaise ?? 0n),
+    0n,
+  );
 
   const rows: DashboardAttentionRow[] = [];
 
@@ -547,8 +774,8 @@ export const attention = async (
     rows.push({
       key: "late_transit",
       severity: "critical",
-      title: `${lateTransit} LRs in transit over ${LATE_IN_TRANSIT_DAYS} days`,
-      detail: "Finalised, with no delivery recorded",
+      title: `${lateTransit} LRs late in transit`,
+      detail: `Finalised with no delivery recorded — over ${DELIVERY_DAYS.Road} days by road, ${DELIVERY_DAYS.Rail} by rail`,
       value: String(lateTransit),
     });
   }
@@ -560,6 +787,7 @@ export const attention = async (
       title: `${readyToBill} LRs delivered, not billed`,
       detail: `Ready to bill for over ${UNBILLED_DAYS} days`,
       value: String(readyToBill),
+      valuePaise: unbilledPaise > 0n ? unbilledPaise.toString() : undefined,
     });
   }
 
@@ -644,4 +872,110 @@ const formatLakh = (paise: number): string => {
   const rupees = paise / 100;
   if (rupees >= 10_000_000) return `₹${(rupees / 10_000_000).toFixed(2)} Cr`;
   return `₹${(rupees / 100_000).toFixed(2)} L`;
+};
+
+/**
+ * Card 12 — did we make money? Revenue alone cannot answer that, and the
+ * figure already exists: every closed journey posts a log slip carrying its
+ * freight, its costs and the net result. This sums the posted ones in the
+ * period.
+ *
+ * Log slips have no branch of their own (a journey is not a branch document),
+ * so this is a company figure whatever the page's branch filter says — the
+ * card labels itself accordingly, the way Own fleet does.
+ */
+export const profit = async (window: {
+  from: Date;
+  to: Date;
+}): Promise<DashboardProfit> => {
+  const [current, previous] = await Promise.all([
+    db.logSlip.aggregate({
+      where: {
+        status: { in: ["POSTED_TO_ACCOUNTS", "TALLY_SYNCED"] },
+        logSlipDate: { gte: window.from, lt: window.to },
+      },
+      _sum: {
+        totalFreightPaise: true,
+        totalExpensePaise: true,
+        netVehicleResultPaise: true,
+      },
+      _count: true,
+    }),
+    db.logSlip.aggregate({
+      where: {
+        status: { in: ["POSTED_TO_ACCOUNTS", "TALLY_SYNCED"] },
+        logSlipDate: {
+          gte: new Date(
+            window.from.getTime() -
+              (window.to.getTime() - window.from.getTime()),
+          ),
+          lt: window.from,
+        },
+      },
+      _sum: { netVehicleResultPaise: true },
+    }),
+  ]);
+
+  const freightPaise = current._sum.totalFreightPaise ?? 0n;
+  const expensePaise = current._sum.totalExpensePaise ?? 0n;
+  const netPaise = current._sum.netVehicleResultPaise ?? 0n;
+  const prevNet = previous._sum.netVehicleResultPaise ?? 0n;
+
+  return {
+    freightPaise: freightPaise.toString(),
+    expensePaise: expensePaise.toString(),
+    netPaise: netPaise.toString(),
+    journeyCount: current._count,
+    // Margin on the freight the journeys actually earned.
+    marginPct:
+      freightPaise > 0n
+        ? Math.round((Number(netPaise) / Number(freightPaise)) * 100)
+        : null,
+    deltaPct:
+      prevNet !== 0n
+        ? Math.round(
+            ((Number(netPaise) - Number(prevNet)) / Math.abs(Number(prevNet))) *
+              100,
+          )
+        : null,
+  };
+};
+
+/**
+ * Card 13 — what we owe. Outstanding and Overdue are what customers owe us;
+ * without the other side an owner cannot read their position. Approved and
+ * part-paid slips are a real commitment; drafts and pending approvals are not
+ * yet, so they are left out.
+ */
+export const payables = async (req: Request): Promise<DashboardPayables> => {
+  const branch = branchFilter(req);
+
+  const [slips, overdue] = await Promise.all([
+    db.vendorPaymentSlip.aggregate({
+      where: { ...branch, status: { in: ["APPROVED", "PARTIALLY_PAID"] } },
+      _sum: { netPayablePaise: true, paidPaise: true },
+      _count: true,
+    }),
+    db.vendorPaymentSlip.aggregate({
+      where: {
+        ...branch,
+        status: { in: ["APPROVED", "PARTIALLY_PAID"] },
+        createdAt: { lt: new Date(Date.now() - 30 * DAY_MS) },
+      },
+      _sum: { netPayablePaise: true, paidPaise: true },
+      _count: true,
+    }),
+  ]);
+
+  const owed =
+    (slips._sum.netPayablePaise ?? 0n) - (slips._sum.paidPaise ?? 0n);
+  const owedOverdue =
+    (overdue._sum.netPayablePaise ?? 0n) - (overdue._sum.paidPaise ?? 0n);
+
+  return {
+    outstandingPaise: (owed > 0n ? owed : 0n).toString(),
+    slipCount: slips._count,
+    overduePaise: (owedOverdue > 0n ? owedOverdue : 0n).toString(),
+    overdueCount: overdue._count,
+  };
 };

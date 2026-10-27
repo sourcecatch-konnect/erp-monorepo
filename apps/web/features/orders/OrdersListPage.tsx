@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { ORDERS_HELP } from "./help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -165,11 +168,14 @@ const onCreateLR = (order: OrderListRow) => {
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Orders</h1>
-        {canCreate ? (
-          <Button onClick={() => router.push("/orders/new")}>
-            <IconPlus size={16} className="mr-1" /> New Order
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <PageHelp content={ORDERS_HELP} />
+          {canCreate ? (
+            <Button onClick={() => router.push("/orders/new")}>
+              <IconPlus size={16} className="mr-1" /> New Order
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <OrderTable

@@ -13,6 +13,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Input } from "@skerp/ui/components/input";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import type { MyWorkModule, MyWorkQueue, MyWorkQueueKey } from "@skerp/types";
+import { AreaCards } from "./AreaCards";
+import { AreaSections } from "./AreaSections";
 import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
@@ -114,6 +116,7 @@ export function WorkList({
   view,
   onQueue,
   onView,
+  onArea,
   onQuick,
 }: {
   queues: MyWorkQueue[];
@@ -123,6 +126,7 @@ export function WorkList({
   view: View;
   onQueue: (queue: MyWorkQueueKey | null) => void;
   onView: (view: View) => void;
+  onArea: (module: MyWorkModule | null) => void;
   onQuick: (action: QuickAction) => void;
 }) {
   const setQueue = onQueue;
@@ -145,11 +149,21 @@ export function WorkList({
   const page = paging.key === filterKey ? paging.page : 0;
   const setPage = (p: number) => setPaging({ key: filterKey, page: p });
 
+  /**
+   * With no area picked and nothing typed, the work reads better grouped by
+   * area than as one merged page — see AreaSections. Searching, narrowing to
+   * an area, or switching to late/leftovers all want the ranked flat list
+   * instead, so the two swap automatically rather than behind a toggle.
+   */
+  const grouped = module === null && view === "waiting" && search === "";
+
   const list = useQuery({
     queryKey: myWorkKeys.list(filter, page, size),
     queryFn: () => myWorkApi.list(filter, page * size, size),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
+    // The sections fetch per area; this page would be thrown away.
+    enabled: !grouped,
   });
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
@@ -175,7 +189,9 @@ export function WorkList({
           <p className="text-sm text-muted-foreground">
             {area
               ? `${area.covers}. Most urgent first.`
-              : "Everything waiting on you, most urgent first."}
+              : grouped
+                ? "Everything waiting on you, grouped by work area."
+                : "Everything waiting on you, most urgent first."}
           </p>
         </div>
         <div className="relative w-full sm:w-72">
@@ -205,8 +221,10 @@ export function WorkList({
         </div>
       </header>
 
-      {/* Filters: steps of the area, then which items */}
+      {/* Filters: area, then steps inside it, then which items */}
       <div className="space-y-3 border-b bg-muted/30 px-4 py-3">
+        <AreaCards queues={queues} value={module} onChange={onArea} />
+
         {area && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 text-xs font-medium text-muted-foreground">
@@ -272,7 +290,16 @@ export function WorkList({
         )}
       </div>
 
-      {list.isPending ? (
+      {grouped ? (
+        <div className="p-4">
+          <AreaSections
+            queues={queues}
+            branch={branch}
+            onArea={onArea}
+            onQuick={onQuick}
+          />
+        </div>
+      ) : list.isPending ? (
         <div className="space-y-3 p-4">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
@@ -306,7 +333,7 @@ export function WorkList({
         </ul>
       )}
 
-      {total > 0 && (
+      {!grouped && total > 0 && (
         <div className="border-t px-4 py-3">
           <TablePaginationFooter
             total={total}

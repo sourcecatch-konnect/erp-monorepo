@@ -763,7 +763,7 @@ export function LRToBillWorkbench() {
             {billingStep === "SELECT_LRS" ? (
                 <>
                     {/* BILL FILTERS */}
-                    <Card className="overflow-hidden">
+                    <Card data-tour="bill-info" className="overflow-hidden">
                         <CardHeader className="border-b bg-muted/20 pb-4">
                             <CardTitle>Bill information</CardTitle>
 
@@ -934,7 +934,7 @@ export function LRToBillWorkbench() {
 
                     {/* LR SELECTION */}
                     {customerId ? (
-                        <Card className="overflow-hidden">
+                        <Card data-tour="bill-eligible" className="overflow-hidden">
                             <CardHeader className="border-b bg-muted/20">
                                 <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
                                     <div>
@@ -1175,7 +1175,7 @@ export function LRToBillWorkbench() {
                     </Card>
 
                     <div className="flex flex-col gap-4">
-                        <Card className="min-w-0 overflow-hidden">
+                        <Card data-tour="bill-selected" className="min-w-0 overflow-hidden">
                             <CardHeader className="border-b bg-muted/20">
                                 <CardTitle>Selected LRs and charges</CardTitle>
 
@@ -1603,7 +1603,7 @@ export function LRToBillWorkbench() {
 
                         {/* STICKY BILL SUMMARY */}
                         <div className="space-y-4">
-                            <Card className="overflow-hidden border-primary/20">
+                            <Card data-tour="bill-summary" className="overflow-hidden border-primary/20">
                                 <CardHeader className="border-b bg-primary/5 pb-4">
                                     <CardTitle>Bill Summary</CardTitle>
 
@@ -1727,6 +1727,7 @@ export function LRToBillWorkbench() {
                                             size="sm"
                                             disabled={!canCreate || !selectedLRs.length || create.isPending}
                                             onClick={() => create.mutate()}
+                                            data-tour="bill-create"
                                         >
                                             {create.isPending
                                                 ? "Creating draft…"

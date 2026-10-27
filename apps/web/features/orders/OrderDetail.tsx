@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { NextStep } from "@skerp/ui/components/next-step";
+import { orderNextStep } from "./help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -112,6 +116,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
   const canCancel = useCan(PERMS.ORDER.CANCEL);
   const canUpdate = useCan(PERMS.ORDER.UPDATE);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
+  const canViewTrips = useCan(PERMS.TRIP.VIEW);
 
   const { data: order, isLoading } = useQuery({
     queryKey: orderKeys.detail(orderId),
@@ -286,6 +291,12 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
     order.status === "Confirmed";
   const cancellable =
     order.status === "PendingApproval" || order.status === "Confirmed";
+  const nextHint = orderNextStep(order.status, {
+    orderId: order.id,
+    canApprove,
+    canCreateLr: canCreateLR,
+    canViewTrips,
+  });
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
@@ -354,6 +365,20 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
           )}
         </div>
       </div>
+      {nextHint ? (
+        <NextStep
+          title={nextHint.title}
+          action={
+            nextHint.action ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={nextHint.action.href}>{nextHint.action.label}</Link>
+              </Button>
+            ) : undefined
+          }
+        >
+          {nextHint.text}
+        </NextStep>
+      ) : null}
       {order.status === "Rejected" && order.rejectionReason && (
         <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
           <IconAlertCircle size={16} className="mt-0.5 shrink-0" />

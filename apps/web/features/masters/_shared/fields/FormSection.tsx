@@ -8,6 +8,8 @@ type Props = {
   description?: string;
   children: React.ReactNode;
   columns?: 1 | 2 | 3;
+  /** Anchor for a guided tour step (`data-tour`). */
+  tourId?: string;
 };
 
 const gridClassByColumns = {
@@ -22,9 +24,13 @@ export default function FormSection({
   description,
   children,
   columns = 3,
+  tourId,
 }: Props) {
   return (
-    <section className="col-span-full rounded-lg border bg-muted/20 p-4">
+    <section
+      data-tour={tourId}
+      className="col-span-full rounded-lg border bg-muted/20 p-4"
+    >
       <header className="mb-3 flex items-start gap-2.5">
         <span className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
           {icon}

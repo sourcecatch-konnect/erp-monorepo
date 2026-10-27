@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { TRIPS_HELP } from "./help";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -239,11 +242,14 @@ export default function TripsListPage() {
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Trips</h1>
-        {canCreate ? (
-          <Button onClick={() => router.push("/trips/new")}>
-            <IconPlus size={16} className="mr-1" /> New Trip
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <PageHelp content={TRIPS_HELP} />
+          {canCreate ? (
+            <Button onClick={() => router.push("/trips/new")}>
+              <IconPlus size={16} className="mr-1" /> New Trip
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

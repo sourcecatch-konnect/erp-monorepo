@@ -42,6 +42,25 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  /*
+   * Learning accents. The training screens are the one place in the ERP that
+   * is about the person rather than the paperwork, so a tile row there is
+   * allowed to carry colour. Six hues, each with a soft surface fill and an
+   * ink colour that passes contrast on it. Outside /training, the single
+   * primary rule in llm-guideline/design.md still applies.
+   */
+  --color-learn-1: var(--learn-1);
+  --color-learn-1-soft: var(--learn-1-soft);
+  --color-learn-2: var(--learn-2);
+  --color-learn-2-soft: var(--learn-2-soft);
+  --color-learn-3: var(--learn-3);
+  --color-learn-3-soft: var(--learn-3-soft);
+  --color-learn-4: var(--learn-4);
+  --color-learn-4-soft: var(--learn-4-soft);
+  --color-learn-5: var(--learn-5);
+  --color-learn-5-soft: var(--learn-5-soft);
+  --color-learn-6: var(--learn-6);
+  --color-learn-6-soft: var(--learn-6-soft);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -103,6 +122,19 @@
   --sidebar-accent-foreground: oklch(0.16 0.005 92);
   --sidebar-border: oklch(0.928 0.004 92);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Learning accents — violet, emerald, rose, sky, amber, indigo. */
+  --learn-1: oklch(0.54 0.21 290);
+  --learn-1-soft: oklch(0.96 0.03 290);
+  --learn-2: oklch(0.56 0.15 158);
+  --learn-2-soft: oklch(0.96 0.03 158);
+  --learn-3: oklch(0.58 0.2 16);
+  --learn-3-soft: oklch(0.96 0.025 16);
+  --learn-4: oklch(0.56 0.15 230);
+  --learn-4-soft: oklch(0.96 0.03 230);
+  --learn-5: oklch(0.6 0.14 70);
+  --learn-5-soft: oklch(0.96 0.04 70);
+  --learn-6: oklch(0.52 0.19 265);
+  --learn-6-soft: oklch(0.96 0.03 265);
 }
 
 .dark {
@@ -141,6 +173,19 @@
   --sidebar-accent-foreground: oklch(0.985 0.002 92);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* Lifted hues on a dark surface; the soft fills become low-alpha tints. */
+  --learn-1: oklch(0.72 0.16 290);
+  --learn-1-soft: oklch(0.72 0.16 290 / 15%);
+  --learn-2: oklch(0.72 0.14 158);
+  --learn-2-soft: oklch(0.72 0.14 158 / 15%);
+  --learn-3: oklch(0.72 0.16 16);
+  --learn-3-soft: oklch(0.72 0.16 16 / 15%);
+  --learn-4: oklch(0.72 0.13 230);
+  --learn-4-soft: oklch(0.72 0.13 230 / 15%);
+  --learn-5: oklch(0.78 0.13 70);
+  --learn-5-soft: oklch(0.78 0.13 70 / 15%);
+  --learn-6: oklch(0.7 0.16 265);
+  --learn-6-soft: oklch(0.7 0.16 265 / 15%);
 }
 .pac-container {
   z-index: 9999 !important;
@@ -170,7 +215,6 @@
   }
 
   @keyframes truck-bob {
-
     0%,
     100% {
       transform: translateY(0);
@@ -190,7 +234,6 @@
 }
 
 @layer base {
-
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
@@ -199,7 +242,6 @@
 
 /* Motion vocabulary: micro-interactions stay 150–300ms ease-out; honor OS setting */
 @media (prefers-reduced-motion: reduce) {
-
   *,
   *::before,
   *::after {

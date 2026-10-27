@@ -5,6 +5,7 @@ import type {
   User,
 } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
+import { isTrainingEnvironment, logOutboundSkipped } from "../../lib/environment.js";
 import { emitInAppNotification } from "./realtime.js";
 import type { RenderedNotification } from "./types.js";
 
@@ -201,4 +202,15 @@ const providers: Record<NotificationChannel, NotificationProvider> = {
 export const sendViaProvider = (
   channel: NotificationChannel,
   args: ProviderArgs,
-) => providers[channel].send(args);
+) => {
+  // Training environment: in-app notifications still work so people can
+  // practise; nothing is emailed or sent on WhatsApp.
+  if (channel !== "IN_APP" && isTrainingEnvironment()) {
+    logOutboundSkipped(channel, `delivery ${args.delivery.id}`);
+    return Promise.resolve<ProviderResult>({
+      skipped: true,
+      reason: "Training environment: outbound messages are switched off",
+    });
+  }
+  return providers[channel].send(args);
+};

@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHelp } from "@/features/training";
+import { DELIVERY_CHALLANS_HELP } from "./help";
+
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -141,14 +144,17 @@ export default function DeliveryChallanList() {
             Dispatch Branch GRN goods by VP and track pending quantities.
           </p>
         </div>
-        {canCreate ? (
-          <Button asChild>
-            <Link href="/vp-management/delivery-challans/new">
-              <IconPlus size={16} className="mr-1.5" />
-              Create Delivery Challan
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <PageHelp content={DELIVERY_CHALLANS_HELP} />
+          {canCreate ? (
+            <Button asChild>
+              <Link href="/vp-management/delivery-challans/new">
+                <IconPlus size={16} className="mr-1.5" />
+                Create Delivery Challan
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
