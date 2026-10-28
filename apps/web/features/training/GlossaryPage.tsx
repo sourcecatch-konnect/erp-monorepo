@@ -14,6 +14,8 @@ import {
   type GlossaryArea,
 } from "./content/glossary";
 import { STAGE_TERMS } from "./content/stages";
+import { PlaybackNotice, PlayText } from "./audio/PlayText";
+import { useTranslate } from "./i18n";
 import { useCompleteOnVisit } from "./hooks/useTraining";
 import { STAGE_BY_KEY } from "./lib/catalog-lookup";
 
@@ -51,6 +53,7 @@ const ALL = "__all__";
 /** A3 — every ERP word in plain language, searchable and tagged by area. */
 export function GlossaryPage() {
   useCompleteOnVisit("/training/glossary");
+  const { t } = useTranslate();
   const [query, setQuery] = useState("");
   const [area, setArea] = useState<GlossaryArea | typeof ALL>(ALL);
 
@@ -115,6 +118,8 @@ export function GlossaryPage() {
           {entries.length} of {GLOSSARY.length} words
         </p>
       </div>
+
+      <PlaybackNotice />
 
       <div className="flex flex-wrap gap-1.5">
         <button
@@ -188,12 +193,19 @@ export function GlossaryPage() {
                   </span>
                   {entry.fullName ? (
                     <span className="w-full text-xs text-muted-foreground">
-                      {entry.fullName}
+                      {t(`glossary.${entry.id}.fullName`, entry.fullName)}
                     </span>
                   ) : null}
                 </dt>
-                <dd className="mt-2 text-sm text-muted-foreground">
-                  {entry.meaning}
+                <dd className="mt-2 flex items-start gap-2 text-sm text-muted-foreground">
+                  <PlayText
+                    id={`glossary.${entry.id}.meaning`}
+                    text={t(`glossary.${entry.id}.meaning`, entry.meaning)}
+                    label={`Read the meaning of ${entry.term} aloud`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    {t(`glossary.${entry.id}.meaning`, entry.meaning)}
+                  </span>
                 </dd>
 
                 {usedIn.length > 0 ? (

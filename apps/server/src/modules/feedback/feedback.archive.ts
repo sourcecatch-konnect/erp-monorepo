@@ -6,9 +6,17 @@ import { formatFeedbackNumber } from "@skerp/types";
 
 import { db } from "../../../prisma/prisma.js";
 import { getObjectStream, isS3Configured } from "../../lib/s3.js";
-import { buildFeedbackDocx, imageSize, type DocxImage } from "./feedback.docx.js";
+import {
+  buildFeedbackDocx,
+  imageSize,
+  type DocxImage,
+} from "./feedback.docx.js";
 import { buildFeedbackXlsx } from "./feedback.export.js";
-import { ATTACHMENT_ENTITY, findScreenshots } from "./feedback.service.js";
+import {
+  ATTACHMENT_ENTITY,
+  findScreenshots,
+  findVoiceNotes,
+} from "./feedback.service.js";
 
 /**
  * B9 step 1 — archive ALL feedback before it is switched off and removed.
@@ -32,12 +40,20 @@ import { ATTACHMENT_ENTITY, findScreenshots } from "./feedback.service.js";
 const DOCX_BATCH = 300;
 const DOCX_IMAGE_BYTES = 40 * 1024 * 1024;
 
-type SavedFile = { feedbackId: string; file: string; bytes: number; originalName: string };
+type SavedFile = {
+  feedbackId: string;
+  file: string;
+  bytes: number;
+  originalName: string;
+};
 
 async function main() {
   const generatedAt = new Date();
   const stamp = generatedAt.toISOString().slice(0, 10);
-  const outDir = path.resolve(process.argv[2] ?? ".", `skerp-feedback-archive-${stamp}`);
+  const outDir = path.resolve(
+    process.argv[2] ?? ".",
+    `skerp-feedback-archive-${stamp}`,
+  );
   const filesDir = path.join(outDir, "attachments");
   await mkdir(filesDir, { recursive: true });
 
@@ -46,34 +62,72 @@ async function main() {
     orderBy: { number: "asc" },
     include: { comments: { orderBy: { createdAt: "asc" } } },
   });
-  const numberById = new Map(rows.map((row) => [row.id, formatFeedbackNumber(row.number)]));
+  const numberById = new Map(
+    rows.map((row) => [row.id, formatFeedbackNumber(row.number)]),
+  );
 
   /* ---- Attached files: saved once, then reused by the Word reports ---- */
   const attachmentCount = await db.attachment.count({
-    where: { entityType: ATTACHMENT_ENTITY, uploaded: true, deletedAt: null, antivirusStatus: "CLEAN" },
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      uploaded: true,
+      deletedAt: null,
+      antivirusStatus: "CLEAN",
+    },
   });
   const saved: SavedFile[] = [];
+  /*
+   * Voice notes go in the zip but never into `saved`: that list is what the
+   * Word reports try to embed as images, and an audio file there would be
+   * read, rejected by imageSize() and reported as a skipped picture.
+   */
+  const savedVoice: SavedFile[] = [];
   const failed: string[] = [];
   if (rows.length > 0 && isS3Configured()) {
-    const perItem = new Map<string, number>();
-    for (const shot of await findScreenshots(rows.map((row) => row.id))) {
-      const index = (perItem.get(shot.entityId) ?? 0) + 1;
-      perItem.set(shot.entityId, index);
-      const file = `${numberById.get(shot.entityId)}-${index}${path.extname(shot.originalName) || ".bin"}`;
-      try {
-        const data = await buffer(await getObjectStream(shot.s3Key));
-        await writeFile(path.join(filesDir, file), data);
-        saved.push({ feedbackId: shot.entityId, file, bytes: data.length, originalName: shot.originalName });
-      } catch (error) {
-        failed.push(`${file} (${shot.s3Key})`);
-        console.error(`[feedback-archive] could not download ${shot.s3Key}:`, error);
+    const ids = rows.map((row) => row.id);
+    const download = async (
+      attachments: Awaited<ReturnType<typeof findScreenshots>>,
+      suffix: string,
+      into: SavedFile[],
+    ) => {
+      const perItem = new Map<string, number>();
+      for (const shot of attachments) {
+        const index = (perItem.get(shot.entityId) ?? 0) + 1;
+        perItem.set(shot.entityId, index);
+        const file = `${numberById.get(shot.entityId)}-${suffix}${index}${path.extname(shot.originalName) || ".bin"}`;
+        try {
+          const data = await buffer(await getObjectStream(shot.s3Key));
+          await writeFile(path.join(filesDir, file), data);
+          into.push({
+            feedbackId: shot.entityId,
+            file,
+            bytes: data.length,
+            originalName: shot.originalName,
+          });
+        } catch (error) {
+          failed.push(`${file} (${shot.s3Key})`);
+          console.error(
+            `[feedback-archive] could not download ${shot.s3Key}:`,
+            error,
+          );
+        }
       }
+    };
+    await download(await findScreenshots(ids), "", saved);
+    await download(await findVoiceNotes(ids), "voice-", savedVoice);
+  }
+  const allSaved = [...saved, ...savedVoice];
+  const byItem = (entries: SavedFile[]) => {
+    const map = new Map<string, SavedFile[]>();
+    for (const entry of entries) {
+      map.set(entry.feedbackId, [...(map.get(entry.feedbackId) ?? []), entry]);
     }
-  }
-  const savedByItem = new Map<string, SavedFile[]>();
-  for (const entry of saved) {
-    savedByItem.set(entry.feedbackId, [...(savedByItem.get(entry.feedbackId) ?? []), entry]);
-  }
+    return map;
+  };
+  /** Every attached file, listed in feedback.json. */
+  const savedByItem = byItem(allSaved);
+  /** Pictures only — the Word reports embed these. */
+  const picturesByItem = byItem(saved);
 
   /* ---- Excel: every item ---- */
   await writeFile(
@@ -90,7 +144,7 @@ async function main() {
     let usedBytes = 0;
     let skipped = 0;
     for (const row of batch) {
-      for (const entry of savedByItem.get(row.id) ?? []) {
+      for (const entry of picturesByItem.get(row.id) ?? []) {
         const data = await readFile(path.join(filesDir, entry.file));
         const size = imageSize(data);
         if (!size || usedBytes + data.length > DOCX_IMAGE_BYTES) {
@@ -124,11 +178,13 @@ async function main() {
         items: rows.map((row) => ({
           fbNumber: numberById.get(row.id),
           ...row,
-          attachments: (savedByItem.get(row.id) ?? []).map(({ file, originalName, bytes }) => ({
-            file: `attachments/${file}`,
-            originalName,
-            bytes,
-          })),
+          attachments: (savedByItem.get(row.id) ?? []).map(
+            ({ file, originalName, bytes }) => ({
+              file: `attachments/${file}`,
+              originalName,
+              bytes,
+            }),
+          ),
         })),
       },
       null,
@@ -143,24 +199,33 @@ async function main() {
     "",
     `Items:         ${rows.length}${rows.length ? ` (${formatFeedbackNumber(rows[0]!.number)} to ${formatFeedbackNumber(rows.at(-1)!.number)})` : ""}`,
     `Comments:      ${comments}`,
-    `Attachments:   ${saved.length} saved of ${attachmentCount} clean uploads`,
+    `Attachments:   ${allSaved.length} saved of ${attachmentCount} clean uploads`,
+    `               ${saved.length} picture(s), ${savedVoice.length} voice note(s)`,
     ...(isS3Configured()
       ? []
-      : ["               (AWS_S3_BUCKET not set here, so no files were downloaded — run again where it is set)"]),
+      : [
+          "               (AWS_S3_BUCKET not set here, so no files were downloaded — run again where it is set)",
+        ]),
     ...(failed.length ? [`Not saved:     ${failed.join(", ")}`] : []),
     `Word reports:  ${reports}${skippedImages ? ` (${skippedImages} picture(s) left out of the Word files; all are in attachments/)` : ""}`,
     "",
     "feedback.xlsx           every item, one row each, plus By page and By status sheets",
     "feedback-report-N.docx  developer report grouped by module and page, 300 items per file",
     "feedback.json           every stored field and the full conversation",
-    "attachments/            the files reporters attached, named after the item (FB-0042-1.png)",
+    "attachments/            the files reporters attached, named after the item",
+    "                        pictures FB-0042-1.png, voice notes FB-0042-voice-1.webm",
   ];
   await writeFile(path.join(outDir, "README.txt"), `${lines.join("\n")}\n`);
 
   console.log(lines.slice(3, lines.indexOf("", 3)).join("\n"));
   console.log(`\nfeedback-archive: written to ${outDir}`);
-  if (failed.length > 0 || (attachmentCount > 0 && saved.length < attachmentCount)) {
-    console.warn("feedback-archive: some attached files were not saved — see README.txt before removing S3 data.");
+  if (
+    failed.length > 0 ||
+    (attachmentCount > 0 && allSaved.length < attachmentCount)
+  ) {
+    console.warn(
+      "feedback-archive: some attached files were not saved — see README.txt before removing S3 data.",
+    );
   }
 }
 

@@ -12,7 +12,10 @@ import {
   IconInfoCircle,
   IconMapPin,
 } from "@tabler/icons-react";
-import { FEEDBACK_MAX_SCREENSHOTS, feedbackFormSchema } from "@skerp/validators";
+import {
+  FEEDBACK_MAX_SCREENSHOTS,
+  feedbackFormSchema,
+} from "@skerp/validators";
 import {
   describeUserAgent,
   formatFeedbackNumber,
@@ -32,14 +35,21 @@ import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { CATEGORY_META, CATEGORY_ORDER } from "../categories";
 import { feedbackKeys } from "../feedback.keys";
 import { feedbackApi } from "../feedback.service";
-import {
-  EMPTY_FEEDBACK_VALUES,
-  type FeedbackFormValues,
-} from "../form-values";
+import { EMPTY_FEEDBACK_VALUES, type FeedbackFormValues } from "../form-values";
 import { snapshotActivity } from "../lib/activity-recorder";
+import { releaseVoiceNote, type VoiceNote } from "../lib/voice-note";
+import { VoiceNoteSection } from "./VoiceNoteSection";
 import { clearDraft, loadDraft, saveDraft } from "../lib/draft";
-import { fileToScreenshot, releaseScreenshot, type Screenshot } from "../lib/images";
-import { describeClient, describePage, type PageInfo } from "../lib/page-context";
+import {
+  fileToScreenshot,
+  releaseScreenshot,
+  type Screenshot,
+} from "../lib/images";
+import {
+  describeClient,
+  describePage,
+  type PageInfo,
+} from "../lib/page-context";
 import { CategoryFields } from "./CategoryFields";
 import { ScreenshotSection } from "./ScreenshotSection";
 
@@ -109,8 +119,8 @@ function WhatWeAttach({ page }: { page: PageInfo }) {
         What we attach automatically
       </summary>
       <p className="mt-2 text-xs text-muted-foreground">
-        So you don&apos;t have to explain where you were, we send these details with
-        your feedback. We never send passwords or what you typed into other
+        So you don&apos;t have to explain where you were, we send these details
+        with your feedback. We never send passwords or what you typed into other
         screens.
       </p>
       <dl className="mt-3 grid gap-2 text-sm">
@@ -128,11 +138,13 @@ function WhatWeAttach({ page }: { page: PageInfo }) {
 function SentConfirmation({
   number,
   failedPictures,
+  failedVoiceNotes,
   onAnother,
   onClose,
 }: {
   number: number;
   failedPictures: number;
+  failedVoiceNotes: number;
   onAnother: () => void;
   onClose: () => void;
 }) {
@@ -154,8 +166,14 @@ function SentConfirmation({
         </p>
         {failedPictures > 0 ? (
           <p className="text-sm text-destructive">
-            {failedPictures} picture{failedPictures === 1 ? "" : "s"} could not be
-            attached. Your feedback was still sent.
+            {failedPictures} picture{failedPictures === 1 ? "" : "s"} could not
+            be attached. Your feedback was still sent.
+          </p>
+        ) : null}
+        {failedVoiceNotes > 0 ? (
+          <p className="text-sm text-destructive">
+            {failedVoiceNotes} voice note{failedVoiceNotes === 1 ? "" : "s"}{" "}
+            could not be attached. Your feedback was still sent.
           </p>
         ) : null}
       </div>
@@ -170,18 +188,49 @@ function SentConfirmation({
 }
 
 /** Upload each picture: presign → PUT to storage → confirm. Returns how many failed. */
-async function uploadScreenshots(feedbackId: string, shots: Screenshot[]): Promise<number> {
+async function uploadScreenshots(
+  feedbackId: string,
+  shots: Screenshot[],
+): Promise<number> {
   let failed = 0;
   for (const shot of shots) {
     try {
-      const { attachmentId, uploadUrl } = await feedbackApi.requestScreenshot(feedbackId, {
-        mime: "image/jpeg",
-        sizeBytes: shot.blob.size,
-        width: shot.width,
-        height: shot.height,
-      });
+      const { attachmentId, uploadUrl } = await feedbackApi.requestScreenshot(
+        feedbackId,
+        {
+          mime: "image/jpeg",
+          sizeBytes: shot.blob.size,
+          width: shot.width,
+          height: shot.height,
+        },
+      );
       await feedbackApi.uploadToStorage(uploadUrl, shot.blob);
       await feedbackApi.completeScreenshot(feedbackId, attachmentId);
+    } catch {
+      failed += 1;
+    }
+  }
+  return failed;
+}
+
+/** Same three steps for each voice note. Returns how many failed. */
+async function uploadVoiceNotes(
+  feedbackId: string,
+  notes: VoiceNote[],
+): Promise<number> {
+  let failed = 0;
+  for (const note of notes) {
+    try {
+      const { attachmentId, uploadUrl } = await feedbackApi.requestVoiceNote(
+        feedbackId,
+        {
+          mime: note.mime,
+          sizeBytes: note.blob.size,
+          durationSeconds: note.durationSeconds,
+        },
+      );
+      await feedbackApi.uploadToStorage(uploadUrl, note.blob);
+      await feedbackApi.completeVoiceNote(feedbackId, attachmentId);
     } catch {
       failed += 1;
     }
@@ -192,25 +241,38 @@ async function uploadScreenshots(feedbackId: string, shots: Screenshot[]): Promi
 export function FeedbackForm({
   onClose,
   screenshotsEnabled,
+  voiceNotesEnabled,
   shots,
+  notes,
   element,
   onShotsChange,
+  onNotesChange,
   onElementChange,
   onPick,
 }: {
   onClose: () => void;
   screenshotsEnabled: boolean;
+  voiceNotesEnabled: boolean;
   shots: Screenshot[];
+  notes: VoiceNote[];
   element: FeedbackElement | null;
   onShotsChange: (shots: Screenshot[]) => void;
+  onNotesChange: (notes: VoiceNote[]) => void;
   onElementChange: (element: FeedbackElement | null) => void;
   onPick: () => void;
 }) {
   const pathname = usePathname();
   const { labels } = useBreadcrumbLabels();
-  const page = useMemo(() => describePage(pathname, labels), [pathname, labels]);
+  const page = useMemo(
+    () => describePage(pathname, labels),
+    [pathname, labels],
+  );
   const queryClient = useQueryClient();
-  const [sent, setSent] = useState<{ number: number; failedPictures: number } | null>(null);
+  const [sent, setSent] = useState<{
+    number: number;
+    failedPictures: number;
+    failedVoiceNotes: number;
+  } | null>(null);
 
   const methods = useForm<FeedbackFormValues>({
     resolver,
@@ -241,21 +303,30 @@ export function FeedbackForm({
         },
         context: {
           ...describeClient(),
-          breadcrumb: page.breadcrumb.slice(0, 12).map((item) => clip(item, 160)),
+          breadcrumb: page.breadcrumb
+            .slice(0, 12)
+            .map((item) => clip(item, 160)),
           ...snapshotActivity(),
           ...(element ? { element } : {}),
         },
       });
-      // The feedback is saved first; a failed picture never loses the report.
+      // The feedback is saved first; a failed attachment never loses the report.
       const failedPictures = await uploadScreenshots(created.id, shots);
-      return { ...created, failedPictures };
+      const failedVoiceNotes = await uploadVoiceNotes(created.id, notes);
+      return { ...created, failedPictures, failedVoiceNotes };
     },
     onSuccess: (created) => {
       clearDraft(page.path);
       shots.forEach(releaseScreenshot);
+      notes.forEach(releaseVoiceNote);
       onShotsChange([]);
+      onNotesChange([]);
       onElementChange(null);
-      setSent({ number: created.number, failedPictures: created.failedPictures });
+      setSent({
+        number: created.number,
+        failedPictures: created.failedPictures,
+        failedVoiceNotes: created.failedVoiceNotes,
+      });
       void queryClient.invalidateQueries({ queryKey: feedbackKeys.mine });
     },
   });
@@ -281,7 +352,11 @@ export function FeedbackForm({
     fileToScreenshot(file)
       .then((shot) => onShotsChange([...shots, shot]))
       .catch((error: unknown) =>
-        toast.error(error instanceof Error ? error.message : "We couldn't add that picture."),
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "We couldn't add that picture.",
+        ),
       );
   };
 
@@ -290,6 +365,7 @@ export function FeedbackForm({
       <SentConfirmation
         number={sent.number}
         failedPictures={sent.failedPictures}
+        failedVoiceNotes={sent.failedVoiceNotes}
         onClose={onClose}
         onAnother={() => {
           methods.reset(EMPTY_FEEDBACK_VALUES);
@@ -311,7 +387,11 @@ export function FeedbackForm({
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
           <PageBanner page={page} />
 
-          <Tabs value={category} onValueChange={chooseCategory} className="gap-4">
+          <Tabs
+            value={category}
+            onValueChange={chooseCategory}
+            className="gap-4"
+          >
             <section className="space-y-3">
               <StepHeading step={1} title="What kind of feedback is it?" />
               <TabsList
@@ -322,12 +402,18 @@ export function FeedbackForm({
                   const meta = CATEGORY_META[value];
                   const TileIcon = meta.icon;
                   return (
-                    <TabsTrigger key={value} value={value} className={TILE_CLASS}>
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className={TILE_CLASS}
+                    >
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                         <TileIcon className="size-5" aria-hidden />
                       </span>
                       <span className="grid gap-0.5">
-                        <span className="text-sm font-semibold">{meta.title}</span>
+                        <span className="text-sm font-semibold">
+                          {meta.title}
+                        </span>
                         <span className="text-xs font-normal text-muted-foreground">
                           {meta.hint}
                         </span>
@@ -361,14 +447,21 @@ export function FeedbackForm({
             />
           ) : null}
 
+          {category !== "" && voiceNotesEnabled ? (
+            <VoiceNoteSection notes={notes} onNotesChange={onNotesChange} />
+          ) : null}
+
           {category !== "" ? <WhatWeAttach page={page} /> : null}
 
           {submit.isError ? (
             <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              <IconAlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <IconAlertTriangle
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden
+              />
               <p>
-                We couldn&apos;t send your feedback: {submit.error.message}. Your
-                text is still here, so please try again.
+                We couldn&apos;t send your feedback: {submit.error.message}.
+                Your text is still here, so please try again.
               </p>
             </div>
           ) : null}

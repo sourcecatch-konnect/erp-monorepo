@@ -15,6 +15,7 @@ import {
   feedbackStatusSchema,
   feedbackSubmitSchema,
   feedbackTriageSchema,
+  feedbackVoiceNoteRequestSchema,
 } from "@skerp/validators";
 
 /**
@@ -62,6 +63,13 @@ export type FeedbackScreenshot = {
   url: string;
 };
 
+export type FeedbackVoiceNote = {
+  id: string;
+  /** Short-lived presigned download URL. */
+  url: string;
+  mime: string;
+};
+
 export type FeedbackDetail = FeedbackListItem & {
   description: string | null;
   details: FeedbackDetails;
@@ -73,6 +81,7 @@ export type FeedbackDetail = FeedbackListItem & {
   externalRef: string | null;
   resolvedAt: string | null;
   screenshots: FeedbackScreenshot[];
+  voiceNotes: FeedbackVoiceNote[];
 };
 
 export type MyFeedbackItem = Pick<
@@ -91,7 +100,12 @@ export type MyFeedbackItem = Pick<
 >;
 
 export type FeedbackElement = z.infer<typeof feedbackElementSchema>;
-export type FeedbackScreenshotRequest = z.infer<typeof feedbackScreenshotRequestSchema>;
+export type FeedbackScreenshotRequest = z.infer<
+  typeof feedbackScreenshotRequestSchema
+>;
+export type FeedbackVoiceNoteRequest = z.infer<
+  typeof feedbackVoiceNoteRequestSchema
+>;
 export type FeedbackCommentBody = z.infer<typeof feedbackCommentSchema>;
 export type FeedbackConfirmBody = z.infer<typeof feedbackConfirmSchema>;
 export type FeedbackCommentKind = z.infer<typeof feedbackCommentKindSchema>;
@@ -107,10 +121,23 @@ export type FeedbackComment = {
 };
 
 /** POST /feedback/:id/screenshots */
-export type FeedbackScreenshotUpload = { attachmentId: string; uploadUrl: string };
+export type FeedbackScreenshotUpload = {
+  attachmentId: string;
+  uploadUrl: string;
+};
+
+/** POST /feedback/:id/voice-notes — same presign shape as a screenshot. */
+export type FeedbackVoiceNoteUpload = {
+  attachmentId: string;
+  uploadUrl: string;
+};
 
 /** GET /feedback/status */
-export type FeedbackStatusInfo = { enabled: boolean; screenshots: boolean };
+export type FeedbackStatusInfo = {
+  enabled: boolean;
+  screenshots: boolean;
+  voiceNotes: boolean;
+};
 
 /** Grouped by page name (not URL) so every detail page of a screen counts together. */
 export type FeedbackTopPage = {

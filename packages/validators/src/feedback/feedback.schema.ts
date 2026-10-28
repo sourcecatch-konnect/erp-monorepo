@@ -378,7 +378,10 @@ export const feedbackCommentSchema = z.object({
     .max(2000, "Please keep your message under 2000 characters"),
 });
 
-export const FEEDBACK_CONFIRM_OUTCOMES = ["CONFIRMED_FIXED", "STILL_BROKEN"] as const;
+export const FEEDBACK_CONFIRM_OUTCOMES = [
+  "CONFIRMED_FIXED",
+  "STILL_BROKEN",
+] as const;
 
 /** The reporter's answer when the team marks their item FIXED. */
 export const feedbackConfirmSchema = z.object({
@@ -388,4 +391,51 @@ export const feedbackConfirmSchema = z.object({
     .trim()
     .max(2000, "Please keep your message under 2000 characters")
     .optional(),
+});
+
+/* ------------------------------------------------------------------ */
+/* Voice notes (B9)                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A spoken report, recorded in the browser and attached like a screenshot.
+ *
+ * The point is reach, not convenience: a driver or branch clerk who cannot
+ * write the problem in English can hold a button and say it in Hindi. The
+ * text fields stay required, so a voice note adds detail rather than
+ * replacing the title the team triages on.
+ */
+export const FEEDBACK_MAX_VOICE_NOTES = 2;
+/** Long enough to describe a screen, short enough to stay listenable. */
+export const FEEDBACK_MAX_VOICE_SECONDS = 120;
+export const FEEDBACK_MAX_VOICE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * What MediaRecorder actually produces, by browser: Chrome/Firefox give
+ * webm/opus, Safari gives mp4. The client strips the `;codecs=…` parameter
+ * before sending, so these are bare types.
+ */
+export const FEEDBACK_VOICE_MIMES = [
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+] as const;
+
+/** Presign request for one voice note, sent after the feedback is created. */
+export const feedbackVoiceNoteRequestSchema = z.object({
+  mime: z.enum(FEEDBACK_VOICE_MIMES),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(FEEDBACK_MAX_VOICE_BYTES, "Voice notes must be smaller than 5 MB"),
+  durationSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(
+      FEEDBACK_MAX_VOICE_SECONDS,
+      `Voice notes can be up to ${FEEDBACK_MAX_VOICE_SECONDS} seconds`,
+    ),
 });

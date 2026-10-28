@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@skerp/ui/components/tabs";
 import { captureElement, pickElement } from "../lib/capture";
 import type { Screenshot } from "../lib/images";
 import { markFeedbackSeen, readSeenAt } from "../lib/seen";
+import type { VoiceNote } from "../lib/voice-note";
 import { FeedbackForm } from "./FeedbackForm";
 import { MyFeedbackList } from "./MyFeedbackList";
 
@@ -28,11 +29,13 @@ export default function FeedbackSheet({
   open,
   onOpenChange,
   screenshotsEnabled,
+  voiceNotesEnabled,
   updates,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   screenshotsEnabled: boolean;
+  voiceNotesEnabled: boolean;
   /** Items with news since the user last looked at My feedback. */
   updates: number;
 }) {
@@ -40,6 +43,8 @@ export default function FeedbackSheet({
   // Pictures + the picked element live here, not in the form: the form
   // unmounts while the panel is hidden for "Point at the problem".
   const [shots, setShots] = useState<Screenshot[]>([]);
+  // Voice notes are held here for the same reason as the pictures.
+  const [notes, setNotes] = useState<VoiceNote[]>([]);
   const [element, setElement] = useState<FeedbackElement | null>(null);
   const [picking, setPicking] = useState(false);
   // When My feedback was last opened before now, so new items stay marked.
@@ -76,7 +81,9 @@ export default function FeedbackSheet({
       }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "We couldn't take that picture.",
+        error instanceof Error
+          ? error.message
+          : "We couldn't take that picture.",
       );
     } finally {
       setPicking(false);
@@ -90,7 +97,9 @@ export default function FeedbackSheet({
         className="w-full gap-0 data-[side=right]:sm:max-w-xl"
       >
         <SheetHeader className="gap-1 border-b border-border px-6 py-4 pr-12">
-          <SheetTitle className="text-lg">Send feedback to the ERP team</SheetTitle>
+          <SheetTitle className="text-lg">
+            Send feedback to the ERP team
+          </SheetTitle>
           <SheetDescription>
             Found a problem or have an idea? Tell us here. It goes straight to
             the people building the system.
@@ -120,9 +129,12 @@ export default function FeedbackSheet({
           <FeedbackForm
             onClose={() => onOpenChange(false)}
             screenshotsEnabled={screenshotsEnabled}
+            voiceNotesEnabled={voiceNotesEnabled}
             shots={shots}
+            notes={notes}
             element={element}
             onShotsChange={setShots}
+            onNotesChange={setNotes}
             onElementChange={setElement}
             onPick={startPick}
           />

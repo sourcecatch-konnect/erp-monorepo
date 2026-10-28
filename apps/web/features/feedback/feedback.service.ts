@@ -18,6 +18,8 @@ import type {
   FeedbackSubmitBody,
   FeedbackSummary,
   FeedbackTriageInput,
+  FeedbackVoiceNoteRequest,
+  FeedbackVoiceNoteUpload,
   MyFeedbackItem,
 } from "@skerp/types";
 import {
@@ -48,7 +50,10 @@ const filterQuery = ({ search, ...filters }: FeedbackFilters) => {
   return params;
 };
 
-const download = async (path: string, filters: FeedbackFilters): Promise<Blob> => {
+const download = async (
+  path: string,
+  filters: FeedbackFilters,
+): Promise<Blob> => {
   const res = await api.get<Blob>(path, {
     params: filterQuery(filters),
     responseType: "blob",
@@ -106,15 +111,14 @@ export const feedbackApi = {
     body: FeedbackBulkStatusBody,
   ): Promise<{ updated: number }> =>
     unwrapApiResponse(
-      await api.patch<ApiResponse<{ updated: number }>>(
-        "/feedback/bulk",
-        body,
-      ),
+      await api.patch<ApiResponse<{ updated: number }>>("/feedback/bulk", body),
     ),
 
   /** Same filters as the list, without paging. */
-  exportXlsx: (filters: FeedbackFilters) => download("/feedback/export/xlsx", filters),
-  exportDocx: (filters: FeedbackFilters) => download("/feedback/export/docx", filters),
+  exportXlsx: (filters: FeedbackFilters) =>
+    download("/feedback/export/xlsx", filters),
+  exportDocx: (filters: FeedbackFilters) =>
+    download("/feedback/export/docx", filters),
 
   /* ---- B6: screenshots ---- */
 
@@ -134,11 +138,36 @@ export const feedbackApi = {
    * purpose (same as @skerp/attachments-web): no cookies go to S3.
    */
   uploadToStorage: async (uploadUrl: string, blob: Blob): Promise<void> => {
-    await axios.put(uploadUrl, blob, { headers: { "Content-Type": blob.type } });
+    await axios.put(uploadUrl, blob, {
+      headers: { "Content-Type": blob.type },
+    });
   },
 
-  completeScreenshot: async (id: string, attachmentId: string): Promise<void> => {
+  completeScreenshot: async (
+    id: string,
+    attachmentId: string,
+  ): Promise<void> => {
     await api.post(`/feedback/${id}/screenshots/${attachmentId}/complete`);
+  },
+
+  /* ---- B9: voice notes (same presign → PUT → confirm flow) ---- */
+
+  requestVoiceNote: async (
+    id: string,
+    body: FeedbackVoiceNoteRequest,
+  ): Promise<FeedbackVoiceNoteUpload> =>
+    unwrapApiResponse(
+      await api.post<ApiResponse<FeedbackVoiceNoteUpload>>(
+        `/feedback/${id}/voice-notes`,
+        body,
+      ),
+    ),
+
+  completeVoiceNote: async (
+    id: string,
+    attachmentId: string,
+  ): Promise<void> => {
+    await api.post(`/feedback/${id}/voice-notes/${attachmentId}/complete`);
   },
 
   /* ---- B8: conversation ---- */
@@ -148,9 +177,15 @@ export const feedbackApi = {
       await api.get<ApiResponse<FeedbackComment[]>>(`/feedback/${id}/comments`),
     ),
 
-  addComment: async (id: string, body: FeedbackCommentBody): Promise<FeedbackComment> =>
+  addComment: async (
+    id: string,
+    body: FeedbackCommentBody,
+  ): Promise<FeedbackComment> =>
     unwrapApiResponse(
-      await api.post<ApiResponse<FeedbackComment>>(`/feedback/${id}/comments`, body),
+      await api.post<ApiResponse<FeedbackComment>>(
+        `/feedback/${id}/comments`,
+        body,
+      ),
     ),
 
   confirm: async (id: string, body: FeedbackConfirmBody): Promise<void> => {

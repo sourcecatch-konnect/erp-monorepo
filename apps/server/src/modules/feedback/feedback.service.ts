@@ -72,19 +72,43 @@ export const commentSelect = {
 /** Attachment entityType for feedback pictures (S3 prefix attachments/Feedback/). */
 export const ATTACHMENT_ENTITY = "Feedback";
 
-/** Clean, uploaded pictures for these items, oldest first. */
-export const findScreenshots = (feedbackIds: string[]) =>
+/*
+ * Pictures and voice notes are both rows on the same entityType, so every
+ * query has to say which kind it wants. Without the mime filter a voice note
+ * would count against the picture limit, show up as a broken <img>, and be
+ * handed to the Word export to embed as an image.
+ */
+const PICTURE_MIME_PREFIX = "image/";
+const VOICE_MIME_PREFIX = "audio/";
+
+const attachmentsOfKind = (feedbackIds: string[], prefix: string) =>
   db.attachment.findMany({
     where: {
       entityType: ATTACHMENT_ENTITY,
       entityId: { in: feedbackIds },
+      mime: { startsWith: prefix },
       uploaded: true,
       deletedAt: null,
       antivirusStatus: "CLEAN",
     },
     orderBy: { uploadedAt: "asc" },
-    select: { id: true, entityId: true, s3Key: true, sizeBytes: true, originalName: true },
+    select: {
+      id: true,
+      entityId: true,
+      s3Key: true,
+      sizeBytes: true,
+      originalName: true,
+      mime: true,
+    },
   });
+
+/** Clean, uploaded pictures for these items, oldest first. */
+export const findScreenshots = (feedbackIds: string[]) =>
+  attachmentsOfKind(feedbackIds, PICTURE_MIME_PREFIX);
+
+/** Clean, uploaded voice notes for these items, oldest first. */
+export const findVoiceNotes = (feedbackIds: string[]) =>
+  attachmentsOfKind(feedbackIds, VOICE_MIME_PREFIX);
 
 const startOfDay = (iso: string): Date | null => {
   const date = new Date(`${iso}T00:00:00`);

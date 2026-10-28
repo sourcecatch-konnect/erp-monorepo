@@ -2,12 +2,14 @@ import { Router, type Request } from "express";
 import { buffer } from "node:stream/consumers";
 import {
   FEEDBACK_MAX_SCREENSHOTS,
+  FEEDBACK_MAX_VOICE_NOTES,
   feedbackBulkStatusSchema,
   feedbackCommentSchema,
   feedbackConfirmSchema,
   feedbackScreenshotRequestSchema,
   feedbackSubmitSchema,
   feedbackTriageSchema,
+  feedbackVoiceNoteRequestSchema,
 } from "@skerp/validators";
 
 import type { Prisma } from "../../../generated/prisma/index.js";
@@ -33,7 +35,11 @@ import {
   getAttachment,
   getDownloadUrl,
 } from "../attachments/attachment.service.js";
-import { buildFeedbackDocx, imageSize, type DocxImage } from "./feedback.docx.js";
+import {
+  buildFeedbackDocx,
+  imageSize,
+  type DocxImage,
+} from "./feedback.docx.js";
 import { buildFeedbackXlsx } from "./feedback.export.js";
 import {
   ATTACHMENT_ENTITY,
@@ -42,6 +48,7 @@ import {
   commentSelect,
   describeFilters,
   findScreenshots,
+  findVoiceNotes,
   getFeedbackSummary,
   isResolved,
   listSelect,
@@ -75,7 +82,8 @@ router.use(authMiddleware);
 
 const actorId = (req: { ctx?: { userId: string } }) => req.ctx!.userId;
 const canView = (req: Request) => req.ctx!.permissions.has(PERMS.FEEDBACK.VIEW);
-const canManage = (req: Request) => req.ctx!.permissions.has(PERMS.FEEDBACK.MANAGE);
+const canManage = (req: Request) =>
+  req.ctx!.permissions.has(PERMS.FEEDBACK.MANAGE);
 
 /** Load an item and check the caller is its reporter (or, if allowed, the team). */
 const loadForCaller = async (
@@ -94,7 +102,12 @@ const loadForCaller = async (
 
 /** Lets the web widget hide itself when the server flag is off (404). */
 router.get("/status", (_req, res) =>
-  sendOk(res, { enabled: true, screenshots: isS3Configured() }),
+  // Both kinds of attachment need S3, so one flag answers for both.
+  sendOk(res, {
+    enabled: true,
+    screenshots: isS3Configured(),
+    voiceNotes: isS3Configured(),
+  }),
 );
 
 router.post("/", async (req, res) => {
@@ -245,7 +258,10 @@ router.get("/export/docx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
         ]);
       } catch (error) {
         skippedImages += 1;
-        console.error("[feedback] could not load screenshot for Word export:", error);
+        console.error(
+          "[feedback] could not load screenshot for Word export:",
+          error,
+        );
       }
     }
   }
@@ -317,7 +333,16 @@ router.get("/:id", async (req, res) => {
         })),
       )
     : [];
-  return sendOk(res, { ...item, screenshots });
+  const voiceNotes = isS3Configured()
+    ? await Promise.all(
+        (await findVoiceNotes([item.id])).map(async (note) => ({
+          id: note.id,
+          url: await getDownloadUrl(note.id),
+          mime: note.mime,
+        })),
+      )
+    : [];
+  return sendOk(res, { ...item, screenshots, voiceNotes });
 });
 
 router.patch("/:id", can(PERMS.FEEDBACK.MANAGE), async (req, res) => {
@@ -387,10 +412,16 @@ router.post("/:id/screenshots", async (req, res) => {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
   const existing = await db.attachment.count({
-    where: { entityType: ATTACHMENT_ENTITY, entityId: item.id, deletedAt: null },
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: item.id,
+      deletedAt: null,
+    },
   });
   if (existing >= FEEDBACK_MAX_SCREENSHOTS) {
-    throw new BadRequestError(`You can attach up to ${FEEDBACK_MAX_SCREENSHOTS} pictures`);
+    throw new BadRequestError(
+      `You can attach up to ${FEEDBACK_MAX_SCREENSHOTS} pictures`,
+    );
   }
 
   const { mime, sizeBytes, width, height } = parsed.data;
@@ -405,15 +436,89 @@ router.post("/:id/screenshots", async (req, res) => {
     },
     actorId(req),
   );
-  return sendOk(res, { attachmentId: attachment.id, uploadUrl }, undefined, 201);
+  return sendOk(
+    res,
+    { attachmentId: attachment.id, uploadUrl },
+    undefined,
+    201,
+  );
 });
 
 router.post("/:id/screenshots/:attachmentId/complete", async (req, res) => {
   const { item, isReporter } = await loadForCaller(req, () => false);
   if (!isReporter) throw new ForbiddenError();
   const attachment = await getAttachment(String(req.params.attachmentId));
-  if (attachment.entityType !== ATTACHMENT_ENTITY || attachment.entityId !== item.id) {
+  if (
+    attachment.entityType !== ATTACHMENT_ENTITY ||
+    attachment.entityId !== item.id
+  ) {
     throw new NotFoundError("Picture not found");
+  }
+  await completeUpload(attachment.id);
+  return sendOk(res, { id: attachment.id });
+});
+
+/* ------------------------------------------------------------------ */
+/* B9 — voice notes (a spoken report, recorded in the browser)         */
+/* ------------------------------------------------------------------ */
+
+router.post("/:id/voice-notes", async (req, res) => {
+  if (!isS3Configured()) {
+    throw new ConflictError("Voice note storage is not set up on this server");
+  }
+  const { item, isReporter } = await loadForCaller(req, () => false);
+  if (!isReporter) throw new ForbiddenError();
+
+  const parsed = feedbackVoiceNoteRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
+
+  // Counted against voice notes only — pictures have their own limit.
+  const existing = await db.attachment.count({
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: item.id,
+      mime: { startsWith: "audio/" },
+      deletedAt: null,
+    },
+  });
+  if (existing >= FEEDBACK_MAX_VOICE_NOTES) {
+    throw new BadRequestError(
+      `You can attach up to ${FEEDBACK_MAX_VOICE_NOTES} voice notes`,
+    );
+  }
+
+  const { mime, sizeBytes, durationSeconds } = parsed.data;
+  const extension = mime.slice("audio/".length);
+  const { attachment, uploadUrl } = await createAttachment(
+    {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: item.id,
+      // The duration is in the name so the team sees it without playing.
+      originalName: `voice-note-${durationSeconds}s.${extension}`,
+      mime,
+      sizeBytes,
+    },
+    actorId(req),
+  );
+  return sendOk(
+    res,
+    { attachmentId: attachment.id, uploadUrl },
+    undefined,
+    201,
+  );
+});
+
+router.post("/:id/voice-notes/:attachmentId/complete", async (req, res) => {
+  const { item, isReporter } = await loadForCaller(req, () => false);
+  if (!isReporter) throw new ForbiddenError();
+  const attachment = await getAttachment(String(req.params.attachmentId));
+  if (
+    attachment.entityType !== ATTACHMENT_ENTITY ||
+    attachment.entityId !== item.id
+  ) {
+    throw new NotFoundError("Voice note not found");
   }
   await completeUpload(attachment.id);
   return sendOk(res, { id: attachment.id });
@@ -453,7 +558,10 @@ router.post("/:id/comments", async (req, res) => {
       select: commentSelect,
     }),
     // Bump updatedAt so the other side sees "new activity".
-    db.feedback.update({ where: { id: item.id }, data: { updatedAt: new Date() } }),
+    db.feedback.update({
+      where: { id: item.id },
+      data: { updatedAt: new Date() },
+    }),
   ]);
   return sendOk(res, comment, undefined, 201);
 });
