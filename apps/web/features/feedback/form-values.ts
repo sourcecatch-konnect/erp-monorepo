@@ -1,64 +1,44 @@
-import type {
-  FeedbackCategory,
-  FeedbackSeverity,
-} from "@skerp/types";
+import { FEEDBACK_CATEGORIES, FEEDBACK_IMPACTS } from "@skerp/validators";
+import type { FeedbackCategory, FeedbackImpact } from "@skerp/types";
+
+const isOneOf = <T extends string>(values: readonly T[], value: unknown): value is T =>
+  typeof value === "string" && (values as readonly string[]).includes(value);
 
 /**
- * Flat react-hook-form state holding every tab's fields at once, so switching
- * tabs keeps what was typed. The shared `feedbackFormSchema` (a discriminated
- * union on `category`) validates only the active tab and strips the rest.
+ * react-hook-form state for the Give feedback form. Validated by the shared
+ * `feedbackFormSchema`; "" means "not chosen" for the type and "whole screen"
+ * for the section. `hasVoiceNote` mirrors the recording held by the sheet.
  */
 export type FeedbackFormValues = {
   category: FeedbackCategory | "";
-  title: string;
+  impact: FeedbackImpact;
+  section: string;
   description: string;
-  // Bug
-  steps: string;
-  expected: string;
-  actual: string;
-  severity: FeedbackSeverity | "";
-  frequency: string;
-  // Wrong flow
-  step: string;
-  currentBehaviour: string;
-  correctProcess: string;
-  responsibleRole: string;
-  impact: string;
-  // UI change
-  element: string;
-  problem: string;
-  suggestion: string;
-  // Hard to find
-  lookingFor: string;
-  lookedWhere: string;
-  found: string;
-  foundWhere: string;
-  // Suggestion
-  idea: string;
-  benefit: string;
+  points: string[];
+  hasVoiceNote: boolean;
 };
 
 export const EMPTY_FEEDBACK_VALUES: FeedbackFormValues = {
   category: "",
-  title: "",
+  impact: "MEDIUM",
+  section: "",
   description: "",
-  steps: "",
-  expected: "",
-  actual: "",
-  severity: "",
-  frequency: "",
-  step: "",
-  currentBehaviour: "",
-  correctProcess: "",
-  responsibleRole: "",
-  impact: "",
-  element: "",
-  problem: "",
-  suggestion: "",
-  lookingFor: "",
-  lookedWhere: "",
-  found: "",
-  foundWhere: "",
-  idea: "",
-  benefit: "",
+  points: [""],
+  hasVoiceNote: false,
 };
+
+/** A stored draft may come from the v1 form or be partial — keep only what fits. */
+export function restoreDraft(draft: Partial<FeedbackFormValues> | null): FeedbackFormValues {
+  if (!draft) return EMPTY_FEEDBACK_VALUES;
+  const points = Array.isArray(draft.points)
+    ? draft.points.filter((point): point is string => typeof point === "string")
+    : [];
+  return {
+    ...EMPTY_FEEDBACK_VALUES,
+    category: isOneOf(FEEDBACK_CATEGORIES, draft.category) ? draft.category : "",
+    impact: isOneOf(FEEDBACK_IMPACTS, draft.impact) ? draft.impact : "MEDIUM",
+    section: typeof draft.section === "string" ? draft.section : "",
+    description: typeof draft.description === "string" ? draft.description : "",
+    points: points.length > 0 ? points : [""],
+  };
+}

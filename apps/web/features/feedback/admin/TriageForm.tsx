@@ -6,8 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  FEEDBACK_SEVERITIES,
-  FEEDBACK_SEVERITY_LABELS,
+  FEEDBACK_IMPACTS,
+  FEEDBACK_IMPACT_LABELS,
   FEEDBACK_STATUSES,
   FEEDBACK_STATUS_LABELS,
   feedbackTriageSchema,
@@ -27,14 +27,14 @@ const STATUS_OPTIONS = FEEDBACK_STATUSES.map((value) => ({
   value,
   label: FEEDBACK_STATUS_LABELS[value],
 }));
-const SEVERITY_OPTIONS = FEEDBACK_SEVERITIES.map((value) => ({
+const IMPACT_OPTIONS = FEEDBACK_IMPACTS.map((value) => ({
   value,
-  label: FEEDBACK_SEVERITY_LABELS[value],
+  label: FEEDBACK_IMPACT_LABELS[value],
 }));
 
 const toDefaults = (item: FeedbackDetail): FeedbackTriageInput => ({
   status: item.status,
-  severity: item.severity ?? "",
+  impact: item.impact,
   assignee: item.assignee ?? "",
   externalRef: item.externalRef ?? "",
   devNotes: item.devNotes ?? "",
@@ -85,10 +85,10 @@ export function TriageForm({
           required
         />
         <SelectField<FeedbackTriageInput>
-          name="severity"
-          label="Severity"
-          options={SEVERITY_OPTIONS}
-          placeholder="Not set"
+          name="impact"
+          label="Impact"
+          options={IMPACT_OPTIONS}
+          required
         />
         <TextField<FeedbackTriageInput>
           name="assignee"

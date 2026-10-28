@@ -5,10 +5,16 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { IconCircleCheck, IconCopy, IconExternalLink } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconCopy,
+  IconExternalLink,
+} from "@tabler/icons-react";
 import {
   describeUserAgent,
   formatFeedbackNumber,
+  legacyDetailRows,
   type FeedbackDetail,
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -30,13 +36,14 @@ import {
 } from "@skerp/ui/components/table";
 import {
   FeedbackCategoryBadge,
-  FeedbackSeverityBadge,
+  FeedbackImpactBadge,
   FeedbackStatusBadge,
 } from "../components/badges";
 import { CommentThread } from "../components/CommentThread";
+import { FeedbackFiles } from "../components/FeedbackFiles";
 import { feedbackKeys } from "../feedback.keys";
 import { feedbackApi } from "../feedback.service";
-import { detailRows, feedbackAsJira } from "../lib/copy-as-jira";
+import { feedbackAsJira } from "../lib/copy-as-jira";
 import { TriageForm } from "./TriageForm";
 
 const TRIAGE_FORM_ID = "feedback-triage-form";
@@ -66,6 +73,34 @@ function FieldList({ rows }: { rows: [string, React.ReactNode][] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+const plannedAnything = (item: FeedbackDetail) => {
+  const planned = item.context.attachmentsPlanned;
+  return Boolean(planned && (planned.voice || planned.images + planned.documents > 0));
+};
+
+/** "The reporter attached 3 files but only 2 arrived." — from what the browser said it would send. */
+function MissingFiles({ item }: { item: FeedbackDetail }) {
+  const planned = item.context.attachmentsPlanned;
+  if (!planned) return null;
+  const voiceMissing = planned.voice && !item.voiceSeconds;
+  const plannedFiles = planned.images + planned.documents;
+  const arrivedFiles = item.imageCount + item.documentCount;
+  if (!voiceMissing && arrivedFiles >= plannedFiles) return null;
+  const parts = [
+    voiceMissing ? "a voice note" : null,
+    arrivedFiles < plannedFiles
+      ? `${plannedFiles} file${plannedFiles === 1 ? "" : "s"} (${arrivedFiles} arrived)`
+      : null,
+  ].filter(Boolean);
+  return (
+    <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      <IconAlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+      The reporter attached {parts.join(" and ")}, but not everything arrived. Ask them
+      in the conversation to send it again.
+    </p>
   );
 }
 
@@ -188,7 +223,10 @@ export function FeedbackDetailSheet({
         if (!open) onClose();
       }}
     >
-      <SheetContent side="right" className="w-full gap-0 data-[side=right]:sm:max-w-2xl">
+      <SheetContent
+        side="right"
+        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
+      >
         {isLoading || !item ? (
           <div className="space-y-4 p-6">
             <SheetTitle className="sr-only">Feedback details</SheetTitle>
@@ -213,7 +251,7 @@ export function FeedbackDetailSheet({
                   {formatFeedbackNumber(item.number)}
                 </span>
                 <FeedbackCategoryBadge category={item.category} />
-                {item.severity ? <FeedbackSeverityBadge severity={item.severity} /> : null}
+                <FeedbackImpactBadge impact={item.impact} withWord />
                 <FeedbackStatusBadge status={item.status} />
                 {item.reporterConfirmedAt ? (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
@@ -230,11 +268,12 @@ export function FeedbackDetailSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+            <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:px-6">
               <Section title="Where it happened">
                 <FieldList
                   rows={[
                     ["Page", `${item.pageTitle} (${item.moduleLabel})`],
+                    ["Section", item.section ?? "Whole screen"],
                     [
                       "Address",
                       <Link
@@ -264,40 +303,41 @@ export function FeedbackDetailSheet({
               </Section>
 
               <Section title="What they told us">
-                <FieldList
-                  rows={[
-                    ...detailRows(item),
-                    ...(item.description
-                      ? ([["Anything else", item.description]] as [string, string][])
-                      : []),
-                  ]}
-                />
+                <div className="space-y-3 rounded-md border border-border bg-card p-4 text-sm">
+                  {item.description ? (
+                    <p className="whitespace-pre-wrap break-words text-foreground">
+                      {item.description}
+                    </p>
+                  ) : null}
+                  {item.points.length > 0 ? (
+                    <ol className="list-decimal space-y-1 pl-5 text-foreground">
+                      {item.points.map((point, index) => (
+                        <li key={index} className="break-words">
+                          {point}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                  {!item.description && item.points.length === 0 ? (
+                    <p className="text-muted-foreground">
+                      {item.voiceSeconds
+                        ? "Nothing typed. Listen to the voice note below."
+                        : "Nothing typed."}
+                    </p>
+                  ) : null}
+                </div>
               </Section>
 
-              {item.screenshots.length > 0 ? (
-                <Section title={`Pictures (${item.screenshots.length})`}>
-                  <ul className="grid gap-3 sm:grid-cols-2">
-                    {item.screenshots.map((shot, index) => (
-                      <li key={shot.id}>
-                        <a
-                          href={shot.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block overflow-hidden rounded-md border border-border transition-colors duration-150 hover:border-primary"
-                        >
-                          {/* Presigned storage URL — next/image can't optimise it. */}
-                          <img
-                            src={shot.url}
-                            alt={`Picture ${index + 1} from the reporter`}
-                            className="h-40 w-full object-cover object-top"
-                          />
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-muted-foreground">
-                    Click a picture to open it full size.
-                  </p>
+              {item.files.length > 0 || plannedAnything(item) ? (
+                <Section title="Attached">
+                  <MissingFiles item={item} />
+                  <FeedbackFiles files={item.files} voiceSeconds={item.voiceSeconds} showSpeed />
+                </Section>
+              ) : null}
+
+              {legacyDetailRows(item.details).length > 0 ? (
+                <Section title="Answers from the old form">
+                  <FieldList rows={legacyDetailRows(item.details)} />
                 </Section>
               ) : null}
 

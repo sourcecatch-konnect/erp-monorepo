@@ -64,14 +64,15 @@ function EnabledLauncher() {
       <Button
         variant="outline"
         aria-haspopup="dialog"
-        className="relative"
+        className="relative max-sm:size-11 max-sm:px-0"
         onClick={() => {
           setMounted(true);
           setOpen(true);
         }}
       >
         <IconMessageReport className="size-4" aria-hidden />
-        Feedback
+        {/* Icon only on phones: the top bar is narrow there. */}
+        <span className="max-sm:sr-only">Feedback</span>
         {updates > 0 ? (
           <>
             <span
@@ -88,7 +89,7 @@ function EnabledLauncher() {
         <FeedbackSheet
           open={open}
           onOpenChange={setOpen}
-          screenshotsEnabled={status.data?.screenshots === true}
+          uploadsEnabled={status.data?.uploads === true}
           updates={updates}
         />
       ) : null}

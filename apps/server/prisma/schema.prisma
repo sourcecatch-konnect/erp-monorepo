@@ -5274,10 +5274,12 @@ model TrainingQuizAttempt {
 
 enum FeedbackCategory {
   BUG
-  FLOW
-  UI
-  FINDABILITY
-  SUGGESTION
+  IMPROVEMENT
+  MISSING_FEATURE
+  CONFUSING
+  DATA_ISSUE
+  TRAINING_HELP
+  OTHER
 }
 
 enum FeedbackStatus {
@@ -5289,23 +5291,31 @@ enum FeedbackStatus {
   DUPLICATE
 }
 
-enum FeedbackSeverity {
-  BLOCKER
-  MAJOR
-  MINOR
+enum FeedbackImpact {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
 model Feedback {
-  id          String            @id @default(cuid())
+  id           String           @id @default(cuid())
   /// Human reference, shown as FB-0042.
-  number      Int               @unique @default(autoincrement())
-  category    FeedbackCategory
-  title       String
-  description String?
-  /// Category-specific answers, validated by @skerp/validators feedbackFormSchema.
-  details     Json
-  severity    FeedbackSeverity?
-  status      FeedbackStatus    @default(NEW)
+  number       Int              @unique @default(autoincrement())
+  category     FeedbackCategory
+  impact       FeedbackImpact   @default(MEDIUM)
+  /// Made by the server: first line of the text, else the first point, else "<Type> on <Page>".
+  title        String
+  description  String?
+  /// Short points, in the order the reporter wrote them.
+  points       String[]         @default([])
+  /// Part of the page the feedback is about. Null = the whole screen.
+  section      String?
+  /// Answers from the v1 five-tab form. Empty object for items sent with v2.
+  details      Json             @default("{}")
+  /// Length of the voice note, set when its upload completes.
+  voiceSeconds Int?
+  status       FeedbackStatus   @default(NEW)
 
   pagePath    String
   pageTitle   String
@@ -5332,6 +5342,7 @@ model Feedback {
 
   @@index([status])
   @@index([category])
+  @@index([impact])
   @@index([moduleLabel, pagePath])
   @@index([reporterId])
   @@index([createdAt])

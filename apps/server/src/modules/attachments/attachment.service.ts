@@ -42,6 +42,12 @@ const buildKey = (input: CreateAttachmentInput): string =>
     input.entityId,
   )}/${randomUUID()}-${sanitizeName(input.originalName)}`;
 
+/** Per-call override of the env-wide size and type limits. */
+export type AttachmentLimits = {
+  maxBytes?: number;
+  mimes?: readonly string[];
+};
+
 /**
  * Validate the request, create the PENDING row, and return a presigned PUT URL.
  * The browser uploads straight to S3 — bytes never pass through this server.
@@ -49,14 +55,16 @@ const buildKey = (input: CreateAttachmentInput): string =>
 export const createAttachment = async (
   input: CreateAttachmentInput,
   userId: string,
+  limits: AttachmentLimits = {},
 ) => {
-  if (input.sizeBytes > maxSizeBytes()) {
+  const maxBytes = limits.maxBytes ?? maxSizeBytes();
+  if (input.sizeBytes > maxBytes) {
     throw new BadRequestError(
-      `File exceeds the ${maxSizeBytes()} byte limit`,
+      `File exceeds the ${maxBytes} byte limit`,
       "FILE_TOO_LARGE",
     );
   }
-  if (!allowedMimes().includes(input.mime.toLowerCase())) {
+  if (!(limits.mimes ?? allowedMimes()).includes(input.mime.toLowerCase())) {
     throw new BadRequestError(
       `File type "${input.mime}" is not allowed`,
       "MIME_NOT_ALLOWED",
