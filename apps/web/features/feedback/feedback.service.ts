@@ -9,10 +9,11 @@ import type {
   FeedbackConfirmBody,
   FeedbackCreated,
   FeedbackDetail,
+  FeedbackFileComplete,
+  FeedbackFileRequest,
+  FeedbackFileUpload,
+  FeedbackImpact,
   FeedbackListItem,
-  FeedbackScreenshotRequest,
-  FeedbackScreenshotUpload,
-  FeedbackSeverity,
   FeedbackStatus,
   FeedbackStatusInfo,
   FeedbackSubmitBody,
@@ -32,7 +33,7 @@ export type FeedbackListParams = {
   search?: string;
   status?: FeedbackStatus | "OPEN";
   category?: FeedbackCategory;
-  severity?: FeedbackSeverity;
+  impact?: FeedbackImpact;
   module?: string;
   pageTitle?: string;
 };
@@ -116,29 +117,41 @@ export const feedbackApi = {
   exportXlsx: (filters: FeedbackFilters) => download("/feedback/export/xlsx", filters),
   exportDocx: (filters: FeedbackFilters) => download("/feedback/export/docx", filters),
 
-  /* ---- B6: screenshots ---- */
+  /* ---- Files + voice note ---- */
 
-  requestScreenshot: async (
+  requestFile: async (
     id: string,
-    body: FeedbackScreenshotRequest,
-  ): Promise<FeedbackScreenshotUpload> =>
+    body: FeedbackFileRequest,
+  ): Promise<FeedbackFileUpload> =>
     unwrapApiResponse(
-      await api.post<ApiResponse<FeedbackScreenshotUpload>>(
-        `/feedback/${id}/screenshots`,
-        body,
-      ),
+      await api.post<ApiResponse<FeedbackFileUpload>>(`/feedback/${id}/files`, body),
     ),
 
   /**
-   * PUT the picture straight to storage with the presigned URL. Bare axios on
-   * purpose (same as @skerp/attachments-web): no cookies go to S3.
+   * PUT the file straight to storage with the presigned URL. Bare axios on
+   * purpose (same as @skerp/attachments-web): no cookies go to S3. The
+   * Content-Type must equal the type the URL was signed for.
    */
-  uploadToStorage: async (uploadUrl: string, blob: Blob): Promise<void> => {
-    await axios.put(uploadUrl, blob, { headers: { "Content-Type": blob.type } });
+  uploadToStorage: async (
+    uploadUrl: string,
+    blob: Blob,
+    contentType: string,
+    onProgress?: (fraction: number) => void,
+  ): Promise<void> => {
+    await axios.put(uploadUrl, blob, {
+      headers: { "Content-Type": contentType },
+      onUploadProgress: (event) => {
+        if (onProgress && event.total) onProgress(event.loaded / event.total);
+      },
+    });
   },
 
-  completeScreenshot: async (id: string, attachmentId: string): Promise<void> => {
-    await api.post(`/feedback/${id}/screenshots/${attachmentId}/complete`);
+  completeFile: async (
+    id: string,
+    attachmentId: string,
+    body: FeedbackFileComplete = {},
+  ): Promise<void> => {
+    await api.post(`/feedback/${id}/files/${attachmentId}/complete`, body);
   },
 
   /* ---- B8: conversation ---- */

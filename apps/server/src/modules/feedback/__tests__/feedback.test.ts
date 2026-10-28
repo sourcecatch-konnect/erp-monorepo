@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
-import { feedbackFormSchema, feedbackSubmitSchema } from "@skerp/validators";
+import {
+  FEEDBACK_NOTHING_TO_SEND,
+  feedbackFileRequestSchema,
+  feedbackFormSchema,
+  feedbackSubmitSchema,
+} from "@skerp/validators";
+import { feedbackFileKind, legacyDetailRows } from "@skerp/types";
 
 vi.mock("../../../../prisma/prisma.js", () => ({ db: {} }));
 
@@ -9,8 +15,8 @@ import { buildFeedbackXlsx } from "../feedback.export.js";
 import {
   OPEN_STATUSES,
   buildFeedbackWhere,
+  deriveTitle,
   isResolved,
-  pickDetails,
   statusChangeText,
   takeSubmitSlot,
 } from "../feedback.service.js";
@@ -18,37 +24,13 @@ import type { ListQuery } from "../../_shared/list.query.js";
 
 const page = { path: "/vp-management/vp-loading", title: "VP Loading", module: "Operations › VP Management" };
 
-const VALID = {
-  BUG: {
-    category: "BUG",
-    title: "Save button does nothing",
-    steps: "Filled the form and pressed Save",
-    expected: "The loading is saved",
-    actual: "Nothing happens",
-    severity: "MAJOR",
-  },
-  FLOW: {
-    category: "FLOW",
-    title: "Approval step is in the wrong place",
-    step: "Approve order",
-    currentBehaviour: "Operations can approve",
-    correctProcess: "Only the branch manager approves",
-  },
-  UI: {
-    category: "UI",
-    title: "Label is confusing",
-    element: "Consignee field",
-    problem: "CONFUSING_NAME",
-    suggestion: "Call it Receiver",
-  },
-  FINDABILITY: {
-    category: "FINDABILITY",
-    title: "Cannot find the POD upload",
-    lookingFor: "Where to upload the POD",
-    lookedWhere: "LR list",
-    found: "NO",
-  },
-  SUGGESTION: { category: "SUGGESTION", title: "Bulk approve", idea: "Approve many orders at once" },
+const FORM = {
+  category: "BUG",
+  impact: "HIGH",
+  section: "",
+  description: "Save does nothing",
+  points: [],
+  hasVoiceNote: false,
 } as const;
 
 const query = (filter: Record<string, string> = {}, search?: string): ListQuery => ({
@@ -58,43 +40,96 @@ const query = (filter: Record<string, string> = {}, search?: string): ListQuery 
   ...(search ? { search } : {}),
 });
 
-describe("feedback form schema (B1)", () => {
-  it.each(Object.entries(VALID))("accepts a complete %s report", (_category, feedback) => {
-    expect(feedbackSubmitSchema.safeParse({ feedback, page, context: {} }).success).toBe(true);
+describe("feedback form schema (v2)", () => {
+  it("accepts text, a point or a voice note on its own", () => {
+    const withText = feedbackFormSchema.safeParse(FORM);
+    const withPoint = feedbackFormSchema.safeParse({ ...FORM, description: "", points: ["Wrong total"] });
+    const withVoice = feedbackFormSchema.safeParse({ ...FORM, description: "", hasVoiceNote: true });
+    expect([withText, withPoint, withVoice].every((result) => result.success)).toBe(true);
   });
 
-  it("names each missing required field for a bug", () => {
-    const result = feedbackFormSchema.safeParse({ category: "BUG", title: "Broken" });
+  it("asks for something to send when there is no text, point or voice note", () => {
+    const result = feedbackFormSchema.safeParse({ ...FORM, description: "  ", points: ["", " "] });
     expect(result.success).toBe(false);
-    const paths = result.error!.issues.map((issue) => issue.path.join("."));
-    expect(paths).toEqual(expect.arrayContaining(["steps", "expected", "actual", "severity"]));
+    expect(result.error!.issues).toContainEqual(
+      expect.objectContaining({ path: ["description"], message: FEEDBACK_NOTHING_TO_SEND }),
+    );
   });
 
-  it("asks for a title of at least 3 letters on every tab", () => {
-    for (const feedback of Object.values(VALID)) {
-      expect(feedbackFormSchema.safeParse({ ...feedback, title: "ab" }).success).toBe(false);
-    }
+  it("requires a type", () => {
+    const result = feedbackFormSchema.safeParse({ ...FORM, category: "" });
+    expect(result.success).toBe(false);
+    expect(result.error!.issues[0]!.path).toEqual(["category"]);
+  });
+
+  it("drops empty points and caps them at 10 × 300 characters", () => {
+    expect(feedbackFormSchema.parse({ ...FORM, points: [" One ", "", "Two"] }).points).toEqual(["One", "Two"]);
+    expect(feedbackFormSchema.safeParse({ ...FORM, points: Array(11).fill("x") }).success).toBe(false);
+    expect(feedbackFormSchema.safeParse({ ...FORM, points: ["x".repeat(301)] }).success).toBe(false);
   });
 
   it("caps the technical trail at 10 API calls", () => {
     const call = { method: "GET", url: "/orders", status: 500, durationMs: 12, at: "2026-10-24T10:00:00Z" };
     const context = { recentApi: Array.from({ length: 11 }, () => call) };
-    expect(feedbackSubmitSchema.safeParse({ feedback: VALID.BUG, page, context }).success).toBe(false);
+    expect(feedbackSubmitSchema.safeParse({ feedback: FORM, page, context }).success).toBe(false);
+    expect(feedbackSubmitSchema.safeParse({ feedback: FORM, page, context: {} }).success).toBe(true);
+  });
+});
+
+describe("feedback file requests", () => {
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+  it("accepts each kind within its limits", () => {
+    expect(
+      feedbackFileRequestSchema.safeParse({ kind: "image", mime: "image/jpeg", sizeBytes: 200_000, width: 1600, height: 900 })
+        .success,
+    ).toBe(true);
+    expect(
+      feedbackFileRequestSchema.safeParse({ kind: "document", mime: DOCX, sizeBytes: 12 * 1024 * 1024, name: "Rates.docx" })
+        .success,
+    ).toBe(true);
+    expect(
+      feedbackFileRequestSchema.safeParse({ kind: "voice", mime: "audio/webm", sizeBytes: 900_000, durationSec: 180 }).success,
+    ).toBe(true);
+  });
+
+  it("refuses old and macro-enabled Office files, CSV, big files and long voice notes", () => {
+    for (const mime of ["application/vnd.ms-excel", "application/vnd.ms-word.document.macroEnabled.12", "text/csv"]) {
+      expect(feedbackFileRequestSchema.safeParse({ kind: "document", mime, sizeBytes: 1000, name: "x" }).success).toBe(false);
+    }
+    expect(
+      feedbackFileRequestSchema.safeParse({ kind: "document", mime: DOCX, sizeBytes: 12 * 1024 * 1024 + 1, name: "x" })
+        .success,
+    ).toBe(false);
+    expect(
+      feedbackFileRequestSchema.safeParse({ kind: "voice", mime: "audio/webm", sizeBytes: 1000, durationSec: 181 }).success,
+    ).toBe(false);
+    expect(
+      feedbackFileRequestSchema.safeParse({ kind: "voice", mime: "audio/webm;codecs=opus", sizeBytes: 1000, durationSec: 5 })
+        .success,
+    ).toBe(false);
+  });
+
+  it("tells pictures, documents and voice notes apart by type", () => {
+    expect(feedbackFileKind("image/jpeg")).toBe("image");
+    expect(feedbackFileKind("audio/mp4")).toBe("voice");
+    expect(feedbackFileKind("application/pdf")).toBe("document");
   });
 });
 
 describe("feedback service", () => {
-  it("keeps only the chosen tab's answers, trimmed", () => {
-    const form = feedbackFormSchema.parse({
-      ...VALID.FINDABILITY,
-      foundWhere: "   ",
-      description: "extra",
-    });
-    expect(pickDetails(form)).toEqual({
-      lookingFor: "Where to upload the POD",
-      lookedWhere: "LR list",
-      found: "NO",
-    });
+  it("makes the title from the text, then the first point, then type and page", () => {
+    expect(deriveTitle({ category: "BUG", description: "\n  Save does nothing  \nmore", points: ["x"] }, "VP Loading")).toBe(
+      "Save does nothing",
+    );
+    expect(deriveTitle({ category: "BUG", points: ["Total is wrong"] }, "VP Loading")).toBe("Total is wrong");
+    expect(deriveTitle({ category: "IMPROVEMENT", points: [] }, "Order Board")).toBe("Improvement on Order Board");
+  });
+
+  it("cuts long titles at a word boundary", () => {
+    const title = deriveTitle({ category: "BUG", description: "word ".repeat(40), points: [] }, "VP Loading");
+    expect(title.length).toBeLessThanOrEqual(120);
+    expect(title.endsWith("word…")).toBe(true);
   });
 
   it("treats Fixed, Won't fix and Duplicate as resolved", () => {
@@ -103,15 +138,24 @@ describe("feedback service", () => {
     expect(statusChangeText("NEW", "FIXED")).toMatch(/^Status changed from .+ to .+\.$/);
   });
 
-  it("filters the inbox by open status, type and FB number search", () => {
+  it("filters the inbox by open status, type, impact and FB number search", () => {
     expect(buildFeedbackWhere(query())).toEqual({});
-    const where = buildFeedbackWhere(query({ status: "OPEN", category: "BUG", severity: "nope" }, "FB-0042"));
+    const where = buildFeedbackWhere(
+      query({ status: "OPEN", category: "BUG", impact: "CRITICAL", severity: "MAJOR" }, "FB-0042"),
+    );
     const and = where.AND as Record<string, unknown>[];
     expect(and).toContainEqual({ status: { in: [...OPEN_STATUSES] } });
     expect(and).toContainEqual({ category: "BUG" });
+    expect(and).toContainEqual({ impact: "CRITICAL" });
     expect(and.some((clause) => "severity" in clause)).toBe(false);
     const search = and.find((clause) => "OR" in clause) as { OR: Record<string, unknown>[] };
     expect(search.OR).toContainEqual({ number: 42 });
+    expect(search.OR).toContainEqual({ description: { contains: "FB-0042", mode: "insensitive" } });
+  });
+
+  it("ignores an impact that isn't one of the four", () => {
+    const and = (buildFeedbackWhere(query({ impact: "BLOCKER" })).AND ?? []) as Record<string, unknown>[];
+    expect(and.some((clause) => "impact" in clause)).toBe(false);
   });
 
   it("includes the whole 'to' day in a date range", () => {
@@ -130,16 +174,27 @@ describe("feedback service", () => {
     expect(results[20]).toBe(false);
     expect(takeSubmitSlot(`${user}-other`)).toBe(true);
   });
+
+  it("labels v1 answers for migrated items", () => {
+    expect(legacyDetailRows({ steps: "Pressed save", frequency: "ALWAYS", unknown: "x", found: "" })).toEqual([
+      ["What they were doing", "Pressed save"],
+      ["How often it happens", "Every time"],
+    ]);
+    expect(legacyDetailRows({})).toEqual([]);
+  });
 });
 
 const row = (number: number, overrides: Partial<DocxRow> = {}): DocxRow => ({
   id: `fb-${number}`,
   number,
   category: "BUG",
+  impact: "HIGH",
   title: `Problem ${number}`,
-  description: null,
-  details: { steps: "Pressed save", expected: "Saved", actual: "Error" },
-  severity: "MAJOR",
+  description: "Save does nothing",
+  points: ["Open an LR", "Press Save"],
+  section: "Freight",
+  details: {},
+  voiceSeconds: 102,
   status: "NEW",
   pagePath: page.path,
   pageTitle: page.title,
@@ -158,22 +213,58 @@ const row = (number: number, overrides: Partial<DocxRow> = {}): DocxRow => ({
   ...overrides,
 });
 
+const cellByHeader = (sheet: ExcelJS.Worksheet, rowNumber: number, header: string) => {
+  const headers = sheet.getRow(1).values as unknown[];
+  return sheet.getRow(rowNumber).getCell(headers.indexOf(header)).value;
+};
+
 describe("feedback exports (B5, B7)", () => {
-  it("Excel has one row per item and the summary sheets", async () => {
-    const rows = [row(1), row(2, { status: "FIXED", category: "UI", severity: null })];
+  it("Excel has one row per item, the v2 columns and the summary sheets", async () => {
+    const rows = [
+      row(1),
+      row(2, {
+        status: "FIXED",
+        category: "IMPROVEMENT",
+        description: null,
+        points: [],
+        voiceSeconds: null,
+        details: { idea: "Approve many orders at once" },
+      }),
+    ];
+    const files = new Map([
+      [
+        "fb-1",
+        [
+          { kind: "image" as const, name: "picture-1600x900.jpg" },
+          { kind: "document" as const, name: "Rates.xlsx" },
+        ],
+      ],
+    ]);
     const wb = new ExcelJS.Workbook();
-    const xlsx = await buildFeedbackXlsx(rows, { generatedAt: new Date() });
+    const xlsx = await buildFeedbackXlsx(rows, { generatedAt: new Date(), files });
     await wb.xlsx.load(new Uint8Array(xlsx).buffer);
     expect(wb.worksheets.map((sheet) => sheet.name)).toEqual(["Feedback", "By page", "By status"]);
-    expect(wb.getWorksheet("Feedback")!.actualRowCount).toBe(rows.length + 1);
-    expect(String(wb.getWorksheet("Feedback")!.getRow(2).getCell(1).value)).toBe("FB-0001");
+    const sheet = wb.getWorksheet("Feedback")!;
+    expect(sheet.actualRowCount).toBe(rows.length + 1);
+    expect(String(sheet.getRow(2).getCell(1).value)).toBe("FB-0001");
+    expect(cellByHeader(sheet, 2, "Impact")).toBe("High");
+    expect(cellByHeader(sheet, 2, "Points")).toBe("1. Open an LR\n2. Press Save");
+    expect(cellByHeader(sheet, 2, "Voice note")).toBe("1:42");
+    expect(cellByHeader(sheet, 2, "Pictures")).toBe(1);
+    expect(cellByHeader(sheet, 2, "Documents")).toBe("Rates.xlsx");
+    expect(cellByHeader(sheet, 3, "Old form answers")).toBe("Idea: Approve many orders at once");
   });
 
   it("Word report is a valid .docx", async () => {
     const docx = await buildFeedbackDocx(
       [row(1, { comments: [{ authorName: "Dev", side: "TEAM", body: "Fixed", createdAt: new Date() }] })],
       new Map(),
-      { generatedAt: new Date(), filters: "All feedback", skippedImages: 0 },
+      {
+        generatedAt: new Date(),
+        filters: "All feedback",
+        skippedImages: 0,
+        files: new Map([["fb-1", [{ kind: "document", name: "Rates.xlsx" }]]]),
+      },
     );
     expect(docx.subarray(0, 2).toString()).toBe("PK");
     expect(docx.length).toBeGreaterThan(1000);

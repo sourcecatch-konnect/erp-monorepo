@@ -2,17 +2,19 @@ import ExcelJS from "exceljs";
 import {
   FEEDBACK_CATEGORIES,
   FEEDBACK_CATEGORY_LABELS,
-  FEEDBACK_DETAIL_FIELDS,
-  FEEDBACK_SEVERITY_LABELS,
+  FEEDBACK_IMPACT_LABELS,
   FEEDBACK_STATUSES,
   FEEDBACK_STATUS_LABELS,
 } from "@skerp/validators";
 import {
   describeUserAgent,
   formatFeedbackNumber,
+  formatVoiceDuration,
+  legacyDetailRows,
   type FeedbackCategory,
   type FeedbackContext,
-  type FeedbackSeverity,
+  type FeedbackFileKind,
+  type FeedbackImpact,
   type FeedbackStatus,
 } from "@skerp/types";
 
@@ -27,10 +29,14 @@ export type FeedbackExportRow = {
   id: string;
   number: number;
   category: FeedbackCategory;
+  impact: FeedbackImpact;
   title: string;
   description: string | null;
+  points: string[];
+  section: string | null;
+  /** v1 answers; empty for items sent with the v2 form. */
   details: unknown;
-  severity: FeedbackSeverity | null;
+  voiceSeconds: number | null;
   status: FeedbackStatus;
   pagePath: string;
   pageTitle: string;
@@ -47,6 +53,9 @@ export type FeedbackExportRow = {
   createdAt: Date;
 };
 
+/** An attached file as the exports list it (pictures are also embedded in Word). */
+export type ExportFile = { kind: FeedbackFileKind; name: string };
+
 const OPEN: readonly FeedbackStatus[] = ["NEW", "TRIAGED", "IN_PROGRESS"];
 
 export const fmtDateTime = (date: Date): string =>
@@ -61,22 +70,15 @@ export const fmtDateTime = (date: Date): string =>
 export const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
-/** "What they were doing: …" lines, labels and choice values made readable. */
-export const describeDetails = (
-  category: FeedbackCategory,
-  details: unknown,
-): string => {
-  const answers = asRecord(details);
-  const lines: string[] = [];
-  for (const field of FEEDBACK_DETAIL_FIELDS[category]) {
-    const raw = answers[field.key];
-    if (typeof raw !== "string" || raw === "") continue;
-    const choices: Record<string, string> | undefined =
-      "choices" in field ? field.choices : undefined;
-    lines.push(`${field.label}: ${choices?.[raw] ?? raw}`);
-  }
-  return lines.join("\n");
-};
+/** v1 answers as "What they were doing: …" lines, choice values made readable. */
+export const describeLegacyDetails = (details: unknown): string =>
+  legacyDetailRows(details)
+    .map(([label, value]) => `${label}: ${value}`)
+    .join("\n");
+
+/** "1. …", one point per line. */
+export const describePoints = (points: string[]): string =>
+  points.map((point, index) => `${index + 1}. ${point}`).join("\n");
 
 export const describeApiErrors = (context: FeedbackContext): string =>
   (context.recentApi ?? [])
@@ -107,7 +109,7 @@ const styleHeader = (sheet: ExcelJS.Worksheet, columnCount: number) => {
 
 export async function buildFeedbackXlsx(
   rows: FeedbackExportRow[],
-  meta: { generatedAt: Date; webUrl?: string },
+  meta: { generatedAt: Date; webUrl?: string; files?: Map<string, ExportFile[]> },
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "SK ERP";
@@ -118,17 +120,22 @@ export async function buildFeedbackXlsx(
   sheet.columns = [
     { header: "FB #", key: "number", width: 10 },
     { header: "Reported on", key: "createdAt", width: 20 },
-    { header: "Type", key: "category", width: 14 },
-    { header: "Severity", key: "severity", width: 10 },
+    { header: "Type", key: "category", width: 16 },
+    { header: "Impact", key: "impact", width: 10 },
     { header: "Status", key: "status", width: 13 },
     { header: "Confirmed by tester", key: "confirmed", width: 18 },
     { header: "Title", key: "title", width: 40 },
     { header: "Module", key: "moduleLabel", width: 28 },
     { header: "Page", key: "pageTitle", width: 24 },
     { header: "Page address", key: "pagePath", width: 32 },
+    { header: "Section", key: "section", width: 22 },
     { header: "Record ID", key: "entityId", width: 16 },
-    { header: "Details", key: "details", width: 60 },
-    { header: "Anything else", key: "description", width: 40 },
+    { header: "What they told us", key: "description", width: 50 },
+    { header: "Points", key: "points", width: 50 },
+    { header: "Voice note", key: "voice", width: 11 },
+    { header: "Pictures", key: "pictures", width: 9 },
+    { header: "Documents", key: "documents", width: 30 },
+    { header: "Old form answers", key: "details", width: 50 },
     { header: "Reported by", key: "reporterName", width: 22 },
     { header: "Role", key: "reporterRole", width: 18 },
     { header: "Branch", key: "reporterBranch", width: 16 },
@@ -143,20 +150,29 @@ export async function buildFeedbackXlsx(
 
   for (const row of rows) {
     const context = asRecord(row.context) as FeedbackContext;
+    const files = meta.files?.get(row.id) ?? [];
     const excelRow = sheet.addRow({
       number: formatFeedbackNumber(row.number),
       createdAt: fmtDateTime(row.createdAt),
       category: FEEDBACK_CATEGORY_LABELS[row.category],
-      severity: row.severity ? FEEDBACK_SEVERITY_LABELS[row.severity] : "",
+      impact: FEEDBACK_IMPACT_LABELS[row.impact],
       status: FEEDBACK_STATUS_LABELS[row.status],
       confirmed: row.reporterConfirmedAt ? fmtDateTime(row.reporterConfirmedAt) : "",
       title: row.title,
       moduleLabel: row.moduleLabel,
       pageTitle: row.pageTitle,
       pagePath: row.pagePath,
+      section: row.section ?? "",
       entityId: row.entityId ?? "",
-      details: describeDetails(row.category, row.details),
       description: row.description ?? "",
+      points: describePoints(row.points),
+      voice: row.voiceSeconds ? formatVoiceDuration(row.voiceSeconds) : "",
+      pictures: files.filter((file) => file.kind === "image").length || "",
+      documents: files
+        .filter((file) => file.kind === "document")
+        .map((file) => file.name)
+        .join("\n"),
+      details: describeLegacyDetails(row.details),
       reporterName: row.reporterName,
       reporterRole: row.reporterRole,
       reporterBranch: row.reporterBranch ?? "",

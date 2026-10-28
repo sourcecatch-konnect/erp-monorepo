@@ -22,8 +22,8 @@ production goes live. Step 5 removes it from every deployment.
 ## 1. Archive everything
 
 Run on the production server (or anywhere with the production
-`DATABASE_URL` **and** `AWS_S3_BUCKET` / AWS credentials, so the pictures can
-be downloaded):
+`DATABASE_URL` **and** `AWS_S3_BUCKET` / AWS credentials, so the pictures,
+documents and voice notes can be downloaded):
 
 ```bash
 cd apps/server
@@ -36,9 +36,9 @@ It is read-only and works whether feedback is on or off. It writes
 | File | What |
 | --- | --- |
 | `feedback.xlsx` | Every item, no row limit, plus the By page / By status sheets |
-| `feedback-report-N.docx` | Developer report by module → page, 300 items per file, pictures embedded |
+| `feedback-report-N.docx` | Developer report by module → page, 300 items per file, pictures embedded, documents and voice notes listed |
 | `feedback.json` | Every stored field and the full conversation (lossless) |
-| `attachments/` | Every file reporters attached, named after the item (`FB-0042-1.png`) |
+| `attachments/` | Every file reporters attached (pictures, documents, voice notes), named after the item (`FB-0042-1.jpg`, `FB-0042-2.webm`) |
 | `README.txt` | Counts and what is where |
 
 Check `README.txt`: **Attachments** must say `N saved of N`. If it doesn't,
@@ -50,16 +50,16 @@ the only copy afterwards. Store the folder with the release docs.
 | Where | Change | Takes effect |
 | --- | --- | --- |
 | Server env | `FEEDBACK_ENABLED="false"` (or remove it), restart | Immediately: every `/feedback/*` returns 404, and the web button hides itself because `GET /feedback/status` 404s |
-| Web build env | `NEXT_PUBLIC_FEEDBACK_ENABLED="false"` | Next web build: the button and Settings → Feedback are not built at all |
+| Web build env | `NEXT_PUBLIC_FEEDBACK_ENABLED="false"` | Next web build: the button and the Administration → Feedback sidebar item are not built at all |
 
-Switching off never deletes data. The tables, pictures and permissions stay
+Switching off never deletes data. The tables, files and permissions stay
 until step 5, so turning the flags back on restores everything.
 
 ## 3. Check it's off
 
 - `curl -i https://<api-host>/feedback/status` → `404`.
 - Signed in as an admin: no **Feedback** button in the top bar, no
-  **Settings → Feedback** entry, and `/settings/feedback` shows "not found"
+  **Feedback** item under Administration in the sidebar, and `/settings/feedback` shows "not found"
   (after the web rebuild).
 - Browser dev tools → Network, reload any page: no request to `/feedback/status`
   and no feedback chunk (after the web rebuild).
@@ -99,7 +99,7 @@ Every one is marked `remove-before-prod` in the code.
 | `apps/server/prisma/schema.prisma` | The whole "In-app feedback — TESTING PHASE ONLY" block: `Feedback`, `FeedbackComment` and the five `Feedback*` enums. No other model has a relation to them |
 | `apps/server/.env.example` | `FEEDBACK_ENABLED` and its comment |
 | `apps/web/components/layout/AppShell.tsx` | The `FeedbackLauncher` import and `<FeedbackLauncher />` |
-| `apps/web/config/navigation.ts` | The `NEXT_PUBLIC_FEEDBACK_ENABLED` Settings → Feedback entry |
+| `apps/web/config/navigation.ts` | The `NEXT_PUBLIC_FEEDBACK_ENABLED` Feedback item in the Administration section (and the `IconMessageReport` import if nothing else uses it) |
 | `apps/web/eslint.config.js` | The `no-restricted-imports` block guarding `@/features/feedback` |
 | `apps/web/.env.example` | `NEXT_PUBLIC_FEEDBACK_ENABLED` and `NEXT_PUBLIC_APP_VERSION` (only feedback reads it) with their comments |
 | `packages/types/src/permissions.ts` | `FeedbackPermissionKey` (type and its use in the `PermissionKey` union) and the `PERMS.FEEDBACK` group |
@@ -109,8 +109,13 @@ Every one is marked `remove-before-prod` in the code.
 | `turbo.json` | `FEEDBACK_ENABLED`, `NEXT_PUBLIC_FEEDBACK_ENABLED`, `NEXT_PUBLIC_APP_VERSION` in `globalEnv` |
 | `docs/TRAINING_ENVIRONMENT.md` | The Feedback paragraph and the two `FEEDBACK` lines in the env blocks |
 
-Keep the two existing migrations (`…_feedback_testing_phase`,
-`…_feedback_comments`): they are history and must stay.
+Keep the three existing migrations (`…_feedback_testing_phase`,
+`…_feedback_comments`, `…_feedback_v2_form`): they are history and must stay.
+
+Two changes made for feedback v2 are generic and **stay**: the optional
+`limits` argument of `createAttachment` (attachment.service.ts) and the
+`text-base md:text-sm` font size on the shared `Input` (stops iOS zooming into
+fields). Neither mentions feedback.
 
 ### 5c. Migration
 
@@ -132,7 +137,7 @@ DROP TYPE "FeedbackCommentKind";
 DROP TYPE "FeedbackCommentSide";
 DROP TYPE "FeedbackCategory";
 DROP TYPE "FeedbackStatus";
-DROP TYPE "FeedbackSeverity";
+DROP TYPE "FeedbackImpact";
 
 -- The permission seed only adds keys, never deletes them. RolePermission and
 -- UserPermission rows go with these (ON DELETE CASCADE).
