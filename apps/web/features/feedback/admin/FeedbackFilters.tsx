@@ -4,8 +4,8 @@ import { IconSearch, IconX } from "@tabler/icons-react";
 import {
   FEEDBACK_CATEGORIES,
   FEEDBACK_CATEGORY_LABELS,
-  FEEDBACK_SEVERITIES,
-  FEEDBACK_SEVERITY_LABELS,
+  FEEDBACK_IMPACTS,
+  FEEDBACK_IMPACT_LABELS,
   FEEDBACK_STATUSES,
   FEEDBACK_STATUS_LABELS,
 } from "@skerp/validators";
@@ -39,7 +39,7 @@ function FilterSelect({
   onChange: (value: string | undefined) => void;
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-1.5 max-sm:w-[calc(50%-0.375rem)]">
       <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
         {label}
       </label>
@@ -47,7 +47,7 @@ function FilterSelect({
         value={value ?? ALL}
         onValueChange={(next) => onChange(next === ALL ? undefined : next)}
       >
-        <SelectTrigger id={id} className="h-10 w-44">
+        <SelectTrigger id={id} className="h-10 w-full sm:w-44">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -85,7 +85,7 @@ export function FeedbackFilters({
   return (
     <div className="space-y-3 rounded-md border border-border bg-card p-4">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="grid min-w-64 flex-1 gap-1.5">
+        <div className="grid w-full flex-1 gap-1.5 sm:w-auto sm:min-w-64">
           <label htmlFor="feedback-search" className="text-xs font-medium text-muted-foreground">
             Search
           </label>
@@ -97,7 +97,7 @@ export function FeedbackFilters({
             <Input
               id="feedback-search"
               className="h-10 pl-9"
-              placeholder="Title, page, person or FB number"
+              placeholder="Text, page, person or FB number"
               value={searchText}
               onChange={(event) => onSearchText(event.target.value)}
             />
@@ -131,15 +131,15 @@ export function FeedbackFilters({
           }
         />
         <FilterSelect
-          id="feedback-severity"
-          label="Severity"
-          value={filters.severity}
-          options={FEEDBACK_SEVERITIES.map((value) => ({
+          id="feedback-impact"
+          label="Impact"
+          value={filters.impact}
+          options={FEEDBACK_IMPACTS.map((value) => ({
             value,
-            label: FEEDBACK_SEVERITY_LABELS[value],
+            label: FEEDBACK_IMPACT_LABELS[value],
           }))}
           onChange={(value) =>
-            onChange({ severity: value as FeedbackFilterValues["severity"] })
+            onChange({ impact: value as FeedbackFilterValues["impact"] })
           }
         />
         <FilterSelect

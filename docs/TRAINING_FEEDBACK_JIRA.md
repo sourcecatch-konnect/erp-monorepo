@@ -405,6 +405,9 @@ Either choice records the `welcome` step.
 
 # EPIC B: In-app Feedback, testing phase (ERP-?) · `remove-before-prod`
 
+> **v2 (B10–B17):** the five-tab form below was replaced by one short form with Impact, Points, voice
+> notes and documents. See [FEEDBACK_V2_PLAN.md](./FEEDBACK_V2_PLAN.md).
+
 **Summary:** Page-aware feedback form on every screen (Bug / Wrong flow / UI change / Hard to find /
 Suggestion), with an admin inbox and Excel / Word export. Fully isolated and removable.
 

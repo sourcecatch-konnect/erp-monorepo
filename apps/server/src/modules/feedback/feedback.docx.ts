@@ -9,27 +9,31 @@ import {
 import {
   FEEDBACK_CATEGORIES,
   FEEDBACK_CATEGORY_LABELS,
-  FEEDBACK_SEVERITY_LABELS,
+  FEEDBACK_IMPACT_LABELS,
   FEEDBACK_STATUSES,
   FEEDBACK_STATUS_LABELS,
 } from "@skerp/validators";
 import {
   describeUserAgent,
   formatFeedbackNumber,
+  formatVoiceDuration,
+  legacyDetailRows,
   type FeedbackContext,
 } from "@skerp/types";
 
 import {
   asRecord,
   describeApiErrors,
-  describeDetails,
+  describePoints,
   fmtDateTime,
+  type ExportFile,
   type FeedbackExportRow,
 } from "./feedback.export.js";
 
 /**
- * B7 — developer report: Module → Page → item, with the reporter's answers,
- * embedded screenshots, technical details, team notes and the conversation.
+ * B7 — developer report: Module → Page → item, with the reporter's text and
+ * points, embedded pictures, the documents and voice note listed (Word can't
+ * hold audio), technical details, team notes and the conversation.
  */
 
 export type DocxComment = {
@@ -101,16 +105,21 @@ const small = (text: string) =>
 const heading = (text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel]) =>
   new Paragraph({ heading: level, spacing: { before: 240, after: 120 }, children: [new TextRun(text)] });
 
-function itemParagraphs(row: DocxRow, images: DocxImage[], webUrl?: string): Paragraph[] {
+function itemParagraphs(
+  row: DocxRow,
+  images: DocxImage[],
+  files: ExportFile[],
+  webUrl?: string,
+): Paragraph[] {
   const context = asRecord(row.context) as FeedbackContext;
   const out: Paragraph[] = [];
 
   const tags = [
     formatFeedbackNumber(row.number),
     FEEDBACK_CATEGORY_LABELS[row.category],
-    row.severity ? FEEDBACK_SEVERITY_LABELS[row.severity] : null,
+    FEEDBACK_IMPACT_LABELS[row.impact],
     FEEDBACK_STATUS_LABELS[row.status],
-  ].filter(Boolean);
+  ];
   out.push(heading(`${tags.join(" · ")} — ${row.title}`, HeadingLevel.HEADING_3));
   out.push(
     small(
@@ -122,12 +131,18 @@ function itemParagraphs(row: DocxRow, images: DocxImage[], webUrl?: string): Par
     ),
   );
 
-  const details = describeDetails(row.category, row.details);
-  for (const line of details.split("\n").filter(Boolean)) {
-    const [label, ...rest] = line.split(": ");
-    out.push(labelled(label ?? "", rest.join(": ")));
+  if (row.section) out.push(labelled("Section", row.section));
+  if (row.description) out.push(labelled("What they told us", row.description));
+  if (row.points.length > 0) out.push(labelled("Points", `\n${describePoints(row.points)}`));
+  for (const [label, value] of legacyDetailRows(row.details)) {
+    out.push(labelled(label, value));
   }
-  if (row.description) out.push(labelled("Anything else", row.description));
+
+  const documents = files.filter((file) => file.kind === "document").map((file) => file.name);
+  if (row.voiceSeconds) {
+    out.push(labelled("Voice note", `${formatVoiceDuration(row.voiceSeconds)}, listen in the ERP`));
+  }
+  if (documents.length > 0) out.push(labelled("Documents", documents.join(", ")));
 
   for (const image of images) {
     const scale = Math.min(1, MAX_IMAGE_WIDTH / image.width);
@@ -200,7 +215,13 @@ function itemParagraphs(row: DocxRow, images: DocxImage[], webUrl?: string): Par
 export async function buildFeedbackDocx(
   rows: DocxRow[],
   images: Map<string, DocxImage[]>,
-  meta: { generatedAt: Date; filters: string; webUrl?: string; skippedImages: number },
+  meta: {
+    generatedAt: Date;
+    filters: string;
+    webUrl?: string;
+    skippedImages: number;
+    files?: Map<string, ExportFile[]>;
+  },
 ): Promise<Buffer> {
   const children: Paragraph[] = [
     new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun("SK ERP — Feedback report")] }),
@@ -236,7 +257,14 @@ export async function buildFeedbackDocx(
     for (const [page, items] of [...pages].sort(([a], [b]) => a.localeCompare(b))) {
       children.push(heading(`${page} (${items.length})`, HeadingLevel.HEADING_2));
       for (const row of items) {
-        children.push(...itemParagraphs(row, images.get(row.id) ?? [], meta.webUrl));
+        children.push(
+          ...itemParagraphs(
+            row,
+            images.get(row.id) ?? [],
+            meta.files?.get(row.id) ?? [],
+            meta.webUrl,
+          ),
+        );
       }
     }
   }

@@ -9,12 +9,12 @@ import {
 } from "@tabler/icons-react";
 import {
   FEEDBACK_CATEGORY_LABELS,
-  FEEDBACK_SEVERITY_LABELS,
+  FEEDBACK_IMPACT_LABELS,
   FEEDBACK_STATUS_LABELS,
 } from "@skerp/validators";
 import type {
   FeedbackCategory,
-  FeedbackSeverity,
+  FeedbackImpact,
   FeedbackStatus,
 } from "@skerp/types";
 import { cn } from "@skerp/ui/lib/util";
@@ -57,21 +57,25 @@ export function FeedbackCategoryBadge({
   );
 }
 
-const SEVERITY_STYLE: Record<FeedbackSeverity, string> = {
-  BLOCKER: "border-destructive/30 bg-destructive/10 text-destructive",
-  MAJOR: "border-border bg-muted text-foreground",
-  MINOR: "border-border bg-card text-muted-foreground",
+const IMPACT_STYLE: Record<FeedbackImpact, string> = {
+  CRITICAL: "border-destructive/30 bg-destructive/10 text-destructive",
+  HIGH: "border-border bg-muted text-foreground",
+  MEDIUM: "border-border bg-card text-foreground",
+  LOW: "border-border bg-card text-muted-foreground",
 };
 
-export function FeedbackSeverityBadge({
-  severity,
+export function FeedbackImpactBadge({
+  impact,
+  withWord = false,
 }: {
-  severity: FeedbackSeverity | null;
+  impact: FeedbackImpact;
+  /** "High impact" where no column header says what the badge is. */
+  withWord?: boolean;
 }) {
-  if (!severity) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className={cn(BADGE, SEVERITY_STYLE[severity])}>
-      {FEEDBACK_SEVERITY_LABELS[severity]}
+    <span className={cn(BADGE, IMPACT_STYLE[impact])}>
+      {FEEDBACK_IMPACT_LABELS[impact]}
+      {withWord ? " impact" : ""}
     </span>
   );
 }

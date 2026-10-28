@@ -1,65 +1,61 @@
 import {
-  IconArrowsShuffle,
   IconBug,
   IconBulb,
-  IconLayout,
-  IconSearch,
+  IconDatabaseExclamation,
+  IconDots,
+  IconHelpCircle,
+  IconPuzzle,
+  IconSchool,
   type Icon,
 } from "@tabler/icons-react";
-import type { FeedbackCategory } from "@skerp/types";
+import {
+  FEEDBACK_CATEGORIES,
+  FEEDBACK_CATEGORY_LABELS,
+  FEEDBACK_IMPACTS,
+  FEEDBACK_IMPACT_LABELS,
+} from "@skerp/validators";
+import type { FeedbackCategory, FeedbackImpact } from "@skerp/types";
 
 /** How each feedback type is introduced to the person reporting it. */
 export type CategoryMeta = {
   value: FeedbackCategory;
-  title: string;
+  label: string;
   hint: string;
   icon: Icon;
-  /** Example shown in the "Short title" box. */
-  titleExample: string;
 };
 
-export const CATEGORY_META: Record<FeedbackCategory, CategoryMeta> = {
-  BUG: {
-    value: "BUG",
-    title: "Something is not working",
-    hint: "An error, a wrong number, or a button that does nothing.",
-    icon: IconBug,
-    titleExample: "e.g. Save button does nothing on the LR form",
-  },
-  FLOW: {
-    value: "FLOW",
-    title: "The process is wrong",
-    hint: "The steps don't match how we actually work at SK.",
-    icon: IconArrowsShuffle,
-    titleExample: "e.g. Order should be approved before LRs are made",
-  },
-  UI: {
-    value: "UI",
-    title: "The screen needs a change",
-    hint: "Hard to read, confusing, or too many clicks.",
-    icon: IconLayout,
-    titleExample: "e.g. Freight total is hard to see",
-  },
-  FINDABILITY: {
-    value: "FINDABILITY",
-    title: "I can't find something",
-    hint: "A screen, button or report was hard to find.",
-    icon: IconSearch,
-    titleExample: "e.g. Couldn't find where to print the LR",
-  },
-  SUGGESTION: {
-    value: "SUGGESTION",
-    title: "I have an idea",
-    hint: "Something new that would make work easier.",
-    icon: IconBulb,
-    titleExample: "e.g. Show the customer's outstanding amount on the order",
-  },
+const CATEGORY_DETAILS: Record<FeedbackCategory, { hint: string; icon: Icon }> = {
+  BUG: { hint: "Something is broken or shows an error.", icon: IconBug },
+  IMPROVEMENT: { hint: "It works, but could be better.", icon: IconBulb },
+  MISSING_FEATURE: { hint: "Something we need isn't there.", icon: IconPuzzle },
+  CONFUSING: { hint: "Hard to understand or to find.", icon: IconHelpCircle },
+  DATA_ISSUE: { hint: "Wrong, missing or duplicate data.", icon: IconDatabaseExclamation },
+  TRAINING_HELP: { hint: "Help text or training is wrong or missing.", icon: IconSchool },
+  OTHER: { hint: "Anything else.", icon: IconDots },
 };
 
-export const CATEGORY_ORDER: FeedbackCategory[] = [
-  "BUG",
-  "FLOW",
-  "UI",
-  "FINDABILITY",
-  "SUGGESTION",
-];
+export const CATEGORY_META: Record<FeedbackCategory, CategoryMeta> = Object.fromEntries(
+  FEEDBACK_CATEGORIES.map((value) => [
+    value,
+    { value, label: FEEDBACK_CATEGORY_LABELS[value], ...CATEGORY_DETAILS[value] },
+  ]),
+) as Record<FeedbackCategory, CategoryMeta>;
+
+export const CATEGORY_ORDER: readonly FeedbackCategory[] = FEEDBACK_CATEGORIES;
+
+export const IMPACT_HINTS: Record<FeedbackImpact, string> = {
+  LOW: "Small annoyance.",
+  MEDIUM: "Slows me down.",
+  HIGH: "Wrong result, or a lot of extra work.",
+  CRITICAL: "I can't do my work.",
+};
+
+export const CATEGORY_OPTIONS = FEEDBACK_CATEGORIES.map((value) => ({
+  value,
+  label: FEEDBACK_CATEGORY_LABELS[value],
+}));
+
+export const IMPACT_OPTIONS = FEEDBACK_IMPACTS.map((value) => ({
+  value,
+  label: FEEDBACK_IMPACT_LABELS[value],
+}));

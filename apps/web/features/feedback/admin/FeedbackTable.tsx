@@ -1,7 +1,12 @@
 "use client";
 
 import { format } from "date-fns";
-import { formatFeedbackNumber, type FeedbackListItem } from "@skerp/types";
+import { IconMicrophone, IconPaperclip, IconPhoto } from "@tabler/icons-react";
+import {
+  formatFeedbackNumber,
+  formatVoiceDuration,
+  type FeedbackListItem,
+} from "@skerp/types";
 import { Checkbox } from "@skerp/ui/components/checkbox";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
@@ -14,11 +19,43 @@ import {
 } from "@skerp/ui/components/table";
 import {
   FeedbackCategoryBadge,
-  FeedbackSeverityBadge,
+  FeedbackImpactBadge,
   FeedbackStatusBadge,
 } from "../components/badges";
 
-const DATA_COLUMNS = 7;
+const DATA_COLUMNS = 8;
+
+/** Voice note length and picture / document counts, or a dash. */
+function FileIndicators({ row }: { row: FeedbackListItem }) {
+  if (!row.voiceSeconds && !row.imageCount && !row.documentCount) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+      {row.voiceSeconds ? (
+        <span className="inline-flex items-center gap-1">
+          <IconMicrophone className="size-3.5" aria-hidden />
+          {formatVoiceDuration(row.voiceSeconds)}
+          <span className="sr-only"> voice note</span>
+        </span>
+      ) : null}
+      {row.imageCount ? (
+        <span className="inline-flex items-center gap-1">
+          <IconPhoto className="size-3.5" aria-hidden />
+          {row.imageCount}
+          <span className="sr-only"> picture{row.imageCount === 1 ? "" : "s"}</span>
+        </span>
+      ) : null}
+      {row.documentCount ? (
+        <span className="inline-flex items-center gap-1">
+          <IconPaperclip className="size-3.5" aria-hidden />
+          {row.documentCount}
+          <span className="sr-only"> document{row.documentCount === 1 ? "" : "s"}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 // Radix sets data-state="checked"; the shared Checkbox's `data-checked:` fill never matches.
 const CHECKBOX_CLASS =
@@ -65,8 +102,9 @@ export function FeedbackTable({
           <TableHead>Type</TableHead>
           <TableHead>What was reported</TableHead>
           <TableHead>Reported by</TableHead>
-          <TableHead>Severity</TableHead>
+          <TableHead>Impact</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Files</TableHead>
           <TableHead>Reported on</TableHead>
         </TableRow>
       </TableHeader>
@@ -129,6 +167,9 @@ export function FeedbackTable({
                   <p className="text-xs text-muted-foreground">
                     {row.pageTitle} · {row.moduleLabel}
                   </p>
+                  {row.section ? (
+                    <p className="text-xs text-muted-foreground">Section: {row.section}</p>
+                  ) : null}
                 </TableCell>
                 <TableCell className="whitespace-normal">
                   <p className="text-foreground">{row.reporterName}</p>
@@ -138,13 +179,16 @@ export function FeedbackTable({
                   </p>
                 </TableCell>
                 <TableCell>
-                  <FeedbackSeverityBadge severity={row.severity} />
+                  <FeedbackImpactBadge impact={row.impact} />
                 </TableCell>
                 <TableCell>
                   <FeedbackStatusBadge status={row.status} />
                   {row.reporterConfirmedAt ? (
                     <p className="mt-1 text-xs text-primary">Confirmed by tester</p>
                   ) : null}
+                </TableCell>
+                <TableCell>
+                  <FileIndicators row={row} />
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {format(new Date(row.createdAt), "dd MMM yyyy, h:mm a")}

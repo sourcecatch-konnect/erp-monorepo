@@ -1,6 +1,4 @@
-import {
-  FEEDBACK_MAX_SCREENSHOT_BYTES,
-} from "@skerp/validators";
+import { FEEDBACK_MAX_FILE_BYTES } from "@skerp/validators";
 
 /** A picture waiting to be sent with the feedback (kept in memory until submit). */
 export type Screenshot = {
@@ -39,8 +37,8 @@ export async function canvasToScreenshot(
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
 
   let blob = await toBlob(canvas);
-  if (blob.size > FEEDBACK_MAX_SCREENSHOT_BYTES) blob = await toBlob(canvas, 0.6);
-  if (blob.size > FEEDBACK_MAX_SCREENSHOT_BYTES) {
+  if (blob.size > FEEDBACK_MAX_FILE_BYTES) blob = await toBlob(canvas, 0.6);
+  if (blob.size > FEEDBACK_MAX_FILE_BYTES) {
     throw new Error("This picture is too large. Try a smaller part of the screen.");
   }
   return {
