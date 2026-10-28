@@ -63,6 +63,7 @@ Variables (same page → Variables), all optional:
 | `PROD_DEPLOY_PATH`                  | defaults to `/opt/skerp`           |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`   | baked into the web bundle at build |
 | `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`    | baked into the web bundle at build |
+| `NEXT_PUBLIC_FEEDBACK_ENABLED`      | `true` shows the Feedback button (baked in at build); the server also needs `FEEDBACK_ENABLED=true` in `.env` |
 
 ## Deploying
 
