@@ -107,6 +107,10 @@ Every one is marked `remove-before-prod` in the code.
 | `packages/validators/src/index.ts` | `export * from "./feedback/feedback.schema.js"` |
 | `packages/validators/package.json` | The `"./feedback"` subpath export |
 | `turbo.json` | `FEEDBACK_ENABLED`, `NEXT_PUBLIC_FEEDBACK_ENABLED`, `NEXT_PUBLIC_APP_VERSION` in `globalEnv` |
+| `apps/web/Dockerfile` | The `NEXT_PUBLIC_FEEDBACK_ENABLED` `ARG` and its `ENV` line |
+| `.github/workflows/production.yml` | The `NEXT_PUBLIC_FEEDBACK_ENABLED` build-arg (then delete the repo variable of the same name) |
+| `deploy/docker-compose.prod.yml` | `FEEDBACK_ENABLED` in the server `environment` |
+| `deploy/.env.example` | The "In-app feedback" block (and `FEEDBACK_ENABLED` in the host's real `.env`) |
 | `docs/TRAINING_ENVIRONMENT.md` | The Feedback paragraph and the two `FEEDBACK` lines in the env blocks |
 
 Keep the three existing migrations (`…_feedback_testing_phase`,
