@@ -1,8 +1,15 @@
 import { Router, type Request } from "express";
 import { buffer } from "node:stream/consumers";
 import {
-  FEEDBACK_MAX_SCREENSHOTS,
+  FEEDBACK_DOCUMENT_EXTENSIONS,
+  FEEDBACK_DOCUMENT_MIMES,
+  FEEDBACK_IMAGE_MIMES,
+  FEEDBACK_MAX_FILES,
+  FEEDBACK_MAX_FILE_BYTES,
+  FEEDBACK_MAX_VOICE_BYTES,
   FEEDBACK_MAX_VOICE_NOTES,
+  FEEDBACK_VOICE_EXTENSIONS,
+  FEEDBACK_VOICE_MIMES,
   feedbackBulkStatusSchema,
   feedbackCommentSchema,
   feedbackConfirmSchema,
@@ -11,16 +18,17 @@ import {
   feedbackSubmitSchema,
   feedbackTriageSchema,
   feedbackVoiceNoteRequestSchema,
+  type FeedbackDocumentMime,
 } from "@skerp/validators";
 import { feedbackFileKind, type FeedbackFileRequest } from "@skerp/types";
 
 import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
+import { rateLimit } from "../../middlewares/rate-limit.middleware.js";
 import { can } from "../../auth/can.middleware.js";
 import { PERMS } from "../../auth/permissions.js";
 import {
-  AppError,
   BadRequestError,
   ConflictError,
   ForbiddenError,
@@ -42,7 +50,7 @@ import {
   imageSize,
   type DocxImage,
 } from "./feedback.docx.js";
-import { buildFeedbackXlsx } from "./feedback.export.js";
+import { buildFeedbackXlsx, type ExportFile } from "./feedback.export.js";
 import {
   ATTACHMENT_ENTITY,
   buildFeedbackOrderBy,
@@ -50,14 +58,13 @@ import {
   commentSelect,
   deriveTitle,
   describeFilters,
-  findScreenshots,
+  findFeedbackFiles,
   findVoiceNotes,
   getFeedbackSummary,
   isResolved,
   listSelect,
   reporterSnapshot,
   statusChangeText,
-  takeSubmitSlot,
   withFileCounts,
 } from "./feedback.service.js";
 
@@ -124,12 +131,32 @@ router.get("/status", (_req, res) =>
   // Both kinds of attachment need S3, so one flag answers for both.
   sendOk(res, {
     enabled: true,
-    screenshots: isS3Configured(),
+    uploads: isS3Configured(),
     voiceNotes: isS3Configured(),
   }),
 );
 
-router.post("/", async (req, res) => {
+/*
+ * 20 reports an hour per person. Generous for honest use, and enough to stop
+ * a stuck retry loop or a bored tester filling the inbox.
+ *
+ * The shared limiter rather than a hand-rolled counter: it sweeps its own
+ * buckets, and it answers with Retry-After and X-RateLimit-* so the reporter
+ * is told *when* they can try again instead of "a little later". Keyed by
+ * user id, not IP — a branch office behind one IP is many people.
+ *
+ * Still per-process, the same caveat as the permission cache. Moving both to
+ * Redis is one job for the day a second container appears.
+ */
+router.post(
+  "/",
+  rateLimit({
+    name: "feedback-submit",
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    key: (req) => req.ctx!.userId,
+  }),
+  async (req, res) => {
   const parsed = feedbackSubmitSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(
@@ -144,14 +171,6 @@ router.post("/", async (req, res) => {
   }
 
   const userId = actorId(req);
-  if (!takeSubmitSlot(userId)) {
-    throw new AppError(
-      "You have sent a lot of feedback in the last hour. Please try again a little later.",
-      429,
-      "RATE_LIMITED",
-    );
-  }
-
   const created = await db.feedback.create({
     data: {
       category: feedback.category,
@@ -160,6 +179,8 @@ router.post("/", async (req, res) => {
       description: feedback.description || null,
       points: feedback.points,
       section: feedback.section || null,
+      // Answers to the guided questions; labelled by detailRows on the way out.
+      details: feedback.answers as Prisma.InputJsonValue,
       pagePath: page.path,
       pageTitle: page.title,
       moduleLabel: page.module,
@@ -170,32 +191,70 @@ router.post("/", async (req, res) => {
     },
     select: { id: true, number: true },
   });
-  return sendOk(res, created, undefined, 201);
+    return sendOk(res, created, undefined, 201);
+  },
+);
+
+/**
+ * "Has anything happened to my feedback since I last looked?"
+ *
+ * Counted here rather than in the browser, because the browser only holds one
+ * page of items: with the old fixed take of 50, a reply on somebody's 51st
+ * report never raised the dot and they were never told. The count must see
+ * every item the reporter has, so it can't be derived from the list.
+ *
+ * `since` is the reporter's own last-looked time, kept per browser.
+ */
+router.get("/mine/updates", async (req, res) => {
+  const since = new Date(String(req.query.since ?? ""));
+  if (Number.isNaN(since.getTime())) {
+    throw new BadRequestError("A valid `since` timestamp is required");
+  }
+  const count = await db.feedback.count({
+    where: {
+      reporterId: actorId(req),
+      updatedAt: { gt: since },
+      // Changed *after* it was sent — saving the item sets both timestamps, so
+      // without this every new report would count as its own update.
+      NOT: { updatedAt: { equals: db.feedback.fields.createdAt } },
+    },
+  });
+  return sendOk(res, { count });
 });
 
 router.get("/mine", async (req, res) => {
-  const items = await db.feedback.findMany({
-    where: { reporterId: actorId(req) },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: {
-      id: true,
-      number: true,
-      category: true,
-      impact: true,
-      title: true,
-      section: true,
-      status: true,
-      pagePath: true,
-      pageTitle: true,
-      moduleLabel: true,
-      reporterConfirmedAt: true,
-      voiceSeconds: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+  const query = parseListQuery(req);
+  const where = { reporterId: actorId(req) };
+  const [total, items] = await Promise.all([
+    db.feedback.count({ where }),
+    db.feedback.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: query.page * query.size,
+      take: query.size,
+      select: {
+        id: true,
+        number: true,
+        category: true,
+        impact: true,
+        title: true,
+        section: true,
+        status: true,
+        pagePath: true,
+        pageTitle: true,
+        moduleLabel: true,
+        reporterConfirmedAt: true,
+        voiceSeconds: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+  ]);
+  return sendOk(res, await withFileCounts(items), {
+    page: query.page,
+    size: query.size,
+    total,
   });
-  return sendOk(res, await withFileCounts(items));
 });
 
 router.get("/summary", can(PERMS.FEEDBACK.VIEW), async (_req, res) =>
@@ -379,7 +438,7 @@ router.get("/:id", async (req, res) => {
       })),
     )
     : [];
-  return sendOk(res, { ...item, screenshots, voiceNotes });
+  return sendOk(res, { ...item, files, voiceNotes });
 });
 
 router.patch("/:id", can(PERMS.FEEDBACK.MANAGE), async (req, res) => {
@@ -499,17 +558,20 @@ router.post("/:id/files", async (req, res) => {
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
-  const existing = await db.attachment.count({
+  const request = parsed.data;
+  await assertRoomFor(item.id, request.kind);
+
+  // Pending rows are failed or unfinished PUTs; retries are fine, floods are not.
+  const pending = await db.attachment.count({
     where: {
       entityType: ATTACHMENT_ENTITY,
       entityId: item.id,
+      uploaded: false,
       deletedAt: null,
     },
   });
-  if (existing >= FEEDBACK_MAX_SCREENSHOTS) {
-    throw new BadRequestError(
-      `You can attach up to ${FEEDBACK_MAX_SCREENSHOTS} pictures`,
-    );
+  if (pending >= MAX_PENDING_FILES) {
+    throw new BadRequestError("Too many unfinished uploads on this feedback");
   }
 
   const { attachment, uploadUrl } = await createAttachment(

@@ -89,8 +89,7 @@ function EnabledLauncher() {
         <FeedbackSheet
           open={open}
           onOpenChange={setOpen}
-          screenshotsEnabled={status.data?.screenshots === true}
-          voiceNotesEnabled={status.data?.voiceNotes === true}
+          uploadsEnabled={status.data?.uploads === true}
           updates={updates}
         />
       ) : null}

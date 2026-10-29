@@ -3,10 +3,10 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  IconCamera,
   IconFileTypeDocx,
   IconFileTypePdf,
   IconFileTypeXls,
+  IconHandFinger,
   IconPaperclip,
   IconPencil,
   IconX,
@@ -14,7 +14,6 @@ import {
 import { FEEDBACK_MAX_FILES, type FeedbackDocumentMime } from "@skerp/validators";
 import { Button } from "@skerp/ui/components/button";
 import { cn } from "@skerp/ui/lib/util";
-import { capturePage } from "../lib/capture";
 import {
   FILE_ACCEPT,
   classifyFile,
@@ -70,19 +69,22 @@ export async function toPendingFiles(files: File[], room: number): Promise<Pendi
 }
 
 /**
- * "Images & documents": choose files (camera on phones), a picture of this
- * page, drag and drop, and Ctrl+V anywhere in the form (handled by the form).
- * Pictures can be marked up before sending.
+ * "Show us": point at the part that is wrong, take a picture of the page, or
+ * add your own file. Drag and drop and Ctrl+V anywhere in the form also work
+ * (the form handles the paste). Pictures can be marked up before sending.
  */
 export function AttachmentsSection({
   files,
   onFilesChange,
   onElementRemoved,
+  onPoint,
 }: {
   files: PendingFile[];
   onFilesChange: (files: PendingFile[]) => void;
   /** The picked-element picture was removed, so forget the picked element too. */
   onElementRemoved: () => void;
+  /** Hides the panel, lets the user click the page, then reopens it. */
+  onPoint: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,22 +104,6 @@ export function AttachmentsSection({
     }
   };
 
-  const addPagePicture = async () => {
-    if (full) return;
-    setBusy(true);
-    try {
-      const shot = await capturePage();
-      onFilesChange([...files, { kind: "image", id: shot.id, shot }]);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "We couldn't take the picture. Try 'Choose files' instead.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const remove = (file: PendingFile) => {
     releaseFile(file);
@@ -144,32 +130,40 @@ export function AttachmentsSection({
       }}
     >
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Images &amp; documents</h3>
+        <h3 className="text-sm font-semibold text-foreground">Show us</h3>
         <p className="text-xs text-muted-foreground">
-          Up to {FEEDBACK_MAX_FILES} files, 12 MB each. Pictures, PDF, Word (.docx), Excel (.xlsx).
+          A picture helps the team see the problem straight away.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {/*
+       * Pointing is the primary action: it needs no thought — click the thing
+       * that is wrong and the picture, the section name and the element are
+       * all filled in at once. It takes its own full-width row, and the two
+       * fallbacks share the next one. This panel sits in a half-width column
+       * beside the voice note, so three buttons abreast would not fit anyway.
+       */}
+      <div className="grid gap-2">
         <Button
           type="button"
-          variant="outline"
-          className="max-sm:h-11"
+          className="h-11 w-full"
           disabled={full || busy}
-          onClick={() => fileInput.current?.click()}
+          onClick={onPoint}
         >
-          <IconPaperclip className="size-4" aria-hidden />
-          Choose files
+          <IconHandFinger className="size-4" aria-hidden />
+          Point at the problem
         </Button>
         <Button
           type="button"
           variant="outline"
-          className="max-sm:h-11"
+          className="h-11 w-full"
           disabled={full || busy}
-          onClick={addPagePicture}
+          onClick={() => fileInput.current?.click()}
         >
-          <IconCamera className="size-4" aria-hidden />
-          {busy ? "Adding…" : "Picture of this page"}
+          <IconPaperclip className="size-4 shrink-0" aria-hidden />
+          <span className="truncate">
+            {busy ? "Adding…" : "Add a picture or file"}
+          </span>
         </Button>
         <input
           ref={fileInput}

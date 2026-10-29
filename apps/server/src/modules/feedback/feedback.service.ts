@@ -116,6 +116,75 @@ export const findScreenshots = (feedbackIds: string[]) =>
 export const findVoiceNotes = (feedbackIds: string[]) =>
   attachmentsOfKind(feedbackIds, VOICE_MIME_PREFIX);
 
+/**
+ * Everything the reporter attached as a file — pictures and documents, but
+ * never voice notes, which have their own endpoint and their own list.
+ */
+export const findFeedbackFiles = (feedbackIds: string[]) =>
+  db.attachment.findMany({
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: { in: feedbackIds },
+      NOT: { mime: { startsWith: VOICE_MIME_PREFIX } },
+      uploaded: true,
+      deletedAt: null,
+      antivirusStatus: "CLEAN",
+    },
+    orderBy: { uploadedAt: "asc" },
+    select: {
+      id: true,
+      originalName: true,
+      mime: true,
+      sizeBytes: true,
+      entityId: true,
+      uploadedAt: true,
+      s3Key: true,
+    },
+  });
+
+export type FeedbackFileCounts = { imageCount: number; documentCount: number };
+
+/** Picture and document counts per item, for the list views. */
+export const countFeedbackFiles = async (
+  feedbackIds: string[],
+): Promise<Map<string, FeedbackFileCounts>> => {
+  const counts = new Map<string, FeedbackFileCounts>();
+  if (feedbackIds.length === 0) return counts;
+  const rows = await db.attachment.groupBy({
+    by: ["entityId", "mime"],
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: { in: feedbackIds },
+      NOT: { mime: { startsWith: VOICE_MIME_PREFIX } },
+      uploaded: true,
+      deletedAt: null,
+      antivirusStatus: "CLEAN",
+    },
+    _count: { _all: true },
+  });
+  for (const row of rows) {
+    const current = counts.get(row.entityId) ?? {
+      imageCount: 0,
+      documentCount: 0,
+    };
+    const kind = feedbackFileKind(row.mime);
+    if (kind === "image") current.imageCount += row._count._all;
+    if (kind === "document") current.documentCount += row._count._all;
+    counts.set(row.entityId, current);
+  }
+  return counts;
+};
+
+export const withFileCounts = async <T extends { id: string }>(
+  items: T[],
+): Promise<(T & FeedbackFileCounts)[]> => {
+  const counts = await countFeedbackFiles(items.map((item) => item.id));
+  return items.map((item) => ({
+    ...item,
+    ...(counts.get(item.id) ?? { imageCount: 0, documentCount: 0 }),
+  }));
+};
+
 const startOfDay = (iso: string): Date | null => {
   const date = new Date(`${iso}T00:00:00`);
   return Number.isNaN(date.getTime()) ? null : date;
@@ -212,16 +281,21 @@ const clipAtWord = (text: string, max: number): string => {
  * first point, else "<Type> on <Page>" (a voice note or pictures only).
  */
 export const deriveTitle = (
-  form: Pick<FeedbackForm, "category" | "description" | "points">,
+  form: Pick<FeedbackForm, "category" | "description" | "points"> &
+    Partial<Pick<FeedbackForm, "answers">>,
   pageTitle: string,
 ): string => {
   const firstLine = form.description
     ?.split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
+  // A report made only of guided answers is normal — the questions carry it,
+  // and without this it would be titled "Bug on Dashboard" like every other.
+  const firstAnswer = Object.values(form.answers ?? {}).find(Boolean);
   const text =
     firstLine ??
     form.points[0] ??
+    firstAnswer ??
     `${FEEDBACK_CATEGORY_LABELS[form.category]} on ${pageTitle}`;
   return clipAtWord(text.replace(/\s+/g, " "), MAX_TITLE_CHARS);
 };
@@ -272,29 +346,6 @@ export const describeFilters = (query: ListQuery): string => {
     search ? `Search: "${search}"` : null,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : "All feedback";
-};
-
-/* ------------------------------------------------------------------ */
-/* Submit rate limit (in-memory, per server instance)                  */
-/* ------------------------------------------------------------------ */
-
-const WINDOW_MS = 60 * 60 * 1000;
-const MAX_PER_WINDOW = 20;
-const submitsByUser = new Map<string, number[]>();
-
-/** Returns false once a user has sent MAX_PER_WINDOW items in the last hour. */
-export const takeSubmitSlot = (userId: string): boolean => {
-  const now = Date.now();
-  const recent = (submitsByUser.get(userId) ?? []).filter(
-    (at) => now - at < WINDOW_MS,
-  );
-  if (recent.length >= MAX_PER_WINDOW) {
-    submitsByUser.set(userId, recent);
-    return false;
-  }
-  recent.push(now);
-  submitsByUser.set(userId, recent);
-  return true;
 };
 
 /* ------------------------------------------------------------------ */

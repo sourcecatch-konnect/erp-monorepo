@@ -11,9 +11,10 @@ import {
   imageSize,
   type DocxImage,
 } from "./feedback.docx.js";
-import { buildFeedbackXlsx } from "./feedback.export.js";
+import { buildFeedbackXlsx, type ExportFile } from "./feedback.export.js";
 import {
   ATTACHMENT_ENTITY,
+  findFeedbackFiles,
   findScreenshots,
   findVoiceNotes,
 } from "./feedback.service.js";

@@ -30,7 +30,13 @@ import {
 import { describePage } from "../lib/page-context";
 import { sectionFor } from "../lib/page-sections";
 import { markFeedbackSeen, readSeenAt } from "../lib/seen";
-import type { VoiceNote } from "../lib/voice-note";
+import {
+  runUploads,
+  uploadJobs,
+  waitingProgress,
+  type UploadJob,
+  type UploadProgress,
+} from "../lib/upload";
 import { FeedbackForm } from "./FeedbackForm";
 import { MyFeedbackList } from "./MyFeedbackList";
 import { SentView } from "./SentView";
@@ -53,24 +59,25 @@ const VIEW_TAB_CLASS =
 export default function FeedbackSheet({
   open,
   onOpenChange,
-  screenshotsEnabled,
-  voiceNotesEnabled,
+  uploadsEnabled,
   updates,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  screenshotsEnabled: boolean;
-  voiceNotesEnabled: boolean;
+  uploadsEnabled: boolean;
   /** Items with news since the user last looked at My feedback. */
   updates: number;
 }) {
-  const [view, setView] = useState<View>("new");
-  // Pictures + the picked element live here, not in the form: the form
-  // unmounts while the panel is hidden for "Point at the problem".
-  const [shots, setShots] = useState<Screenshot[]>([]);
-  // Voice notes are held here for the same reason as the pictures.
-  const [notes, setNotes] = useState<VoiceNote[]>([]);
-  const [element, setElement] = useState<FeedbackElement | null>(null);
+  const pathname = usePathname();
+  const { labels } = useBreadcrumbLabels();
+  const page = useMemo(() => describePage(pathname, labels), [pathname, labels]);
+  const queryClient = useQueryClient();
+
+  const [view, setView] = useState<View>("give");
+  // Unsent files, voice note and picked element, per page. They live here,
+  // not in the form: the form unmounts whenever the panel is hidden.
+  const [byPage, setByPage] = useState<Record<string, PageAttachments>>({});
+  const attachments = byPage[pathname] ?? NO_ATTACHMENTS;
   const [picking, setPicking] = useState(false);
   const [delivery, setDelivery] = useState<Delivery | null>(null);
   // When My feedback was last opened before now, so new items stay marked.
@@ -132,11 +139,7 @@ export default function FeedbackSheet({
         files: shot ? [...current.files, { kind: "image", id: shot.id, shot }] : current.files,
       }));
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "We couldn't take that picture.",
-      );
+      toast.error(error instanceof Error ? error.message : "We couldn't take that picture.");
     } finally {
       setPicking(false);
     }
@@ -146,11 +149,11 @@ export default function FeedbackSheet({
     setDelivery((current) =>
       current && current.id === feedbackId
         ? {
-          ...current,
-          uploads: current.uploads.map((upload) =>
-            upload.id === id ? { ...upload, ...patch } : upload,
-          ),
-        }
+            ...current,
+            uploads: current.uploads.map((upload) =>
+              upload.id === id ? { ...upload, ...patch } : upload,
+            ),
+          }
         : current,
     );
 
@@ -185,18 +188,28 @@ export default function FeedbackSheet({
   };
 
   return (
-    <Sheet open={open && !picking} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open && !picking}
+      onOpenChange={(next) => {
+        /*
+         * Hiding the panel so the user can point at the page closes the Sheet,
+         * and Radix reports that as the user closing it. Letting that through
+         * cleared `open`, so the panel never came back and the user had to
+         * press Feedback again. While picking, the close is ours, not theirs.
+         */
+        if (picking) return;
+        onOpenChange(next);
+      }}
+    >
       <SheetContent
         side="right"
         className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl data-[side=right]:lg:max-w-2xl data-[side=right]:xl:max-w-3xl"
       >
-        <SheetHeader className="gap-1 border-b border-border px-6 py-4 pr-12">
-          <SheetTitle className="text-lg">
-            Send feedback to the ERP team
-          </SheetTitle>
-          <SheetDescription>
-            Found a problem or have an idea? Tell us here. It goes straight to
-            the people building the system.
+        <SheetHeader className="gap-1 border-b border-border pt-4 pr-12 pb-3 pl-4 sm:pl-6">
+          <SheetTitle className="text-lg">Feedback &amp; Review</SheetTitle>
+          <SheetDescription className="truncate">
+            {page.title}
+            {page.entityLabel ? ` · ${page.entityLabel}` : ""} · {page.module}
           </SheetDescription>
           <Tabs
             value={view}
@@ -228,15 +241,6 @@ export default function FeedbackSheet({
             onRetry={retry}
             onAnother={() => setDelivery(null)}
             onClose={() => onOpenChange(false)}
-            screenshotsEnabled={screenshotsEnabled}
-            voiceNotesEnabled={voiceNotesEnabled}
-            shots={shots}
-            notes={notes}
-            element={element}
-            onShotsChange={setShots}
-            onNotesChange={setNotes}
-            onElementChange={setElement}
-            onPick={startPick}
           />
         ) : (
           <FeedbackForm

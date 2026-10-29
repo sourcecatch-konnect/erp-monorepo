@@ -19,8 +19,6 @@ import type {
   FeedbackSubmitBody,
   FeedbackSummary,
   FeedbackTriageInput,
-  FeedbackVoiceNoteRequest,
-  FeedbackVoiceNoteUpload,
   MyFeedbackItem,
 } from "@skerp/types";
 import {
@@ -28,6 +26,9 @@ import {
   unwrapListResponse,
   type ListResult,
 } from "@/features/masters/_shared/master-api";
+
+/** Items per page in the "My feedback" tab. */
+export const MY_FEEDBACK_PAGE_SIZE = 20;
 
 export type FeedbackListParams = {
   page: number;
@@ -51,10 +52,7 @@ const filterQuery = ({ search, ...filters }: FeedbackFilters) => {
   return params;
 };
 
-const download = async (
-  path: string,
-  filters: FeedbackFilters,
-): Promise<Blob> => {
+const download = async (path: string, filters: FeedbackFilters): Promise<Blob> => {
   const res = await api.get<Blob>(path, {
     params: filterQuery(filters),
     responseType: "blob",
@@ -74,10 +72,27 @@ export const feedbackApi = {
       await api.post<ApiResponse<FeedbackCreated>>("/feedback", body),
     ),
 
-  mine: async (): Promise<MyFeedbackItem[]> =>
-    unwrapApiResponse(
-      await api.get<ApiResponse<MyFeedbackItem[]>>("/feedback/mine"),
+  /** One page of the reporter's own feedback, newest first. */
+  mine: async (page = 0, size = MY_FEEDBACK_PAGE_SIZE): Promise<ListResult<MyFeedbackItem>> =>
+    unwrapListResponse(
+      await api.get<ApiResponse<MyFeedbackItem[]>>("/feedback/mine", {
+        params: { page, size },
+      }),
     ),
+
+  /**
+   * How many of the reporter's items changed after they were sent and since
+   * `seenAt`. Counted by the server across *all* their items — deriving it
+   * from the list would miss anything past the first page.
+   */
+  myUpdates: async (seenAt: number): Promise<number> =>
+    (
+      await unwrapApiResponse(
+        await api.get<ApiResponse<{ count: number }>>("/feedback/mine/updates", {
+          params: { since: new Date(seenAt).toISOString() },
+        }),
+      )
+    ).count,
 
   summary: async (): Promise<FeedbackSummary> =>
     unwrapApiResponse(
@@ -112,14 +127,15 @@ export const feedbackApi = {
     body: FeedbackBulkStatusBody,
   ): Promise<{ updated: number }> =>
     unwrapApiResponse(
-      await api.patch<ApiResponse<{ updated: number }>>("/feedback/bulk", body),
+      await api.patch<ApiResponse<{ updated: number }>>(
+        "/feedback/bulk",
+        body,
+      ),
     ),
 
   /** Same filters as the list, without paging. */
-  exportXlsx: (filters: FeedbackFilters) =>
-    download("/feedback/export/xlsx", filters),
-  exportDocx: (filters: FeedbackFilters) =>
-    download("/feedback/export/docx", filters),
+  exportXlsx: (filters: FeedbackFilters) => download("/feedback/export/xlsx", filters),
+  exportDocx: (filters: FeedbackFilters) => download("/feedback/export/docx", filters),
 
   /* ---- Files + voice note ---- */
 
@@ -136,37 +152,41 @@ export const feedbackApi = {
    * purpose (same as @skerp/attachments-web): no cookies go to S3. The
    * Content-Type must equal the type the URL was signed for.
    */
-  uploadToStorage: async (uploadUrl: string, blob: Blob): Promise<void> => {
-    await axios.put(uploadUrl, blob, {
-      headers: { "Content-Type": blob.type },
-    });
+  uploadToStorage: async (
+    uploadUrl: string,
+    blob: Blob,
+    contentType: string,
+    onProgress?: (fraction: number) => void,
+  ): Promise<void> => {
+    try {
+      await axios.put(uploadUrl, blob, {
+        headers: { "Content-Type": contentType },
+        onUploadProgress: (event) => {
+          if (onProgress && event.total) onProgress(event.loaded / event.total);
+        },
+      });
+    } catch (error) {
+      /*
+       * S3 answers with XML, and axios turns that into "Request failed with
+       * status code 403" — which tells the reporter nothing and reads like
+       * their feedback was rejected. A 403 here is the server's storage
+       * credentials, never anything the reporter did.
+       */
+      const status = axios.isAxiosError(error) ? error.response?.status : null;
+      throw new Error(
+        status === 403 || status === 401
+          ? "File storage rejected the upload. This is a server setting, not something you did — please tell the team."
+          : "We couldn't send this file. Your feedback was saved; you can retry the file.",
+      );
+    }
   },
 
-  completeScreenshot: async (
+  completeFile: async (
     id: string,
     attachmentId: string,
+    body: FeedbackFileComplete = {},
   ): Promise<void> => {
-    await api.post(`/feedback/${id}/screenshots/${attachmentId}/complete`);
-  },
-
-  /* ---- B9: voice notes (same presign → PUT → confirm flow) ---- */
-
-  requestVoiceNote: async (
-    id: string,
-    body: FeedbackVoiceNoteRequest,
-  ): Promise<FeedbackVoiceNoteUpload> =>
-    unwrapApiResponse(
-      await api.post<ApiResponse<FeedbackVoiceNoteUpload>>(
-        `/feedback/${id}/voice-notes`,
-        body,
-      ),
-    ),
-
-  completeVoiceNote: async (
-    id: string,
-    attachmentId: string,
-  ): Promise<void> => {
-    await api.post(`/feedback/${id}/voice-notes/${attachmentId}/complete`);
+    await api.post(`/feedback/${id}/files/${attachmentId}/complete`, body);
   },
 
   /* ---- B8: conversation ---- */
@@ -176,15 +196,9 @@ export const feedbackApi = {
       await api.get<ApiResponse<FeedbackComment[]>>(`/feedback/${id}/comments`),
     ),
 
-  addComment: async (
-    id: string,
-    body: FeedbackCommentBody,
-  ): Promise<FeedbackComment> =>
+  addComment: async (id: string, body: FeedbackCommentBody): Promise<FeedbackComment> =>
     unwrapApiResponse(
-      await api.post<ApiResponse<FeedbackComment>>(
-        `/feedback/${id}/comments`,
-        body,
-      ),
+      await api.post<ApiResponse<FeedbackComment>>(`/feedback/${id}/comments`, body),
     ),
 
   confirm: async (id: string, body: FeedbackConfirmBody): Promise<void> => {

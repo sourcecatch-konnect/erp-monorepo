@@ -18,4 +18,14 @@ export const GRN_HELP: PageHelpContent = {
   ],
   terms: ["grn", "rake", "demurrage"],
   trainingStep: "rail.grn-rail-head",
+  hi: {
+    purpose:
+      "GRN (Goods Receipt Note) में लिखा जाता है कि rail head पर असल में कितना माल मिला, और कोई shortage या damage हुआ तो वो भी।",
+    howTo: [
+      "Create GRN दबाइए और जिस LR या rake से माल आया है वो चुनिए।",
+      "जो सच में आया है उसे गिनकर भरिए, shortage या damage के साथ।",
+      "गिनती पक्की हो जाने पर GRN submit कीजिए।",
+    ],
+    next: "माल आगे destination branch जाता है, जहाँ branch GRN भरा जाता है।",
+  },
 };

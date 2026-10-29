@@ -3,18 +3,9 @@
 import { useEffect, useState } from "react";
 import { FormProvider, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import {
-  IconAlertTriangle,
-  IconCircleCheck,
-  IconInfoCircle,
-  IconMapPin,
-} from "@tabler/icons-react";
-import {
-  FEEDBACK_MAX_SCREENSHOTS,
-  feedbackFormSchema,
-} from "@skerp/validators";
+import { useMutation } from "@tanstack/react-query";
+import { IconAlertTriangle, IconHandFinger, IconInfoCircle } from "@tabler/icons-react";
+import { FEEDBACK_MAX_FILES, feedbackFormSchema } from "@skerp/validators";
 import {
   describeUserAgent,
   type FeedbackCreated,
@@ -22,32 +13,28 @@ import {
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { useAuth } from "@/features/auth";
-import SelectField from "@/features/masters/_shared/fields/SelectField";
 import TextAreaField from "@/features/masters/_shared/fields/TextAreaField";
 import {
-  CATEGORY_META,
   CATEGORY_OPTIONS,
-  IMPACT_HINTS,
   IMPACT_OPTIONS,
 } from "../categories";
 import { feedbackApi } from "../feedback.service";
-import { EMPTY_FEEDBACK_VALUES, type FeedbackFormValues } from "../form-values";
+import {
+  EMPTY_FEEDBACK_VALUES,
+  restoreDraft,
+  type FeedbackFormValues,
+} from "../form-values";
 import { snapshotActivity } from "../lib/activity-recorder";
-import { releaseVoiceNote, type VoiceNote } from "../lib/voice-note";
-import { VoiceNoteSection } from "./VoiceNoteSection";
 import { clearDraft, loadDraft, saveDraft } from "../lib/draft";
-import {
-  fileToScreenshot,
-  releaseScreenshot,
-  type Screenshot,
-} from "../lib/images";
-import {
-  describeClient,
-  describePage,
-  type PageInfo,
-} from "../lib/page-context";
-import { CategoryFields } from "./CategoryFields";
-import { ScreenshotSection } from "./ScreenshotSection";
+import type { PageAttachments, PendingFile, VoiceNote } from "../lib/files";
+import { describeClient, type PageInfo } from "../lib/page-context";
+import { listPageSections } from "../lib/page-sections";
+import { AttachmentsSection, toPendingFiles } from "./AttachmentsSection";
+import { ChoiceField } from "./ChoiceField";
+import { QuestionFields } from "./QuestionFields";
+import { PointsField } from "./PointsField";
+import { SectionField } from "./SectionField";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 // The form state keeps "" for "not chosen"; the shared schema turns it into
 // the parsed submit shape (empty points dropped, type required).
@@ -79,8 +66,8 @@ function WhatWeAttach({ page }: { page: PageInfo }) {
         What we attach automatically
       </summary>
       <p className="mt-2 text-xs text-muted-foreground">
-        So you don&apos;t have to explain where you were, we send these details
-        with your feedback. We never send passwords or what you typed into other
+        So you don&apos;t have to explain where you were, we send these details with
+        your feedback. We never send passwords or what you typed into other
         screens.
       </p>
       <dl className="mt-3 grid gap-2 text-sm">
@@ -95,118 +82,17 @@ function WhatWeAttach({ page }: { page: PageInfo }) {
   );
 }
 
-function SentConfirmation({
-  number,
-  failedPictures,
-  failedVoiceNotes,
-  onAnother,
-  onClose,
-}: {
-  number: number;
-  failedPictures: number;
-  failedVoiceNotes: number;
-  onAnother: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-10 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <IconCircleCheck className="size-7" aria-hidden />
-      </span>
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">
-          Thank you, your feedback has been sent
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Your reference number is{" "}
-          <span className="font-semibold text-foreground">
-            {formatFeedbackNumber(number)}
-          </span>
-          . You can follow its progress under <strong>My feedback</strong>.
-        </p>
-        {failedPictures > 0 ? (
-          <p className="text-sm text-destructive">
-            {failedPictures} picture{failedPictures === 1 ? "" : "s"} could not
-            be attached. Your feedback was still sent.
-          </p>
-        ) : null}
-        {failedVoiceNotes > 0 ? (
-          <p className="text-sm text-destructive">
-            {failedVoiceNotes} voice note{failedVoiceNotes === 1 ? "" : "s"}{" "}
-            could not be attached. Your feedback was still sent.
-          </p>
-        ) : null}
-      </div>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onAnother}>
-          Send another
-        </Button>
-        <Button onClick={onClose}>Close</Button>
-      </div>
-    </div>
-  );
-}
-
-/** Upload each picture: presign → PUT to storage → confirm. Returns how many failed. */
-async function uploadScreenshots(
-  feedbackId: string,
-  shots: Screenshot[],
-): Promise<number> {
-  let failed = 0;
-  for (const shot of shots) {
-    try {
-      const { attachmentId, uploadUrl } = await feedbackApi.requestScreenshot(
-        feedbackId,
-        {
-          mime: "image/jpeg",
-          sizeBytes: shot.blob.size,
-          width: shot.width,
-          height: shot.height,
-        },
-      );
-      await feedbackApi.uploadToStorage(uploadUrl, shot.blob);
-      await feedbackApi.completeScreenshot(feedbackId, attachmentId);
-    } catch {
-      failed += 1;
-    }
-  }
-  return failed;
-}
-
-/** Same three steps for each voice note. Returns how many failed. */
-async function uploadVoiceNotes(
-  feedbackId: string,
-  notes: VoiceNote[],
-): Promise<number> {
-  let failed = 0;
-  for (const note of notes) {
-    try {
-      const { attachmentId, uploadUrl } = await feedbackApi.requestVoiceNote(
-        feedbackId,
-        {
-          mime: note.mime,
-          sizeBytes: note.blob.size,
-          durationSeconds: note.durationSeconds,
-        },
-      );
-      await feedbackApi.uploadToStorage(uploadUrl, note.blob);
-      await feedbackApi.completeVoiceNote(feedbackId, attachmentId);
-    } catch {
-      failed += 1;
-    }
-  }
-  return failed;
-}
-
+/**
+ * Give feedback: one short form, the same on every page. The page, the person
+ * and the technical trail are attached automatically; the files and voice
+ * note are held by the sheet and uploaded once the item exists.
+ */
 export function FeedbackForm({
-  onClose,
-  screenshotsEnabled,
-  voiceNotesEnabled,
-  shots,
-  notes,
-  element,
-  onShotsChange,
-  onNotesChange,
+  page,
+  attachments,
+  uploadsEnabled,
+  onFilesChange,
+  onVoiceChange,
   onElementChange,
   onPoint,
   onSent,
@@ -222,28 +108,10 @@ export function FeedbackForm({
   onPoint: () => void;
   onSent: (created: FeedbackCreated) => void;
   onClose: () => void;
-  screenshotsEnabled: boolean;
-  voiceNotesEnabled: boolean;
-  shots: Screenshot[];
-  notes: VoiceNote[];
-  element: FeedbackElement | null;
-  onShotsChange: (shots: Screenshot[]) => void;
-  onNotesChange: (notes: VoiceNote[]) => void;
-  onElementChange: (element: FeedbackElement | null) => void;
-  onPick: () => void;
 }) {
-  const pathname = usePathname();
-  const { labels } = useBreadcrumbLabels();
-  const page = useMemo(
-    () => describePage(pathname, labels),
-    [pathname, labels],
-  );
-  const queryClient = useQueryClient();
-  const [sent, setSent] = useState<{
-    number: number;
-    failedPictures: number;
-    failedVoiceNotes: number;
-  } | null>(null);
+  const { files, voice, element } = attachments;
+  // Read once per opening: the panel covers the page while it is open.
+  const [sections] = useState(listPageSections);
 
   const methods = useForm<FeedbackFormValues>({
     resolver,
@@ -254,7 +122,6 @@ export function FeedbackForm({
     },
   });
   const category = methods.watch("category");
-  const impact = methods.watch("impact");
 
   // Unsent text survives closing the panel (per page). restoreDraft ignores the
   // voice flag: the recording itself only lives in memory.
@@ -280,9 +147,7 @@ export function FeedbackForm({
         },
         context: {
           ...describeClient(),
-          breadcrumb: page.breadcrumb
-            .slice(0, 12)
-            .map((item) => clip(item, 160)),
+          breadcrumb: page.breadcrumb.slice(0, 12).map((item) => clip(item, 160)),
           ...snapshotActivity(),
           ...(element ? { element } : {}),
           attachmentsPlanned: {
@@ -291,191 +156,168 @@ export function FeedbackForm({
             documents: uploadsEnabled ? files.filter((file) => file.kind === "document").length : 0,
           },
         },
-      });
-    // The feedback is saved first; a failed attachment never loses the report.
-    const failedPictures = await uploadScreenshots(created.id, shots);
-    const failedVoiceNotes = await uploadVoiceNotes(created.id, notes);
-    return { ...created, failedPictures, failedVoiceNotes };
-  },
+      }),
     onSuccess: (created) => {
       clearDraft(page.path);
-      shots.forEach(releaseScreenshot);
-      notes.forEach(releaseVoiceNote);
-      onShotsChange([]);
-      onNotesChange([]);
-      onElementChange(null);
-      setSent({
-        number: created.number,
-        failedPictures: created.failedPictures,
-        failedVoiceNotes: created.failedVoiceNotes,
-      });
-      void queryClient.invalidateQueries({ queryKey: feedbackKeys.mine });
+      methods.reset(EMPTY_FEEDBACK_VALUES);
+      onSent(created);
     },
   });
 
-const onSubmit = methods.handleSubmit((values) =>
-  // Resolver output is the parsed schema value (empty points already dropped).
-  submit.mutate(values as unknown as FeedbackFormInput),
-);
-
-// Ctrl+V of a screenshot anywhere in the form adds it as a picture.
-const onPaste = (event: React.ClipboardEvent<HTMLFormElement>) => {
-  if (!uploadsEnabled || files.length >= FEEDBACK_MAX_FILES) return;
-  const pasted = Array.from(event.clipboardData.items)
-    .filter((item) => item.kind === "file")
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => file !== null);
-  if (pasted.length === 0) return;
-  event.preventDefault();
-  fileToScreenshot(file)
-    .then((shot) => onShotsChange([...shots, shot]))
-    .catch((error: unknown) =>
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "We couldn't add that picture.",
-      ),
-    );
-};
-
-if (sent !== null) {
-  return (
-    <SentConfirmation
-      number={sent.number}
-      failedPictures={sent.failedPictures}
-      failedVoiceNotes={sent.failedVoiceNotes}
-      onClose={onClose}
-      onAnother={() => {
-        methods.reset(EMPTY_FEEDBACK_VALUES);
-        submit.reset();
-        setSent(null);
-      }}
-    />
+  const onSubmit = methods.handleSubmit((values) =>
+    // Resolver output is the parsed schema value (empty points already dropped).
+    submit.mutate(values as unknown as FeedbackFormInput),
   );
-}
 
-return (
-  <FormProvider {...methods}>
-    <form
-      onSubmit={onSubmit}
-      onPaste={onPaste}
-      className="flex min-h-0 flex-1 flex-col"
-      noValidate
-    >
-      <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
-        <PageBanner page={page} />
+  // Ctrl+V of a screenshot anywhere in the form adds it as a picture.
+  const onPaste = (event: React.ClipboardEvent<HTMLFormElement>) => {
+    if (!uploadsEnabled || files.length >= FEEDBACK_MAX_FILES) return;
+    const pasted = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (pasted.length === 0) return;
+    event.preventDefault();
+    void toPendingFiles(pasted, FEEDBACK_MAX_FILES - files.length).then((added) => {
+      if (added.length > 0) onFilesChange([...files, ...added]);
+    });
+  };
 
-        <Tabs
-          value={category}
-          onValueChange={chooseCategory}
-          className="gap-4"
-        >
-          <section className="space-y-3">
-            <StepHeading step={1} title="What kind of feedback is it?" />
-            <TabsList
-              aria-label="Kind of feedback"
-              className="grid h-auto w-full grid-cols-1 gap-2 rounded-none bg-transparent p-0 group-data-horizontal/tabs:h-auto sm:grid-cols-2"
-            >
-              {CATEGORY_ORDER.map((value) => {
-                const meta = CATEGORY_META[value];
-                const TileIcon = meta.icon;
-                return (
-                  <TabsTrigger
-                    key={value}
-                    value={value}
-                    className={TILE_CLASS}
-                  >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <TileIcon className="size-5" aria-hidden />
-                    </span>
-                    <span className="grid gap-0.5">
-                      <span className="text-sm font-semibold">
-                        {meta.title}
-                      </span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {meta.hint}
-                      </span>
-                    </span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-            {category === "" ? (
-              <p className="text-sm text-muted-foreground">
-                Choose the one that fits best. You can change it at any time.
-              </p>
-            ) : null}
-          </div>
-          <div className="grid gap-1">
-            <SelectField<FeedbackFormValues>
-              name="impact"
-              label="Impact"
-              options={IMPACT_OPTIONS}
-              required
-            />
-            <p className="text-xs text-muted-foreground">{IMPACT_HINTS[impact]}</p>
-          </div>
-      </div>
-
-      <SectionField sections={sections} canPoint onPoint={onPoint} />
-
-      {element ? (
-        <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          <IconHandFinger className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">
-            You pointed at:{" "}
-            <span className="font-medium text-foreground">
-              {element.text ? `"${element.text}"` : `a ${element.tag} element`}
-            </span>
-          </span>
-          <button
-            type="button"
-            className="shrink-0 text-primary transition-colors duration-150 hover:underline"
-            onClick={() => onElementChange(null)}
-          >
-            Clear
-          </button>
-        </p>
-      ) : null}
-
-      {category !== "" && voiceNotesEnabled ? (
-        <VoiceNoteSection notes={notes} onNotesChange={onNotesChange} />
-      ) : null}
-
-      {category !== "" ? <WhatWeAttach page={page} /> : null}
-
-      {submit.isError ? (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <IconAlertTriangle
-            className="mt-0.5 size-4 shrink-0"
-            aria-hidden
+  return (
+    <FormProvider {...methods}>
+      <form
+        onSubmit={onSubmit}
+        onPaste={onPaste}
+        className="flex min-h-0 flex-1 flex-col"
+        noValidate
+      >
+        <div className="@container flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
+          {/*
+           * Choices are rows, not dropdowns. Every type and every impact level
+           * is readable at a glance with its plain-language hint, and each row
+           * is a large tap target — this form is used on phones, in a yard,
+           * by people who are not going to open a dropdown to read their
+           * options one at a time.
+           */}
+          <ChoiceField
+            name="category"
+            label="What kind of problem is it?"
+            options={CATEGORY_OPTIONS}
+            columns={2}
+            required
           />
-          <p>
-            We couldn&apos;t send your feedback: {submit.error.message}.
-            Your text is still here, so please try again.
-          </p>
-        </div>
-      ) : null}
-    </div>
 
-    <div className="flex items-center gap-2 border-t border-border px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:justify-end sm:px-6 sm:pb-4">
-      <Button
-        type="button"
-        variant="outline"
-        className="max-sm:h-11 max-sm:flex-1"
-        onClick={onClose}
-      >
-        Cancel
-      </Button>
-      <Button
-        type="submit"
-        className="max-sm:h-11 max-sm:flex-1"
-        disabled={submit.isPending}
-      >
-        {submit.isPending ? "Sending…" : "Submit feedback"}
-      </Button>
-    </div>
-  </form>
-    </FormProvider >
+          {/*
+           * Everything below depends on the type, so none of it is shown until
+           * a type is chosen. Opening this panel on a wall of empty fields is
+           * what makes people close it again; one question is answerable.
+           */}
+          {category ? (
+            <>
+              <ChoiceField
+                name="impact"
+                label="How much does it affect your work?"
+                options={IMPACT_OPTIONS}
+                compact
+                required
+              />
+
+              {/*
+               * Pointing lives in "Show us" when pictures are available, so the
+               * action appears once. With uploads off there is no "Show us", and
+               * pointing is still worth offering: it fills in the section name.
+               */}
+              <SectionField
+                sections={sections}
+                canPoint={!uploadsEnabled}
+                onPoint={onPoint}
+              />
+
+          {element ? (
+            <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <IconHandFinger className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1">
+                You pointed at:{" "}
+                <span className="font-medium text-foreground">
+                  {element.text ? `"${element.text}"` : `a ${element.tag} element`}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="shrink-0 text-primary transition-colors duration-150 hover:underline"
+                onClick={() => onElementChange(null)}
+              >
+                Clear
+              </button>
+            </p>
+          ) : null}
+
+              {/* The questions for the chosen type carry most of the report. */}
+              <QuestionFields category={category} />
+
+              <TextAreaField<FeedbackFormValues>
+                name="description"
+                label="Anything else we should know?"
+                placeholder="Add anything the questions above didn't cover…"
+                rows={3}
+                maxLength={4000}
+              />
+
+              <PointsField />
+
+              {uploadsEnabled ? (
+                <div className="grid gap-4 @xl:grid-cols-2">
+                  <VoiceRecorder note={voice} onChange={onVoiceChange} />
+                  <AttachmentsSection
+                    files={files}
+                    onFilesChange={onFilesChange}
+                    onElementRemoved={() => onElementChange(null)}
+                    onPoint={onPoint}
+                  />
+                </div>
+              ) : (
+                <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                  Voice notes and attachments aren&apos;t set up on this server
+                  yet. You can still send text and points.
+                </p>
+              )}
+
+              <WhatWeAttach page={page} />
+            </>
+          ) : null}
+
+          {submit.isError ? (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+              <IconAlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <p>
+                We couldn&apos;t send your feedback: {submit.error.message}. Everything
+                you added is still here, so please try again.
+              </p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-border px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:justify-end sm:px-6 sm:pb-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="max-sm:h-11 max-sm:flex-1"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            className="max-sm:h-11 max-sm:flex-1"
+            disabled={submit.isPending}
+          >
+            {submit.isPending ? "Sending…" : "Submit feedback"}
+          </Button>
+        </div>
+      </form>
+    </FormProvider>
   );
 }
