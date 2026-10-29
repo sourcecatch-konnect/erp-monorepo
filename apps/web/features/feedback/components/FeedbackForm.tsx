@@ -13,12 +13,9 @@ import {
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { useAuth } from "@/features/auth";
-import SelectField from "@/features/masters/_shared/fields/SelectField";
 import TextAreaField from "@/features/masters/_shared/fields/TextAreaField";
 import {
-  CATEGORY_META,
   CATEGORY_OPTIONS,
-  IMPACT_HINTS,
   IMPACT_OPTIONS,
 } from "../categories";
 import { feedbackApi } from "../feedback.service";
@@ -33,6 +30,8 @@ import type { PageAttachments, PendingFile, VoiceNote } from "../lib/files";
 import { describeClient, type PageInfo } from "../lib/page-context";
 import { listPageSections } from "../lib/page-sections";
 import { AttachmentsSection, toPendingFiles } from "./AttachmentsSection";
+import { ChoiceField } from "./ChoiceField";
+import { QuestionFields } from "./QuestionFields";
 import { PointsField } from "./PointsField";
 import { SectionField } from "./SectionField";
 import { VoiceRecorder } from "./VoiceRecorder";
@@ -123,7 +122,6 @@ export function FeedbackForm({
     },
   });
   const category = methods.watch("category");
-  const impact = methods.watch("impact");
 
   // Unsent text survives closing the panel (per page). restoreDraft ignores the
   // voice flag: the recording itself only lives in memory.
@@ -194,31 +192,46 @@ export function FeedbackForm({
         noValidate
       >
         <div className="@container flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
-          <div className="grid gap-4 @md:grid-cols-2">
-            <div className="grid gap-1">
-              <SelectField<FeedbackFormValues>
-                name="category"
-                label="Type"
-                options={CATEGORY_OPTIONS}
-                placeholder="Choose a type"
-                required
-              />
-              {category ? (
-                <p className="text-xs text-muted-foreground">{CATEGORY_META[category].hint}</p>
-              ) : null}
-            </div>
-            <div className="grid gap-1">
-              <SelectField<FeedbackFormValues>
-                name="impact"
-                label="Impact"
-                options={IMPACT_OPTIONS}
-                required
-              />
-              <p className="text-xs text-muted-foreground">{IMPACT_HINTS[impact]}</p>
-            </div>
-          </div>
+          {/*
+           * Choices are rows, not dropdowns. Every type and every impact level
+           * is readable at a glance with its plain-language hint, and each row
+           * is a large tap target — this form is used on phones, in a yard,
+           * by people who are not going to open a dropdown to read their
+           * options one at a time.
+           */}
+          <ChoiceField
+            name="category"
+            label="What kind of problem is it?"
+            options={CATEGORY_OPTIONS}
+            columns={2}
+            required
+          />
 
-          <SectionField sections={sections} canPoint onPoint={onPoint} />
+          {/*
+           * Everything below depends on the type, so none of it is shown until
+           * a type is chosen. Opening this panel on a wall of empty fields is
+           * what makes people close it again; one question is answerable.
+           */}
+          {category ? (
+            <>
+              <ChoiceField
+                name="impact"
+                label="How much does it affect your work?"
+                options={IMPACT_OPTIONS}
+                compact
+                required
+              />
+
+              {/*
+               * Pointing lives in "Show us" when pictures are available, so the
+               * action appears once. With uploads off there is no "Show us", and
+               * pointing is still worth offering: it fills in the section name.
+               */}
+              <SectionField
+                sections={sections}
+                canPoint={!uploadsEnabled}
+                onPoint={onPoint}
+              />
 
           {element ? (
             <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -239,33 +252,39 @@ export function FeedbackForm({
             </p>
           ) : null}
 
-          <TextAreaField<FeedbackFormValues>
-            name="description"
-            label="What should we know?"
-            placeholder="Describe the issue, confusion or improvement…"
-            rows={4}
-            maxLength={4000}
-          />
+              {/* The questions for the chosen type carry most of the report. */}
+              <QuestionFields category={category} />
 
-          <PointsField />
-
-          {uploadsEnabled ? (
-            <div className="grid gap-4 @xl:grid-cols-2">
-              <VoiceRecorder note={voice} onChange={onVoiceChange} />
-              <AttachmentsSection
-                files={files}
-                onFilesChange={onFilesChange}
-                onElementRemoved={() => onElementChange(null)}
+              <TextAreaField<FeedbackFormValues>
+                name="description"
+                label="Anything else we should know?"
+                placeholder="Add anything the questions above didn't cover…"
+                rows={3}
+                maxLength={4000}
               />
-            </div>
-          ) : (
-            <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-              Voice notes and attachments aren&apos;t set up on this server yet. You can
-              still send text and points.
-            </p>
-          )}
 
-          <WhatWeAttach page={page} />
+              <PointsField />
+
+              {uploadsEnabled ? (
+                <div className="grid gap-4 @xl:grid-cols-2">
+                  <VoiceRecorder note={voice} onChange={onVoiceChange} />
+                  <AttachmentsSection
+                    files={files}
+                    onFilesChange={onFilesChange}
+                    onElementRemoved={() => onElementChange(null)}
+                    onPoint={onPoint}
+                  />
+                </div>
+              ) : (
+                <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                  Voice notes and attachments aren&apos;t set up on this server
+                  yet. You can still send text and points.
+                </p>
+              )}
+
+              <WhatWeAttach page={page} />
+            </>
+          ) : null}
 
           {submit.isError ? (
             <div

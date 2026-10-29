@@ -21,6 +21,11 @@ import { LESSON_CONTENT, type LessonContent } from "./content/lessons";
 import { TRACK_ICONS } from "./content/track-icons";
 import { LessonList, type LessonListItem } from "./components/LessonList";
 import { LessonReference } from "./components/LessonReference";
+import { ListenAll } from "./audio/ListenAll";
+import { VoiceSettings } from "./audio/VoiceSettings";
+import { type Clip } from "./audio/player";
+import { LanguageToggle } from "./i18n/LanguageToggle";
+import { type Translate, useTranslate } from "./i18n";
 import { LessonStepper } from "./components/LessonStepper";
 import { ProgressRing } from "./components/ProgressRing";
 import { QuizPanel } from "./components/QuizPanel";
@@ -44,6 +49,72 @@ const fallbackContent = (trackTitle: string): LessonContent => ({
   does: [],
 });
 
+/**
+ * The lesson as a spoken passage: the opening, then each action in order,
+ * then what has to be ready and the one mistake to avoid.
+ *
+ * One clip per action rather than one for the whole lesson, so the player can
+ * show which action is being read and a listener can skip back to just that
+ * one. A lesson is where somebody is being taught something new, so this is
+ * the screen where listening instead of reading matters most.
+ */
+const lessonClips = (
+  step: TrainingStep,
+  content: LessonContent,
+  { t, tList, lang }: Translate,
+): Clip[] => {
+  const key = step.key;
+  const title = t(`lesson.${key}.title`, step.title);
+  const doTitles = tList(
+    `lesson.${key}.do.title`,
+    content.does.map((action) => action.title),
+  );
+  const doDetails = tList(
+    `lesson.${key}.do.detail`,
+    content.does.map((action) => action.detail),
+  );
+  const step_ = lang === "hi" ? "स्टेप" : "Step";
+
+  const clips: Clip[] = [
+    {
+      id: `lesson.${key}.intro`,
+      title,
+      lines: [
+        title,
+        t(`lesson.${key}.intro`, content.intro ?? step.summary ?? ""),
+      ].filter(Boolean),
+    },
+    ...content.does.map((action, index) => ({
+      id: `lesson.${key}.do.${index}`,
+      title: doTitles[index] ?? action.title,
+      lines: [
+        `${step_} ${index + 1}. ${doTitles[index] ?? action.title}.`,
+        doDetails[index] ?? action.detail,
+      ],
+    })),
+  ];
+
+  if (content.needs?.length) {
+    clips.push({
+      id: `lesson.${key}.needs`,
+      title: t("ui.beforeYouStart", "Before you start"),
+      lines: [
+        t("ui.beforeYouStartSpoken", "Before you start, you need:"),
+        ...tList(`lesson.${key}.needs`, content.needs),
+      ],
+    });
+  }
+  const warn = t(`lesson.${key}.warn`, content.warn ?? "");
+  if (content.warn) {
+    clips.push({
+      id: `lesson.${key}.warn`,
+      title: t("ui.watchOut", "Watch out"),
+      lines: [t("ui.watchOutSpoken", "Watch out."), warn],
+    });
+  }
+  return clips;
+};
+
 function LessonBody({
   step,
   content,
@@ -58,21 +129,42 @@ function LessonBody({
   entry: TrainingProgressEntry | undefined;
 }) {
   const LessonIcon: Icon = content.icon;
+  const translate = useTranslate();
+  const { t, tList } = translate;
+  const key = step.key;
+  const title = t(`lesson.${key}.title`, step.title);
+  const doTitles = tList(
+    `lesson.${key}.do.title`,
+    content.does.map((action) => action.title),
+  );
+  const doDetails = tList(
+    `lesson.${key}.do.detail`,
+    content.does.map((action) => action.detail),
+  );
 
   return (
     <div className="space-y-5 px-5 pb-1 pt-5">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-tight text-primary">
-          Lesson {index + 1} of {total} · {content.group}
+          {t("ui.lesson", "Lesson")} {index + 1} {t("ui.of", "of")} {total} ·{" "}
+          {t(`lesson.group.${content.group}`, content.group)}
         </p>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-foreground">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <LessonIcon className="size-[18px]" aria-hidden />
             </span>
-            {step.title}
+            {title}
           </h1>
           <div className="flex flex-wrap items-center gap-2">
+            {/* Read-aloud sits with the lesson it reads, because the lesson
+                screen has no training nav to put it in. */}
+            <LanguageToggle />
+            <ListenAll
+              clips={lessonClips(step, content, translate)}
+              label={t("ui.listenToLesson", "Listen to this lesson")}
+            />
+            <VoiceSettings />
             {entry ? (
               <span
                 className={cn(
@@ -103,7 +195,7 @@ function LessonBody({
           </div>
         </div>
         <p className="max-w-[66ch] text-sm text-muted-foreground">
-          {content.intro ?? step.summary}
+          {t(`lesson.${key}.intro`, content.intro ?? step.summary ?? "")}
         </p>
       </div>
 
@@ -111,7 +203,7 @@ function LessonBody({
         <div className="overflow-hidden rounded-lg border border-border">
           <p className="flex items-center gap-1.5 border-b border-border bg-background px-4 py-2.5 text-xs font-semibold uppercase tracking-tight text-muted-foreground">
             <IconArrowRight className="size-3.5" aria-hidden />
-            Do this, in this order
+            {t("ui.doThisInOrder", "Do this, in this order")}
           </p>
           <ol className="px-4 py-4">
             {content.does.map((action, actionIndex) => {
@@ -136,10 +228,10 @@ function LessonBody({
                   </span>
                   <span className="min-w-0 flex-1 pt-0.5">
                     <span className="block text-sm font-semibold text-foreground">
-                      {action.title}
+                      {doTitles[actionIndex] ?? action.title}
                     </span>
                     <span className="block max-w-[80ch] text-sm text-muted-foreground">
-                      {action.detail}
+                      {doDetails[actionIndex] ?? action.detail}
                     </span>
                   </span>
                 </li>
@@ -160,7 +252,7 @@ function LessonBody({
         </div>
       )}
 
-      <LessonReference content={content} />
+      <LessonReference content={content} stepKey={key} />
 
       {entry?.completedBy === "SYSTEM" ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

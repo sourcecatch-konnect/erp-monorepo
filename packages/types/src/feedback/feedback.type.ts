@@ -17,6 +17,7 @@ import {
   feedbackStatusSchema,
   feedbackSubmitSchema,
   feedbackTriageSchema,
+  feedbackVoiceNoteRequestSchema,
   type FEEDBACK_FILE_KINDS,
 } from "@skerp/validators";
 
@@ -76,6 +77,13 @@ export type FeedbackFile = {
   url: string;
 };
 
+export type FeedbackVoiceNote = {
+  id: string;
+  /** Short-lived presigned download URL. */
+  url: string;
+  mime: string;
+};
+
 export type FeedbackDetail = FeedbackListItem & {
   description: string | null;
   points: string[];
@@ -87,7 +95,9 @@ export type FeedbackDetail = FeedbackListItem & {
   devNotes: string | null;
   externalRef: string | null;
   resolvedAt: string | null;
+  /** Images and documents, presigned for download. */
   files: FeedbackFile[];
+  voiceNotes: FeedbackVoiceNote[];
 };
 
 export type MyFeedbackItem = Pick<
@@ -113,6 +123,9 @@ export type MyFeedbackItem = Pick<
 export type FeedbackElement = z.infer<typeof feedbackElementSchema>;
 export type FeedbackFileRequest = z.infer<typeof feedbackFileRequestSchema>;
 export type FeedbackFileComplete = z.infer<typeof feedbackFileCompleteSchema>;
+export type FeedbackVoiceNoteRequest = z.infer<
+  typeof feedbackVoiceNoteRequestSchema
+>;
 export type FeedbackCommentBody = z.infer<typeof feedbackCommentSchema>;
 export type FeedbackConfirmBody = z.infer<typeof feedbackConfirmSchema>;
 export type FeedbackCommentKind = z.infer<typeof feedbackCommentKindSchema>;
@@ -130,8 +143,21 @@ export type FeedbackComment = {
 /** POST /feedback/:id/files */
 export type FeedbackFileUpload = { attachmentId: string; uploadUrl: string };
 
-/** GET /feedback/status. `uploads` is false when file storage isn't set up. */
-export type FeedbackStatusInfo = { enabled: boolean; uploads: boolean };
+/** POST /feedback/:id/voice-notes — same presign shape as a file. */
+export type FeedbackVoiceNoteUpload = {
+  attachmentId: string;
+  uploadUrl: string;
+};
+
+/**
+ * GET /feedback/status. Both flags are false when file storage isn't set up:
+ * `uploads` covers images and documents, `voiceNotes` the recorder.
+ */
+export type FeedbackStatusInfo = {
+  enabled: boolean;
+  uploads: boolean;
+  voiceNotes: boolean;
+};
 
 /** Grouped by page name (not URL) so every detail page of a screen counts together. */
 export type FeedbackTopPage = {
@@ -161,7 +187,7 @@ export const formatVoiceDuration = (seconds: number): string =>
 export const feedbackFileKind = (mime: string): FeedbackFileKind =>
   mime.startsWith("audio/") ? "voice" : mime.startsWith("image/") ? "image" : "document";
 
-/** v1 answers as [label, readable value] pairs, in the order the old form asked them. */
+/** Answers as [label, readable value] pairs, in the order the questions ask them. */
 export const legacyDetailRows = (details: unknown): [string, string][] => {
   if (!details || typeof details !== "object") return [];
   const answers = details as Record<string, unknown>;

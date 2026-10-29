@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
 import {
+  FEEDBACK_CATEGORIES,
   FEEDBACK_NOTHING_TO_SEND,
+  FEEDBACK_QUESTIONS,
+  LEGACY_FEEDBACK_DETAIL_FIELDS,
   feedbackFileRequestSchema,
   feedbackFormSchema,
   feedbackSubmitSchema,
@@ -18,9 +21,9 @@ import {
   deriveTitle,
   isResolved,
   statusChangeText,
-  takeSubmitSlot,
 } from "../feedback.service.js";
 import type { ListQuery } from "../../_shared/list.query.js";
+import { rateLimit } from "../../../middlewares/rate-limit.middleware.js";
 
 const page = { path: "/vp-management/vp-loading", title: "VP Loading", module: "Operations › VP Management" };
 
@@ -167,12 +170,41 @@ describe("feedback service", () => {
     expect(lt.getTime() - gte.getTime()).toBe(24 * 60 * 60 * 1000);
   });
 
-  it("allows 20 reports an hour per person", () => {
+  it("allows 20 reports an hour per person, then answers 429 with Retry-After", () => {
+    // The same limiter the route mounts on POST /feedback.
+    const limiter = rateLimit({
+      name: "feedback-submit",
+      windowMs: 60 * 60 * 1000,
+      max: 20,
+      key: (req) => req.ctx!.userId,
+    });
+    const call = (userId: string) => {
+      const headers: Record<string, string> = {};
+      let status = 0;
+      let passed = false;
+      const res = {
+        setHeader: (k: string, v: string) => { headers[k] = v; },
+        status: (s: number) => { status = s; return res; },
+        json: () => res,
+      };
+      limiter({ ctx: { userId } } as never, res as never, () => { passed = true; });
+      return { passed, status, headers };
+    };
+
     const user = `rate-${Date.now()}`;
-    const results = Array.from({ length: 21 }, () => takeSubmitSlot(user));
-    expect(results.slice(0, 20).every(Boolean)).toBe(true);
-    expect(results[20]).toBe(false);
-    expect(takeSubmitSlot(`${user}-other`)).toBe(true);
+    const results = Array.from({ length: 21 }, () => call(user));
+    expect(results.slice(0, 20).every((r) => r.passed)).toBe(true);
+
+    const blocked = results[20]!;
+    expect(blocked.passed).toBe(false);
+    expect(blocked.status).toBe(429);
+    // The reporter is told when to come back, not just "later".
+    expect(Number(blocked.headers["Retry-After"])).toBeGreaterThan(0);
+    expect(blocked.headers["X-RateLimit-Limit"]).toBe("20");
+    expect(blocked.headers["X-RateLimit-Remaining"]).toBe("0");
+
+    // Counted per person: one noisy reporter never blocks anyone else.
+    expect(call(`${user}-other`).passed).toBe(true);
   });
 
   it("labels v1 answers for migrated items", () => {
@@ -268,5 +300,65 @@ describe("feedback exports (B5, B7)", () => {
     );
     expect(docx.subarray(0, 2).toString()).toBe("PK");
     expect(docx.length).toBeGreaterThan(1000);
+  });
+});
+
+describe("guided questions", () => {
+  const base = { category: "BUG", impact: "HIGH", section: "", points: [], hasVoiceNote: false };
+
+  it("asks questions for every type, and none for Other", () => {
+    for (const category of FEEDBACK_CATEGORIES) {
+      const questions = FEEDBACK_QUESTIONS[category] ?? [];
+      if (category === "OTHER") expect(questions).toHaveLength(0);
+      else expect(questions.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("labels every question key, so answers show in the admin view and the exports", () => {
+    const labelled = new Set(LEGACY_FEEDBACK_DETAIL_FIELDS.map((field) => field.key));
+    for (const questions of Object.values(FEEDBACK_QUESTIONS)) {
+      for (const question of questions) expect(labelled).toContain(question.key);
+    }
+  });
+
+  it("keeps question keys unique within a type", () => {
+    for (const questions of Object.values(FEEDBACK_QUESTIONS)) {
+      const keys = questions.map((question) => question.key);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+  });
+
+  it("accepts answers on their own — the questions can carry the whole report", () => {
+    const parsed = feedbackFormSchema.safeParse({ ...base, answers: { steps: "I pressed Save" } });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.answers).toEqual({ steps: "I pressed Save" });
+  });
+
+  it("drops blank and whitespace-only answers", () => {
+    const parsed = feedbackFormSchema.safeParse({
+      ...base,
+      description: "something",
+      answers: { steps: "I pressed Save", expected: "", actual: "   " },
+    });
+    expect(parsed.success && parsed.data.answers).toEqual({ steps: "I pressed Save" });
+  });
+
+  it("still refuses a report with nothing in it at all", () => {
+    const parsed = feedbackFormSchema.safeParse({ ...base, answers: { steps: "  " } });
+    expect(parsed.success).toBe(false);
+    expect(parsed.success === false && parsed.error.issues[0]?.message).toBe(FEEDBACK_NOTHING_TO_SEND);
+  });
+
+  it("titles an answers-only report from the first answer, not the page name", () => {
+    expect(
+      deriveTitle({ category: "BUG", points: [], answers: { steps: "Save does nothing" } }, "VP Loading"),
+    ).toBe("Save does nothing");
+  });
+
+  it("renders answers with their labels", () => {
+    expect(legacyDetailRows({ steps: "I pressed Save", wrongValue: "0" })).toEqual([
+      ["What they were doing", "I pressed Save"],
+      ["What it shows", "0"],
+    ]);
   });
 });

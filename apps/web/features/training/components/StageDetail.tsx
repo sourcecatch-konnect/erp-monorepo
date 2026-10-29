@@ -27,6 +27,9 @@ import {
   STAGE_TERMS,
 } from "../content/stages";
 import { GLOSSARY } from "../content/glossary";
+import { PlayText } from "../audio/PlayText";
+import { ListenAll } from "../audio/ListenAll";
+import { useTranslate } from "../i18n";
 import { STAGE_BY_KEY, previousStages } from "../lib/catalog-lookup";
 import { TONE_BADGE, sectionTone } from "./SectionRail";
 import { Term } from "./Term";
@@ -175,6 +178,10 @@ export function StageDetail({
   me: TrainingMe;
   onOpenStage: (key: TrainingStageKey) => void;
 }) {
+  // Before the early return: a hook must run on every render of this
+  // component, including the one where the stage is not found.
+  const { t, tList } = useTranslate();
+
   const stage = STAGE_BY_KEY.get(stageKey);
   const view = me.stages.find((item) => item.key === stageKey);
   const content = STAGE_CONTENT[stageKey];
@@ -202,6 +209,16 @@ export function StageDetail({
   /* "You" already has its own list above, so don't repeat the user's own role. */
   const others = view.owners.filter((owner) => owner !== me.role.name);
   const steps = STAGE_STEPS[stageKey];
+  // Lists are translated whole, so a part-done translation never interleaves.
+  const stepTitles = tList(
+    `stage.${stageKey}.steps.title`,
+    steps.map((item) => item.title),
+  );
+  const stepDetails = tList(
+    `stage.${stageKey}.steps.detail`,
+    steps.map((item) => item.detail),
+  );
+  const needs = tList(`stage.${stageKey}.needs`, content.needs);
 
   const terms = (STAGE_TERMS[stageKey] ?? [])
     .map((id) => GLOSSARY_BY_ID.get(id))
@@ -299,12 +316,42 @@ export function StageDetail({
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-5 p-4">
+          {/* The whole step in one press: what it is for, then each thing to
+              do, in order. The per-block button stays for anyone who wants
+              just that paragraph. */}
+          <ListenAll
+            clips={[
+              {
+                id: `stage.${stageKey}.explain`,
+                title: stage.title,
+                lines: [t(`stage.${stageKey}.explain`, content.explain)],
+              },
+              ...(steps ?? []).map((item, stepIndex) => ({
+                id: `stage.${stageKey}.step.${stepIndex}`,
+                title: stepTitles[stepIndex] ?? item.title,
+                lines: [
+                  `Step ${stepIndex + 1}. ${stepTitles[stepIndex] ?? item.title}.`,
+                  stepDetails[stepIndex] ?? item.detail,
+                ],
+              })),
+            ]}
+            label={`Listen to this whole step`}
+            className="w-fit"
+          />
           {/* The explanation leads: someone who reads only one thing on this
               panel should read what the step is for, not its prerequisites. */}
           <Block icon={IconListCheck} title="What happens here">
-            <p className="mt-2 max-w-[72ch] text-[15px] leading-relaxed text-foreground">
-              {content.explain}
-            </p>
+            <div className="mt-2 flex items-start gap-2.5">
+              <PlayText
+                id={`stage.${stageKey}.explain`}
+                text={t(`stage.${stageKey}.explain`, content.explain)}
+                label={`Read what happens at ${stage.title} aloud`}
+                className="mt-0.5"
+              />
+              <p className="max-w-[72ch] text-[15px] leading-relaxed text-foreground">
+                {t(`stage.${stageKey}.explain`, content.explain)}
+              </p>
+            </div>
           </Block>
 
           {/* The explanation says what the step is for; this says what your
@@ -329,10 +376,10 @@ export function StageDetail({
                     </span>
                     <span className="min-w-0 flex-1 pt-0.5">
                       <span className="block text-sm font-semibold text-foreground">
-                        {item.title}
+                        {stepTitles[stepIndex] ?? item.title}
                       </span>
                       <span className="block max-w-[72ch] text-sm text-muted-foreground">
-                        {item.detail}
+                        {stepDetails[stepIndex] ?? item.detail}
                       </span>
                     </span>
                   </li>
@@ -343,7 +390,7 @@ export function StageDetail({
 
           <Block icon={IconFlag} title="Before you start, you need">
             <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
-              {content.needs.map((need) => (
+              {needs.map((need) => (
                 <li
                   key={need}
                   className="flex items-start gap-2 rounded-lg border border-border bg-background px-3 py-2"
@@ -404,7 +451,7 @@ export function StageDetail({
                 className="mt-0.5 size-4 shrink-0 text-primary"
                 aria-hidden
               />
-              {content.tip}
+              {t(`stage.${stageKey}.tip`, content.tip)}
             </p>
           ) : null}
         </div>
@@ -434,7 +481,7 @@ export function StageDetail({
                   This step produces
                 </p>
                 <p className="mt-0.5 text-sm font-medium text-foreground">
-                  {STAGE_OUTPUT[stageKey]}
+                  {t(`stage.${stageKey}.output`, STAGE_OUTPUT[stageKey])}
                 </p>
               </li>
               <li

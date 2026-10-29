@@ -45,12 +45,25 @@ function Tour({
   steps,
   open,
   onClose,
+  onStepChange,
   labels = {},
 }: {
   steps: TourStep[];
   open: boolean;
   onClose: (reason: TourCloseReason) => void;
-  labels?: Partial<Record<"next" | "back" | "done" | "close" | "stepOf", string>>;
+  /**
+   * The step now showing, each time it changes, including the first. Steps
+   * missing from the page are skipped before this fires, so `index` counts
+   * the steps actually being shown rather than the ones passed in.
+   *
+   * Added for read-aloud: a tour is the one place where speaking without
+   * being asked is right, because the reader opted into being walked through
+   * the screen.
+   */
+  onStepChange?: (step: TourStep, index: number) => void;
+  labels?: Partial<
+    Record<"next" | "back" | "done" | "close" | "stepOf", string>
+  >;
 }) {
   const [available, setAvailable] = React.useState<TourStep[]>([]);
   const [index, setIndex] = React.useState(0);
@@ -107,12 +120,27 @@ function Tour({
     if (cardRef.current) setCardHeight(cardRef.current.offsetHeight);
   }, [step, rect]);
 
+  /*
+   * Keyed on the step, not on the callback: a caller passing an inline
+   * function would otherwise make the tour re-announce the same step on
+   * every render.
+   */
+  const announce = React.useRef(onStepChange);
+  announce.current = onStepChange;
+  React.useEffect(() => {
+    if (step) announce.current?.(step, index);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   const last = index >= available.length - 1;
   const goNext = React.useCallback(() => {
     if (last) onClose("finished");
     else setIndex((i) => i + 1);
   }, [last, onClose]);
-  const goBack = React.useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
+  const goBack = React.useCallback(
+    () => setIndex((i) => Math.max(0, i - 1)),
+    [],
+  );
 
   React.useEffect(() => {
     if (!step) return;
@@ -157,7 +185,8 @@ function Tour({
           left: rect.left - PAD,
           width: rect.width + PAD * 2,
           height: rect.height + PAD * 2,
-          boxShadow: "0 0 0 9999px color-mix(in oklch, var(--foreground) 35%, transparent)",
+          boxShadow:
+            "0 0 0 9999px color-mix(in oklch, var(--foreground) 35%, transparent)",
         }}
       />
       <div
@@ -178,11 +207,20 @@ function Tour({
         </p>
         <div className="text-sm text-muted-foreground">{step.content}</div>
         <div className="flex items-center justify-between gap-2 pt-2">
-          <Button variant="ghost" size="sm" onClick={() => onClose("dismissed")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onClose("dismissed")}
+          >
             {labels.close ?? "Close tour"}
           </Button>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={index === 0} onClick={goBack}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={index === 0}
+              onClick={goBack}
+            >
               {labels.back ?? "Back"}
             </Button>
             <Button ref={nextRef} size="sm" onClick={goNext}>

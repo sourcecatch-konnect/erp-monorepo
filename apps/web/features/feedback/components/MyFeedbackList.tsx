@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
   IconArrowLeft,
@@ -189,19 +189,40 @@ function MyFeedbackDetail({ item, onBack }: { item: MyFeedbackItem; onBack: () =
 /** What the signed-in user has sent, newest first; open one for its files and replies. */
 export function MyFeedbackList({ seenAt }: { seenAt: number }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const { data, isLoading, isError, error } = useQuery({
+  /*
+   * Paged rather than a fixed 50: a tester can pass that in a week, and the
+   * items they could no longer reach were the oldest — the ones most likely
+   * to have been answered.
+   */
+  const {
+    data: pages,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: feedbackKeys.mine,
-    queryFn: feedbackApi.mine,
+    queryFn: ({ pageParam }) => feedbackApi.mine(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last, all) => {
+      const loaded = all.reduce((n, page) => n + page.data.length, 0);
+      return loaded < (last.meta?.total ?? loaded) ? all.length : undefined;
+    },
   });
 
+  const data = pages?.pages.flatMap((page) => page.data);
+  const total = pages?.pages[0]?.meta?.total ?? data?.length ?? 0;
   const open = data?.find((item) => item.id === openId);
   if (open) return <MyFeedbackDetail item={open} onBack={() => setOpenId(null)} />;
 
   return (
     <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
       <p className="text-sm text-muted-foreground">
-        Everything you have sent (your latest 50). Open one to listen to it again,
-        see the team&apos;s replies, or tell us whether a fix works.
+        Everything you have sent{total > 0 ? ` (${total})` : ""}. Open one to
+        listen to it again, see the team&apos;s replies, or tell us whether a
+        fix works.
       </p>
 
       {isLoading
@@ -238,6 +259,20 @@ export function MyFeedbackList({ seenAt }: { seenAt: number }) {
           onOpen={() => setOpenId(item.id)}
         />
       ))}
+
+      {hasNextPage ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 w-full"
+          disabled={isFetchingNextPage}
+          onClick={() => void fetchNextPage()}
+        >
+          {isFetchingNextPage
+            ? "Loading…"
+            : `Show older (${total - (data?.length ?? 0)} more)`}
+        </Button>
+      ) : null}
     </div>
   );
 }

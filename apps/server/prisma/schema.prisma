@@ -1188,6 +1188,7 @@ model PurchaseOrder {
   @@index([branchId, status])
   @@index([supplierId, status])
   @@index([fyCode])
+  @@index([createdById])
 }
 
 model PurchaseOrderLine {
@@ -1265,6 +1266,7 @@ model SpareInward {
   @@index([poId])
   @@index([supplierId])
   @@index([fyCode])
+  @@index([createdById])
 }
 
 model PurchaseOrderInwardLine {
@@ -1423,6 +1425,8 @@ model JobCard {
   @@index([branchId, status])
   @@index([vehicleId])
   @@index([fyCode])
+  @@index([createdById])
+  @@index([finalisedById])
 }
 
 model JobCardPartLine {
@@ -1565,6 +1569,7 @@ model ServiceBill {
   @@index([branchId, status])
   @@index([serviceProviderId, status])
   @@index([fyCode])
+  @@index([createdById])
 }
 
 model ServiceBillLine {
@@ -1806,6 +1811,8 @@ model Order {
   @@index([customerId])
   @@index([fyCode])
   @@index([routeId])
+  @@index([approvedById])
+  @@index([createdById])
 }
 
 model OrderItem {
@@ -2012,6 +2019,7 @@ model LRGroup {
   @@index([marketTransportId])
   @@index([marketVehicleId])
   @@index([paymentMode])
+  @@index([finalisedById])
 }
 
 model LorryReceipt {
@@ -2059,6 +2067,7 @@ model LorryReceipt {
   @@index([groupId])
   @@index([fyCode])
   @@index([weightUnitId])
+  @@index([createdById])
 }
 
 model LRGoods {
@@ -2118,6 +2127,7 @@ model LRDelivery {
 
   @@index([deliveredAt])
   @@index([unloadingAt])
+  @@index([createdById])
 }
 
 /**
@@ -2148,6 +2158,7 @@ model LRAcknowledgement {
   updatedBy       User?                   @relation("UpdatedLRAck", fields: [updatedById], references: [id])
 
   @@index([receivedAt])
+  @@index([createdById])
 }
 
 model LRAcknowledgementItem {
@@ -2299,6 +2310,9 @@ model Bill {
   @@index([billDate])
   @@index([fyCode])
   @@index([placeOfSupplyStateId])
+  @@index([approvedById])
+  @@index([createdById])
+  @@index([finalisedById])
 }
 
 /// Post-finalisation correction against a FINALISED+ bill. GST makes invoice
@@ -2446,6 +2460,7 @@ model Receipt {
   @@index([customerId, status])
   @@index([receivedAt])
   @@index([fyCode])
+  @@index([createdById])
 }
 
 /// Frozen allocation of one receipt to one bill — replaces the legacy
@@ -2593,6 +2608,7 @@ model VehicleTrip {
   @@unique([journeyId, sequenceNo])
   @@index([status])
   @@index([journeyId])
+  @@index([createdById])
 }
 
 model TripUnloadingPoint {
@@ -2686,6 +2702,7 @@ model VPSchedule {
   @@index([fromBranchId, status, createdAt(sort: Desc)])
   // Serves the create-time duplicate-schedule check (same route + date).
   @@index([fromBranchId, toBranchId, sourceAreaId, destinationAreaId, scheduleDate])
+  @@index([createdById])
 }
 
 /// ERP master record for a physical tracker synchronized from OneLap.
@@ -2849,6 +2866,7 @@ model RailRakeOperation {
   @@index([branchId, status])
   @@index([stage, status])
   @@index([createdAt])
+  @@index([createdById])
 }
 
 model RailRakePlacement {
@@ -3272,6 +3290,8 @@ model VendorPaymentSlip {
   @@index([type, status])
   @@index([transportId])
   @@index([labourId])
+  @@index([approvedById])
+  @@index([createdById])
 }
 
 /// One line per claimed source document (an LR's freight/detention, a GRN's
@@ -3758,6 +3778,7 @@ model VPLoading {
   @@index([vpWagonLoadingId])
   @@index([grnId])
   @@index([status])
+  @@index([createdById])
 }
 
 model VPWagonLoading {
@@ -3910,6 +3931,7 @@ model RailBranchGRN {
   @@index([railRakeId, status])
   @@index([status])
   @@index([createdAt])
+  @@index([createdById])
 }
 
 model RailBranchGRNItem {
@@ -4024,6 +4046,7 @@ model DeliveryChallan {
   @@index([vehicleId])
   @@index([loadingAt])
   @@index([fyCode])
+  @@index([createdById])
 }
 
 model DeliveryChallanItem {
@@ -4729,6 +4752,8 @@ model TripExpense {
   @@index([tripId])
   @@index([expenseTypeId])
   @@index([status])
+  @@index([approvedById])
+  @@index([createdById])
 }
 
 /// Configurable journey expense category. System categories seed the standard
@@ -4843,6 +4868,7 @@ model LogSlip {
 
   @@index([status])
   @@index([fyCode])
+  @@index([generatedById])
 }
 
 /// Snapshot line frozen at log slip generation. `sourceType`/`sourceId` point

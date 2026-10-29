@@ -21,6 +21,10 @@ import {
   type TourCloseReason,
   type TourStep,
 } from "@skerp/ui/components/tour";
+import { PlayText } from "../audio/PlayText";
+import { playClips, stopPlayback, toLines } from "../audio/player";
+import { useVoicePrefs, voiceRate } from "../audio/prefs";
+import { type TrainingLanguage, useTrainingLanguage } from "../i18n";
 import { useStepProgress, useTrainingMe } from "../hooks/useTraining";
 import {
   STAGE_BY_KEY,
@@ -56,9 +60,64 @@ export type PageHelpContent = {
   /** Training step that practises this screen. */
   trainingStep?: string;
   tour?: PageTour;
+  /**
+   * The same explanation in Hindi, kept here beside the English rather than
+   * in the training dictionary: one source per screen, edited by whoever
+   * edits the English, and a missing translation is visible in review.
+   *
+   * Until a screen has it, read-aloud hides itself in Hindi instead of
+   * speaking English at a reader who chose हिंदी — the silent fallback is
+   * worse than no button, because nothing tells them what happened.
+   */
+  hi?: { purpose: string; howTo?: string[]; next?: string; tour?: string[] };
 };
 
 const TOUR_OFFER_DELAY_MS = 1200;
+
+/**
+ * The whole screen explanation as one spoken passage: what this screen is
+ * for, the steps in order, and what follows.
+ *
+ * One button for all of it, rather than one per section. Somebody who opened
+ * Help wants the screen explained, not a page of speaker icons — and the
+ * steps only make sense read in order anyway. Mistakes are left out: a
+ * warning should be read, not heard once and forgotten.
+ */
+const spokenHelp = (
+  content: PageHelpContent,
+  lang: TrainingLanguage,
+): string | null => {
+  const source = lang === "hi" ? content.hi : content;
+  // No Hindi for this screen yet: say nothing rather than speak English.
+  if (!source) return null;
+
+  const parts = [content.title, source.purpose];
+  const howTo = source.howTo;
+  if (howTo?.length) {
+    parts.push(
+      lang === "hi" ? "इस क्रम में कीजिये।" : "Do this, in this order.",
+    );
+    /*
+     * Spoken as "Step 1 … Step 2 …", because a digit alone is not heard as a
+     * list the way an indented number is read as one.
+     */
+    howTo.forEach((line, index) =>
+      parts.push(
+        lang === "hi"
+          ? `स्टेप ${index + 1}. ${line}`
+          : `Step ${index + 1}. ${line}`,
+      ),
+    );
+  }
+  if (source.next) {
+    parts.push(
+      lang === "hi"
+        ? `आगे क्या होता है। ${source.next}`
+        : `What happens next. ${source.next}`,
+    );
+  }
+  return parts.join(" ");
+};
 
 /** "Help" button for a page header: opens the Help panel and runs the tour. */
 export function PageHelp({ content }: { content: PageHelpContent }) {
@@ -66,7 +125,10 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
   const [touring, setTouring] = useState(false);
   const { data: me } = useTrainingMe();
   const { mutate } = useStepProgress();
+  const voice = useVoicePrefs();
+  const lang = useTrainingLanguage();
   const offered = useRef(false);
+  const spoken = spokenHelp(content, lang);
 
   const tour = content.tour;
   const tourStepKey = tour ? `tour.${tour.key}` : null;
@@ -117,6 +179,9 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
 
   const closeTour = (reason: TourCloseReason) => {
     setTouring(false);
+    // The tour is the one thing that speaks on its own, so leaving it must
+    // also be what stops it.
+    stopPlayback();
     if (!tourStepKey || reason === "unavailable") return;
     mutate({
       stepKey: tourStepKey,
@@ -189,6 +254,24 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
           </>
         }
       >
+        {/*
+          Read-aloud for the whole explanation, at the top where somebody who
+          reads slowly will meet it first. It disappears entirely when
+          read-aloud is switched off in the training nav.
+        */}
+        {voice.enabled && spoken ? (
+          <div className="flex items-center gap-2.5">
+            <PlayText
+              id={`help.${content.tour?.key ?? content.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+              text={spoken}
+              label="Listen to this explanation"
+            />
+            <span className="text-xs text-muted-foreground">
+              Listen to this explanation
+            </span>
+          </div>
+        ) : null}
+
         {content.howTo && content.howTo.length > 0 ? (
           <HelpSection
             title="Do this, in this order"
@@ -359,7 +442,44 @@ export function PageHelp({ content }: { content: PageHelpContent }) {
       </HelpSheet>
 
       {tour ? (
-        <Tour steps={tour.steps} open={touring} onClose={closeTour} />
+        <Tour
+          steps={tour.steps}
+          open={touring}
+          onClose={closeTour}
+          /*
+           * The only autoplay in the app. Somebody who pressed "Take the
+           * guided tour" asked to be walked through the screen, so each step
+           * reads itself; everywhere else the reader presses the button. A
+           * step with no Hindi yet stays silent rather than switching to
+           * English mid-tour.
+           */
+          onStepChange={(step, index) => {
+            if (!voice.enabled) return;
+            const hindi = content.hi?.tour?.[index];
+            if (lang === "hi" && !hindi) {
+              stopPlayback();
+              return;
+            }
+            const text =
+              lang === "hi"
+                ? hindi!
+                : [
+                    step.title,
+                    typeof step.content === "string" ? step.content : "",
+                  ]
+                    .filter(Boolean)
+                    .join(". ");
+            playClips(
+              {
+                id: `tour.${tour.key}.${index}`,
+                title: step.title,
+                lines: toLines(text),
+              },
+              lang,
+              voiceRate(),
+            );
+          }}
+        />
       ) : null}
     </>
   );
