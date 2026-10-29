@@ -19,6 +19,23 @@ export const LR_TO_BILL_HELP: PageHelpContent = {
   ],
   terms: ["place-of-supply", "gst", "rcm", "tds"],
   trainingStep: "acc.lr-to-bill",
+  hi: {
+    purpose:
+      "Delivered LR से bill बनाइए: कौन pay करेगा वो चुनिए, LR चुनिए, common charges जोड़िए और GST जाँच लीजिए।",
+    howTo: [
+      "Bill head (consignor या consignee), transport type और client चुनिए।",
+      "इस bill पर जो delivered LR डालने हैं, उन्हें tick कीजिए।",
+      "Common charges जोड़िए, summary देखिए, फिर Create Draft Bill दबाइए।",
+    ],
+    next: "Draft bill Billing Register में दिखेगा। वहीं जाँचकर finalise कीजिए, तभी bill number मिलता है।",
+    tour: [
+      "सबसे पहले bill head — consignor या consignee — चुनिए, फिर transport type और client।",
+      "यहाँ सिर्फ़ वही delivered LR दिखते हैं जिनका POD आ चुका है। जो इस bill पर डालने हैं, tick कीजिए।",
+      "Freight हर LR से अपने आप आता है। कोई common charge हो तो यहाँ जोड़िए।",
+      "माल कहाँ गया, उसी से GST बनता है। Bill बनाने से पहले total जाँच लीजिए।",
+      "इससे draft बनता है। Billing Register में finalise कीजिए, तभी bill number मिलेगा।",
+    ],
+  },
   tour: {
     key: "lr-to-bill",
     steps: [
@@ -67,4 +84,13 @@ export const BILLING_REGISTER_HELP: PageHelpContent = {
   ],
   terms: ["gst", "place-of-supply", "hsn-sac"],
   trainingStep: "acc.finalise-bill",
+  hi: {
+    purpose: "हर bill, draft से paid तक उसके status के साथ।",
+    howTo: [
+      "Draft bill खोलकर जाँचिए, फिर approve करके finalise कीजिए।",
+      "Finalise हुए bill customer को print या भेज दीजिए।",
+      "Finalised bill कम करना हो तो credit note बनाइए।",
+    ],
+    next: "Customer का payment आने पर उसे Client Payment Receivable में दर्ज कीजिए।",
+  },
 };

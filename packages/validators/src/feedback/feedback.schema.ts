@@ -73,6 +73,8 @@ export const FEEDBACK_MAX_POINTS = 10;
 export const FEEDBACK_MAX_POINT_CHARS = 300;
 export const FEEDBACK_MAX_DESCRIPTION_CHARS = 4000;
 export const FEEDBACK_MAX_SECTION_CHARS = 120;
+/** One answer to a guided question (see FEEDBACK_QUESTIONS). */
+export const FEEDBACK_MAX_ANSWER_CHARS = 1000;
 
 /** Images + documents together. The voice note is counted separately. */
 export const FEEDBACK_MAX_FILES = 6;
@@ -151,10 +153,36 @@ export const feedbackFormSchema = z
       )
       .max(FEEDBACK_MAX_POINTS, `You can add up to ${FEEDBACK_MAX_POINTS} points`)
       .transform((points) => points.filter((point) => point.length > 0)),
+    /*
+     * Answers to the guided questions for the chosen type, keyed by question.
+     * Stored as-is in `Feedback.details`; empty answers are dropped so an
+     * untouched question leaves no trace.
+     */
+    answers: z
+      .record(
+        z
+          .string()
+          .trim()
+          .max(
+            FEEDBACK_MAX_ANSWER_CHARS,
+            `Please keep each answer under ${FEEDBACK_MAX_ANSWER_CHARS} characters`,
+          ),
+      )
+      .optional()
+      .transform((answers) =>
+        Object.fromEntries(
+          Object.entries(answers ?? {}).filter(([, value]) => value !== ""),
+        ),
+      ),
     hasVoiceNote: z.boolean(),
   })
   .superRefine((value, ctx) => {
-    if (!value.description && value.points.length === 0 && !value.hasVoiceNote) {
+    if (
+      !value.description &&
+      value.points.length === 0 &&
+      Object.keys(value.answers).length === 0 &&
+      !value.hasVoiceNote
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["description"],
@@ -162,6 +190,126 @@ export const feedbackFormSchema = z
       });
     }
   });
+
+/* ------------------------------------------------------------------ */
+/* Guided questions, per type                                          */
+/* ------------------------------------------------------------------ */
+
+export type FeedbackQuestion = {
+  /** Stored under this key in `Feedback.details`. */
+  key: string;
+  label: string;
+  placeholder: string;
+  /** Long answers get a textarea; short ones a single line. */
+  long?: boolean;
+};
+
+
+/**
+ * What we ask once the reporter has chosen a type.
+ *
+ * A blank box asking people to "describe the issue" gets one-line reports
+ * that nobody can act on. Three plain questions get a report the team can
+ * reproduce. They are optional on purpose — the reporter must say something,
+ * but no single question blocks a quick note, so "this is confusing" still
+ * takes ten seconds.
+ *
+ * Keys are unique across every type, so one answer map covers the form and
+ * `detailRows` can label them without knowing the type.
+ */
+export const FEEDBACK_QUESTIONS: Record<string, readonly FeedbackQuestion[]> = {
+  BUG: [
+    {
+      key: "steps",
+      label: "What were you doing?",
+      placeholder: "I opened the LR form and pressed Save…",
+      long: true,
+    },
+    {
+      key: "expected",
+      label: "What did you expect to happen?",
+      placeholder: "The LR should be saved and get a number.",
+    },
+    {
+      key: "actual",
+      label: "What happened instead?",
+      placeholder: "Nothing happened. The page stayed the same.",
+    },
+  ],
+  IMPROVEMENT: [
+    {
+      key: "currentBehaviour",
+      label: "What do you have to do now?",
+      placeholder: "I open each order one by one to approve it.",
+      long: true,
+    },
+    {
+      key: "suggestion",
+      label: "What would make it better?",
+      placeholder: "Let me tick several orders and approve them together.",
+      long: true,
+    },
+  ],
+  MISSING_FEATURE: [
+    {
+      key: "lookingFor",
+      label: "What do you need to do?",
+      placeholder: "Print a delivery challan for a part load.",
+      long: true,
+    },
+    {
+      key: "workaround",
+      label: "How are you managing without it?",
+      placeholder: "We write it by hand and keep it in a register.",
+      long: true,
+    },
+  ],
+  CONFUSING: [
+    {
+      key: "element",
+      label: "Which part of the screen?",
+      placeholder: "The 'TBB' column on the LR list.",
+    },
+    {
+      key: "lookedWhere",
+      label: "What did you think it meant, or where did you look?",
+      placeholder: "I looked under Trips first, then under Orders.",
+      long: true,
+    },
+  ],
+  DATA_ISSUE: [
+    {
+      key: "wrongValue",
+      label: "What does it show?",
+      placeholder: "Freight shows 0 for LR-1042.",
+    },
+    {
+      key: "correctValue",
+      label: "What should it show?",
+      placeholder: "It should show 18,500 as per the rate for this route.",
+    },
+    {
+      key: "howToCheck",
+      label: "Where can the team check this?",
+      placeholder: "Open LR-1042, or the rate matrix for Pune to Nagpur.",
+      long: true,
+    },
+  ],
+  TRAINING_HELP: [
+    {
+      key: "lessonRef",
+      label: "Which lesson or help text?",
+      placeholder: "The 'Book an order' lesson, step 3.",
+    },
+    {
+      key: "correctProcess",
+      label: "What does it say, and what is actually right?",
+      placeholder: "It says the manager approves. At SK the branch head does.",
+      long: true,
+    },
+  ],
+  OTHER: [],
+};
 
 /* ------------------------------------------------------------------ */
 /* v1 answers (shown for items sent before v2)                         */
@@ -217,6 +365,17 @@ export const LEGACY_FEEDBACK_DETAIL_FIELDS: readonly LegacyDetailField[] = [
   { key: "foundWhere", label: "Where it was" },
   { key: "idea", label: "Idea" },
   { key: "benefit", label: "How it helps" },
+  /*
+   * Keys the guided questions added in v2. The rest of FEEDBACK_QUESTIONS
+   * deliberately reuses the keys above, so an answer to "What were you doing?"
+   * lands in `steps` and reads the same in the admin view whether it was sent
+   * by the old form or the new one.
+   */
+  { key: "workaround", label: "Managing without it by" },
+  { key: "wrongValue", label: "What it shows" },
+  { key: "correctValue", label: "What it should show" },
+  { key: "howToCheck", label: "Where to check it" },
+  { key: "lessonRef", label: "Lesson or help text" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -387,7 +546,10 @@ export const feedbackCommentSchema = z.object({
     .max(2000, "Please keep your message under 2000 characters"),
 });
 
-export const FEEDBACK_CONFIRM_OUTCOMES = ["CONFIRMED_FIXED", "STILL_BROKEN"] as const;
+export const FEEDBACK_CONFIRM_OUTCOMES = [
+  "CONFIRMED_FIXED",
+  "STILL_BROKEN",
+] as const;
 
 /** The reporter's answer when the team marks their item FIXED. */
 export const feedbackConfirmSchema = z.object({
@@ -397,4 +559,39 @@ export const feedbackConfirmSchema = z.object({
     .trim()
     .max(2000, "Please keep your message under 2000 characters")
     .optional(),
+});
+
+/* ------------------------------------------------------------------ */
+/* Voice notes (B9)                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A spoken report, recorded in the browser and attached like a screenshot.
+ *
+ * The point is reach, not convenience: a driver or branch clerk who cannot
+ * write the problem in English can hold a button and say it in Hindi. The
+ * text fields stay required, so a voice note adds detail rather than
+ * replacing the title the team triages on.
+ */
+/** Length and size limits are shared with the unified file upload above. */
+export const FEEDBACK_MAX_VOICE_NOTES = 2;
+/** Presign request for one voice note, sent after the feedback is created. */
+export const feedbackVoiceNoteRequestSchema = z.object({
+  mime: z.enum(FEEDBACK_VOICE_MIMES),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(
+      FEEDBACK_MAX_VOICE_BYTES,
+      `Voice notes must be smaller than ${FEEDBACK_MAX_VOICE_BYTES / (1024 * 1024)} MB`,
+    ),
+  durationSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(
+      FEEDBACK_MAX_VOICE_SECONDS,
+      `Voice notes can be up to ${FEEDBACK_MAX_VOICE_SECONDS} seconds`,
+    ),
 });

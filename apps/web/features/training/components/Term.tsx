@@ -8,6 +8,7 @@ import {
   PopoverTrigger,
 } from "@skerp/ui/components/popver";
 import { GLOSSARY } from "../content/glossary";
+import { useTranslate } from "../i18n";
 
 const GLOSSARY_BY_ID = new Map(GLOSSARY.map((entry) => [entry.id, entry]));
 
@@ -18,6 +19,7 @@ const GLOSSARY_BY_ID = new Map(GLOSSARY.map((entry) => [entry.id, entry]));
  *   <Term id="tbb">TBB</Term>
  */
 export function Term({ id, children }: { id: string; children?: ReactNode }) {
+  const { t } = useTranslate();
   const entry = GLOSSARY_BY_ID.get(id);
   if (!entry) return <>{children}</>;
 
@@ -41,7 +43,9 @@ export function Term({ id, children }: { id: string; children?: ReactNode }) {
             </span>
           ) : null}
         </p>
-        <p className="text-muted-foreground">{entry.meaning}</p>
+        <p className="text-muted-foreground">
+          {t(`glossary.${entry.id}.meaning`, entry.meaning)}
+        </p>
         <Link
           href={`/training/glossary#term-${entry.id}`}
           className="inline-block text-xs font-medium text-primary hover:underline"

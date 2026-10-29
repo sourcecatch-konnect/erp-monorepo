@@ -78,19 +78,25 @@ export const commentSelect = {
 /** Attachment entityType for feedback files (S3 prefix attachments/Feedback/). */
 export const ATTACHMENT_ENTITY = "Feedback";
 
-const cleanFiles = (feedbackIds: string[]) =>
-  ({
-    entityType: ATTACHMENT_ENTITY,
-    entityId: { in: feedbackIds },
-    uploaded: true,
-    deletedAt: null,
-    antivirusStatus: "CLEAN",
-  }) satisfies Prisma.AttachmentWhereInput;
+/*
+ * Pictures and voice notes are both rows on the same entityType, so every
+ * query has to say which kind it wants. Without the mime filter a voice note
+ * would count against the picture limit, show up as a broken <img>, and be
+ * handed to the Word export to embed as an image.
+ */
+const PICTURE_MIME_PREFIX = "image/";
+const VOICE_MIME_PREFIX = "audio/";
 
-/** Clean, uploaded files for these items, oldest first. */
-export const findFeedbackFiles = (feedbackIds: string[]) =>
+const attachmentsOfKind = (feedbackIds: string[], prefix: string) =>
   db.attachment.findMany({
-    where: cleanFiles(feedbackIds),
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: { in: feedbackIds },
+      mime: { startsWith: prefix },
+      uploaded: true,
+      deletedAt: null,
+      antivirusStatus: "CLEAN",
+    },
     orderBy: { uploadedAt: "asc" },
     select: {
       id: true,
@@ -99,6 +105,40 @@ export const findFeedbackFiles = (feedbackIds: string[]) =>
       sizeBytes: true,
       originalName: true,
       mime: true,
+    },
+  });
+
+/** Clean, uploaded pictures for these items, oldest first. */
+export const findScreenshots = (feedbackIds: string[]) =>
+  attachmentsOfKind(feedbackIds, PICTURE_MIME_PREFIX);
+
+/** Clean, uploaded voice notes for these items, oldest first. */
+export const findVoiceNotes = (feedbackIds: string[]) =>
+  attachmentsOfKind(feedbackIds, VOICE_MIME_PREFIX);
+
+/**
+ * Everything the reporter attached as a file — pictures and documents, but
+ * never voice notes, which have their own endpoint and their own list.
+ */
+export const findFeedbackFiles = (feedbackIds: string[]) =>
+  db.attachment.findMany({
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: { in: feedbackIds },
+      NOT: { mime: { startsWith: VOICE_MIME_PREFIX } },
+      uploaded: true,
+      deletedAt: null,
+      antivirusStatus: "CLEAN",
+    },
+    orderBy: { uploadedAt: "asc" },
+    select: {
+      id: true,
+      originalName: true,
+      mime: true,
+      sizeBytes: true,
+      entityId: true,
+      uploadedAt: true,
+      s3Key: true,
     },
   });
 
@@ -112,11 +152,21 @@ export const countFeedbackFiles = async (
   if (feedbackIds.length === 0) return counts;
   const rows = await db.attachment.groupBy({
     by: ["entityId", "mime"],
-    where: cleanFiles(feedbackIds),
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: { in: feedbackIds },
+      NOT: { mime: { startsWith: VOICE_MIME_PREFIX } },
+      uploaded: true,
+      deletedAt: null,
+      antivirusStatus: "CLEAN",
+    },
     _count: { _all: true },
   });
   for (const row of rows) {
-    const current = counts.get(row.entityId) ?? { imageCount: 0, documentCount: 0 };
+    const current = counts.get(row.entityId) ?? {
+      imageCount: 0,
+      documentCount: 0,
+    };
     const kind = feedbackFileKind(row.mime);
     if (kind === "image") current.imageCount += row._count._all;
     if (kind === "document") current.documentCount += row._count._all;
@@ -231,16 +281,21 @@ const clipAtWord = (text: string, max: number): string => {
  * first point, else "<Type> on <Page>" (a voice note or pictures only).
  */
 export const deriveTitle = (
-  form: Pick<FeedbackForm, "category" | "description" | "points">,
+  form: Pick<FeedbackForm, "category" | "description" | "points"> &
+    Partial<Pick<FeedbackForm, "answers">>,
   pageTitle: string,
 ): string => {
   const firstLine = form.description
     ?.split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
+  // A report made only of guided answers is normal — the questions carry it,
+  // and without this it would be titled "Bug on Dashboard" like every other.
+  const firstAnswer = Object.values(form.answers ?? {}).find(Boolean);
   const text =
     firstLine ??
     form.points[0] ??
+    firstAnswer ??
     `${FEEDBACK_CATEGORY_LABELS[form.category]} on ${pageTitle}`;
   return clipAtWord(text.replace(/\s+/g, " "), MAX_TITLE_CHARS);
 };
@@ -291,29 +346,6 @@ export const describeFilters = (query: ListQuery): string => {
     search ? `Search: "${search}"` : null,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : "All feedback";
-};
-
-/* ------------------------------------------------------------------ */
-/* Submit rate limit (in-memory, per server instance)                  */
-/* ------------------------------------------------------------------ */
-
-const WINDOW_MS = 60 * 60 * 1000;
-const MAX_PER_WINDOW = 20;
-const submitsByUser = new Map<string, number[]>();
-
-/** Returns false once a user has sent MAX_PER_WINDOW items in the last hour. */
-export const takeSubmitSlot = (userId: string): boolean => {
-  const now = Date.now();
-  const recent = (submitsByUser.get(userId) ?? []).filter(
-    (at) => now - at < WINDOW_MS,
-  );
-  if (recent.length >= MAX_PER_WINDOW) {
-    submitsByUser.set(userId, recent);
-    return false;
-  }
-  recent.push(now);
-  submitsByUser.set(userId, recent);
-  return true;
 };
 
 /* ------------------------------------------------------------------ */

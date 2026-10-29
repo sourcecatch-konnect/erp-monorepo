@@ -188,7 +188,19 @@ export default function FeedbackSheet({
   };
 
   return (
-    <Sheet open={open && !picking} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open && !picking}
+      onOpenChange={(next) => {
+        /*
+         * Hiding the panel so the user can point at the page closes the Sheet,
+         * and Radix reports that as the user closing it. Letting that through
+         * cleared `open`, so the panel never came back and the user had to
+         * press Feedback again. While picking, the close is ours, not theirs.
+         */
+        if (picking) return;
+        onOpenChange(next);
+      }}
+    >
       <SheetContent
         side="right"
         className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl data-[side=right]:lg:max-w-2xl data-[side=right]:xl:max-w-3xl"

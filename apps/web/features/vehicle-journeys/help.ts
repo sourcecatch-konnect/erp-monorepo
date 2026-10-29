@@ -18,6 +18,16 @@ export const JOURNEYS_HELP: PageHelpContent = {
   ],
   terms: ["vehicle-journey", "log-slip", "happay"],
   trainingStep: "bm.close-journey",
+  hi: {
+    purpose:
+      "Vehicle journey यानी truck का एक पूरा चक्कर — निकलने से लौटने तक। एक journey में एक से ज़्यादा trip हो सकते हैं।",
+    howTo: [
+      "गाड़ी निकलते समय Start Journey दबाइए।",
+      "उसके trip, ख़र्च और advance जैसे-जैसे होते हैं, journey पर जुड़ते जाते हैं।",
+      "गाड़ी लौटने पर journey खोलकर बंद कीजिए, फिर Log Slip बनाइए।",
+    ],
+    next: "Log Slip accounts में post होती है और ड्राइवर का हिसाब चुकता हो जाता है।",
+  },
 };
 
 export const LOG_SLIP_HELP: PageHelpContent = {
@@ -37,6 +47,23 @@ export const LOG_SLIP_HELP: PageHelpContent = {
   ],
   terms: ["log-slip", "vehicle-journey"],
   trainingStep: "bm.close-journey",
+  hi: {
+    purpose:
+      "पूरी हुई journey का असली record: किलोमीटर, diesel, freight, ख़र्च, और ड्राइवर को कितना देना या उससे कितना लेना है।",
+    howTo: [
+      "सबसे पहले ऊपर की warning देखिए। जिस journey के trip खुले हों, उसका हिसाब नहीं हो सकता।",
+      "Log slip की तारीख़ और diesel के आँकड़े भरिए, फिर Generate Log Slip दबाइए।",
+      "Print कीजिए, फिर accounts में post कीजिए।",
+    ],
+    next: "Post करते ही accounting entry बन जाती है। Post हुई slip बदलनी हो तो permission वाला व्यक्ति कारण लिखकर उसे reopen करेगा।",
+    tour: [
+      "यहाँ उस journey की गाड़ी, ड्राइवर और किलोमीटर दिखते हैं जिसका हिसाब आप कर रहे हैं।",
+      "तारीख़ और diesel के आँकड़े जाँचिए, कुछ कहना हो तो remarks लिखिए, फिर Generate दबाइए। Slip तुरंत बन जाती है।",
+      "ये total दिखाते हैं freight, ख़र्च, और ड्राइवर को कितना देना या उससे कितना लेना है।",
+      "Total के पीछे की हर freight, advance, diesel और expense की line यहाँ है।",
+      "Generate के बाद slip print कीजिए और accounts में post कीजिए।",
+    ],
+  },
   tour: {
     key: "log-slip",
     steps: [

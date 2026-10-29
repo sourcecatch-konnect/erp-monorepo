@@ -15,6 +15,8 @@ export type FeedbackFormValues = {
   section: string;
   description: string;
   points: string[];
+  /** Answers to the guided questions for the chosen type, keyed by question. */
+  answers: Record<string, string>;
   hasVoiceNote: boolean;
 };
 
@@ -24,6 +26,7 @@ export const EMPTY_FEEDBACK_VALUES: FeedbackFormValues = {
   section: "",
   description: "",
   points: [""],
+  answers: {},
   hasVoiceNote: false,
 };
 
@@ -40,5 +43,13 @@ export function restoreDraft(draft: Partial<FeedbackFormValues> | null): Feedbac
     section: typeof draft.section === "string" ? draft.section : "",
     description: typeof draft.description === "string" ? draft.description : "",
     points: points.length > 0 ? points : [""],
+    answers:
+      draft.answers && typeof draft.answers === "object"
+        ? Object.fromEntries(
+            Object.entries(draft.answers).filter(
+              ([, value]) => typeof value === "string",
+            ),
+          )
+        : {},
   };
 }

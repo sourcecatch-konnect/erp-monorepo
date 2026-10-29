@@ -14,6 +14,7 @@ import {
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { MAIN_FLOW, SIDE_FLOWS, type MapSection } from "./content/process-map";
 import { STAGE_CONTENT, STAGE_TERMS } from "./content/stages";
+import { PlaybackNotice } from "./audio/PlayText";
 import { SectionRail, TONE_BADGE, sectionTone } from "./components/SectionRail";
 import { StageDetail } from "./components/StageDetail";
 import { TrainingNav } from "./components/TrainingNav";
@@ -260,6 +261,8 @@ export function ProcessMapPage() {
               does.
             </p>
           ) : null}
+
+          <PlaybackNotice />
 
           {hits ? (
             <section className="rounded-lg border border-border bg-card p-4">
