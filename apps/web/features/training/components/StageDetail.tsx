@@ -28,6 +28,7 @@ import {
 } from "../content/stages";
 import { GLOSSARY } from "../content/glossary";
 import { PlayText } from "../audio/PlayText";
+import { ListenAll } from "../audio/ListenAll";
 import { useTranslate } from "../i18n";
 import { STAGE_BY_KEY, previousStages } from "../lib/catalog-lookup";
 import { TONE_BADGE, sectionTone } from "./SectionRail";
@@ -315,6 +316,28 @@ export function StageDetail({
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-5 p-4">
+          {/* The whole step in one press: what it is for, then each thing to
+              do, in order. The per-block button stays for anyone who wants
+              just that paragraph. */}
+          <ListenAll
+            clips={[
+              {
+                id: `stage.${stageKey}.explain`,
+                title: stage.title,
+                lines: [t(`stage.${stageKey}.explain`, content.explain)],
+              },
+              ...(steps ?? []).map((item, stepIndex) => ({
+                id: `stage.${stageKey}.step.${stepIndex}`,
+                title: stepTitles[stepIndex] ?? item.title,
+                lines: [
+                  `Step ${stepIndex + 1}. ${stepTitles[stepIndex] ?? item.title}.`,
+                  stepDetails[stepIndex] ?? item.detail,
+                ],
+              })),
+            ]}
+            label={`Listen to this whole step`}
+            className="w-fit"
+          />
           {/* The explanation leads: someone who reads only one thing on this
               panel should read what the step is for, not its prerequisites. */}
           <Block icon={IconListCheck} title="What happens here">

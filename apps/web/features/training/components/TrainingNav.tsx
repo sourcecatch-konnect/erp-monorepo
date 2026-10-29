@@ -9,12 +9,9 @@ import {
   IconUserCircle,
 } from "@tabler/icons-react";
 import { cn } from "@skerp/ui/lib/util";
+import { VoiceSettings } from "../audio/VoiceSettings";
 import { IS_TRAINING_ENVIRONMENT } from "../environment";
-import {
-  TRAINING_LANGUAGES,
-  setTrainingLanguage,
-  useTrainingLanguage,
-} from "../i18n";
+import { LanguageToggle } from "../i18n/LanguageToggle";
 
 const LINKS = [
   { href: "/training", label: "My role & training", icon: IconUserCircle },
@@ -71,44 +68,12 @@ export function TrainingNav() {
         );
       })}
 
-      <LanguageToggle />
+      {/* Language and voice sit together: both answer "how do I want to take
+          this in?", and both are set once rather than per paragraph. */}
+      <div className="ms-auto flex items-center gap-2">
+        <LanguageToggle />
+        <VoiceSettings />
+      </div>
     </nav>
-  );
-}
-
-/**
- * English / हिंदी, on every training screen. Each language is named in its own
- * script, which is what a reader scans for. Untranslated text stays English,
- * so switching never leaves a blank on screen.
- */
-function LanguageToggle() {
-  const lang = useTrainingLanguage();
-
-  return (
-    <div
-      role="group"
-      aria-label="Language"
-      className="ms-auto mb-1.5 inline-flex overflow-hidden rounded-lg border border-border bg-card"
-    >
-      {TRAINING_LANGUAGES.map((item) => {
-        const on = item.key === lang;
-        return (
-          <button
-            key={item.key}
-            type="button"
-            aria-pressed={on}
-            onClick={() => setTrainingLanguage(item.key)}
-            className={cn(
-              "border-s px-2.5 py-1 text-xs font-medium transition-colors duration-150 first:border-s-0",
-              on
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {item.native}
-          </button>
-        );
-      })}
-    </div>
   );
 }

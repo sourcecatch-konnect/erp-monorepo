@@ -36,7 +36,7 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile, access } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile, access } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -177,6 +177,27 @@ async function main() {
   }
 
   await writeFile(stampPath, JSON.stringify(stamps, null, 2));
+
+  /*
+   * public/audio/manifest.json — every generated file, as "<lang>/<name>.mp3".
+   * The player reads it once and asks for a file only when it is listed, so a
+   * line with no generated audio goes straight to the browser's voice instead
+   * of 404ing first. Rebuilt from what is on disk across all languages, so
+   * generating one language never drops another's entries.
+   */
+  const audioRoot = join(WEB, "public", "audio");
+  const names = [];
+  for (const dir of await readdir(audioRoot, { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    for (const file of await readdir(join(audioRoot, dir.name))) {
+      if (file.endsWith(".mp3")) names.push(`${dir.name}/${file}`);
+    }
+  }
+  names.sort();
+  await writeFile(
+    join(audioRoot, "manifest.json"),
+    JSON.stringify(names, null, 2),
+  );
   console.log(
     `\n${lang}: ${made} generated, ${skipped} unchanged, ${items.length} total.`,
   );

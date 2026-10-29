@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
 import { IconPlayerPauseFilled, IconVolume } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { useTrainingLanguage } from "../i18n";
-import { playKey, stopPlayback, toggle, useTrainingPlayer } from "./player";
+import { playKey, toggle, useTrainingPlayer } from "./player";
+import { useVoicePrefs, voiceRate } from "./prefs";
 
 /**
  * "Read this aloud" beside a piece of training text.
@@ -17,6 +17,7 @@ export function PlayText({
   id,
   text,
   label = "Read aloud",
+  title,
   className,
 }: {
   /** The content id, e.g. `glossary.lr.meaning`. Names the audio file too. */
@@ -24,19 +25,33 @@ export function PlayText({
   /** The text as rendered — already translated if the reader is in Hindi. */
   text: string;
   label?: string;
+  /** Shown in the player while this plays. Defaults to the label. */
+  title?: string;
   className?: string;
 }) {
   const lang = useTrainingLanguage();
+  const { enabled } = useVoicePrefs();
   const { playing, error } = useTrainingPlayer();
   const active = playing === playKey(id, lang);
 
-  // Leaving the screen should not leave a voice talking over the next one.
-  useEffect(() => () => stopPlayback(), []);
+  /*
+   * Deliberately no stop-on-unmount here. These buttons unmount whenever a
+   * list is filtered or a panel closes, and one of them stopping playback
+   * would cut off a passage the reader is still listening to. Stopping when
+   * the screen changes is the player's job — see VoicePlayer.
+   */
+
+  /*
+   * Read-aloud off means the button is gone, not disabled. A page can carry
+   * forty of these, and forty dead buttons are more in the way than none.
+   * Switching it back on is one control, in the training nav.
+   */
+  if (!enabled) return null;
 
   return (
     <button
       type="button"
-      onClick={() => toggle(id, text, lang)}
+      onClick={() => toggle(id, text, lang, voiceRate(), title ?? label)}
       aria-label={active ? "Stop reading" : label}
       title={active ? "Stop reading" : label}
       className={cn(
@@ -65,8 +80,9 @@ export function PlayText({
  * near the language toggle.
  */
 export function PlaybackNotice() {
+  const { enabled } = useVoicePrefs();
   const { error } = useTrainingPlayer();
-  if (!error) return null;
+  if (!enabled || !error) return null;
 
   return (
     <p

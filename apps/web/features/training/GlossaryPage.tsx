@@ -15,6 +15,7 @@ import {
 } from "./content/glossary";
 import { STAGE_TERMS } from "./content/stages";
 import { PlaybackNotice, PlayText } from "./audio/PlayText";
+import { ListenAll } from "./audio/ListenAll";
 import { useTranslate } from "./i18n";
 import { useCompleteOnVisit } from "./hooks/useTraining";
 import { STAGE_BY_KEY } from "./lib/catalog-lookup";
@@ -118,6 +119,19 @@ export function GlossaryPage() {
           {entries.length} of {GLOSSARY.length} words
         </p>
       </div>
+
+      {/* The whole filtered list, read one word after another: narrow it to
+          an area, press once, and listen through it. */}
+      <ListenAll
+        clips={entries.map((entry) => ({
+          id: `glossary.${entry.id}.meaning`,
+          title: t(`glossary.${entry.id}.term`, entry.term),
+          lines: [
+            `${t(`glossary.${entry.id}.term`, entry.term)}. ${t(`glossary.${entry.id}.meaning`, entry.meaning)}`,
+          ],
+        }))}
+        label={`Listen to all ${entries.length} words`}
+      />
 
       <PlaybackNotice />
 
