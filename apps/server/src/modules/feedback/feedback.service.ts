@@ -1,17 +1,17 @@
 import {
   FEEDBACK_CATEGORIES,
   FEEDBACK_CATEGORY_LABELS,
-  FEEDBACK_DETAIL_FIELDS,
-  FEEDBACK_SEVERITIES,
-  FEEDBACK_SEVERITY_LABELS,
+  FEEDBACK_IMPACTS,
+  FEEDBACK_IMPACT_LABELS,
   FEEDBACK_STATUSES,
   FEEDBACK_STATUS_LABELS,
   type feedbackFormSchema,
 } from "@skerp/validators";
-import type {
-  FeedbackCategory,
-  FeedbackStatus,
-  FeedbackSummary,
+import {
+  feedbackFileKind,
+  type FeedbackCategory,
+  type FeedbackStatus,
+  type FeedbackSummary,
 } from "@skerp/types";
 import type { z } from "zod";
 
@@ -46,8 +46,9 @@ export const listSelect = {
   id: true,
   number: true,
   category: true,
+  impact: true,
   title: true,
-  severity: true,
+  section: true,
   status: true,
   pagePath: true,
   pageTitle: true,
@@ -56,6 +57,7 @@ export const listSelect = {
   reporterRole: true,
   reporterBranch: true,
   reporterConfirmedAt: true,
+  voiceSeconds: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.FeedbackSelect;
@@ -69,7 +71,11 @@ export const commentSelect = {
   createdAt: true,
 } satisfies Prisma.FeedbackCommentSelect;
 
-/** Attachment entityType for feedback pictures (S3 prefix attachments/Feedback/). */
+/* ------------------------------------------------------------------ */
+/* Attached files (pictures, documents, voice note)                    */
+/* ------------------------------------------------------------------ */
+
+/** Attachment entityType for feedback files (S3 prefix attachments/Feedback/). */
 export const ATTACHMENT_ENTITY = "Feedback";
 
 /*
@@ -117,9 +123,9 @@ const startOfDay = (iso: string): Date | null => {
 
 /**
  * Filters (all optional): `filter[status]` (a status or "OPEN"),
- * `filter[category]`, `filter[severity]`, `filter[module]`,
+ * `filter[category]`, `filter[impact]`, `filter[module]`,
  * `filter[pageTitle]`, `filter[role]`, `filter[from]`, `filter[to]`
- * (YYYY-MM-DD). `search` matches title, page, reporter or the FB number.
+ * (YYYY-MM-DD). `search` matches title, text, page, reporter or the FB number.
  */
 export const buildFeedbackWhere = (
   query: ListQuery,
@@ -135,8 +141,8 @@ export const buildFeedbackWhere = (
   if (isOneOf(FEEDBACK_CATEGORIES, filter.category)) {
     and.push({ category: filter.category });
   }
-  if (isOneOf(FEEDBACK_SEVERITIES, filter.severity)) {
-    and.push({ severity: filter.severity });
+  if (isOneOf(FEEDBACK_IMPACTS, filter.impact)) {
+    and.push({ impact: filter.impact });
   }
   if (filter.module) and.push({ moduleLabel: filter.module });
   if (filter.pageTitle) and.push({ pageTitle: filter.pageTitle });
@@ -158,6 +164,7 @@ export const buildFeedbackWhere = (
       OR: [
         { title: contains },
         { description: contains },
+        { section: contains },
         { pageTitle: contains },
         { moduleLabel: contains },
         { reporterName: contains },
@@ -175,7 +182,7 @@ const SORTABLE_FIELDS = new Set([
   "number",
   "status",
   "category",
-  "severity",
+  "impact",
   "moduleLabel",
 ]);
 
@@ -186,18 +193,42 @@ export const buildFeedbackOrderBy = (
     ? { [query.sort.field]: query.sort.direction }
     : { createdAt: "desc" };
 
-/** Keep only the answers that belong to the chosen tab, trimmed and non-empty. */
-export const pickDetails = (form: FeedbackForm): Record<string, string> => {
-  const answers = form as unknown as Record<string, unknown>;
-  const details: Record<string, string> = {};
-  for (const field of FEEDBACK_DETAIL_FIELDS[form.category]) {
-    const value = answers[field.key];
-    if (typeof value === "string" && value.trim() !== "") {
-      details[field.key] = value.trim();
-    }
-  }
-  return details;
+/* ------------------------------------------------------------------ */
+/* Title                                                               */
+/* ------------------------------------------------------------------ */
+
+const MAX_TITLE_CHARS = 120;
+
+/** Cut at a word boundary when there is one in the second half, then add "…". */
+const clipAtWord = (text: string, max: number): string => {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 };
+
+/**
+ * The reporter doesn't type a title: use the first line of the text, else the
+ * first point, else "<Type> on <Page>" (a voice note or pictures only).
+ */
+export const deriveTitle = (
+  form: Pick<FeedbackForm, "category" | "description" | "points">,
+  pageTitle: string,
+): string => {
+  const firstLine = form.description
+    ?.split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  const text =
+    firstLine ??
+    form.points[0] ??
+    `${FEEDBACK_CATEGORY_LABELS[form.category]} on ${pageTitle}`;
+  return clipAtWord(text.replace(/\s+/g, " "), MAX_TITLE_CHARS);
+};
+
+/* ------------------------------------------------------------------ */
+/* People + wording                                                    */
+/* ------------------------------------------------------------------ */
 
 /** Snapshot taken at submit time — no FK to User, so the table drops cleanly. */
 export const reporterSnapshot = async (userId: string) => {
@@ -233,8 +264,8 @@ export const describeFilters = (query: ListQuery): string => {
     isOneOf(FEEDBACK_CATEGORIES, filter.category)
       ? `Type: ${FEEDBACK_CATEGORY_LABELS[filter.category]}`
       : null,
-    isOneOf(FEEDBACK_SEVERITIES, filter.severity)
-      ? `Severity: ${FEEDBACK_SEVERITY_LABELS[filter.severity]}`
+    isOneOf(FEEDBACK_IMPACTS, filter.impact)
+      ? `Impact: ${FEEDBACK_IMPACT_LABELS[filter.impact]}`
       : null,
     filter.module ? `Module: ${filter.module}` : null,
     filter.pageTitle ? `Page: ${filter.pageTitle}` : null,

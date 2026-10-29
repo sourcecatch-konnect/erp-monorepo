@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  LEGACY_FEEDBACK_DETAIL_FIELDS,
   feedbackBulkStatusSchema,
   feedbackCategorySchema,
   feedbackCommentKindSchema,
@@ -7,15 +8,20 @@ import {
   feedbackCommentSideSchema,
   feedbackConfirmSchema,
   feedbackElementSchema,
-  feedbackScreenshotRequestSchema,
+  feedbackFileCompleteSchema,
+  feedbackFileRequestSchema,
   feedbackContextSchema,
   feedbackFormSchema,
+  feedbackImpactSchema,
   feedbackPageSchema,
-  feedbackSeveritySchema,
   feedbackStatusSchema,
   feedbackSubmitSchema,
   feedbackTriageSchema,
+<<<<<<< HEAD
   feedbackVoiceNoteRequestSchema,
+=======
+  type FEEDBACK_FILE_KINDS,
+>>>>>>> 7d8701ebc689f728021633d53d8b5a6d05f85c49
 } from "@skerp/validators";
 
 /**
@@ -24,7 +30,7 @@ import {
 
 export type FeedbackCategory = z.infer<typeof feedbackCategorySchema>;
 export type FeedbackStatus = z.infer<typeof feedbackStatusSchema>;
-export type FeedbackSeverity = z.infer<typeof feedbackSeveritySchema>;
+export type FeedbackImpact = z.infer<typeof feedbackImpactSchema>;
 
 export type FeedbackFormInput = z.input<typeof feedbackFormSchema>;
 export type FeedbackPage = z.infer<typeof feedbackPageSchema>;
@@ -36,15 +42,16 @@ export type FeedbackSubmitBody = z.input<typeof feedbackSubmitSchema>;
 export type FeedbackTriageInput = z.input<typeof feedbackTriageSchema>;
 export type FeedbackBulkStatusBody = z.infer<typeof feedbackBulkStatusSchema>;
 
-/** Category-specific answers, keyed as in FEEDBACK_DETAIL_FIELDS. */
+/** Answers from the v1 five-tab form, keyed as in LEGACY_FEEDBACK_DETAIL_FIELDS. Empty for v2 items. */
 export type FeedbackDetails = Record<string, string>;
 
 export type FeedbackListItem = {
   id: string;
   number: number;
   category: FeedbackCategory;
+  impact: FeedbackImpact;
   title: string;
-  severity: FeedbackSeverity | null;
+  section: string | null;
   status: FeedbackStatus;
   pagePath: string;
   pageTitle: string;
@@ -53,12 +60,22 @@ export type FeedbackListItem = {
   reporterRole: string;
   reporterBranch: string | null;
   reporterConfirmedAt: string | null;
+  /** Length of the voice note, when one arrived. */
+  voiceSeconds: number | null;
+  imageCount: number;
+  documentCount: number;
   createdAt: string;
   updatedAt: string;
 };
 
-export type FeedbackScreenshot = {
+export type FeedbackFileKind = (typeof FEEDBACK_FILE_KINDS)[number];
+
+export type FeedbackFile = {
   id: string;
+  kind: FeedbackFileKind;
+  name: string;
+  mime: string;
+  sizeBytes: number;
   /** Short-lived presigned download URL. */
   url: string;
 };
@@ -72,6 +89,7 @@ export type FeedbackVoiceNote = {
 
 export type FeedbackDetail = FeedbackListItem & {
   description: string | null;
+  points: string[];
   details: FeedbackDetails;
   entityId: string | null;
   context: FeedbackContext;
@@ -80,8 +98,12 @@ export type FeedbackDetail = FeedbackListItem & {
   devNotes: string | null;
   externalRef: string | null;
   resolvedAt: string | null;
+<<<<<<< HEAD
   screenshots: FeedbackScreenshot[];
   voiceNotes: FeedbackVoiceNote[];
+=======
+  files: FeedbackFile[];
+>>>>>>> 7d8701ebc689f728021633d53d8b5a6d05f85c49
 };
 
 export type MyFeedbackItem = Pick<
@@ -89,23 +111,33 @@ export type MyFeedbackItem = Pick<
   | "id"
   | "number"
   | "category"
+  | "impact"
   | "title"
+  | "section"
   | "status"
   | "pagePath"
   | "pageTitle"
   | "moduleLabel"
   | "reporterConfirmedAt"
+  | "voiceSeconds"
+  | "imageCount"
+  | "documentCount"
   | "createdAt"
   | "updatedAt"
 >;
 
 export type FeedbackElement = z.infer<typeof feedbackElementSchema>;
+<<<<<<< HEAD
 export type FeedbackScreenshotRequest = z.infer<
   typeof feedbackScreenshotRequestSchema
 >;
 export type FeedbackVoiceNoteRequest = z.infer<
   typeof feedbackVoiceNoteRequestSchema
 >;
+=======
+export type FeedbackFileRequest = z.infer<typeof feedbackFileRequestSchema>;
+export type FeedbackFileComplete = z.infer<typeof feedbackFileCompleteSchema>;
+>>>>>>> 7d8701ebc689f728021633d53d8b5a6d05f85c49
 export type FeedbackCommentBody = z.infer<typeof feedbackCommentSchema>;
 export type FeedbackConfirmBody = z.infer<typeof feedbackConfirmSchema>;
 export type FeedbackCommentKind = z.infer<typeof feedbackCommentKindSchema>;
@@ -120,6 +152,7 @@ export type FeedbackComment = {
   createdAt: string;
 };
 
+<<<<<<< HEAD
 /** POST /feedback/:id/screenshots */
 export type FeedbackScreenshotUpload = {
   attachmentId: string;
@@ -138,6 +171,13 @@ export type FeedbackStatusInfo = {
   screenshots: boolean;
   voiceNotes: boolean;
 };
+=======
+/** POST /feedback/:id/files */
+export type FeedbackFileUpload = { attachmentId: string; uploadUrl: string };
+
+/** GET /feedback/status. `uploads` is false when file storage isn't set up. */
+export type FeedbackStatusInfo = { enabled: boolean; uploads: boolean };
+>>>>>>> 7d8701ebc689f728021633d53d8b5a6d05f85c49
 
 /** Grouped by page name (not URL) so every detail page of a screen counts together. */
 export type FeedbackTopPage = {
@@ -158,6 +198,27 @@ export type FeedbackCreated = { id: string; number: number };
 
 export const formatFeedbackNumber = (n: number): string =>
   `FB-${String(n).padStart(4, "0")}`;
+
+/** 102 → "1:42" */
+export const formatVoiceDuration = (seconds: number): string =>
+  `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
+/** Which part of the item a stored attachment is: picture, document or voice note. */
+export const feedbackFileKind = (mime: string): FeedbackFileKind =>
+  mime.startsWith("audio/") ? "voice" : mime.startsWith("image/") ? "image" : "document";
+
+/** v1 answers as [label, readable value] pairs, in the order the old form asked them. */
+export const legacyDetailRows = (details: unknown): [string, string][] => {
+  if (!details || typeof details !== "object") return [];
+  const answers = details as Record<string, unknown>;
+  const rows: [string, string][] = [];
+  for (const field of LEGACY_FEEDBACK_DETAIL_FIELDS) {
+    const raw = answers[field.key];
+    if (typeof raw !== "string" || raw === "") continue;
+    rows.push([field.label, field.choices?.[raw] ?? raw]);
+  }
+  return rows;
+};
 
 // Order matters: Edge's UA also contains "Chrome", Chrome's contains "Safari".
 const BROWSERS: [RegExp, string][] = [

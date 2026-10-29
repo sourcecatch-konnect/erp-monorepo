@@ -6,11 +6,13 @@ import {
   feedbackBulkStatusSchema,
   feedbackCommentSchema,
   feedbackConfirmSchema,
-  feedbackScreenshotRequestSchema,
+  feedbackFileCompleteSchema,
+  feedbackFileRequestSchema,
   feedbackSubmitSchema,
   feedbackTriageSchema,
   feedbackVoiceNoteRequestSchema,
 } from "@skerp/validators";
+import { feedbackFileKind, type FeedbackFileRequest } from "@skerp/types";
 
 import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
@@ -46,16 +48,17 @@ import {
   buildFeedbackOrderBy,
   buildFeedbackWhere,
   commentSelect,
+  deriveTitle,
   describeFilters,
   findScreenshots,
   findVoiceNotes,
   getFeedbackSummary,
   isResolved,
   listSelect,
-  pickDetails,
   reporterSnapshot,
   statusChangeText,
   takeSubmitSlot,
+  withFileCounts,
 } from "./feedback.service.js";
 
 /**
@@ -66,8 +69,10 @@ import {
  * createCrudRouter): submitting is open to every signed-in user, triage is
  * gated by feedback.view / feedback.manage.
  *
- * Screenshots reuse attachment.service (entityType "Feedback") — a one-way
- * dependency: S3 keys land under attachments/Feedback/, attachments is unchanged.
+ * Pictures, documents and the voice note reuse attachment.service
+ * (entityType "Feedback") — a one-way dependency: S3 keys land under
+ * attachments/Feedback/. Feedback passes its own size and type limits, so the
+ * env-wide attachment limits for other modules don't change.
  */
 export const isFeedbackEnabled = (): boolean =>
   process.env.FEEDBACK_ENABLED === "true";
@@ -76,6 +81,8 @@ const MAX_CONTEXT_CHARS = 32_000;
 const MAX_EXPORT_ROWS = 5_000;
 const MAX_DOCX_ROWS = 300;
 const MAX_DOCX_IMAGE_BYTES = 40 * 1024 * 1024;
+/** Unfinished uploads (retries after a failed PUT) allowed on top of the limit. */
+const MAX_PENDING_FILES = 2 * FEEDBACK_MAX_FILES;
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -98,6 +105,18 @@ const loadForCaller = async (
   const isReporter = item.reporterId === actorId(req);
   if (!isReporter && !allowTeam(req)) throw new ForbiddenError();
   return { item, isReporter };
+};
+
+/** File names for the export columns, grouped by item. */
+const exportFiles = async (ids: string[]): Promise<Map<string, ExportFile[]>> => {
+  const files = new Map<string, ExportFile[]>();
+  for (const file of await findFeedbackFiles(ids)) {
+    files.set(file.entityId, [
+      ...(files.get(file.entityId) ?? []),
+      { kind: feedbackFileKind(file.mime), name: file.originalName },
+    ]);
+  }
+  return files;
 };
 
 /** Lets the web widget hide itself when the server flag is off (404). */
@@ -136,10 +155,11 @@ router.post("/", async (req, res) => {
   const created = await db.feedback.create({
     data: {
       category: feedback.category,
-      title: feedback.title,
+      impact: feedback.impact,
+      title: deriveTitle(feedback, page.title),
       description: feedback.description || null,
-      details: pickDetails(feedback),
-      severity: feedback.category === "BUG" ? feedback.severity : null,
+      points: feedback.points,
+      section: feedback.section || null,
       pagePath: page.path,
       pageTitle: page.title,
       moduleLabel: page.module,
@@ -162,17 +182,20 @@ router.get("/mine", async (req, res) => {
       id: true,
       number: true,
       category: true,
+      impact: true,
       title: true,
+      section: true,
       status: true,
       pagePath: true,
       pageTitle: true,
       moduleLabel: true,
       reporterConfirmedAt: true,
+      voiceSeconds: true,
       createdAt: true,
       updatedAt: true,
     },
   });
-  return sendOk(res, items);
+  return sendOk(res, await withFileCounts(items));
 });
 
 router.get("/summary", can(PERMS.FEEDBACK.VIEW), async (_req, res) =>
@@ -192,7 +215,11 @@ router.get("/", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
       select: listSelect,
     }),
   ]);
-  return sendOk(res, items, { page: query.page, size: query.size, total });
+  return sendOk(res, await withFileCounts(items), {
+    page: query.page,
+    size: query.size,
+    total,
+  });
 });
 
 router.get("/export/xlsx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
@@ -206,6 +233,7 @@ router.get("/export/xlsx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
   const xlsx = await buildFeedbackXlsx(rows, {
     generatedAt,
     webUrl: process.env.WEB_URL,
+    files: await exportFiles(rows.map((row) => row.id)),
   });
   const stamp = generatedAt.toISOString().slice(0, 10);
   res.setHeader(
@@ -219,7 +247,7 @@ router.get("/export/xlsx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
   return res.send(xlsx);
 });
 
-/** B7 — Word report for developers, screenshots embedded. */
+/** B7 — Word report for developers, pictures embedded, other files listed. */
 router.get("/export/docx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
   const query = parseListQuery(req);
   const rows = await db.feedback.findMany({
@@ -234,26 +262,29 @@ router.get("/export/docx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
     },
   });
 
+  const ids = rows.map((row) => row.id);
   const images = new Map<string, DocxImage[]>();
   let usedBytes = 0;
   let skippedImages = 0;
   if (rows.length > 0 && isS3Configured()) {
-    const attachments = await findScreenshots(rows.map((row) => row.id));
-    for (const attachment of attachments) {
-      if (usedBytes + attachment.sizeBytes > MAX_DOCX_IMAGE_BYTES) {
+    const pictures = (await findFeedbackFiles(ids)).filter(
+      (file) => feedbackFileKind(file.mime) === "image",
+    );
+    for (const picture of pictures) {
+      if (usedBytes + picture.sizeBytes > MAX_DOCX_IMAGE_BYTES) {
         skippedImages += 1;
         continue;
       }
       try {
-        const data = await buffer(await getObjectStream(attachment.s3Key));
+        const data = await buffer(await getObjectStream(picture.s3Key));
         const size = imageSize(data);
         if (!size) {
           skippedImages += 1;
           continue;
         }
         usedBytes += data.length;
-        images.set(attachment.entityId, [
-          ...(images.get(attachment.entityId) ?? []),
+        images.set(picture.entityId, [
+          ...(images.get(picture.entityId) ?? []),
           { data, ...size },
         ]);
       } catch (error) {
@@ -272,6 +303,7 @@ router.get("/export/docx", can(PERMS.FEEDBACK.VIEW), async (req, res) => {
     filters: describeFilters(query),
     webUrl: process.env.WEB_URL,
     skippedImages,
+    files: await exportFiles(ids),
   });
   res.setHeader(
     "Content-Type",
@@ -325,22 +357,27 @@ router.get("/:id", async (req, res) => {
   if (!canView(req) && item.reporterId !== actorId(req)) {
     throw new ForbiddenError();
   }
-  const screenshots = isS3Configured()
+  const stored = await findFeedbackFiles([item.id]);
+  const files = isS3Configured()
     ? await Promise.all(
-        (await findScreenshots([item.id])).map(async (shot) => ({
-          id: shot.id,
-          url: await getDownloadUrl(shot.id),
-        })),
-      )
+      stored.map(async (file) => ({
+        id: file.id,
+        kind: feedbackFileKind(file.mime),
+        name: file.originalName,
+        mime: file.mime,
+        sizeBytes: file.sizeBytes,
+        url: await getDownloadUrl(file.id),
+      })),
+    )
     : [];
   const voiceNotes = isS3Configured()
     ? await Promise.all(
-        (await findVoiceNotes([item.id])).map(async (note) => ({
-          id: note.id,
-          url: await getDownloadUrl(note.id),
-          mime: note.mime,
-        })),
-      )
+      (await findVoiceNotes([item.id])).map(async (note) => ({
+        id: note.id,
+        url: await getDownloadUrl(note.id),
+        mime: note.mime,
+      })),
+    )
     : [];
   return sendOk(res, { ...item, screenshots, voiceNotes });
 });
@@ -381,15 +418,15 @@ router.patch("/:id", can(PERMS.FEEDBACK.MANAGE), async (req, res) => {
     db.feedbackComment.createMany({
       data: actor
         ? [
-            {
-              feedbackId: id,
-              authorId: userId,
-              authorName: actor.reporterName,
-              side: "TEAM" as const,
-              kind: "STATUS_CHANGE" as const,
-              body: statusChangeText(current.status, next.status),
-            },
-          ]
+          {
+            feedbackId: id,
+            authorId: userId,
+            authorName: actor.reporterName,
+            side: "TEAM" as const,
+            kind: "STATUS_CHANGE" as const,
+            body: statusChangeText(current.status, next.status),
+          },
+        ]
         : [],
     }),
   ]);
@@ -397,17 +434,68 @@ router.patch("/:id", can(PERMS.FEEDBACK.MANAGE), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* B6 — screenshots (reporter uploads after the item is created)       */
+/* Files + voice note (reporter uploads after the item is created)     */
 /* ------------------------------------------------------------------ */
 
-router.post("/:id/screenshots", async (req, res) => {
+/** "C:\fakepath\Rate list (Oct).xlsx" → "Rate list (Oct).xlsx", extension forced to match the type. */
+const documentName = (name: string, mime: FeedbackDocumentMime): string => {
+  const base = name.split(/[\\/]/).pop() ?? "";
+  const stem =
+    base
+      .replace(/\.[^.]*$/, "")
+      .replace(/[^\w .()-]+/g, "_")
+      .trim()
+      .slice(0, 150) || "document";
+  return `${stem}.${FEEDBACK_DOCUMENT_EXTENSIONS[mime]}`;
+};
+
+const storedName = (request: FeedbackFileRequest): string => {
+  switch (request.kind) {
+    case "image":
+      return `picture-${request.width}x${request.height}.${request.mime === "image/png" ? "png" : "jpg"}`;
+    case "document":
+      return documentName(request.name, request.mime);
+    case "voice":
+      return `voice-note-${request.durationSec}s.${FEEDBACK_VOICE_EXTENSIONS[request.mime]}`;
+  }
+};
+
+const limitsFor = (kind: FeedbackFileRequest["kind"]) =>
+  kind === "voice"
+    ? { maxBytes: FEEDBACK_MAX_VOICE_BYTES, mimes: FEEDBACK_VOICE_MIMES }
+    : {
+      maxBytes: FEEDBACK_MAX_FILE_BYTES,
+      mimes: [...FEEDBACK_IMAGE_MIMES, ...FEEDBACK_DOCUMENT_MIMES],
+    };
+
+/** Finished uploads of this item: the voice note, and pictures + documents together. */
+const uploadedCounts = async (feedbackId: string) => {
+  const rows = await db.attachment.findMany({
+    where: { entityType: ATTACHMENT_ENTITY, entityId: feedbackId, uploaded: true, deletedAt: null },
+    select: { mime: true },
+  });
+  const voice = rows.filter((row) => feedbackFileKind(row.mime) === "voice").length;
+  return { voice, files: rows.length - voice };
+};
+
+const assertRoomFor = async (feedbackId: string, kind: FeedbackFileRequest["kind"]) => {
+  const counts = await uploadedCounts(feedbackId);
+  if (kind === "voice" && counts.voice >= 1) {
+    throw new BadRequestError("Only one voice note can be attached");
+  }
+  if (kind !== "voice" && counts.files >= FEEDBACK_MAX_FILES) {
+    throw new BadRequestError(`You can attach up to ${FEEDBACK_MAX_FILES} files`);
+  }
+};
+
+router.post("/:id/files", async (req, res) => {
   if (!isS3Configured()) {
-    throw new ConflictError("Picture storage is not set up on this server");
+    throw new ConflictError("File storage is not set up on this server");
   }
   const { item, isReporter } = await loadForCaller(req, () => false);
   if (!isReporter) throw new ForbiddenError();
 
-  const parsed = feedbackScreenshotRequestSchema.safeParse(req.body);
+  const parsed = feedbackFileRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError(parsed.error.flatten().fieldErrors);
   }
@@ -424,17 +512,16 @@ router.post("/:id/screenshots", async (req, res) => {
     );
   }
 
-  const { mime, sizeBytes, width, height } = parsed.data;
-  const extension = mime === "image/png" ? "png" : "jpg";
   const { attachment, uploadUrl } = await createAttachment(
     {
       entityType: ATTACHMENT_ENTITY,
       entityId: item.id,
-      originalName: `screenshot-${width}x${height}.${extension}`,
-      mime,
-      sizeBytes,
+      originalName: storedName(request),
+      mime: request.mime,
+      sizeBytes: request.sizeBytes,
     },
     actorId(req),
+    limitsFor(request.kind),
   );
   return sendOk(
     res,
@@ -444,9 +531,13 @@ router.post("/:id/screenshots", async (req, res) => {
   );
 });
 
-router.post("/:id/screenshots/:attachmentId/complete", async (req, res) => {
+router.post("/:id/files/:attachmentId/complete", async (req, res) => {
   const { item, isReporter } = await loadForCaller(req, () => false);
   if (!isReporter) throw new ForbiddenError();
+  const parsed = feedbackFileCompleteSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.flatten().fieldErrors);
+  }
   const attachment = await getAttachment(String(req.params.attachmentId));
   if (
     attachment.entityType !== ATTACHMENT_ENTITY ||
@@ -454,7 +545,17 @@ router.post("/:id/screenshots/:attachmentId/complete", async (req, res) => {
   ) {
     throw new NotFoundError("Picture not found");
   }
+  const kind = feedbackFileKind(attachment.mime);
+  // Checked again here: several requests can be in flight at once.
+  if (!attachment.uploaded) await assertRoomFor(item.id, kind);
+
   await completeUpload(attachment.id);
+  if (kind === "voice") {
+    await db.feedback.update({
+      where: { id: item.id },
+      data: { voiceSeconds: parsed.data.durationSec ?? null },
+    });
+  }
   return sendOk(res, { id: attachment.id });
 });
 

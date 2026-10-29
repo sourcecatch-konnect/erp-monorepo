@@ -2,7 +2,7 @@ import "dotenv/config";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buffer } from "node:stream/consumers";
-import { formatFeedbackNumber } from "@skerp/types";
+import { feedbackFileKind, formatFeedbackNumber } from "@skerp/types";
 
 import { db } from "../../../prisma/prisma.js";
 import { getObjectStream, isS3Configured } from "../../lib/s3.js";
@@ -29,7 +29,8 @@ import {
  *   feedback.xlsx           every item, no row limit (same layout as the export)
  *   feedback-report-N.docx  Word report, 300 items per file, pictures embedded
  *   feedback.json           every field and the whole conversation (lossless)
- *   attachments/            every clean file the reporters attached, FB-0042-1.png
+ *   attachments/            every clean file the reporters attached (pictures,
+ *                           documents, voice notes), FB-0042-1.jpg, FB-0042-2.webm
  *   README.txt              what is where, and the counts
  *
  * Read-only: it never changes the database or S3, and works with
@@ -75,6 +76,14 @@ async function main() {
       antivirusStatus: "CLEAN",
     },
   });
+  const storedFiles = rows.length > 0 ? await findFeedbackFiles(rows.map((row) => row.id)) : [];
+  const exportFiles = new Map<string, ExportFile[]>();
+  for (const stored of storedFiles) {
+    exportFiles.set(stored.entityId, [
+      ...(exportFiles.get(stored.entityId) ?? []),
+      { kind: feedbackFileKind(stored.mime), name: stored.originalName },
+    ]);
+  }
   const saved: SavedFile[] = [];
   /*
    * Voice notes go in the zip but never into `saved`: that list is what the
@@ -132,7 +141,7 @@ async function main() {
   /* ---- Excel: every item ---- */
   await writeFile(
     path.join(outDir, "feedback.xlsx"),
-    await buildFeedbackXlsx(rows, { generatedAt, webUrl }),
+    await buildFeedbackXlsx(rows, { generatedAt, webUrl, files: exportFiles }),
   );
 
   /* ---- Word: 300 items per file so each stays openable ---- */
@@ -165,6 +174,7 @@ async function main() {
         filters: `Archive part ${reports}: ${range}`,
         webUrl,
         skippedImages: skipped,
+        files: exportFiles,
       }),
     );
   }
@@ -204,8 +214,8 @@ async function main() {
     ...(isS3Configured()
       ? []
       : [
-          "               (AWS_S3_BUCKET not set here, so no files were downloaded — run again where it is set)",
-        ]),
+        "               (AWS_S3_BUCKET not set here, so no files were downloaded — run again where it is set)",
+      ]),
     ...(failed.length ? [`Not saved:     ${failed.join(", ")}`] : []),
     `Word reports:  ${reports}${skippedImages ? ` (${skippedImages} picture(s) left out of the Word files; all are in attachments/)` : ""}`,
     "",

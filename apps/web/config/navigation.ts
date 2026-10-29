@@ -5,6 +5,7 @@ import {
   IconDatabase,
   IconFileBarcode,
   IconLayoutDashboard,
+  IconMessageReport,
   IconReceipt2,
   IconRoute,
   IconSettings,
@@ -530,18 +531,21 @@ export const NAV_SECTIONS: NavSection[] = [
             href: "/settings/training",
             permission: PERMS.ADMIN.TRAINING_MANAGE,
           },
-          // remove-before-prod: in-app feedback (testing phase only).
-          ...(process.env.NEXT_PUBLIC_FEEDBACK_ENABLED === "true"
-            ? [
-              {
-                title: "Feedback",
-                href: "/settings/feedback",
-                permission: PERMS.FEEDBACK.VIEW,
-              },
-            ]
-            : []),
         ],
       },
+      // remove-before-prod: in-app feedback (testing phase only). Its own
+      // item (reports aren't a setting); the URL stays /settings/feedback so
+      // links in exports and Jira tickets keep working.
+      ...(process.env.NEXT_PUBLIC_FEEDBACK_ENABLED === "true"
+        ? [
+            {
+              title: "Feedback",
+              href: "/settings/feedback",
+              icon: IconMessageReport,
+              permission: PERMS.FEEDBACK.VIEW,
+            },
+          ]
+        : []),
     ],
   },
 ];
