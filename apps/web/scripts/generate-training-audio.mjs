@@ -96,7 +96,7 @@ async function collect() {
     join(WEB, "features/training/content/glossary.ts"),
     "utf8",
   );
-  const entries = file.split(/\n  \{\n/).slice(1);
+  const entries = file.split(/\n {2}\{\n/).slice(1);
   for (const entry of entries) {
     const id = entry.match(/id: "([a-z0-9-]+)"/)?.[1];
     const meaning = entry.match(/meaning:\s*\n?\s*"((?:[^"\\]|\\.)*)"/)?.[1];
