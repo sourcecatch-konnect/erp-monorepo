@@ -31,7 +31,7 @@ import {
   IconArrowRight,
   IconPackage,
 } from "@tabler/icons-react";
-import { useCan } from "@/features/auth";
+import { RequirePermission, useCan } from "@/features/auth";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
 import { orderApi } from "./order.service";
 import { orderKeys } from "./order.keys";
@@ -112,9 +112,6 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
   const [cancelOpen, setCancelOpen] = React.useState(false);
 
   const canApprove = useCan(PERMS.ORDER.APPROVE);
-  const canReject = useCan(PERMS.ORDER.REJECT);
-  const canCancel = useCan(PERMS.ORDER.CANCEL);
-  const canUpdate = useCan(PERMS.ORDER.UPDATE);
   const canCreateLR = useCan(PERMS.LORRY_RECEIPT.CREATE);
   const canViewTrips = useCan(PERMS.TRIP.VIEW);
 
@@ -232,30 +229,30 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
   const totalWeight =
     order.orderType === "Truck"
       ? (order.consignments?.reduce((sum, consignment) => {
-        const lineWeight = Number(consignment.totalWeight ?? 0);
-        if (!Number.isNaN(lineWeight) && lineWeight > 0) {
-          return sum + lineWeight;
-        }
+          const lineWeight = Number(consignment.totalWeight ?? 0);
+          if (!Number.isNaN(lineWeight) && lineWeight > 0) {
+            return sum + lineWeight;
+          }
 
-        const goodsWeight =
-          consignment.goods?.reduce((goodsSum, item) => {
-            const weight = Number(item.weight ?? 0);
-            return goodsSum + (Number.isNaN(weight) ? 0 : weight);
-          }, 0) ?? 0;
+          const goodsWeight =
+            consignment.goods?.reduce((goodsSum, item) => {
+              const weight = Number(item.weight ?? 0);
+              return goodsSum + (Number.isNaN(weight) ? 0 : weight);
+            }, 0) ?? 0;
 
-        return sum + goodsWeight;
-      }, 0) ?? 0)
+          return sum + goodsWeight;
+        }, 0) ?? 0)
       : (order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0);
 
   const weightUnits =
     order.orderType === "Truck"
       ? Array.from(
-        new Set(
-          (order.consignments ?? [])
-            .map((c) => c.unit)
-            .filter((u): u is string => Boolean(u)),
-        ),
-      )
+          new Set(
+            (order.consignments ?? [])
+              .map((c) => c.unit)
+              .filter((u): u is string => Boolean(u)),
+          ),
+        )
       : [];
 
   const totalWeightUnit =
@@ -326,42 +323,54 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {canUpdate && editable && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                router.push(
-                  `/orders/${encodeURIComponent(order.orderNumber)}/edit`,
-                )
-              }
-            >
-              <IconEdit size={14} className="mr-1.5" /> Edit
-            </Button>
+          {/* The order's own state still hides an action that doesn't apply —
+              there's no Approve on an approved order. A missing *permission*
+              dims the button and says what's needed, rather than leaving the
+              reader to guess why it vanished. */}
+          {editable && (
+            <RequirePermission permission={PERMS.ORDER.UPDATE}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  router.push(
+                    `/orders/${encodeURIComponent(order.orderNumber)}/edit`,
+                  )
+                }
+              >
+                <IconEdit size={14} className="mr-1.5" /> Edit
+              </Button>
+            </RequirePermission>
           )}
-          {canReject && isPending && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRejectOpen(true)}
-            >
-              <IconX size={14} className="mr-1.5" /> Reject
-            </Button>
+          {isPending && (
+            <RequirePermission permission={PERMS.ORDER.REJECT}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRejectOpen(true)}
+              >
+                <IconX size={14} className="mr-1.5" /> Reject
+              </Button>
+            </RequirePermission>
           )}
-          {canCancel && cancellable && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900 dark:hover:bg-red-950"
-              onClick={() => setCancelOpen(true)}
-            >
-              <IconBan size={14} className="mr-1.5" /> Cancel
-            </Button>
+          {cancellable && (
+            <RequirePermission permission={PERMS.ORDER.CANCEL}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900 dark:hover:bg-red-950"
+                onClick={() => setCancelOpen(true)}
+              >
+                <IconBan size={14} className="mr-1.5" /> Cancel
+              </Button>
+            </RequirePermission>
           )}
-          {canApprove && isPending && (
-            <Button size="sm" onClick={() => setApproveOpen(true)}>
-              <IconCheck size={14} className="mr-1.5" /> Approve
-            </Button>
+          {isPending && (
+            <RequirePermission permission={PERMS.ORDER.APPROVE}>
+              <Button size="sm" onClick={() => setApproveOpen(true)}>
+                <IconCheck size={14} className="mr-1.5" /> Approve
+              </Button>
+            </RequirePermission>
           )}
         </div>
       </div>
@@ -442,10 +451,11 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                       label="LRs created"
                       value={
                         <span
-                          className={`font-medium ${(lrCountsQuery.data ?? 0) >= order.truckQuantity
+                          className={`font-medium ${
+                            (lrCountsQuery.data ?? 0) >= order.truckQuantity
                               ? "text-red-600"
                               : "text-foreground"
-                            }`}
+                          }`}
                         >
                           {lrCountsQuery.data ?? "—"} / {order.truckQuantity}
                           {(lrCountsQuery.data ?? 0) >= order.truckQuantity && (
@@ -515,8 +525,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
               </div>
 
               {freightWasEdited &&
-                autoFreight != null &&
-                approvedFreight != null ? (
+              autoFreight != null &&
+              approvedFreight != null ? (
                 <div className="mt-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div>
@@ -560,7 +570,7 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
           </CardSection>
 
           {order.orderType === "Truck" &&
-            (order.consignments?.length ?? 0) > 0 ? (
+          (order.consignments?.length ?? 0) > 0 ? (
             <CardSection
               title="Consignment Lines"
               icon={<IconPackage size={14} />}
@@ -709,9 +719,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                 {isDownloadingPdf ? "Downloading..." : "Download PDF"}
               </Button>
 
-              {canCreateLR &&
-                order.orderType === "Truck" &&
-                order.status === "Confirmed" && (
+              {order.orderType === "Truck" && order.status === "Confirmed" && (
+                <RequirePermission permission={PERMS.LORRY_RECEIPT.CREATE}>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -722,7 +731,8 @@ export default function OrderDetail({ orderId }: { orderId: string }) {
                   >
                     <IconFileText size={14} /> Create LR
                   </Button>
-                )}
+                </RequirePermission>
+              )}
             </div>
           </section>
         </div>

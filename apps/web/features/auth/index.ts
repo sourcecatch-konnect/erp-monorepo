@@ -7,6 +7,7 @@ export { useCan, useCanAny } from "./hooks/useCan";
 export { AuthBootstrap } from "./components/AuthBootstrap";
 export { ProtectedRoute } from "./components/ProtectedRoute";
 export { Can } from "./components/Can";
+export { RequirePermission } from "./components/RequirePermission";
 export { LoginForm } from "./components/LoginForm";
 export { ForgotPasswordForm } from "./components/ForgotPasswordForm";
 export { ResetPasswordForm } from "./components/ResetPasswordForm";
@@ -14,11 +15,7 @@ export {
   login,
   logout,
   fetchMe,
+  refreshMe,
   sessionExpired,
 } from "./store/authSlice";
-export type {
-  AuthUser,
-  AuthStatus,
-  AuthState,
-  LoginPayload,
-} from "./types";
+export type { AuthUser, AuthStatus, AuthState, LoginPayload } from "./types";

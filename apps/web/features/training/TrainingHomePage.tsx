@@ -26,7 +26,7 @@ import { ProgressBar } from "./components/ProgressBar";
 import { ProgressRing } from "./components/ProgressRing";
 import { StatTile } from "./components/StatTile";
 import { TrainingHero } from "./components/TrainingHero";
-import { TrainingNav } from "./components/TrainingNav";
+import { TrainingPageHeader } from "./components/TrainingPageHeader";
 import { useCompleteOnVisit, useTrainingMe } from "./hooks/useTraining";
 import {
   progressMap,
@@ -489,17 +489,7 @@ export function TrainingHomePage() {
 
   return (
     <div className="w-full space-y-4">
-      <header className="space-y-0.5">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          My role &amp; training
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Learn what your role does in the ERP and where your work fits in the
-          business.
-        </p>
-      </header>
-
-      <TrainingNav />
+      <TrainingPageHeader caption="Learn what your role does in the ERP, and where your work fits in the business." />
 
       {isLoading ? (
         <div className="space-y-4">

@@ -6,7 +6,7 @@ import { IconArrowRight, IconSearch } from "@tabler/icons-react";
 import type { TrainingStageKey } from "@skerp/types";
 import { Input } from "@skerp/ui/components/input";
 import { cn } from "@skerp/ui/lib/util";
-import { TrainingNav } from "./components/TrainingNav";
+import { TrainingPageHeader } from "./components/TrainingPageHeader";
 import {
   AREA_TONES,
   GLOSSARY,
@@ -78,16 +78,7 @@ export function GlossaryPage() {
 
   return (
     <div className="w-full space-y-4">
-      <header className="space-y-0.5">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Glossary
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Every word the ERP uses, explained in plain language.
-        </p>
-      </header>
-
-      <TrainingNav />
+      <TrainingPageHeader caption="Every word the ERP uses, explained in plain language." />
 
       <section className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
         <p className="text-sm text-muted-foreground">
