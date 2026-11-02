@@ -61,8 +61,17 @@ export const CATEGORY_OPTIONS = FEEDBACK_CATEGORIES.map((value) => ({
   icon: CATEGORY_DETAILS[value].icon,
 }));
 
+/** The dot beside each impact, so the scale reads as a scale. */
+const IMPACT_TONES: Record<FeedbackImpact, "muted" | "primary" | "warning" | "destructive"> = {
+  LOW: "muted",
+  MEDIUM: "primary",
+  HIGH: "warning",
+  CRITICAL: "destructive",
+};
+
 export const IMPACT_OPTIONS = FEEDBACK_IMPACTS.map((value) => ({
   value,
   label: FEEDBACK_IMPACT_LABELS[value],
   hint: IMPACT_HINTS[value],
+  tone: IMPACT_TONES[value],
 }));

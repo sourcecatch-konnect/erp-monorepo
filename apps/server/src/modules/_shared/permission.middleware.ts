@@ -22,7 +22,7 @@ const actionToKeySuffix: Record<PermissionAction, string> = {
 
 export const requirePermission = (
   permissionKey: string,
-  action: PermissionAction
+  action: PermissionAction,
 ) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.ctx) {
@@ -34,9 +34,12 @@ export const requirePermission = (
 
     const fullKey = `${permissionKey}.${actionToKeySuffix[action]}`;
     if (!req.ctx.permissions.has(fullKey)) {
+      // `required` lets the client name the missing permission instead of
+      // showing the bare word "Forbidden".
       return sendError(res, 403, {
         code: "FORBIDDEN",
         message: "Forbidden",
+        details: { required: [fullKey] },
       });
     }
 

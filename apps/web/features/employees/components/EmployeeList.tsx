@@ -6,7 +6,9 @@ import {
   IconEdit,
   IconEye,
   IconKey,
+  IconPlus,
   IconTrash,
+  IconUsers,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 import type { EmployeePageQuery } from "@skerp/validators";
@@ -48,22 +50,17 @@ import {
   useEmployeesPage,
   useSetEmployeeStatus,
 } from "../hooks/useEmployees";
-import type {
-  EmployeeCredentials,
-  EmployeeDialogTarget,
-  EmployeeListRow,
-} from "../types";
+import type { EmployeeCredentials, EmployeeListRow } from "../types";
 import { CreateEmployeeDialog } from "./CreateEmployeeDialog";
 import { ResetPasswordDialog } from "./ResetPasswordDialog";
 import { CredentialsDialog } from "./CredentialsDialog";
-import { EmployeeDetailDialog } from "./EmployeeDetailDialog";
+import { EditEmployeeDialog } from "./EditEmployeeDialog";
+import { EmployeeDetailSheet } from "./EmployeeDetailSheet";
+import { RoleChip, UserAvatar, nameOf } from "./employee.ui";
 
-const COLUMN_COUNT = 6;
+const COLUMN_COUNT = 5;
 
-const nameOf = (e: EmployeeListRow) =>
-  [e.firstName, e.middleName, e.lastName].filter(Boolean).join(" ");
-
-/** User management screen - list, create, view/edit, reset password, activate/deactivate, delete. */
+/** User management screen — list, create, view, edit, reset password, activate, delete. */
 export function EmployeeList() {
   const { user: me } = useAuth();
   const [search, setSearch] = useState("");
@@ -101,9 +98,10 @@ export function EmployeeList() {
   const deleteMutation = useDeleteEmployee();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [detailTarget, setDetailTarget] = useState<EmployeeDialogTarget | null>(
-    null,
-  );
+  // Viewing and editing are separate surfaces, so they are separate state:
+  // a read-only sheet and a form dialog, never the same component in a mode.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [resetTarget, setResetTarget] = useState<EmployeeListRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EmployeeListRow | null>(
     null,
@@ -134,14 +132,29 @@ export function EmployeeList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">Users</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+              Users
+            </h1>
+            {/* The count answers "how many people have logins?" without
+                anyone having to page to the end of the table. */}
+            {employeesQuery.isSuccess ? (
+              <span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                <IconUsers className="size-3.5" aria-hidden />
+                {total}
+              </span>
+            ) : null}
+          </div>
           <p className="text-sm text-muted-foreground">
             Create users, assign roles, and manage passwords.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Create user</Button>
+        <Button onClick={() => setCreateOpen(true)}>
+          <IconPlus className="size-4" aria-hidden />
+          Create user
+        </Button>
       </div>
 
       <TableSearchInput
@@ -154,15 +167,14 @@ export function EmployeeList() {
       />
 
       <div className="space-y-3">
-        <div className="rounded-md border border-border bg-card">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Branch</TableHead>
-                <TableHead>Active</TableHead>
+                <TableHead className="w-28">Can sign in</TableHead>
                 <TableHead className="w-16 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -184,11 +196,25 @@ export function EmployeeList() {
               ) : loadingRows ? (
                 Array.from({ length: employees.length || 5 }, (_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: COLUMN_COUNT }, (__, j) => (
-                      <TableCell key={j}>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                    ))}
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="size-9 rounded-full" />
+                        <div className="space-y-1.5">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-44" />
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-9" />
+                    </TableCell>
+                    <TableCell />
                   </TableRow>
                 ))
               ) : employees.length === 0 ? (
@@ -224,26 +250,38 @@ export function EmployeeList() {
                   const name = nameOf(emp);
                   return (
                     <TableRow key={emp.id}>
-                      <TableCell className="font-medium text-foreground">
-                        <button
-                          type="button"
-                          className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          onClick={() =>
-                            setDetailTarget({ id: emp.id, mode: "view" })
-                          }
-                        >
-                          {name}
-                          {isMe ? (
-                            <span className="font-normal text-muted-foreground">
-                              {" "}
-                              (you)
-                            </span>
-                          ) : null}
-                        </button>
+                      {/* Name and email in one cell: they are one identity,
+                          and splitting them cost a column that made every
+                          row wrap on a laptop screen. */}
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <UserAvatar employee={emp} />
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              className="block max-w-full truncate text-left text-sm font-medium text-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              onClick={() => setDetailId(emp.id)}
+                            >
+                              {name}
+                              {isMe ? (
+                                <span className="font-normal text-muted-foreground">
+                                  {" "}
+                                  (you)
+                                </span>
+                              ) : null}
+                            </button>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {emp.email}
+                            </p>
+                          </div>
+                        </div>
                       </TableCell>
-                      <TableCell>{emp.email}</TableCell>
-                      <TableCell>{emp.role.name}</TableCell>
-                      <TableCell>{emp.branch.name}</TableCell>
+                      <TableCell>
+                        <RoleChip name={emp.role.name} />
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {emp.branch.name}
+                      </TableCell>
                       <TableCell>
                         <Switch
                           aria-label={`${name} can sign in`}
@@ -275,18 +313,12 @@ export function EmployeeList() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
-                              onClick={() =>
-                                setDetailTarget({ id: emp.id, mode: "view" })
-                              }
+                              onClick={() => setDetailId(emp.id)}
                             >
                               <IconEye size={16} />
-                              View
+                              View details
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setDetailTarget({ id: emp.id, mode: "edit" })
-                              }
-                            >
+                            <DropdownMenuItem onClick={() => setEditId(emp.id)}>
                               <IconEdit size={16} />
                               Edit
                             </DropdownMenuItem>
@@ -403,10 +435,22 @@ export function EmployeeList() {
         onOpenChange={setCreateOpen}
         onCreated={setCredentials}
       />
-      <EmployeeDetailDialog
-        target={detailTarget}
-        onClose={() => setDetailTarget(null)}
+      <EmployeeDetailSheet
+        employeeId={detailId}
+        onClose={() => setDetailId(null)}
+        onEdit={(id) => {
+          // Hand over to the form: one surface on screen at a time.
+          setDetailId(null);
+          setEditId(id);
+        }}
+        onResetPassword={(id) => {
+          const row = employees.find((emp) => emp.id === id);
+          if (!row) return;
+          setDetailId(null);
+          setResetTarget(row);
+        }}
       />
+      <EditEmployeeDialog employeeId={editId} onClose={() => setEditId(null)} />
       <ResetPasswordDialog
         employee={resetTarget}
         onClose={() => setResetTarget(null)}
