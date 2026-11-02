@@ -1,32 +1,45 @@
 import { z } from "zod";
+import { optionalRupeesToPaise, rupeesToPaise } from "../_shared/money.js";
 
 /* -----------------------------
    HELPERS
 ------------------------------ */
 
+/** Blank (a cleared "Any" select) and null both mean "applies to any". */
 const optionalId = z
   .string()
   .trim()
-  .min(1)
   .nullish()
-  .transform((v) => v ?? null);
+  .transform((v) => (v ? v : null));
 
-/** Money arrives from forms as rupees; the database stores paise. */
-const paise = z
-  .number({ invalid_type_error: "Enter an amount" })
-  .int("Amount must be a whole number of paise")
-  .min(0, "Amount cannot be negative");
+/** Money is entered in rupees and stored as paise (see `_shared/money`). */
+const optionalPaise = (label: string) =>
+  optionalRupeesToPaise(label, { allowZero: true }).transform((v) => v ?? null);
 
-const optionalPaise = paise.nullish().transform((v) => v ?? null);
+/** Form inputs arrive as strings; JSON callers may send numbers. */
+const wholeNumber = (label: string, min: number) =>
+  z.coerce
+    .number({ invalid_type_error: `Enter ${label}` })
+    .int(`${label} must be a whole number`)
+    .min(min, `${label} must be at least ${min}`);
+
+const optionalWholeNumber = (label: string, min: number) =>
+  z
+    .union([z.string(), z.number()])
+    .nullish()
+    .transform((v) => (v === "" || v === null || v === undefined ? null : Number(v)))
+    .refine(
+      (v) => v === null || (Number.isInteger(v) && v >= min),
+      `${label} must be a whole number of at least ${min}`,
+    );
 
 const dateInput = z
-  .string()
-  .min(1, "Date is required")
+  .union([z.string(), z.date()])
   .transform((v) => new Date(v))
-  .refine((d) => !Number.isNaN(d.getTime()), "Enter a valid date");
+  .refine((d) => !Number.isNaN(d.getTime()), "Date is required");
 
 const optionalDateInput = z
-  .string()
+  .union([z.string(), z.date()])
   .nullish()
   .transform((v) => (v ? new Date(v) : null))
   .refine((d) => d === null || !Number.isNaN(d.getTime()), "Enter a valid date");
@@ -43,9 +56,14 @@ export const detentionBasisSchema = z.enum(["DAY", "HOUR"]);
  */
 export const detentionSlabBandSchema = z
   .object({
-    fromUnit: z.number().int().min(1, "Bands start at unit 1"),
-    toUnit: z.number().int().min(1).nullish().transform((v) => v ?? null),
-    ratePaise: paise,
+    fromUnit: wholeNumber("Band start", 1),
+    toUnit: optionalWholeNumber("Band end", 1),
+    /** Rupees in, paise out. Blank is refused, not read as ₹0 — a forgotten
+     *  rate would otherwise make that band free. */
+    ratePaise: z
+      .union([z.string(), z.number()])
+      .refine((v) => String(v).trim() !== "", "Enter a rate")
+      .pipe(rupeesToPaise("Rate", { allowZero: true })),
   })
   .refine((b) => b.toUnit === null || b.toUnit >= b.fromUnit, {
     message: "Band end must not be before its start",
@@ -104,18 +122,19 @@ const slabBase = z.object({
   customerId: optionalId,
   vehicleTypeId: optionalId,
 
-  freightFromPaise: optionalPaise,
-  freightToPaise: optionalPaise,
+  /** Rupees in, paise out. */
+  freightFromPaise: optionalPaise("Freight from"),
+  freightToPaise: optionalPaise("Freight to"),
 
   basis: detentionBasisSchema.default("DAY"),
 
   firstDayFree: z.boolean().default(false),
   lastDayFree: z.boolean().default(false),
 
-  freeHours: z.number().int().min(0).nullish().transform((v) => v ?? null),
-  blockHours: z.number().int().min(1).nullish().transform((v) => v ?? null),
+  freeHours: optionalWholeNumber("Free hours", 0),
+  blockHours: optionalWholeNumber("Block size", 1),
 
-  priority: z.number().int().min(0).default(0),
+  priority: wholeNumber("Priority", 0).default(0),
 
   effectiveFrom: dateInput,
   effectiveTo: optionalDateInput,
