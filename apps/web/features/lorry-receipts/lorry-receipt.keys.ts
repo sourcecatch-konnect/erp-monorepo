@@ -5,4 +5,6 @@ export const lrKeys = {
   list: (query: ListQuery) => ["lorry-receipts", "list", query] as const,
   statusCounts: ["lorry-receipts", "status-counts"] as const,
   detail: (id: string) => ["lorry-receipts", "detail", id] as const,
+  deliveryChallans: (id: string) =>
+    ["lorry-receipts", "detail", id, "delivery-challans"] as const,
 };

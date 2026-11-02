@@ -137,10 +137,15 @@ export default function DeliverySection({
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <InfoField
+            label="Truck reported at"
+            value={
+              delivery.reportedAt ? formatDateTime(delivery.reportedAt) : "—"
+            }
+          />
+          <InfoField
             label="Delivered at"
             value={formatDateTime(delivery.deliveredAt)}
           />
-
           <InfoField
             label="Unloading completed"
             value={

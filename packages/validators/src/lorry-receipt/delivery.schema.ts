@@ -48,8 +48,7 @@ const optionalNonNegativeInt = (label: string) =>
       return Number(value);
     })
     .refine(
-      (value) =>
-        value === undefined || (Number.isInteger(value) && value >= 0),
+      (value) => value === undefined || (Number.isInteger(value) && value >= 0),
       `${label} must be a non-negative whole number`,
     );
 
@@ -74,6 +73,9 @@ const optionalQty = (label: string) =>
 
 const deliveryFields = {
   deliveredAt: requiredDate("delivery date"),
+  // Truck arrival at the consignee. Detention runs from the earliest of these
+  // across a challan's LRs, so it is kept apart from the handover time.
+  reportedAt: optionalDate("truck reporting time"),
   unloadingAt: optionalDate("unloading completion date"),
   receiverName: optionalString,
   receiverPhone: optionalString,
@@ -83,23 +85,53 @@ const deliveryFields = {
   remark: optionalString,
 };
 
+/** Reported → delivered → unloaded, in that order. */
+const checkDeliveryOrder = (
+  value: { deliveredAt: Date; reportedAt?: Date; unloadingAt?: Date },
+  ctx: z.RefinementCtx,
+) => {
+  if (value.reportedAt && value.reportedAt > value.deliveredAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["reportedAt"],
+      message: "Truck reporting time cannot be after the delivery time",
+    });
+  }
+  if (value.unloadingAt && value.unloadingAt < value.deliveredAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["unloadingAt"],
+      message: "Unloading completion cannot be before delivery time",
+    });
+  }
+};
+
+/**
+ * The day the broker's truck reported at the station, per delivery challan the
+ * LR travelled on. The office enters it with the delivery, when the papers
+ * come back; `null` clears it. Single-LR delivery only — a bulk delivery
+ * spans challans that are better set one LR at a time.
+ */
+const challanReportDates = z
+  .array(
+    z.object({
+      challanId: z.string().min(1),
+      version: z.coerce.number().int().min(1),
+      reportDate: z.coerce.date().nullable(),
+    }),
+  )
+  .optional();
+
 export const deliverLRSchema = z
-  .object(deliveryFields)
-  .superRefine((value, ctx) => {
-    if (value.unloadingAt && value.unloadingAt < value.deliveredAt) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["unloadingAt"],
-        message: "Unloading completion cannot be before delivery time",
-      });
-    }
-  });
+  .object({ ...deliveryFields, challanReportDates })
+  .superRefine(checkDeliveryOrder);
 
 export type DeliverLRInput = z.infer<typeof deliverLRSchema>;
 
 export const updateLRDeliverySchema = z.object({
   ...deliveryFields,
   deliveredAt: optionalDate("delivery date"),
+  challanReportDates,
 });
 
 export type UpdateLRDeliveryInput = z.infer<typeof updateLRDeliverySchema>;
@@ -120,15 +152,7 @@ export const deliverGroupSchema = z
       )
       .min(1, "Select at least one lorry receipt"),
   })
-  .superRefine((value, ctx) => {
-    if (value.unloadingAt && value.unloadingAt < value.deliveredAt) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["unloadingAt"],
-        message: "Unloading completion cannot be before delivery time",
-      });
-    }
-  });
+  .superRefine(checkDeliveryOrder);
 export type DeliverGroupInput = z.infer<typeof deliverGroupSchema>;
 
 /* ------------------------------------------------------------------ */

@@ -338,6 +338,10 @@ export default function LRUnloadingDetailPage({ id }: { id: string }) {
                         label="Issued"
                         value={formatDateTime(dc.issuedAt)}
                       />
+                      <Field
+                        label="Station report date"
+                        value={dc.reportDate ? formatDate(dc.reportDate) : null}
+                      />
                     </div>
                   </Link>
                 ))}

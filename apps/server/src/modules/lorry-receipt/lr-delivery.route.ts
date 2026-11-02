@@ -8,6 +8,7 @@ import {
 import { PERMS } from "@skerp/types";
 
 import { db } from "../../../prisma/prisma.js";
+import type { Prisma } from "../../../generated/prisma/index.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { sendOk } from "../_shared/response.js";
@@ -15,6 +16,7 @@ import { getParamId } from "../_shared/param.js";
 import { assertBranchAccess } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
+  ConflictError,
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
@@ -39,6 +41,7 @@ import {
 } from "./lr-delivery.cache.js";
 import {
   assertLRsNotOnVendorSlip,
+  assertNotOnVendorSlip,
   sameValue,
 } from "../vendor-payment/source-lock.js";
 
@@ -74,7 +77,7 @@ const lrForAction = async (id: string) => {
         select: {
           id: true,
           deliveredAt: true,
-
+          reportedAt: true,
           unloadingAt: true,
         },
       },
@@ -96,6 +99,85 @@ const lrForAction = async (id: string) => {
   });
   if (!lr) throw new NotFoundError("Lorry receipt not found");
   return lr;
+};
+
+/** Live (non-cancelled) delivery challans that carry this LR's goods. */
+const challansOfLR = (lrNumber: string) => ({
+  status: { not: "CANCELLED" as const },
+  items: { some: { lrNumberSnapshot: lrNumber } },
+});
+
+type ChallanReportDateEntry = {
+  challanId: string;
+  version: number;
+  reportDate: Date | null;
+};
+
+/**
+ * Check the challan report dates sent with a delivery and keep only the ones
+ * that change. Read-only, so it runs before the transaction. A challan already
+ * on a broker payment slip is locked: the slip's detention was computed from
+ * the old date.
+ */
+const prepareChallanReportDates = async (
+  lrNumber: string,
+  entries: ChallanReportDateEntry[] | undefined,
+): Promise<ChallanReportDateEntry[]> => {
+  if (!entries?.length) return [];
+  const ids = [...new Set(entries.map((entry) => entry.challanId))];
+  if (ids.length !== entries.length) {
+    throw new BadRequestError("The same delivery challan appears twice");
+  }
+
+  const challans = await db.deliveryChallan.findMany({
+    where: { id: { in: ids }, ...challansOfLR(lrNumber) },
+    select: { id: true, challanNumber: true, version: true, reportDate: true },
+  });
+  const byId = new Map(challans.map((challan) => [challan.id, challan]));
+
+  const changes = entries.filter((entry) => {
+    const challan = byId.get(entry.challanId);
+    if (!challan) {
+      throw new BadRequestError(
+        "A delivery challan is not on this LR, or has been cancelled",
+      );
+    }
+    if (challan.version !== entry.version) {
+      throw new ConflictError(
+        `Delivery Challan ${challan.challanNumber} changed. Please refresh before saving.`,
+      );
+    }
+    return (
+      (challan.reportDate?.getTime() ?? null) !==
+      (entry.reportDate?.getTime() ?? null)
+    );
+  });
+
+  await assertNotOnVendorSlip(
+    db,
+    "DELIVERY_CHALLAN",
+    changes.map((change) => change.challanId),
+    "change a delivery challan's report date",
+  );
+  return changes;
+};
+
+const applyChallanReportDates = async (
+  tx: Prisma.TransactionClient,
+  changes: ChallanReportDateEntry[],
+  me: string,
+) => {
+  for (const change of changes) {
+    await tx.deliveryChallan.update({
+      where: { id: change.challanId, version: change.version },
+      data: {
+        reportDate: change.reportDate,
+        updatedById: me,
+        version: { increment: 1 },
+      },
+      select: { id: true },
+    });
+  }
 };
 
 /** Origin-or-destination branch scope for worklist queries. */
@@ -624,6 +706,7 @@ router.get(
             challanNumber: true,
             status: true,
             loadingAt: true,
+            reportDate: true,
             issuedAt: true,
             vehicleNumberSnapshot: true,
             vehicle: { select: { vehicleNumber: true } },
@@ -710,6 +793,7 @@ router.get(
         challanNumber: row.challanNumber,
         status: row.status,
         loadingAt: row.loadingAt,
+        reportDate: row.reportDate,
         issuedAt: row.issuedAt,
         vehicleNumber: row.vehicle?.vehicleNumber ?? row.vehicleNumberSnapshot,
         driverName: row.driverName,
@@ -730,6 +814,30 @@ router.get(
     const lr = await lrForAction(id);
     assertBranchAccess(req, lr.group.destinationBranchId);
     return sendOk(res, await getLRDeliveryEligibility(id));
+  },
+);
+
+/** The challans the deliver dialog shows for their report dates. */
+router.get(
+  "/:id/delivery-challans",
+  can(PERMS.LORRY_RECEIPT.VIEW),
+  async (req, res) => {
+    const id = getParamId(req);
+    const lr = await lrForAction(id);
+    assertBranchAccess(req, lr.group.destinationBranchId);
+    const challans = await db.deliveryChallan.findMany({
+      where: challansOfLR(lr.lrNumber),
+      orderBy: [{ loadingAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        challanNumber: true,
+        status: true,
+        loadingAt: true,
+        reportDate: true,
+        version: true,
+      },
+    });
+    return sendOk(res, challans);
   },
 );
 
@@ -754,14 +862,19 @@ router.post(
     }
     const input = parsed.data;
     const me = actorId(req);
+    const challanChanges = await prepareChallanReportDates(
+      lr.lrNumber,
+      input.challanReportDates,
+    );
 
     await db.$transaction(async (tx) => {
       assertLRDeliveryEligible(await getLRDeliveryEligibility(id, tx));
+      await applyChallanReportDates(tx, challanChanges, me);
       await tx.lRDelivery.create({
         data: {
           lrId: id,
           deliveredAt: input.deliveredAt,
-
+          reportedAt: input.reportedAt ?? null,
           unloadingAt: input.unloadingAt ?? null,
           receiverName: input.receiverName ?? null,
           receiverPhone: input.receiverPhone ?? null,
@@ -815,43 +928,64 @@ router.patch(
     }
     const input = parsed.data;
     const deliveredAt = input.deliveredAt ?? lr.delivery.deliveredAt;
+    const reportedAt = input.reportedAt ?? lr.delivery.reportedAt;
     const unloadingAt = input.unloadingAt ?? lr.delivery.unloadingAt;
 
+    if (reportedAt && reportedAt > deliveredAt) {
+      throw new BadRequestError(
+        "Truck reporting time cannot be after the delivery time",
+      );
+    }
     if (unloadingAt && unloadingAt < deliveredAt) {
       throw new BadRequestError(
         "Unloading completion cannot be before delivery time",
       );
     }
     const me = actorId(req);
+    const challanChanges = await prepareChallanReportDates(
+      lr.lrNumber,
+      input.challanReportDates,
+    );
 
-    const updated = await db.lRDelivery.update({
-      where: { lrId: id },
-      data: {
-        ...(input.deliveredAt !== undefined
-          ? { deliveredAt: input.deliveredAt }
-          : {}),
-
-        ...(input.unloadingAt !== undefined
-          ? { unloadingAt: input.unloadingAt ?? null }
-          : {}),
-        ...(input.receiverName !== undefined
-          ? { receiverName: input.receiverName ?? null }
-          : {}),
-        ...(input.receiverPhone !== undefined
-          ? { receiverPhone: input.receiverPhone ?? null }
-          : {}),
-        ...(lr.group.isMarketVehicle
-          ? input.unloadingCharges !== undefined
-            ? { unloadingCharges: input.unloadingCharges ?? null }
-            : {}
-          : { unloadingCharges: null }),
-        ...(input.remark !== undefined ? { remark: input.remark ?? null } : {}),
-        updatedById: me,
-        version: { increment: 1 },
-      },
-      include: deliveryInclude,
+    await db.$transaction(async (tx) => {
+      await applyChallanReportDates(tx, challanChanges, me);
+      await tx.lRDelivery.update({
+        where: { lrId: id },
+        data: {
+          ...(input.deliveredAt !== undefined
+            ? { deliveredAt: input.deliveredAt }
+            : {}),
+          ...(input.reportedAt !== undefined
+            ? { reportedAt: input.reportedAt ?? null }
+            : {}),
+          ...(input.unloadingAt !== undefined
+            ? { unloadingAt: input.unloadingAt ?? null }
+            : {}),
+          ...(input.receiverName !== undefined
+            ? { receiverName: input.receiverName ?? null }
+            : {}),
+          ...(input.receiverPhone !== undefined
+            ? { receiverPhone: input.receiverPhone ?? null }
+            : {}),
+          ...(lr.group.isMarketVehicle
+            ? input.unloadingCharges !== undefined
+              ? { unloadingCharges: input.unloadingCharges ?? null }
+              : {}
+            : { unloadingCharges: null }),
+          ...(input.remark !== undefined
+            ? { remark: input.remark ?? null }
+            : {}),
+          updatedById: me,
+          version: { increment: 1 },
+        },
+        select: { id: true },
+      });
     });
 
+    const updated = await db.lRDelivery.findUniqueOrThrow({
+      where: { lrId: id },
+      include: deliveryInclude,
+    });
     return sendOk(res, updated);
   },
 );

@@ -166,6 +166,7 @@ function Deliver({
     <DeliverDialog
       open
       onOpenChange={(open) => !open && onClose()}
+      lrId={id}
       lrNumber={number}
       isMarketVehicle={group.data.isMarketVehicle}
       mode="deliver"
