@@ -22,6 +22,7 @@ import { vendorPaymentApi } from "./vendor-payment.service";
 import {
   LoadMoreFooter,
   SkeletonTableRows,
+  VENDOR_PAYMENT_TYPE_LABELS,
   VendorPaymentStatusBadge,
   money,
 } from "./vendor-payment.ui";
@@ -132,7 +133,9 @@ export function VendorPaymentRegisterList() {
                       onClick={() => router.push(`/accounts/vendor-payments/${slip.id}`)}
                     >
                       <TableCell className="font-medium">{slip.slipNumber}</TableCell>
-                      <TableCell className="text-sm">{slip.type}</TableCell>
+                      <TableCell className="text-sm">
+                        {VENDOR_PAYMENT_TYPE_LABELS[slip.type]}
+                      </TableCell>
                       <TableCell className="text-sm">
                         {slip.transport?.name ?? slip.labour?.name ?? "—"}
                       </TableCell>

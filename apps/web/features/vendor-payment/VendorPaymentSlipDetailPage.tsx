@@ -24,7 +24,13 @@ import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { vendorPaymentApi, type VendorPaymentSlipLine } from "./vendor-payment.service";
 import { RejectSlipDialog } from "./RejectSlipDialog";
 import { CancelSlipDialog } from "./CancelSlipDialog";
-import { PageHeader, VendorPaymentStatusBadge, formatDate, money } from "./vendor-payment.ui";
+import {
+  PageHeader,
+  VENDOR_PAYMENT_TYPE_LABELS,
+  VendorPaymentStatusBadge,
+  formatDate,
+  money,
+} from "./vendor-payment.ui";
 
 const CANCELLABLE_STATUSES = new Set(["DRAFT", "PENDING_APPROVAL", "APPROVED"]);
 
@@ -34,13 +40,15 @@ const SOURCE_TYPE_LABELS: Record<VendorPaymentSlipLine["sourceType"], string> = 
   GRN_HAMALI: "GRN at Rail Head",
   RAIL_BRANCH_GRN: "GRN at Branch",
   VP_LOADING: "VP loading",
+  DELIVERY_CHALLAN: "Delivery challan",
 };
 
 /** "MH19AB1234 · G-0045 · LR-1, LR-2" for a truck; the document no. otherwise. */
 function SourceLabel({ line }: { line: VendorPaymentSlipLine }) {
   const source = line.source;
   if (!source) return <span>{SOURCE_TYPE_LABELS[line.sourceType]}</span>;
-  if (line.sourceType === "LR_GROUP") {
+  // A truck and a delivery challan both carry several LRs; list them.
+  if (line.sourceType === "LR_GROUP" || line.sourceType === "DELIVERY_CHALLAN") {
     return (
       <>
         <p className="font-medium text-sm">
@@ -166,7 +174,7 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
     <div className="space-y-6">
       <PageHeader
         title={slip.slipNumber}
-        description={`${slip.type === "TRANSPORTER" ? "Transporter" : slip.type} payment slip for ${
+        description={`${VENDOR_PAYMENT_TYPE_LABELS[slip.type]} payment slip for ${
           slip.transport?.name ?? slip.labour?.name ?? "—"
         } — ${slip.branch?.name ?? "—"}`}
         actions={
@@ -289,7 +297,13 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
 
       <Card className="overflow-hidden">
         <CardHeader className="border-b bg-muted/20">
-          <CardTitle>{slip.type === "TRANSPORTER" ? "Trucks" : "Source lines"}</CardTitle>
+          <CardTitle>
+            {slip.type === "TRANSPORTER"
+              ? "Trucks"
+              : slip.type === "LDC_BROKER"
+                ? "Delivery challans"
+                : "Source lines"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>

@@ -234,15 +234,22 @@ async function buildServerLines(
       const server = reconciled.get(line.sourceId);
       if (!server)
         throw new BadRequestError(`Challan ${line.sourceId} is not a valid LDC line`);
+      // The client's detention is the broker's claim. The business pays
+      // whichever is lower — the claim or the slab — so a claim can only
+      // reduce the payable, never raise it above what the slab allows.
+      const detentionPaise =
+        line.detentionPaise < server.detentionPaise
+          ? line.detentionPaise
+          : server.detentionPaise;
       // TDS is deducted on the gross payable, matching the legacy
       // `NetAmt = TotalFreightPayable - TDS` (ACCOUNTS_MODULE_MAP §2.F).
-      const gross = server.freightPaise + server.detentionPaise;
+      const gross = server.freightPaise + detentionPaise;
       return {
         sourceType: line.sourceType,
         sourceId: line.sourceId,
         ...ZERO_LINE_COMPONENTS,
         freightPaise: server.freightPaise,
-        detentionPaise: server.detentionPaise,
+        detentionPaise,
         advancePaise: server.advancePaise,
         tdsPaise: roundPaiseByBps(gross, tdsRateBps),
       };

@@ -24,7 +24,24 @@ export type VendorPaymentSourceType =
   | "LR_GROUP"
   | "GRN_HAMALI"
   | "RAIL_BRANCH_GRN"
-  | "VP_LOADING";
+  | "VP_LOADING"
+  | "DELIVERY_CHALLAN";
+
+/** An issued delivery challan the LDC broker can be paid for — one slip line.
+ *  Detention is computed by the server from the broker's slab. */
+export type EligibleLDCSource = {
+  sourceId: string;
+  /** Challan number. */
+  label: string;
+  vehicleNumber: string | null;
+  branchId: string;
+  occurredAt: string;
+  freightPaise: string;
+  advancePaise: string;
+  detentionPaise: string;
+  /** Why the detention figure may be wrong (missing dates, no slab, …). */
+  detentionWarnings: string[];
+};
 
 export type EligibleTransporterLR = {
   lrId: string;
@@ -172,8 +189,8 @@ export type CreateVendorPaymentSlipBody = {
   branchId: string;
   transportId?: string;
   labourId?: string;
-  /** Required for HAMALI — basis points (200 = 2%), applied per line via
-   *  roundPaiseByBps server-side. Unused for TRANSPORTER. */
+  /** Required for HAMALI and LDC_BROKER — basis points (200 = 2%), applied
+   *  per line via roundPaiseByBps server-side. Unused for TRANSPORTER. */
   tdsRateBps?: number;
   lines: VendorPaymentSlipLineInput[];
 };
@@ -273,6 +290,22 @@ export const vendorPaymentApi = {
       "/vendor-payment/calculators/transporter-trucks",
       { ...chunkParams(filters), transportId: filters.transportId },
     ),
+  /** Page-based (challans are one table), unlike the cursor-chunked lists. */
+  eligibleLDCSources: async (filters: {
+    transportId: string;
+    branchId?: string;
+    from?: string;
+    to?: string;
+    search?: string;
+    page: number;
+    size: number;
+  }): Promise<ListResult<EligibleLDCSource>> => {
+    const response = await api.get<ApiResponse<EligibleLDCSource[]>>(
+      "/vendor-payment/calculators/ldc-broker",
+      { params: { ...filters, search: filters.search?.trim() || undefined } },
+    );
+    return unwrapListResponse(response);
+  },
   eligibleHamaliSources: (filters: EligibleChunkFilters & { labourId: string }) =>
     get<EligibleChunk<EligibleHamaliSource>>("/vendor-payment/calculators/hamali", {
       ...chunkParams(filters),
