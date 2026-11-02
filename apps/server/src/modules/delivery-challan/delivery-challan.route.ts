@@ -29,6 +29,7 @@ import {
 import { getParamId } from "../_shared/param.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { sendOk } from "../_shared/response.js";
+import { assertNotOnVendorSlip } from "../vendor-payment/source-lock.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -1503,6 +1504,14 @@ router.post(
         "Delivery Challan changed. Please refresh before cancelling.",
       );
     }
+    // A broker slip line holds this challan's freight and detention; the
+    // broker would still be paid for a cancelled challan.
+    await assertNotOnVendorSlip(
+      db,
+      "DELIVERY_CHALLAN",
+      [existing.id],
+      "cancel this delivery challan",
+    );
 
     const cancelled = await db.deliveryChallan.update({
       where: { id: existing.id, version: existing.version },
