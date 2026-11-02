@@ -272,6 +272,11 @@ export const NAV_SECTIONS: NavSection[] = [
             permission: PERMS.MASTERS.RAILWAY_FREIGHT.VIEW,
           },
           { title: "Wagons", href: "/masters/wagons", permission: PERMS.MASTERS.WAGON.VIEW },
+          {
+            title: "Detention Slabs",
+            href: "/masters/detention-slab",
+            permission: PERMS.MASTERS.DETENTION_SLAB.VIEW,
+          },
           // Goods & spares
           { title: "Goods", href: "/masters/goods", permission: PERMS.MASTERS.GOODS.VIEW },
           {

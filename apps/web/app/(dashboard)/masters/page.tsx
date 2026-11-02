@@ -9,6 +9,7 @@ import {
     IconFileInvoice,
     IconGauge,
     IconGps,
+    IconHourglass,
     IconMap2,
     IconMapPin,
     IconPackage,
@@ -63,6 +64,7 @@ const ALL_CARDS: MasterCard[] = [
     { title: "Rate Matrix", description: "Route-wise freight rate entries", href: "/masters/rate-matrix", icon: IconReceipt, group: "Rates & Finance", permission: PERMS.MASTERS.RATE_MATRIX.VIEW },
     { title: "Wagons", description: "Railway wagon types & dimensions", href: "/masters/wagons", icon: IconTrain, group: "Rates & Finance", permission: PERMS.MASTERS.WAGON.VIEW },
     { title: "Railway Freight", description: "Rail freight matrix by route", href: "/masters/railway-freight", icon: IconTrain, group: "Rates & Finance", permission: PERMS.MASTERS.RAILWAY_FREIGHT.VIEW },
+    { title: "Detention Slabs", description: "Broker detention rules: free days & rates", href: "/masters/detention-slab", icon: IconHourglass, group: "Rates & Finance", permission: PERMS.MASTERS.DETENTION_SLAB.VIEW },
     { title: "Creditors", description: "Payees grouped by category", href: "/masters/creditor", icon: IconReceipt, group: "Rates & Finance", permission: PERMS.MASTERS.CREDITOR.VIEW },
     { title: "Cash Accounts", description: "Bank accounts & cash-in-hand", href: "/masters/cash-account", icon: IconReceipt, group: "Rates & Finance", permission: PERMS.MASTERS.CASH_ACCOUNT.VIEW },
 
