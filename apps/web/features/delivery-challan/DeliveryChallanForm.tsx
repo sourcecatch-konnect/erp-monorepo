@@ -20,6 +20,10 @@ import type {
   UpdateDeliveryChallanBody,
 } from "@skerp/types";
 import { PERMS } from "@skerp/types";
+
+/** The four values the server accepts; "" is this form's unselected state. */
+type PaymentBy = NonNullable<CreateDeliveryChallanBody["paymentBy"]>;
+
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
 import {
@@ -273,8 +277,10 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
   const [advanceAmount, setAdvanceAmount] = React.useState(
     paiseToRupees(initialData?.advanceAmount),
   );
-  const [paymentBy, setPaymentBy] = React.useState(
-    initialData?.paymentBy ?? "",
+  // "" is the unselected state; the four real values match
+  // `deliveryChallanPaymentBySchema`.
+  const [paymentBy, setPaymentBy] = React.useState<PaymentBy | "">(
+    (initialData?.paymentBy as PaymentBy | undefined) ?? "",
   );
   const [loadingAt, setLoadingAt] = React.useState(
     initialData?.loadingAt
@@ -1444,7 +1450,10 @@ export default function DeliveryChallanForm({ mode, initialData }: Props) {
           </div>
           <div>
             <FieldLabel>Payment by</FieldLabel>
-            <Select value={paymentBy} onValueChange={setPaymentBy}>
+            <Select
+              value={paymentBy}
+              onValueChange={(value) => setPaymentBy(value as PaymentBy)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select payment party" />
               </SelectTrigger>

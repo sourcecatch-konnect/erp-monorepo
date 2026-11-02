@@ -16,6 +16,7 @@ export const vendorPaymentSourceTypeSchema = z.enum([
   "GRN_HAMALI",
   "RAIL_BRANCH_GRN",
   "VP_LOADING",
+  "DELIVERY_CHALLAN",
 ]);
 
 export const vendorPaymentStatusSchema = z.enum([
@@ -84,6 +85,18 @@ export const eligibleHamaliSourceQuerySchema = z.object({
   from: isoDate.optional(),
   to: isoDate.optional(),
   ...eligibleChunkParams,
+});
+
+/** LDC broker browse: page-based, since challans are one queryable table.
+ *  (The hamali stream is cursor-based only because it merges three.) */
+export const eligibleLDCSourceQuerySchema = z.object({
+  transportId: id,
+  branchId: id.optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  search: z.string().trim().min(1).max(100).optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 /* ------------------------------------------------------------------ */

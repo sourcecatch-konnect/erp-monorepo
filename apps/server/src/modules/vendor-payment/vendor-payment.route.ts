@@ -5,6 +5,7 @@ import {
   createVendorPaymentDisbursementSchema,
   createVendorPaymentSlipSchema,
   eligibleHamaliSourceQuerySchema,
+  eligibleLDCSourceQuerySchema,
   eligibleTransporterLRQuerySchema,
   rejectVendorPaymentSlipSchema,
   submitVendorPaymentSlipSchema,
@@ -56,6 +57,10 @@ import {
   reconcileHamaliLines,
   type HamaliSourceType,
 } from "./calculators/hamali.js";
+import {
+  findEligibleLDCSources,
+  reconcileLDCLines,
+} from "./calculators/ldc-broker.js";
 import { SLIP_LIST_ORDER_BY, buildSlipListWhere } from "./slip-list.query.js";
 import { assertFundingMatchesMode } from "../driver-finance/driver-finance.service.js";
 
@@ -210,6 +215,40 @@ async function buildServerLines(
     });
   }
 
+  if (type === "LDC_BROKER") {
+    if (!payee.transportId)
+      throw new BadRequestError("An LDC broker slip needs transportId");
+    if (tdsRateBps === undefined)
+      throw new BadRequestError("An LDC broker slip needs a TDS percentage");
+    if (lines.some((l) => l.sourceType !== "DELIVERY_CHALLAN"))
+      throw new BadRequestError("An LDC broker slip takes delivery challans only");
+
+    const reconciled = await reconcileLDCLines(
+      client,
+      payee.transportId,
+      lines.map((l) => l.sourceId),
+      excludeSlipId,
+    );
+
+    return lines.map((line) => {
+      const server = reconciled.get(line.sourceId);
+      if (!server)
+        throw new BadRequestError(`Challan ${line.sourceId} is not a valid LDC line`);
+      // TDS is deducted on the gross payable, matching the legacy
+      // `NetAmt = TotalFreightPayable - TDS` (ACCOUNTS_MODULE_MAP §2.F).
+      const gross = server.freightPaise + server.detentionPaise;
+      return {
+        sourceType: line.sourceType,
+        sourceId: line.sourceId,
+        ...ZERO_LINE_COMPONENTS,
+        freightPaise: server.freightPaise,
+        detentionPaise: server.detentionPaise,
+        advancePaise: server.advancePaise,
+        tdsPaise: roundPaiseByBps(gross, tdsRateBps),
+      };
+    });
+  }
+
   throw new BadRequestError("This vendor payment type is not available yet");
 }
 
@@ -236,6 +275,11 @@ function recalcSlipTotals(type: VendorPaymentType, lines: VendorPaymentSlipLineI
       // Per VP-5: gross is the claimed hamali amount, net = gross - TDS.
       gross = line.hamaliPaise;
       deductions = line.tdsPaise;
+    } else if (type === "LDC_BROKER") {
+      // Challan freight plus computed detention, less the advance already
+      // handed over and TDS.
+      gross = line.freightPaise + line.detentionPaise;
+      deductions = line.advancePaise + line.tdsPaise;
     } else {
       throw new BadRequestError("This vendor payment type is not available yet");
     }
@@ -376,6 +420,41 @@ router.get(
       size: input.size,
     });
     return sendOk(res, page);
+  },
+);
+
+/**
+ * Issued delivery challans this broker can be paid for, with detention already
+ * computed from the slab so the operator sees the real payable before
+ * selecting anything.
+ */
+router.get(
+  "/calculators/ldc-broker",
+  can(PERMS.ACCOUNTS.PAYMENT.CREATE),
+  async (req, res) => {
+    const input = validate(eligibleLDCSourceQuerySchema.safeParse(req.query));
+    if (input.branchId) assertBranchAccess(req, input.branchId);
+
+    const branchIds = input.branchId
+      ? [input.branchId]
+      : !req.ctx || req.ctx.branchScope === "ALL"
+        ? undefined
+        : req.ctx.branchIds;
+
+    const page = await findEligibleLDCSources({
+      transportId: input.transportId,
+      branchIds,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      page: input.page,
+      size: input.size,
+    });
+    return sendOk(res, page.rows, {
+      page: input.page,
+      size: input.size,
+      total: page.total,
+    });
   },
 );
 

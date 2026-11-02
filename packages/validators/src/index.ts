@@ -106,6 +106,7 @@ export * from "./master/pump.schema.js";
 export * from "./master/wagon.schema.js";
 export * from "./master/railwayFreighMatrix.schema.js";
 export * from "./master/agreement.schema.js";
+export * from "./master/detention-slab.schema.js";
 export * from "./master/rateMatrix.schema.js";
 export * from "./master/vehicleType.schema.js";
 export * from "./order/order.schema.js";

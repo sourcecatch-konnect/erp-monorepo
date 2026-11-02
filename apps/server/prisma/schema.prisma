@@ -118,6 +118,7 @@ model User {
   submittedRailBranchGRNs RailBranchGRN[] @relation("SubmittedRailBranchGRNs")
 
   createdDeliveryChallans   DeliveryChallan[] @relation("CreatedDeliveryChallans")
+  createdDetentionSlabs     DetentionSlab[]   @relation("CreatedDetentionSlabs")
   updatedDeliveryChallans   DeliveryChallan[] @relation("UpdatedDeliveryChallans")
   issuedDeliveryChallans    DeliveryChallan[] @relation("IssuedDeliveryChallans")
   cancelledDeliveryChallans DeliveryChallan[] @relation("CancelledDeliveryChallans")
@@ -682,6 +683,7 @@ model Customer {
   cityId                  String
   stateId                 String
   agreements              Agreement[]        @relation("CustomerAgreements")
+  detentionSlabs          DetentionSlab[]    @relation("CustomerDetentionSlabs")
   city                    City               @relation(fields: [cityId], references: [id])
   state                   State              @relation(fields: [stateId], references: [id])
   locations               CustomerLocation[]
@@ -738,6 +740,94 @@ model DetentionRate {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   agreement    Agreement         @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+}
+
+/// Broker detention slab (DC / LDC). Replaces the agreement-scoped
+/// `DetentionRate` for the payable side: slabs are negotiated per broker, and
+/// the same broker can have different terms per vehicle type and freight band.
+/// Matching is most-specific-wins — see `detention.service.ts` `pickSlab`.
+model DetentionSlab {
+  id   String @id @default(cuid())
+  name String
+
+  /// All four scopes are optional. `null` means "applies to any", so a single
+  /// house slab needs no rows filled in and a broker-specific one overrides it.
+  transportId   String?
+  customerId    String?
+  vehicleTypeId String?
+
+  /// Freight band the challan must fall in, inclusive. Paise.
+  freightFromPaise BigInt?
+  freightToPaise   BigInt?
+
+  basis DetentionBasis @default(DAY)
+
+  /// DAY basis. Two independent rules: a 2-day detention with both set is free.
+  firstDayFree Boolean @default(false)
+  lastDayFree  Boolean @default(false)
+
+  /// HOUR basis: free window, then whole blocks of `blockHours` (spec uses 24).
+  freeHours  Int?
+  blockHours Int?
+
+  /// Tie-break when several slabs match equally well. Higher wins.
+  priority Int @default(0)
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transport   Transport?   @relation("TransportDetentionSlabs", fields: [transportId], references: [id], onDelete: Restrict)
+  customer    Customer?    @relation("CustomerDetentionSlabs", fields: [customerId], references: [id], onDelete: Restrict)
+  vehicleType VehicleType? @relation("VehicleTypeDetentionSlabs", fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  createdBy   User         @relation("CreatedDetentionSlabs", fields: [createdById], references: [id], onDelete: Restrict)
+
+  bands DetentionSlabBand[]
+
+  @@index([deletedAt, isActive, transportId])
+  @@index([customerId])
+  @@index([vehicleTypeId])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+/// One stacked tier of a slab. Tiers are consumed bottom-up over the
+/// *chargeable* units (after free days/hours), so 4 chargeable days against
+/// bands [1-2 @1000, 3+ @1500] costs 2x1000 + 2x1500 — not 4x1500.
+model DetentionSlabBand {
+  id     String @id @default(cuid())
+  slabId String
+  slab   DetentionSlab @relation(fields: [slabId], references: [id], onDelete: Cascade)
+
+  /// 1-based, inclusive. `toUnit` null = open-ended ("from the 3rd day").
+  fromUnit  Int
+  toUnit    Int?
+  ratePaise BigInt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One band may start at a given unit per slab — stops overlapping tiers,
+  /// which would otherwise make the charge depend on row order.
+  @@unique([slabId, fromUnit])
+  @@index([slabId])
+}
+
+enum DeliveryChallanPaymentBy {
+  COMPANY
+  CLIENT
+  TRANSPORTER
+  CASH
+}
+
+enum DetentionBasis {
+  DAY
+  HOUR
 }
 
 model Route {
@@ -996,6 +1086,7 @@ model Transport {
   lrgroups           LRGroup[]
   ledger             Ledger?
   vendorPaymentSlips VendorPaymentSlip[]
+  detentionSlabs     DetentionSlab[]     @relation("TransportDetentionSlabs")
 
   @@index([name])
   @@index([cityId])
@@ -1893,6 +1984,7 @@ model VehicleType {
   orders           Order[]
   rateMatrices     RateMatrix[]
   vehicles         Vehicle[]
+  detentionSlabs   DetentionSlab[] @relation("VehicleTypeDetentionSlabs")
 
   @@index([name])
 }
@@ -4007,9 +4099,16 @@ model DeliveryChallan {
 
   freightAmount BigInt?
   advanceAmount BigInt?
-  paymentBy     String?
+  /// Who bears the last-mile freight. Drives whether the challan becomes a
+  /// broker payable at all.
+  paymentBy     DeliveryChallanPaymentBy?
 
   loadingAt DateTime
+
+  /// Separate from `loadingAt`: the date the truck was reported for this
+  /// challan. Detention counts from the earliest of this, `loadingAt` and
+  /// every linked LR's own reporting date.
+  reportDate DateTime?
 
   supervisorId String?
   supervisor   Labour? @relation("DeliveryChallanSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
@@ -4582,6 +4681,8 @@ enum VendorPaymentSourceType {
   GRN_HAMALI
   RAIL_BRANCH_GRN
   VP_LOADING
+  /// One Local Delivery Challan paid to the last-mile broker.
+  DELIVERY_CHALLAN
 }
 
 enum ReceiptPaymentMode {

@@ -71,6 +71,7 @@ import vpLoadingRoute from "./modules/vp-loading/vp-loading.route.js";
 import railRakeRoute from "./modules/rail-rake/rail-rake.route.js";
 import railBranchGrnRoute from "./modules/rail-branch-grn/rail-branch-grn.route.js";
 import deliveryChallanRoute from "./modules/delivery-challan/delivery-challan.route.js";
+import detentionRoute from "./modules/detention/detention.route.js";
 import railRakeOperationRoute from "./modules/rail-rake-operation/rail-rake-operation.route.js";
 import tablePrefRoute from "./modules/user-pref/table-pref.route.js";
 import oneLapTrackerRoute from "./modules/one-lap-tracker/one-lap-tracker.route.js";
@@ -169,6 +170,7 @@ app.use("/vp-loading", vpLoadingRoute);
 app.use("/rail-rakes", railRakeRoute);
 app.use("/rail-branch-grns", railBranchGrnRoute);
 app.use("/delivery-challans", deliveryChallanRoute);
+app.use("/detention", detentionRoute);
 app.use("/rail-rake-operations", railRakeOperationRoute);
 app.use("/me/table-prefs", tablePrefRoute);
 // BullMQ dashboard — inspect notification queues at /admin/queues (login required)

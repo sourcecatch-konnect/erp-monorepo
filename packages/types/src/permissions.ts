@@ -38,7 +38,8 @@ export type MasterSlug =
   | "rate-matrix"
   | "vehicle-type"
   | "creditor"
-  | "cash-account";
+  | "cash-account"
+  | "detention-slab";
 
 type MasterPermissionKey =
   | `masters.${MasterSlug}.${CrudAction}`
@@ -306,6 +307,7 @@ export const PERMS = {
     VEHICLE_TYPE: masterPerms("vehicle-type"),
     CREDITOR: masterPerms("creditor"),
     CASH_ACCOUNT: masterPerms("cash-account"),
+    DETENTION_SLAB: masterPerms("detention-slab"),
   },
   LORRY_RECEIPT: {
     VIEW: "lorry_receipt.view",

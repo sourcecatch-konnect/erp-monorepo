@@ -1433,8 +1433,14 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
 
   const payeeLedger = await getVendorPayeeLedger(tx, args);
   const totals = sumLines(args.lines);
+  const payeeLabel =
+    args.type === "TRANSPORTER"
+      ? "Transporter"
+      : args.type === "LDC_BROKER"
+        ? "LDC broker"
+        : "Hamali";
   const lineNarration = withDetail(
-    `${args.type === "TRANSPORTER" ? "Transporter" : "Hamali"} accrual ${args.slipNumber}`,
+    `${payeeLabel} accrual ${args.slipNumber}`,
     args.narrationDetail,
   );
   const lines: DraftLine[] = [];
@@ -1444,8 +1450,11 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
   // to 8 of these, which was 8 sequential network round trips on every single
   // approval (this function runs on both the submit auto-approve path and the
   // standalone approve endpoint).
+  // An LDC broker accrual touches the same heads as a transporter one: the
+  // last-mile freight and its detention are the expense, the advance already
+  // handed over and TDS are the deductions.
   const codes =
-    args.type === "TRANSPORTER"
+    args.type === "TRANSPORTER" || args.type === "LDC_BROKER"
       ? [
           "FREIGHT_EXPENSE",
           VENDOR_DETENTION_EXPENSE_CODE,
@@ -1481,7 +1490,7 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
     lines.push({ ledgerId: ledger.id, debitPaise: 0n, creditPaise: amount, narration: lineNarration });
   };
 
-  if (args.type === "TRANSPORTER") {
+  if (args.type === "TRANSPORTER" || args.type === "LDC_BROKER") {
     debit("FREIGHT_EXPENSE", totals.freightPaise);
     debit(VENDOR_DETENTION_EXPENSE_CODE, totals.detentionPaise);
     credit(VENDOR_ADVANCE_RECOVERY_CODE, totals.advancePaise);

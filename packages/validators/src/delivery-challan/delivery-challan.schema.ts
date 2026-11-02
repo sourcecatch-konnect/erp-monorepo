@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const deliveryChallanPaymentBySchema = z.enum([
+  "COMPANY",
+  "CLIENT",
+  "TRANSPORTER",
+  "CASH",
+]);
+
 const optionalId = z
   .string()
   .trim()
@@ -48,7 +55,9 @@ const dispatchFields = z.object({
   totalWeight: z.coerce.number().finite().positive().optional(),
   freightAmount: optionalMoney,
   advanceAmount: optionalMoney,
-  paymentBy: optionalText(50),
+  // Was free text; an enum so the broker payable can key off it without
+  // matching "To Pay" against "TO_PAY" against "topay".
+  paymentBy: deliveryChallanPaymentBySchema.nullish(),
 
   loadingAt: z.coerce.date(),
   supervisorId: z.string().trim().min(1, "Supervisor is required"),
