@@ -18,9 +18,12 @@ export const can = (key: PermissionKey) => {
       });
     }
     if (!req.ctx.permissions.has(key)) {
+      // `required` lets the client name the missing permission instead of
+      // showing the bare word "Forbidden".
       return sendError(res, 403, {
         code: "FORBIDDEN",
         message: "Forbidden",
+        details: { required: [key] },
       });
     }
     return next();
@@ -40,9 +43,11 @@ export const canAny = (...keys: PermissionKey[]) => {
       });
     }
     if (!keys.some((k) => req.ctx!.permissions.has(k))) {
+      // Any one of these would have been enough.
       return sendError(res, 403, {
         code: "FORBIDDEN",
         message: "Forbidden",
+        details: { required: keys },
       });
     }
     return next();

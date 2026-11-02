@@ -115,7 +115,9 @@ const loadForCaller = async (
 };
 
 /** File names for the export columns, grouped by item. */
-const exportFiles = async (ids: string[]): Promise<Map<string, ExportFile[]>> => {
+const exportFiles = async (
+  ids: string[],
+): Promise<Map<string, ExportFile[]>> => {
   const files = new Map<string, ExportFile[]>();
   for (const file of await findFeedbackFiles(ids)) {
     files.set(file.entityId, [
@@ -157,40 +159,40 @@ router.post(
     key: (req) => req.ctx!.userId,
   }),
   async (req, res) => {
-  const parsed = feedbackSubmitSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ValidationError(
-      parsed.error.issues.map(
-        (issue) => `${issue.path.join(".")}: ${issue.message}`,
-      ),
-    );
-  }
-  const { feedback, page, context } = parsed.data;
-  if (JSON.stringify(context).length > MAX_CONTEXT_CHARS) {
-    throw new BadRequestError("Technical details are too large");
-  }
+    const parsed = feedbackSubmitSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(
+        parsed.error.issues.map(
+          (issue) => `${issue.path.join(".")}: ${issue.message}`,
+        ),
+      );
+    }
+    const { feedback, page, context } = parsed.data;
+    if (JSON.stringify(context).length > MAX_CONTEXT_CHARS) {
+      throw new BadRequestError("Technical details are too large");
+    }
 
-  const userId = actorId(req);
-  const created = await db.feedback.create({
-    data: {
-      category: feedback.category,
-      impact: feedback.impact,
-      title: deriveTitle(feedback, page.title),
-      description: feedback.description || null,
-      points: feedback.points,
-      section: feedback.section || null,
-      // Answers to the guided questions; labelled by detailRows on the way out.
-      details: feedback.answers as Prisma.InputJsonValue,
-      pagePath: page.path,
-      pageTitle: page.title,
-      moduleLabel: page.module,
-      entityId: page.entityId || null,
-      context: context as Prisma.InputJsonValue,
-      reporterId: userId,
-      ...(await reporterSnapshot(userId)),
-    },
-    select: { id: true, number: true },
-  });
+    const userId = actorId(req);
+    const created = await db.feedback.create({
+      data: {
+        category: feedback.category,
+        impact: feedback.impact,
+        title: deriveTitle(feedback, page.title),
+        description: feedback.description || null,
+        points: feedback.points,
+        section: feedback.section || null,
+        // Answers to the guided questions; labelled by detailRows on the way out.
+        details: feedback.answers as Prisma.InputJsonValue,
+        pagePath: page.path,
+        pageTitle: page.title,
+        moduleLabel: page.module,
+        entityId: page.entityId || null,
+        context: context as Prisma.InputJsonValue,
+        reporterId: userId,
+        ...(await reporterSnapshot(userId)),
+      },
+      select: { id: true, number: true },
+    });
     return sendOk(res, created, undefined, 201);
   },
 );
@@ -416,27 +418,37 @@ router.get("/:id", async (req, res) => {
   if (!canView(req) && item.reporterId !== actorId(req)) {
     throw new ForbiddenError();
   }
-  const stored = await findFeedbackFiles([item.id]);
+  /*
+   * `files` carries every attachment INCLUDING the voice note: the reader
+   * (FeedbackFiles) splits them by `kind`, and findFeedbackFiles excludes
+   * audio because the archive downloads voice notes separately. Leaving the
+   * voice note out here meant the player never rendered — the component
+   * looked for kind "voice" in a list that could never contain it.
+   */
+  const stored = [
+    ...(await findVoiceNotes([item.id])),
+    ...(await findFeedbackFiles([item.id])),
+  ];
   const files = isS3Configured()
     ? await Promise.all(
-      stored.map(async (file) => ({
-        id: file.id,
-        kind: feedbackFileKind(file.mime),
-        name: file.originalName,
-        mime: file.mime,
-        sizeBytes: file.sizeBytes,
-        url: await getDownloadUrl(file.id),
-      })),
-    )
+        stored.map(async (file) => ({
+          id: file.id,
+          kind: feedbackFileKind(file.mime),
+          name: file.originalName,
+          mime: file.mime,
+          sizeBytes: file.sizeBytes,
+          url: await getDownloadUrl(file.id),
+        })),
+      )
     : [];
   const voiceNotes = isS3Configured()
     ? await Promise.all(
-      (await findVoiceNotes([item.id])).map(async (note) => ({
-        id: note.id,
-        url: await getDownloadUrl(note.id),
-        mime: note.mime,
-      })),
-    )
+        (await findVoiceNotes([item.id])).map(async (note) => ({
+          id: note.id,
+          url: await getDownloadUrl(note.id),
+          mime: note.mime,
+        })),
+      )
     : [];
   return sendOk(res, { ...item, files, voiceNotes });
 });
@@ -477,15 +489,15 @@ router.patch("/:id", can(PERMS.FEEDBACK.MANAGE), async (req, res) => {
     db.feedbackComment.createMany({
       data: actor
         ? [
-          {
-            feedbackId: id,
-            authorId: userId,
-            authorName: actor.reporterName,
-            side: "TEAM" as const,
-            kind: "STATUS_CHANGE" as const,
-            body: statusChangeText(current.status, next.status),
-          },
-        ]
+            {
+              feedbackId: id,
+              authorId: userId,
+              authorName: actor.reporterName,
+              side: "TEAM" as const,
+              kind: "STATUS_CHANGE" as const,
+              body: statusChangeText(current.status, next.status),
+            },
+          ]
         : [],
     }),
   ]);
@@ -523,27 +535,39 @@ const limitsFor = (kind: FeedbackFileRequest["kind"]) =>
   kind === "voice"
     ? { maxBytes: FEEDBACK_MAX_VOICE_BYTES, mimes: FEEDBACK_VOICE_MIMES }
     : {
-      maxBytes: FEEDBACK_MAX_FILE_BYTES,
-      mimes: [...FEEDBACK_IMAGE_MIMES, ...FEEDBACK_DOCUMENT_MIMES],
-    };
+        maxBytes: FEEDBACK_MAX_FILE_BYTES,
+        mimes: [...FEEDBACK_IMAGE_MIMES, ...FEEDBACK_DOCUMENT_MIMES],
+      };
 
 /** Finished uploads of this item: the voice note, and pictures + documents together. */
 const uploadedCounts = async (feedbackId: string) => {
   const rows = await db.attachment.findMany({
-    where: { entityType: ATTACHMENT_ENTITY, entityId: feedbackId, uploaded: true, deletedAt: null },
+    where: {
+      entityType: ATTACHMENT_ENTITY,
+      entityId: feedbackId,
+      uploaded: true,
+      deletedAt: null,
+    },
     select: { mime: true },
   });
-  const voice = rows.filter((row) => feedbackFileKind(row.mime) === "voice").length;
+  const voice = rows.filter(
+    (row) => feedbackFileKind(row.mime) === "voice",
+  ).length;
   return { voice, files: rows.length - voice };
 };
 
-const assertRoomFor = async (feedbackId: string, kind: FeedbackFileRequest["kind"]) => {
+const assertRoomFor = async (
+  feedbackId: string,
+  kind: FeedbackFileRequest["kind"],
+) => {
   const counts = await uploadedCounts(feedbackId);
   if (kind === "voice" && counts.voice >= 1) {
     throw new BadRequestError("Only one voice note can be attached");
   }
   if (kind !== "voice" && counts.files >= FEEDBACK_MAX_FILES) {
-    throw new BadRequestError(`You can attach up to ${FEEDBACK_MAX_FILES} files`);
+    throw new BadRequestError(
+      `You can attach up to ${FEEDBACK_MAX_FILES} files`,
+    );
   }
 };
 

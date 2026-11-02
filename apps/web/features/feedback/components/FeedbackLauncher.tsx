@@ -62,23 +62,33 @@ function EnabledLauncher() {
   return (
     <>
       <Button
+        type="button"
         variant="outline"
         aria-haspopup="dialog"
-        className="relative max-sm:size-11 max-sm:px-0"
+        aria-expanded={open}
+        className="relative h-9 gap-2 rounded-xl border-violet-200 bg-violet-50 px-3.5 text-sm font-medium text-violet-700 shadow-sm transition-colors duration-150 hover:border-violet-300 hover:bg-violet-100 hover:text-violet-800 dark:border-violet-400/25 dark:bg-violet-400/10 dark:text-violet-300 dark:hover:bg-violet-400/20 dark:hover:text-violet-200 max-sm:size-11 max-sm:px-0"
         onClick={() => {
           setMounted(true);
           setOpen(true);
         }}
       >
-        <IconMessageReport className="size-4" aria-hidden />
-        {/* Icon only on phones: the top bar is narrow there. */}
-        <span className="max-sm:sr-only">Feedback</span>
+        <IconMessageReport
+          className="size-4 shrink-0"
+          stroke={1.8}
+          aria-hidden
+        />
+
+        <span className="max-sm:sr-only">Give feedback</span>
+
         {updates > 0 ? (
           <>
             <span
               aria-hidden
-              className="absolute -right-1 -top-1 size-2.5 rounded-full bg-primary ring-2 ring-background"
-            />
+              className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-violet-600 text-[10px] font-semibold leading-none text-white ring-2 ring-background"
+            >
+              {updates > 9 ? "9+" : updates}
+            </span>
+
             <span className="sr-only">
               , {updates} update{updates === 1 ? "" : "s"} on your feedback
             </span>

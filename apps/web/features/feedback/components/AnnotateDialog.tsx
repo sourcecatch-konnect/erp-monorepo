@@ -132,22 +132,30 @@ export function AnnotateDialog({
 
         <DialogFooter className="sm:justify-between">
           <div className="flex gap-2">
+            {/* This dialog opens from inside the feedback form; without an
+                explicit type these default to submit and send the report. */}
             <Button
+              type="button"
               variant="ghost"
               disabled={boxes.length === 0}
               onClick={() => setBoxes((current) => current.slice(0, -1))}
             >
               Undo last box
             </Button>
-            <Button variant="ghost" disabled={boxes.length === 0} onClick={() => setBoxes([])}>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={boxes.length === 0}
+              onClick={() => setBoxes([])}
+            >
               Clear
             </Button>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={save} disabled={saving}>
+            <Button type="button" onClick={save} disabled={saving}>
               {saving ? "Saving…" : "Save picture"}
             </Button>
           </div>
