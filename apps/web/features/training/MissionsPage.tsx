@@ -17,7 +17,7 @@ import {
 import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { cn } from "@skerp/ui/lib/util";
-import { TrainingNav } from "./components/TrainingNav";
+import { TrainingPageHeader } from "./components/TrainingPageHeader";
 import { VERIFIER_LABELS } from "./content/verifier-labels";
 import { useStepProgress, useTrainingMe } from "./hooks/useTraining";
 import { trainingKeys } from "./training.keys";
@@ -196,18 +196,7 @@ export function MissionsPage() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Practice missions
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Real-life jobs to do from start to finish on made-up data. Nothing
-          here is real, so you can&apos;t break anything. The data is reset
-          every night.
-        </p>
-      </header>
-
-      <TrainingNav />
+      <TrainingPageHeader caption="Real-life jobs to do from start to finish on made-up data. Nothing here is real, so you can&rsquo;t break anything — the data is reset every night." />
 
       <section className="rounded-lg border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">

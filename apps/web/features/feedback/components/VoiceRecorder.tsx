@@ -27,12 +27,17 @@ export function VoiceRecorder({
   const { state, start, stop, reset } = useVoiceRecorder(onChange);
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">Voice feedback</h3>
-        <p className="text-xs text-muted-foreground">
-          Speak in any language. Up to {FEEDBACK_MAX_VOICE_SECONDS / 60} minutes.
-        </p>
+    <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <IconMicrophone className="size-[18px]" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">Voice feedback</h3>
+          <p className="text-xs text-muted-foreground">
+            Speak in any language. Up to {FEEDBACK_MAX_VOICE_SECONDS / 60} minutes.
+          </p>
+        </div>
       </div>
 
       {!support.ok ? (
@@ -67,7 +72,10 @@ export function VoiceRecorder({
       ) : state.phase === "recording" ? (
         <div className="space-y-3">
           <div className="flex items-center gap-3" role="status" aria-live="polite">
-            <span className="size-2.5 shrink-0 rounded-full bg-destructive" aria-hidden />
+            <span
+              className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive"
+              aria-hidden
+            />
             <span className="text-sm font-medium tabular-nums text-foreground">
               Recording {formatVoiceDuration(state.seconds)} /{" "}
               {formatVoiceDuration(FEEDBACK_MAX_VOICE_SECONDS)}
@@ -88,8 +96,9 @@ export function VoiceRecorder({
         <div className="space-y-2">
           <Button
             type="button"
-            variant="outline"
-            className="max-sm:h-11"
+            variant="soft"
+            size="lg"
+            className="max-sm:h-11 max-sm:w-full"
             disabled={state.phase === "requesting"}
             onClick={() => {
               reset();

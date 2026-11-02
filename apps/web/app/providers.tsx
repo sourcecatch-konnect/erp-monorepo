@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { Provider as ReduxProvider } from "react-redux";
+import { TooltipProvider } from "@skerp/ui/components/tooltip";
 import { store } from "@/store/store";
 import { AuthBootstrap } from "@/features/auth";
 
@@ -21,13 +22,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
             staleTime: 30_000,
           },
         },
-      })
+      }),
   );
 
   return (
     <ReduxProvider store={store}>
       <QueryClientProvider client={queryClient}>
-        <AuthBootstrap>{children}</AuthBootstrap>
+        {/* App-wide, so any component can show a tooltip without wrapping
+            itself — permission hints in particular appear all over. Features
+            that already nest their own provider keep working. */}
+        <TooltipProvider delayDuration={200}>
+          <AuthBootstrap>{children}</AuthBootstrap>
+        </TooltipProvider>
       </QueryClientProvider>
     </ReduxProvider>
   );

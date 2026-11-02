@@ -34,12 +34,7 @@ function SelectGroup({
 function SelectValue({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return (
-    <SelectPrimitive.Value
-      data-slot="select-value"
-      {...props}
-    />
-  );
+  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
 /* ---------------- Trigger ---------------- */
@@ -59,7 +54,7 @@ function SelectTrigger({
       className={cn(
         "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm",
         "focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-        className
+        className,
       )}
       {...props}
     >
@@ -87,15 +82,31 @@ function SelectContent({
         position={position}
         className={cn(
           "relative z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
+          // Radix gives the viewport `overflow: hidden auto` inline, but with
+          // no height cap on the content it simply grows past the screen and
+          // there is nothing to scroll — long lists (the permission areas,
+          // every master, a branch list) run off the bottom. Prefer the space
+          // Radix measured next to the trigger; `max-h-96` covers a
+          // non-popper content, which gets no such variable.
+          "max-h-96 data-[side=bottom]:max-h-[var(--radix-select-content-available-height)] data-[side=top]:max-h-[var(--radix-select-content-available-height)]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2",
-          className
+          className,
         )}
         {...props}
       >
         <SelectScrollUpButton />
 
-        <SelectPrimitive.Viewport className="p-1">
+        {/* Radix already gives the viewport `flex: 1; overflow: hidden auto`
+            inline, so it scrolls as soon as the content above is capped. All
+            it needs here is to be at least as wide as the trigger. */}
+        <SelectPrimitive.Viewport
+          className={cn(
+            "p-1",
+            position === "popper" &&
+              "w-full min-w-[var(--radix-select-trigger-width)]",
+          )}
+        >
           {children}
         </SelectPrimitive.Viewport>
 
@@ -132,7 +143,7 @@ function SelectItem({
         "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm",
         "focus:bg-accent focus:text-accent-foreground",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-        className
+        className,
       )}
       {...props}
     >

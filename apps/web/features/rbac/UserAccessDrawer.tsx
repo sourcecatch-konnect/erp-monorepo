@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { IconCheck, IconX, IconChevronDown } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconChevronDown,
+  IconMinus,
+} from "@tabler/icons-react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,8 +17,12 @@ import {
 } from "@skerp/validators";
 import {
   permissionLabel,
+  permissionActionOf,
+  permissionAreaGroup,
   permissionAreaLabel,
   permissionAreaOf,
+  permissionAreaShortLabel,
+  PERMISSION_GROUP_ORDER,
 } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Checkbox } from "@skerp/ui/components/checkbox";
@@ -27,7 +36,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@skerp/ui/components/select";
@@ -48,11 +59,21 @@ import {
   TableCell,
 } from "@skerp/ui/components/table";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@skerp/ui/components/tabs";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { TablePaginationFooter } from "@/components/data-table";
 import { rbacApi } from "./rbac.service";
 import { rbacKeys } from "./rbac.keys";
+import { actionIcon } from "./components/permission-icons";
 import type { BranchOption, RoleSummary } from "./types";
+
+/** "changed" reviews what's already set for this person; "browse" finds more. */
+type AccessTab = "changed" | "browse";
 
 export function UserAccessDrawer({
   userId,
@@ -97,6 +118,7 @@ export function UserAccessDrawer({
   const debouncedSearch = useDebouncedValue(search, 4);
   const [area, setArea] = useState("all");
   const [expanded, setExpanded] = useState(false);
+  const [tab, setTab] = useState<AccessTab>("browse");
   const [page, setPage] = useState(0);
   const pageSize = 20;
   const pageParams: PermissionPageQuery = {
@@ -123,9 +145,89 @@ export function UserAccessDrawer({
       permissionAreaLabel(b.moduleCode),
     ),
   );
+  /**
+   * ~35 flat options is the same wall the role editor had. Bucket them so the
+   * dropdown opens on six headings instead of an alphabetical list.
+   */
+  const areaGroups = PERMISSION_GROUP_ORDER.map((name) => ({
+    name,
+    areas: areas.filter((a) => permissionAreaGroup(a.moduleCode) === name),
+  })).filter((g) => g.areas.length > 0);
   const visiblePermissions = catalogQuery.data?.items ?? [];
   const totalPermissions = catalogQuery.data?.total ?? 0;
   const overrideMap = new Map(overrides.map((o) => [o.key, o.effect]));
+
+  const selectedRole = roles.find((r) => r.id === roleId);
+  const roleName = selectedRole?.name ?? "";
+  /**
+   * The table rows carry `roleAllowed` from the server, but only for the page
+   * being shown. The override chips sit above the table and can name any key,
+   * so read the role's whole set once instead of paging to find each one.
+   */
+  const roleQuery = useQuery({
+    queryKey: rbacKeys.role(roleId ?? ""),
+    queryFn: () => rbacApi.getRole(roleId!),
+    enabled: expanded && Boolean(roleId),
+    staleTime: 60 * 1000,
+  });
+  const roleKeys = roleQuery.data
+    ? new Set(roleQuery.data.permissionKeys)
+    : null;
+  /** `undefined` means "not known yet" — never claim either way on a guess. */
+  const roleAllows = (key: string): boolean | undefined => {
+    // The server grants built-in roles everything, whatever is stored.
+    if (selectedRole?.isSystem) return true;
+    return roleKeys ? roleKeys.has(key) : undefined;
+  };
+
+  /** Changes that match what the role already says, so they do nothing. */
+  const pointlessOverrides = overrides
+    .filter((o) => isRedundant(o.effect, roleAllows(o.key)))
+    .map((o) => o.key);
+
+  const removeOverrides = (keys: string[]) => {
+    const drop = new Set(keys);
+    form.setValue(
+      "overrides",
+      overrides.filter((o) => !drop.has(o.key)),
+      { shouldDirty: true },
+    );
+  };
+
+  const pendingChanges: string[] = [];
+  if (access) {
+    if (roleId !== access.role?.id)
+      pendingChanges.push(`role → ${roleName || "none"}`);
+    if (scope !== access.branchScope)
+      pendingChanges.push(
+        scope === "ALL" ? "all branches" : "only the branches you picked",
+      );
+    else if (
+      scope === "ASSIGNED" &&
+      (branchIds.length !== access.branchIds.length ||
+        branchIds.some((id) => !access.branchIds.includes(id)))
+    )
+      pendingChanges.push(
+        branchIds.length === 1 ? "1 branch" : `${branchIds.length} branches`,
+      );
+    const savedOverrides = new Map(
+      access.overrides.map((o) => [o.key, o.effect]),
+    );
+    const changedOverrides = new Set([
+      ...overrides
+        .filter((o) => savedOverrides.get(o.key) !== o.effect)
+        .map((o) => o.key),
+      ...access.overrides
+        .filter((o) => !overrideMap.has(o.key))
+        .map((o) => o.key),
+    ]);
+    if (changedOverrides.size)
+      pendingChanges.push(
+        changedOverrides.size === 1
+          ? "1 thing changed just for them"
+          : `${changedOverrides.size} things changed just for them`,
+      );
+  }
   const saveMut = useMutation({
     mutationFn: (values: UpdateUserAccessInput) =>
       rbacApi.updateUserAccess(userId, values),
@@ -159,7 +261,9 @@ export function UserAccessDrawer({
         if (!open && !saveMut.isPending) onClose();
       }}
     >
-      <SheetContent className="flex h-dvh w-full flex-col overflow-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-2xl">
+      {/* Four columns plus a "Use the <role> role" dropdown don't fit in the
+          default sheet width — the control was overlapping the Result column. */}
+      <SheetContent className="flex h-dvh w-full flex-col overflow-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-3xl data-[side=right]:lg:max-w-5xl">
         <SheetHeader className="shrink-0">
           <SheetTitle>
             {name ? `Edit access for ${name}` : "Edit access"}
@@ -307,9 +411,11 @@ export function UserAccessDrawer({
                     className="rounded-lg border bg-card"
                   >
                     <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 text-left text-sm font-semibold">
-                      <span>Special permissions</span>
+                      <span>Change something just for this person</span>
                       <span className="flex items-center gap-2 text-muted-foreground">
-                        {overrides.length ? `${overrides.length} set` : "None"}
+                        {overrides.length
+                          ? `${overrides.length} changed`
+                          : "Nothing changed"}
                         <IconChevronDown
                           size={18}
                           aria-hidden="true"
@@ -319,202 +425,307 @@ export function UserAccessDrawer({
                     </CollapsibleTrigger>
                     <CollapsibleContent className="space-y-4 p-4 pt-0">
                       <p className="text-sm text-muted-foreground">
-                        Allow or block a single action for this person only,
-                        without changing their role. Most people don&apos;t need
-                        any.
+                        Give {name || "this person"} something extra, or take
+                        something away — for them only. Everyone else with the{" "}
+                        {roleName || "same"} role stays the same. Most people
+                        don&apos;t need this.
                       </p>
-                      <section className="space-y-2">
-                        <h3 className="text-sm font-medium">
-                          Set for this person
-                        </h3>
-                        {overrides.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            No special permissions are set. Their role decides
-                            what they can do.
-                          </p>
-                        ) : (
-                          overrides.map((o) => (
-                            <div
-                              key={o.key}
-                              className="flex items-center justify-between gap-2 rounded-sm bg-primary/5 p-2 text-sm"
+                      {/* Two jobs, two tabs. Reviewing what's already been
+                          changed and hunting through 250 permissions for
+                          something new are different tasks, and stacking the
+                          first above the second buried the search behind a
+                          list that grows with every change made. */}
+                      <Tabs
+                        value={tab}
+                        onValueChange={(v) => setTab(v as AccessTab)}
+                      >
+                        <TabsList>
+                          <TabsTrigger value="changed">
+                            Changed
+                            {overrides.length ? ` (${overrides.length})` : ""}
+                          </TabsTrigger>
+                          <TabsTrigger value="browse">
+                            All permissions
+                          </TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="changed" className="space-y-3">
+                          {overrides.length === 0 ? (
+                            <p className="py-6 text-center text-sm text-muted-foreground">
+                              Nothing has been changed for{" "}
+                              {name || "this person"}.{" "}
+                              {roleName
+                                ? `The ${roleName} role decides everything.`
+                                : "Their role decides everything."}
+                            </p>
+                          ) : (
+                            <>
+                              {/* One banner beats repeating the same warning
+                                  on a dozen rows. */}
+                              {pointlessOverrides.length > 0 && (
+                                <div
+                                  role="status"
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-muted/40 p-3 text-sm"
+                                >
+                                  <span className="flex items-start gap-2">
+                                    <IconAlertTriangle
+                                      size={16}
+                                      aria-hidden="true"
+                                      className="mt-0.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <span className="text-muted-foreground">
+                                      {pointlessOverrides.length === 1
+                                        ? "1 of these changes does nothing"
+                                        : `${pointlessOverrides.length} of these changes do nothing`}{" "}
+                                      \u2014 the {roleName || "their"} role
+                                      already says the same. They will keep
+                                      overriding it if the role changes later.
+                                    </span>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      removeOverrides(pointlessOverrides)
+                                    }
+                                  >
+                                    Undo those
+                                  </Button>
+                                </div>
+                              )}
+                              {overrides.map((o) => (
+                                <OverrideChip
+                                  key={o.key}
+                                  permissionKey={o.key}
+                                  effect={o.effect}
+                                  /* undefined until the role's set loads \u2014
+                                     then we don't claim either way. */
+                                  roleAllowed={roleAllows(o.key)}
+                                  roleName={roleName}
+                                  onRemove={() => setOverride(o.key, "none")}
+                                />
+                              ))}
+                            </>
+                          )}
+                        </TabsContent>
+
+                        <TabsContent value="browse" className="space-y-4">
+                          <div className="min-w-0 space-y-3">
+                            <h3 className="text-sm font-medium">
+                              Find something to change
+                            </h3>
+                            <label
+                              htmlFor="permission-category"
+                              className="block text-xs font-medium text-muted-foreground"
                             >
-                              <div className="min-w-0 break-words">
-                                <span className="font-medium">
-                                  {o.effect === "GRANT" ? "Allowed" : "Blocked"}
-                                </span>{" "}
-                                {" \u00b7 "}
-                                <span title={o.key}>
-                                  {permissionLabel(o.key)}
-                                </span>
-                                <p className="text-muted-foreground">
-                                  {permissionAreaLabel(permissionAreaOf(o.key))}
-                                </p>
+                              Area
+                            </label>
+                            {modulesQuery.isPending ? (
+                              <Skeleton className="h-9 w-full" />
+                            ) : modulesQuery.isError ? (
+                              <div role="alert" className="space-y-2 text-sm">
+                                <p>Couldn&apos;t load categories.</p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => void modulesQuery.refetch()}
+                                >
+                                  Try again
+                                </Button>
                               </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                title="Go back to what the role allows"
-                                aria-label={`Remove special permission: ${permissionLabel(o.key)}`}
-                                onClick={() => setOverride(o.key, "none")}
+                            ) : (
+                              <Select
+                                value={area}
+                                onValueChange={(value) => {
+                                  setArea(value);
+                                  setPage(0);
+                                }}
                               >
-                                Remove
-                              </Button>
-                            </div>
-                          ))
-                        )}
-                      </section>
-                      <div className="min-w-0 space-y-3">
-                        <h3 className="text-sm font-medium">Search category</h3>
-                        {modulesQuery.isPending ? (
-                          <Skeleton className="h-9 w-full" />
-                        ) : modulesQuery.isError ? (
-                          <div role="alert" className="space-y-2 text-sm">
-                            <p>Couldn&apos;t load categories.</p>
+                                <SelectTrigger
+                                  id="permission-category"
+                                  aria-label="Permission category"
+                                  className="w-full min-w-0"
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">All areas</SelectItem>
+                                  {areaGroups.map((group) => (
+                                    <SelectGroup key={group.name}>
+                                      <SelectLabel>{group.name}</SelectLabel>
+                                      {group.areas.map((a) => (
+                                        <SelectItem
+                                          key={a.moduleCode}
+                                          value={a.moduleCode}
+                                        >
+                                          {permissionAreaShortLabel(
+                                            a.moduleCode,
+                                          )}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectGroup>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <label
+                              htmlFor="permission-search"
+                              className="block text-xs font-medium text-muted-foreground"
+                            >
+                              Search
+                            </label>
+                            <Input
+                              id="permission-search"
+                              aria-label="Search permissions"
+                              placeholder="e.g. approve payments"
+                              value={search}
+                              onChange={(e) => {
+                                setSearch(e.target.value);
+                                setPage(0);
+                              }}
+                            />
+                          </div>
+                          {(search || area !== "all") && (
                             <Button
                               type="button"
-                              variant="outline"
-                              onClick={() => void modulesQuery.refetch()}
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSearch("");
+                                setArea("all");
+                                setPage(0);
+                              }}
                             >
-                              Try again
+                              Clear filters
                             </Button>
-                          </div>
-                        ) : (
-                          <Select
-                            value={area}
-                            onValueChange={(value) => {
-                              setArea(value);
-                              setPage(0);
-                            }}
-                          >
-                            <SelectTrigger
-                              id="permission-category"
-                              aria-label="Permission category"
-                              className="w-full min-w-0"
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">
-                                All categories
-                              </SelectItem>
-                              {areas.map((a) => (
-                                <SelectItem
-                                  key={a.moduleCode}
-                                  value={a.moduleCode}
-                                >
-                                  {permissionAreaLabel(a.moduleCode)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                        <Input
-                          id="permission-search"
-                          aria-label="Search permissions"
-                          placeholder="Search, e.g. approve payments"
-                          value={search}
-                          onChange={(e) => {
-                            setSearch(e.target.value);
-                            setPage(0);
-                          }}
-                        />
-                      </div>
-                      {(search || area !== "all") && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSearch("");
-                            setArea("all");
-                            setPage(0);
-                          }}
-                        >
-                          Clear filters
-                        </Button>
-                      )}
-                      {catalogQuery.isError ? (
-                        <div role="alert" className="space-y-2 text-sm">
-                          <p>Couldn&apos;t load permissions.</p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => void catalogQuery.refetch()}
-                          >
-                            Try again
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <Table className="min-w-[24rem] table-fixed sm:min-w-0">
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="whitespace-normal">
-                                  What they can do
-                                </TableHead>
-                                <TableHead className="w-16 whitespace-normal text-center">
-                                  Access
-                                </TableHead>
-                                <TableHead className="w-40 whitespace-normal">
-                                  For this person
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {catalogQuery.isPending ? (
-                                Array.from({ length: 4 }, (_, i) => (
-                                  <TableRow key={i}>
-                                    {[0, 1, 2].map((j) => (
-                                      <TableCell key={j}>
-                                        <Skeleton className="h-5 w-full" />
-                                      </TableCell>
-                                    ))}
+                          )}
+                          {/* Read once, and the four columns explain themselves
+                          for the rest of the screen. */}
+                          <p className="rounded-sm bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                            Each row reads left to right: what the{" "}
+                            <strong className="font-medium text-foreground">
+                              {roleName || "their"} role
+                            </strong>{" "}
+                            gives everyone who has it, what you set{" "}
+                            <strong className="font-medium text-foreground">
+                              for this person
+                            </strong>
+                            , and what they end up with.{" "}
+                            <strong className="font-medium text-foreground">
+                              Always allow
+                            </strong>{" "}
+                            gives them something extra;{" "}
+                            <strong className="font-medium text-foreground">
+                              Always block
+                            </strong>{" "}
+                            takes something away. Leave it on{" "}
+                            <strong className="font-medium text-foreground">
+                              Use the {roleName || "their"} role
+                            </strong>{" "}
+                            to change nothing.
+                          </p>
+                          {catalogQuery.isError ? (
+                            <div role="alert" className="space-y-2 text-sm">
+                              <p>Couldn&apos;t load permissions.</p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void catalogQuery.refetch()}
+                              >
+                                Try again
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <Table className="min-w-[24rem] table-fixed sm:min-w-0">
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="whitespace-normal">
+                                      What they can do
+                                    </TableHead>
+                                    {/* Naming the source is the point of this
+                                    screen: without it you can't tell a ✓ that
+                                    came from the role from one you added. */}
+                                    <TableHead
+                                      className="w-20 whitespace-normal text-center"
+                                      title={
+                                        roleName
+                                          ? `What the ${roleName} role gives everyone who has it`
+                                          : "What their role gives"
+                                      }
+                                    >
+                                      {roleName
+                                        ? `${roleName} role`
+                                        : "Their role"}
+                                    </TableHead>
+                                    <TableHead className="w-56 whitespace-normal">
+                                      For this person
+                                    </TableHead>
+                                    <TableHead className="w-16 whitespace-normal text-center">
+                                      Result
+                                    </TableHead>
                                   </TableRow>
-                                ))
-                              ) : visiblePermissions.length === 0 ? (
-                                <TableRow>
-                                  <TableCell
-                                    colSpan={3}
-                                    className="py-6 text-sm text-muted-foreground"
-                                  >
-                                    {search || area !== "all"
-                                      ? "No permissions match these filters. Try a simpler word or clear the filters."
-                                      : "No permissions are available yet."}
-                                  </TableCell>
-                                </TableRow>
-                              ) : (
-                                visiblePermissions.map((p, i) => (
-                                  <PermissionRow
-                                    key={p.key}
-                                    areaHeading={
-                                      i === 0 ||
-                                      permissionAreaOf(
-                                        visiblePermissions[i - 1]!.key,
-                                      ) !== permissionAreaOf(p.key)
-                                    }
-                                    permissionKey={p.key}
-                                    effect={overrideMap.get(p.key) ?? "none"}
-                                    allowed={p.roleAllowed}
-                                    onChange={(effect) =>
-                                      setOverride(p.key, effect)
-                                    }
+                                </TableHeader>
+                                <TableBody>
+                                  {catalogQuery.isPending ? (
+                                    Array.from({ length: 4 }, (_, i) => (
+                                      <TableRow key={i}>
+                                        {[0, 1, 2, 3].map((j) => (
+                                          <TableCell key={j}>
+                                            <Skeleton className="h-5 w-full" />
+                                          </TableCell>
+                                        ))}
+                                      </TableRow>
+                                    ))
+                                  ) : visiblePermissions.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell
+                                        colSpan={4}
+                                        className="py-6 text-sm text-muted-foreground"
+                                      >
+                                        {search || area !== "all"
+                                          ? "No permissions match these filters. Try a simpler word or clear the filters."
+                                          : "No permissions are available yet."}
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : (
+                                    visiblePermissions.map((p, i) => (
+                                      <PermissionRow
+                                        key={p.key}
+                                        areaHeading={
+                                          i === 0 ||
+                                          permissionAreaOf(
+                                            visiblePermissions[i - 1]!.key,
+                                          ) !== permissionAreaOf(p.key)
+                                        }
+                                        permissionKey={p.key}
+                                        effect={
+                                          overrideMap.get(p.key) ?? "none"
+                                        }
+                                        allowed={p.roleAllowed}
+                                        roleName={roleName}
+                                        onChange={(effect) =>
+                                          setOverride(p.key, effect)
+                                        }
+                                      />
+                                    ))
+                                  )}
+                                </TableBody>
+                              </Table>
+                              {!catalogQuery.isPending &&
+                                totalPermissions > pageSize && (
+                                  <TablePaginationFooter
+                                    total={totalPermissions}
+                                    page={page}
+                                    size={pageSize}
+                                    onPageChange={setPage}
                                   />
-                                ))
-                              )}
-                            </TableBody>
-                          </Table>
-                          {!catalogQuery.isPending &&
-                            totalPermissions > pageSize && (
-                              <TablePaginationFooter
-                                total={totalPermissions}
-                                page={page}
-                                size={pageSize}
-                                onPageChange={setPage}
-                              />
-                            )}
-                        </>
-                      )}
+                                )}
+                            </>
+                          )}
+                        </TabsContent>
+                      </Tabs>
                     </CollapsibleContent>
                   </Collapsible>
                 </fieldset>
@@ -523,6 +734,16 @@ export function UserAccessDrawer({
           )}
         </div>
         <SheetFooter className="shrink-0 border-t p-4">
+          {/* Say what Save will do. The three sections scroll independently,
+              so without this you can change a role, the branches and several
+              overrides with nothing on screen summarising any of it. */}
+          {access && (
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {pendingChanges.length
+                ? `Not saved yet: ${pendingChanges.join(" · ")}.`
+                : "Nothing to save."}
+            </p>
+          )}
           {Object.keys(form.formState.errors).length > 0 && (
             <p
               role="alert"
@@ -565,25 +786,59 @@ export function UserAccessDrawer({
     </Sheet>
   );
 }
+/**
+ * Yes / no as a tick or a quiet dash. Not-allowed is the ordinary state for
+ * most of a few hundred permissions, so it must not read as an error — a
+ * column of red crosses makes the handful of real ticks hard to find.
+ */
+function YesNo({ allowed, what }: { allowed: boolean; what: string }) {
+  const text = `${what}: ${allowed ? "yes" : "no"}`;
+  return allowed ? (
+    <span className="inline-flex text-success" title={text}>
+      <IconCheck size={18} aria-hidden="true" />
+      <span className="sr-only">{text}</span>
+    </span>
+  ) : (
+    <span className="inline-flex text-muted-foreground" title={text}>
+      <IconMinus size={18} aria-hidden="true" />
+      <span className="sr-only">{text}</span>
+    </span>
+  );
+}
+
+/** A per-person change that matches what the role already says does nothing. */
+const isRedundant = (effect: string, roleAllowed: boolean | undefined) =>
+  roleAllowed !== undefined &&
+  ((effect === "GRANT" && roleAllowed) || (effect === "DENY" && !roleAllowed));
+
+const redundantNote = (roleName: string, roleAllowed: boolean) =>
+  `The ${roleName || "their"} role already ${roleAllowed ? "allows" : "blocks"} this, so you don't need to set it here. If you do, it will stay this way even after the role is changed.`;
+
 function PermissionRow({
   permissionKey,
   effect,
   allowed,
   areaHeading,
+  roleName,
   onChange,
 }: {
   permissionKey: string;
   effect: string;
+  /** What the role alone says, before anything set for this person. */
   allowed: boolean;
   areaHeading: boolean;
+  roleName: string;
   onChange: (effect: string) => void;
 }) {
   const effectiveAllowed = effect === "GRANT" || (effect !== "DENY" && allowed);
+  const redundant = isRedundant(effect, allowed);
+  const Glyph = actionIcon(permissionActionOf(permissionKey));
+
   return (
     <>
       {areaHeading && (
-        <TableRow className="bg-muted/40">
-          <TableCell colSpan={3} className="whitespace-normal font-medium">
+        <TableRow className="bg-muted/40 hover:bg-muted/40">
+          <TableCell colSpan={4} className="whitespace-normal font-medium">
             {permissionAreaLabel(permissionAreaOf(permissionKey))}
           </TableCell>
         </TableRow>
@@ -593,37 +848,116 @@ function PermissionRow({
           title={permissionKey}
           className="whitespace-normal break-words"
         >
-          {permissionLabel(permissionKey)}
+          <span className="flex items-start gap-2">
+            <Glyph
+              size={16}
+              aria-hidden="true"
+              className="mt-0.5 shrink-0 text-muted-foreground"
+            />
+            <span className="min-w-0">
+              {permissionLabel(permissionKey)}
+              {redundant && (
+                <span className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
+                  <IconAlertTriangle
+                    size={12}
+                    aria-hidden="true"
+                    className="mt-0.5 shrink-0"
+                  />
+                  {redundantNote(roleName, allowed)}
+                </span>
+              )}
+            </span>
+          </span>
         </TableCell>
         <TableCell className="text-center">
-          {effectiveAllowed ? (
-            <span title="Allowed" className="inline-flex text-success">
-              <IconCheck size={20} aria-hidden="true" />
-              <span className="sr-only">Allowed</span>
-            </span>
-          ) : (
-            <span title="Not allowed" className="inline-flex text-destructive">
-              <IconX size={20} aria-hidden="true" />
-              <span className="sr-only">Not allowed</span>
-            </span>
-          )}
+          <YesNo
+            allowed={allowed}
+            what={
+              roleName
+                ? `The ${roleName} role gives this`
+                : "Their role gives this"
+            }
+          />
         </TableCell>
         <TableCell>
           <Select value={effect} onValueChange={onChange}>
             <SelectTrigger
-              aria-label={`Special permission: ${permissionLabel(permissionKey)}`}
+              aria-label={`${permissionLabel(permissionKey)} for this person`}
               className="w-full min-w-0"
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">Same as role</SelectItem>
-              <SelectItem value="GRANT">Allow</SelectItem>
-              <SelectItem value="DENY">Block</SelectItem>
+              {/* The default has to read as "I'm not touching this". A bare
+                  role name ("Same as Employee") reads like a person. */}
+              <SelectItem value="none">
+                {roleName ? `Use the ${roleName} role` : "Use their role"}
+              </SelectItem>
+              <SelectItem value="GRANT">Always allow</SelectItem>
+              <SelectItem value="DENY">Always block</SelectItem>
             </SelectContent>
           </Select>
         </TableCell>
+        <TableCell className="text-center">
+          <YesNo allowed={effectiveAllowed} what="They can do this" />
+        </TableCell>
       </TableRow>
     </>
+  );
+}
+
+/** One thing already changed for this person, listed above the table. */
+function OverrideChip({
+  permissionKey,
+  effect,
+  roleAllowed,
+  roleName,
+  onRemove,
+}: {
+  permissionKey: string;
+  effect: "GRANT" | "DENY";
+  roleAllowed: boolean | undefined;
+  roleName: string;
+  onRemove: () => void;
+}) {
+  const redundant = isRedundant(effect, roleAllowed);
+  return (
+    <div className="flex items-start justify-between gap-2 rounded-sm bg-primary/5 p-2 text-sm">
+      <div className="min-w-0 break-words">
+        <span title={permissionKey}>{permissionLabel(permissionKey)}</span>
+        {" — "}
+        <span className="font-medium">
+          {effect === "GRANT" ? "always allowed" : "always blocked"}
+        </span>
+        <p className="text-xs text-muted-foreground">
+          {permissionAreaLabel(permissionAreaOf(permissionKey))}
+        </p>
+        {/* Short, because the banner above already explains why. This only
+            has to mark which ones it meant. */}
+        {redundant && roleAllowed !== undefined && (
+          <p
+            className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"
+            title={redundantNote(roleName, roleAllowed)}
+          >
+            <IconAlertTriangle size={12} aria-hidden="true" />
+            Does nothing
+          </p>
+        )}
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        title={
+          roleName
+            ? `Go back to what the ${roleName} role gives`
+            : "Go back to what their role gives"
+        }
+        aria-label={`Undo the change to ${permissionLabel(permissionKey)}`}
+        onClick={onRemove}
+      >
+        Undo
+      </Button>
+    </div>
   );
 }
