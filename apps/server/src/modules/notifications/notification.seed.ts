@@ -48,6 +48,10 @@ const templateBodies: Record<
     subject: "POD not received",
     body: "LR {{lrNumber}} was delivered {{days}} day(s) ago but the signed POD has not been received yet.",
   },
+  "claim.created": {
+    subject: "New damage claim",
+    body: "New claim {{claimNumber}} on LR {{lrNumber}}.",
+  },
   "trip.created": {
     subject: "Trip created",
     body: "Trip {{tripNumber}} has been created.",
@@ -150,6 +154,15 @@ const rules: RuleSeed[] = [
     recipientResolverKey: "lr.creator",
     channels: [...defaultChannels],
     templateCode: "lr.pod_uploaded",
+  },
+  {
+    eventType: "claim.created",
+    name: "New damage claim",
+    severity: NotificationSeverity.WARNING,
+    // Raised from an LR ack / GRN; the event branch is the LR's booking branch.
+    recipientResolverKey: "permission:claim.update@branch",
+    channels: [NotificationChannel.IN_APP],
+    templateCode: "claim.created",
   },
   {
     eventType: "trip.created",

@@ -41,6 +41,7 @@ import {
   assertLRsNotOnVendorSlip,
   sameValue,
 } from "../vendor-payment/source-lock.js";
+import { syncLRAckClaim } from "../claim/claim.sync.js";
 
 /**
  * Delivery + acknowledgement actions on a single LR. Mounted on
@@ -967,6 +968,8 @@ router.post(
     });
 
     await evaluateBillingForLR(db, id, me);
+    // Damage/shortage on the ack raises a claim. Never throws.
+    await syncLRAckClaim(id, me);
 
     const ack = await db.lRAcknowledgement.findUniqueOrThrow({
       where: { lrId: id },
@@ -1085,6 +1088,7 @@ router.patch(
     });
 
     await evaluateBillingForLR(db, id, me);
+    await syncLRAckClaim(id, me);
 
     return sendOk(res, updated);
   },
@@ -1133,6 +1137,8 @@ router.post(
         select: { id: true },
       });
     });
+    // Cancels a still-pending claim raised from this ack.
+    await syncLRAckClaim(id, me);
 
     return sendOk(res, { id, status: "DELIVERED" });
   },

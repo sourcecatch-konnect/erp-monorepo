@@ -39,6 +39,7 @@ import {
   sameValue,
 } from "../vendor-payment/source-lock.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
+import { syncGRNClaim } from "../claim/claim.sync.js";
 
 const router: Router = Router();
 
@@ -987,6 +988,8 @@ router.put("/:id", can(PERMS.GRN.UPDATE), async (req, res) => {
       timeout: 15000,
     },
   );
+  // Only a SUBMITTED GRN raises a claim; the sync skips drafts. Never throws.
+  await syncGRNClaim(grn.id, actorId(req));
 
   await validateDamagePhotoAttachments(
     grn.id,
@@ -1064,6 +1067,7 @@ router.post("/:id/submit", can(PERMS.GRN.SUBMIT), async (req, res) => {
       version: true,
     },
   });
+  await syncGRNClaim(grn.id, actorId(req));
 
   return sendOk(res, grn);
 });
@@ -1113,6 +1117,8 @@ router.post("/:id/cancel", can(PERMS.GRN.CANCEL), async (req, res) => {
       version: true,
     },
   });
+  // Cancels a still-pending claim raised from this GRN.
+  await syncGRNClaim(grn.id, actorId(req));
 
   return sendOk(res, grn);
 });
