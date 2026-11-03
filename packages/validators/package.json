@@ -121,6 +121,10 @@
     "./feedback": {
       "types": "./src/feedback/feedback.schema.ts",
       "import": "./dist/feedback/feedback.schema.js"
+    },
+    "./claims/claim": {
+      "types": "./src/claims/claim.schema.ts",
+      "import": "./dist/claims/claim.schema.js"
     }
   },
   "scripts": {

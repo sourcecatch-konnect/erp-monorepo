@@ -174,6 +174,14 @@ type DriverFinancePermissionKey =
   | "driver_finance.advance_manage"
   | "driver_finance.pay";
 
+type ClaimPermissionKey =
+  | "claim.view"
+  | "claim.create"
+  | "claim.update"
+  | "claim.settle"
+  | "claim.recovery"
+  | "claim.approve";
+
 type LedgerPermissionKey =
   | "ledger.view"
   | "ledger.voucher_view"
@@ -239,6 +247,7 @@ export type PermissionKey =
   | ReceiptPermissionKey
   | AccountsPaymentPermissionKey
   | DriverFinancePermissionKey
+  | ClaimPermissionKey
   | LedgerPermissionKey
   | WorkshopPermissionKey
   | GRNPermissionKey
@@ -490,6 +499,14 @@ export const PERMS = {
     SALARY_APPROVE: "driver_finance.salary_approve",
     ADVANCE_MANAGE: "driver_finance.advance_manage",
     PAY: "driver_finance.pay",
+  },
+  CLAIM: {
+    VIEW: "claim.view",
+    CREATE: "claim.create",
+    UPDATE: "claim.update",
+    SETTLE: "claim.settle",
+    RECOVERY: "claim.recovery",
+    APPROVE: "claim.approve",
   },
   LEDGER: {
     VIEW: "ledger.view",

@@ -212,6 +212,11 @@ model User {
 
   passwordResetTokens PasswordResetToken[]
   cashAccountOpenings CashAccountOpening[] @relation("CashAccountOpeningUpdatedBy")
+
+  createdClaims          Claim[]         @relation("CreatedClaims")
+  updatedClaims          Claim[]         @relation("UpdatedClaims")
+  createdClaimRecoveries ClaimRecovery[] @relation("CreatedClaimRecoveries")
+  claimEvents            ClaimEvent[]    @relation("ClaimEventActor")
 }
 
 /// Single-use, time-limited tokens for the "forgot password" flow. Only the
@@ -329,6 +334,7 @@ model Branch {
   driverSalaryRuns     DriverSalaryRun[]
   driverSalaryAdvances DriverSalaryAdvance[]
   driverPayouts        DriverPayout[]
+  claims               Claim[]
   purchaseOrders       PurchaseOrder[]
   spareInwards         SpareInward[]
   spareBatches         SpareBatch[]
@@ -697,6 +703,7 @@ model Customer {
   cashReceivables         CashReceivable[]
   ledgerEntries           LedgerEntry[]
   ledger                  Ledger?
+  claims                  Claim[]
 
   @@index([name])
   @@index([cityId])
@@ -829,6 +836,7 @@ model Driver {
   salaries           DriverSalary[]
   salaryAdvances     DriverSalaryAdvance[]
   payouts            DriverPayout[]
+  claimRecoveries    ClaimRecovery[]
 
   @@index([name])
 }
@@ -883,6 +891,7 @@ model Labour {
   jobCardServiceLines        JobCardServiceLine[]
   ledger                     Ledger?
   vendorPaymentSlips         VendorPaymentSlip[]
+  claimRecoveries            ClaimRecovery[]
 
   @@index([name])
   @@index([branchId])
@@ -996,6 +1005,7 @@ model Transport {
   lrgroups           LRGroup[]
   ledger             Ledger?
   vendorPaymentSlips VendorPaymentSlip[]
+  claimRecoveries    ClaimRecovery[]
 
   @@index([name])
   @@index([cityId])
@@ -2046,6 +2056,7 @@ model LorryReceipt {
   billableCharges LRCharge[]
   billLines       BillLine[]
   billLinks       BillLorryReceipt[]
+  claims          Claim[]
 
   createdBy         User              @relation("CreatedLR", fields: [createdById], references: [id])
   group             LRGroup           @relation(fields: [groupId], references: [id])
@@ -2076,6 +2087,7 @@ model LRGoods {
   height         Float?
   grnGoods       GRNGoods[]
   ackItems       LRAcknowledgementItem[]
+  claimItems     ClaimItem[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   lorryReceipt   LorryReceipt            @relation(fields: [lorryReceiptId], references: [id])
@@ -3392,6 +3404,7 @@ model JournalEntry {
   driverSalaryRun           DriverSalaryRun?
   driverSalaryAdvance       DriverSalaryAdvance?
   driverPayout              DriverPayout?
+  claimRecovery             ClaimRecovery?
 
   @@unique([voucherType, sourceType, sourceId])
   @@unique([voucherType, voucherNumber])
@@ -5374,4 +5387,186 @@ model FeedbackComment {
   feedback   Feedback            @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
 
   @@index([feedbackId, createdAt])
+}
+
+// ─── Claims / Damage Settlement (docs/CLAIMS_JIRA.md, Epic C) ───────────────
+
+enum ClaimType {
+  DAMAGE
+  SHORTAGE
+  LOSS
+}
+
+/// Where the claim came from. originRefId points at the source document.
+enum ClaimOrigin {
+  LR_ACK
+  GRN
+  RAIL_BRANCH_GRN
+  MANUAL
+}
+
+/// Who caused the damage: GRNDamagesBy's values (minus NONE), plus DRIVER and
+/// INSURED_EVENT (accident, fire, theft — recovered from insurance).
+enum ClaimCause {
+  TRANSPORTER
+  LABOUR
+  RAILWAY
+  CUSTOMER
+  DRIVER
+  INSURED_EVENT
+  UNKNOWN
+}
+
+enum ClaimStatus {
+  PENDING
+  ACTIVE
+  SETTLED
+  REJECTED
+  CANCELLED
+}
+
+enum ClaimRecoverySource {
+  INSURANCE
+  TRANSPORTER
+  DRIVER
+  LABOUR
+  RAILWAY
+  OTHER
+}
+
+enum ClaimRecoveryStatus {
+  FILED
+  APPROVED
+  RECEIVED
+  REJECTED
+}
+
+/// One damage/shortage event on one LR: what the customer claimed, what we
+/// settled, and what we recover from whoever caused it. Raised automatically
+/// from an LR acknowledgement or GRN with damage, or by hand (MANUAL).
+/// Branch = the LR's booking branch. Money in paise.
+model Claim {
+  id                 String      @id @default(cuid())
+  claimNumber        String      @unique
+  fyCode             String
+  claimDate          DateTime
+  branchId           String
+  lrId               String
+  /// Defaults to the LR's consignor; changed at assessment if the consignee claims.
+  customerId         String
+  claimType          ClaimType
+  origin             ClaimOrigin
+  /// LRAcknowledgement / GRN / RailBranchGRN id. Null for MANUAL.
+  originRefId        String?
+  /// Filled at assessment.
+  causedBy           ClaimCause?
+  damagedQty         Decimal     @default(0) @db.Decimal(14, 4)
+  shortageQty        Decimal     @default(0) @db.Decimal(14, 4)
+  goodsValuePaise    BigInt?
+  claimedAmountPaise BigInt      @default(0)
+  settledAmountPaise BigInt?
+  basisDescription   String?
+  status             ClaimStatus @default(PENDING)
+  settledAt          DateTime?
+  rejectedReason     String?
+  cancelReason       String?
+  version            Int         @default(1)
+  createdById        String
+  updatedById        String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  deletedAt          DateTime?
+
+  branch     Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  lr         LorryReceipt    @relation(fields: [lrId], references: [id], onDelete: Restrict)
+  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy  User            @relation("CreatedClaims", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy  User?           @relation("UpdatedClaims", fields: [updatedById], references: [id], onDelete: SetNull)
+  items      ClaimItem[]
+  recoveries ClaimRecovery[]
+  events     ClaimEvent[]
+
+  /// Keeps auto-create idempotent: one claim per source document per LR (a
+  /// branch GRN covers a whole wagon, so it raises one claim per LR on it).
+  /// MANUAL claims have a null originRefId, which Postgres never treats as equal.
+  @@unique([origin, originRefId, lrId])
+  @@index([branchId, status])
+  @@index([lrId])
+  @@index([customerId])
+  @@index([status, claimDate])
+}
+
+/// The damaged/short quantity per LR goods line. lrGoodsId is null when a GRN
+/// line can't be traced back to an LR goods row; goodsName is a snapshot.
+model ClaimItem {
+  id          String   @id @default(cuid())
+  claimId     String
+  lrGoodsId   String?
+  goodsName   String
+  damagedQty  Decimal  @default(0) @db.Decimal(14, 4)
+  shortageQty Decimal  @default(0) @db.Decimal(14, 4)
+  valuePaise  BigInt?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  claim   Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  lrGoods LRGoods? @relation(fields: [lrGoodsId], references: [id], onDelete: Restrict)
+
+  @@index([claimId])
+  @@index([lrGoodsId])
+}
+
+/// Money to recover from one responsible party; a claim can split its loss
+/// across several (e.g. 60% insurance + 40% broker). The FK matching `source`
+/// is set (transport / driver / labour); insurance and other use partyName.
+model ClaimRecovery {
+  id             String              @id @default(cuid())
+  claimId        String
+  source         ClaimRecoverySource
+  transportId    String?
+  driverId       String?
+  labourId       String?
+  partyName      String?
+  amountPaise    BigInt
+  status         ClaimRecoveryStatus @default(FILED)
+  /// Insurance claim no. / debit note no.
+  referenceNo    String?
+  remarks        String?
+  journalEntryId String?             @unique
+  version        Int                 @default(1)
+  createdById    String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  claim        Claim         @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  transport    Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
+  driver       Driver?       @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  labour       Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy    User          @relation("CreatedClaimRecoveries", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([claimId])
+  @@index([status])
+  @@index([transportId])
+  @@index([driverId])
+}
+
+/// Claim timeline: one row per transition or notable change (same idea as
+/// OrderEvent). eventType values are typed in @skerp/validators.
+model ClaimEvent {
+  id         String       @id @default(cuid())
+  claimId    String
+  eventType  String
+  fromStatus ClaimStatus?
+  toStatus   ClaimStatus?
+  note       String?
+  payload    Json?
+  /// Null for system events (scheduled sweeps).
+  actorId    String?
+  createdAt  DateTime     @default(now())
+
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  actor User? @relation("ClaimEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([claimId, createdAt])
 }

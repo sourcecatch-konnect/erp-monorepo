@@ -86,6 +86,7 @@ import trainingRoute from "./modules/training/training.route.js";
 // remove-before-prod: in-app feedback (testing phase only).
 import feedbackRoute, { isFeedbackEnabled } from "./modules/feedback/feedback.route.js";
 import driverFinanceRoute from "./modules/driver-finance/driver-finance.route.js";
+import claimRoute from "./modules/claim/claim.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -186,6 +187,7 @@ app.use("/training", trainingRoute);
 // remove-before-prod: FEEDBACK_ENABLED=false → every /feedback/* 404s.
 if (isFeedbackEnabled()) app.use("/feedback", feedbackRoute);
 app.use("/driver-finance", driverFinanceRoute);
+app.use("/claims", claimRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>

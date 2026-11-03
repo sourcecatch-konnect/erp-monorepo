@@ -1,5 +1,6 @@
 import {
   IconActivity,
+  IconAlertTriangle,
   IconChecklist,
   IconClipboardList,
   IconDatabase,
@@ -110,6 +111,12 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/lorry-receipts/unloading-report",
         icon: IconFileBarcode,
         permission: PERMS.LORRY_RECEIPT.VIEW,
+      },
+      {
+        title: "Damage Claims",
+        href: "/claims",
+        icon: IconAlertTriangle,
+        permission: PERMS.CLAIM.VIEW,
       },
       {
         title: "VP Management",
