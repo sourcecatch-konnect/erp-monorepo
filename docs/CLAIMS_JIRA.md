@@ -8,7 +8,8 @@
 > Source: `docs/ERP_MODULE_PLAN_V2.md` §7.1.
 
 ---
-
+ 
+ 
 ## Background
 
 When goods arrive damaged or short, SK pays the customer for the loss and tries to recover it from whoever
