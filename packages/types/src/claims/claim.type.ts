@@ -1,12 +1,18 @@
 import type { z } from "zod";
 import type {
+  claimAssessmentSchema,
   claimCauseSchema,
   claimEventTypeSchema,
   claimOriginSchema,
+  claimReasonSchema,
   claimRecoverySourceSchema,
   claimRecoveryStatusSchema,
+  claimSettlementModeSchema,
   claimStatusSchema,
   claimTypeSchema,
+  createClaimSchema,
+  paymentModeSchema,
+  settleClaimSchema,
 } from "@skerp/validators";
 
 export type ClaimType = z.infer<typeof claimTypeSchema>;
@@ -16,6 +22,55 @@ export type ClaimStatus = z.infer<typeof claimStatusSchema>;
 export type ClaimRecoverySource = z.infer<typeof claimRecoverySourceSchema>;
 export type ClaimRecoveryStatus = z.infer<typeof claimRecoveryStatusSchema>;
 export type ClaimEventType = z.infer<typeof claimEventTypeSchema>;
+export type ClaimSettlementMode = z.infer<typeof claimSettlementModeSchema>;
+type PaymentMode = z.infer<typeof paymentModeSchema>;
+
+/** Form values (rupees as typed) — the server converts to paise. */
+export type CreateClaimFormInput = z.input<typeof createClaimSchema>;
+export type ClaimAssessmentFormInput = z.input<typeof claimAssessmentSchema>;
+export type SettleClaimFormInput = z.input<typeof settleClaimSchema>;
+export type ClaimReasonInput = z.input<typeof claimReasonSchema>;
+
+/** An LR a claim can be raised on by hand (GET /claims/eligible-lrs). */
+export type ClaimEligibleLr = {
+  id: string;
+  lrNumber: string;
+  groupNumber: string;
+  status: string;
+  consignor: { id: string; name: string };
+  consignee: { id: string; name: string };
+  goods: { id: string; name: string; quantity: number; unit: string | null }[];
+};
+
+/** What a settlement can be linked to (GET /claims/:id/settlement-options). */
+export type ClaimSettlementOptions = {
+  /** Settlements above this wait for a second user with claim.approve. */
+  approvalLimitPaise: number;
+  receiptAllocations: {
+    id: string;
+    receiptNumber: string | null;
+    receivedAt: string;
+    billNumber: string | null;
+    damageAmountPaise: number;
+    /** The bill includes this claim's LR. */
+    onThisLr: boolean;
+  }[];
+  creditNotes: {
+    id: string;
+    noteNumber: string;
+    createdAt: string;
+    billNumber: string | null;
+    amountPaise: number;
+    reason: string;
+    onThisLr: boolean;
+  }[];
+  fundingAccounts: {
+    id: string;
+    name: string;
+    group: "CASH" | "BANK";
+    balancePaise: number;
+  }[];
+};
 
 /** One row of the claims register (GET /claims). Money in paise. */
 export type ClaimListRow = {
@@ -118,6 +173,39 @@ export type ClaimDetail = {
     /** Null for system events. */
     actor: ClaimPerson | null;
   }[];
+  /** Set once the claim is SETTLED. */
+  settlement: {
+    mode: ClaimSettlementMode;
+    receipt: {
+      id: string;
+      receiptNumber: string | null;
+      billNumber: string | null;
+      damageAmountPaise: number;
+    } | null;
+    creditNote: {
+      id: string;
+      noteNumber: string;
+      billId: string;
+      billNumber: string | null;
+      amountPaise: number;
+    } | null;
+    paymentMode: PaymentMode | null;
+    fundingAccountName: string | null;
+    referenceNo: string | null;
+    note: string | null;
+    voucher: { id: string; voucherNumber: string } | null;
+    settledBy: ClaimPerson | null;
+    approvedBy: ClaimPerson | null;
+  } | null;
+  /** A settlement above the limit, waiting for a second user to approve. */
+  pendingSettlement: {
+    amountPaise: number;
+    settledAt: string;
+    mode: ClaimSettlementMode;
+    note: string | null;
+    requestedBy: ClaimPerson | null;
+    requestedAt: string | null;
+  } | null;
   createdBy: ClaimPerson;
   createdAt: string;
   updatedAt: string;

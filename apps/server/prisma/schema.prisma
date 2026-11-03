@@ -215,6 +215,9 @@ model User {
 
   createdClaims          Claim[]         @relation("CreatedClaims")
   updatedClaims          Claim[]         @relation("UpdatedClaims")
+  settledClaims          Claim[]         @relation("SettledClaims")
+  approvedClaimSettles   Claim[]         @relation("ApprovedClaimSettlements")
+  requestedClaimSettles  Claim[]         @relation("RequestedClaimSettlements")
   createdClaimRecoveries ClaimRecovery[] @relation("CreatedClaimRecoveries")
   claimEvents            ClaimEvent[]    @relation("ClaimEventActor")
 }
@@ -2342,6 +2345,7 @@ model BillCreditNote {
   // two-step order as Bill.journalEntryId / Receipt.journalEntryId.
   journalEntryId String?       @unique
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  claim          Claim?
 
   @@index([billId])
   @@index([customerId])
@@ -2477,6 +2481,7 @@ model ReceiptAllocation {
 
   receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   bill    Bill    @relation(fields: [billId], references: [id], onDelete: Restrict)
+  claim   Claim?
 
   @@unique([receiptId, billId])
   @@index([billId])
@@ -3211,6 +3216,7 @@ model Ledger {
   vendorPaymentDisbursements VendorPaymentDisbursement[]
   driverSalaryAdvances       DriverSalaryAdvance[]
   driverPayouts              DriverPayout[]
+  claimSettlements           Claim[]
   driver                     Driver?                     @relation(fields: [driverId], references: [id], onDelete: Restrict)
   createdAt                  DateTime                    @default(now())
   updatedAt                  DateTime                    @updatedAt
@@ -3405,6 +3411,7 @@ model JournalEntry {
   driverSalaryAdvance       DriverSalaryAdvance?
   driverPayout              DriverPayout?
   claimRecovery             ClaimRecovery?
+  claimSettlement           Claim?
 
   @@unique([voucherType, sourceType, sourceId])
   @@unique([voucherType, voucherNumber])
@@ -4541,6 +4548,7 @@ enum JournalSourceType {
   DRIVER_SALARY_ADVANCE
   DRIVER_PAYOUT
   OPENING_BALANCE
+  CLAIM_SETTLEMENT
 }
 
 enum AllocationRefType {
@@ -5425,6 +5433,16 @@ enum ClaimStatus {
   CANCELLED
 }
 
+/// How the customer was compensated (C4).
+enum ClaimSettlementMode {
+  /// They short-paid a bill: ReceiptAllocation.damageAmountPaise. No new voucher.
+  RECEIPT_DEDUCTION
+  /// A BillCreditNote on their bill. No new voucher.
+  CREDIT_NOTE
+  /// We paid them: Dr DAMAGE_DEDUCTION / Cr Cash-Bank.
+  PAID_SEPARATELY
+}
+
 enum ClaimRecoverySource {
   INSURANCE
   TRANSPORTER
@@ -5470,12 +5488,31 @@ model Claim {
   settledAt          DateTime?
   rejectedReason     String?
   cancelReason       String?
-  version            Int         @default(1)
-  createdById        String
-  updatedById        String?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  deletedAt          DateTime?
+
+  /// Settlement (C4) — set together when the claim becomes SETTLED.
+  settlementMode            ClaimSettlementMode?
+  /// One allocation / credit note can settle only one claim.
+  receiptAllocationId       String?              @unique
+  creditNoteId              String?              @unique
+  settlementPaymentMode     PaymentMode?
+  settlementFundingLedgerId String?
+  settlementReferenceNo     String?
+  settlementNote            String?
+  settlementJournalEntryId  String?              @unique
+  settledById               String?
+  settlementApprovedById    String?
+  /// A settlement above the approval limit waits here (validated settle body)
+  /// until a second user with claim.approve approves or declines it.
+  pendingSettlement         Json?
+  settlementRequestedById   String?
+  settlementRequestedAt     DateTime?
+
+  version     Int       @default(1)
+  createdById String
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
   branch     Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
   lr         LorryReceipt    @relation(fields: [lrId], references: [id], onDelete: Restrict)
@@ -5485,6 +5522,14 @@ model Claim {
   items      ClaimItem[]
   recoveries ClaimRecovery[]
   events     ClaimEvent[]
+
+  receiptAllocation       ReceiptAllocation? @relation(fields: [receiptAllocationId], references: [id], onDelete: SetNull)
+  creditNote              BillCreditNote?    @relation(fields: [creditNoteId], references: [id], onDelete: SetNull)
+  settlementFundingLedger Ledger?            @relation(fields: [settlementFundingLedgerId], references: [id], onDelete: Restrict)
+  settlementJournalEntry  JournalEntry?      @relation(fields: [settlementJournalEntryId], references: [id], onDelete: SetNull)
+  settledBy               User?              @relation("SettledClaims", fields: [settledById], references: [id], onDelete: SetNull)
+  settlementApprovedBy    User?              @relation("ApprovedClaimSettlements", fields: [settlementApprovedById], references: [id], onDelete: SetNull)
+  settlementRequestedBy   User?              @relation("RequestedClaimSettlements", fields: [settlementRequestedById], references: [id], onDelete: SetNull)
 
   /// Keeps auto-create idempotent: one claim per source document per LR (a
   /// branch GRN covers a whole wagon, so it raises one claim per LR on it).

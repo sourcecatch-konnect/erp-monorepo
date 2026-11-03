@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { IconX } from "@tabler/icons-react";
-import type { ClaimCause, ClaimStatus, ClaimType } from "@skerp/types";
+import { IconPlus, IconX } from "@tabler/icons-react";
+import { PERMS, type ClaimCause, type ClaimStatus, type ClaimType } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
 import { Input } from "@skerp/ui/components/input";
@@ -26,7 +26,7 @@ import {
 } from "@skerp/ui/components/table";
 import { SortHeader, TablePaginationFooter, TableSearchInput } from "@/components/data-table";
 
-import { useAuth } from "@/features/auth";
+import { useAuth, useCan } from "@/features/auth";
 import { branchApi } from "@/features/masters/branch/branch.service";
 import { customerApi } from "@/features/masters/Customer/customer.service";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -35,6 +35,7 @@ import { formatPaise } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { claimApi, type ClaimFilters } from "./claim.service";
 import { claimKeys } from "./claim.keys";
+import { NewClaimDialog } from "./NewClaimDialog";
 import {
   CLAIM_CAUSE_LABELS,
   CLAIM_STATUS,
@@ -149,6 +150,8 @@ function CustomerFilter({
 
 export function ClaimsListPage() {
   const { user } = useAuth();
+  const canCreate = useCan(PERMS.CLAIM.CREATE);
+  const [newOpen, setNewOpen] = React.useState(false);
 
   const [size, setSize] = React.useState(20);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
@@ -211,13 +214,21 @@ export function ClaimsListPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold">Damage Claims</h1>
-        <p className="text-sm text-muted-foreground">
-          Every damage or shortage on an LR: what the customer claimed, what we settled, and what
-          we recovered from whoever caused it.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Damage Claims</h1>
+          <p className="text-sm text-muted-foreground">
+            Every damage or shortage on an LR: what the customer claimed, what we settled, and what
+            we recovered from whoever caused it.
+          </p>
+        </div>
+        {canCreate && (
+          <Button onClick={() => setNewOpen(true)}>
+            <IconPlus size={15} /> New claim
+          </Button>
+        )}
       </div>
+      <NewClaimDialog open={newOpen} onOpenChange={setNewOpen} />
 
       <StatusSummary
         filters={filters}

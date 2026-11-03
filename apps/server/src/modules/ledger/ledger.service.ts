@@ -303,7 +303,8 @@ function journalSourceTypeToLedgerSourceType(sourceType: string): LedgerSourceTy
   if (
     sourceType === "VENDOR_PAYMENT" ||
     sourceType === "DRIVER_PAYOUT" ||
-    sourceType === "DRIVER_SALARY_ADVANCE"
+    sourceType === "DRIVER_SALARY_ADVANCE" ||
+    sourceType === "CLAIM_SETTLEMENT"
   )
     return "PAYMENT";
   if (sourceType === "RECEIPT") return "RECEIPT";

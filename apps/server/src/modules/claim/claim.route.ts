@@ -1,22 +1,37 @@
 import { Router, type Request } from "express";
-import { claimListQuerySchema, claimStatusSchema } from "@skerp/validators";
 import {
-  PERMS,
-  type ClaimDetail,
-  type ClaimListRow,
-  type ClaimPerson,
-  type ClaimStatusSummary,
-} from "@skerp/types";
-import type { ClaimOrigin, Prisma } from "../../../generated/prisma/index.js";
+  claimAssessmentSchema,
+  claimListQuerySchema,
+  claimReasonSchema,
+  claimStatusSchema,
+  claimVersionSchema,
+  createClaimSchema,
+  settleClaimSchema,
+} from "@skerp/validators";
+import { PERMS, type ClaimListRow, type ClaimStatusSummary } from "@skerp/types";
+import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
-import { NotFoundError, ValidationError } from "../../lib/error.js";
+import { ValidationError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { parseListQuery } from "../_shared/list.query.js";
 import { claimMoneyTotals, COUNTED_RECOVERY_STATUSES } from "./claim.compute.js";
+import { claimDetail } from "./claim.detail.js";
+import {
+  approveSettlement,
+  closeClaim,
+  createManualClaim,
+  declineSettlement,
+  eligibleLrsForClaim,
+  loadClaimForAction,
+  lrForManualClaim,
+  requestSettlement,
+  saveAssessment,
+  settlementOptions,
+} from "./claim.service.js";
 
 /**
  * Claims / Damage Settlement (docs/CLAIMS_JIRA.md, Epic C). Mounted at /claims.
@@ -25,6 +40,7 @@ import { claimMoneyTotals, COUNTED_RECOVERY_STATUSES } from "./claim.compute.js"
  */
 const router: Router = Router();
 router.use(authMiddleware);
+const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 const validate = <T>(
   result:
@@ -55,11 +71,6 @@ const endOfDayUtc = (date: Date) => {
   end.setUTCHours(23, 59, 59, 999);
   return end;
 };
-
-const personName = (user: { id: string; firstName: string | null; lastName: string | null }): ClaimPerson => ({
-  id: user.id,
-  name: [user.firstName, user.lastName].filter(Boolean).join(" ") || "—",
-});
 
 /**
  * Register filters, shared by the list and the summary strip. Every filter
@@ -184,122 +195,100 @@ router.get("/summary", can(PERMS.CLAIM.VIEW), async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Manual claim (C4)                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Delivered LRs of the user's branches, for the "New claim" picker. */
+router.get("/eligible-lrs", can(PERMS.CLAIM.CREATE), async (req, res) => {
+  const { search } = parseListQuery(req);
+  return sendOk(res, await eligibleLrsForClaim(branchFilter(req, "originBranchId"), search));
+});
+
+router.post("/", can(PERMS.CLAIM.CREATE), async (req, res) => {
+  const input = validate(createClaimSchema.safeParse(req.body));
+  const lr = await lrForManualClaim(input.lrId);
+  // The claim belongs to the LR's booking branch.
+  assertBranchAccess(req, lr.group.originBranchId);
+  const claim = await createManualClaim(input, lr, actorId(req));
+  return sendOk(res, await claimDetail(claim.id), undefined, 201);
+});
+
+/* ------------------------------------------------------------------ */
 /* Detail                                                              */
 /* ------------------------------------------------------------------ */
 
-const namedUser = { select: { id: true, firstName: true, lastName: true } } as const;
-const named = { select: { id: true, name: true } } as const;
+router.get("/:id", can(PERMS.CLAIM.VIEW), async (req, res) => {
+  const detail = await claimDetail(getParamId(req));
+  // 403, not 404: the claim exists, it just belongs to another branch.
+  assertBranchAccess(req, detail.branch.id);
+  return sendOk(res, detail);
+});
 
-const claimDetailInclude = {
-  branch: { select: { id: true, name: true, branchCode: true } },
-  customer: named,
-  lr: {
-    select: {
-      id: true,
-      lrNumber: true,
-      groupId: true,
-      group: { select: { groupNumber: true, consignor: named, consignee: named } },
-    },
-  },
-  items: { orderBy: { createdAt: "asc" } },
-  recoveries: {
-    orderBy: { createdAt: "asc" },
-    include: { transport: named, driver: named, labour: named },
-  },
-  events: { orderBy: { createdAt: "asc" }, include: { actor: namedUser } },
-  createdBy: namedUser,
-} satisfies Prisma.ClaimInclude;
+/* ------------------------------------------------------------------ */
+/* Actions (C4) — each loads the claim, checks its branch, then acts   */
+/* ------------------------------------------------------------------ */
 
-/** GRN number for the source link; the other sources link by id alone. */
-const sourceNumberOf = async (origin: ClaimOrigin, originRefId: string | null) => {
-  if (origin !== "GRN" || !originRefId) return null;
-  const grn = await db.gRN.findUnique({
-    where: { id: originRefId },
-    select: { grnNumber: true },
-  });
-  return grn?.grnNumber ?? null;
+const claimForAction = async (req: Request) => {
+  const claim = await loadClaimForAction(getParamId(req));
+  assertBranchAccess(req, claim.branchId);
+  return claim;
 };
 
-router.get("/:id", can(PERMS.CLAIM.VIEW), async (req, res) => {
-  const claim = await db.claim.findFirst({
-    where: { id: getParamId(req), deletedAt: null },
-    include: claimDetailInclude,
-  });
-  if (!claim) throw new NotFoundError("Claim not found");
-  // 403, not 404: the claim exists, it just belongs to another branch.
-  assertBranchAccess(req, claim.branchId);
+/** PENDING → ACTIVE once goods value, claimed amount and caused-by are in. */
+router.post("/:id/assess", can(PERMS.CLAIM.UPDATE), async (req, res) => {
+  const claim = await claimForAction(req);
+  const input = validate(claimAssessmentSchema.safeParse(req.body));
+  await saveAssessment(claim, input, actorId(req), { activate: true });
+  return sendOk(res, await claimDetail(claim.id));
+});
 
-  const totals = claimMoneyTotals(claim);
-  const detail: ClaimDetail = {
-    id: claim.id,
-    claimNumber: claim.claimNumber,
-    fyCode: claim.fyCode,
-    claimDate: claim.claimDate.toISOString(),
-    claimType: claim.claimType,
-    origin: claim.origin,
-    originRefId: claim.originRefId,
-    sourceNumber: await sourceNumberOf(claim.origin, claim.originRefId),
-    causedBy: claim.causedBy,
-    status: claim.status,
-    damagedQty: claim.damagedQty.toNumber(),
-    shortageQty: claim.shortageQty.toNumber(),
-    goodsValuePaise: claim.goodsValuePaise === null ? null : Number(claim.goodsValuePaise),
-    claimedAmountPaise: Number(claim.claimedAmountPaise),
-    settledAmountPaise:
-      claim.settledAmountPaise === null ? null : Number(claim.settledAmountPaise),
-    recoveredAmountPaise: Number(totals.recoveredAmountPaise),
-    netLossPaise: totals.netLossPaise === null ? null : Number(totals.netLossPaise),
-    basisDescription: claim.basisDescription,
-    settledAt: claim.settledAt?.toISOString() ?? null,
-    rejectedReason: claim.rejectedReason,
-    cancelReason: claim.cancelReason,
-    version: claim.version,
-    branch: claim.branch,
-    customer: claim.customer,
-    lr: {
-      id: claim.lr.id,
-      lrNumber: claim.lr.lrNumber,
-      groupId: claim.lr.groupId,
-      groupNumber: claim.lr.group.groupNumber,
-      consignor: claim.lr.group.consignor,
-      consignee: claim.lr.group.consignee,
-    },
-    items: claim.items.map((item) => ({
-      id: item.id,
-      lrGoodsId: item.lrGoodsId,
-      goodsName: item.goodsName,
-      damagedQty: item.damagedQty.toNumber(),
-      shortageQty: item.shortageQty.toNumber(),
-      valuePaise: item.valuePaise === null ? null : Number(item.valuePaise),
-    })),
-    recoveries: claim.recoveries.map((recovery) => ({
-      id: recovery.id,
-      source: recovery.source,
-      partyName:
-        recovery.transport?.name ??
-        recovery.driver?.name ??
-        recovery.labour?.name ??
-        recovery.partyName,
-      amountPaise: Number(recovery.amountPaise),
-      status: recovery.status,
-      referenceNo: recovery.referenceNo,
-      remarks: recovery.remarks,
-      createdAt: recovery.createdAt.toISOString(),
-    })),
-    events: claim.events.map((event) => ({
-      id: event.id,
-      eventType: event.eventType,
-      fromStatus: event.fromStatus,
-      toStatus: event.toStatus,
-      note: event.note,
-      createdAt: event.createdAt.toISOString(),
-      actor: event.actor ? personName(event.actor) : null,
-    })),
-    createdBy: personName(claim.createdBy),
-    createdAt: claim.createdAt.toISOString(),
-    updatedAt: claim.updatedAt.toISOString(),
-  };
-  return sendOk(res, detail);
+/** Edit an active claim's assessment. */
+router.patch("/:id", can(PERMS.CLAIM.UPDATE), async (req, res) => {
+  const claim = await claimForAction(req);
+  const input = validate(claimAssessmentSchema.safeParse(req.body));
+  await saveAssessment(claim, input, actorId(req), { activate: false });
+  return sendOk(res, await claimDetail(claim.id));
+});
+
+router.get("/:id/settlement-options", can(PERMS.CLAIM.SETTLE), async (req, res) => {
+  const claim = await claimForAction(req);
+  return sendOk(res, await settlementOptions(claim));
+});
+
+/** Settle now, or — above the approval limit — wait for a second user. */
+router.post("/:id/settle", can(PERMS.CLAIM.SETTLE), async (req, res) => {
+  const claim = await claimForAction(req);
+  const input = validate(settleClaimSchema.safeParse(req.body));
+  await requestSettlement(claim, input, actorId(req));
+  return sendOk(res, await claimDetail(claim.id));
+});
+
+router.post("/:id/settlement/approve", can(PERMS.CLAIM.APPROVE), async (req, res) => {
+  const claim = await claimForAction(req);
+  const { version } = validate(claimVersionSchema.safeParse(req.body));
+  await approveSettlement(claim, version, actorId(req));
+  return sendOk(res, await claimDetail(claim.id));
+});
+
+router.post("/:id/settlement/decline", can(PERMS.CLAIM.APPROVE), async (req, res) => {
+  const claim = await claimForAction(req);
+  const input = validate(claimReasonSchema.safeParse(req.body));
+  await declineSettlement(claim, input, actorId(req));
+  return sendOk(res, await claimDetail(claim.id));
+});
+
+router.post("/:id/reject", can(PERMS.CLAIM.SETTLE), async (req, res) => {
+  const claim = await claimForAction(req);
+  const input = validate(claimReasonSchema.safeParse(req.body));
+  await closeClaim(claim, input, actorId(req), "REJECTED");
+  return sendOk(res, await claimDetail(claim.id));
+});
+
+router.post("/:id/cancel", can(PERMS.CLAIM.UPDATE), async (req, res) => {
+  const claim = await claimForAction(req);
+  const input = validate(claimReasonSchema.safeParse(req.body));
+  await closeClaim(claim, input, actorId(req), "CANCELLED");
+  return sendOk(res, await claimDetail(claim.id));
 });
 
 export default router;

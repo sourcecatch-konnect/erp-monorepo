@@ -3,8 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import axios from "axios";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconArrowLeft } from "@tabler/icons-react";
+import { toast } from "sonner";
 import { AttachmentPanel } from "@skerp/attachments-web";
 import { PERMS, type ClaimDetail } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -19,12 +20,15 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 
-import { useCan } from "@/features/auth";
+import ReasonDialog from "@/components/feedback/ReasonDialog";
+import { useAuth, useCan } from "@/features/auth";
 import { attachmentApi } from "@/features/attachments/attachment.client";
 import { DetailSection } from "@/features/masters/_shared/DetailSection";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
+import { AssessClaimDialog } from "./AssessClaimDialog";
+import { SettleClaimDialog } from "./SettleClaimDialog";
 import { claimApi } from "./claim.service";
 import { claimKeys } from "./claim.keys";
 import {
@@ -32,8 +36,10 @@ import {
   CLAIM_ORIGIN_LABELS,
   CLAIM_TYPE_LABELS,
   ClaimStatusBadge,
+  PAYMENT_MODE_LABELS,
   RECOVERY_SOURCE_LABELS,
   RecoveryStatusBadge,
+  SETTLEMENT_MODE_LABELS,
   claimSourceLink,
 } from "./claim.ui";
 
@@ -42,12 +48,41 @@ export const CLAIM_ATTACHMENT_ENTITY = "claim";
 
 const EVENT_LABELS: Record<string, string> = {
   CREATED: "Claim raised",
-  UPDATED: "Updated from the source document",
+  UPDATED: "Updated",
   STATUS_CHANGED: "Status changed",
   SOURCE_CHANGED: "Source document changed",
+  SETTLEMENT_REQUESTED: "Settlement sent for approval",
+  SETTLEMENT_DECLINED: "Settlement declined",
   RECOVERY_ADDED: "Recovery added",
   RECOVERY_STATUS_CHANGED: "Recovery updated",
   NOTE: "Note",
+};
+
+type ReasonAction = "reject" | "cancel" | "decline";
+
+const REASON_DIALOG: Record<
+  ReasonAction,
+  { title: string; description: string; confirmLabel: string; done: string }
+> = {
+  reject: {
+    title: "Reject claim",
+    description: "We don't accept the customer's claim. The reason is kept on the claim's timeline.",
+    confirmLabel: "Reject claim",
+    done: "Claim rejected",
+  },
+  cancel: {
+    title: "Cancel claim",
+    description:
+      "The claim was raised by mistake. It won't come back even if the acknowledgement or GRN is edited later.",
+    confirmLabel: "Cancel claim",
+    done: "Claim cancelled",
+  },
+  decline: {
+    title: "Decline settlement",
+    description: "The claim stays active and can be settled again for a different amount.",
+    confirmLabel: "Decline settlement",
+    done: "Settlement declined",
+  },
 };
 
 function Info({ label, children }: { label: string; children: React.ReactNode }) {
@@ -88,6 +123,69 @@ function Timeline({ events }: { events: ClaimDetail["events"] }) {
   );
 }
 
+function SettlementSection({ settlement, claim }: {
+  settlement: NonNullable<ClaimDetail["settlement"]>;
+  claim: ClaimDetail;
+}) {
+  return (
+    <DetailSection title="Settlement" contentClassName="grid gap-4 p-4 sm:grid-cols-3">
+      <Info label="Settled">
+        {formatPaise(claim.settledAmountPaise)} on {formatDate(claim.settledAt)}
+      </Info>
+      <Info label="How">{SETTLEMENT_MODE_LABELS[settlement.mode]}</Info>
+      {settlement.receipt ? (
+        <Info label="Receipt">
+          <Link
+            href={`/accounts/receipts/${settlement.receipt.id}`}
+            className="text-primary hover:underline"
+          >
+            {settlement.receipt.receiptNumber ?? "Receipt"}
+          </Link>
+          <span className="block text-xs text-muted-foreground">
+            Bill {settlement.receipt.billNumber ?? "—"} ·{" "}
+            {formatPaise(settlement.receipt.damageAmountPaise)} deducted
+          </span>
+        </Info>
+      ) : null}
+      {settlement.creditNote ? (
+        <Info label="Credit note">
+          <Link
+            href={`/accounts/bills/${settlement.creditNote.billId}`}
+            className="text-primary hover:underline"
+          >
+            {settlement.creditNote.noteNumber}
+          </Link>
+          <span className="block text-xs text-muted-foreground">
+            Bill {settlement.creditNote.billNumber ?? "—"} ·{" "}
+            {formatPaise(settlement.creditNote.amountPaise)}
+          </span>
+        </Info>
+      ) : null}
+      {settlement.mode === "PAID_SEPARATELY" ? (
+        <Info label="Paid from">
+          {settlement.fundingAccountName ?? "—"}
+          {settlement.paymentMode ? (
+            <span className="block text-xs text-muted-foreground">
+              {PAYMENT_MODE_LABELS[settlement.paymentMode]}
+              {settlement.referenceNo ? ` · ${settlement.referenceNo}` : ""}
+            </span>
+          ) : null}
+        </Info>
+      ) : null}
+      {settlement.voucher ? <Info label="Voucher">{settlement.voucher.voucherNumber}</Info> : null}
+      <Info label="Settled by">{settlement.settledBy?.name ?? "—"}</Info>
+      {settlement.approvedBy ? (
+        <Info label="Approved by">{settlement.approvedBy.name}</Info>
+      ) : null}
+      {settlement.note ? (
+        <div className="sm:col-span-3">
+          <Info label="Note">{settlement.note}</Info>
+        </div>
+      ) : null}
+    </DetailSection>
+  );
+}
+
 const loadErrorText = (error: unknown) => {
   const status = axios.isAxiosError(error) ? error.response?.status : undefined;
   if (status === 403) return "This claim belongs to a branch you don't have access to.";
@@ -110,10 +208,49 @@ function DetailSkeleton() {
 }
 
 export function ClaimDetailPage({ claimId }: { claimId: string }) {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const canViewAttachments = useCan(PERMS.ATTACHMENTS.VIEW);
+  const canUpdate = useCan(PERMS.CLAIM.UPDATE);
+  const canSettle = useCan(PERMS.CLAIM.SETTLE);
+  const canApprove = useCan(PERMS.CLAIM.APPROVE);
+
+  const [assessOpen, setAssessOpen] = React.useState(false);
+  const [settleOpen, setSettleOpen] = React.useState(false);
+  const [reasonAction, setReasonAction] = React.useState<ReasonAction | null>(null);
+
   const query = useQuery({
     queryKey: claimKeys.detail(claimId),
     queryFn: () => claimApi.get(claimId),
+  });
+
+  const onUpdated = (updated: ClaimDetail) => {
+    queryClient.setQueryData(claimKeys.detail(claimId), updated);
+    queryClient.invalidateQueries({ queryKey: claimKeys.all });
+  };
+
+  const approve = useMutation({
+    mutationFn: (version: number) => claimApi.approveSettlement(claimId, version),
+    onSuccess: (updated) => {
+      toast.success("Settlement approved — claim settled");
+      onUpdated(updated);
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const withReason = useMutation({
+    mutationFn: ({ action, reason, version }: { action: ReasonAction; reason: string; version: number }) => {
+      const body = { version, reason };
+      if (action === "reject") return claimApi.reject(claimId, body);
+      if (action === "cancel") return claimApi.cancel(claimId, body);
+      return claimApi.declineSettlement(claimId, body);
+    },
+    onSuccess: (updated, { action }) => {
+      toast.success(REASON_DIALOG[action].done);
+      setReasonAction(null);
+      onUpdated(updated);
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
   });
 
   const backLink = (
@@ -143,6 +280,9 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
 
   const claim = query.data;
   const source = claimSourceLink(claim);
+  const pending = claim.pendingSettlement;
+  const open = claim.status === "PENDING" || claim.status === "ACTIVE";
+  const askedByMe = pending?.requestedBy?.id === user?.id;
   const closedReason =
     claim.status === "REJECTED"
       ? claim.rejectedReason
@@ -152,18 +292,74 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        {backLink}
-        <p className="text-xs font-medium text-muted-foreground">Damage claim</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold">{claim.claimNumber}</h1>
-          <ClaimStatusBadge status={claim.status} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          {backLink}
+          <p className="text-xs font-medium text-muted-foreground">Damage claim</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold">{claim.claimNumber}</h1>
+            <ClaimStatusBadge status={claim.status} />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {CLAIM_TYPE_LABELS[claim.claimType]} on LR {claim.lr.lrNumber} · raised{" "}
+            {formatDate(claim.claimDate)} by {claim.createdBy.name}
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {CLAIM_TYPE_LABELS[claim.claimType]} on LR {claim.lr.lrNumber} · raised{" "}
-          {formatDate(claim.claimDate)} by {claim.createdBy.name}
-        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {claim.status === "PENDING" && canUpdate && (
+            <Button onClick={() => setAssessOpen(true)}>Assess</Button>
+          )}
+          {claim.status === "ACTIVE" && !pending && canSettle && (
+            <Button onClick={() => setSettleOpen(true)}>Settle</Button>
+          )}
+          {pending && canApprove && !askedByMe && (
+            <Button disabled={approve.isPending} onClick={() => approve.mutate(claim.version)}>
+              {approve.isPending ? "Approving…" : "Approve settlement"}
+            </Button>
+          )}
+          {pending && canApprove && (
+            <Button variant="outline" onClick={() => setReasonAction("decline")}>
+              {askedByMe ? "Withdraw settlement" : "Decline"}
+            </Button>
+          )}
+          {claim.status === "ACTIVE" && !pending && canUpdate && (
+            <Button variant="outline" onClick={() => setAssessOpen(true)}>
+              Edit assessment
+            </Button>
+          )}
+          {open && !pending && canSettle && (
+            <Button
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setReasonAction("reject")}
+            >
+              Reject
+            </Button>
+          )}
+          {open && !pending && canUpdate && (
+            <Button
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setReasonAction("cancel")}
+            >
+              Cancel claim
+            </Button>
+          )}
+        </div>
       </div>
+
+      {pending ? (
+        <div className="rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+          <span className="font-medium">
+            Settlement of {formatPaise(pending.amountPaise)} ({SETTLEMENT_MODE_LABELS[pending.mode].toLowerCase()}) is
+            waiting for approval.
+          </span>{" "}
+          Asked by {pending.requestedBy?.name ?? "—"}
+          {pending.requestedAt ? ` on ${formatDateTime(pending.requestedAt)}` : ""}.
+          {askedByMe ? " Another user with approval rights must approve it." : ""}
+        </div>
+      ) : null}
 
       {closedReason ? (
         <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm">
@@ -206,7 +402,7 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
               </Link>
               <span className="block text-xs text-muted-foreground">{claim.lr.groupNumber}</span>
             </Info>
-            <Info label="Customer">{claim.customer.name}</Info>
+            <Info label="Claimed by">{claim.customer.name}</Info>
             <Info label="Branch">{claim.branch.name}</Info>
             <Info label="Consignor → consignee">
               {claim.lr.consignor.name} → {claim.lr.consignee.name}
@@ -231,6 +427,10 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
               </div>
             ) : null}
           </DetailSection>
+
+          {claim.settlement ? (
+            <SettlementSection settlement={claim.settlement} claim={claim} />
+          ) : null}
 
           <DetailSection title="Goods">
             <Table>
@@ -321,6 +521,23 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
           )}
         </div>
       </div>
+
+      <AssessClaimDialog claim={claim} open={assessOpen} onOpenChange={setAssessOpen} />
+      <SettleClaimDialog claim={claim} open={settleOpen} onOpenChange={setSettleOpen} />
+      {reasonAction ? (
+        <ReasonDialog
+          open
+          onOpenChange={(next) => !next && setReasonAction(null)}
+          title={REASON_DIALOG[reasonAction].title}
+          description={REASON_DIALOG[reasonAction].description}
+          confirmLabel={REASON_DIALOG[reasonAction].confirmLabel}
+          destructive={reasonAction !== "decline"}
+          isPending={withReason.isPending}
+          onConfirm={(reason) =>
+            withReason.mutate({ action: reasonAction, reason, version: claim.version })
+          }
+        />
+      ) : null}
     </div>
   );
 }

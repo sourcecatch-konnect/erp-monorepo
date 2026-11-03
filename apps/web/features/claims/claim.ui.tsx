@@ -4,6 +4,7 @@ import type {
   ClaimOrigin,
   ClaimRecoverySource,
   ClaimRecoveryStatus,
+  ClaimSettlementMode,
   ClaimStatus,
   ClaimType,
 } from "@skerp/types";
@@ -31,6 +32,37 @@ export const CLAIM_ORIGIN_LABELS: Record<ClaimOrigin, string> = {
   RAIL_BRANCH_GRN: "GRN at branch",
   MANUAL: "Raised by hand",
 };
+
+export const SETTLEMENT_MODE_LABELS: Record<ClaimSettlementMode, string> = {
+  RECEIPT_DEDUCTION: "Deducted on a receipt",
+  CREDIT_NOTE: "Credit note",
+  PAID_SEPARATELY: "Paid separately",
+};
+
+export const PAYMENT_MODE_LABELS: Record<
+  NonNullable<NonNullable<ClaimDetail["settlement"]>["paymentMode"]>,
+  string
+> = {
+  CASH: "Cash",
+  BANK: "Bank transfer",
+  UPI: "UPI",
+  CHEQUE: "Cheque",
+};
+
+/** Label/value pairs for SelectField. */
+export const optionsOf = (labels: Record<string, string>) =>
+  Object.entries(labels).map(([value, label]) => ({ value, label }));
+
+/** Today as yyyy-mm-dd, for <input type="date">. */
+export const todayInput = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+};
+
+/** Paise → the rupee string a money input expects ("35000.5"). */
+export const rupeesInput = (paise: number | null) =>
+  paise === null ? "" : String(paise / 100);
 
 export const RECOVERY_SOURCE_LABELS: Record<ClaimRecoverySource, string> = {
   INSURANCE: "Insurance",

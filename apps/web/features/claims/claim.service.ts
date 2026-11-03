@@ -1,12 +1,18 @@
 import { api } from "@/lib/api";
 import type {
   ApiResponse,
+  ClaimAssessmentFormInput,
   ClaimCause,
   ClaimDetail,
+  ClaimEligibleLr,
   ClaimListRow,
+  ClaimReasonInput,
+  ClaimSettlementOptions,
   ClaimStatus,
   ClaimStatusSummary,
   ClaimType,
+  CreateClaimFormInput,
+  SettleClaimFormInput,
 } from "@skerp/types";
 import {
   unwrapApiResponse,
@@ -52,6 +58,70 @@ export const claimApi = {
 
   get: async (id: string): Promise<ClaimDetail> => {
     const res = await api.get<ApiResponse<ClaimDetail>>(`/claims/${id}`);
+    return unwrapApiResponse(res);
+  },
+
+  /* C4 — every action answers with the updated claim. */
+
+  eligibleLrs: async (search: string): Promise<ClaimEligibleLr[]> => {
+    const res = await api.get<ApiResponse<ClaimEligibleLr[]>>("/claims/eligible-lrs", {
+      params: { search },
+    });
+    return unwrapApiResponse(res);
+  },
+
+  create: async (values: CreateClaimFormInput): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>("/claims", values);
+    return unwrapApiResponse(res);
+  },
+
+  assess: async (id: string, values: ClaimAssessmentFormInput): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(`/claims/${id}/assess`, values);
+    return unwrapApiResponse(res);
+  },
+
+  updateAssessment: async (
+    id: string,
+    values: ClaimAssessmentFormInput,
+  ): Promise<ClaimDetail> => {
+    const res = await api.patch<ApiResponse<ClaimDetail>>(`/claims/${id}`, values);
+    return unwrapApiResponse(res);
+  },
+
+  settlementOptions: async (id: string): Promise<ClaimSettlementOptions> => {
+    const res = await api.get<ApiResponse<ClaimSettlementOptions>>(
+      `/claims/${id}/settlement-options`,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  settle: async (id: string, values: SettleClaimFormInput): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(`/claims/${id}/settle`, values);
+    return unwrapApiResponse(res);
+  },
+
+  approveSettlement: async (id: string, version: number): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(`/claims/${id}/settlement/approve`, {
+      version,
+    });
+    return unwrapApiResponse(res);
+  },
+
+  declineSettlement: async (id: string, body: ClaimReasonInput): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(
+      `/claims/${id}/settlement/decline`,
+      body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  reject: async (id: string, body: ClaimReasonInput): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(`/claims/${id}/reject`, body);
+    return unwrapApiResponse(res);
+  },
+
+  cancel: async (id: string, body: ClaimReasonInput): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(`/claims/${id}/cancel`, body);
     return unwrapApiResponse(res);
   },
 };
