@@ -41,6 +41,7 @@ import {
 } from "@tabler/icons-react";
 
 import { useCan } from "@/features/auth";
+import { LRClaimsSection, claimKeys } from "@/features/claims";
 import ReasonDialog from "@/components/feedback/ReasonDialog";
 import { attachmentApi } from "@/features/attachments/attachment.client";
 import { formatPaise, paiseToRupees } from "@/lib/money";
@@ -266,6 +267,8 @@ export default function LRDetail({ id }: { id: string }) {
       });
     }
     queryClient.invalidateQueries({ queryKey: lrGroupKeys.all });
+    // Acknowledging (or undoing it) raises / cancels damage claims.
+    queryClient.invalidateQueries({ queryKey: claimKeys.all });
   };
 
   const finalise = useMutation({
@@ -1237,6 +1240,8 @@ export default function LRDetail({ id }: { id: string }) {
           </div>
         ))}
       </section>
+
+      <LRClaimsSection groupId={g.id} />
 
       <FinaliseDialog
         open={finaliseOpen}

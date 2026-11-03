@@ -62,6 +62,8 @@ export const claimListQuerySchema = z.object({
   branchId: id.optional(),
   customerId: id.optional(),
   lrId: id.optional(),
+  /** Every claim on the LRs of one group — the LR detail page. */
+  lrGroupId: id.optional(),
   dateFrom: z.coerce.date().optional(),
   dateTo: z.coerce.date().optional(),
 });

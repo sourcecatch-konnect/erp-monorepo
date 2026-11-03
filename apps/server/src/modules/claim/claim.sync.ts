@@ -141,7 +141,7 @@ const applyClaimSync = async (input: SyncInput): Promise<void> => {
         payload: {
           claimNumber: claim.claimNumber,
           lrNumber: lr.lrNumber,
-          linkUrl: "/claims",
+          linkUrl: `/claims/${claim.id}`,
         },
         dedupeKey: `claim.created:${claim.id}`,
       });
