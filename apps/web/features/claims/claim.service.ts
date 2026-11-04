@@ -1,6 +1,9 @@
 import { api } from "@/lib/api";
 import type {
+  AddClaimRecoveryFormInput,
   ApiResponse,
+  ClaimFundingAccount,
+  ReceiveClaimRecoveryFormInput,
   ClaimAssessmentFormInput,
   ClaimCause,
   ClaimDetail,
@@ -122,6 +125,50 @@ export const claimApi = {
 
   cancel: async (id: string, body: ClaimReasonInput): Promise<ClaimDetail> => {
     const res = await api.post<ApiResponse<ClaimDetail>>(`/claims/${id}/cancel`, body);
+    return unwrapApiResponse(res);
+  },
+
+  /* C5 — recovery lines. `version` is the claim's. */
+
+  fundingAccounts: async (id: string): Promise<ClaimFundingAccount[]> => {
+    const res = await api.get<ApiResponse<ClaimFundingAccount[]>>(`/claims/${id}/funding-accounts`);
+    return unwrapApiResponse(res);
+  },
+
+  addRecovery: async (id: string, values: AddClaimRecoveryFormInput): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(`/claims/${id}/recoveries`, values);
+    return unwrapApiResponse(res);
+  },
+
+  approveRecovery: async (id: string, recoveryId: string, version: number): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(
+      `/claims/${id}/recoveries/${recoveryId}/approve`,
+      { version },
+    );
+    return unwrapApiResponse(res);
+  },
+
+  receiveRecovery: async (
+    id: string,
+    recoveryId: string,
+    values: ReceiveClaimRecoveryFormInput,
+  ): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(
+      `/claims/${id}/recoveries/${recoveryId}/receive`,
+      values,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  rejectRecovery: async (
+    id: string,
+    recoveryId: string,
+    body: ClaimReasonInput,
+  ): Promise<ClaimDetail> => {
+    const res = await api.post<ApiResponse<ClaimDetail>>(
+      `/claims/${id}/recoveries/${recoveryId}/reject`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 };

@@ -200,6 +200,49 @@ export const pendingClaimSettlementSchema = z
 
 export const claimVersionSchema = z.object({ version });
 
+/* ------------------------------------------------------------------ */
+/* C5 — recovery lines. `version` is the claim's: every recovery step  */
+/* bumps it, which serialises the "total ≤ settled" check.             */
+/* ------------------------------------------------------------------ */
+
+/** Sources with a party master; the others name the party in partyName. */
+const PARTY_FIELD = {
+  TRANSPORTER: ["transportId", "Pick the transporter / broker"],
+  DRIVER: ["driverId", "Pick the driver"],
+  LABOUR: ["labourId", "Pick the labour gang"],
+  INSURANCE: ["partyName", "Name the insurance company"],
+  RAILWAY: ["partyName", "Name the railway office"],
+  OTHER: ["partyName", "Name who pays"],
+} as const;
+
+export const addClaimRecoverySchema = z
+  .object({
+    version,
+    source: claimRecoverySourceSchema,
+    transportId: id.optional(),
+    driverId: id.optional(),
+    labourId: id.optional(),
+    partyName: optionalText(200),
+    amount: rupeesToPaise("Amount"),
+    /** Insurance claim no. / debit note no. */
+    referenceNo: optionalText(120),
+    remarks: optionalText(500),
+  })
+  .superRefine((value, ctx) => {
+    const [field, message] = PARTY_FIELD[value.source];
+    if (!value[field]) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
+  });
+
+/** Money in from insurance, labour, railway or others. */
+export const receiveClaimRecoverySchema = z.object({
+  version,
+  receivedAt: requiredDate("received date"),
+  paymentMode: paymentModeSchema,
+  /** The cash / bank ledger it came into. */
+  fundingLedgerId: id,
+  referenceNo: optionalText(120),
+});
+
 /** Reject, cancel, or decline a settlement. */
 export const claimReasonSchema = z.object({
   version,

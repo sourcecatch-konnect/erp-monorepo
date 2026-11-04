@@ -307,7 +307,7 @@ function journalSourceTypeToLedgerSourceType(sourceType: string): LedgerSourceTy
     sourceType === "CLAIM_SETTLEMENT"
   )
     return "PAYMENT";
-  if (sourceType === "RECEIPT") return "RECEIPT";
+  if (sourceType === "RECEIPT" || sourceType === "CLAIM_RECOVERY") return "RECEIPT";
   return "ADJUSTMENT";
 }
 

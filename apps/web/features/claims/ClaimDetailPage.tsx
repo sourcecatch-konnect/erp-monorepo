@@ -29,6 +29,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { formatPaise } from "@/lib/money";
 import { AssessClaimDialog } from "./AssessClaimDialog";
 import { SettleClaimDialog } from "./SettleClaimDialog";
+import { RecoveriesSection } from "./RecoveriesSection";
 import { claimApi } from "./claim.service";
 import { claimKeys } from "./claim.keys";
 import {
@@ -37,8 +38,6 @@ import {
   CLAIM_TYPE_LABELS,
   ClaimStatusBadge,
   PAYMENT_MODE_LABELS,
-  RECOVERY_SOURCE_LABELS,
-  RecoveryStatusBadge,
   SETTLEMENT_MODE_LABELS,
   claimSourceLink,
 } from "./claim.ui";
@@ -465,41 +464,7 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
             </Table>
           </DetailSection>
 
-          <DetailSection title="Recoveries">
-            {claim.recoveries.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">
-                No recovery recorded yet. Recovery from insurance, the transporter or others is
-                tracked here.
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>From</TableHead>
-                    <TableHead>Party</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {claim.recoveries.map((recovery) => (
-                    <TableRow key={recovery.id}>
-                      <TableCell>{RECOVERY_SOURCE_LABELS[recovery.source]}</TableCell>
-                      <TableCell>{recovery.partyName ?? "—"}</TableCell>
-                      <TableCell>{recovery.referenceNo ?? "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatPaise(recovery.amountPaise)}
-                      </TableCell>
-                      <TableCell>
-                        <RecoveryStatusBadge status={recovery.status} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </DetailSection>
+          <RecoveriesSection claim={claim} />
         </div>
 
         <div className="space-y-4">

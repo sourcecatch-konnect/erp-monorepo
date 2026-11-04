@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addClaimRecoverySchema,
   createClaimSchema,
   pendingClaimSettlementSchema,
   settleClaimSchema,
@@ -84,5 +85,24 @@ describe("pendingClaimSettlementSchema", () => {
   it("treats anything else as no pending settlement", () => {
     expect(pendingClaimSettlementSchema.safeParse(null).success).toBe(false);
     expect(pendingClaimSettlementSchema.safeParse({ mode: "CREDIT_NOTE" }).success).toBe(false);
+  });
+});
+
+describe("addClaimRecoverySchema — each source names its party", () => {
+  const base = { version: 2, amount: "21000" };
+
+  it("insurance, railway and others need a party name", () => {
+    for (const source of ["INSURANCE", "RAILWAY", "OTHER"]) {
+      const result = addClaimRecoverySchema.safeParse({ ...base, source });
+      expect(issuePaths(result)).toEqual(["partyName"]);
+    }
+    const ok = addClaimRecoverySchema.parse({ ...base, source: "INSURANCE", partyName: "New India Assurance" });
+    expect(ok.amount).toBe(2_100_000);
+  });
+
+  it("transporter, driver and labour need the master row", () => {
+    expect(issuePaths(addClaimRecoverySchema.safeParse({ ...base, source: "TRANSPORTER" }))).toEqual(["transportId"]);
+    expect(issuePaths(addClaimRecoverySchema.safeParse({ ...base, source: "DRIVER" }))).toEqual(["driverId"]);
+    expect(issuePaths(addClaimRecoverySchema.safeParse({ ...base, source: "LABOUR" }))).toEqual(["labourId"]);
   });
 });

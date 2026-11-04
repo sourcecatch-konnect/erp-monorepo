@@ -15,7 +15,10 @@ import {
   NotFoundError,
 } from "../../lib/error.js";
 import { fyCodeFor } from "../_shared/doc-number.js";
-import { getGLLedger, postJournal } from "../ledger/posting.service.js";
+import {
+  claimGLLedger,
+  postClaimSettlementPayment,
+} from "../ledger/posting.service.js";
 import {
   assertEnoughMoney,
   assertFundingMatchesMode,
@@ -46,7 +49,6 @@ type ReasonInput = ReturnType<typeof claimReasonSchema.parse>;
 type PendingSettlement = ReturnType<typeof pendingClaimSettlementSchema.parse>;
 
 const DELIVERED_STATUSES = ["DELIVERED", "ACKNOWLEDGED"] as const;
-const DAMAGE_DEDUCTION_LEDGER = "DAMAGE_DEDUCTION";
 
 const PAYMENT_MODE_TEXT: Record<NonNullable<PendingSettlement["paymentMode"]>, string> = {
   CASH: "cash",
@@ -59,13 +61,13 @@ const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
 
 const isUniqueViolation = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-const isStaleUpdate = (error: unknown) =>
+export const isStaleUpdate = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
 
-const STALE = "This claim was changed by someone else. Refresh and try again.";
+export const STALE = "This claim was changed by someone else. Refresh and try again.";
 
 /** Turns a lost optimistic-lock race (update where version) into a 409. */
-const withVersionGuard = async <T>(write: () => Promise<T>): Promise<T> => {
+export const withVersionGuard = async <T>(write: () => Promise<T>): Promise<T> => {
   try {
     return await write();
   } catch (error) {
@@ -218,6 +220,7 @@ const actionClaimSelect = {
   goodsValuePaise: true,
   causedBy: true,
   claimedAmountPaise: true,
+  settledAmountPaise: true,
   pendingSettlement: true,
   settlementRequestedById: true,
   customer: { select: { name: true } },
@@ -226,6 +229,11 @@ const actionClaimSelect = {
       lrNumber: true,
       group: { select: { consignorId: true, consigneeId: true } },
     },
+  },
+  /** Recoveries still in play (C5); rejected ones don't count against the loss. */
+  recoveries: {
+    where: { status: { not: "REJECTED" } },
+    select: { id: true, amountPaise: true },
   },
 } satisfies Prisma.ClaimSelect;
 export type ActionClaim = Prisma.ClaimGetPayload<{ select: typeof actionClaimSelect }>;
@@ -240,9 +248,13 @@ export const loadClaimForAction = async (id: string): Promise<ActionClaim> => {
   return claim;
 };
 
-const assertVersion = (claim: ActionClaim, version: number) => {
+export const assertVersion = (claim: ActionClaim, version: number) => {
   if (claim.version !== version) throw new ConflictError(STALE);
 };
+
+/** Filed + approved + received recoveries on the claim. */
+export const committedRecoveriesPaise = (claim: ActionClaim) =>
+  claim.recoveries.reduce((sum, recovery) => sum + recovery.amountPaise, 0n);
 
 const hasPendingSettlement = (claim: ActionClaim) => claim.pendingSettlement !== null;
 
@@ -394,7 +406,7 @@ const applySettlement = async (
   const amountPaise = BigInt(settlement.settledAmountPaise);
   const paid = settlement.mode === "PAID_SEPARATELY";
   // Reads before the transaction (CLAUDE.md "Database transactions").
-  const damageLedger = paid ? await getGLLedger(db, DAMAGE_DEDUCTION_LEDGER) : null;
+  const damageLedger = paid ? await claimGLLedger(db, "settlement") : null;
   const narration = `Damage claim ${claim.claimNumber} settled with ${claim.customer.name} — LR ${claim.lr.lrNumber}`;
   const note = `Settled ${rupeesText(amountPaise)}, ${link.text}${settlement.note ? ` — ${settlement.note}` : ""}`;
 
@@ -404,26 +416,17 @@ const applySettlement = async (
         let journalEntryId: string | null = null;
         if (paid && damageLedger) {
           await assertEnoughMoney(tx, settlement.fundingLedgerId!, amountPaise);
-          const journal = await postJournal(tx, {
-            voucherType: "PAYMENT",
+          const journal = await postClaimSettlementPayment(tx, {
+            sourceId: claim.id,
             voucherNumber: claim.claimNumber,
             voucherDate: settlement.settledAt,
             fyCode: fyCodeFor(settlement.settledAt),
             branchId: claim.branchId,
+            fundingLedgerId: settlement.fundingLedgerId!,
+            glLedgerId: damageLedger.id,
+            amountPaise,
             narration,
-            sourceType: "CLAIM_SETTLEMENT",
-            sourceId: claim.id,
-            sourceNumber: claim.claimNumber,
             createdById: actorId,
-            lines: [
-              { ledgerId: damageLedger.id, debitPaise: amountPaise, creditPaise: 0n, narration },
-              {
-                ledgerId: settlement.fundingLedgerId!,
-                debitPaise: 0n,
-                creditPaise: amountPaise,
-                narration,
-              },
-            ],
           });
           journalEntryId = journal.id;
         }
@@ -486,7 +489,7 @@ export const requestSettlement = async (
   if (hasPendingSettlement(claim))
     throw new BadRequestError("A settlement is already waiting for approval");
   const amountPaise = BigInt(input.settledAmount);
-  const blocker = settleBlocker(claim, amountPaise);
+  const blocker = settleBlocker(claim, amountPaise, committedRecoveriesPaise(claim));
   if (blocker) throw new BadRequestError(blocker);
 
   const settlement: PendingSettlement = {
@@ -545,7 +548,11 @@ export const approveSettlement = async (claim: ActionClaim, version: number, app
     throw new ForbiddenError(
       "You asked for this settlement — another user with approval rights must approve it",
     );
-  const blocker = settleBlocker(claim, BigInt(settlement.settledAmountPaise));
+  const blocker = settleBlocker(
+    claim,
+    BigInt(settlement.settledAmountPaise),
+    committedRecoveriesPaise(claim),
+  );
   if (blocker) throw new BadRequestError(blocker);
   // The receipt deduction / credit note may have been used since the request.
   const link = await checkSettlementLink(claim, settlement);
@@ -678,6 +685,8 @@ export const closeClaim = async (
     );
   if (hasPendingSettlement(claim))
     throw new BadRequestError("A settlement is waiting for approval — approve or decline it first");
+  if (claim.recoveries.length > 0)
+    throw new BadRequestError("Reject this claim's recovery lines first");
 
   await withVersionGuard(() =>
     db.claim.update({

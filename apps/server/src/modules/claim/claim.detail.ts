@@ -24,7 +24,13 @@ const claimDetailInclude = {
   items: { orderBy: { createdAt: "asc" } },
   recoveries: {
     orderBy: { createdAt: "asc" },
-    include: { transport: named, driver: named, labour: named },
+    include: {
+      transport: named,
+      driver: named,
+      labour: named,
+      receivedIntoLedger: { select: { name: true } },
+      journalEntry: { select: { id: true, voucherNumber: true } },
+    },
   },
   events: { orderBy: { createdAt: "asc" }, include: { actor: namedUser } },
   createdBy: namedUser,
@@ -141,6 +147,12 @@ export const claimDetail = async (id: string): Promise<ClaimDetail> => {
       referenceNo: recovery.referenceNo,
       remarks: recovery.remarks,
       createdAt: recovery.createdAt.toISOString(),
+      lineNo: recovery.lineNo,
+      rejectedReason: recovery.rejectedReason,
+      receivedAt: recovery.receivedAt?.toISOString() ?? null,
+      receiptMode: recovery.receiptMode,
+      receivedIntoName: recovery.receivedIntoLedger?.name ?? null,
+      voucher: recovery.journalEntry,
     })),
     events: claim.events.map((event) => ({
       id: event.id,

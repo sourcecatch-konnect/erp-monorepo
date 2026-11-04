@@ -1802,3 +1802,82 @@ export async function postDriverSalaryRun(tx: Tx, args: DriverSalaryRunPostingAr
     }),
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Damage claims (docs/CLAIMS_JIRA.md, Epic C)                         */
+/* ------------------------------------------------------------------ */
+
+// Keep in sync with prisma/seed-ledger.ts.
+const CLAIM_DAMAGE_EXPENSE_CODE = "DAMAGE_DEDUCTION";
+const CLAIM_DAMAGE_RECOVERY_CODE = "DAMAGE_RECOVERY";
+
+export type ClaimMoneyArgs = {
+  /** Claim.id (settlement) / ClaimRecovery.id (recovery) — the voucher's sourceId. */
+  sourceId: string;
+  voucherNumber: string;
+  voucherDate: Date;
+  fyCode: string;
+  branchId: string;
+  /** The Cash / Bank ledger, already checked by the caller (assertFundingMatchesMode). */
+  fundingLedgerId: string;
+  /** The DAMAGE_DEDUCTION / DAMAGE_RECOVERY ledger id when the caller resolved it
+   *  before the transaction; looked up here otherwise. */
+  glLedgerId?: string;
+  amountPaise: bigint;
+  narration: string;
+  createdById: string;
+};
+
+/** The GL ledger a claim voucher posts to, for callers resolving it before their transaction. */
+export const claimGLLedger = (tx: Tx, kind: "settlement" | "recovery") =>
+  getGLLedger(tx, kind === "settlement" ? CLAIM_DAMAGE_EXPENSE_CODE : CLAIM_DAMAGE_RECOVERY_CODE);
+
+/**
+ * C4 — customer compensated in cash / bank for damage:
+ * Dr DAMAGE_DEDUCTION / Cr Cash-Bank. A deduction on a receipt or a credit
+ * note posts nothing here; those documents carry their own voucher.
+ */
+export async function postClaimSettlementPayment(tx: Tx, args: ClaimMoneyArgs) {
+  const glLedgerId = args.glLedgerId ?? (await claimGLLedger(tx, "settlement")).id;
+  return postJournal(tx, {
+    voucherType: "PAYMENT",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.voucherDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: args.narration,
+    sourceType: "CLAIM_SETTLEMENT",
+    sourceId: args.sourceId,
+    sourceNumber: args.voucherNumber,
+    createdById: args.createdById,
+    lines: [
+      { ledgerId: glLedgerId, debitPaise: args.amountPaise, creditPaise: 0n, narration: args.narration },
+      { ledgerId: args.fundingLedgerId, debitPaise: 0n, creditPaise: args.amountPaise, narration: args.narration },
+    ],
+  });
+}
+
+/**
+ * C5 — damage recovered from insurance, labour, railway or another party,
+ * received in cash / bank: Dr Cash-Bank / Cr DAMAGE_RECOVERY. Transporter and
+ * driver recoveries are deducted from what we pay them instead (C7 / C6).
+ */
+export async function postClaimRecoveryReceipt(tx: Tx, args: ClaimMoneyArgs) {
+  const glLedgerId = args.glLedgerId ?? (await claimGLLedger(tx, "recovery")).id;
+  return postJournal(tx, {
+    voucherType: "RECEIPT",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.voucherDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: args.narration,
+    sourceType: "CLAIM_RECOVERY",
+    sourceId: args.sourceId,
+    sourceNumber: args.voucherNumber,
+    createdById: args.createdById,
+    lines: [
+      { ledgerId: args.fundingLedgerId, debitPaise: args.amountPaise, creditPaise: 0n, narration: args.narration },
+      { ledgerId: glLedgerId, debitPaise: 0n, creditPaise: args.amountPaise, narration: args.narration },
+    ],
+  });
+}

@@ -29,6 +29,8 @@ export const settleBlocker = (
     claimedAmountPaise: bigint;
   },
   amountPaise: bigint,
+  /** Non-rejected recoveries already on the claim (C5). */
+  recoveriesPaise = 0n,
 ): string | null => {
   if (claim.status !== "ACTIVE") return "Only an assessed (active) claim can be settled";
   if (claim.goodsValuePaise === null || claim.causedBy === null)
@@ -36,7 +38,47 @@ export const settleBlocker = (
   if (amountPaise <= 0n) return "The settled amount must be more than zero";
   if (amountPaise > claim.claimedAmountPaise)
     return `The settled amount can't be more than the ${rupeesText(claim.claimedAmountPaise)} claimed`;
+  if (amountPaise < recoveriesPaise)
+    return `${rupeesText(recoveriesPaise)} is already being recovered — the settlement can't be less than that`;
   return null;
+};
+
+/* ------------------------------------------------------------------ */
+/* C5 — recovery lines                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Recoveries can't add up to more than the loss: settled, or claimed until settled. */
+export const recoveryCapPaise = (claim: {
+  settledAmountPaise: bigint | null;
+  claimedAmountPaise: bigint;
+}) => claim.settledAmountPaise ?? claim.claimedAmountPaise;
+
+/**
+ * Why `addPaise` more can't be recovered on this claim, or null.
+ * `committedPaise` = the claim's recoveries that aren't rejected.
+ */
+export const recoveryBlocker = (
+  claim: { status: ClaimStatus; settledAmountPaise: bigint | null; claimedAmountPaise: bigint },
+  committedPaise: bigint,
+  addPaise: bigint,
+): string | null => {
+  if (claim.status !== "ACTIVE" && claim.status !== "SETTLED")
+    return "Recovery can only be recorded on an active or settled claim";
+  const cap = recoveryCapPaise(claim);
+  if (committedPaise + addPaise > cap) {
+    const left = cap > committedPaise ? cap - committedPaise : 0n;
+    return `Recoveries can't add up to more than the ${rupeesText(cap)} ${claim.settledAmountPaise === null ? "claimed" : "settled"} — only ${rupeesText(left)} is left to recover`;
+  }
+  return null;
+};
+
+/**
+ * Transporter and driver recoveries come back through their payments (vendor
+ * slip — C7, salary run — C6), so they're never marked received by hand here.
+ */
+export const RECOVERED_ELSEWHERE: Partial<Record<string, string>> = {
+  TRANSPORTER: "A transporter / broker recovery is deducted on their vendor payment slip",
+  DRIVER: "A driver recovery is deducted from their salary run",
 };
 
 /**

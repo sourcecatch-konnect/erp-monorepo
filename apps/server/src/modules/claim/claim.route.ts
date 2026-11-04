@@ -1,5 +1,7 @@
 import { Router, type Request } from "express";
 import {
+  addClaimRecoverySchema,
+  receiveClaimRecoverySchema,
   claimAssessmentSchema,
   claimListQuerySchema,
   claimReasonSchema,
@@ -32,6 +34,13 @@ import {
   saveAssessment,
   settlementOptions,
 } from "./claim.service.js";
+import {
+  addRecovery,
+  approveRecovery,
+  receiveRecovery,
+  recoveryFundingAccounts,
+  rejectRecovery,
+} from "./claim.recovery.service.js";
 
 /**
  * Claims / Damage Settlement (docs/CLAIMS_JIRA.md, Epic C). Mounted at /claims.
@@ -290,5 +299,61 @@ router.post("/:id/cancel", can(PERMS.CLAIM.UPDATE), async (req, res) => {
   await closeClaim(claim, input, actorId(req), "CANCELLED");
   return sendOk(res, await claimDetail(claim.id));
 });
+
+/* ------------------------------------------------------------------ */
+/* Recovery lines (C5)                                                 */
+/* ------------------------------------------------------------------ */
+
+const recoveryIdOf = (req: Request) => {
+  const id = req.params.recoveryId;
+  if (!id || Array.isArray(id)) throw new ValidationError("Invalid recovery ID");
+  return id;
+};
+
+/** Cash / bank accounts a recovery can be received into. */
+router.get("/:id/funding-accounts", can(PERMS.CLAIM.RECOVERY), async (req, res) => {
+  await claimForAction(req);
+  return sendOk(res, await recoveryFundingAccounts());
+});
+
+router.post("/:id/recoveries", can(PERMS.CLAIM.RECOVERY), async (req, res) => {
+  const claim = await claimForAction(req);
+  const input = validate(addClaimRecoverySchema.safeParse(req.body));
+  await addRecovery(claim, input, actorId(req));
+  return sendOk(res, await claimDetail(claim.id), undefined, 201);
+});
+
+router.post(
+  "/:id/recoveries/:recoveryId/approve",
+  can(PERMS.CLAIM.RECOVERY),
+  async (req, res) => {
+    const claim = await claimForAction(req);
+    const { version } = validate(claimVersionSchema.safeParse(req.body));
+    await approveRecovery(claim, recoveryIdOf(req), version, actorId(req));
+    return sendOk(res, await claimDetail(claim.id));
+  },
+);
+
+router.post(
+  "/:id/recoveries/:recoveryId/receive",
+  can(PERMS.CLAIM.RECOVERY),
+  async (req, res) => {
+    const claim = await claimForAction(req);
+    const input = validate(receiveClaimRecoverySchema.safeParse(req.body));
+    await receiveRecovery(claim, recoveryIdOf(req), input, actorId(req));
+    return sendOk(res, await claimDetail(claim.id));
+  },
+);
+
+router.post(
+  "/:id/recoveries/:recoveryId/reject",
+  can(PERMS.CLAIM.RECOVERY),
+  async (req, res) => {
+    const claim = await claimForAction(req);
+    const input = validate(claimReasonSchema.safeParse(req.body));
+    await rejectRecovery(claim, recoveryIdOf(req), input, actorId(req));
+    return sendOk(res, await claimDetail(claim.id));
+  },
+);
 
 export default router;

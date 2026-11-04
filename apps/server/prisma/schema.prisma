@@ -3217,6 +3217,7 @@ model Ledger {
   driverSalaryAdvances       DriverSalaryAdvance[]
   driverPayouts              DriverPayout[]
   claimSettlements           Claim[]
+  claimRecoveryReceipts      ClaimRecovery[]             @relation("ClaimRecoveryReceivedInto")
   driver                     Driver?                     @relation(fields: [driverId], references: [id], onDelete: Restrict)
   createdAt                  DateTime                    @default(now())
   updatedAt                  DateTime                    @updatedAt
@@ -4549,6 +4550,7 @@ enum JournalSourceType {
   DRIVER_PAYOUT
   OPENING_BALANCE
   CLAIM_SETTLEMENT
+  CLAIM_RECOVERY
 }
 
 enum AllocationRefType {
@@ -5565,32 +5567,40 @@ model ClaimItem {
 /// across several (e.g. 60% insurance + 40% broker). The FK matching `source`
 /// is set (transport / driver / labour); insurance and other use partyName.
 model ClaimRecovery {
-  id             String              @id @default(cuid())
-  claimId        String
-  source         ClaimRecoverySource
-  transportId    String?
-  driverId       String?
-  labourId       String?
-  partyName      String?
-  amountPaise    BigInt
-  status         ClaimRecoveryStatus @default(FILED)
+  id                   String              @id @default(cuid())
+  claimId              String
+  /// 1, 2, 3… per claim; the receipt voucher is numbered <claimNumber>/R<lineNo>.
+  lineNo               Int
+  source               ClaimRecoverySource
+  transportId          String?
+  driverId             String?
+  labourId             String?
+  partyName            String?
+  amountPaise          BigInt
+  status               ClaimRecoveryStatus @default(FILED)
   /// Insurance claim no. / debit note no.
-  referenceNo    String?
-  remarks        String?
-  journalEntryId String?             @unique
-  version        Int                 @default(1)
-  createdById    String
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  referenceNo          String?
+  remarks              String?
+  rejectedReason       String?
+  /// RECEIVED (C5): when, how and into which cash / bank ledger the money came.
+  receivedAt           DateTime?
+  receiptMode          PaymentMode?
+  receivedIntoLedgerId String?
+  journalEntryId       String?             @unique
+  version              Int                 @default(1)
+  createdById          String
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
-  claim        Claim         @relation(fields: [claimId], references: [id], onDelete: Restrict)
-  transport    Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
-  driver       Driver?       @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  labour       Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
-  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
-  createdBy    User          @relation("CreatedClaimRecoveries", fields: [createdById], references: [id], onDelete: Restrict)
+  receivedIntoLedger Ledger?       @relation("ClaimRecoveryReceivedInto", fields: [receivedIntoLedgerId], references: [id], onDelete: Restrict)
+  claim              Claim         @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  transport          Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
+  driver             Driver?       @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  labour             Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  journalEntry       JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy          User          @relation("CreatedClaimRecoveries", fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([claimId])
+  @@unique([claimId, lineNo])
   @@index([status])
   @@index([transportId])
   @@index([driverId])

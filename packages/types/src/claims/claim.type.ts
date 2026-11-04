@@ -13,6 +13,8 @@ import type {
   createClaimSchema,
   paymentModeSchema,
   settleClaimSchema,
+  addClaimRecoverySchema,
+  receiveClaimRecoverySchema,
 } from "@skerp/validators";
 
 export type ClaimType = z.infer<typeof claimTypeSchema>;
@@ -29,6 +31,16 @@ type PaymentMode = z.infer<typeof paymentModeSchema>;
 export type CreateClaimFormInput = z.input<typeof createClaimSchema>;
 export type ClaimAssessmentFormInput = z.input<typeof claimAssessmentSchema>;
 export type SettleClaimFormInput = z.input<typeof settleClaimSchema>;
+export type AddClaimRecoveryFormInput = z.input<typeof addClaimRecoverySchema>;
+export type ReceiveClaimRecoveryFormInput = z.input<typeof receiveClaimRecoverySchema>;
+
+/** A cash / bank account money can go out of or come into, with its balance. */
+export type ClaimFundingAccount = {
+  id: string;
+  name: string;
+  group: "CASH" | "BANK";
+  balancePaise: number;
+};
 export type ClaimReasonInput = z.input<typeof claimReasonSchema>;
 
 /** An LR a claim can be raised on by hand (GET /claims/eligible-lrs). */
@@ -160,6 +172,13 @@ export type ClaimDetail = {
     referenceNo: string | null;
     remarks: string | null;
     createdAt: string;
+    /** 1, 2, 3… within the claim. */
+    lineNo: number;
+    rejectedReason: string | null;
+    receivedAt: string | null;
+    receiptMode: PaymentMode | null;
+    receivedIntoName: string | null;
+    voucher: { id: string; voucherNumber: string } | null;
   }[];
   /** Oldest first. */
   events: {

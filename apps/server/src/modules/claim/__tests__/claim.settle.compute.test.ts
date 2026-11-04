@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { claimSettlementApprovalLimitPaise } from "../claim.config.js";
 import {
+  RECOVERED_ELSEWHERE,
   claimItemsBlocker,
+  recoveryBlocker,
   needsSettlementApproval,
   rupeesText,
   settleBlocker,
@@ -142,5 +144,50 @@ describe("claimSettlementApprovalLimitPaise", () => {
 describe("rupeesText", () => {
   it("formats paise in Indian grouping", () => {
     expect(rupeesText(rs(123_456.7))).toBe("₹1,23,456.70");
+  });
+});
+
+describe("recoveryBlocker (C5)", () => {
+  const settled = {
+    status: "SETTLED" as const,
+    settledAmountPaise: rs(35_000),
+    claimedAmountPaise: rs(40_000),
+  };
+
+  it("takes a 60% insurance + 40% broker split of the settled amount", () => {
+    expect(recoveryBlocker(settled, 0n, rs(21_000))).toBeNull();
+    expect(recoveryBlocker(settled, rs(21_000), rs(14_000))).toBeNull();
+  });
+
+  it("refuses recoveries beyond the settled amount, saying what's left", () => {
+    expect(recoveryBlocker(settled, rs(21_000), rs(14_000.01))).toBe(
+      "Recoveries can't add up to more than the ₹35,000.00 settled — only ₹14,000.00 is left to recover",
+    );
+  });
+
+  it("caps at the claimed amount until the claim is settled", () => {
+    const active = { ...settled, status: "ACTIVE" as const, settledAmountPaise: null };
+    expect(recoveryBlocker(active, 0n, rs(40_000))).toBeNull();
+    expect(recoveryBlocker(active, 0n, rs(40_000.01))).toMatch(/₹40,000.00 claimed/);
+  });
+
+  it("only on an active or settled claim", () => {
+    expect(recoveryBlocker({ ...settled, status: "PENDING" }, 0n, rs(1))).toMatch(/active or settled/);
+    expect(recoveryBlocker({ ...settled, status: "REJECTED" }, 0n, rs(1))).toMatch(/active or settled/);
+  });
+
+  it("leaves transporter and driver recoveries to their payment runs", () => {
+    expect(RECOVERED_ELSEWHERE.TRANSPORTER).toMatch(/vendor payment slip/);
+    expect(RECOVERED_ELSEWHERE.DRIVER).toMatch(/salary run/);
+    expect(RECOVERED_ELSEWHERE.INSURANCE).toBeUndefined();
+  });
+});
+
+describe("settleBlocker with recoveries already filed (C5)", () => {
+  it("won't settle below what's already being recovered", () => {
+    expect(settleBlocker(assessed, rs(20_000), rs(25_000))).toMatch(
+      /₹25,000.00 is already being recovered/,
+    );
+    expect(settleBlocker(assessed, rs(25_000), rs(25_000))).toBeNull();
   });
 });
