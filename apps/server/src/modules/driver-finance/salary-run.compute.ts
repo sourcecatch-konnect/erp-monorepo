@@ -13,6 +13,8 @@ export type MovementBucket =
   | "LOG_SLIP"
   /** An earlier salary run's credit or payment — always "previous balance". */
   | "SALARY"
+  /** A damage-claim recovery deducted from his salary (C6). */
+  | "DAMAGE_RECOVERY"
   /** Anything else (manual payouts, …). */
   | "OTHER";
 
@@ -156,6 +158,10 @@ export type SalaryLineInput = {
    *  "we owe", but will be paid from that run — so it is added back here
    *  instead of being paid a second time through this run. */
   outstandingEarlierRunsPaise: bigint;
+  /** Approved damage-claim recoveries attached to this line but not posted
+   *  yet (the run is still a draft) — deducted as if already on the ledger.
+   *  Once the run is approved they're ledger movements instead. */
+  pendingDamageRecoveryPaise?: bigint;
 };
 
 export type SalaryLineResult = {
@@ -165,6 +171,7 @@ export type SalaryLineResult = {
   logSlipBalancePaise: bigint;
   otherPaymentsPaise: bigint;
   previousBalancePaise: bigint;
+  damageRecoveryPaise: bigint;
   netPaise: bigint;
 };
 
@@ -189,22 +196,25 @@ export function computeSalaryLine(input: SalaryLineInput): SalaryLineResult {
   const presentDays = employedDays - input.absentDays;
   const earnedPaise = earnedSalaryPaise(input.baseSalaryPaise, presentDays, input.daysInMonth);
 
-  let owesTotal = input.outstandingEarlierRunsPaise;
+  const pendingDamage = input.pendingDamageRecoveryPaise ?? 0n;
+  let owesTotal = input.outstandingEarlierRunsPaise + pendingDamage;
   let advance = 0n;
   let logSlip = 0n;
   let other = 0n;
+  let damage = pendingDamage;
   for (const m of input.movements) {
     owesTotal += m.owesPaise;
     if (m.voucherDate < input.windowStart || m.bucket === "SALARY") continue;
     if (m.bucket === "SALARY_ADVANCE") advance += m.owesPaise;
     else if (m.bucket === "LOG_SLIP") logSlip += m.owesPaise;
+    else if (m.bucket === "DAMAGE_RECOVERY") damage += m.owesPaise;
     else other += m.owesPaise;
   }
   // A reversal this month of an earlier month's advance would show as a
   // negative advance — keep the column readable and let it fall into the
   // previous balance instead.
   const salaryAdvancePaise = advance > 0n ? advance : 0n;
-  const previousBalancePaise = owesTotal - salaryAdvancePaise - logSlip - other;
+  const previousBalancePaise = owesTotal - salaryAdvancePaise - logSlip - other - damage;
 
   return {
     presentDays,
@@ -213,6 +223,7 @@ export function computeSalaryLine(input: SalaryLineInput): SalaryLineResult {
     logSlipBalancePaise: logSlip,
     otherPaymentsPaise: other,
     previousBalancePaise,
+    damageRecoveryPaise: damage,
     netPaise: earnedPaise - owesTotal,
   };
 }

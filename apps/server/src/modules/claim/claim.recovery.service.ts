@@ -125,6 +125,9 @@ const recoverySelect = {
   transport: { select: { name: true } },
   driver: { select: { name: true } },
   labour: { select: { name: true } },
+  journalEntryId: true,
+  /** C6: the salary run a driver recovery is deducted on. */
+  driverSalary: { select: { isActive: true, run: { select: { runNumber: true, status: true } } } },
 } satisfies Prisma.ClaimRecoverySelect;
 
 const loadRecovery = async (claim: ActionClaim, recoveryId: string) => {
@@ -190,10 +193,31 @@ export const rejectRecovery = async (
   const recovery = await loadRecovery(claim, recoveryId);
   if (recovery.status !== "FILED" && recovery.status !== "APPROVED")
     throw new BadRequestError("Only a filed or approved recovery can be rejected");
+  // C6: once a salary run deducted it, the run must be cancelled first; a
+  // draft run just loses the line.
+  const run = recovery.driverSalary?.isActive ? recovery.driverSalary.run : null;
+  if (recovery.journalEntryId || (run && run.status !== "DRAFT"))
+    throw new BadRequestError(
+      `This recovery is already deducted in salary run ${run?.runNumber ?? ""} — cancel that run first`,
+    );
+  // C7: a transporter recovery on a vendor payment slip comes off the slip first.
+  const slipLine = await db.vendorPaymentSlipLine.findFirst({
+    where: { sourceType: "CLAIM_RECOVERY", sourceId: recovery.id, isActive: true },
+    select: { slip: { select: { slipNumber: true } } },
+  });
+  if (slipLine)
+    throw new BadRequestError(
+      `This recovery is on vendor payment slip ${slipLine.slip.slipNumber} — take it off the slip (edit or cancel it) first`,
+    );
   await recordStep(
     claim,
     recoveryId,
-    { status: "REJECTED", rejectedReason: input.reason, version: { increment: 1 } },
+    {
+      status: "REJECTED",
+      rejectedReason: input.reason,
+      ...(run ? { driverSalary: { disconnect: true } } : {}),
+      version: { increment: 1 },
+    },
     `Recovery ${recovery.label} rejected: ${input.reason}`,
     actorId,
   );

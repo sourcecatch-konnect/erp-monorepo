@@ -1881,3 +1881,45 @@ export async function postClaimRecoveryReceipt(tx: Tx, args: ClaimMoneyArgs) {
     ],
   });
 }
+
+export type ClaimSalaryDeductionArgs = {
+  /** "<recoveryId>:<driverSalaryId>" — one voucher per recovery per salary
+   *  line, so a recovery whose run was cancelled can be deducted again. */
+  sourceId: string;
+  voucherNumber: string;
+  voucherDate: Date;
+  fyCode: string;
+  branchId: string;
+  driverId: string;
+  amountPaise: bigint;
+  narration: string;
+  createdById: string;
+};
+
+/**
+ * C6 — a driver's damage recovery taken out of his salary:
+ * Dr Driver / Cr DAMAGE_RECOVERY. Posted when the salary run is approved;
+ * the run's net pay already left this amount out.
+ */
+export async function postClaimSalaryDeduction(tx: Tx, args: ClaimSalaryDeductionArgs) {
+  const [driverLedger, recoveryLedger] = await Promise.all([
+    getOrCreatePartyLedger(tx, { driverId: args.driverId }),
+    claimGLLedger(tx, "recovery"),
+  ]);
+  return postJournal(tx, {
+    voucherType: "JOURNAL",
+    voucherNumber: args.voucherNumber,
+    voucherDate: args.voucherDate,
+    fyCode: args.fyCode,
+    branchId: args.branchId,
+    narration: args.narration,
+    sourceType: "CLAIM_DEDUCTION",
+    sourceId: args.sourceId,
+    sourceNumber: args.voucherNumber,
+    createdById: args.createdById,
+    lines: [
+      { ledgerId: driverLedger.id, debitPaise: args.amountPaise, creditPaise: 0n, narration: args.narration },
+      { ledgerId: recoveryLedger.id, debitPaise: 0n, creditPaise: args.amountPaise, narration: args.narration },
+    ],
+  });
+}

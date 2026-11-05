@@ -39,6 +39,15 @@ import {
   type MonthBounds,
   type MovementBucket,
 } from "./salary-run.compute.js";
+import {
+  attachRunDeductions,
+  deferRunDeduction,
+  postRunDeductions,
+  receiveRunDeductions,
+  releaseRunDeductions,
+  runDeductionRows,
+  runDeductions,
+} from "../claim/claim.salary-deduction.js";
 
 /**
  * Driver salary run (Driver Lifecycle Phase 3) — the office's monthly salary
@@ -199,6 +208,9 @@ async function loadMovements(
       case "DRIVER_SALARY":
         bucket = "SALARY";
         break;
+      case "CLAIM_DEDUCTION":
+        bucket = "DAMAGE_RECOVERY";
+        break;
       case "DRIVER_PAYOUT": {
         const paid = payoutSource.get(source.sourceId);
         bucket = paid === "LOG_SLIP" ? "LOG_SLIP" : paid === "SALARY_RUN" ? "SALARY" : "OTHER";
@@ -271,6 +283,8 @@ async function computeLines(
   bounds: MonthBounds,
   runId: string | null,
   inputs: LineInput[],
+  /** Damage-claim recoveries on the lines, not posted yet (C6) — runDeductions(). */
+  pendingDamage: Map<string, bigint> = new Map(),
 ) {
   const driverIds = inputs.map((l) => l.driverId);
   const [movements, outstanding, employment] = await Promise.all([
@@ -295,6 +309,7 @@ async function computeLines(
       windowStart,
       movements: movements.get(input.driverId) ?? [],
       outstandingEarlierRunsPaise: outstanding.get(input.driverId) ?? 0n,
+      pendingDamageRecoveryPaise: pendingDamage.get(input.driverId) ?? 0n,
     }),
   }));
 }
@@ -310,6 +325,7 @@ const lineData = (line: ComputedLine) => ({
   logSlipBalancePaise: line.logSlipBalancePaise,
   otherPaymentsPaise: line.otherPaymentsPaise,
   previousBalancePaise: line.previousBalancePaise,
+  damageRecoveryPaise: line.damageRecoveryPaise,
   netPaise: line.netPaise,
   remarks: line.remarks,
 });
@@ -355,6 +371,7 @@ async function saveLines(
       "logSlipBalancePaise"  = v.log_slip,
       "otherPaymentsPaise"   = v.other,
       "previousBalancePaise" = v.previous,
+      "damageRecoveryPaise"  = v.damage,
       "netPaise"             = v.net,
       "remarks"              = v.remarks,
       "updatedAt"            = ${new Date().toISOString()}::timestamp(3)
@@ -368,9 +385,10 @@ async function saveLines(
       ${big((r) => r.logSlipBalancePaise)}::bigint[],
       ${big((r) => r.otherPaymentsPaise)}::bigint[],
       ${big((r) => r.previousBalancePaise)}::bigint[],
+      ${big((r) => r.damageRecoveryPaise)}::bigint[],
       ${big((r) => r.netPaise)}::bigint[],
       ${rows.map((r) => r.remarks)}::text[]
-    ) AS v(id, base, absent, present, earned, advance, log_slip, other, previous, net, remarks)
+    ) AS v(id, base, absent, present, earned, advance, log_slip, other, previous, damage, net, remarks)
     WHERE s."id" = v.id
   `;
 }
@@ -386,9 +404,11 @@ async function recomputeAndSave(
   run: { id: string; month: string },
   lines: StoredLine[],
   computed?: ComputedLine[],
+  pendingDamage?: Map<string, bigint>,
 ) {
   const result =
-    computed ?? (await computeLines(tx, monthBounds(run.month), run.id, lines));
+    computed ??
+    (await computeLines(tx, monthBounds(run.month), run.id, lines, pendingDamage));
   await saveLines(tx, new Map(lines.map((l) => [l.driverId, l.id])), result);
   return result;
 }
@@ -450,6 +470,8 @@ export async function createSalaryRun(
     await branchCodeOf(branchId),
     fyCode,
   );
+  // Approved damage-claim recoveries waiting for these drivers (C6).
+  const deductions = await runDeductions(db, null, drivers.map((d) => d.id));
 
   return db.$transaction(async (tx) => {
     const computed = await computeLines(
@@ -462,9 +484,10 @@ export async function createSalaryRun(
         absentDays: 0,
         remarks: null,
       })),
+      deductions.byDriver,
     );
     try {
-      return await tx.driverSalaryRun.create({
+      const created = await tx.driverSalaryRun.create({
         data: {
           runNumber,
           month: input.month,
@@ -482,8 +505,16 @@ export async function createSalaryRun(
             })),
           },
         },
-        select: { id: true },
+        select: { id: true, salaries: { select: { id: true, driverId: true } } },
       });
+      await attachRunDeductions(
+        tx,
+        { id: created.id, runNumber },
+        deductions.toAttach,
+        new Map(created.salaries.map((s) => [s.driverId, s.id])),
+        actorId,
+      );
+      return { id: created.id };
     } catch (err) {
       if (isUniqueConflict(err))
         throw new BadRequestError(
@@ -504,6 +535,7 @@ export async function updateSalaryRun(
   input: UpdateDriverSalaryRunInput,
   /** Branch-access check (the route's); runs before anything is written. */
   assertAccess: (branch: { id: string; name: string }) => void,
+  actorId: string,
 ) {
   // The run and its lines in one round trip.
   const [run, stored] = await Promise.all([
@@ -551,14 +583,23 @@ export async function updateSalaryRun(
   // A draft is a preview — nothing is posted, and approve recalculates under
   // the driver locks — so the ledger is read here, in parallel, outside the
   // transaction. The version check below still stops two overlapping edits.
-  const computed = await computeLines(db, monthBounds(run.month), run.id, lines);
+  const deductions = await runDeductions(db, run.id, lines.map((l) => l.driverId));
+  const computed = await computeLines(db, monthBounds(run.month), run.id, lines, deductions.byDriver);
 
   return db.$transaction(async (tx) => {
+    // A removed driver's line goes, and with it (SetNull) any recovery on it.
     if (removeIds.length)
       await tx.driverSalary.deleteMany({ where: { id: { in: removeIds } } });
     for (const m of masterUpdates)
       await tx.driver.update({ where: { id: m.driverId }, data: { salary: BigInt(m.to) } });
     await recomputeAndSave(tx, run, lines, computed);
+    await attachRunDeductions(
+      tx,
+      run,
+      deductions.toAttach,
+      new Map(lines.map((l) => [l.driverId, l.id])),
+      actorId,
+    );
     try {
       const updated = await tx.driverSalaryRun.update({
         where: { id, version: input.version },
@@ -628,7 +669,8 @@ export async function approveSalaryRun(
     await lockDrivers(tx, lines.map((l) => l.driverId));
 
     // Read the ledger INSIDE the transaction, after the locks.
-    const computed = await recomputeAndSave(tx, run, lines);
+    const deductions = await runDeductions(tx, run.id, lines.map((l) => l.driverId));
+    const computed = await recomputeAndSave(tx, run, lines, undefined, deductions.byDriver);
     const journal = await postDriverSalaryRun(tx, {
       runId: run.id,
       runNumber: run.runNumber,
@@ -640,6 +682,20 @@ export async function approveSalaryRun(
       existingJournalEntryId: run.journalEntryId,
       createdById: actorId,
     });
+    // Damage-claim recoveries (C6): attach any approved since the last edit,
+    // then post each one — the lines above already left them out of net pay.
+    await attachRunDeductions(
+      tx,
+      run,
+      deductions.toAttach,
+      new Map(lines.map((l) => [l.driverId, l.id])),
+      actorId,
+    );
+    await postRunDeductions(
+      tx,
+      { id: run.id, runNumber: run.runNumber, monthEnd: bounds.monthEnd, monthLabel: monthLabel(run.month) },
+      actorId,
+    );
 
     try {
       return await tx.driverSalaryRun.update({
@@ -787,6 +843,8 @@ export async function paySalaryRun(id: string, input: PayDriverSalaryRunInput, a
     const fullyPaid = allLines.every(
       (l) => (paidAfter.get(`${id}:${l.driverId}`) ?? 0n) >= l.netPaise,
     );
+    // Paid in full: the damage recoveries taken out of this run are received.
+    if (fullyPaid) await receiveRunDeductions(tx, run, input.paidAt, actorId);
 
     return tx.driverSalaryRun.update({
       where: { id },
@@ -835,6 +893,8 @@ export async function cancelSalaryRun(
         );
       if (run.journalEntryId) await reverseJournal(tx, run.journalEntryId, reason, actorId);
     }
+    // Damage-claim recoveries: vouchers reversed, back to pending for the next run.
+    await releaseRunDeductions(tx, run, reason, actorId);
 
     await tx.driverSalary.updateMany({ where: { runId: id }, data: { isActive: false } });
     return tx.driverSalaryRun.update({
@@ -849,6 +909,31 @@ export async function cancelSalaryRun(
       select: { id: true },
     });
   }, TX_OPTIONS);
+}
+
+/**
+ * Take a damage-claim recovery off a DRAFT run (C6): it goes back to pending
+ * and is deducted from a later run instead. The run is then recalculated.
+ */
+export async function removeRunDeduction(
+  id: string,
+  recoveryId: string,
+  version: number,
+  actorId: string,
+  assertAccess: (branch: { id: string; name: string }) => void,
+) {
+  const run = await db.driverSalaryRun.findUnique({
+    where: { id },
+    include: { branch: { select: { id: true, name: true } } },
+  });
+  if (!run) throw new NotFoundError("Salary run not found");
+  assertAccess(run.branch);
+  if (run.status !== "DRAFT")
+    throw new BadRequestError("A recovery can only be taken off a draft salary run");
+  if (run.version !== version) throw conflict();
+  const removed = await db.$transaction((tx) => deferRunDeduction(tx, run, recoveryId, actorId));
+  if (!removed) throw new NotFoundError("That recovery is not on this salary run");
+  return updateSalaryRun(id, { version, lines: [] }, assertAccess, actorId);
 }
 
 /* ------------------------------------------------------------------ */
@@ -880,7 +965,7 @@ export async function salaryRunDetail(id: string) {
 
   const bounds = monthBounds(run.month);
   const driverIds = run.salaries.map((s) => s.driverId);
-  const [paid, payouts, journeys] = await Promise.all([
+  const [paid, payouts, journeys, deductions] = await Promise.all([
     paidPerDriver(db, [id]),
     // Every payment made from this run (reversed ones too, marked), with the
     // cash / bank account it came from — shown under each driver's Paid.
@@ -914,6 +999,8 @@ export async function salaryRunDetail(id: string) {
         vehicle: { select: { vehicleNumber: true } },
       },
     }),
+    // Damage-claim recoveries deducted on each line (C6).
+    runDeductionRows(db, id),
   ]);
   const vehiclesByDriver = new Map<string, Set<string>>();
   // A hint for the clerk typing absent days — never used in the maths: a
@@ -958,6 +1045,7 @@ export async function salaryRunDetail(id: string) {
       vehicles: [...(vehiclesByDriver.get(s.driverId) ?? [])],
       journeyDays: journeyDays(s.driverId),
       payouts: payouts.filter((p) => p.driverId === s.driverId),
+      damageRecoveries: deductions.filter((d) => d.driverId === s.driverId),
     })),
   };
 }

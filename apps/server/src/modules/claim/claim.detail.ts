@@ -30,6 +30,9 @@ const claimDetailInclude = {
       labour: named,
       receivedIntoLedger: { select: { name: true } },
       journalEntry: { select: { id: true, voucherNumber: true } },
+      driverSalary: {
+        select: { isActive: true, run: { select: { id: true, runNumber: true, status: true } } },
+      },
     },
   },
   events: { orderBy: { createdAt: "asc" }, include: { actor: namedUser } },
@@ -92,6 +95,16 @@ export const claimDetail = async (id: string): Promise<ClaimDetail> => {
 
   const totals = claimMoneyTotals(claim);
   const pending = pendingClaimSettlementSchema.safeParse(claim.pendingSettlement);
+  // C7: which vendor payment slip each transporter recovery sits on.
+  const slipLines = await db.vendorPaymentSlipLine.findMany({
+    where: {
+      sourceType: "CLAIM_RECOVERY",
+      isActive: true,
+      sourceId: { in: claim.recoveries.map((recovery) => recovery.id) },
+    },
+    select: { sourceId: true, slip: { select: { id: true, slipNumber: true, status: true } } },
+  });
+  const slipOf = new Map(slipLines.map((line) => [line.sourceId, line.slip]));
 
   return {
     id: claim.id,
@@ -153,6 +166,8 @@ export const claimDetail = async (id: string): Promise<ClaimDetail> => {
       receiptMode: recovery.receiptMode,
       receivedIntoName: recovery.receivedIntoLedger?.name ?? null,
       voucher: recovery.journalEntry,
+      salaryRun: recovery.driverSalary?.isActive ? recovery.driverSalary.run : null,
+      vendorSlip: slipOf.get(recovery.id) ?? null,
     })),
     events: claim.events.map((event) => ({
       id: event.id,

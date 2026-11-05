@@ -24,7 +24,24 @@ export type VendorPaymentSourceType =
   | "LR_GROUP"
   | "GRN_HAMALI"
   | "RAIL_BRANCH_GRN"
-  | "VP_LOADING";
+  | "VP_LOADING"
+  /** Claims C7: an approved damage recovery deducted on a transporter slip. */
+  | "CLAIM_RECOVERY";
+
+/** An approved damage-claim recovery from this transporter (claims C7). The
+ *  truck line already deducts its LR acknowledgement's damage, so the line
+ *  takes only `damagePaise` = amount − coveredByAck. */
+export type EligibleTransporterClaimRecovery = {
+  recoveryId: string;
+  claimId: string;
+  claimNumber: string;
+  lineNo: number;
+  lrNumber: string;
+  referenceNo: string | null;
+  amountPaise: string;
+  coveredByAckPaise: string;
+  damagePaise: string;
+};
 
 export type EligibleTransporterLR = {
   lrId: string;
@@ -272,6 +289,11 @@ export const vendorPaymentApi = {
     get<EligibleChunk<EligibleTransporterTruck>>(
       "/vendor-payment/calculators/transporter-trucks",
       { ...chunkParams(filters), transportId: filters.transportId },
+    ),
+  eligibleTransporterClaimRecoveries: (transportId: string) =>
+    get<EligibleTransporterClaimRecovery[]>(
+      "/vendor-payment/calculators/transporter-claim-recoveries",
+      { transportId },
     ),
   eligibleHamaliSources: (filters: EligibleChunkFilters & { labourId: string }) =>
     get<EligibleChunk<EligibleHamaliSource>>("/vendor-payment/calculators/hamali", {

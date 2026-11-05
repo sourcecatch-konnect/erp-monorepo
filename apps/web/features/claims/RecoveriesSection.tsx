@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { IconPlus } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -47,10 +48,40 @@ function StatusCell({ recovery }: { recovery: Recovery }) {
       {recovery.status === "REJECTED" && recovery.rejectedReason ? (
         <p className="text-xs text-muted-foreground">{recovery.rejectedReason}</p>
       ) : null}
-      {(recovery.status === "FILED" || recovery.status === "APPROVED") &&
-      RECEIVED_ELSEWHERE.has(recovery.source) ? (
+      {recovery.salaryRun ? (
         <p className="text-xs text-muted-foreground">
-          {recovery.source === "TRANSPORTER" ? "Deducted on their vendor slip" : "Deducted from salary"}
+          {recovery.status === "RECEIVED"
+            ? "Deducted in "
+            : recovery.salaryRun.status === "DRAFT"
+              ? "On draft salary run "
+              : "Deducted in "}
+          <Link
+            href={`/accounts/driver-salary-runs/${recovery.salaryRun.id}`}
+            className="text-primary hover:underline"
+          >
+            {recovery.salaryRun.runNumber}
+          </Link>
+        </p>
+      ) : recovery.vendorSlip ? (
+        <p className="text-xs text-muted-foreground">
+          {recovery.status === "RECEIVED" ? "Deducted on " : "On vendor slip "}
+          <Link
+            href={`/accounts/vendor-payments/${recovery.vendorSlip.id}`}
+            className="text-primary hover:underline"
+          >
+            {recovery.vendorSlip.slipNumber}
+          </Link>
+        </p>
+      ) : (recovery.status === "FILED" || recovery.status === "APPROVED") &&
+        RECEIVED_ELSEWHERE.has(recovery.source) ? (
+        <p className="text-xs text-muted-foreground">
+          {recovery.status === "FILED"
+            ? recovery.source === "TRANSPORTER"
+              ? "Deducted on their vendor slip once approved"
+              : "Deducted from salary once approved"
+            : recovery.source === "TRANSPORTER"
+              ? "Waiting for their next vendor slip"
+              : "Waiting for the next salary run"}
         </p>
       ) : null}
     </div>

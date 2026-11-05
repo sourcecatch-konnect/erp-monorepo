@@ -4551,6 +4551,8 @@ enum JournalSourceType {
   OPENING_BALANCE
   CLAIM_SETTLEMENT
   CLAIM_RECOVERY
+  /// C6: a driver recovery deducted from his salary (Dr Driver / Cr DAMAGE_RECOVERY).
+  CLAIM_DEDUCTION
 }
 
 enum AllocationRefType {
@@ -4582,6 +4584,8 @@ enum VendorPaymentSourceType {
   GRN_HAMALI
   RAIL_BRANCH_GRN
   VP_LOADING
+  /// Claims C7: an approved transporter recovery deducted on the slip (sourceId = ClaimRecovery.id).
+  CLAIM_RECOVERY
 }
 
 enum ReceiptPaymentMode {
@@ -5055,8 +5059,10 @@ model DriverSalaryRun {
   approvedBy   User?         @relation("ApprovedDriverSalaryRuns", fields: [approvedById], references: [id], onDelete: SetNull)
   cancelledBy  User?         @relation("CancelledDriverSalaryRuns", fields: [cancelledById], references: [id], onDelete: SetNull)
 
-  salaries DriverSalary[]
-  payouts  DriverPayout[]
+  salaries                DriverSalary[]
+  payouts                 DriverPayout[]
+  /// Driver recoveries someone took off this (draft) run — not re-attached to it.
+  deferredClaimRecoveries ClaimRecovery[] @relation("ClaimRecoveryDeferredFromRun")
 
   @@index([month])
   @@index([branchId, status])
@@ -5090,14 +5096,20 @@ model DriverSalary {
   /// like the balances: positive = reduces what we still owe him.
   otherPaymentsPaise   BigInt @default(0)
   previousBalancePaise BigInt @default(0)
+  /// Damage-claim recoveries deducted this month (C6): approved driver
+  /// recoveries attached to this line, plus their vouchers once the run is
+  /// approved. Part of what the driver owes, like the columns above.
+  damageRecoveryPaise  BigInt @default(0)
   netPaise             BigInt
 
   remarks   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  run    DriverSalaryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  driver Driver          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  run             DriverSalaryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  driver          Driver          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  /// Driver recoveries deducted on this line.
+  claimRecoveries ClaimRecovery[]
 
   @@index([runId])
   @@index([driverId])
@@ -5586,21 +5598,30 @@ model ClaimRecovery {
   receivedAt           DateTime?
   receiptMode          PaymentMode?
   receivedIntoLedgerId String?
+  /// DRIVER source (C6): the salary line it's deducted on. One line only, so
+  /// it can't be deducted twice; cleared when the run is cancelled.
+  driverSalaryId       String?
+  /// Taken off this draft run by hand — waits for the next run instead.
+  deferredFromRunId    String?
   journalEntryId       String?             @unique
   version              Int                 @default(1)
   createdById          String
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
-  receivedIntoLedger Ledger?       @relation("ClaimRecoveryReceivedInto", fields: [receivedIntoLedgerId], references: [id], onDelete: Restrict)
-  claim              Claim         @relation(fields: [claimId], references: [id], onDelete: Restrict)
-  transport          Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
-  driver             Driver?       @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  labour             Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
-  journalEntry       JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
-  createdBy          User          @relation("CreatedClaimRecoveries", fields: [createdById], references: [id], onDelete: Restrict)
+  receivedIntoLedger Ledger?          @relation("ClaimRecoveryReceivedInto", fields: [receivedIntoLedgerId], references: [id], onDelete: Restrict)
+  /// A draft run can drop a driver line; the recovery then waits for the next run.
+  driverSalary       DriverSalary?    @relation(fields: [driverSalaryId], references: [id], onDelete: SetNull)
+  deferredFromRun    DriverSalaryRun? @relation("ClaimRecoveryDeferredFromRun", fields: [deferredFromRunId], references: [id], onDelete: SetNull)
+  claim              Claim            @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  transport          Transport?       @relation(fields: [transportId], references: [id], onDelete: Restrict)
+  driver             Driver?          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  labour             Labour?          @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  journalEntry       JournalEntry?    @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdBy          User             @relation("CreatedClaimRecoveries", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@unique([claimId, lineNo])
+  @@index([driverSalaryId])
   @@index([status])
   @@index([transportId])
   @@index([driverId])

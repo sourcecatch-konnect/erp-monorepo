@@ -91,7 +91,8 @@ const totalDeductionOf = (l: DriverSalaryLine) =>
     BigInt(l.salaryAdvancePaise) +
     BigInt(l.logSlipBalancePaise) +
     BigInt(l.otherPaymentsPaise) +
-    BigInt(l.previousBalancePaise)
+    BigInt(l.previousBalancePaise) +
+    BigInt(l.damageRecoveryPaise)
   ).toString();
 
 /** A deduction: positive is taken off the pay (shown "−₹"); negative is money
@@ -110,17 +111,65 @@ type DeductionKey =
   | "salaryAdvancePaise"
   | "logSlipBalancePaise"
   | "otherPaymentsPaise"
-  | "previousBalancePaise";
+  | "previousBalancePaise"
+  | "damageRecoveryPaise";
 
 const DEDUCTION_PARTS: { key: DeductionKey; label: string; hint: string }[] = [
   { key: "salaryAdvancePaise", label: "Salary advance", hint: "Advances given this month" },
   { key: "logSlipBalancePaise", label: "Log slip", hint: "This month's log slips, net of Paid in cash" },
   { key: "otherPaymentsPaise", label: "Other paid", hint: "Manual payments this month" },
+  { key: "damageRecoveryPaise", label: "Damage recovery", hint: "Approved damage-claim recoveries" },
   { key: "previousBalancePaise", label: "Previous", hint: "Carried from earlier months / late entries" },
 ];
 
+/** The damage-claim recoveries behind the "Damage recovery" part (claims C6). */
+function DamageRecoveryList({
+  line,
+  onRemove,
+  removing,
+}: {
+  line: DriverSalaryLine;
+  /** Draft runs only: take one off — it waits for a later run. */
+  onRemove?: (recoveryId: string) => void;
+  removing?: boolean;
+}) {
+  if (!line.damageRecoveries.length) return null;
+  return (
+    <ul className="space-y-1 pl-3 text-xs text-muted-foreground">
+      {line.damageRecoveries.map((recovery) => (
+        <li key={recovery.id} className="flex items-center justify-between gap-2">
+          <Link href={`/claims/${recovery.claimId}`} className="text-primary hover:underline">
+            {recovery.label}
+          </Link>
+          <span className="flex items-center gap-2">
+            <span className="tabular-nums">−{money(recovery.amountPaise)}</span>
+            {onRemove && !recovery.posted ? (
+              <button
+                type="button"
+                className="font-medium text-destructive hover:underline disabled:opacity-50"
+                disabled={removing}
+                onClick={() => onRemove(recovery.id)}
+              >
+                Remove
+              </button>
+            ) : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Deductions total with a details popup — like the journey route chain. */
-function DeductionsCell({ line }: { line: DriverSalaryLine }) {
+function DeductionsCell({
+  line,
+  onRemoveRecovery,
+  removing,
+}: {
+  line: DriverSalaryLine;
+  onRemoveRecovery?: (recoveryId: string) => void;
+  removing?: boolean;
+}) {
   const parts = DEDUCTION_PARTS.filter((p) => BigInt(line[p.key]) !== 0n);
   if (!parts.length) return <span className="text-muted-foreground">—</span>;
   const net = BigInt(line.netPaise);
@@ -148,12 +197,17 @@ function DeductionsCell({ line }: { line: DriverSalaryLine }) {
               <span className="tabular-nums">{money(line.earnedPaise)}</span>
             </div>
             {parts.map((p) => (
-              <div key={p.key} className="flex justify-between gap-3">
-                <span>
-                  {p.label}
-                  <span className="block text-xs text-muted-foreground">{p.hint}</span>
-                </span>
-                <DeductionAmount paise={line[p.key]} />
+              <div key={p.key} className="space-y-1">
+                <div className="flex justify-between gap-3">
+                  <span>
+                    {p.label}
+                    <span className="block text-xs text-muted-foreground">{p.hint}</span>
+                  </span>
+                  <DeductionAmount paise={line[p.key]} />
+                </div>
+                {p.key === "damageRecoveryPaise" ? (
+                  <DamageRecoveryList line={line} onRemove={onRemoveRecovery} removing={removing} />
+                ) : null}
               </div>
             ))}
             <div className="flex justify-between border-t pt-2 font-semibold">
@@ -324,6 +378,12 @@ export function SalaryRunDetailPage({ id }: { id: string }) {
             : "Recalculated from the latest entries",
       );
     },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+  const removeRecovery = useMutation({
+    mutationFn: (recoveryId: string) =>
+      driverFinanceApi.removeDamageRecovery(id, recoveryId, run!.version),
+    onSuccess: () => onDone("Damage recovery taken off — it will be deducted from a later run"),
     onError: (error) => toast.error(getErrorMessage(error)),
   });
   const approve = useMutation({
@@ -599,7 +659,13 @@ export function SalaryRunDetailPage({ id }: { id: string }) {
                       {money(line.earnedPaise)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <DeductionsCell line={line} />
+                      <DeductionsCell
+                        line={line}
+                        onRemoveRecovery={
+                          isDraft && canManage ? (recoveryId) => removeRecovery.mutate(recoveryId) : undefined
+                        }
+                        removing={removeRecovery.isPending}
+                      />
                     </TableCell>
                     <TableCell
                       className={cn(

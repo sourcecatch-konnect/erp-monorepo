@@ -39,8 +39,9 @@ export async function resolveLineSources(
   const grnIds = idsOf(lines, "GRN_HAMALI");
   const branchGrnIds = idsOf(lines, "RAIL_BRANCH_GRN");
   const wagonIds = idsOf(lines, "VP_LOADING");
+  const recoveryIds = idsOf(lines, "CLAIM_RECOVERY");
 
-  const [trucks, lrs, grns, branchGrns, wagons] = await Promise.all([
+  const [trucks, lrs, grns, branchGrns, wagons, recoveries] = await Promise.all([
     truckIds.length
       ? client.lRGroup.findMany({ where: { id: { in: truckIds } }, select: truckSelect })
       : [],
@@ -76,6 +77,17 @@ export async function resolveLineSources(
       ? client.vPWagonLoading.findMany({
           where: { id: { in: wagonIds } },
           select: { id: true, gateNo: true, mrRrRow: { select: { vpNo: true } } },
+        })
+      : [],
+    // Claims C7: the damage recovery and its claim / LR.
+    recoveryIds.length
+      ? client.claimRecovery.findMany({
+          where: { id: { in: recoveryIds } },
+          select: {
+            id: true,
+            lineNo: true,
+            claim: { select: { claimNumber: true, lr: { select: { lrNumber: true } } } },
+          },
         })
       : [],
   ]);
@@ -128,6 +140,13 @@ export async function resolveLineSources(
     ].filter(Boolean);
     sources.set(wagon.id, {
       label: parts.length ? parts.join(" · ") : "VP loading",
+      vehicleNumber: null,
+      lrs: [],
+    });
+  }
+  for (const recovery of recoveries) {
+    sources.set(recovery.id, {
+      label: `Damage claim ${recovery.claim.claimNumber} R${recovery.lineNo} (LR ${recovery.claim.lr.lrNumber})`,
       vehicleNumber: null,
       lrs: [],
     });

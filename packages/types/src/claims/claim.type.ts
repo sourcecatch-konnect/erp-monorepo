@@ -179,6 +179,10 @@ export type ClaimDetail = {
     receiptMode: PaymentMode | null;
     receivedIntoName: string | null;
     voucher: { id: string; voucherNumber: string } | null;
+    /** DRIVER source (C6): the salary run it's deducted on. */
+    salaryRun: { id: string; runNumber: string; status: string } | null;
+    /** TRANSPORTER source (C7): the vendor payment slip it's deducted on. */
+    vendorSlip: { id: string; slipNumber: string; status: string } | null;
   }[];
   /** Oldest first. */
   events: {
