@@ -3,6 +3,8 @@ import {
   addClaimRecoverySchema,
   receiveClaimRecoverySchema,
   claimAssessmentSchema,
+  claimCostSummaryQuerySchema,
+  claimExportQuerySchema,
   claimListQuerySchema,
   claimReasonSchema,
   claimStatusSchema,
@@ -10,7 +12,7 @@ import {
   createClaimSchema,
   settleClaimSchema,
 } from "@skerp/validators";
-import { PERMS, type ClaimListRow, type ClaimStatusSummary } from "@skerp/types";
+import { PERMS, type ClaimStatusSummary } from "@skerp/types";
 import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
@@ -20,8 +22,17 @@ import { ValidationError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { parseListQuery } from "../_shared/list.query.js";
-import { claimMoneyTotals, COUNTED_RECOVERY_STATUSES } from "./claim.compute.js";
 import { claimDetail } from "./claim.detail.js";
+import { notifyIfHighValueClaim } from "./claim.alerts.js";
+import {
+  claimAgeing,
+  claimCostSummary,
+  claimListInclude,
+  claimsCsv,
+  claimsXlsx,
+  exportRows,
+  toClaimListRow,
+} from "./claim.reports.js";
 import {
   approveSettlement,
   closeClaim,
@@ -73,6 +84,14 @@ const SORTABLE_FIELDS = [
 type SortableField = (typeof SORTABLE_FIELDS)[number];
 const isSortable = (field: string): field is SortableField =>
   (SORTABLE_FIELDS as readonly string[]).includes(field);
+
+/** The register's order — the export uses the same one. */
+const orderByOf = (
+  sort: ReturnType<typeof parseListQuery>["sort"],
+): Prisma.ClaimOrderByWithRelationInput[] =>
+  sort && isSortable(sort.field)
+    ? [{ [sort.field]: sort.direction }, { createdAt: "desc" }]
+    : [{ claimDate: "desc" }, { createdAt: "desc" }];
 
 /** A date picker sends midnight UTC; claimDate carries a time of day. */
 const endOfDayUtc = (date: Date) => {
@@ -129,55 +148,59 @@ router.get("/", can(PERMS.CLAIM.VIEW), async (req, res) => {
   const filters = validate(claimListQuerySchema.safeParse(req.query));
   const where = claimWhere(req, query.search, filters);
 
-  const orderBy: Prisma.ClaimOrderByWithRelationInput[] =
-    query.sort && isSortable(query.sort.field)
-      ? [{ [query.sort.field]: query.sort.direction }, { createdAt: "desc" }]
-      : [{ claimDate: "desc" }, { createdAt: "desc" }];
-
   const [claims, total] = await Promise.all([
     db.claim.findMany({
       where,
-      include: {
-        branch: { select: { id: true, name: true, branchCode: true } },
-        customer: { select: { id: true, name: true } },
-        lr: { select: { id: true, lrNumber: true, groupId: true } },
-        recoveries: {
-          where: { status: { in: [...COUNTED_RECOVERY_STATUSES] } },
-          select: { status: true, amountPaise: true },
-        },
-      },
-      orderBy,
+      include: claimListInclude,
+      orderBy: orderByOf(query.sort),
       skip: query.page * query.size,
       take: query.size,
     }),
     db.claim.count({ where }),
   ]);
 
-  const rows: ClaimListRow[] = claims.map((claim) => {
-    const totals = claimMoneyTotals(claim);
-    return {
-      id: claim.id,
-      claimNumber: claim.claimNumber,
-      claimDate: claim.claimDate.toISOString(),
-      claimType: claim.claimType,
-      origin: claim.origin,
-      causedBy: claim.causedBy,
-      status: claim.status,
-      damagedQty: claim.damagedQty.toNumber(),
-      shortageQty: claim.shortageQty.toNumber(),
-      claimedAmountPaise: Number(claim.claimedAmountPaise),
-      settledAmountPaise:
-        claim.settledAmountPaise === null ? null : Number(claim.settledAmountPaise),
-      recoveredAmountPaise: Number(totals.recoveredAmountPaise),
-      netLossPaise: totals.netLossPaise === null ? null : Number(totals.netLossPaise),
-      branch: claim.branch,
-      customer: claim.customer,
-      lr: claim.lr,
-      createdAt: claim.createdAt.toISOString(),
-    };
-  });
+  return sendOk(res, claims.map(toClaimListRow), { page: query.page, size: query.size, total });
+});
 
-  return sendOk(res, rows, { page: query.page, size: query.size, total });
+/* ------------------------------------------------------------------ */
+/* Reports (C8) — same filters as the register                        */
+/* ------------------------------------------------------------------ */
+
+/** The filtered register, in the register's order, with a totals row. */
+router.get("/export", can(PERMS.CLAIM.VIEW), async (req, res) => {
+  const query = parseListQuery(req);
+  const { format, ...filters } = validate(claimExportQuerySchema.safeParse(req.query));
+  const rows = await exportRows(claimWhere(req, query.search, filters), orderByOf(query.sort));
+  const now = new Date();
+  const name = `damage-claims-${now.toISOString().slice(0, 10)}`;
+  if (format === "csv") {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${name}.csv"`);
+    // BOM so Excel opens ₹ and other non-ASCII text correctly.
+    return res.send(`\uFEFF${claimsCsv(rows)}`);
+  }
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  res.setHeader("Content-Disposition", `attachment; filename="${name}.xlsx"`);
+  return res.send(await claimsXlsx(rows, now));
+});
+
+/** Open claims by days since raised (the status filter is ignored). */
+router.get("/ageing", can(PERMS.CLAIM.VIEW), async (req, res) => {
+  const query = parseListQuery(req);
+  const filters = validate(claimListQuerySchema.safeParse(req.query));
+  const where = claimWhere(req, query.search, { ...filters, status: undefined });
+  return sendOk(res, await claimAgeing(where, new Date()));
+});
+
+/** Settled, recovered and net loss of settled claims, grouped (the status filter is ignored). */
+router.get("/cost-summary", can(PERMS.CLAIM.VIEW), async (req, res) => {
+  const query = parseListQuery(req);
+  const { groupBy, ...filters } = validate(claimCostSummaryQuerySchema.safeParse(req.query));
+  const where = claimWhere(req, query.search, { ...filters, status: undefined });
+  return sendOk(res, await claimCostSummary(where, groupBy));
 });
 
 /** Counts and amounts per status under the register's other filters (the status filter is ignored). */
@@ -219,6 +242,7 @@ router.post("/", can(PERMS.CLAIM.CREATE), async (req, res) => {
   // The claim belongs to the LR's booking branch.
   assertBranchAccess(req, lr.group.originBranchId);
   const claim = await createManualClaim(input, lr, actorId(req));
+  await notifyIfHighValueClaim(claim.id, actorId(req));
   return sendOk(res, await claimDetail(claim.id), undefined, 201);
 });
 
@@ -248,6 +272,7 @@ router.post("/:id/assess", can(PERMS.CLAIM.UPDATE), async (req, res) => {
   const claim = await claimForAction(req);
   const input = validate(claimAssessmentSchema.safeParse(req.body));
   await saveAssessment(claim, input, actorId(req), { activate: true });
+  await notifyIfHighValueClaim(claim.id, actorId(req));
   return sendOk(res, await claimDetail(claim.id));
 });
 
@@ -256,6 +281,7 @@ router.patch("/:id", can(PERMS.CLAIM.UPDATE), async (req, res) => {
   const claim = await claimForAction(req);
   const input = validate(claimAssessmentSchema.safeParse(req.body));
   await saveAssessment(claim, input, actorId(req), { activate: false });
+  await notifyIfHighValueClaim(claim.id, actorId(req));
   return sendOk(res, await claimDetail(claim.id));
 });
 

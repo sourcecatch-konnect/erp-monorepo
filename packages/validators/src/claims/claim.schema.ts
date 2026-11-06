@@ -74,6 +74,15 @@ export const claimListQuerySchema = z.object({
   dateTo: z.coerce.date().optional(),
 });
 
+/* C8 — reports: same filters as the register, plus these. */
+export const claimCostGroupBySchema = z.enum(["cause", "transporter", "route", "customer"]);
+export const claimCostSummaryQuerySchema = claimListQuerySchema.extend({
+  groupBy: claimCostGroupBySchema.default("cause"),
+});
+export const claimExportQuerySchema = claimListQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]).default("xlsx"),
+});
+
 /* ------------------------------------------------------------------ */
 /* C4 — manual claim, assessment, settlement                           */
 /* Money is entered in rupees and arrives here as paise (numbers).     */

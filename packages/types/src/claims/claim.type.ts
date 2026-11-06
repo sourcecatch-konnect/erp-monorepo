@@ -108,6 +108,40 @@ export type ClaimListRow = {
   createdAt: string;
 };
 
+/* C8 — reports. */
+
+/** Open claims by days since raised (GET /claims/ageing). */
+export type ClaimAgeingBucket = {
+  key: "D0_15" | "D16_30" | "D31_60" | "D60_PLUS";
+  label: string;
+  count: number;
+  claimedAmountPaise: number;
+};
+
+export type ClaimAgeing = {
+  buckets: ClaimAgeingBucket[];
+  /** Equals the sum of the buckets' counts. */
+  openCount: number;
+};
+
+export type ClaimCostGroupBy = "cause" | "transporter" | "route" | "customer";
+
+export type ClaimCostSummaryRow = {
+  key: string;
+  label: string;
+  claims: number;
+  settledAmountPaise: number;
+  recoveredAmountPaise: number;
+  netLossPaise: number;
+};
+
+/** Damage cost of settled claims, grouped (GET /claims/cost-summary). */
+export type ClaimCostSummary = {
+  groupBy: ClaimCostGroupBy;
+  rows: ClaimCostSummaryRow[];
+  totals: Omit<ClaimCostSummaryRow, "key" | "label">;
+};
+
 /** One tile of the register's summary strip (GET /claims/summary). */
 export type ClaimStatusSummary = {
   status: ClaimStatus;

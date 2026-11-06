@@ -2,6 +2,9 @@ import { api } from "@/lib/api";
 import type {
   AddClaimRecoveryFormInput,
   ApiResponse,
+  ClaimAgeing,
+  ClaimCostGroupBy,
+  ClaimCostSummary,
   ClaimFundingAccount,
   ReceiveClaimRecoveryFormInput,
   ClaimAssessmentFormInput,
@@ -55,6 +58,32 @@ export const claimApi = {
   summary: async (filters: ClaimFilters): Promise<ClaimStatusSummary[]> => {
     const res = await api.get<ApiResponse<ClaimStatusSummary[]>>("/claims/summary", {
       params: filters,
+    });
+    return unwrapApiResponse(res);
+  },
+
+  /* C8 — reports, under the same filters as the register. */
+
+  /** The filtered register as a file, in the register's order, with totals. */
+  exportFile: async (params: ClaimFilters & { sort?: string }, format: "csv" | "xlsx") => {
+    const res = await api.get<Blob>("/claims/export", {
+      params: { ...params, format },
+      responseType: "blob",
+    });
+    return res.data;
+  },
+
+  ageing: async (filters: ClaimFilters): Promise<ClaimAgeing> => {
+    const res = await api.get<ApiResponse<ClaimAgeing>>("/claims/ageing", { params: filters });
+    return unwrapApiResponse(res);
+  },
+
+  costSummary: async (
+    filters: ClaimFilters,
+    groupBy: ClaimCostGroupBy,
+  ): Promise<ClaimCostSummary> => {
+    const res = await api.get<ApiResponse<ClaimCostSummary>>("/claims/cost-summary", {
+      params: { ...filters, groupBy },
     });
     return unwrapApiResponse(res);
   },

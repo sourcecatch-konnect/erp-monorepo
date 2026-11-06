@@ -3,7 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { IconPlus, IconX } from "@tabler/icons-react";
+import { IconChartBar, IconDownload, IconPlus, IconX } from "@tabler/icons-react";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@skerp/ui/components/dropdown";
+import { downloadBlob } from "@/features/masters/_shared/master-api";
+import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { PERMS, type ClaimCause, type ClaimStatus, type ClaimType } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Combobox, type ComboboxOption } from "@skerp/ui/components/combobox";
@@ -200,6 +209,23 @@ export function ClaimsListPage() {
   const claims = list.data?.data ?? [];
   const total = list.data?.meta?.total ?? 0;
 
+  // Export exactly what the register shows: same filters, status and order.
+  const [exporting, setExporting] = React.useState<"csv" | "xlsx" | null>(null);
+  const exportAs = async (format: "csv" | "xlsx") => {
+    setExporting(format);
+    try {
+      const blob = await claimApi.exportFile(
+        { ...filters, ...(status ? { status } : {}), sort },
+        format,
+      );
+      downloadBlob(blob, `damage-claims-${new Date().toISOString().slice(0, 10)}.${format}`);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const hasFilters = Object.keys(filters).length > 0 || status !== undefined;
   const clearFilters = () => {
     setSearch("");
@@ -222,11 +248,29 @@ export function ClaimsListPage() {
             we recovered from whoever caused it.
           </p>
         </div>
-        {canCreate && (
-          <Button onClick={() => setNewOpen(true)}>
-            <IconPlus size={15} /> New claim
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/claims/reports">
+              <IconChartBar size={15} /> Reports
+            </Link>
           </Button>
-        )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={exporting !== null || total === 0}>
+                <IconDownload size={15} /> {exporting ? "Exporting…" : "Export"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => exportAs("xlsx")}>Excel (.xlsx)</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => exportAs("csv")}>CSV</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {canCreate && (
+            <Button onClick={() => setNewOpen(true)}>
+              <IconPlus size={15} /> New claim
+            </Button>
+          )}
+        </div>
       </div>
       <NewClaimDialog open={newOpen} onOpenChange={setNewOpen} />
 

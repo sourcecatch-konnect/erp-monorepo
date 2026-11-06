@@ -116,6 +116,7 @@ const notificationMetadata = {
     { key: "subscribers", label: "Branch subscribers" },
     { key: "role:Branch Manager@branch", label: "Branch managers" },
     { key: "permission:claim.update@branch", label: "Branch users who handle claims" },
+    { key: "role:Admin,Accounts@branch", label: "Admin and Accounts" },
   ],
   templateVariables: {
     notification_test: ["title", "message"],
@@ -125,6 +126,8 @@ const notificationMetadata = {
     "lr.delivered": ["lrNumber"],
     "lr.pod_uploaded": ["lrNumber"],
     "claim.created": ["claimNumber", "lrNumber"],
+    "claim.stale": ["claimNumber", "lrNumber", "statusLabel", "days"],
+    "claim.high_value": ["claimNumber", "lrNumber", "amount"],
     "trip.created": ["tripNumber"],
     "trip.closed": ["tripNumber"],
     "trip.close_blocked": ["tripNumber", "reason"],

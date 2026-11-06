@@ -51,8 +51,7 @@ tracks recovery from each responsible party, and posts the right vouchers.
 `llm-guideline/design.md` (tokens only, 6px radius, `Table`/`Skeleton`/`Pagination` primitives, one primary
 button per view). Every route is permission-gated on the server and branch-scoped with `branchFilter(req)` /
 `assertBranchAccess`. Money is `BigInt` paise. No `any`. Zod schemas live in `@skerp/validators`.
-Multi-step writes follow the transaction rules in `CLAUDE.md` (reads before the transaction, writes only
-inside it).
+Multi-step writes follow the transaction rules in `CLAUDE.md` (reads before the transaction, writes only inside it).
 
 ---
 

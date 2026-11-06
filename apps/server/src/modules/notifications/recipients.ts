@@ -31,11 +31,13 @@ const usersForBranch = async (branchId: string) => {
   return users.map((user) => user.id);
 };
 
-const roleUsersForBranch = async (roleName: string, branchId?: string | null) => {
+/** `roleNames` is one role or several, comma-separated ("Admin,Accounts"). */
+const roleUsersForBranch = async (roleNames: string, branchId?: string | null) => {
+  const names = roleNames.split(",").map((name) => name.trim()).filter(Boolean);
   const users = await db.user.findMany({
     where: {
       status: true,
-      role: { name: roleName },
+      role: { name: { in: names } },
       ...(branchId
         ? {
             OR: [

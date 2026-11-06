@@ -8,4 +8,7 @@ export const claimKeys = {
   eligibleLrs: (search: string) => [...claimKeys.all, "eligible-lrs", search] as const,
   settlementOptions: (id: string) => [...claimKeys.all, "settlement-options", id] as const,
   fundingAccounts: (id: string) => [...claimKeys.all, "funding-accounts", id] as const,
+  ageing: (filters: ClaimFilters) => [...claimKeys.all, "ageing", filters] as const,
+  costSummary: (filters: ClaimFilters, groupBy: string) =>
+    [...claimKeys.all, "cost-summary", filters, groupBy] as const,
 };

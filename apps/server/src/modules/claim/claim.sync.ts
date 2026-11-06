@@ -2,6 +2,7 @@ import { Prisma, type ClaimOrigin } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { publishNotificationEvent } from "../notifications/notification.service.js";
 import { reserveClaimNumber } from "./claim.numbers.js";
+import { notifyIfHighValueClaim } from "./claim.alerts.js";
 import {
   ackClaimFacts,
   claimSyncState,
@@ -145,6 +146,7 @@ const applyClaimSync = async (input: SyncInput): Promise<void> => {
         },
         dedupeKey: `claim.created:${claim.id}`,
       });
+      await notifyIfHighValueClaim(claim.id, actorId);
       return;
     }
 
@@ -184,6 +186,8 @@ const applyClaimSync = async (input: SyncInput): Promise<void> => {
           select: { id: true },
         }),
       ]);
+      // The ack's damage amount may have pushed the claim over the threshold.
+      await notifyIfHighValueClaim(existing.id, actorId);
       return;
     }
 

@@ -189,6 +189,19 @@ export interface DashboardResponse {
   attention: DashboardAttentionRow[] | null;
   profit: DashboardProfit | null;
   payables: DashboardPayables | null;
+  /** Damage claims (claims C8) — needs claim.view. */
+  claims: DashboardClaims | null;
+}
+
+/** Damage claims card. Paise as strings (BigInt on the server). */
+export interface DashboardClaims {
+  /** Pending + active claims. */
+  openCount: number;
+  /** Claimed amount of those open claims — what they could still cost. */
+  openClaimedPaise: string;
+  settledThisMonthCount: number;
+  /** Settled − recovered, over claims settled this calendar month. */
+  netLossThisMonthPaise: string;
 }
 
 /**
