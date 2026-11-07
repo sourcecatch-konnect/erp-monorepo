@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 
 import {
   Table,
@@ -12,48 +11,31 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 
-import type { AckMismatch, ChallanAck } from "./ack.service";
+import type { ChallanAck } from "./ack.service";
 
 /**
- * The supervisor's account beside the broker's, with every disagreement
- * called out.
+ * The broker's claim on a delivery challan, as staff transcribed it.
  *
- * This layout *is* the control. CONTEXT.md §5.2: the broker files their own
- * claim and it is "often inflated", so an approver has to be able to see at
- * a glance where the two accounts part company before deciding which to
- * trust. A tidier single-column summary would defeat the purpose.
- *
- * The mismatch list comes from the server — it is not recomputed here, so
- * what the approver sees cannot drift from what the comparison actually
- * found.
+ * This was once a side-by-side of the supervisor's account against the
+ * broker's, with every disagreement called out — the fraud control described
+ * in CONTEXT.md §5.2. The supervisor acknowledgement was dropped on
+ * 2026-11-07: he is a `Labour` record with no ERP login, so both columns
+ * were always typed by the same staff. What remains is the broker's claim,
+ * the Labour supervisor's name for context, and the slab ceiling applied on
+ * the payment slip, which pays the lower of claim and slab.
  */
 
-const FIELD_LABELS: Record<string, string> = {
-  reportingDate: "Reporting date",
-  unloadingDate: "Unloading date",
-  collectionDate: "Collection date",
-  claimedDetentionDays: "Detention days",
-  claimedDetentionPaise: "Detention amount",
-  parkingPaise: "Parking",
-  otherPaise: "Other expenses",
-  labourPaise: "Labour",
-  damagePaise: "Damage",
-  shortageQty: "Shortage (qty)",
-  damageQty: "Damaged (qty)",
-};
-
-const MONEY_FIELDS = new Set([
-  "claimedDetentionPaise",
-  "parkingPaise",
-  "otherPaise",
-  "labourPaise",
-  "damagePaise",
-]);
-const DATE_FIELDS = new Set([
-  "reportingDate",
-  "unloadingDate",
-  "collectionDate",
-]);
+const CLAIM_ROWS = [
+  { key: "reportingDate", label: "Reporting date", kind: "date" },
+  { key: "unloadingDate", label: "Unloading date", kind: "date" },
+  { key: "collectionDate", label: "Collection date", kind: "date" },
+  { key: "claimedDetentionDays", label: "Detention days", kind: "count" },
+  { key: "claimedDetentionPaise", label: "Detention amount", kind: "money" },
+  { key: "parkingPaise", label: "Parking", kind: "money" },
+  { key: "labourPaise", label: "Labour", kind: "money" },
+  { key: "otherPaise", label: "Other expenses", kind: "money" },
+  { key: "damagePaise", label: "Damage", kind: "money" },
+] as const;
 
 const rupees = (paise: string) =>
   `₹${(Number(paise) / 100).toLocaleString("en-IN", {
@@ -68,187 +50,92 @@ const day = (iso: string) =>
     year: "numeric",
   });
 
-/** Render a compared value the way its field should read. */
-const show = (field: string, raw: string | null) => {
-  if (raw === null) return <span className="text-muted-foreground">—</span>;
-  if (MONEY_FIELDS.has(field)) return rupees(raw);
-  if (DATE_FIELDS.has(field)) return day(raw);
-  return raw;
+const dash = <span className="text-muted-foreground">—</span>;
+
+const show = (kind: "date" | "money" | "count", raw: string | number | null) => {
+  if (raw === null || raw === undefined) return dash;
+  if (kind === "money") return rupees(String(raw));
+  if (kind === "date") return day(String(raw));
+  return String(raw);
 };
 
-function PartyHeader({
-  title,
-  ack,
-}: {
-  title: string;
-  ack: ChallanAck | null;
-}) {
-  return (
-    <div>
-      <p className="text-sm font-medium">{title}</p>
-      {ack ? (
-        <p className="text-xs text-muted-foreground">
-          {ack.filedBy
-            ? `${ack.filedBy.firstName} ${ack.filedBy.lastName}`
-            : "—"}{" "}
-          · {day(ack.filedAt)}
-        </p>
-      ) : (
-        <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-          Not filed
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function ChallanAckComparison({
-  supervisor,
   broker,
-  mismatches,
-  bothFiled,
+  supervisor,
 }: {
-  supervisor: ChallanAck | null;
   broker: ChallanAck | null;
-  mismatches: AckMismatch[];
-  bothFiled: boolean;
+  /** The Labour supervisor who ran the unloading — context, not a claim. */
+  supervisor: { id: string; name: string } | null;
 }) {
-  if (!supervisor && !broker)
+  if (!broker)
     return (
-      <p className="text-sm text-muted-foreground">
-        Neither the supervisor nor the broker has filed an acknowledgement for
-        this challan yet.
-      </p>
+      <div className="space-y-1">
+        <p className="text-sm text-muted-foreground">
+          The broker&apos;s claim has not been entered for this challan yet.
+        </p>
+        {supervisor ? (
+          <p className="text-xs text-muted-foreground">
+            Unloading supervisor: {supervisor.name}
+          </p>
+        ) : null}
+      </div>
     );
 
   return (
-    <div className="space-y-4">
-      {!bothFiled ? (
-        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-          <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
-          <span>
-            Only one side has filed, so there is nothing to compare against.
-            You can still approve, but you would be ruling on a single account.
-          </span>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Broker&apos;s claim</p>
+          <p className="text-xs text-muted-foreground">
+            Entered by{" "}
+            {broker.filedBy
+              ? `${broker.filedBy.firstName} ${broker.filedBy.lastName}`
+              : "—"}{" "}
+            · {day(broker.filedAt)}
+          </p>
         </div>
-      ) : mismatches.length === 0 ? (
-        <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm">
-          <IconCheck size={16} className="mt-0.5 shrink-0 text-primary" />
-          <span>
-            Both accounts agree on every field.
-          </span>
-        </div>
-      ) : (
-        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-          <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
-          <span>
-            The two accounts differ on {mismatches.length} field
-            {mismatches.length === 1 ? "" : "s"}, highlighted below.
-          </span>
-        </div>
-      )}
-
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[30%]">Field</TableHead>
-              <TableHead>
-                <PartyHeader title="SK supervisor" ack={supervisor} />
-              </TableHead>
-              <TableHead>
-                <PartyHeader title="Broker" ack={broker} />
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {mismatches.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={3}
-                  className="text-sm text-muted-foreground"
-                >
-                  No differences to show.
-                </TableCell>
-              </TableRow>
-            ) : (
-              mismatches.map((row) => (
-                <TableRow
-                  key={row.field}
-                  className="bg-amber-50/50 dark:bg-amber-950/20"
-                >
-                  <TableCell className="text-sm font-medium">
-                    {FIELD_LABELS[row.field] ?? row.field}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {show(row.field, row.supervisor)}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {show(row.field, row.broker)}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+        {supervisor ? (
+          <p className="text-xs text-muted-foreground">
+            Unloading supervisor: {supervisor.name}
+          </p>
+        ) : null}
       </div>
 
-      {/* Per-LR quantities, side by side. Shortage is the server's derived
-          figure, never recomputed here. */}
-      {supervisor || broker ? (
-        <div className="overflow-x-auto">
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            Per-LR quantities
-          </p>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>LR</TableHead>
-                <TableHead className="text-right">Supervisor rcvd</TableHead>
-                <TableHead className="text-right">Supervisor short</TableHead>
-                <TableHead className="text-right">Broker rcvd</TableHead>
-                <TableHead className="text-right">Broker short</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[
-                ...new Set([
-                  ...(supervisor?.items ?? []).map((i) => i.lrNumberSnapshot),
-                  ...(broker?.items ?? []).map((i) => i.lrNumberSnapshot),
-                ]),
-              ].map((lr) => {
-                const s = supervisor?.items.find(
-                  (i) => i.lrNumberSnapshot === lr,
-                );
-                const b = broker?.items.find((i) => i.lrNumberSnapshot === lr);
-                const differs =
-                  (s?.receivedQty ?? null) !== (b?.receivedQty ?? null);
-                return (
-                  <TableRow
-                    key={lr}
-                    className={
-                      differs ? "bg-amber-50/50 dark:bg-amber-950/20" : ""
-                    }
-                  >
-                    <TableCell className="text-sm font-medium">{lr}</TableCell>
-                    <TableCell className="text-right text-sm">
-                      {s ? `${s.receivedQty} / ${s.totalQty}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-sm">
-                      {s ? s.shortageQty : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-sm">
-                      {b ? `${b.receivedQty} / ${b.totalQty}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-sm">
-                      {b ? b.shortageQty : "—"}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Head</TableHead>
+            <TableHead className="text-right">Claimed</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {CLAIM_ROWS.map((row) => (
+            <TableRow key={row.key}>
+              <TableCell>{row.label}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {show(row.kind, broker[row.key])}
+              </TableCell>
+            </TableRow>
+          ))}
+          <TableRow>
+            <TableCell>Shortage (qty)</TableCell>
+            <TableCell className="text-right tabular-nums">
+              {broker.totalShortageQty}
+            </TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>Damaged (qty)</TableCell>
+            <TableCell className="text-right tabular-nums">
+              {broker.totalDamageQty}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+
+      {broker.remarks ? (
+        <p className="text-xs text-muted-foreground">
+          Remarks: {broker.remarks}
+        </p>
       ) : null}
     </div>
   );

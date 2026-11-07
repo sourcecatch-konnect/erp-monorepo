@@ -275,7 +275,6 @@ const labels = {
   "delivery_challan.delete": "Delete delivery challans",
   "delivery_challan.issue": "Issue delivery challans",
   "delivery_challan.cancel": "Cancel delivery challans",
-  "delivery_challan.ack.supervisor": "File the supervisor acknowledgement on a delivery challan",
   "delivery_challan.ack.broker": "File the broker acknowledgement on a delivery challan",
   "delivery_challan.approve": "Approve a delivery challan (accept one acknowledgement)",
   "ewaybill.view": "View e-way bills",

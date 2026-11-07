@@ -6,12 +6,10 @@ import { api } from "@/lib/api";
 /**
  * DC Acknowledgement + Approval (LDC phase L5).
  *
- * Two parties file independently, an approver rules between them. The server
- * computes the mismatch list — it is the fraud control, so it is not
- * recomputed in the browser where it could drift from what was approved.
+ * One acknowledgement per challan: the broker's claim, transcribed by staff
+ * from his bill and email. An approver then rules on it. SK's own side of
+ * the delivery is the challan's Labour supervisor and the LR dates.
  */
-
-export type DeliveryChallanAckType = "SUPERVISOR" | "BROKER";
 
 export type AckItem = {
   id: string;
@@ -26,7 +24,6 @@ export type AckItem = {
 
 export type ChallanAck = {
   id: string;
-  ackType: DeliveryChallanAckType;
   reportingDate: string | null;
   unloadingDate: string | null;
   collectionDate: string | null;
@@ -46,17 +43,8 @@ export type ChallanAck = {
   totalDamageQty: number;
 };
 
-/** One field the two accounts disagree on. Values are pre-stringified by the
- *  server so the comparison is exactly what it compared. */
-export type AckMismatch = {
-  field: string;
-  supervisor: string | null;
-  broker: string | null;
-};
-
 export type ChallanApproval = {
   id: string;
-  acceptedAckType: DeliveryChallanAckType;
   acceptedAckId: string;
   approvedDetentionDays: number | null;
   approvedParkingPaise: string | null;
@@ -74,18 +62,18 @@ export type ChallanAckView = {
   challanId: string;
   challanNumber: string;
   status: string;
-  /** The challan's own lines, so a form can be laid out and quantities
-   *  prefilled before either party has filed. */
+  /** The challan's own lines, so the form can be laid out and quantities
+   *  prefilled before the broker's claim has been entered. */
   lines: { id: string; lrNumberSnapshot: string; quantity: number }[];
-  supervisor: ChallanAck | null;
   broker: ChallanAck | null;
-  mismatches: AckMismatch[];
-  bothFiled: boolean;
+  /** The Labour supervisor who ran the unloading — SK's own side, held on
+   *  the challan rather than acknowledged. */
+  supervisor: { id: string; name: string } | null;
+  filed: boolean;
   approval: ChallanApproval | null;
 };
 
 export type UpsertAckBody = {
-  ackType: DeliveryChallanAckType;
   reportingDate?: string | null;
   unloadingDate?: string | null;
   collectionDate?: string | null;
@@ -106,7 +94,6 @@ export type UpsertAckBody = {
 };
 
 export type ApproveChallanBody = {
-  acceptedAckType: DeliveryChallanAckType;
   approvedDetentionDays?: number | null;
   approvedParkingPaise?: string | null;
   approvedOtherPaise?: string | null;
@@ -126,7 +113,7 @@ export const challanAckApi = {
 
   upsert: async (challanId: string, body: UpsertAckBody) =>
     unwrapApiResponse(
-      await api.put<ApiResponse<{ id: string; ackType: DeliveryChallanAckType }>>(
+      await api.put<ApiResponse<{ id: string }>>(
         `/delivery-challans/${challanId}/acknowledgements`,
         body,
       ),

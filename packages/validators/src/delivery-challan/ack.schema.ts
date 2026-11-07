@@ -3,9 +3,10 @@ import { z } from "zod";
 /**
  * DC Acknowledgement + Approval (LDC phase L5).
  *
- * Two parties file independently, an approver picks one. The schemas are
- * shared by the server (`.parse`) and the web forms (`zodResolver`), so the
- * two can never drift.
+ * One acknowledgement per challan: the broker's claim, transcribed by staff
+ * from his bill and email (the broker has no ERP login). An approver then
+ * rules on it. The schemas are shared by the server (`.parse`) and the web
+ * forms (`zodResolver`), so the two can never drift.
  */
 
 const id = z.string().trim().min(1);
@@ -16,8 +17,6 @@ const isoDate = z.coerce.date();
  *  claim fix (D-14) had to restore on the payment slip. */
 const optionalPaise = z.coerce.bigint().nonnegative().nullish();
 const optionalCount = z.coerce.number().int().min(0).nullish();
-
-export const deliveryChallanAckTypeSchema = z.enum(["SUPERVISOR", "BROKER"]);
 
 export const deliveryChallanAckItemSchema = z.object({
   challanItemId: id,
@@ -48,8 +47,6 @@ const ackItemRules = (
 
 export const upsertDeliveryChallanAckSchema = z
   .object({
-    ackType: deliveryChallanAckTypeSchema,
-
     /** Drives the detention window once this ack is approved (Q18). */
     reportingDate: isoDate.nullish(),
     unloadingDate: isoDate.nullish(),
@@ -96,9 +93,6 @@ export const upsertDeliveryChallanAckSchema = z
   });
 
 export const approveDeliveryChallanSchema = z.object({
-  /** Which party's account the approver trusts. */
-  acceptedAckType: deliveryChallanAckTypeSchema,
-
   /** Approved figures. Omitted means "take the accepted ack's number". */
   approvedDetentionDays: optionalCount,
   approvedParkingPaise: optionalPaise,
@@ -115,9 +109,6 @@ export const revokeDeliveryChallanApprovalSchema = z.object({
   version: z.coerce.number().int().min(1),
 });
 
-export type DeliveryChallanAckTypeInput = z.infer<
-  typeof deliveryChallanAckTypeSchema
->;
 export type UpsertDeliveryChallanAckInput = z.infer<
   typeof upsertDeliveryChallanAckSchema
 >;

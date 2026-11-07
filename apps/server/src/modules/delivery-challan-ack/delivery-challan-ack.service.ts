@@ -9,7 +9,6 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../lib/error.j
 import { assertNotOnVendorSlip } from "../vendor-payment/source-lock.js";
 import {
   approvalDefaultsFrom,
-  compareAcks,
   shortageQtyOf,
   totalDamageQty,
   totalShortageQty,
@@ -27,7 +26,6 @@ import {
 
 const ackSelect = {
   id: true,
-  ackType: true,
   reportingDate: true,
   unloadingDate: true,
   collectionDate: true,
@@ -61,7 +59,6 @@ type LoadedAck = Prisma.DeliveryChallanAcknowledgementGetPayload<{
 }>;
 
 const toLite = (ack: LoadedAck): AckLite => ({
-  ackType: ack.ackType,
   reportingDate: ack.reportingDate,
   unloadingDate: ack.unloadingDate,
   collectionDate: ack.collectionDate,
@@ -104,6 +101,9 @@ const loadChallanOrThrow = async (
       challanNumber: true,
       status: true,
       sourceBranchId: true,
+      /// SK's own side of the delivery: the Labour supervisor who ran the
+      /// unloading. Held on the challan, never acknowledged — he has no login.
+      supervisor: { select: { id: true, name: true } },
       items: {
         select: { id: true, lrNumberSnapshot: true, quantity: true },
         orderBy: { lrNumberSnapshot: "asc" },
@@ -112,7 +112,6 @@ const loadChallanOrThrow = async (
       approval: {
         select: {
           id: true,
-          acceptedAckType: true,
           acceptedAckId: true,
           approvedDetentionDays: true,
           approvedParkingPaise: true,
@@ -134,20 +133,19 @@ const loadChallanOrThrow = async (
 
 type LoadedChallan = Awaited<ReturnType<typeof loadChallanOrThrow>>;
 
-const pick = (challan: LoadedChallan, type: "SUPERVISOR" | "BROKER") =>
-  challan.acknowledgements.find((ack) => ack.ackType === type) ?? null;
+const pick = (challan: LoadedChallan) => challan.acknowledgements[0] ?? null;
 
 /**
- * Both acknowledgements side by side, with every field they disagree on.
+ * The broker's acknowledgement, with the quantities it implies.
  *
- * The mismatch list is the point of the screen: the broker's claim is "often
- * inflated" (CONTEXT.md §5.2) and seeing exactly where the two accounts part
- * company is what lets an approver rule rather than guess.
+ * What the broker claims is "often inflated" (CONTEXT.md §5.2). The control
+ * is no longer a second account to compare against — the supervisor is a
+ * Labour record, not a user — but the slab ceiling applied on the payment
+ * slip, which pays `min(claimed, slab)`.
  */
 export const getChallanAckView = async (challanId: string) => {
   const challan = await loadChallanOrThrow(challanId);
-  const supervisor = pick(challan, "SUPERVISOR");
-  const broker = pick(challan, "BROKER");
+  const broker = pick(challan);
 
   const withDerived = (ack: LoadedAck | null) =>
     ack
@@ -169,13 +167,11 @@ export const getChallanAckView = async (challanId: string) => {
     /** The challan's own lines, so a form can be laid out before either ack
      *  exists and so quantities can be prefilled from what was sent. */
     lines: challan.items,
-    supervisor: withDerived(supervisor),
     broker: withDerived(broker),
-    mismatches: compareAcks(
-      supervisor ? toLite(supervisor) : null,
-      broker ? toLite(broker) : null,
-    ),
-    bothFiled: Boolean(supervisor && broker),
+    /** The Labour supervisor who ran the unloading — SK's own side of the
+     *  delivery, which is held on the challan rather than acknowledged. */
+    supervisor: challan.supervisor,
+    filed: Boolean(broker),
     approval: challan.approval,
   };
 };
@@ -183,8 +179,8 @@ export const getChallanAckView = async (challanId: string) => {
 /**
  * File or amend one party's acknowledgement.
  *
- * Idempotent per `(challan, ackType)` — the DB unique makes a second filing
- * by the same party an amendment of the first, not a duplicate row.
+ * Idempotent per challan — the DB unique makes a second filing an amendment
+ * of the first, not a duplicate row.
  *
  * Two things are refused:
  *  - amending once the challan is on a payment slip, for the same reason the
@@ -209,7 +205,7 @@ export const upsertChallanAck = async (
       "Only an issued delivery challan can be acknowledged",
     );
 
-  const existing = pick(challan, input.ackType);
+  const existing = pick(challan);
   if (existing && input.version !== undefined && existing.version !== input.version)
     throw new ConflictError(
       "This acknowledgement changed in another session. Refresh and try again.",
@@ -277,7 +273,6 @@ export const upsertChallanAck = async (
     : await tx.deliveryChallanAcknowledgement.create({
         data: {
           challanId: challan.id,
-          ackType: input.ackType,
           filedById: actorId,
           ...data,
         },
@@ -300,10 +295,7 @@ export const upsertChallanAck = async (
 /**
  * Rule on a challan: accept one acknowledgement and record the figures.
  *
- * Requires that the accepted party has actually filed. It does **not**
- * require both to have filed — a broker who never files should not be able
- * to stall payment indefinitely — but the view reports `bothFiled` so the
- * approver knows what they are ruling without.
+ * Requires that the broker has actually filed.
  *
  * Posts nothing (Q9).
  */
@@ -323,10 +315,19 @@ export const approveChallan = async (
       "This challan is already approved — revoke the existing approval first",
     );
 
-  const accepted = pick(challan, input.acceptedAckType);
+  const accepted = pick(challan);
   if (!accepted)
     throw new BadRequestError(
-      `No ${input.acceptedAckType.toLowerCase()} acknowledgement has been filed for this challan`,
+      "No broker acknowledgement has been filed for this challan",
+    );
+
+  // Maker-checker, matching the payment slip's rule: whoever filed the
+  // account cannot be the one who rules it trustworthy. Fail-closed — the
+  // comparison is the fraud control, and it is worth nothing if the filer
+  // signs off on their own figures.
+  if (accepted.filedById === actorId)
+    throw new BadRequestError(
+      "You filed this acknowledgement, so you cannot approve it. Another user with approval rights must rule on it.",
     );
 
   const defaults = approvalDefaultsFrom(toLite(accepted));
@@ -341,7 +342,6 @@ export const approveChallan = async (
   const approval = await tx.deliveryChallanApproval.create({
     data: {
       challanId: challan.id,
-      acceptedAckType: accepted.ackType,
       acceptedAckId: accepted.id,
       approvedDetentionDays: resolve(
         input.approvedDetentionDays,

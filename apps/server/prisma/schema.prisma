@@ -4190,28 +4190,25 @@ model DeliveryChallanItem {
   @@index([branchGrnItemId])
 }
 
-/// Who filed an acknowledgement for a delivery challan. Exactly two parties
-/// may, and each may file at most once — enforced by @@unique below.
-enum DeliveryChallanAckType {
-  /// What SK's own supervisor at the godown witnessed.
-  SUPERVISOR
-  /// What the broker who hauled the load claims.
-  BROKER
-}
-
-/// One party's account of how a delivery challan actually went.
+/// The broker's account of how a delivery challan went — his claim.
 ///
-/// Two rows per challan, filed independently (CONTEXT.md §5.2): the SK
-/// supervisor acks what was received, the broker files their own claim —
-/// "often inflated". Showing the two side by side is the fraud control, and
-/// an approver picks which version to trust (DeliveryChallanApproval).
+/// **One row per challan.** An earlier design kept a second, parallel
+/// acknowledgement from SK's own godown supervisor so an approver could
+/// compare the two (CONTEXT.md §5.2). That was dropped on 2026-11-07: the
+/// supervisor is a `Labour` record, not an ERP user, so SK's side was always
+/// going to be typed by the same staff who type the broker's. SK's own
+/// account of the delivery is already held by `DeliveryChallan.supervisorId`
+/// (the Labour supervisor who ran the unloading) and the LR's `reportedAt` /
+/// `unloadingAt`. The control on an inflated claim is now the **slab
+/// ceiling** — the broker is paid `min(claimed, slab)` — not a comparison.
+///
+/// The broker never logs in; staff transcribe his bill and email.
 ///
 /// Nothing here posts to the ledger. An acknowledgement is evidence; the
 /// money is accrued later, once, by the vendor-payment slip (decision Q9).
 model DeliveryChallanAcknowledgement {
-  id        String                 @id @default(cuid())
-  challanId String
-  ackType   DeliveryChallanAckType
+  id        String @id @default(cuid())
+  challanId String @unique
 
   /// Dates that drive the detention window once this ack is the approved one
   /// (decision Q18). Named for what the engine consumes rather than for the
@@ -4246,11 +4243,9 @@ model DeliveryChallanAcknowledgement {
   challan DeliveryChallan                      @relation(fields: [challanId], references: [id], onDelete: Cascade)
   filedBy User                                 @relation("FiledDeliveryChallanAcks", fields: [filedById], references: [id], onDelete: Restrict)
   items   DeliveryChallanAckItem[]
-  /// Set when this acknowledgement is the one an approver accepted.
+  /// Set when an approver has accepted this acknowledgement.
   acceptedBy DeliveryChallanApproval? @relation("AcceptedDeliveryChallanAck")
 
-  /// One acknowledgement per party per challan.
-  @@unique([challanId, ackType])
   @@index([challanId])
 }
 
@@ -4293,11 +4288,10 @@ model DeliveryChallanApproval {
   id        String @id @default(cuid())
   challanId String @unique
 
-  /// Which party's account the approver accepted.
-  acceptedAckType DeliveryChallanAckType
-  /// Unique: an acknowledgement can be the accepted one at most once, which
-  /// follows from there being one approval per challan.
-  acceptedAckId   String                 @unique
+  /// The broker acknowledgement this approval ruled on. Unique: an
+  /// acknowledgement can be the accepted one at most once, which follows
+  /// from there being one approval per challan.
+  acceptedAckId String @unique
 
   /// The approved figures. Editable by the approver, defaulted from the
   /// accepted acknowledgement. Paise. These feed the payable in L4; today

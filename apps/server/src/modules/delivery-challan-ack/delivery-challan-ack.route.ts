@@ -78,31 +78,20 @@ router.get(
 );
 
 /**
- * File or amend an acknowledgement.
+ * File or amend the broker's acknowledgement.
  *
- * The permission required depends on which party is filing, so a supervisor
- * cannot file the broker's claim or the reverse — that separation is the
- * whole point of having two acks.
+ * The broker has no ERP login — staff transcribe his bill and email — so
+ * this is one permission, not a pair keyed on who is filing.
  */
 router.put(
   "/:id/acknowledgements",
-  async (req, res, next) => {
-    // Gate on the ackType in the body, so the check happens before any work.
-    const parsed = upsertDeliveryChallanAckSchema.safeParse(req.body);
-    if (!parsed.success)
-      return next(new ValidationError(parsed.error.flatten().fieldErrors));
-    const permission =
-      parsed.data.ackType === "SUPERVISOR"
-        ? PERMS.DELIVERY_CHALLAN.ACK_SUPERVISOR
-        : PERMS.DELIVERY_CHALLAN.ACK_BROKER;
-    return can(permission)(req, res, next);
-  },
+  can(PERMS.DELIVERY_CHALLAN.ACK_BROKER),
   async (req, res) => {
     const id = getParamId(req);
     await assertChallanBranch(req, id);
     const input = validate(upsertDeliveryChallanAckSchema.safeParse(req.body));
     const ackId = await upsertChallanAck(id, input, actorId(req));
-    return sendOk(res, { id: ackId, ackType: input.ackType });
+    return sendOk(res, { id: ackId });
   },
 );
 

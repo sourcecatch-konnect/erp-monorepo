@@ -259,13 +259,12 @@ export const loadChallanContext = async (
       reportDate: true,
       transport: { select: { name: true } },
       vehicle: { select: { vehicleTypeId: true } },
-      // Q18: once a challan is approved, the accepted acknowledgement's dates
+      // Q18: once a challan is approved, the approved acknowledgement's dates
       // are the source of truth for the detention window — not the LR-derived
       // ones. A challan with no approval is either grandfathered (Q10) or
       // not yet payable, and falls back to the LR dates below.
       approval: {
         select: {
-          acceptedAckType: true,
           acceptedAck: {
             select: { reportingDate: true, unloadingDate: true },
           },

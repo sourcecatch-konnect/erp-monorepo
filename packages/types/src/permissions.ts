@@ -106,7 +106,6 @@ type DeliveryChallanPermissionKey =
   | "delivery_challan.cancel"
   // Filing an acknowledgement and ruling on one are separate capabilities —
   // see the note on PERMS.DELIVERY_CHALLAN.
-  | "delivery_challan.ack.supervisor"
   | "delivery_challan.ack.broker"
   | "delivery_challan.approve";
 type RailRakeOperationPermissionKey =
@@ -417,14 +416,16 @@ export const PERMS = {
     ISSUE: "delivery_challan.issue",
     CANCEL: "delivery_challan.cancel",
     /**
-     * Filing an acknowledgement and approving one are deliberately three
-     * separate permissions, not one. The whole control is that SK's
-     * supervisor and the broker file independently and a third person rules
-     * between them (CONTEXT.md §5.2) — if one role could both file and
-     * approve, the separation of duties collapses and the fraud check is
-     * decorative.
+     * Entering the broker's claim and approving it are deliberately two
+     * separate permissions, not one. The broker has no ERP login, so staff
+     * transcribe his bill; whoever types it must not also be the one who
+     * rules it payable, or the separation of duties collapses. The service
+     * enforces this per user as well — the filer cannot approve their own
+     * acknowledgement.
+     *
+     * A third key, `delivery_challan.ack.supervisor`, was retired on
+     * 2026-11-07 with the supervisor acknowledgement itself.
      */
-    ACK_SUPERVISOR: "delivery_challan.ack.supervisor",
     ACK_BROKER: "delivery_challan.ack.broker",
     APPROVE: "delivery_challan.approve",
   },
