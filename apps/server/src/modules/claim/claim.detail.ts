@@ -18,7 +18,16 @@ const claimDetailInclude = {
       id: true,
       lrNumber: true,
       groupId: true,
-      group: { select: { groupNumber: true, consignor: named, consignee: named } },
+      group: {
+        select: {
+          groupNumber: true,
+          consignor: named,
+          consignee: named,
+          // Who hauled it: an own-fleet LR has no transporter to recover from.
+          isMarketVehicle: true,
+          marketTransport: named,
+        },
+      },
     },
   },
   items: { orderBy: { createdAt: "asc" } },
@@ -138,6 +147,10 @@ export const claimDetail = async (id: string): Promise<ClaimDetail> => {
       groupNumber: claim.lr.group.groupNumber,
       consignor: claim.lr.group.consignor,
       consignee: claim.lr.group.consignee,
+      /** Who hauled it. A transporter recovery is only possible on a
+       *  market vehicle, and only from the broker that carried it. */
+      isMarketVehicle: claim.lr.group.isMarketVehicle,
+      marketTransport: claim.lr.group.marketTransport,
     },
     items: claim.items.map((item) => ({
       id: item.id,

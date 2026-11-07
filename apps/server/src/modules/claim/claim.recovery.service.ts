@@ -16,6 +16,7 @@ import {
 import {
   RECOVERED_ELSEWHERE,
   recoveryBlocker,
+  transporterRecoveryBlocker,
   rupeesText,
 } from "./claim.settle.compute.js";
 import {
@@ -73,6 +74,18 @@ export const addRecovery = async (claim: ActionClaim, input: AddInput, actorId: 
   const amountPaise = BigInt(input.amount);
   const blocker = recoveryBlocker(claim, committedRecoveriesPaise(claim), amountPaise);
   if (blocker) throw new BadRequestError(blocker);
+
+  // Accounts, 2026-11-07: an own-fleet consignment has no transporter to
+  // recover from, and a market one can only be recovered from the broker who
+  // actually hauled it — not whichever broker was picked in the dialog.
+  if (input.source === "TRANSPORTER") {
+    const haulageBlocker = transporterRecoveryBlocker(claim.lr.group);
+    if (haulageBlocker) throw new BadRequestError(haulageBlocker);
+    if (input.transportId !== claim.lr.group.marketTransportId)
+      throw new BadRequestError(
+        `LR ${claim.lr.lrNumber} was hauled by a different transporter — recover from the one that carried it.`,
+      );
+  }
   const party = await partyOf(input);
   const last = await db.claimRecovery.aggregate({
     where: { claimId: claim.id },

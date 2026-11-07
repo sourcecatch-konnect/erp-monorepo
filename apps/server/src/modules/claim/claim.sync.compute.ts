@@ -18,8 +18,15 @@ export type ClaimSourceFacts = {
   lines: ClaimSourceLine[];
   damagedQty: number;
   shortageQty: number;
-  /** LR acknowledgement damage amount, paise. Null for GRNs. */
+  /**
+   * What the loss is worth, paise. On an LR acknowledgement this is the
+   * damage amount somebody actually entered. On a GRN it is a pro-rata
+   * estimate off the LR's invoice (see `proRataLossPaise`), or null when one
+   * cannot be derived.
+   */
   damageAmountPaise: bigint | null;
+  /** True when `damageAmountPaise` was derived rather than entered. */
+  amountIsEstimate?: boolean;
   causedBy: ClaimCause | null;
 };
 
@@ -32,6 +39,41 @@ export type ClaimSourceSnapshot = {
 };
 
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
+
+/**
+ * What the damaged and short units are worth, pro-rata on the LR's invoice.
+ *
+ * Only the LR acknowledgement carries a rupee figure; a GRN at the rail head
+ * or branch records quantities, because the supervisor counts cartons rather
+ * than pricing them. Those claims used to arrive at zero, which made them
+ * invisible to the high-value alert and understated every cost report until
+ * somebody assessed them.
+ *
+ * So a GRN claim now opens with an *estimate*: the LR's declared invoice
+ * value spread evenly across its booked units, times the units lost. It is a
+ * starting figure for the assessor, never a settlement — the assessor sets
+ * the real claimed amount, and nothing is paid on this number.
+ *
+ * Returns null when it cannot be derived honestly: no invoice value, no
+ * booked quantity, or nothing lost. A wrong estimate is worse than none.
+ */
+export const proRataLossPaise = (input: {
+  invoiceAmountPaise: bigint | null;
+  /** Total booked units across the LR's goods lines. */
+  bookedQty: number;
+  /** Units damaged plus units short. */
+  lostQty: number;
+}): bigint | null => {
+  const { invoiceAmountPaise, bookedQty, lostQty } = input;
+  if (invoiceAmountPaise === null || invoiceAmountPaise <= 0n) return null;
+  if (bookedQty <= 0 || lostQty <= 0) return null;
+  // Cap at the whole invoice: more lost than booked is a data error, and the
+  // estimate must not exceed what the consignment was declared to be worth.
+  const ratio = Math.min(lostQty / bookedQty, 1);
+  const value = (Number(invoiceAmountPaise) * ratio);
+  const paise = BigInt(Math.round(value));
+  return paise > 0n ? paise : null;
+};
 
 const buildFacts = (
   lines: ClaimSourceLine[],
@@ -82,11 +124,31 @@ type GRNDamagesBy = "NONE" | "TRANSPORTER" | "LABOUR" | "RAILWAY" | "CUSTOMER" |
 export const causeFromDamagesBy = (damagesBy: GRNDamagesBy | null): ClaimCause | null =>
   damagesBy === null || damagesBy === "NONE" ? null : damagesBy;
 
-/** GRN at rail head, or one LR's share of a branch GRN. */
+/**
+ * GRN at rail head, or one LR's share of a branch GRN.
+ *
+ * `lrValue` lets the claim open with a pro-rata estimate instead of zero —
+ * see `proRataLossPaise`. Omit it and the claim opens unpriced, as before.
+ */
 export const grnClaimFacts = (
   lines: ClaimSourceLine[],
   damagesBy: GRNDamagesBy | null,
-): ClaimSourceFacts => buildFacts(lines, null, causeFromDamagesBy(damagesBy));
+  lrValue?: { invoiceAmountPaise: bigint | null; bookedQty: number },
+): ClaimSourceFacts => {
+  const facts = buildFacts(lines, null, causeFromDamagesBy(damagesBy));
+  if (!lrValue) return facts;
+  return {
+    ...facts,
+    damageAmountPaise: proRataLossPaise({
+      invoiceAmountPaise: lrValue.invoiceAmountPaise,
+      bookedQty: lrValue.bookedQty,
+      lostQty: facts.damagedQty + facts.shortageQty,
+    }),
+    /** Flags the figure as derived, so the UI can say so and the assessor
+     *  knows it is not something the customer actually asked for. */
+    amountIsEstimate: true,
+  };
+};
 
 /** Branch GRN items belong to several LRs: group them per LR. */
 export const groupLinesByLr = <T extends ClaimSourceLine & { lrId: string }>(lines: T[]) => {

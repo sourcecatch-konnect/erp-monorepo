@@ -73,6 +73,29 @@ export const recoveryBlocker = (
 };
 
 /**
+ * Why this claim's loss can't be recovered from a transporter, or null.
+ *
+ * Confirmed with Accounts 2026-11-07: when the consignment moved on SK's own
+ * fleet there is nobody to recover from — the company carried it and the
+ * company bears the loss. A transporter recovery only arises when the LR was
+ * hauled by a market vehicle, and then only from the broker who hauled it.
+ *
+ * Without this the register fills with recoveries nobody can ever collect,
+ * and worse, the vendor-payment slip would deduct them from whichever broker
+ * happened to be picked.
+ */
+export const transporterRecoveryBlocker = (haulage: {
+  isMarketVehicle: boolean;
+  marketTransportId: string | null;
+}): string | null => {
+  if (!haulage.isMarketVehicle)
+    return "This consignment moved on SK's own vehicle, so there is no transporter to recover from. The company bears this loss.";
+  if (!haulage.marketTransportId)
+    return "This LR is marked as a market vehicle but no transporter is recorded against it — fix the LR before recovering from a broker.";
+  return null;
+};
+
+/**
  * Transporter and driver recoveries come back through their payments (vendor
  * slip — C7, salary run — C6), so they're never marked received by hand here.
  */

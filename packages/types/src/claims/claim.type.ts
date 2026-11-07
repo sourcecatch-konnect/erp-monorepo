@@ -187,6 +187,14 @@ export type ClaimDetail = {
     groupNumber: string;
     consignor: { id: string; name: string };
     consignee: { id: string; name: string };
+    /**
+     * Who hauled it. An own-fleet consignment has no transporter to recover
+     * from — the company carried it and bears the loss (Accounts,
+     * 2026-11-07). On a market vehicle, recovery is only possible from the
+     * broker named here.
+     */
+    isMarketVehicle: boolean;
+    marketTransport: { id: string; name: string } | null;
   };
   items: {
     id: string;

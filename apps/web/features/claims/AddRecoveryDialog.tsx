@@ -24,7 +24,6 @@ import TextAreaField from "@/features/masters/_shared/fields/TextAreaField";
 import TextField from "@/features/masters/_shared/fields/TextField";
 import getErrorMessage from "@/features/masters/_shared/hooks/useMasterMutation";
 import { labourApi } from "@/features/masters/labour/labour.service";
-import { transportApi } from "@/features/masters/transport/transport.service";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatPaise } from "@/lib/money";
 import { claimApi } from "./claim.service";
@@ -50,10 +49,16 @@ function MasterSearchField({
   const [text, setText] = React.useState("");
   const debounced = useDebouncedValue(text, 300);
   const [picked, setPicked] = React.useState<{ id: string; name: string } | null>(null);
+  // An empty query returns the first 20 rows (crud.factory's /search applies
+  // no filter when `q` is blank), so the list is populated the moment the
+  // picker opens. Without that it looks broken: an empty box with no hint
+  // that anything exists behind it. A single letter is left unsearched —
+  // it matches almost everything and the result is noise.
+  const term = debounced.trim();
   const results = useQuery({
-    queryKey: ["claims", "party-search", name, debounced],
-    queryFn: () => search(debounced),
-    enabled: debounced.trim().length >= 2,
+    queryKey: ["claims", "party-search", name, term],
+    queryFn: () => search(term),
+    enabled: term.length === 0 || term.length >= 2,
   });
   const rows = [
     ...(picked ? [picked] : []),
@@ -76,8 +81,14 @@ function MasterSearchField({
               field.onChange(id);
             }}
             placeholder={placeholder}
-            searchPlaceholder="Type 2+ letters"
-            emptyText={debounced.trim().length >= 2 ? "Nothing found" : "Type to search"}
+            searchPlaceholder="Type to narrow the list"
+            emptyText={
+              results.isFetching
+                ? "Searching…"
+                : term.length === 1
+                  ? "Keep typing — one letter is too broad"
+                  : "Nothing found"
+            }
             searchValue={text}
             onSearchChange={setText}
             invalid={Boolean(fieldState.error)}
@@ -104,6 +115,9 @@ export const leftToRecoverPaise = (claim: ClaimDetail) => {
 const valuesOf = (claim: ClaimDetail): DefaultValues<AddClaimRecoveryFormInput> => ({
   version: claim.version,
   source: "INSURANCE",
+  // Fixed, not chosen: only the broker that hauled the LR can be recovered
+  // from, so it is seeded here and shown read-only on the form.
+  transportId: claim.lr.marketTransport?.id ?? undefined,
   partyName: "",
   amount: rupeesInput(leftToRecoverPaise(claim) || null),
   referenceNo: "",
@@ -131,6 +145,16 @@ export function AddRecoveryDialog({
 
   const source = form.watch("source");
   const leftPaise = leftToRecoverPaise(claim);
+
+  // Accounts, 2026-11-07: an own-fleet consignment has no transporter to
+  // recover from — the company carried it and bears the loss. Offering the
+  // option anyway would only produce recoveries nobody can ever collect, so
+  // it is dropped rather than shown and rejected on save.
+  const canRecoverFromTransporter =
+    claim.lr.isMarketVehicle && Boolean(claim.lr.marketTransport);
+  const sourceOptions = optionsOf(RECOVERY_SOURCE_LABELS).filter(
+    (option) => option.value !== "TRANSPORTER" || canRecoverFromTransporter,
+  );
 
   const add = useMutation({
     mutationFn: (values: AddClaimRecoveryFormInput) => claimApi.addRecovery(claim.id, values),
@@ -164,22 +188,30 @@ export function AddRecoveryDialog({
               name="source"
               label="Recover from"
               required
-              options={optionsOf(RECOVERY_SOURCE_LABELS)}
+              options={sourceOptions}
             />
             {source === "TRANSPORTER" ? (
-              <MasterSearchField
-                key="transport"
-                name="transportId"
-                label="Transporter / broker"
-                placeholder="Search a transporter"
-                search={transportApi.search}
-              />
+              // The broker is fixed: only the one that actually hauled the LR
+              // can be recovered from, so this is shown, not chosen. The
+              // server rejects any other transporter.
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Transporter / broker
+                </label>
+                <p className="flex min-h-10 items-center rounded-lg border bg-muted/30 px-3 text-sm">
+                  {claim.lr.marketTransport?.name ?? "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  The broker that hauled {claim.lr.lrNumber}. Recovered by
+                  deducting it from their next vendor payment slip.
+                </p>
+              </div>
             ) : source === "LABOUR" ? (
               <MasterSearchField
                 key="labour"
                 name="labourId"
                 label="Labour gang"
-                placeholder="Search labour"
+                placeholder="Select a labour gang"
                 search={labourApi.search}
               />
             ) : source === "DRIVER" ? (

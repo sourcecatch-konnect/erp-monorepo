@@ -28,6 +28,10 @@ import {
 const lrContextSelect = {
   id: true,
   lrNumber: true,
+  /** For the pro-rata estimate on GRN-origin claims: the consignment's
+   *  declared value, spread across its booked units. */
+  invoiceAmount: true,
+  goods: { select: { quantity: true } },
   group: {
     select: {
       originBranchId: true,
@@ -37,6 +41,12 @@ const lrContextSelect = {
   },
 } satisfies Prisma.LorryReceiptSelect;
 type LRContext = Prisma.LorryReceiptGetPayload<{ select: typeof lrContextSelect }>;
+
+/** The LR figures a GRN claim's pro-rata estimate is derived from. */
+const lrValueOf = (lr: LRContext) => ({
+  invoiceAmountPaise: lr.invoiceAmount,
+  bookedQty: lr.goods.reduce((sum, line) => sum + line.quantity, 0),
+});
 
 const existingClaimSelect = {
   id: true,
@@ -351,6 +361,7 @@ export const syncGRNClaim = (grnId: string, actorId: string) =>
             shortageQty: line.shortageQty,
           })),
           grn.damagesBy,
+          lrValueOf(grn.lorryReceipt),
         )
         : null,
       claimDate: grn.inDateTime ?? new Date(),
@@ -423,7 +434,7 @@ export const syncRailBranchGRNClaims = (branchGrnId: string, actorId: string) =>
           originRefId: grn.id,
           sourceLabel: "the branch GRN",
           lr,
-          facts: grnClaimFacts(linesByLr.get(lr.id) ?? [], grn.damagesBy),
+          facts: grnClaimFacts(linesByLr.get(lr.id) ?? [], grn.damagesBy, lrValueOf(lr)),
           claimDate: grn.submittedAt ?? grn.inDateTime ?? new Date(),
           existing,
           actorId,

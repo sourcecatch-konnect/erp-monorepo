@@ -227,7 +227,16 @@ const actionClaimSelect = {
   lr: {
     select: {
       lrNumber: true,
-      group: { select: { consignorId: true, consigneeId: true } },
+      group: {
+        select: {
+          consignorId: true,
+          consigneeId: true,
+          /** Who hauled it. An own-fleet LR has nobody to recover from —
+           *  see `transporterRecoveryBlocker`. */
+          isMarketVehicle: true,
+          marketTransportId: true,
+        },
+      },
     },
   },
   /** Recoveries still in play (C5); rejected ones don't count against the loss. */
