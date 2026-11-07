@@ -23,7 +23,11 @@ const GL_LEDGERS: {
   group: LedgerAccountGroup;
 }[] = [
   { code: "FREIGHT_INCOME", name: "Freight Income", group: "DIRECT_INCOME" },
-  { code: "DETENTION_INCOME", name: "Detention Income", group: "DIRECT_INCOME" },
+  {
+    code: "DETENTION_INCOME",
+    name: "Detention Income",
+    group: "DIRECT_INCOME",
+  },
   {
     code: "UNLOADING_INCOME",
     name: "Unloading / Hamali Income",
@@ -161,6 +165,24 @@ const GL_LEDGERS: {
   {
     code: "STATIONERY_RECOVERY",
     name: "Stationery Recovery",
+    group: "INDIRECT_INCOME",
+  },
+  // LDC deduction heads (L4). Parking / labour / other are charges the
+  // broker bills and the approver allows, so they are expenses alongside
+  // freight. Shortage is recovered from him, like damage.
+  {
+    code: "PARKING_EXPENSE",
+    name: "Parking Expense",
+    group: "DIRECT_EXPENSE",
+  },
+  {
+    code: "LDC_OTHER_EXPENSE",
+    name: "LDC Other Expense",
+    group: "DIRECT_EXPENSE",
+  },
+  {
+    code: "SHORTAGE_RECOVERY",
+    name: "Shortage Recovery",
     group: "INDIRECT_INCOME",
   },
 ];

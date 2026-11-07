@@ -217,6 +217,13 @@ export type ReconciledLDCLine = {
   /** The slab that produced the figure, snapshotted for the audit trail. */
   detentionSlabId: string | null;
   detentionSlabName: string | null;
+  /** Deduction heads as the approver ruled them (L4). Absent approval, or
+   *  an unruled head, is zero — nothing is assumed in the broker.s favour. */
+  parkingPaise: bigint;
+  labourPaise: bigint;
+  otherPaise: bigint;
+  damagePaise: bigint;
+  shortagePaise: bigint;
 };
 
 /**
@@ -258,7 +265,16 @@ export async function reconcileLDCLines(
       advanceAmount: true,
       paymentBy: true,
       loadingAt: true,
-      approval: { select: { id: true } },
+      approval: {
+        select: {
+          id: true,
+          approvedParkingPaise: true,
+          approvedLabourPaise: true,
+          approvedOtherPaise: true,
+          approvedDamagePaise: true,
+          approvedShortagePaise: true,
+        },
+      },
     },
   });
 
@@ -277,8 +293,12 @@ export async function reconcileLDCLines(
   if (notPayable.length)
     throw new BadRequestError(
       `Not payable by the company: ${notPayable
-        .map((c) => `${c.challanNumber} (${c.paymentBy ?? "payment-by not set"})`)
-        .join(", ")}. Only challans borne by the company can be paid to a broker.`,
+        .map(
+          (c) => `${c.challanNumber} (${c.paymentBy ?? "payment-by not set"})`,
+        )
+        .join(
+          ", ",
+        )}. Only challans borne by the company can be paid to a broker.`,
     );
 
   // Q8 — a challan issued on or after the cutover needs a DC approval before
@@ -328,6 +348,10 @@ export async function reconcileLDCLines(
       );
 
     const quote = quotes[index];
+    // L4: the approver's ruling on each head, or zero. A challan with no
+    // approval (grandfathered under Q10) carries no heads — nothing is
+    // assumed in either party's favour.
+    const ruling = challan.approval;
     result.set(challan.id, {
       freightPaise,
       advancePaise,
@@ -335,6 +359,11 @@ export async function reconcileLDCLines(
       detentionDays: quote?.window.detentionDays ?? null,
       detentionSlabId: quote?.slab?.id ?? null,
       detentionSlabName: quote?.slab?.name ?? null,
+      parkingPaise: ruling?.approvedParkingPaise ?? 0n,
+      labourPaise: ruling?.approvedLabourPaise ?? 0n,
+      otherPaise: ruling?.approvedOtherPaise ?? 0n,
+      damagePaise: ruling?.approvedDamagePaise ?? 0n,
+      shortagePaise: ruling?.approvedShortagePaise ?? 0n,
     });
   });
 

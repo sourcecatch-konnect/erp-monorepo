@@ -3409,6 +3409,15 @@ model VendorPaymentSlipLine {
   stationeryPaise BigInt @default(0)
   netPaise        BigInt @default(0)
 
+  // LDC_BROKER deduction heads (phase L4). The approver rules on each of
+  // these on the DC approval; the slip is where they become money. Parking,
+  // labour and other are the broker's own charges and add to the payable;
+  // shortage is recovered from him, like damage above.
+  parkingPaise   BigInt @default(0)
+  labourPaise    BigInt @default(0)
+  otherPaise     BigInt @default(0)
+  shortagePaise  BigInt @default(0)
+
   // LDC_BROKER only — how the detention figure was arrived at, snapshotted at
   // slip time. Slabs are editable and soft-deleted, so a paid slip must carry
   // its own working or it becomes unexplainable (spec STEP 18).

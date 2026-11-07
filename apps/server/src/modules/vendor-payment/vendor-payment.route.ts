@@ -125,6 +125,11 @@ const loadSlipDetail = async (id: string) =>
  * the client claimed it was.
  */
 type BuiltSlipLine = VendorPaymentSlipLineInput & {
+  // LDC deduction heads (L4) — always supplied via ZERO_LINE_COMPONENTS.
+  parkingPaise: bigint;
+  labourPaise: bigint;
+  otherPaise: bigint;
+  shortagePaise: bigint;
   detentionDays?: number | null;
   detentionSlabId?: string | null;
   detentionSlabName?: string | null;
@@ -139,6 +144,11 @@ const ZERO_LINE_COMPONENTS = {
   tdsPaise: 0n,
   damagePaise: 0n,
   stationeryPaise: 0n,
+  // LDC deduction heads (L4). Zero for every other slip type.
+  parkingPaise: 0n,
+  labourPaise: 0n,
+  otherPaise: 0n,
+  shortagePaise: 0n,
 };
 
 /**
@@ -217,6 +227,11 @@ async function buildServerLines(
         damagePaise: server.damagePaise,
         // The one client-owned amount — no stored source to check it against.
         stationeryPaise: line.stationeryPaise,
+        // LDC-only heads (L4) — a transporter slip never carries them.
+        parkingPaise: 0n,
+        labourPaise: 0n,
+        otherPaise: 0n,
+        shortagePaise: 0n,
       };
     });
   }
@@ -289,7 +304,15 @@ async function buildServerLines(
       );
       // TDS is deducted on the gross payable, matching the legacy
       // `NetAmt = TotalFreightPayable - TDS` (ACCOUNTS_MODULE_MAP §2.F).
-      const gross = server.freightPaise + approvedPaise;
+      // The approved heads the broker charges (parking, labour, other) are
+      // part of that gross; the ones recovered from him (damage, shortage)
+      // are not — they reduce the net, not the TDS base.
+      const gross =
+        server.freightPaise +
+        approvedPaise +
+        server.parkingPaise +
+        server.labourPaise +
+        server.otherPaise;
       return {
         sourceType: line.sourceType,
         sourceId: line.sourceId,
@@ -298,6 +321,11 @@ async function buildServerLines(
         detentionPaise: approvedPaise,
         advancePaise: server.advancePaise,
         tdsPaise: roundPaiseByBps(gross, tdsRateBps),
+        parkingPaise: server.parkingPaise,
+        labourPaise: server.labourPaise,
+        otherPaise: server.otherPaise,
+        damagePaise: server.damagePaise,
+        shortagePaise: server.shortagePaise,
         detentionDays: server.detentionDays,
         detentionSlabId: server.detentionSlabId,
         detentionSlabName: server.detentionSlabName,
@@ -340,10 +368,20 @@ function recalcSlipTotals(type: VendorPaymentType, lines: BuiltSlipLine[]) {
       gross = line.hamaliPaise;
       deductions = line.tdsPaise;
     } else if (type === "LDC_BROKER") {
-      // Challan freight plus computed detention, less the advance already
-      // handed over and TDS.
-      gross = line.freightPaise + line.detentionPaise;
-      deductions = line.advancePaise + line.tdsPaise;
+      // Challan freight, computed detention and the heads the approver
+      // allowed the broker to charge; less the advance already handed over,
+      // TDS, and what is recovered from him (damage, shortage).
+      gross =
+        line.freightPaise +
+        line.detentionPaise +
+        line.parkingPaise +
+        line.labourPaise +
+        line.otherPaise;
+      deductions =
+        line.advancePaise +
+        line.tdsPaise +
+        line.damagePaise +
+        line.shortagePaise;
     } else {
       throw new BadRequestError(
         "This vendor payment type is not available yet",
@@ -375,6 +413,10 @@ const lineCreateData = (lines: RecalculatedLine[]) =>
     tdsPaise: line.tdsPaise,
     damagePaise: line.damagePaise,
     stationeryPaise: line.stationeryPaise,
+    parkingPaise: line.parkingPaise,
+    labourPaise: line.labourPaise,
+    otherPaise: line.otherPaise,
+    shortagePaise: line.shortagePaise,
     netPaise: line.netPaise,
     detentionDays: line.detentionDays ?? null,
     detentionSlabId: line.detentionSlabId ?? null,
@@ -707,6 +749,10 @@ type ActiveLine = {
   tdsPaise: bigint;
   damagePaise: bigint;
   stationeryPaise: bigint;
+  parkingPaise: bigint;
+  labourPaise: bigint;
+  otherPaise: bigint;
+  shortagePaise: bigint;
 };
 
 /**
