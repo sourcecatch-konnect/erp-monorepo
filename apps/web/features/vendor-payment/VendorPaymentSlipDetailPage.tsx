@@ -93,6 +93,41 @@ function SourceLabel({ line }: { line: VendorPaymentSlipLine }) {
  * the slip was made. The stored amount beside this stays the authoritative
  * one; nothing here is a recomputed figure presented as payable.
  */
+/**
+ * The LDC heads the approver ruled on (L4), shown only when one is non-zero.
+ *
+ * They are part of the net but have no column of their own — the line table
+ * is already ten wide — and a figure nobody can see is a figure nobody can
+ * question, which matters more here than tidiness: these are the heads an
+ * approver allowed the broker on top of freight, or recovered from him.
+ */
+function ApprovedHeads({ line }: { line: VendorPaymentSlipLine }) {
+  const charged = [
+    ["Parking", line.parkingPaise],
+    ["Labour", line.labourPaise],
+    ["Other", line.otherPaise],
+  ] as const;
+  const recovered = [["Shortage", line.shortagePaise]] as const;
+
+  const shown = [...charged, ...recovered].filter(
+    ([, paise]) => paise && BigInt(paise) !== 0n,
+  );
+  if (!shown.length) return null;
+
+  return (
+    <p className="mt-1 text-xs font-normal text-muted-foreground">
+      {shown
+        .map(
+          ([label, paise]) =>
+            `${label} ${
+              recovered.some(([r]) => r === label) ? "−" : "+"
+            }${money(paise as string)}`,
+        )
+        .join(" · ")}
+    </p>
+  );
+}
+
 function DetentionNote({
   row,
   hasStoredSlab,
@@ -474,6 +509,7 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                   <TableRow>
                     <TableCell className="text-xs">
                       <SourceLabel line={line} />
+                      <ApprovedHeads line={line} />
                     </TableCell>
                     <TableCell className="text-right">
                       {money(line.freightPaise)}

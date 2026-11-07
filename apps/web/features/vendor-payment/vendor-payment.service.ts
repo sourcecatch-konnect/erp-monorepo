@@ -184,6 +184,14 @@ export type VendorPaymentSlipLine = VendorPaymentSlipLineInput & {
   detentionSlabName?: string | null;
   /** The broker’s claim, when it differed from the slab. */
   claimedDetentionPaise?: string | null;
+  /** LDC_BROKER only — the heads the approver ruled on (L4). Parking,
+   *  labour and other are what the broker is allowed to charge; shortage is
+   *  recovered from him, like damage. Derived server-side from the DC
+   *  approval, never sent by the client. */
+  parkingPaise?: string;
+  labourPaise?: string;
+  otherPaise?: string;
+  shortagePaise?: string;
 };
 
 type NamedUser = { id: string; firstName: string; lastName: string } | null;

@@ -19,6 +19,7 @@ import { PERMS } from "@skerp/types";
 
 import { ChallanAckComparison } from "./ChallanAckComparison";
 import { ChallanAckForm } from "./ChallanAckForm";
+import { ChallanApproveDialog } from "./ChallanApproveDialog";
 import {
   challanAckApi,
   challanAckKeys,
@@ -37,6 +38,7 @@ export function ChallanAckPanel({ challanId }: { challanId: string }) {
   const canApprove = useCan(PERMS.DELIVERY_CHALLAN.APPROVE);
   const canFileAck = useCan(PERMS.DELIVERY_CHALLAN.ACK_BROKER);
   const [formOpen, setFormOpen] = React.useState(false);
+  const [approveOpen, setApproveOpen] = React.useState(false);
 
   const view = useQuery({
     queryKey: challanAckKeys.view(challanId),
@@ -46,18 +48,8 @@ export function ChallanAckPanel({ challanId }: { challanId: string }) {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: challanAckKeys.view(challanId) });
 
-  const approve = useMutation({
-    mutationFn: () => challanAckApi.approve(challanId, {}),
-    onSuccess: () => {
-      toast.success("Challan approved");
-      void invalidate();
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Could not approve the challan",
-      ),
-  });
-
+  // Approving lives in ChallanApproveDialog — it is a ruling on each head,
+  // not a single button, now that those heads reach the payable (L4).
   const revoke = useMutation({
     mutationFn: (version: number) =>
       challanAckApi.revokeApproval(challanId, {
@@ -166,17 +158,14 @@ export function ChallanAckPanel({ challanId }: { challanId: string }) {
           <div className="rounded-md border border-border p-3">
             <p className="text-sm font-medium">Approve this claim</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              The approved dates become the basis for the detention
-              calculation, and the broker is paid the lower of his claim and
-              his slab. This records figures only — it posts nothing.
+              Rule on each head he claimed. The approved dates become the
+              basis for the detention calculation, and the detention amount
+              is capped at his slab. This records figures only — it posts
+              nothing.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                disabled={approve.isPending}
-                onClick={() => approve.mutate()}
-              >
-                Approve
+              <Button size="sm" onClick={() => setApproveOpen(true)}>
+                Review &amp; approve
               </Button>
             </div>
           </div>
@@ -188,6 +177,15 @@ export function ChallanAckPanel({ challanId }: { challanId: string }) {
             view={view.data}
             open={formOpen}
             onOpenChange={setFormOpen}
+          />
+        ) : null}
+
+        {canApprove && broker ? (
+          <ChallanApproveDialog
+            challanId={challanId}
+            view={view.data}
+            open={approveOpen}
+            onOpenChange={setApproveOpen}
           />
         ) : null}
       </CardContent>
