@@ -1,5 +1,5 @@
 import { ComponentType } from "react";
-import { IconBox, IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch, IconGasStation, IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld, IconTrain, IconBuildingBank, IconCash, IconRulerMeasure, IconGps } from "@tabler/icons-react";
+import { IconBox, IconBuilding, IconBuildingWarehouse, IconCategory, IconGitBranch, IconGasStation, IconMapPin, IconMapPins, IconProps, IconSteeringWheel, IconTool, IconTruck, IconTruckDelivery, IconUsers, IconWorld, IconTrain, IconBuildingBank, IconCash, IconRulerMeasure, IconGps, IconHourglass } from "@tabler/icons-react";
 
 export type MasterCategory = "Location";
 
@@ -34,7 +34,8 @@ export type MasterEntry = {
   | "masters.pump"
   | "masters.vehicle-type"
   | "masters.creditor"
-  | "masters.cash-account";
+  | "masters.cash-account"
+  | "masters.detention-slab";
   page: () => Promise<{ default: ComponentType }>;
 };
 
@@ -84,6 +85,13 @@ export const masterRegistry = [
     category: "Location",
     permissionKey: "masters.vehicle-type",
     page: () => import("./vehicleType/page"),
+  }, {
+    slug: "detention-slab",
+    label: "Detention Slab",
+    icon: IconHourglass,
+    category: "Location",
+    permissionKey: "masters.detention-slab",
+    page: () => import("./detention-slab/page"),
   }, {
     slug: "spare-category",
     label: "Spare Category",

@@ -100,6 +100,11 @@ const CANONICAL_ROLES: {
       PERMS.BILLING.APPROVE,
       PERMS.RECEIPT.VIEW,
       PERMS.RECEIPT.APPROVE,
+      // Rules on the broker's claim. Deliberately NOT paired with
+      // ACK_BROKER (which Operations holds): the person who types the
+      // broker's figures must not be the person who approves them. The
+      // service enforces the same rule per user.
+      PERMS.DELIVERY_CHALLAN.APPROVE,
     ],
   },
   {
@@ -133,6 +138,9 @@ const CANONICAL_ROLES: {
       PERMS.ATTACHMENTS.VIEW,
       PERMS.ATTACHMENTS.CREATE,
       PERMS.ATTACHMENTS.DOWNLOAD,
+      // Transcribes the broker's bill and email into the challan. Approval
+      // sits with Branch Manager, not here.
+      PERMS.DELIVERY_CHALLAN.ACK_BROKER,
     ],
   },
   {

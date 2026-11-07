@@ -1620,6 +1620,7 @@ router.post(
         data: input.lrs.map((line) => ({
           lrId: line.lrId,
           deliveredAt: input.deliveredAt,
+          reportedAt: input.reportedAt ?? null,
           unloadingAt: input.unloadingAt ?? null,
           receiverName: input.receiverName ?? null,
           receiverPhone: input.receiverPhone ?? null,

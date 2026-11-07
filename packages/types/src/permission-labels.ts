@@ -156,6 +156,12 @@ const labels = {
   "masters.cash-account.delete": "Delete cash accounts",
   "masters.cash-account.bulk_import": "Upload cash accounts from a file",
   "masters.cash-account.export": "Download cash account list",
+  "masters.detention-slab.view": "View detention slabs",
+  "masters.detention-slab.create": "Add detention slabs",
+  "masters.detention-slab.update": "Edit detention slabs",
+  "masters.detention-slab.delete": "Delete detention slabs",
+  "masters.detention-slab.bulk_import": "Upload detention slabs from a file",
+  "masters.detention-slab.export": "Download detention slab list",
   "accounts.payment.approve": "Approve vendor payments",
   "accounts.payment.view": "View vendor payments",
   "accounts.payment.create": "Create vendor payments",
@@ -269,6 +275,8 @@ const labels = {
   "delivery_challan.delete": "Delete delivery challans",
   "delivery_challan.issue": "Issue delivery challans",
   "delivery_challan.cancel": "Cancel delivery challans",
+  "delivery_challan.ack.broker": "File the broker acknowledgement on a delivery challan",
+  "delivery_challan.approve": "Approve a delivery challan (accept one acknowledgement)",
   "ewaybill.view": "View e-way bills",
   "ewaybill.create": "Create e-way bills",
   "ewaybill.update": "Edit e-way bills",
@@ -390,6 +398,7 @@ const areas: Record<string, string> = {
   "masters.rate-matrix": "Master data: Rate matrices",
   "masters.creditor": "Master data: Creditors",
   "masters.cash-account": "Master data: Cash accounts",
+  "masters.detention-slab": "Master data: Detention slabs",
 };
 const readable = (value: string): string => {
   const text = value

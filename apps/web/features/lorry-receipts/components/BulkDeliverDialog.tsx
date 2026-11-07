@@ -47,16 +47,20 @@ const toLocalInputValue = (date: Date): string => {
   );
 };
 
-const buildDefaults = (lrs: PendingLr[]): DeliverGroupFormInput => ({
-  deliveredAt: toLocalInputValue(new Date()),
-
-  unloadingAt: "",
-  receiverName: "",
-  receiverPhone: "",
-  unloadingCharges: "",
-  remark: "",
-  lrs: lrs.map((lr) => ({ lrId: lr.id, unloadingCharges: "", remark: "" })),
-});
+const buildDefaults = (lrs: PendingLr[]): DeliverGroupFormInput => {
+  const deliveredAt = toLocalInputValue(new Date());
+  return {
+    deliveredAt,
+    // Starts at the delivery time; changed only when the truck waited.
+    reportedAt: deliveredAt,
+    unloadingAt: "",
+    receiverName: "",
+    receiverPhone: "",
+    unloadingCharges: "",
+    remark: "",
+    lrs: lrs.map((lr) => ({ lrId: lr.id, unloadingCharges: "", remark: "" })),
+  };
+};
 
 const toDate = (value: string | Date | undefined) => {
   if (!value) return undefined;
@@ -126,6 +130,26 @@ export default function BulkDeliverDialog({
           >
             <section className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
               <div>
+                <FieldLabel>Truck reported at</FieldLabel>
+                <Controller
+                  name="reportedAt"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DateTimePicker
+                      selected={toDate(field.value)}
+                      onSelect={field.onChange}
+                      placeholder="When the truck reached"
+                    />
+                  )}
+                />
+                {errors.reportedAt?.message ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    {String(errors.reportedAt.message)}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
                 <FieldLabel required>Delivered at</FieldLabel>
                 <Controller
                   name="deliveredAt"
@@ -133,7 +157,12 @@ export default function BulkDeliverDialog({
                   render={({ field }) => (
                     <DateTimePicker
                       selected={toDate(field.value)}
-                      onSelect={field.onChange}
+                      onSelect={(date) => {
+                        field.onChange(date);
+                        if (!form.getFieldState("reportedAt").isDirty) {
+                          form.setValue("reportedAt", date);
+                        }
+                      }}
                       placeholder="Select delivery date and time"
                       clearable={false}
                     />

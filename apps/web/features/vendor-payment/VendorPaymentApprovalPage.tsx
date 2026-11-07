@@ -37,6 +37,7 @@ import { useSlipList } from "./useSlipList";
 const TYPE_FILTERS: { label: string; value: VendorPaymentType | "ALL" }[] = [
   { label: "All types", value: "ALL" },
   { label: "Transporter", value: "TRANSPORTER" },
+  { label: "LDC broker", value: "LDC_BROKER" },
   { label: "Hamali", value: "HAMALI" },
 ];
 

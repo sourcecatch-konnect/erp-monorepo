@@ -15,6 +15,7 @@ import {
   buildDriverMoneyOutLines,
   buildSalaryRunLines,
 } from "./driver-finance.lines.js";
+import { reversalPeriodFor } from "./reversal-date.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -63,8 +64,7 @@ export async function requireFundingLedger(tx: Tx, fundingLedgerId: string) {
   const fundingLedger = await tx.ledger.findUnique({
     where: { id: fundingLedgerId },
   });
-  if (!fundingLedger)
-    throw new BadRequestError("Funding ledger not found");
+  if (!fundingLedger) throw new BadRequestError("Funding ledger not found");
   if (fundingLedger.group !== "CASH" && fundingLedger.group !== "BANK")
     throw new BadRequestError(
       "Funding ledger must be an allowed Cash or Bank account",
@@ -380,10 +380,14 @@ export async function postSalesVoucher(tx: Tx, args: SalesVoucherArgs) {
 
   for (const line of args.lines) {
     const code = INCOME_CODE[line.chargeType];
-    add(code, line.effect === "DEDUCTION" ? -line.amountPaise : line.amountPaise);
+    add(
+      code,
+      line.effect === "DEDUCTION" ? -line.amountPaise : line.amountPaise,
+    );
   }
   for (const tax of args.taxLines) {
-    if (tax.taxAmountPaise !== 0n) add(TAX_CODE[tax.taxType], tax.taxAmountPaise);
+    if (tax.taxAmountPaise !== 0n)
+      add(TAX_CODE[tax.taxType], tax.taxAmountPaise);
   }
   if (args.roundOffPaise !== 0n) add("ROUND_OFF", args.roundOffPaise);
 
@@ -486,8 +490,10 @@ export async function postReceiptVoucher(tx: Tx, args: ReceiptVoucherArgs) {
     net.set(code, (net.get(code) ?? 0n) + delta);
   for (const a of args.allocations) {
     if (a.tdsAmountPaise !== 0n) add("TDS_RECEIVABLE", a.tdsAmountPaise);
-    if (a.damageAmountPaise !== 0n) add("DAMAGE_DEDUCTION", a.damageAmountPaise);
-    if (a.rateDiffAmountPaise !== 0n) add("RATE_DIFFERENCE", a.rateDiffAmountPaise);
+    if (a.damageAmountPaise !== 0n)
+      add("DAMAGE_DEDUCTION", a.damageAmountPaise);
+    if (a.rateDiffAmountPaise !== 0n)
+      add("RATE_DIFFERENCE", a.rateDiffAmountPaise);
   }
 
   const lines: DraftLine[] = [];
@@ -645,7 +651,10 @@ export type SpareInwardVoucherArgs = {
  * Voucher number is the inward number — a SpareInward is billed 1:1, like a
  * SALES voucher reuses the bill number.
  */
-export async function postSpareInwardVoucher(tx: Tx, args: SpareInwardVoucherArgs) {
+export async function postSpareInwardVoucher(
+  tx: Tx,
+  args: SpareInwardVoucherArgs,
+) {
   const [inventoryLedger, supplierLedger] = await Promise.all([
     getGLLedger(tx, "SPARE_PARTS_INVENTORY"),
     getOrCreatePartyLedger(tx, { sparePartSupplierId: args.supplierId }),
@@ -697,7 +706,10 @@ export type JobCardVoucherArgs = {
  *   Cr  Spare Parts Inventory        = Σ part line amounts (batch cost)
  * Service lines carry no entry here — they're billed later by Service Bill.
  */
-export async function postJobCardPartsVoucher(tx: Tx, args: JobCardVoucherArgs) {
+export async function postJobCardPartsVoucher(
+  tx: Tx,
+  args: JobCardVoucherArgs,
+) {
   // Independent lookups — run together instead of one after another.
   const [expenseLedger, inventoryLedger] = await Promise.all([
     getGLLedger(tx, "REPAIR_EXPENSE"),
@@ -752,7 +764,10 @@ export type PartReturnVoucherArgs = {
  * A fresh voucher, not reverseJournal — the original Job Card voucher may
  * cover several parts and this only credits back one of them.
  */
-export async function postPartReturnVoucher(tx: Tx, args: PartReturnVoucherArgs) {
+export async function postPartReturnVoucher(
+  tx: Tx,
+  args: PartReturnVoucherArgs,
+) {
   const [inventoryLedger, expenseLedger] = await Promise.all([
     getGLLedger(tx, "SPARE_PARTS_INVENTORY"),
     getGLLedger(tx, "REPAIR_EXPENSE"),
@@ -805,7 +820,10 @@ export type ServiceBillVoucherArgs = {
  * This is the ONLY place a JobCardServiceLine's cost hits the ledger — Job
  * Card Finalise deliberately skips it (see JobCard flow doc).
  */
-export async function postServiceBillVoucher(tx: Tx, args: ServiceBillVoucherArgs) {
+export async function postServiceBillVoucher(
+  tx: Tx,
+  args: ServiceBillVoucherArgs,
+) {
   const [expenseLedger, providerLedger] = await Promise.all([
     getGLLedger(tx, "REPAIR_EXPENSE"),
     getOrCreatePartyLedger(tx, { sparePartSupplierId: args.serviceProviderId }),
@@ -870,7 +888,10 @@ export type ServiceBillPaymentVoucherArgs = {
  *   Cr  Bank/Cash account               = paidPaise
  *   Cr  TDS Payable (Contractor)        = tdsPaise
  */
-export async function postServiceBillPaymentVoucher(tx: Tx, args: ServiceBillPaymentVoucherArgs) {
+export async function postServiceBillPaymentVoucher(
+  tx: Tx,
+  args: ServiceBillPaymentVoucherArgs,
+) {
   const [cashLedger, providerLedger] = await Promise.all([
     getCashLedger(tx, args.cashAccountId),
     getOrCreatePartyLedger(tx, { sparePartSupplierId: args.serviceProviderId }),
@@ -937,7 +958,10 @@ export type ReplacementInwardVoucherArgs = {
  *   Dr  Spare Parts Inventory
  *   Cr  supplier party ledger
  */
-export async function postReplacementInwardVoucher(tx: Tx, args: ReplacementInwardVoucherArgs) {
+export async function postReplacementInwardVoucher(
+  tx: Tx,
+  args: ReplacementInwardVoucherArgs,
+) {
   const [inventoryLedger, supplierLedger] = await Promise.all([
     getGLLedger(tx, "SPARE_PARTS_INVENTORY"),
     getOrCreatePartyLedger(tx, { sparePartSupplierId: args.supplierId }),
@@ -996,7 +1020,10 @@ export type ReplacementCreditNoteVoucherArgs = {
  *   Dr  supplier party ledger (reduces what we owe them)
  *   Cr  Repair Expense
  */
-export async function postReplacementCreditNoteVoucher(tx: Tx, args: ReplacementCreditNoteVoucherArgs) {
+export async function postReplacementCreditNoteVoucher(
+  tx: Tx,
+  args: ReplacementCreditNoteVoucherArgs,
+) {
   const [expenseLedger, supplierLedger] = await Promise.all([
     getGLLedger(tx, "REPAIR_EXPENSE"),
     getOrCreatePartyLedger(tx, { sparePartSupplierId: args.supplierId }),
@@ -1052,7 +1079,10 @@ export type BillCreditNoteVoucherArgs = {
  *   CREDIT_NOTE (customer owes less): Dr SALES_ADJUSTMENT / Cr customer ledger
  *   DEBIT_NOTE  (customer owes more): Dr customer ledger / Cr SALES_ADJUSTMENT
  */
-export async function postBillCreditNoteVoucher(tx: Tx, args: BillCreditNoteVoucherArgs) {
+export async function postBillCreditNoteVoucher(
+  tx: Tx,
+  args: BillCreditNoteVoucherArgs,
+) {
   const [adjustmentLedger, customerLedger] = await Promise.all([
     getGLLedger(tx, "SALES_ADJUSTMENT"),
     getOrCreatePartyLedger(tx, { customerId: args.customerId }),
@@ -1258,11 +1288,17 @@ export async function reverseJournal(
     original.lines.map((line, index) => [line.id, index]),
   );
 
+  // Which period the contra belongs to. PROVISIONAL convention — see
+  // reversal-date.ts and Q16 in docs/LDC_PHASE_L0_IMPLEMENTATION_PLAN.md.
+  // Previously `voucherDate` was today while `fyCode` was the original's, so
+  // the two contradicted each other across a year boundary (audit D-5).
+  const period = reversalPeriodFor(original, new Date());
+
   const contra = await postJournal(tx, {
     voucherType: "JOURNAL",
     voucherNumber: `REV/${original.voucherNumber}`,
-    voucherDate: new Date(),
-    fyCode: original.fyCode,
+    voucherDate: period.voucherDate,
+    fyCode: period.fyCode,
     branchId: original.branchId,
     narration: `Reversal of ${original.voucherType} ${original.voucherNumber} — ${reason}`,
     sourceType: "MANUAL",
@@ -1288,7 +1324,12 @@ export async function reverseJournal(
           ? ("AGAINST_REF" as const)
           : ("NEW_REF" as const);
       return alloc.billId
-        ? { lineIndex, billId: alloc.billId, refType, amountPaise: alloc.amountPaise }
+        ? {
+            lineIndex,
+            billId: alloc.billId,
+            refType,
+            amountPaise: alloc.amountPaise,
+          }
         : {
             lineIndex,
             vendorPaymentSlipId: alloc.vendorPaymentSlipId!,
@@ -1328,6 +1369,12 @@ const VENDOR_COMMISSION_RECOVERY_CODE = "COMMISSION_RECOVERY";
 const VENDOR_HAMALI_RECOVERY_CODE = "HAMALI_RECOVERY";
 const VENDOR_DAMAGE_RECOVERY_CODE = "DAMAGE_RECOVERY";
 const VENDOR_STATIONERY_RECOVERY_CODE = "STATIONERY_RECOVERY";
+// LDC deduction heads (L4). Labour reuses HAMALI_EXPENSE — the broker's
+// labour charge is the same kind of cost under a different name on his bill,
+// and a second ledger for it would split the same expense in two.
+const VENDOR_PARKING_EXPENSE_CODE = "PARKING_EXPENSE";
+const VENDOR_LDC_OTHER_EXPENSE_CODE = "LDC_OTHER_EXPENSE";
+const VENDOR_SHORTAGE_RECOVERY_CODE = "SHORTAGE_RECOVERY";
 
 /** Resolve the slip's single payee ledger — exactly one of transportId /
  *  labourId is set, DB-enforced by VendorPaymentSlip_one_payee_chk. */
@@ -1357,6 +1404,13 @@ export type VendorSlipAccrualLine = {
   tdsPaise: bigint;
   damagePaise: bigint;
   stationeryPaise: bigint;
+  // LDC_BROKER deduction heads (L4). Parking, labour and other are the
+  // broker.s charges the approver allowed (Dr); shortage is recovered from
+  // him (Cr), like damage. Zero on every other slip type.
+  parkingPaise: bigint;
+  labourPaise: bigint;
+  otherPaise: bigint;
+  shortagePaise: bigint;
 };
 
 export type VendorSlipAccrualArgs = {
@@ -1393,6 +1447,10 @@ const sumLines = (lines: VendorSlipAccrualLine[]): VendorSlipAccrualLine =>
       tdsPaise: sum.tdsPaise + l.tdsPaise,
       damagePaise: sum.damagePaise + l.damagePaise,
       stationeryPaise: sum.stationeryPaise + l.stationeryPaise,
+      parkingPaise: sum.parkingPaise + l.parkingPaise,
+      labourPaise: sum.labourPaise + l.labourPaise,
+      otherPaise: sum.otherPaise + l.otherPaise,
+      shortagePaise: sum.shortagePaise + l.shortagePaise,
     }),
     {
       freightPaise: 0n,
@@ -1403,6 +1461,10 @@ const sumLines = (lines: VendorSlipAccrualLine[]): VendorSlipAccrualLine =>
       tdsPaise: 0n,
       damagePaise: 0n,
       stationeryPaise: 0n,
+      parkingPaise: 0n,
+      labourPaise: 0n,
+      otherPaise: 0n,
+      shortagePaise: 0n,
     },
   );
 
@@ -1423,7 +1485,10 @@ const sumLines = (lines: VendorSlipAccrualLine[]): VendorSlipAccrualLine =>
  * journal, returns it unchanged rather than posting again. Must run inside
  * the caller's transaction (the same one that flips the slip to APPROVED).
  */
-export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs) {
+export async function postVendorSlipAccrual(
+  tx: Tx,
+  args: VendorSlipAccrualArgs,
+) {
   if (args.existingAccrualJournalEntryId) {
     const existing = await tx.journalEntry.findUnique({
       where: { id: args.existingAccrualJournalEntryId },
@@ -1433,8 +1498,14 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
 
   const payeeLedger = await getVendorPayeeLedger(tx, args);
   const totals = sumLines(args.lines);
+  const payeeLabel =
+    args.type === "TRANSPORTER"
+      ? "Transporter"
+      : args.type === "LDC_BROKER"
+        ? "LDC broker"
+        : "Hamali";
   const lineNarration = withDetail(
-    `${args.type === "TRANSPORTER" ? "Transporter" : "Hamali"} accrual ${args.slipNumber}`,
+    `${payeeLabel} accrual ${args.slipNumber}`,
     args.narrationDetail,
   );
   const lines: DraftLine[] = [];
@@ -1444,8 +1515,11 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
   // to 8 of these, which was 8 sequential network round trips on every single
   // approval (this function runs on both the submit auto-approve path and the
   // standalone approve endpoint).
+  // An LDC broker accrual touches the same heads as a transporter one: the
+  // last-mile freight and its detention are the expense, the advance already
+  // handed over and TDS are the deductions.
   const codes =
-    args.type === "TRANSPORTER"
+    args.type === "TRANSPORTER" || args.type === "LDC_BROKER"
       ? [
           "FREIGHT_EXPENSE",
           VENDOR_DETENTION_EXPENSE_CODE,
@@ -1455,6 +1529,10 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
           "TDS_PAYABLE",
           VENDOR_DAMAGE_RECOVERY_CODE,
           VENDOR_STATIONERY_RECOVERY_CODE,
+          VENDOR_PARKING_EXPENSE_CODE,
+          VENDOR_HAMALI_EXPENSE_CODE,
+          VENDOR_LDC_OTHER_EXPENSE_CODE,
+          VENDOR_SHORTAGE_RECOVERY_CODE,
         ]
       : [VENDOR_HAMALI_EXPENSE_CODE, "TDS_PAYABLE"];
   const ledgers = await tx.ledger.findMany({ where: { code: { in: codes } } });
@@ -1469,19 +1547,31 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
   };
 
   const debit = (code: string, amount: bigint) => {
-    if (amount < 0n) throw new BadRequestError(`${code} amount cannot be negative`);
+    if (amount < 0n)
+      throw new BadRequestError(`${code} amount cannot be negative`);
     if (amount === 0n) return;
     const ledger = requireLedger(code);
-    lines.push({ ledgerId: ledger.id, debitPaise: amount, creditPaise: 0n, narration: lineNarration });
+    lines.push({
+      ledgerId: ledger.id,
+      debitPaise: amount,
+      creditPaise: 0n,
+      narration: lineNarration,
+    });
   };
   const credit = (code: string, amount: bigint) => {
-    if (amount < 0n) throw new BadRequestError(`${code} amount cannot be negative`);
+    if (amount < 0n)
+      throw new BadRequestError(`${code} amount cannot be negative`);
     if (amount === 0n) return;
     const ledger = requireLedger(code);
-    lines.push({ ledgerId: ledger.id, debitPaise: 0n, creditPaise: amount, narration: lineNarration });
+    lines.push({
+      ledgerId: ledger.id,
+      debitPaise: 0n,
+      creditPaise: amount,
+      narration: lineNarration,
+    });
   };
 
-  if (args.type === "TRANSPORTER") {
+  if (args.type === "TRANSPORTER" || args.type === "LDC_BROKER") {
     debit("FREIGHT_EXPENSE", totals.freightPaise);
     debit(VENDOR_DETENTION_EXPENSE_CODE, totals.detentionPaise);
     credit(VENDOR_ADVANCE_RECOVERY_CODE, totals.advancePaise);
@@ -1490,6 +1580,11 @@ export async function postVendorSlipAccrual(tx: Tx, args: VendorSlipAccrualArgs)
     credit("TDS_PAYABLE", totals.tdsPaise);
     credit(VENDOR_DAMAGE_RECOVERY_CODE, totals.damagePaise);
     credit(VENDOR_STATIONERY_RECOVERY_CODE, totals.stationeryPaise);
+    // L4 heads. Zero on a TRANSPORTER slip, so these add no lines there.
+    debit(VENDOR_PARKING_EXPENSE_CODE, totals.parkingPaise);
+    debit(VENDOR_HAMALI_EXPENSE_CODE, totals.labourPaise);
+    debit(VENDOR_LDC_OTHER_EXPENSE_CODE, totals.otherPaise);
+    credit(VENDOR_SHORTAGE_RECOVERY_CODE, totals.shortagePaise);
   } else {
     // HAMALI — hamaliPaise here is the gross claimed amount, not a deduction.
     debit(VENDOR_HAMALI_EXPENSE_CODE, totals.hamaliPaise);
@@ -1573,7 +1668,10 @@ export type VendorDisbursementArgs = {
  * additionally expected to have already made disbursement-row creation
  * idempotent via the unique `clientRequestId` constraint before calling this.
  */
-export async function postVendorDisbursement(tx: Tx, args: VendorDisbursementArgs) {
+export async function postVendorDisbursement(
+  tx: Tx,
+  args: VendorDisbursementArgs,
+) {
   if (args.existingSettlementJournalEntryId) {
     const existing = await tx.journalEntry.findUnique({
       where: { id: args.existingSettlementJournalEntryId },
@@ -1655,7 +1753,9 @@ const DRIVER_SALARY_EXPENSE_CODE = "DRIVER_SALARY_EXPENSE";
 /** Returns the existing voucher when a retried request already posted one. */
 async function existingPostedJournal(tx: Tx, journalEntryId?: string | null) {
   if (!journalEntryId) return null;
-  const existing = await tx.journalEntry.findUnique({ where: { id: journalEntryId } });
+  const existing = await tx.journalEntry.findUnique({
+    where: { id: journalEntryId },
+  });
   return existing && existing.status === "POSTED" ? existing : null;
 }
 
@@ -1760,7 +1860,10 @@ export type DriverSalaryRunPostingArgs = {
  * here: those already sit on the driver's ledger, so after this voucher the
  * ledger balance IS the net pay. Paying it is a separate DriverPayout.
  */
-export async function postDriverSalaryRun(tx: Tx, args: DriverSalaryRunPostingArgs) {
+export async function postDriverSalaryRun(
+  tx: Tx,
+  args: DriverSalaryRunPostingArgs,
+) {
   const already = await existingPostedJournal(tx, args.existingJournalEntryId);
   if (already) return already;
 

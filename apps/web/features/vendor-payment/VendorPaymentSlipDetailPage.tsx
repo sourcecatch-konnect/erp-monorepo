@@ -6,7 +6,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { Button } from "@skerp/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@skerp/ui/components/Card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@skerp/ui/components/Card";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import {
   Table,
@@ -21,26 +26,42 @@ import { useCan } from "@/features/auth";
 import { PERMS } from "@skerp/types";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
-import { vendorPaymentApi, type VendorPaymentSlipLine } from "./vendor-payment.service";
+import {
+  vendorPaymentApi,
+  type VendorPaymentSlipLine,
+} from "./vendor-payment.service";
 import { RejectSlipDialog } from "./RejectSlipDialog";
 import { CancelSlipDialog } from "./CancelSlipDialog";
-import { PageHeader, VendorPaymentStatusBadge, formatDate, money } from "./vendor-payment.ui";
+import { DetentionBreakdownDialog } from "./DetentionBreakdownDialog";
+import {
+  PageHeader,
+  VENDOR_PAYMENT_TYPE_LABELS,
+  VendorPaymentStatusBadge,
+  formatDate,
+  money,
+} from "./vendor-payment.ui";
 
 const CANCELLABLE_STATUSES = new Set(["DRAFT", "PENDING_APPROVAL", "APPROVED"]);
 
-const SOURCE_TYPE_LABELS: Record<VendorPaymentSlipLine["sourceType"], string> = {
-  LR_GROUP: "Truck",
-  LR: "LR",
-  GRN_HAMALI: "GRN at Rail Head",
-  RAIL_BRANCH_GRN: "GRN at Branch",
-  VP_LOADING: "VP loading",
-};
+const SOURCE_TYPE_LABELS: Record<VendorPaymentSlipLine["sourceType"], string> =
+  {
+    LR_GROUP: "Truck",
+    LR: "LR",
+    GRN_HAMALI: "GRN at Rail Head",
+    RAIL_BRANCH_GRN: "GRN at Branch",
+    VP_LOADING: "VP loading",
+    DELIVERY_CHALLAN: "Delivery challan",
+  };
 
 /** "MH19AB1234 · G-0045 · LR-1, LR-2" for a truck; the document no. otherwise. */
 function SourceLabel({ line }: { line: VendorPaymentSlipLine }) {
   const source = line.source;
   if (!source) return <span>{SOURCE_TYPE_LABELS[line.sourceType]}</span>;
-  if (line.sourceType === "LR_GROUP") {
+  // A truck and a delivery challan both carry several LRs; list them.
+  if (
+    line.sourceType === "LR_GROUP" ||
+    line.sourceType === "DELIVERY_CHALLAN"
+  ) {
     return (
       <>
         <p className="font-medium text-sm">
@@ -60,6 +81,107 @@ function SourceLabel({ line }: { line: VendorPaymentSlipLine }) {
         {SOURCE_TYPE_LABELS[line.sourceType]}
         {source.vehicleNumber ? ` · ${source.vehicleNumber}` : ""}
       </p>
+    </>
+  );
+}
+
+/**
+ * L0-3 — what the approver needs to know about one line's detention figure.
+ *
+ * Three things the amount alone cannot say: why it is zero, whether anything
+ * about the working is doubtful, and whether the slab has been re-rated since
+ * the slip was made. The stored amount beside this stays the authoritative
+ * one; nothing here is a recomputed figure presented as payable.
+ */
+/**
+ * The LDC heads the approver ruled on (L4), shown only when one is non-zero.
+ *
+ * They are part of the net but have no column of their own — the line table
+ * is already ten wide — and a figure nobody can see is a figure nobody can
+ * question, which matters more here than tidiness: these are the heads an
+ * approver allowed the broker on top of freight, or recovered from him.
+ */
+function ApprovedHeads({ line }: { line: VendorPaymentSlipLine }) {
+  const charged = [
+    ["Parking", line.parkingPaise],
+    ["Labour", line.labourPaise],
+    ["Other", line.otherPaise],
+  ] as const;
+  const recovered = [["Shortage", line.shortagePaise]] as const;
+
+  const shown = [...charged, ...recovered].filter(
+    ([, paise]) => paise && BigInt(paise) !== 0n,
+  );
+  if (!shown.length) return null;
+
+  return (
+    <p className="mt-1 text-xs font-normal text-muted-foreground">
+      {shown
+        .map(
+          ([label, paise]) =>
+            `${label} ${
+              recovered.some(([r]) => r === label) ? "−" : "+"
+            }${money(paise as string)}`,
+        )
+        .join(" · ")}
+    </p>
+  );
+}
+
+function DetentionNote({
+  row,
+  hasStoredSlab,
+  onShowWorking,
+}: {
+  row?: {
+    drifts: boolean;
+    recomputedDetentionPaise: string | null;
+    slabName: string | null;
+    unloadingAt: string | null;
+    warnings: string[];
+  };
+  hasStoredSlab: boolean;
+  onShowWorking: () => void;
+}) {
+  if (!row) return null;
+
+  // Why a zero is a zero. Without this the cell reads a bare "₹0" and the
+  // approver cannot tell a genuine nil from a missing slab or a date that has
+  // not been entered yet.
+  const zeroReason =
+    hasStoredSlab || row.slabName
+      ? null
+      : !row.unloadingAt
+        ? "No unloading date yet"
+        : "No slab matched this broker";
+
+  return (
+    <>
+      {zeroReason ? (
+        <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+          {zeroReason}
+        </p>
+      ) : null}
+      {row.drifts && row.recomputedDetentionPaise !== null ? (
+        <p className="text-xs font-normal text-muted-foreground">
+          Slab now prices {money(row.recomputedDetentionPaise)} — changed since
+          this slip
+        </p>
+      ) : null}
+      {row.warnings.length > 0 ? (
+        <p className="flex items-start justify-end gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+          <IconAlertTriangle size={13} className="mt-0.5 shrink-0" />
+          {row.warnings.length} warning
+          {row.warnings.length === 1 ? "" : "s"}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={onShowWorking}
+        className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
+      >
+        View working
+      </button>
     </>
   );
 }
@@ -91,6 +213,28 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
     queryFn: () => vendorPaymentApi.slip(id),
   });
 
+  // L0-3: the detention working behind each challan line, so the approver sees
+  // what the maker saw while browsing. Its own request — the slip detail
+  // payload stays unchanged, and this costs a challan read per line. Only an
+  // LDC slip has challan lines, so nothing is fetched for other types.
+  const isLDC = query.data?.type === "LDC_BROKER";
+  const detention = useQuery({
+    queryKey: ["vendor-payment", "slip", id, "detention"],
+    queryFn: () => vendorPaymentApi.slipDetention(id),
+    enabled: isLDC,
+  });
+  const detentionBySource = React.useMemo(
+    () => new Map((detention.data ?? []).map((row) => [row.sourceId, row])),
+    [detention.data],
+  );
+  const warnedLineCount = (detention.data ?? []).filter(
+    (row) => row.warnings.length > 0,
+  ).length;
+  const [workingFor, setWorkingFor] = React.useState<{
+    challanId: string;
+    challanNumber: string;
+  } | null>(null);
+
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["vendor-payment", "slip", id] });
 
@@ -109,7 +253,9 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
       invalidate();
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Could not submit the slip"),
+      toast.error(
+        error instanceof Error ? error.message : "Could not submit the slip",
+      ),
   });
 
   const approve = useMutation({
@@ -123,14 +269,20 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
       invalidate();
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Could not approve the slip"),
+      toast.error(
+        error instanceof Error ? error.message : "Could not approve the slip",
+      ),
   });
 
   const reject = useMutation({
     mutationFn: () => {
       const slip = query.data;
       if (!slip) throw new Error("Slip not loaded");
-      return vendorPaymentApi.rejectSlip(slip.id, slip.version, rejectReason.trim());
+      return vendorPaymentApi.rejectSlip(
+        slip.id,
+        slip.version,
+        rejectReason.trim(),
+      );
     },
     onSuccess: (slip) => {
       toast.success(`${slip.slipNumber} rejected — back to draft`);
@@ -139,14 +291,20 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
       invalidate();
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Could not reject the slip"),
+      toast.error(
+        error instanceof Error ? error.message : "Could not reject the slip",
+      ),
   });
 
   const cancel = useMutation({
     mutationFn: () => {
       const slip = query.data;
       if (!slip) throw new Error("Slip not loaded");
-      return vendorPaymentApi.cancelSlip(slip.id, slip.version, cancelReason.trim());
+      return vendorPaymentApi.cancelSlip(
+        slip.id,
+        slip.version,
+        cancelReason.trim(),
+      );
     },
     onSuccess: (slip) => {
       toast.success(`${slip.slipNumber} cancelled`);
@@ -155,18 +313,21 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
       invalidate();
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Could not cancel the slip"),
+      toast.error(
+        error instanceof Error ? error.message : "Could not cancel the slip",
+      ),
   });
 
   if (query.isLoading) return <Skeleton className="h-96" />;
   const slip = query.data;
-  if (!slip) return <p className="text-sm text-muted-foreground">Slip not found.</p>;
+  if (!slip)
+    return <p className="text-sm text-muted-foreground">Slip not found.</p>;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={slip.slipNumber}
-        description={`${slip.type === "TRANSPORTER" ? "Transporter" : slip.type} payment slip for ${
+        description={`${VENDOR_PAYMENT_TYPE_LABELS[slip.type]} payment slip for ${
           slip.transport?.name ?? slip.labour?.name ?? "—"
         } — ${slip.branch?.name ?? "—"}`}
         actions={
@@ -185,14 +346,20 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                 <Button variant="outline" onClick={() => setRejectOpen(true)}>
                   Reject
                 </Button>
-                <Button onClick={() => approve.mutate()} disabled={approve.isPending}>
+                <Button
+                  onClick={() => approve.mutate()}
+                  disabled={approve.isPending}
+                >
                   {approve.isPending ? "Approving..." : "Approve"}
                 </Button>
               </>
             ) : null}
-            {(slip.status === "APPROVED" || slip.status === "PARTIALLY_PAID") && canDisburse ? (
+            {(slip.status === "APPROVED" || slip.status === "PARTIALLY_PAID") &&
+            canDisburse ? (
               <Button
-                onClick={() => router.push(`/accounts/vendor-payments/${slip.id}/disburse`)}
+                onClick={() =>
+                  router.push(`/accounts/vendor-payments/${slip.id}/disburse`)
+                }
               >
                 Disburse
               </Button>
@@ -205,7 +372,10 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
             <Button variant="outline" onClick={() => window.print()}>
               Print slip
             </Button>
-            <Button variant="outline" onClick={() => router.push("/accounts/vendor-payments")}>
+            <Button
+              variant="outline"
+              onClick={() => router.push("/accounts/vendor-payments")}
+            >
               Back to register
             </Button>
           </>
@@ -268,13 +438,18 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
         voucher={voucher.data}
         isLoading={voucher.isLoading}
         isError={voucher.isError}
-        errorMessage={voucher.error instanceof Error ? voucher.error.message : undefined}
+        errorMessage={
+          voucher.error instanceof Error ? voucher.error.message : undefined
+        }
       />
 
       <div className="grid gap-4 md:grid-cols-4">
         {[
           { label: "Gross payable", value: money(slip.grossPayablePaise) },
-          { label: "Total deductions", value: money(slip.totalDeductionsPaise) },
+          {
+            label: "Total deductions",
+            value: money(slip.totalDeductionsPaise),
+          },
           { label: "Net payable", value: money(slip.netPayablePaise) },
           { label: "Paid so far", value: money(slip.paidPaise) },
         ].map((item) => (
@@ -287,9 +462,30 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
         ))}
       </div>
 
+      {/* L0-3 — surfaced above the lines so an approver sees it without
+          scrolling. Advisory only: nothing here blocks approval (that is L2,
+          pending the blocking rules in LDC_WORKFLOW_PLAN.md Q3). */}
+      {warnedLineCount > 0 ? (
+        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>
+            {warnedLineCount} of {detention.data?.length ?? 0} challan
+            {(detention.data?.length ?? 0) === 1 ? "" : "s"} on this slip have
+            detention warnings. Check each line&apos;s working before
+            approving.
+          </span>
+        </div>
+      ) : null}
+
       <Card className="overflow-hidden">
         <CardHeader className="border-b bg-muted/20">
-          <CardTitle>{slip.type === "TRANSPORTER" ? "Trucks" : "Source lines"}</CardTitle>
+          <CardTitle>
+            {slip.type === "TRANSPORTER"
+              ? "Trucks"
+              : slip.type === "LDC_BROKER"
+                ? "Delivery challans"
+                : "Source lines"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -313,29 +509,81 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                   <TableRow>
                     <TableCell className="text-xs">
                       <SourceLabel line={line} />
+                      <ApprovedHeads line={line} />
                     </TableCell>
-                    <TableCell className="text-right">{money(line.freightPaise)}</TableCell>
-                    <TableCell className="text-right">{money(line.detentionPaise)}</TableCell>
-                    <TableCell className="text-right">{money(line.advancePaise)}</TableCell>
-                    <TableCell className="text-right">{money(line.commissionPaise)}</TableCell>
-                    <TableCell className="text-right">{money(line.hamaliPaise)}</TableCell>
-                    <TableCell className="text-right">{money(line.tdsPaise)}</TableCell>
-                    <TableCell className="text-right">{money(line.damagePaise)}</TableCell>
-                    <TableCell className="text-right">{money(line.stationeryPaise)}</TableCell>
-                    <TableCell className="text-right font-medium">{money(line.netPaise)}</TableCell>
+                    <TableCell className="text-right">
+                      {money(line.freightPaise)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(line.detentionPaise)}
+                      {line.detentionSlabName ? (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          {line.detentionDays
+                            ? `${line.detentionDays}d · ${line.detentionSlabName}`
+                            : line.detentionSlabName}
+                        </p>
+                      ) : null}
+                      {line.claimedDetentionPaise ? (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          Broker claimed {money(line.claimedDetentionPaise)}
+                        </p>
+                      ) : null}
+                      <DetentionNote
+                        row={detentionBySource.get(line.sourceId)}
+                        hasStoredSlab={Boolean(line.detentionSlabName)}
+                        onShowWorking={() =>
+                          setWorkingFor({
+                            challanId: line.sourceId,
+                            challanNumber: line.source?.label ?? "challan",
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(line.advancePaise)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(line.commissionPaise)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(line.hamaliPaise)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(line.tdsPaise)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(line.damagePaise)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(line.stationeryPaise)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {money(line.netPaise)}
+                    </TableCell>
                   </TableRow>
                   {line.sourceType === "LR_GROUP"
                     ? (line.source?.lrs ?? []).map((lr) => (
-                        <TableRow key={lr.lrNumber} className="text-xs text-muted-foreground">
+                        <TableRow
+                          key={lr.lrNumber}
+                          className="text-xs text-muted-foreground"
+                        >
                           <TableCell className="pl-6">
-                            <span className="font-medium text-foreground">{lr.lrNumber}</span>
+                            <span className="font-medium text-foreground">
+                              {lr.lrNumber}
+                            </span>
                             {lr.unloadingPoint ? ` · ${lr.unloadingPoint}` : ""}
-                            {lr.deliveredAt ? ` · delivered ${formatDate(lr.deliveredAt)}` : ""}
+                            {lr.deliveredAt
+                              ? ` · delivered ${formatDate(lr.deliveredAt)}`
+                              : ""}
                           </TableCell>
                           <TableCell />
-                          <TableCell className="text-right">{money(lr.detentionPaise)}</TableCell>
+                          <TableCell className="text-right">
+                            {money(lr.detentionPaise)}
+                          </TableCell>
                           <TableCell colSpan={4} />
-                          <TableCell className="text-right">{money(lr.damagePaise)}</TableCell>
+                          <TableCell className="text-right">
+                            {money(lr.damagePaise)}
+                          </TableCell>
                           <TableCell colSpan={2} />
                         </TableRow>
                       ))
@@ -366,16 +614,24 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
               <TableBody>
                 {slip.disbursements.map((d) => (
                   <TableRow key={d.id}>
-                    <TableCell className="text-xs">{formatDate(d.paidAt)}</TableCell>
+                    <TableCell className="text-xs">
+                      {formatDate(d.paidAt)}
+                    </TableCell>
                     <TableCell className="text-xs">{d.mode}</TableCell>
-                    <TableCell className="text-xs">{d.referenceNo ?? "—"}</TableCell>
-                    <TableCell className="text-right">{money(d.paidPaise)}</TableCell>
+                    <TableCell className="text-xs">
+                      {d.referenceNo ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {money(d.paidPaise)}
+                    </TableCell>
                     <TableCell className="text-right">
                       {d.settlementJournalEntryId ? (
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => openVoucher(d.settlementJournalEntryId!)}
+                          onClick={() =>
+                            openVoucher(d.settlementJournalEntryId!)
+                          }
                         >
                           Voucher
                         </Button>
@@ -388,6 +644,16 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
           </CardContent>
         </Card>
       ) : null}
+
+      {/* L0-3 — the same read-only working the maker saw while browsing.
+          Self-fetches from the quote endpoint, so no props beyond the challan. */}
+      <DetentionBreakdownDialog
+        challanId={workingFor?.challanId ?? null}
+        challanNumber={workingFor?.challanNumber ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setWorkingFor(null);
+        }}
+      />
     </div>
   );
 }

@@ -4,7 +4,10 @@ import { Button } from "@skerp/ui/components/button";
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { TableCell, TableRow } from "@skerp/ui/components/table";
 import { cn } from "@/lib/utils";
-import type { VendorPaymentStatus } from "./vendor-payment.service";
+import type {
+  VendorPaymentStatus,
+  VendorPaymentType,
+} from "./vendor-payment.service";
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
@@ -153,6 +156,13 @@ export function LoadMoreFooter({
     </div>
   );
 }
+
+export const VENDOR_PAYMENT_TYPE_LABELS: Record<VendorPaymentType, string> = {
+  TRANSPORTER: "Transporter",
+  HAMALI: "Hamali",
+  LDC_BROKER: "LDC broker",
+  JOBCARD: "Job card",
+};
 
 export const VENDOR_PAYMENT_STATUS_LABELS: Record<VendorPaymentStatus, string> = {
   DRAFT: "Draft",

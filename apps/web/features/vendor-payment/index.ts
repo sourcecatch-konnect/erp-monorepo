@@ -1,5 +1,6 @@
 export { VendorPaymentSlipPage } from "./VendorPaymentSlipPage";
 export { HamaliPaymentPage } from "./HamaliPaymentPage";
+export { LDCPaymentPage } from "./LDCPaymentPage";
 export { VendorPaymentRegisterPage } from "./VendorPaymentRegisterPage";
 export { VendorPaymentSlipDetailPage } from "./VendorPaymentSlipDetailPage";
 export { VendorPaymentApprovalPage } from "./VendorPaymentApprovalPage";

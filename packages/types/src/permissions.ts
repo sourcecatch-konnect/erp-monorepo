@@ -38,7 +38,8 @@ export type MasterSlug =
   | "rate-matrix"
   | "vehicle-type"
   | "creditor"
-  | "cash-account";
+  | "cash-account"
+  | "detention-slab";
 
 type MasterPermissionKey =
   | `masters.${MasterSlug}.${CrudAction}`
@@ -102,7 +103,11 @@ type RailBranchGRNPermissionKey =
 type DeliveryChallanPermissionKey =
   | `delivery_challan.${CrudAction}`
   | "delivery_challan.issue"
-  | "delivery_challan.cancel";
+  | "delivery_challan.cancel"
+  // Filing an acknowledgement and ruling on one are separate capabilities —
+  // see the note on PERMS.DELIVERY_CHALLAN.
+  | "delivery_challan.ack.broker"
+  | "delivery_challan.approve";
 type RailRakeOperationPermissionKey =
   | `rail_rake_operation.${CrudAction}`
   | "rail_rake_operation.submit";
@@ -306,6 +311,7 @@ export const PERMS = {
     VEHICLE_TYPE: masterPerms("vehicle-type"),
     CREDITOR: masterPerms("creditor"),
     CASH_ACCOUNT: masterPerms("cash-account"),
+    DETENTION_SLAB: masterPerms("detention-slab"),
   },
   LORRY_RECEIPT: {
     VIEW: "lorry_receipt.view",
@@ -409,6 +415,19 @@ export const PERMS = {
     DELETE: "delivery_challan.delete",
     ISSUE: "delivery_challan.issue",
     CANCEL: "delivery_challan.cancel",
+    /**
+     * Entering the broker's claim and approving it are deliberately two
+     * separate permissions, not one. The broker has no ERP login, so staff
+     * transcribe his bill; whoever types it must not also be the one who
+     * rules it payable, or the separation of duties collapses. The service
+     * enforces this per user as well — the filer cannot approve their own
+     * acknowledgement.
+     *
+     * A third key, `delivery_challan.ack.supervisor`, was retired on
+     * 2026-11-07 with the supervisor acknowledgement itself.
+     */
+    ACK_BROKER: "delivery_challan.ack.broker",
+    APPROVE: "delivery_challan.approve",
   },
   RAIL_RAKE_OPERATION: {
     VIEW: "rail_rake_operation.view",

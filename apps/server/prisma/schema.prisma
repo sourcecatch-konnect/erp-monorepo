@@ -118,8 +118,11 @@ model User {
   submittedRailBranchGRNs RailBranchGRN[] @relation("SubmittedRailBranchGRNs")
 
   createdDeliveryChallans   DeliveryChallan[] @relation("CreatedDeliveryChallans")
+  createdDetentionSlabs     DetentionSlab[]   @relation("CreatedDetentionSlabs")
   updatedDeliveryChallans   DeliveryChallan[] @relation("UpdatedDeliveryChallans")
   issuedDeliveryChallans    DeliveryChallan[] @relation("IssuedDeliveryChallans")
+  filedDeliveryChallanAcks  DeliveryChallanAcknowledgement[] @relation("FiledDeliveryChallanAcks")
+  approvedDeliveryChallans  DeliveryChallanApproval[]        @relation("ApprovedDeliveryChallans")
   cancelledDeliveryChallans DeliveryChallan[] @relation("CancelledDeliveryChallans")
 
   createdRailRakeOperations   RailRakeOperation[]     @relation("CreatedRailRakeOperations")
@@ -682,6 +685,7 @@ model Customer {
   cityId                  String
   stateId                 String
   agreements              Agreement[]        @relation("CustomerAgreements")
+  detentionSlabs          DetentionSlab[]    @relation("CustomerDetentionSlabs")
   city                    City               @relation(fields: [cityId], references: [id])
   state                   State              @relation(fields: [stateId], references: [id])
   locations               CustomerLocation[]
@@ -738,6 +742,94 @@ model DetentionRate {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   agreement    Agreement         @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+}
+
+/// Broker detention slab (DC / LDC). Replaces the agreement-scoped
+/// `DetentionRate` for the payable side: slabs are negotiated per broker, and
+/// the same broker can have different terms per vehicle type and freight band.
+/// Matching is most-specific-wins — see `detention.service.ts` `pickSlab`.
+model DetentionSlab {
+  id   String @id @default(cuid())
+  name String
+
+  /// All four scopes are optional. `null` means "applies to any", so a single
+  /// house slab needs no rows filled in and a broker-specific one overrides it.
+  transportId   String?
+  customerId    String?
+  vehicleTypeId String?
+
+  /// Freight band the challan must fall in, inclusive. Paise.
+  freightFromPaise BigInt?
+  freightToPaise   BigInt?
+
+  basis DetentionBasis @default(DAY)
+
+  /// DAY basis. Two independent rules: a 2-day detention with both set is free.
+  firstDayFree Boolean @default(false)
+  lastDayFree  Boolean @default(false)
+
+  /// HOUR basis: free window, then whole blocks of `blockHours` (spec uses 24).
+  freeHours  Int?
+  blockHours Int?
+
+  /// Tie-break when several slabs match equally well. Higher wins.
+  priority Int @default(0)
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transport   Transport?   @relation("TransportDetentionSlabs", fields: [transportId], references: [id], onDelete: Restrict)
+  customer    Customer?    @relation("CustomerDetentionSlabs", fields: [customerId], references: [id], onDelete: Restrict)
+  vehicleType VehicleType? @relation("VehicleTypeDetentionSlabs", fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  createdBy   User         @relation("CreatedDetentionSlabs", fields: [createdById], references: [id], onDelete: Restrict)
+
+  bands DetentionSlabBand[]
+
+  @@index([deletedAt, isActive, transportId])
+  @@index([customerId])
+  @@index([vehicleTypeId])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+/// One stacked tier of a slab. Tiers are consumed bottom-up over the
+/// *chargeable* units (after free days/hours), so 4 chargeable days against
+/// bands [1-2 @1000, 3+ @1500] costs 2x1000 + 2x1500 — not 4x1500.
+model DetentionSlabBand {
+  id     String @id @default(cuid())
+  slabId String
+  slab   DetentionSlab @relation(fields: [slabId], references: [id], onDelete: Cascade)
+
+  /// 1-based, inclusive. `toUnit` null = open-ended ("from the 3rd day").
+  fromUnit  Int
+  toUnit    Int?
+  ratePaise BigInt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One band may start at a given unit per slab — stops overlapping tiers,
+  /// which would otherwise make the charge depend on row order.
+  @@unique([slabId, fromUnit])
+  @@index([slabId])
+}
+
+enum DeliveryChallanPaymentBy {
+  COMPANY
+  CLIENT
+  TRANSPORTER
+  CASH
+}
+
+enum DetentionBasis {
+  DAY
+  HOUR
 }
 
 model Route {
@@ -996,6 +1088,7 @@ model Transport {
   lrgroups           LRGroup[]
   ledger             Ledger?
   vendorPaymentSlips VendorPaymentSlip[]
+  detentionSlabs     DetentionSlab[]     @relation("TransportDetentionSlabs")
 
   @@index([name])
   @@index([cityId])
@@ -1893,6 +1986,7 @@ model VehicleType {
   orders           Order[]
   rateMatrices     RateMatrix[]
   vehicles         Vehicle[]
+  detentionSlabs   DetentionSlab[] @relation("VehicleTypeDetentionSlabs")
 
   @@index([name])
 }
@@ -3315,6 +3409,24 @@ model VendorPaymentSlipLine {
   stationeryPaise BigInt @default(0)
   netPaise        BigInt @default(0)
 
+  // LDC_BROKER deduction heads (phase L4). The approver rules on each of
+  // these on the DC approval; the slip is where they become money. Parking,
+  // labour and other are the broker's own charges and add to the payable;
+  // shortage is recovered from him, like damage above.
+  parkingPaise   BigInt @default(0)
+  labourPaise    BigInt @default(0)
+  otherPaise     BigInt @default(0)
+  shortagePaise  BigInt @default(0)
+
+  // LDC_BROKER only — how the detention figure was arrived at, snapshotted at
+  // slip time. Slabs are editable and soft-deleted, so a paid slip must carry
+  // its own working or it becomes unexplainable (spec STEP 18).
+  detentionDays     Int?
+  detentionSlabId   String?
+  detentionSlabName String?
+  /** What the broker billed, when it differed from the slab. */
+  claimedDetentionPaise BigInt?
+
   createdAt DateTime @default(now())
 
   slip VendorPaymentSlip @relation(fields: [slipId], references: [id], onDelete: Cascade)
@@ -4007,9 +4119,16 @@ model DeliveryChallan {
 
   freightAmount BigInt?
   advanceAmount BigInt?
-  paymentBy     String?
+  /// Who bears the last-mile freight. Drives whether the challan becomes a
+  /// broker payable at all.
+  paymentBy     DeliveryChallanPaymentBy?
 
   loadingAt DateTime
+
+  /// Separate from `loadingAt`: the date the truck was reported for this
+  /// challan. Detention counts from the earliest of this, `loadingAt` and
+  /// every linked LR's own reporting date.
+  reportDate DateTime?
 
   supervisorId String?
   supervisor   Labour? @relation("DeliveryChallanSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
@@ -4037,6 +4156,9 @@ model DeliveryChallan {
   updatedAt DateTime @updatedAt
 
   items DeliveryChallanItem[]
+
+  acknowledgements DeliveryChallanAcknowledgement[]
+  approval         DeliveryChallanApproval?
 
   @@index([railRakeId, status])
   @@index([sourceBranchId, status])
@@ -4071,8 +4193,138 @@ model DeliveryChallanItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  ackItems DeliveryChallanAckItem[]
+
   @@unique([deliveryChallanId, branchGrnItemId])
   @@index([branchGrnItemId])
+}
+
+/// The broker's account of how a delivery challan went — his claim.
+///
+/// **One row per challan.** An earlier design kept a second, parallel
+/// acknowledgement from SK's own godown supervisor so an approver could
+/// compare the two (CONTEXT.md §5.2). That was dropped on 2026-11-07: the
+/// supervisor is a `Labour` record, not an ERP user, so SK's side was always
+/// going to be typed by the same staff who type the broker's. SK's own
+/// account of the delivery is already held by `DeliveryChallan.supervisorId`
+/// (the Labour supervisor who ran the unloading) and the LR's `reportedAt` /
+/// `unloadingAt`. The control on an inflated claim is now the **slab
+/// ceiling** — the broker is paid `min(claimed, slab)` — not a comparison.
+///
+/// The broker never logs in; staff transcribe his bill and email.
+///
+/// Nothing here posts to the ledger. An acknowledgement is evidence; the
+/// money is accrued later, once, by the vendor-payment slip (decision Q9).
+model DeliveryChallanAcknowledgement {
+  id        String @id @default(cuid())
+  challanId String @unique
+
+  /// Dates that drive the detention window once this ack is the approved one
+  /// (decision Q18). Named for what the engine consumes rather than for the
+  /// legacy screen's labels, so the mapping cannot be misread:
+  /// `reportingDate` starts the clock, `unloadingDate` stops it.
+  reportingDate DateTime?
+  unloadingDate DateTime?
+  /// Recorded for the audit trail; not an input to the detention window.
+  collectionDate DateTime?
+
+  /// What this party claims is owed. Captured here as evidence only — these
+  /// do not reach the payable until the deduction-head work (L4) wires the
+  /// approved figures into the slip. Paise.
+  claimedDetentionDays  Int?
+  claimedDetentionPaise BigInt?
+  parkingPaise          BigInt?
+  otherPaise            BigInt?
+  labourPaise           BigInt?
+  damagePaise           BigInt?
+
+  remarks String?
+
+  /// Proof of delivery filed with this acknowledgement.
+  podAttachmentId String?
+
+  filedById String
+  filedAt   DateTime @default(now())
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  challan DeliveryChallan                      @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  filedBy User                                 @relation("FiledDeliveryChallanAcks", fields: [filedById], references: [id], onDelete: Restrict)
+  items   DeliveryChallanAckItem[]
+  /// Set when an approver has accepted this acknowledgement.
+  acceptedBy DeliveryChallanApproval? @relation("AcceptedDeliveryChallanAck")
+
+  @@index([challanId])
+}
+
+/// Per-LR quantities on one acknowledgement. Shortage is derived
+/// (`totalQty - receivedQty`), never stored, so it cannot drift from the
+/// numbers it comes from.
+model DeliveryChallanAckItem {
+  id    String @id @default(cuid())
+  ackId String
+
+  /// The challan line this covers, and its LR number snapshotted alongside so
+  /// the ack stays readable if the line is ever detached.
+  challanItemId   String
+  lrNumberSnapshot String
+
+  totalQty    Int
+  receivedQty Int
+  damageQty   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ack         DeliveryChallanAcknowledgement @relation(fields: [ackId], references: [id], onDelete: Cascade)
+  challanItem DeliveryChallanItem            @relation(fields: [challanItemId], references: [id], onDelete: Restrict)
+
+  @@unique([ackId, challanItemId])
+  @@index([ackId])
+}
+
+/// The approver's ruling on a delivery challan: which acknowledgement is
+/// trusted, and the figures that follow from it.
+///
+/// One per challan. Required before a challan can be detention-calculated or
+/// paid (decision Q8) — except for challans grandfathered in by the cutover
+/// date, which predate the requirement (decision Q10).
+///
+/// Posts nothing (decision Q9). It produces amounts; the vendor-payment slip
+/// remains the single accrual point.
+model DeliveryChallanApproval {
+  id        String @id @default(cuid())
+  challanId String @unique
+
+  /// The broker acknowledgement this approval ruled on. Unique: an
+  /// acknowledgement can be the accepted one at most once, which follows
+  /// from there being one approval per challan.
+  acceptedAckId String @unique
+
+  /// The approved figures. Editable by the approver, defaulted from the
+  /// accepted acknowledgement. Paise. These feed the payable in L4; today
+  /// only the dates are consumed (by the detention engine, via Q18).
+  approvedDetentionDays Int?
+  approvedParkingPaise  BigInt?
+  approvedOtherPaise    BigInt?
+  approvedLabourPaise   BigInt?
+  approvedDamagePaise   BigInt?
+  approvedShortagePaise BigInt?
+
+  remarks String?
+
+  approvedById String
+  approvedAt   DateTime @default(now())
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  challan     DeliveryChallan                @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  acceptedAck DeliveryChallanAcknowledgement @relation("AcceptedDeliveryChallanAck", fields: [acceptedAckId], references: [id], onDelete: Restrict)
+  approvedBy  User                           @relation("ApprovedDeliveryChallans", fields: [approvedById], references: [id], onDelete: Restrict)
+
+  @@index([challanId])
 }
 
 enum DeliveryVehicleMode {
@@ -4582,6 +4834,8 @@ enum VendorPaymentSourceType {
   GRN_HAMALI
   RAIL_BRANCH_GRN
   VP_LOADING
+  /// One Local Delivery Challan paid to the last-mile broker.
+  DELIVERY_CHALLAN
 }
 
 enum ReceiptPaymentMode {

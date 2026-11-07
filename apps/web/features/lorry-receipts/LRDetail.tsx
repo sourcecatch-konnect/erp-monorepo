@@ -1272,6 +1272,7 @@ export default function LRDetail({ id }: { id: string }) {
       <DeliverDialog
         open={Boolean(deliverLr)}
         onOpenChange={(o) => !o && setDeliverLr(null)}
+        lrId={deliverLr?.id ?? ""}
         lrNumber={deliverLr?.lrNumber ?? ""}
         isMarketVehicle={g.isMarketVehicle}
         mode="deliver"
@@ -1284,6 +1285,7 @@ export default function LRDetail({ id }: { id: string }) {
       <DeliverDialog
         open={Boolean(editDeliveryLr)}
         onOpenChange={(o) => !o && setEditDeliveryLr(null)}
+        lrId={editDeliveryLr?.id ?? ""}
         lrNumber={editDeliveryLr?.lrNumber ?? ""}
         isMarketVehicle={g.isMarketVehicle}
         mode="edit"
