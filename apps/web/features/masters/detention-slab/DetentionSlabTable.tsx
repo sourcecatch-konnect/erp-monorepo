@@ -37,11 +37,7 @@ export const describeRule = (slab: DetentionSlab) => {
 };
 
 const appliesTo = (slab: DetentionSlab) => {
-  const parts = [
-    slab.transport?.name,
-    slab.vehicleType?.name,
-    slab.customer?.name,
-  ].filter(Boolean);
+  const parts = [slab.transport?.name, slab.vehicleType?.name].filter(Boolean);
   if (slab.freightFromPaise !== null || slab.freightToPaise !== null) {
     parts.push(
       `Freight ${formatCurrencyFromPaise(slab.freightFromPaise)} – ${formatCurrencyFromPaise(slab.freightToPaise)}`,

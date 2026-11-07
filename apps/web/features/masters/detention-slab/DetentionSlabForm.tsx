@@ -4,11 +4,7 @@ import * as React from "react";
 import { Controller, get, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  CreateDetentionSlabBody,
-  CreateDetentionSlabFormInput,
-  DetentionSlab,
-} from "@skerp/types";
+import type { CreateDetentionSlabFormInput, DetentionSlab } from "@skerp/types";
 import { createDetentionSlabSchema } from "@skerp/validators";
 import { Button } from "@skerp/ui/components/button";
 import { DatePicker } from "@skerp/ui/components/datepicker";
@@ -32,8 +28,6 @@ import SwitchField from "../_shared/fields/SwitchField";
 import { useMasterMutations } from "../_shared/hooks/useMasterMutation";
 import { transportApi } from "../transport/transport.service";
 import { transportKeys } from "../transport/transport.key";
-import { customerApi } from "../Customer/customer.service";
-import { customerKeys } from "../Customer/customer.key";
 import { vehicleTypeApi } from "../vehicleType/vehicleType.service";
 import { vehicleTypeKeys } from "../vehicleType/vehicleType.key";
 import { detentionSlabApi } from "./detention-slab.service";
@@ -106,8 +100,10 @@ const valuesFromRow = (row: DetentionSlab): FormValues => ({
  * cover everyone and a broker-specific one overrides it.
  */
 export default function DetentionSlabForm({ open, onOpenChange, row }: Props) {
-  const form = useForm<FormValues, unknown, CreateDetentionSlabBody>({
-    resolver: zodResolver(createDetentionSlabSchema),
+  const form = useForm<FormValues, unknown, FormValues>({
+    // Validate rupee inputs in the browser, but leave the conversion to paise
+    // to the server's schema so money fields are not transformed twice.
+    resolver: zodResolver(createDetentionSlabSchema, undefined, { raw: true }),
     mode: "onChange",
     defaultValues: emptyValues(),
   });
@@ -129,16 +125,17 @@ export default function DetentionSlabForm({ open, onOpenChange, row }: Props) {
     queryFn: () => vehicleTypeApi.list(LOOKUP_QUERY),
     enabled: open,
   });
-  const customers = useQuery({
-    queryKey: customerKeys.list(LOOKUP_QUERY),
-    queryFn: () => customerApi.list(LOOKUP_QUERY),
-    enabled: open,
-  });
 
   const toOptions = (rows?: { id: string; name: string }[]) => [
     ANY,
     ...(rows ?? []).map((r) => ({ label: r.name, value: r.id })),
   ];
+
+  // No "Any" here: every slab names the broker it prices.
+  const brokerOptions = (transports.data?.data ?? []).map((t) => ({
+    label: t.name,
+    value: t.id,
+  }));
 
   React.useEffect(() => {
     if (!open) return;
@@ -158,6 +155,35 @@ export default function DetentionSlabForm({ open, onOpenChange, row }: Props) {
     }
   }, [basis, form]);
 
+  // `name` is no longer typed in — it is the slab's label, derived from the
+  // broker and vehicle type that actually do the matching. A hand-typed name
+  // could disagree with the scope (a slab reading "Bipin Singh" pricing
+  // another broker's challans), which is exactly the confusion this removes.
+  const scopedTransportId = form.watch("transportId");
+  const scopedVehicleTypeId = form.watch("vehicleTypeId");
+  React.useEffect(() => {
+    if (!open) return;
+    const transport = transports.data?.data.find(
+      (t) => t.id === scopedTransportId,
+    );
+    if (!transport) return;
+    const vehicleType = vehicleTypes.data?.data.find(
+      (v) => v.id === scopedVehicleTypeId,
+    );
+    form.setValue(
+      "name",
+      vehicleType ? `${transport.name} - ${vehicleType.name}` : transport.name,
+      { shouldValidate: true },
+    );
+  }, [
+    form,
+    open,
+    scopedTransportId,
+    scopedVehicleTypeId,
+    transports.data,
+    vehicleTypes.data,
+  ]);
+
   const unit = basis === "HOUR" ? "block" : "day";
   const bandsError = get(form.formState.errors, "bands")?.message;
 
@@ -176,7 +202,7 @@ export default function DetentionSlabForm({ open, onOpenChange, row }: Props) {
     });
   };
 
-  const handleSubmit = async (data: CreateDetentionSlabBody) => {
+  const handleSubmit = async (data: FormValues) => {
     if (row) {
       await update.mutateAsync({ id: row.id, data });
     } else {
@@ -186,7 +212,7 @@ export default function DetentionSlabForm({ open, onOpenChange, row }: Props) {
   };
 
   return (
-    <MasterFormDialog<FormValues, CreateDetentionSlabBody>
+    <MasterFormDialog<FormValues, FormValues>
       open={open}
       onOpenChange={onOpenChange}
       title={row ? "Edit Detention Slab" : "Add Detention Slab"}
@@ -198,14 +224,13 @@ export default function DetentionSlabForm({ open, onOpenChange, row }: Props) {
       <FormSection
         icon={<IconTag size={18} />}
         title="Slab"
-        description="Name, priority and the dates it is valid"
+        description="Whose detention this prices, and when it is valid"
         columns={2}
       >
-        <IconTextField<FormValues>
-          name="name"
-          label="Name"
-          placeholder="e.g. Bipin Singh – 32HQ"
-          icon={<IconTag size={16} />}
+        <ComboboxField<FormValues>
+          name="transportId"
+          label="Broker / transporter"
+          options={brokerOptions}
           required
         />
         <IconTextField<FormValues>
@@ -263,23 +288,13 @@ export default function DetentionSlabForm({ open, onOpenChange, row }: Props) {
       <FormSection
         icon={<IconFilter size={18} />}
         title="Applies to"
-        description="Leave a field on Any to match everyone. The most specific slab wins."
+        description="Narrow this broker's slab further, or leave both on Any."
         columns={2}
       >
-        <ComboboxField<FormValues>
-          name="transportId"
-          label="Broker / transporter"
-          options={toOptions(transports.data?.data)}
-        />
         <ComboboxField<FormValues>
           name="vehicleTypeId"
           label="Vehicle type"
           options={toOptions(vehicleTypes.data?.data)}
-        />
-        <ComboboxField<FormValues>
-          name="customerId"
-          label="Customer"
-          options={toOptions(customers.data?.data)}
         />
         <div className="grid grid-cols-2 gap-3">
           <IconTextField<FormValues>

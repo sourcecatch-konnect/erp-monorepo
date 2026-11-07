@@ -121,6 +121,8 @@ model User {
   createdDetentionSlabs     DetentionSlab[]   @relation("CreatedDetentionSlabs")
   updatedDeliveryChallans   DeliveryChallan[] @relation("UpdatedDeliveryChallans")
   issuedDeliveryChallans    DeliveryChallan[] @relation("IssuedDeliveryChallans")
+  filedDeliveryChallanAcks  DeliveryChallanAcknowledgement[] @relation("FiledDeliveryChallanAcks")
+  approvedDeliveryChallans  DeliveryChallanApproval[]        @relation("ApprovedDeliveryChallans")
   cancelledDeliveryChallans DeliveryChallan[] @relation("CancelledDeliveryChallans")
 
   createdRailRakeOperations   RailRakeOperation[]     @relation("CreatedRailRakeOperations")
@@ -3407,6 +3409,15 @@ model VendorPaymentSlipLine {
   stationeryPaise BigInt @default(0)
   netPaise        BigInt @default(0)
 
+  // LDC_BROKER only — how the detention figure was arrived at, snapshotted at
+  // slip time. Slabs are editable and soft-deleted, so a paid slip must carry
+  // its own working or it becomes unexplainable (spec STEP 18).
+  detentionDays     Int?
+  detentionSlabId   String?
+  detentionSlabName String?
+  /** What the broker billed, when it differed from the slab. */
+  claimedDetentionPaise BigInt?
+
   createdAt DateTime @default(now())
 
   slip VendorPaymentSlip @relation(fields: [slipId], references: [id], onDelete: Cascade)
@@ -4137,6 +4148,9 @@ model DeliveryChallan {
 
   items DeliveryChallanItem[]
 
+  acknowledgements DeliveryChallanAcknowledgement[]
+  approval         DeliveryChallanApproval?
+
   @@index([railRakeId, status])
   @@index([sourceBranchId, status])
   @@index([destinationAreaId])
@@ -4170,8 +4184,144 @@ model DeliveryChallanItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  ackItems DeliveryChallanAckItem[]
+
   @@unique([deliveryChallanId, branchGrnItemId])
   @@index([branchGrnItemId])
+}
+
+/// Who filed an acknowledgement for a delivery challan. Exactly two parties
+/// may, and each may file at most once — enforced by @@unique below.
+enum DeliveryChallanAckType {
+  /// What SK's own supervisor at the godown witnessed.
+  SUPERVISOR
+  /// What the broker who hauled the load claims.
+  BROKER
+}
+
+/// One party's account of how a delivery challan actually went.
+///
+/// Two rows per challan, filed independently (CONTEXT.md §5.2): the SK
+/// supervisor acks what was received, the broker files their own claim —
+/// "often inflated". Showing the two side by side is the fraud control, and
+/// an approver picks which version to trust (DeliveryChallanApproval).
+///
+/// Nothing here posts to the ledger. An acknowledgement is evidence; the
+/// money is accrued later, once, by the vendor-payment slip (decision Q9).
+model DeliveryChallanAcknowledgement {
+  id        String                 @id @default(cuid())
+  challanId String
+  ackType   DeliveryChallanAckType
+
+  /// Dates that drive the detention window once this ack is the approved one
+  /// (decision Q18). Named for what the engine consumes rather than for the
+  /// legacy screen's labels, so the mapping cannot be misread:
+  /// `reportingDate` starts the clock, `unloadingDate` stops it.
+  reportingDate DateTime?
+  unloadingDate DateTime?
+  /// Recorded for the audit trail; not an input to the detention window.
+  collectionDate DateTime?
+
+  /// What this party claims is owed. Captured here as evidence only — these
+  /// do not reach the payable until the deduction-head work (L4) wires the
+  /// approved figures into the slip. Paise.
+  claimedDetentionDays  Int?
+  claimedDetentionPaise BigInt?
+  parkingPaise          BigInt?
+  otherPaise            BigInt?
+  labourPaise           BigInt?
+  damagePaise           BigInt?
+
+  remarks String?
+
+  /// Proof of delivery filed with this acknowledgement.
+  podAttachmentId String?
+
+  filedById String
+  filedAt   DateTime @default(now())
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  challan DeliveryChallan                      @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  filedBy User                                 @relation("FiledDeliveryChallanAcks", fields: [filedById], references: [id], onDelete: Restrict)
+  items   DeliveryChallanAckItem[]
+  /// Set when this acknowledgement is the one an approver accepted.
+  acceptedBy DeliveryChallanApproval? @relation("AcceptedDeliveryChallanAck")
+
+  /// One acknowledgement per party per challan.
+  @@unique([challanId, ackType])
+  @@index([challanId])
+}
+
+/// Per-LR quantities on one acknowledgement. Shortage is derived
+/// (`totalQty - receivedQty`), never stored, so it cannot drift from the
+/// numbers it comes from.
+model DeliveryChallanAckItem {
+  id    String @id @default(cuid())
+  ackId String
+
+  /// The challan line this covers, and its LR number snapshotted alongside so
+  /// the ack stays readable if the line is ever detached.
+  challanItemId   String
+  lrNumberSnapshot String
+
+  totalQty    Int
+  receivedQty Int
+  damageQty   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ack         DeliveryChallanAcknowledgement @relation(fields: [ackId], references: [id], onDelete: Cascade)
+  challanItem DeliveryChallanItem            @relation(fields: [challanItemId], references: [id], onDelete: Restrict)
+
+  @@unique([ackId, challanItemId])
+  @@index([ackId])
+}
+
+/// The approver's ruling on a delivery challan: which acknowledgement is
+/// trusted, and the figures that follow from it.
+///
+/// One per challan. Required before a challan can be detention-calculated or
+/// paid (decision Q8) — except for challans grandfathered in by the cutover
+/// date, which predate the requirement (decision Q10).
+///
+/// Posts nothing (decision Q9). It produces amounts; the vendor-payment slip
+/// remains the single accrual point.
+model DeliveryChallanApproval {
+  id        String @id @default(cuid())
+  challanId String @unique
+
+  /// Which party's account the approver accepted.
+  acceptedAckType DeliveryChallanAckType
+  /// Unique: an acknowledgement can be the accepted one at most once, which
+  /// follows from there being one approval per challan.
+  acceptedAckId   String                 @unique
+
+  /// The approved figures. Editable by the approver, defaulted from the
+  /// accepted acknowledgement. Paise. These feed the payable in L4; today
+  /// only the dates are consumed (by the detention engine, via Q18).
+  approvedDetentionDays Int?
+  approvedParkingPaise  BigInt?
+  approvedOtherPaise    BigInt?
+  approvedLabourPaise   BigInt?
+  approvedDamagePaise   BigInt?
+  approvedShortagePaise BigInt?
+
+  remarks String?
+
+  approvedById String
+  approvedAt   DateTime @default(now())
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  challan     DeliveryChallan                @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  acceptedAck DeliveryChallanAcknowledgement @relation("AcceptedDeliveryChallanAck", fields: [acceptedAckId], references: [id], onDelete: Restrict)
+  approvedBy  User                           @relation("ApprovedDeliveryChallans", fields: [approvedById], references: [id], onDelete: Restrict)
+
+  @@index([challanId])
 }
 
 enum DeliveryVehicleMode {

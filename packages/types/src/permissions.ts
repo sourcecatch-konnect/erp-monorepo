@@ -103,7 +103,12 @@ type RailBranchGRNPermissionKey =
 type DeliveryChallanPermissionKey =
   | `delivery_challan.${CrudAction}`
   | "delivery_challan.issue"
-  | "delivery_challan.cancel";
+  | "delivery_challan.cancel"
+  // Filing an acknowledgement and ruling on one are separate capabilities —
+  // see the note on PERMS.DELIVERY_CHALLAN.
+  | "delivery_challan.ack.supervisor"
+  | "delivery_challan.ack.broker"
+  | "delivery_challan.approve";
 type RailRakeOperationPermissionKey =
   | `rail_rake_operation.${CrudAction}`
   | "rail_rake_operation.submit";
@@ -411,6 +416,17 @@ export const PERMS = {
     DELETE: "delivery_challan.delete",
     ISSUE: "delivery_challan.issue",
     CANCEL: "delivery_challan.cancel",
+    /**
+     * Filing an acknowledgement and approving one are deliberately three
+     * separate permissions, not one. The whole control is that SK's
+     * supervisor and the broker file independently and a third person rules
+     * between them (CONTEXT.md §5.2) — if one role could both file and
+     * approve, the separation of duties collapses and the fraud check is
+     * decorative.
+     */
+    ACK_SUPERVISOR: "delivery_challan.ack.supervisor",
+    ACK_BROKER: "delivery_challan.ack.broker",
+    APPROVE: "delivery_challan.approve",
   },
   RAIL_RAKE_OPERATION: {
     VIEW: "rail_rake_operation.view",

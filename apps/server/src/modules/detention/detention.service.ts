@@ -121,7 +121,6 @@ const toRules = (slab: SlabRow): DetentionSlabRules => ({
 
 export type SlabMatchContext = {
   transportId: string | null;
-  customerId: string | null;
   vehicleTypeId: string | null;
   freightPaise: bigint | null;
   on: Date;
@@ -130,11 +129,17 @@ export type SlabMatchContext = {
 /**
  * A slab applies when every scope it names matches. A `null` scope is a
  * wildcard, so an unscoped house slab is the fallback for everything.
+ *
+ * Customer is deliberately not a scope. Detention slabs price what the
+ * business PAYS the broker; what it RECOVERS from the customer is entered by
+ * hand at acknowledgement and billed through `LRCharge`. The column and the
+ * API field remain so existing rows keep their data, but nothing matches on
+ * them.
  */
 const applies = (slab: SlabRow, ctx: SlabMatchContext): boolean => {
   if (slab.transportId && slab.transportId !== ctx.transportId) return false;
-  if (slab.customerId && slab.customerId !== ctx.customerId) return false;
-  if (slab.vehicleTypeId && slab.vehicleTypeId !== ctx.vehicleTypeId) return false;
+  if (slab.vehicleTypeId && slab.vehicleTypeId !== ctx.vehicleTypeId)
+    return false;
 
   if (slab.freightFromPaise !== null || slab.freightToPaise !== null) {
     if (ctx.freightPaise === null) return false;
@@ -152,7 +157,8 @@ const applies = (slab: SlabRow, ctx: SlabMatchContext): boolean => {
 
   const at = ctx.on.getTime();
   if (new Date(slab.effectiveFrom).getTime() > at) return false;
-  if (slab.effectiveTo && new Date(slab.effectiveTo).getTime() < at) return false;
+  if (slab.effectiveTo && new Date(slab.effectiveTo).getTime() < at)
+    return false;
 
   return true;
 };
@@ -160,7 +166,6 @@ const applies = (slab: SlabRow, ctx: SlabMatchContext): boolean => {
 /** How many scopes a slab pins down — the more, the more specific. */
 const specificity = (slab: SlabRow): number =>
   (slab.transportId ? 1 : 0) +
-  (slab.customerId ? 1 : 0) +
   (slab.vehicleTypeId ? 1 : 0) +
   (slab.freightFromPaise !== null || slab.freightToPaise !== null ? 1 : 0);
 
@@ -176,7 +181,10 @@ export type SlabMatch = {
  * breaks that. A tie resolved arbitrarily would make the broker's bill depend
  * on row order, so the order is total and explicit.
  */
-export const pickSlab = (slabs: SlabRow[], ctx: SlabMatchContext): SlabMatch => {
+export const pickSlab = (
+  slabs: SlabRow[],
+  ctx: SlabMatchContext,
+): SlabMatch => {
   const matching = slabs.filter((slab) => applies(slab, ctx));
   if (matching.length === 0) {
     return {
@@ -212,6 +220,16 @@ export type ChallanDetentionContext = {
   ldcDate: Date | null;
   reportDate: Date | null;
   lrs: LRWindowInput[];
+  /** Every LR the challan carries, for display — independent of which source
+   *  supplied the dates. */
+  lrNumbersOnChallan: string[];
+  /**
+   * Where the detention window came from (Q18). `DC_APPROVAL` means an
+   * approver ruled on the dates; `LR_DELIVERY` means they were derived from
+   * the LRs, which is the grandfathered path for challans issued before the
+   * approval requirement.
+   */
+  datesFrom: "DC_APPROVAL" | "LR_DELIVERY";
   /** LR numbers on the challan we could not resolve to a LorryReceipt row. */
   unresolvedLrNumbers: string[];
 };
@@ -241,6 +259,18 @@ export const loadChallanContext = async (
       reportDate: true,
       transport: { select: { name: true } },
       vehicle: { select: { vehicleTypeId: true } },
+      // Q18: once a challan is approved, the accepted acknowledgement's dates
+      // are the source of truth for the detention window — not the LR-derived
+      // ones. A challan with no approval is either grandfathered (Q10) or
+      // not yet payable, and falls back to the LR dates below.
+      approval: {
+        select: {
+          acceptedAckType: true,
+          acceptedAck: {
+            select: { reportingDate: true, unloadingDate: true },
+          },
+        },
+      },
       items: {
         select: {
           lrNumberSnapshot: true,
@@ -292,7 +322,9 @@ export const loadChallanContext = async (
 
   // One batched query for whatever the relation chain could not reach, rather
   // than a lookup per item.
-  const missing = [...snapshotNumbers].filter((number) => !byNumber.has(number));
+  const missing = [...snapshotNumbers].filter(
+    (number) => !byNumber.has(number),
+  );
   if (missing.length > 0) {
     const rescued = await db.lorryReceipt.findMany({
       where: { lrNumber: { in: missing } },
@@ -310,6 +342,20 @@ export const loadChallanContext = async (
     }
   }
 
+  // Q18 — the approved acknowledgement's dates replace the LR-derived window
+  // entirely, rather than joining the earliest/latest contest. That is the
+  // point of the ruling: when the supervisor and the broker disagree about
+  // when the truck reported or finished, an approver decides, and the engine
+  // must use the decision rather than quietly out-voting it with LR data.
+  //
+  // A challan with no approval keeps the original behaviour — it is either
+  // grandfathered under Q10 or not payable yet.
+  const approvedAck = challan.approval?.acceptedAck ?? null;
+  const approvedWindow =
+    approvedAck && (approvedAck.reportingDate || approvedAck.unloadingDate)
+      ? approvedAck
+      : null;
+
   return {
     challanId: challan.id,
     challanNumber: challan.challanNumber,
@@ -317,9 +363,23 @@ export const loadChallanContext = async (
     transportName: challan.transport?.name ?? null,
     vehicleTypeId: challan.vehicle?.vehicleTypeId ?? null,
     freightPaise: challan.freightAmount,
-    ldcDate: challan.loadingAt,
-    reportDate: challan.reportDate,
-    lrs: [...byNumber.values()],
+    ldcDate: approvedWindow ? approvedWindow.reportingDate : challan.loadingAt,
+    reportDate: approvedWindow ? null : challan.reportDate,
+    lrs: approvedWindow
+      ? [
+          {
+            lrNumber: "DC approval",
+            reportedAt: approvedWindow.reportingDate,
+            unloadingAt: approvedWindow.unloadingDate,
+          },
+        ]
+      : [...byNumber.values()],
+    /** The LRs the challan carries, for display, regardless of which source
+     *  priced it — the browse row and the working panel both list them. */
+    lrNumbersOnChallan: [...byNumber.keys()],
+    datesFrom: approvedWindow
+      ? ("DC_APPROVAL" as const)
+      : ("LR_DELIVERY" as const),
     unresolvedLrNumbers: [...snapshotNumbers].filter(
       (number) => !byNumber.has(number),
     ),
@@ -336,6 +396,8 @@ export type DetentionQuote = {
   slab: { id: string; name: string; basis: "DAY" | "HOUR" } | null;
   alternatives: { id: string; name: string }[];
   charge: DetentionCharge;
+  /** Every LR this challan carries, for the browse row and the working panel. */
+  lrNumbers: string[];
   /** LR numbers on the challan with no matching LorryReceipt row. */
   unresolvedLrNumbers: string[];
   /** Everything blocking a confident figure, in plain language. */
@@ -362,23 +424,27 @@ export const quoteChallanDetention = async (
   const window = resolveDetentionWindow({
     ldcDate: overrides.reportingAt ?? context.ldcDate,
     reportDate: overrides.reportingAt ? null : context.reportDate,
-    lrs: overrides.reportingAt || overrides.unloadingAt
-      ? context.lrs.map((lr) => ({
-          ...lr,
-          reportedAt: overrides.reportingAt ?? lr.reportedAt,
-          unloadingAt: overrides.unloadingAt ?? lr.unloadingAt,
-        }))
-      : context.lrs,
+    lrs:
+      overrides.reportingAt || overrides.unloadingAt
+        ? context.lrs.map((lr) => ({
+            ...lr,
+            reportedAt: overrides.reportingAt ?? lr.reportedAt,
+            unloadingAt: overrides.unloadingAt ?? lr.unloadingAt,
+          }))
+        : context.lrs,
   });
 
   const forced = overrides.slabId
     ? (slabs.find((slab) => slab.id === overrides.slabId) ?? null)
     : null;
   const match = forced
-    ? { slab: forced, alternatives: slabs.filter((s) => s.id !== forced.id), reason: null }
+    ? {
+        slab: forced,
+        alternatives: slabs.filter((s) => s.id !== forced.id),
+        reason: null,
+      }
     : pickSlab(slabs, {
         transportId: context.transportId,
-        customerId: null,
         vehicleTypeId: context.vehicleTypeId,
         freightPaise: context.freightPaise,
         on: window.finalReportingAt ?? new Date(),
@@ -394,19 +460,25 @@ export const quoteChallanDetention = async (
         warning: match.reason,
       };
 
+  // Deduped: when the window cannot be resolved, `chargeDetention` returns
+  // `window.reason` as its own warning, so the same sentence arrives twice.
   const warnings = [
-    window.reason,
-    charge.warning,
-    window.lrsMissingUnloading.length > 0
-      ? `No unloading date on ${window.lrsMissingUnloading.length} LR(s): ${window.lrsMissingUnloading.join(", ")}`
-      : null,
-    context.unresolvedLrNumbers.length > 0
-      ? `Could not find ${context.unresolvedLrNumbers.length} LR(s) named on this challan: ${context.unresolvedLrNumbers.join(", ")}`
-      : null,
-    context.transportId === null
-      ? "This challan has no broker — slab matching fell back to the default"
-      : null,
-  ].filter((warning): warning is string => Boolean(warning));
+    ...new Set(
+      [
+        window.reason,
+        charge.warning,
+        window.lrsMissingUnloading.length > 0
+          ? `No unloading date on ${window.lrsMissingUnloading.length} LR(s): ${window.lrsMissingUnloading.join(", ")}`
+          : null,
+        context.unresolvedLrNumbers.length > 0
+          ? `Could not find ${context.unresolvedLrNumbers.length} LR(s) named on this challan: ${context.unresolvedLrNumbers.join(", ")}`
+          : null,
+        context.transportId === null
+          ? "This challan has no broker — slab matching fell back to the default"
+          : null,
+      ].filter((warning): warning is string => Boolean(warning)),
+    ),
+  ];
 
   return {
     challanId: context.challanId,
@@ -423,6 +495,7 @@ export const quoteChallanDetention = async (
       name: slab.name,
     })),
     charge,
+    lrNumbers: context.lrs.map((lr) => lr.lrNumber),
     unresolvedLrNumbers: context.unresolvedLrNumbers,
     warnings,
   };

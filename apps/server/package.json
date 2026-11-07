@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:status": "prisma migrate status",
     "db:deploy": "prisma migrate deploy",
+    "ldc:inventory": "tsx prisma/ldc-inventory.ts",
     "training:seed": "tsx prisma/seed-training.ts",
     "training:reset": "tsx prisma/training-reset.ts"
   },

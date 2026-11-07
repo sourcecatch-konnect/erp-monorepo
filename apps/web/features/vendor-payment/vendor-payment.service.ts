@@ -33,14 +33,49 @@ export type EligibleLDCSource = {
   sourceId: string;
   /** Challan number. */
   label: string;
+  /** Who bears the last-mile freight. Always `COMPANY` on a payable row
+   *  (Q1); on a review row, whatever was recorded — or null if nothing was. */
+  paymentBy: "COMPANY" | "CLIENT" | "TRANSPORTER" | "CASH" | null;
+  /** Set only on review rows — why this challan is not payable. */
+  reviewReason?: string;
   vehicleNumber: string | null;
   branchId: string;
   occurredAt: string;
   freightPaise: string;
   advancePaise: string;
+  /** The detention slab the figure came from; null when none matched. */
+  slabName: string | null;
+  /** The window the detention was measured over, and the day count. */
+  reportingAt: string | null;
+  unloadingAt: string | null;
+  detentionDays: number | null;
+  /** Every LR on this challan. */
+  lrNumbers: string[];
   detentionPaise: string;
   /** Why the detention figure may be wrong (missing dates, no slab, …). */
   detentionWarnings: string[];
+};
+
+/**
+ * One LDC slip line's detention working, re-derived for the approver (L0-3).
+ *
+ * `storedDetentionPaise` is what the slip carries and what was posted — it is
+ * the authoritative figure. `recomputedDetentionPaise` is what the slab prices
+ * it at now; when the two differ (`drifts`) a slab was re-rated after the slip
+ * was made, and the UI says so rather than replacing the stored amount.
+ */
+export type SlipLineDetention = {
+  /** The DeliveryChallan id — matches the slip line's `sourceId`. */
+  sourceId: string;
+  storedDetentionPaise: string;
+  recomputedDetentionPaise: string | null;
+  drifts: boolean;
+  slabName: string | null;
+  reportingAt: string | null;
+  unloadingAt: string | null;
+  detentionDays: number | null;
+  lrNumbers: string[];
+  warnings: string[];
 };
 
 export type EligibleTransporterLR = {
@@ -119,6 +154,10 @@ export type VendorPaymentSlipLineInput = {
   tdsPaise: string;
   damagePaise: string;
   stationeryPaise: string;
+  /** LDC_BROKER only — the broker's filed detention claim. `null` or omitted
+   *  means no claim was filed, and the server pays the slab amount. Send `0`
+   *  only to mean a filed claim of zero. */
+  claimedDetentionPaise?: string | null;
 };
 
 /** What a slip line pays for, resolved by the server. */
@@ -139,6 +178,12 @@ export type VendorPaymentSlipLine = VendorPaymentSlipLineInput & {
   netPaise: string;
   isActive: boolean;
   source?: VendorPaymentLineSource | null;
+  /** LDC_BROKER only — how the detention figure was reached, snapshotted at
+   *  slip time so a paid slip stays explainable. */
+  detentionDays?: number | null;
+  detentionSlabName?: string | null;
+  /** The broker’s claim, when it differed from the slab. */
+  claimedDetentionPaise?: string | null;
 };
 
 type NamedUser = { id: string; firstName: string; lastName: string } | null;
@@ -215,7 +260,10 @@ export type CreateVendorPaymentDisbursementBody = {
   clientRequestId: string;
 };
 
-const get = async <T>(url: string, params?: Record<string, string | undefined>) => {
+const get = async <T>(
+  url: string,
+  params?: Record<string, string | undefined>,
+) => {
   const response = await api.get<ApiResponse<T>>(url, { params });
   return unwrapApiResponse(response);
 };
@@ -280,12 +328,16 @@ export type VendorPaymentSlipSummary = {
 };
 
 export const vendorPaymentApi = {
-  eligibleTransporterLRs: (filters: EligibleChunkFilters & { transportId: string }) =>
+  eligibleTransporterLRs: (
+    filters: EligibleChunkFilters & { transportId: string },
+  ) =>
     get<EligibleChunk<EligibleTransporterLR>>(
       "/vendor-payment/calculators/transporter",
       { ...chunkParams(filters), transportId: filters.transportId },
     ),
-  eligibleTransporterTrucks: (filters: EligibleChunkFilters & { transportId: string }) =>
+  eligibleTransporterTrucks: (
+    filters: EligibleChunkFilters & { transportId: string },
+  ) =>
     get<EligibleChunk<EligibleTransporterTruck>>(
       "/vendor-payment/calculators/transporter-trucks",
       { ...chunkParams(filters), transportId: filters.transportId },
@@ -299,6 +351,10 @@ export const vendorPaymentApi = {
     search?: string;
     page: number;
     size: number;
+    /** `PAYABLE` (default) — challans the broker can be paid for.
+     *  `REVIEW` — the ones held back by the payment-by rule, listed so they
+     *  stay visible. Review rows are never selectable. */
+    mode?: "PAYABLE" | "REVIEW";
   }): Promise<ListResult<EligibleLDCSource>> => {
     const response = await api.get<ApiResponse<EligibleLDCSource[]>>(
       "/vendor-payment/calculators/ldc-broker",
@@ -306,28 +362,46 @@ export const vendorPaymentApi = {
     );
     return unwrapListResponse(response);
   },
-  eligibleHamaliSources: (filters: EligibleChunkFilters & { labourId: string }) =>
-    get<EligibleChunk<EligibleHamaliSource>>("/vendor-payment/calculators/hamali", {
-      ...chunkParams(filters),
-      labourId: filters.labourId,
-    }),
-  slipSummary: () => get<VendorPaymentSlipSummary>("/vendor-payment/slips/summary"),
+  eligibleHamaliSources: (
+    filters: EligibleChunkFilters & { labourId: string },
+  ) =>
+    get<EligibleChunk<EligibleHamaliSource>>(
+      "/vendor-payment/calculators/hamali",
+      {
+        ...chunkParams(filters),
+        labourId: filters.labourId,
+      },
+    ),
+  slipSummary: () =>
+    get<VendorPaymentSlipSummary>("/vendor-payment/slips/summary"),
   createSlip: (body: CreateVendorPaymentSlipBody) =>
     post<VendorPaymentSlip>("/vendor-payment/slips", body),
   updateSlip: (id: string, body: UpdateVendorPaymentSlipBody) =>
     api
-      .patch<ApiResponse<VendorPaymentSlip>>(`/vendor-payment/slips/${id}`, body)
+      .patch<
+        ApiResponse<VendorPaymentSlip>
+      >(`/vendor-payment/slips/${id}`, body)
       .then(unwrapApiResponse),
   submitSlip: (id: string, version: number) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/submit`, { version }),
   approveSlip: (id: string, version: number) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/approve`, { version }),
   rejectSlip: (id: string, version: number, reason: string) =>
-    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/reject`, { version, reason }),
+    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/reject`, {
+      version,
+      reason,
+    }),
   disburse: (id: string, body: CreateVendorPaymentDisbursementBody) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/disburse`, body),
   cancelSlip: (id: string, version: number, reason: string) =>
-    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/cancel`, { version, reason }),
+    post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/cancel`, {
+      version,
+      reason,
+    }),
   listSlips,
   slip: (id: string) => get<VendorPaymentSlip>(`/vendor-payment/slips/${id}`),
+  /** The detention working behind an LDC slip's lines (L0-3). `[]` for any
+   *  slip with no challan lines, so the caller need not branch on type. */
+  slipDetention: (id: string) =>
+    get<SlipLineDetention[]>(`/vendor-payment/slips/${id}/detention`),
 };

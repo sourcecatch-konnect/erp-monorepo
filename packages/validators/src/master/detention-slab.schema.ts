@@ -27,7 +27,9 @@ const optionalWholeNumber = (label: string, min: number) =>
   z
     .union([z.string(), z.number()])
     .nullish()
-    .transform((v) => (v === "" || v === null || v === undefined ? null : Number(v)))
+    .transform((v) =>
+      v === "" || v === null || v === undefined ? null : Number(v),
+    )
     .refine(
       (v) => v === null || (Number.isInteger(v) && v >= min),
       `${label} must be a whole number of at least ${min}`,
@@ -42,7 +44,10 @@ const optionalDateInput = z
   .union([z.string(), z.date()])
   .nullish()
   .transform((v) => (v ? new Date(v) : null))
-  .refine((d) => d === null || !Number.isNaN(d.getTime()), "Enter a valid date");
+  .refine(
+    (d) => d === null || !Number.isNaN(d.getTime()),
+    "Enter a valid date",
+  );
 
 export const detentionBasisSchema = z.enum(["DAY", "HOUR"]);
 
@@ -97,7 +102,11 @@ const bandsSchema = z
         });
       }
       const previous = sorted[index - 1];
-      if (previous && previous.toUnit !== null && band.fromUnit !== previous.toUnit + 1) {
+      if (
+        previous &&
+        previous.toUnit !== null &&
+        band.fromUnit !== previous.toUnit + 1
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
@@ -115,10 +124,16 @@ const bandsSchema = z
 ------------------------------ */
 
 const slabBase = z.object({
+  /** A label only — derived from the broker and vehicle type, never matched
+   *  on. Kept so lists and the LDC payment screen have something to show. */
   name: z.string().trim().min(1, "Name is required").max(120),
 
-  /** All scopes optional — null means "applies to any". */
-  transportId: optionalId,
+  /** Required: a slab prices one broker's detention. There is no house slab —
+   *  a broker with no slab quotes zero and says so, rather than silently
+   *  inheriting someone else's rate card. */
+  transportId: z.string().trim().min(1, "Select a broker / transporter"),
+
+  /** Narrowing scopes. Null means "applies to any". */
   customerId: optionalId,
   vehicleTypeId: optionalId,
 
@@ -145,56 +160,55 @@ const slabBase = z.object({
 });
 
 const withSlabRules = (schema: typeof slabBase) =>
-  schema
-    .superRefine((value, ctx) => {
-      if (
-        value.freightFromPaise !== null &&
-        value.freightToPaise !== null &&
-        value.freightToPaise < value.freightFromPaise
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Freight range end must not be below its start",
-          path: ["freightToPaise"],
-        });
-      }
+  schema.superRefine((value, ctx) => {
+    if (
+      value.freightFromPaise !== null &&
+      value.freightToPaise !== null &&
+      value.freightToPaise < value.freightFromPaise
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Freight range end must not be below its start",
+        path: ["freightToPaise"],
+      });
+    }
 
-      if (
-        value.effectiveTo !== null &&
-        value.effectiveTo.getTime() < value.effectiveFrom.getTime()
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "End date must not be before the start date",
-          path: ["effectiveTo"],
-        });
-      }
+    if (
+      value.effectiveTo !== null &&
+      value.effectiveTo.getTime() < value.effectiveFrom.getTime()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End date must not be before the start date",
+        path: ["effectiveTo"],
+      });
+    }
 
-      // The two bases read different fields; letting both be filled in would
-      // leave the engine quietly ignoring half the form.
-      if (value.basis === "HOUR") {
-        if (value.blockHours === null) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Hour-based slabs need a block size (the spec uses 24)",
-            path: ["blockHours"],
-          });
-        }
-        if (value.firstDayFree || value.lastDayFree) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Free days apply to day-based slabs — use free hours here",
-            path: ["firstDayFree"],
-          });
-        }
-      } else if (value.freeHours !== null || value.blockHours !== null) {
+    // The two bases read different fields; letting both be filled in would
+    // leave the engine quietly ignoring half the form.
+    if (value.basis === "HOUR") {
+      if (value.blockHours === null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Free hours and block size apply to hour-based slabs only",
-          path: ["freeHours"],
+          message: "Hour-based slabs need a block size (the spec uses 24)",
+          path: ["blockHours"],
         });
       }
-    });
+      if (value.firstDayFree || value.lastDayFree) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Free days apply to day-based slabs — use free hours here",
+          path: ["firstDayFree"],
+        });
+      }
+    } else if (value.freeHours !== null || value.blockHours !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Free hours and block size apply to hour-based slabs only",
+        path: ["freeHours"],
+      });
+    }
+  });
 
 export const createDetentionSlabSchema = withSlabRules(slabBase);
 
@@ -218,6 +232,10 @@ export const detentionQuoteQuerySchema = z.object({
 
 export type DetentionBasisInput = z.infer<typeof detentionBasisSchema>;
 export type DetentionSlabBandInput = z.infer<typeof detentionSlabBandSchema>;
-export type CreateDetentionSlabInput = z.infer<typeof createDetentionSlabSchema>;
-export type UpdateDetentionSlabInput = z.infer<typeof updateDetentionSlabSchema>;
+export type CreateDetentionSlabInput = z.infer<
+  typeof createDetentionSlabSchema
+>;
+export type UpdateDetentionSlabInput = z.infer<
+  typeof updateDetentionSlabSchema
+>;
 export type DetentionQuoteQuery = z.infer<typeof detentionQuoteQuerySchema>;

@@ -127,6 +127,7 @@ export * from "./grn/grn.schema.js";
 export * from "./vp-loading/vp-loading.schema.js";
 export * from "./rail-branch-grn/rail-branch-grn.schema.js";
 export * from "./delivery-challan/delivery-challan.schema.js";
+export * from "./delivery-challan/ack.schema.js";
 export * from "./rail-rake-operation/rail-rake-operation.schema.js";
 export * from "./vehicle-journey/vehicle-journey.schema.js";
 export * from "./trip-expense/trip-expense.schema.js";

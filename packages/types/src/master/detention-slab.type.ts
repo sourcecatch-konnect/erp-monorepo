@@ -48,3 +48,57 @@ export type CreateDetentionSlabFormInput = z.input<
 export type UpdateDetentionSlabBody = z.output<
   typeof updateDetentionSlabSchema
 >;
+/** Raw form shape: rupees as typed, converted to paise by the server's schema. */
+export type UpdateDetentionSlabFormInput = z.input<
+  typeof updateDetentionSlabSchema
+>;
+
+/* -----------------------------
+   QUOTE  (GET /detention/challans/:id/quote)
+------------------------------ */
+
+/** One stacked tier of the charge, e.g. "Days 1-2". Paise as strings. */
+export type DetentionChargeLine = {
+  label: string;
+  units: number;
+  ratePaise: string;
+  amountPaise: string;
+};
+
+/** The dates the charge was measured over. */
+export type DetentionQuoteWindow = {
+  finalReportingAt: string | null;
+  finalUnloadingAt: string | null;
+  /** Calendar days held, counting both end dates. */
+  detentionDays: number | null;
+  detentionHours: number | null;
+  lrsMissingUnloading: string[];
+  lrsMissingReporting: string[];
+  reason: string | null;
+};
+
+/**
+ * Why a challan's detention is what it is: the window, the slab that matched,
+ * the slabs that also could have, and the band-by-band working.
+ */
+export type DetentionQuote = {
+  challanId: string;
+  challanNumber: string;
+  broker: { id: string; name: string } | null;
+  window: DetentionQuoteWindow;
+  slab: { id: string; name: string; basis: "DAY" | "HOUR" } | null;
+  /** Other slabs that matched — an operator may force one of these. */
+  alternatives: { id: string; name: string }[];
+  charge: {
+    amountPaise: string;
+    chargeableUnits: number;
+    /** Units waived by first/last day free or the free-hours window. */
+    freeUnits: number;
+    lines: DetentionChargeLine[];
+    warning: string | null;
+  };
+  /** Every LR this challan carries. */
+  lrNumbers: string[];
+  unresolvedLrNumbers: string[];
+  warnings: string[];
+};

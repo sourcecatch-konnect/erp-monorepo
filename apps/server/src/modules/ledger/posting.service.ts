@@ -15,6 +15,7 @@ import {
   buildDriverMoneyOutLines,
   buildSalaryRunLines,
 } from "./driver-finance.lines.js";
+import { reversalPeriodFor } from "./reversal-date.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -1258,11 +1259,17 @@ export async function reverseJournal(
     original.lines.map((line, index) => [line.id, index]),
   );
 
+  // Which period the contra belongs to. PROVISIONAL convention — see
+  // reversal-date.ts and Q16 in docs/LDC_PHASE_L0_IMPLEMENTATION_PLAN.md.
+  // Previously `voucherDate` was today while `fyCode` was the original's, so
+  // the two contradicted each other across a year boundary (audit D-5).
+  const period = reversalPeriodFor(original, new Date());
+
   const contra = await postJournal(tx, {
     voucherType: "JOURNAL",
     voucherNumber: `REV/${original.voucherNumber}`,
-    voucherDate: new Date(),
-    fyCode: original.fyCode,
+    voucherDate: period.voucherDate,
+    fyCode: period.fyCode,
     branchId: original.branchId,
     narration: `Reversal of ${original.voucherType} ${original.voucherNumber} — ${reason}`,
     sourceType: "MANUAL",

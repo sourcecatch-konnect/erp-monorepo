@@ -1,4 +1,7 @@
-import type { Prisma } from "../../../../generated/prisma/index.js";
+import type {
+  DeliveryChallanPaymentBy,
+  Prisma,
+} from "../../../../generated/prisma/index.js";
 import { db } from "../../../../prisma/prisma.js";
 import { BadRequestError } from "../../../lib/error.js";
 import { quoteChallanDetention } from "../../detention/detention.service.js";
@@ -25,15 +28,47 @@ type DbClient = typeof db | Prisma.TransactionClient;
 /** Only an issued challan can be claimed — a draft may still change. */
 const CLAIMABLE_STATUS = "ISSUED" as const;
 
+// The payable rule itself is pure and lives beside this file so it can be
+// unit-tested without a database (see payment-by.ts).
+import {
+  PAYABLE_PAYMENT_BY,
+  isPayablePaymentBy,
+  reviewReasonFor,
+} from "./payment-by.js";
+import {
+  ackRequiredFrom,
+  approvalRequiredReason,
+  isPayableWithoutApproval,
+} from "../../delivery-challan-ack/ack-requirement.js";
+
 export type EligibleLDCSource = {
   sourceId: string;
   /** Challan number, for the browse table. */
   label: string;
+  /**
+   * Who bears this challan's last-mile freight. On a payable row this is
+   * always `COMPANY` (Q1); on a review row it is whatever was recorded, or
+   * `null` if nothing was.
+   */
+  paymentBy: DeliveryChallanPaymentBy | null;
+  /** Set only on review rows — why this challan is not payable. */
+  reviewReason?: string;
   vehicleNumber: string | null;
   branchId: string;
   occurredAt: Date;
   freightPaise: bigint;
   advancePaise: bigint;
+  /** The slab this figure came from — null when none matched. Shown on the
+   *  browse row so a mis-scoped slab is visible before a slip is made. */
+  slabName: string | null;
+  /** The window the charge was measured over, and what it came to. All free
+   *  on the quote that is already computed for the detention figure, so the
+   *  row can explain itself without a second call. */
+  reportingAt: Date | null;
+  unloadingAt: Date | null;
+  detentionDays: number | null;
+  /** Every LR on this challan. */
+  lrNumbers: string[];
   /** Computed from the slab; 0 when no slab matches or dates are missing. */
   detentionPaise: bigint;
   /** Why the detention figure may be wrong — surfaced on the browse row. */
@@ -49,6 +84,13 @@ export type FindEligibleLDCSourcesParams = {
   search?: string;
   page: number;
   size: number;
+  /**
+   * `PAYABLE` (default) — challans the broker can actually be paid for.
+   * `REVIEW` — the ones held back by the `paymentBy` rule, so they are
+   * visible to an operator instead of silently vanishing from the browse
+   * list. A review row is never selectable for a slip.
+   */
+  mode?: "PAYABLE" | "REVIEW";
 };
 
 const rangeOf = (from?: Date, to?: Date) =>
@@ -68,10 +110,24 @@ export async function findEligibleLDCSources(
   params: FindEligibleLDCSourcesParams,
 ): Promise<{ rows: EligibleLDCSource[]; total: number }> {
   const loadingAt = rangeOf(params.from, params.to);
+  const review = params.mode === "REVIEW";
+
+  // Q1: only a COMPANY-borne challan is payable. The review list is the exact
+  // complement — `NOT in (...)` plus the nulls, which Prisma's `notIn` would
+  // drop, since SQL `NOT IN` is never true for NULL.
+  const paymentByWhere: Prisma.DeliveryChallanWhereInput = review
+    ? {
+        OR: [
+          { paymentBy: null },
+          { paymentBy: { notIn: [...PAYABLE_PAYMENT_BY] } },
+        ],
+      }
+    : { paymentBy: { in: [...PAYABLE_PAYMENT_BY] } };
 
   const where: Prisma.DeliveryChallanWhereInput = {
     transportId: params.transportId,
     status: CLAIMABLE_STATUS,
+    ...paymentByWhere,
     ...(params.branchIds ? { sourceBranchId: { in: params.branchIds } } : {}),
     ...(loadingAt ? { loadingAt } : {}),
     ...(params.search
@@ -94,6 +150,7 @@ export async function findEligibleLDCSources(
         freightAmount: true,
         advanceAmount: true,
         vehicleNumberSnapshot: true,
+        paymentBy: true,
         vehicle: { select: { vehicleNumber: true } },
       },
     }),
@@ -110,9 +167,15 @@ export async function findEligibleLDCSources(
   // One quote per challan, in parallel. Each is two queries behind a 5-minute
   // Redis cache on the slab set, so a page of 20 costs 20 challan reads, not
   // 20 slab reads as well.
-  const quotes = await Promise.all(
-    unclaimed.map((c) => quoteChallanDetention(c.id).catch(() => null)),
-  );
+  //
+  // Skipped entirely in REVIEW mode: a row that cannot be paid has no
+  // detention figure worth computing, and pricing it would only invite
+  // someone to act on a number the rule says is not payable.
+  const quotes = review
+    ? unclaimed.map(() => null)
+    : await Promise.all(
+        unclaimed.map((c) => quoteChallanDetention(c.id).catch(() => null)),
+      );
 
   return {
     total,
@@ -121,16 +184,25 @@ export async function findEligibleLDCSources(
       return {
         sourceId: challan.id,
         label: challan.challanNumber,
+        paymentBy: challan.paymentBy,
         vehicleNumber:
           challan.vehicle?.vehicleNumber ?? challan.vehicleNumberSnapshot,
         branchId: challan.sourceBranchId,
         occurredAt: challan.loadingAt,
         freightPaise: challan.freightAmount ?? 0n,
         advancePaise: challan.advanceAmount ?? 0n,
+        slabName: quote?.slab?.name ?? null,
+        reportingAt: quote?.window.finalReportingAt ?? null,
+        unloadingAt: quote?.window.finalUnloadingAt ?? null,
+        detentionDays: quote?.window.detentionDays ?? null,
+        lrNumbers: quote?.lrNumbers ?? [],
         detentionPaise: quote?.charge.amountPaise ?? 0n,
-        detentionWarnings: quote
-          ? quote.warnings
-          : ["Could not compute detention for this challan"],
+        ...(review ? { reviewReason: reviewReasonFor(challan.paymentBy) } : {}),
+        detentionWarnings: review
+          ? []
+          : quote
+            ? quote.warnings
+            : ["Could not compute detention for this challan"],
       };
     }),
   };
@@ -140,6 +212,11 @@ export type ReconciledLDCLine = {
   freightPaise: bigint;
   advancePaise: bigint;
   detentionPaise: bigint;
+  /** Days the truck was held, both end dates counted. Null when unknown. */
+  detentionDays: number | null;
+  /** The slab that produced the figure, snapshotted for the audit trail. */
+  detentionSlabId: string | null;
+  detentionSlabName: string | null;
 };
 
 /**
@@ -162,6 +239,16 @@ export async function reconcileLDCLines(
   if (unique.length !== challanIds.length)
     throw new BadRequestError("The same challan appears twice on this slip");
 
+  // Take the same per-challan lock the acknowledgement/approval handlers
+  // take, so a slip cannot be built from an ack or a ruling that is being
+  // amended at the same moment — the slip's detention is computed from those
+  // dates. Sorted, so two requests claiming overlapping challans acquire the
+  // locks in the same order and cannot deadlock. Released when the caller's
+  // transaction ends.
+  const lockKeys = [...unique].sort().map((id) => `delivery-challan:${id}`);
+  for (const key of lockKeys)
+    await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+
   const challans = await client.deliveryChallan.findMany({
     where: { id: { in: unique }, transportId, status: CLAIMABLE_STATUS },
     select: {
@@ -169,6 +256,9 @@ export async function reconcileLDCLines(
       challanNumber: true,
       freightAmount: true,
       advanceAmount: true,
+      paymentBy: true,
+      loadingAt: true,
+      approval: { select: { id: true } },
     },
   });
 
@@ -177,6 +267,36 @@ export async function reconcileLDCLines(
   if (missing.length)
     throw new BadRequestError(
       `${missing.length} challan(s) are not this broker's, or are not issued`,
+    );
+
+  // Q1 enforced server-side, not only by hiding rows in the browse list: a
+  // challan the company does not bear must not become a payable even if its
+  // id is posted straight to the API. Named individually — an operator who
+  // hits this needs to know which challan to go and fix.
+  const notPayable = challans.filter((c) => !isPayablePaymentBy(c.paymentBy));
+  if (notPayable.length)
+    throw new BadRequestError(
+      `Not payable by the company: ${notPayable
+        .map((c) => `${c.challanNumber} (${c.paymentBy ?? "payment-by not set"})`)
+        .join(", ")}. Only challans borne by the company can be paid to a broker.`,
+    );
+
+  // Q8 — a challan issued on or after the cutover needs a DC approval before
+  // it can be paid. Q10 grandfathers the ones issued before it, which were
+  // delivered under the old rules and must not be stranded.
+  const cutover = ackRequiredFrom();
+  const unapproved = challans.filter(
+    (c) =>
+      !isPayableWithoutApproval(
+        { issuedAt: c.loadingAt, hasApproval: Boolean(c.approval) },
+        cutover,
+      ),
+  );
+  if (unapproved.length)
+    throw new BadRequestError(
+      `${unapproved.length} challan(s) are not approved: ${unapproved
+        .map((c) => c.challanNumber)
+        .join(", ")}. ${approvalRequiredReason}`,
     );
 
   const claimed = await claimedAmong(
@@ -207,7 +327,15 @@ export async function reconcileLDCLines(
         `Challan ${challan.challanNumber}: the advance exceeds freight plus detention`,
       );
 
-    result.set(challan.id, { freightPaise, advancePaise, detentionPaise });
+    const quote = quotes[index];
+    result.set(challan.id, {
+      freightPaise,
+      advancePaise,
+      detentionPaise,
+      detentionDays: quote?.window.detentionDays ?? null,
+      detentionSlabId: quote?.slab?.id ?? null,
+      detentionSlabName: quote?.slab?.name ?? null,
+    });
   });
 
   return result;

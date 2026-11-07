@@ -15,6 +15,44 @@
 /** Money is paise everywhere in this codebase (see schema.prisma). */
 export type Paise = bigint;
 
+/* ────────────────────── what the broker is paid ────────────────────── */
+
+export type ApprovedDetention = {
+  /** The figure that will actually be paid and posted. */
+  approvedPaise: Paise;
+  /** Whether the broker filed a claim at all. A filed claim of zero is still
+   *  a filed claim — that is the whole point of the distinction. */
+  claimFiled: boolean;
+};
+
+/**
+ * Reconcile the broker's claim against the slab.
+ *
+ * The business pays whichever is lower, so a claim can only ever reduce what
+ * is paid, never raise it above the rate card the business agreed.
+ *
+ * The important case is the absent one. `claimPaise` is `null`/`undefined`
+ * when the broker filed no claim, and then **the slab stands** — it is not
+ * treated as a claim of zero. Before this function existed the caller read a
+ * Zod field that defaulted to `0n`, so a request that simply omitted the
+ * field paid the broker no detention at all even when the slab priced it in
+ * thousands (audit D-14). Absent and zero are different facts and are kept
+ * different here.
+ *
+ * A claim of exactly zero is honoured as zero: the broker said they are owed
+ * nothing, and that is their claim to make.
+ */
+export const resolveApprovedDetention = (
+  claimPaise: Paise | null | undefined,
+  slabPaise: Paise,
+): ApprovedDetention =>
+  claimPaise == null
+    ? { approvedPaise: slabPaise, claimFiled: false }
+    : {
+        approvedPaise: claimPaise < slabPaise ? claimPaise : slabPaise,
+        claimFiled: true,
+      };
+
 export type DetentionBasis = "DAY" | "HOUR";
 
 /**
@@ -74,7 +112,8 @@ export type DetentionWindowInput = {
 export type DetentionWindow = {
   finalReportingAt: Date | null;
   finalUnloadingAt: Date | null;
-  /** Calendar days between the two dates. `null` when either is unknown. */
+  /** Calendar days the truck was held, counting both end dates. `null` when
+   *  either date is unknown. */
   detentionDays: number | null;
   /** Hours between the two instants, for HOUR-basis slabs. */
   detentionHours: number | null;
@@ -103,18 +142,26 @@ const latest = (dates: Date[]): Date | null =>
   dates.length === 0
     ? null
     : dates.reduce((max, d) => (d.getTime() > max.getTime() ? d : max));
-
 /**
  * Spec STEPS 3-7 and FINAL CORE BUSINESS LOGIC:
  *
  *   Final Reporting Date = earliest of (LDC date, report date, every LR's
  *                          reporting date)
  *   Final Unloading Date = latest of (every LR's unloading date)
- *   Detention Days       = the calendar-day gap between them
+ *   Detention Days       = the calendar days the truck was held, counted
+ *                          INCLUSIVELY of both ends
  *
  * The clock starts when the *first* LR on the challan reported and stops when
  * the *last* one finished unloading — one truck is held for the whole span,
  * however many consignments it carried.
+ *
+ * NOTE — deliberate deviation from the written spec. STEP 7 gives
+ * `Detention Days = Final Unloading Date - Final Reporting Date`, i.e. the
+ * bare gap: its example 04-03 to 10-03 reads 6 days. The business counts the
+ * dates themselves, so that same span is 7 days (04,05,06,07,08,09,10) and a
+ * truck reported and unloaded on one day is held for 1 day, not 0. Confirmed
+ * with the business on 2026-11-04; the spec document is to be amended to
+ * match. Do not "fix" this back to a bare subtraction.
  */
 export const resolveDetentionWindow = (
   input: DetentionWindowInput,
@@ -155,9 +202,13 @@ export const resolveDetentionWindow = (
     };
   }
 
+  // Inclusive of both end dates: 04-03 to 10-03 is 7 days, and a truck
+  // reported and unloaded on the same day is held for 1. See the note on
+  // `resolveDetentionWindow`.
   const detentionDays = Math.max(
     localDayIndex(finalUnloadingAt, offsetMinutes) -
-      localDayIndex(finalReportingAt, offsetMinutes),
+      localDayIndex(finalReportingAt, offsetMinutes) +
+      1,
     0,
   );
   const detentionHours = Math.max(
@@ -222,7 +273,10 @@ const sortedBands = (bands: SlabBand[]): SlabBand[] =>
  * 1..2 bills the first two chargeable units whether or not any free days were
  * taken off the front.
  */
-const applyBands = (units: number, bands: SlabBand[]): {
+const applyBands = (
+  units: number,
+  bands: SlabBand[],
+): {
   lines: ChargeLine[];
   amountPaise: Paise;
   uncovered: number;
@@ -241,8 +295,7 @@ const applyBands = (units: number, bands: SlabBand[]): {
 
     const lineAmount = BigInt(count) * band.ratePaise;
     lines.push({
-      label:
-        count === 1 ? `Unit ${start}` : `Units ${start}-${end}`,
+      label: count === 1 ? `Unit ${start}` : `Units ${start}-${end}`,
       units: count,
       ratePaise: band.ratePaise,
       amountPaise: lineAmount,

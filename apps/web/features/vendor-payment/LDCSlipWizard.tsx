@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   keepPreviousData,
@@ -9,7 +10,11 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconAlertTriangle, IconTruckDelivery } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconInfoCircle,
+  IconTruckDelivery,
+} from "@tabler/icons-react";
 
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
@@ -51,6 +56,7 @@ import {
   rupeesToPaise,
   today,
 } from "./vendor-payment.ui";
+import { DetentionBreakdownDialog } from "./DetentionBreakdownDialog";
 
 const PAGE_SIZE = 25;
 
@@ -67,15 +73,24 @@ const big = (paise: string) => BigInt(paise);
 const roundPaiseByBps = (amountPaise: bigint, rateBps: bigint) =>
   (amountPaise * rateBps + 5000n) / 10000n;
 
-const claimedPaise = ({ source, claimed }: ChallanDraft) =>
-  claimed.trim() === ""
-    ? big(source.detentionPaise)
-    : BigInt(rupeesToPaise(claimed));
+/**
+ * The broker's filed claim, or `null` when the box is blank.
+ *
+ * A blank box used to be pre-filled here with the slab amount so the server's
+ * `min(claim, slab)` would land on the slab. That made this screen the only
+ * thing standing between an omitted field and a broker paid no detention at
+ * all (audit D-14). The fallback now lives on the server, where it belongs:
+ * blank means "no claim filed" and the slab stands.
+ */
+const claimedPaise = ({ claimed }: ChallanDraft): bigint | null =>
+  claimed.trim() === "" ? null : BigInt(rupeesToPaise(claimed));
 
-/** The business pays whichever is lower: the broker's claim or the slab. */
+/** Preview of the server's rule: pay the lower of a filed claim and the
+ *  slab; with no claim filed, the slab stands. */
 const approvedDetentionPaise = (draft: ChallanDraft) => {
   const claim = claimedPaise(draft);
   const slab = big(draft.source.detentionPaise);
+  if (claim === null) return slab;
   return claim < slab ? claim : slab;
 };
 
@@ -85,8 +100,10 @@ const linePreview = (draft: ChallanDraft, tdsRateBps: number) => {
   const gross = freight + approved;
   const tds = roundPaiseByBps(gross, BigInt(tdsRateBps));
   const net = gross - big(draft.source.advancePaise) - tds;
-  // What the broker billed beyond what is approved — the debit note.
-  const debit = freight + claimedPaise(draft) - gross;
+  // What the broker billed beyond what is approved — the debit note. With no
+  // claim filed there is nothing billed beyond the slab, so this is zero.
+  const claimed = claimedPaise(draft) ?? approved;
+  const debit = freight + claimed - gross;
   return { gross, tds, net, debit };
 };
 
@@ -124,6 +141,10 @@ export function LDCSlipWizard() {
   const [to, setTo] = React.useState(today());
   const [searched, setSearched] = React.useState(false);
   const [challanSearch, setChallanSearch] = React.useState("");
+  // The challan whose detention working is open, if any.
+  const [explaining, setExplaining] = React.useState<EligibleLDCSource | null>(
+    null,
+  );
   const debouncedChallanSearch = useDebouncedValue(challanSearch.trim(), 400);
   const [tdsPct, setTdsPct] = React.useState("1");
 
@@ -181,6 +202,37 @@ export function LDCSlipWizard() {
     () => eligible.data?.pages.flatMap((page) => page.data) ?? [],
     [eligible.data],
   );
+
+  // L1 / Q1 — challans this broker hauled that the company does not bear are
+  // not payable, but they must not just vanish from the operator's view: a
+  // missing challan looks like a system fault, and a `paymentBy` that was
+  // never set is a data-entry gap someone has to go and fix. One page is
+  // enough — this is a prompt to act, not a working list.
+  const needsReview = useQuery({
+    queryKey: [
+      "vendor-payment",
+      "eligible-ldc-review",
+      transportId,
+      branchId,
+      from,
+      to,
+      debouncedChallanSearch,
+    ],
+    queryFn: () =>
+      vendorPaymentApi.eligibleLDCSources({
+        transportId,
+        branchId: branchId || undefined,
+        from: from || undefined,
+        to: to || undefined,
+        search: debouncedChallanSearch || undefined,
+        page: 0,
+        size: PAGE_SIZE,
+        mode: "REVIEW",
+      }),
+    enabled: searched && Boolean(transportId),
+  });
+  const reviewRows = needsReview.data?.data ?? [];
+  const reviewTotal = needsReview.data?.meta?.total ?? 0;
 
   // A new broker or branch is a different set of challans.
   React.useEffect(() => setDrafts({}), [transportId, branchId]);
@@ -246,23 +298,30 @@ export function LDCSlipWizard() {
 
   // Only the claimed detention is read from the client — the server caps it
   // at the slab and re-derives freight, advance and TDS from the challan.
+  // Every `*Paise` field below is prefill only and is overwritten server-side;
+  // the claim travels in its own nullable field, where a blank box means "no
+  // claim filed" rather than a claim of nothing.
   const buildBody = () => ({
     type: "LDC_BROKER" as const,
     branchId,
     transportId,
     tdsRateBps,
-    lines: Object.values(drafts).map((draft) => ({
-      sourceType: "DELIVERY_CHALLAN" as const,
-      sourceId: draft.source.sourceId,
-      freightPaise: draft.source.freightPaise,
-      detentionPaise: String(claimedPaise(draft)),
-      advancePaise: draft.source.advancePaise,
-      commissionPaise: "0",
-      hamaliPaise: "0",
-      tdsPaise: "0",
-      damagePaise: "0",
-      stationeryPaise: "0",
-    })),
+    lines: Object.values(drafts).map((draft) => {
+      const claim = claimedPaise(draft);
+      return {
+        sourceType: "DELIVERY_CHALLAN" as const,
+        sourceId: draft.source.sourceId,
+        freightPaise: draft.source.freightPaise,
+        detentionPaise: "0",
+        advancePaise: draft.source.advancePaise,
+        commissionPaise: "0",
+        hamaliPaise: "0",
+        tdsPaise: "0",
+        damagePaise: "0",
+        stationeryPaise: "0",
+        claimedDetentionPaise: claim === null ? null : String(claim),
+      };
+    }),
   });
 
   const saveDraft = useMutation({
@@ -425,7 +484,7 @@ export function LDCSlipWizard() {
                       <TableRow>
                         <TableHead className="w-10">Select</TableHead>
                         <TableHead>Challan</TableHead>
-                        <TableHead>Loaded</TableHead>
+                        <TableHead>Held</TableHead>
                         <TableHead className="text-right">Freight</TableHead>
                         <TableHead className="text-right">
                           Detention (slab)
@@ -456,10 +515,28 @@ export function LDCSlipWizard() {
                               />
                             </TableCell>
                             <TableCell>
-                              <p className="font-medium">{source.label}</p>
+                              <Link
+                                href={`/vp-management/delivery-challans/${source.sourceId}`}
+                                target="_blank"
+                                className="font-medium transition-colors hover:text-primary hover:underline"
+                              >
+                                {source.label}
+                              </Link>
                               <p className="text-xs text-muted-foreground">
                                 {source.vehicleNumber ?? "No vehicle"}
                               </p>
+                              {source.lrNumbers.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {source.lrNumbers.map((lrNumber) => (
+                                    <span
+                                      key={lrNumber}
+                                      className="rounded-md border border-border px-1.5 py-0.5 text-xs text-muted-foreground"
+                                    >
+                                      {lrNumber}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
                               {source.detentionWarnings.map((warning) => (
                                 <p
                                   key={warning}
@@ -474,13 +551,44 @@ export function LDCSlipWizard() {
                               ))}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {formatDate(source.occurredAt)}
+                              <p className="whitespace-nowrap">
+                                {formatDate(source.occurredAt)}
+                                {source.unloadingAt ? (
+                                  <span className="text-muted-foreground">
+                                    {" → "}
+                                    {formatDate(source.unloadingAt)}
+                                  </span>
+                                ) : null}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {source.detentionDays === null
+                                  ? "Dates incomplete"
+                                  : `${source.detentionDays} day${
+                                      source.detentionDays === 1 ? "" : "s"
+                                    } held`}
+                              </p>
                             </TableCell>
                             <TableCell className="text-right text-sm">
                               <AmountCell paise={source.freightPaise} />
                             </TableCell>
                             <TableCell className="text-right text-sm">
-                              <AmountCell paise={source.detentionPaise} />
+                              <button
+                                type="button"
+                                onClick={() => setExplaining(source)}
+                                className="ml-auto flex flex-col items-end rounded-md px-1.5 py-1 transition-colors hover:bg-muted"
+                                title="Show how this was calculated"
+                              >
+                                <span className="flex items-center gap-1">
+                                  <AmountCell paise={source.detentionPaise} />
+                                  <IconInfoCircle
+                                    size={13}
+                                    className="text-muted-foreground"
+                                  />
+                                </span>
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  {source.slabName ?? "No slab matched"}
+                                </span>
+                              </button>
                             </TableCell>
                             <TableCell>
                               <Input
@@ -527,6 +635,39 @@ export function LDCSlipWizard() {
                 />
               </div>
             )}
+
+            {/* L1 / Q1 — held back by the payment-by rule. Listed, never
+                selectable: the server rejects them on save regardless. */}
+            {reviewTotal > 0 ? (
+              <div className="mt-6 rounded-md border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                <p className="flex items-start gap-2 text-sm font-medium text-amber-900 dark:text-amber-200">
+                  <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  {reviewTotal} challan{reviewTotal === 1 ? "" : "s"} need
+                  review — not payable to the broker as recorded
+                </p>
+                <p className="mt-1 pl-6 text-xs text-amber-800 dark:text-amber-300">
+                  Only challans the company bears can be paid. Fix the
+                  challan&apos;s Payment by field if one of these is wrong.
+                </p>
+                <ul className="mt-2 space-y-1 pl-6">
+                  {reviewRows.map((row) => (
+                    <li key={row.sourceId} className="text-xs">
+                      <span className="font-medium">{row.label}</span>
+                      {row.vehicleNumber ? ` · ${row.vehicleNumber}` : ""}
+                      <span className="text-muted-foreground">
+                        {" — "}
+                        {row.reviewReason}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {reviewTotal > reviewRows.length ? (
+                  <p className="mt-2 pl-6 text-xs text-muted-foreground">
+                    Showing {reviewRows.length} of {reviewTotal}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -636,6 +777,14 @@ export function LDCSlipWizard() {
           </CardContent>
         </Card>
       ) : null}
+
+      <DetentionBreakdownDialog
+        challanId={explaining?.sourceId ?? null}
+        challanNumber={explaining?.label ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setExplaining(null);
+        }}
+      />
     </div>
   );
 }
