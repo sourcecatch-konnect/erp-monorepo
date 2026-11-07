@@ -40,6 +40,7 @@ import {
   PAYMENT_MODE_LABELS,
   SETTLEMENT_MODE_LABELS,
   claimSourceLink,
+  isEstimatedAmount,
 } from "./claim.ui";
 
 /** Photos, the customer's claim letter, surveyor report — one list per claim. */
@@ -370,7 +371,19 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Claimed" value={formatPaise(claim.claimedAmountPaise)} />
+        <StatTile
+          label="Claimed"
+          value={formatPaise(claim.claimedAmountPaise)}
+          // A GRN records cartons, not rupees, so an unassessed GRN claim is
+          // showing the system's pro-rata guess off the LR invoice — not a
+          // figure the customer asked for. Saying so is the whole point:
+          // the two read identically otherwise.
+          hint={
+            isEstimatedAmount(claim)
+              ? "Estimated from the LR invoice — set the real amount when you assess"
+              : undefined
+          }
+        />
         <StatTile
           label="Settled"
           value={formatPaise(claim.settledAmountPaise)}

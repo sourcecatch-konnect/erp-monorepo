@@ -151,3 +151,25 @@ export const quantityText = (damagedQty: number, shortageQty: number) =>
   ]
     .filter(Boolean)
     .join(" · ") || "—";
+
+/**
+ * Is the claimed amount a figure somebody entered, or one the system derived?
+ *
+ * Only an LR acknowledgement carries a rupee figure from the floor; a GRN
+ * records quantities, so its claim opens with a pro-rata estimate off the
+ * LR's invoice. Assessing is what turns an estimate into a real claimed
+ * amount, and assessing moves the claim off PENDING — so a PENDING claim
+ * from a GRN is still showing the system's guess.
+ *
+ * It matters because the two read identically on screen, and an assessor who
+ * mistakes an estimate for what the customer actually asked for will settle
+ * against a number nobody requested.
+ */
+export const isEstimatedAmount = (claim: {
+  status: string;
+  origin: string;
+  claimedAmountPaise: number;
+}) =>
+  claim.status === "PENDING" &&
+  claim.claimedAmountPaise > 0 &&
+  (claim.origin === "GRN" || claim.origin === "RAIL_BRANCH_GRN");

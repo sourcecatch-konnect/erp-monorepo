@@ -50,6 +50,7 @@ import {
   CLAIM_STATUS,
   CLAIM_TYPE_LABELS,
   ClaimStatusBadge,
+  isEstimatedAmount,
 } from "./claim.ui";
 
 const COLUMN_COUNT = 12;
@@ -437,6 +438,13 @@ export function ClaimsListPage() {
                 <TableCell>{claim.causedBy ? CLAIM_CAUSE_LABELS[claim.causedBy] : "—"}</TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatPaise(claim.claimedAmountPaise)}
+                  {/* An unassessed GRN claim shows a pro-rata guess off the
+                      LR invoice, not a figure the customer asked for. */}
+                  {isEstimatedAmount(claim) ? (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      estimated
+                    </span>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatPaise(claim.settledAmountPaise)}
