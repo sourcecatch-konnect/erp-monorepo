@@ -6,7 +6,7 @@ import { IconArrowRight, IconSearch } from "@tabler/icons-react";
 import type { TrainingStageKey } from "@skerp/types";
 import { Input } from "@skerp/ui/components/input";
 import { cn } from "@skerp/ui/lib/util";
-import { TrainingNav } from "./components/TrainingNav";
+import { TrainingPageHeader } from "./components/TrainingPageHeader";
 import {
   AREA_TONES,
   GLOSSARY,
@@ -14,6 +14,9 @@ import {
   type GlossaryArea,
 } from "./content/glossary";
 import { STAGE_TERMS } from "./content/stages";
+import { PlaybackNotice, PlayText } from "./audio/PlayText";
+import { ListenAll } from "./audio/ListenAll";
+import { useTranslate } from "./i18n";
 import { useCompleteOnVisit } from "./hooks/useTraining";
 import { STAGE_BY_KEY } from "./lib/catalog-lookup";
 
@@ -51,6 +54,7 @@ const ALL = "__all__";
 /** A3 — every ERP word in plain language, searchable and tagged by area. */
 export function GlossaryPage() {
   useCompleteOnVisit("/training/glossary");
+  const { t } = useTranslate();
   const [query, setQuery] = useState("");
   const [area, setArea] = useState<GlossaryArea | typeof ALL>(ALL);
 
@@ -74,16 +78,7 @@ export function GlossaryPage() {
 
   return (
     <div className="w-full space-y-4">
-      <header className="space-y-0.5">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Glossary
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Every word the ERP uses, explained in plain language.
-        </p>
-      </header>
-
-      <TrainingNav />
+      <TrainingPageHeader caption="Every word the ERP uses, explained in plain language." />
 
       <section className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
         <p className="text-sm text-muted-foreground">
@@ -115,6 +110,21 @@ export function GlossaryPage() {
           {entries.length} of {GLOSSARY.length} words
         </p>
       </div>
+
+      {/* The whole filtered list, read one word after another: narrow it to
+          an area, press once, and listen through it. */}
+      <ListenAll
+        clips={entries.map((entry) => ({
+          id: `glossary.${entry.id}.meaning`,
+          title: t(`glossary.${entry.id}.term`, entry.term),
+          lines: [
+            `${t(`glossary.${entry.id}.term`, entry.term)}. ${t(`glossary.${entry.id}.meaning`, entry.meaning)}`,
+          ],
+        }))}
+        label={`Listen to all ${entries.length} words`}
+      />
+
+      <PlaybackNotice />
 
       <div className="flex flex-wrap gap-1.5">
         <button
@@ -188,12 +198,19 @@ export function GlossaryPage() {
                   </span>
                   {entry.fullName ? (
                     <span className="w-full text-xs text-muted-foreground">
-                      {entry.fullName}
+                      {t(`glossary.${entry.id}.fullName`, entry.fullName)}
                     </span>
                   ) : null}
                 </dt>
-                <dd className="mt-2 text-sm text-muted-foreground">
-                  {entry.meaning}
+                <dd className="mt-2 flex items-start gap-2 text-sm text-muted-foreground">
+                  <PlayText
+                    id={`glossary.${entry.id}.meaning`}
+                    text={t(`glossary.${entry.id}.meaning`, entry.meaning)}
+                    label={`Read the meaning of ${entry.term} aloud`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    {t(`glossary.${entry.id}.meaning`, entry.meaning)}
+                  </span>
                 </dd>
 
                 {usedIn.length > 0 ? (

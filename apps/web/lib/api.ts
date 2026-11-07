@@ -1,7 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { permissionLabel } from "@skerp/types";
 
-const baseURL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 /**
  * Shared axios instance. Tokens live in httpOnly cookies, so every request
@@ -20,6 +20,18 @@ export const api = axios.create({
 let onAuthFailure: (() => void) | null = null;
 export const setAuthFailureHandler = (fn: () => void) => {
   onAuthFailure = fn;
+};
+
+/**
+ * Called on every 403. The browser's copy of `permissions` comes from
+ * /auth/me at app load, so an admin editing a role leaves it stale — the UI
+ * keeps offering an action the server now refuses. Re-reading the session on a
+ * 403 lets the UI self-correct instead of staying wrong until a hard refresh.
+ * Registered by AuthBootstrap, for the same reason as `onAuthFailure`.
+ */
+let onForbidden: (() => void) | null = null;
+export const setForbiddenHandler = (fn: () => void) => {
+  onForbidden = fn;
 };
 
 /**
@@ -56,6 +68,8 @@ export type ApiRequestError = Error & {
   status?: number;
   code?: string;
   details?: unknown;
+  /** On a 403: the permission key(s) that would have allowed the request. */
+  requiredPermissions?: string[];
 };
 
 const formatDetails = (details: unknown): string | null => {
@@ -88,24 +102,56 @@ const formatDetails = (details: unknown): string | null => {
   return String(details);
 };
 
+/** Reads `details.required` off a 403 body; tolerates a string or an array. */
+const requiredPermissionsOf = (details: unknown): string[] => {
+  if (!details || typeof details !== "object") return [];
+  const required = (details as { required?: unknown }).required;
+  if (typeof required === "string") return [required];
+  if (Array.isArray(required))
+    return required.filter((k): k is string => typeof k === "string");
+  return [];
+};
+
+/**
+ * The server answers a denied request with the bare word "Forbidden", which
+ * tells the reader nothing. Turn the permission key it reports into the same
+ * wording the role editor uses, so people can ask for the right thing.
+ */
+const forbiddenMessage = (keys: string[]): string => {
+  if (!keys.length)
+    return "You don't have permission to do this. Ask an admin to update your role.";
+  const names = keys.map((key) => `"${permissionLabel(key)}"`);
+  const needs = names.length === 1 ? names[0] : names.join(" or ");
+  return `You don't have permission to do this — it needs ${needs}. Ask an admin to add it to your role.`;
+};
+
 const toError = (error: AxiosError): ApiRequestError => {
   const data = error.response?.data as ApiErrorResponse | undefined;
   const apiError = data?.error;
+  const status = error.response?.status;
 
   const details = apiError?.details ?? data?.details;
-  const detailsMessage = formatDetails(details);
+  const code = apiError?.code ?? data?.code;
+
+  // A 403's details carry permission keys, not field errors, so formatDetails
+  // would render them as "required: order.create".
+  const required = status === 403 ? requiredPermissionsOf(details) : [];
+  const detailsMessage = status === 403 ? null : formatDetails(details);
 
   const normalized = new Error(
-    detailsMessage ||
-      apiError?.message ||
-      data?.message ||
-      error.message ||
-      "Something went wrong"
+    status === 403
+      ? forbiddenMessage(required)
+      : detailsMessage ||
+          apiError?.message ||
+          data?.message ||
+          error.message ||
+          "Something went wrong",
   ) as ApiRequestError;
 
-  normalized.status = error.response?.status;
-  normalized.code = apiError?.code ?? data?.code;
+  normalized.status = status;
+  normalized.code = code;
   normalized.details = details;
+  if (required.length) normalized.requiredPermissions = required;
 
   return normalized;
 };
@@ -144,6 +190,12 @@ api.interceptors.response.use(
       onAuthFailure?.();
     }
 
+    // The server refused an action the UI offered, so our permission list is
+    // out of date. Re-read it; the UI corrects itself on the next render.
+    if (status === 403) {
+      onForbidden?.();
+    }
+
     return Promise.reject(toError(error));
-  }
+  },
 );

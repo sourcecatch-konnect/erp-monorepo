@@ -48,4 +48,10 @@ export interface AuthState {
   user: AuthUser | null;
   status: AuthStatus;
   error: string | null;
+  /**
+   * A background re-read of /auth/me is in flight (window refocus, or a 403
+   * suggesting our permission list is stale). Separate from `status` so a
+   * silent refresh never moves an authenticated session back to `loading`.
+   */
+  refreshing: boolean;
 }

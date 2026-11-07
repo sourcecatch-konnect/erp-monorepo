@@ -18,4 +18,14 @@ export const DELIVERY_CHALLANS_HELP: PageHelpContent = {
   ],
   terms: ["dc", "ldc", "broker"],
   trainingStep: "rail.dc",
+  hi: {
+    purpose:
+      "Delivery Challan (DC) से LR का एक group उस truck को सौंपा जाता है जो railhead से last-mile delivery करता है।",
+    howTo: [
+      "Create Delivery Challan दबाइए और जो branch GRN का माल बाहर जा रहा है वो चुनिए।",
+      "एक ही truck में जाने वाले सारे LR एक ही challan पर डालिए।",
+      "Truck निकलते समय challan issue कीजिए।",
+    ],
+    next: "Truck LR deliver करता है। फिर हर LR को delivered मार्क कीजिए और उसका POD upload कीजिए।",
+  },
 };

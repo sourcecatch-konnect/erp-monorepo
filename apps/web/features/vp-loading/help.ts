@@ -18,6 +18,16 @@ export const VP_LOADING_HELP: PageHelpContent = {
   ],
   terms: ["vp", "rake", "hamali"],
   trainingStep: "rail.vp-loading",
+  hi: {
+    purpose:
+      "Rake के हर wagon (VP) में असल में जो माल लोड हुआ, वो उसके VP schedule के सामने दर्ज कीजिए।",
+    howTo: [
+      "Wagon में माल लोड करने के लिए add button दबाइए।",
+      "हर row एक wagon है। खोलकर देखिए क्या लोड हुआ और किसने किया।",
+      "सारे wagon लोड और check हो जाने पर VP schedule Loaded and Verified पर चला जाता है।",
+    ],
+    next: "Rake निकल जाती है। Rail head पर rake और GRN दर्ज कीजिए।",
+  },
 };
 
 export const VP_LOADING_FORM_HELP: PageHelpContent = {
@@ -30,6 +40,26 @@ export const VP_LOADING_FORM_HELP: PageHelpContent = {
     "Enter the quantity loaded and any damage in Goods Loading.",
     "Add labour (hamali) and notes, check the summary, then press Add GRN to Wagon.",
   ],
+  // Overrides the list screen's Hindi, which the spread above would otherwise
+  // carry over and describe the wrong screen.
+  hi: {
+    purpose:
+      "एक LR/GRN का माल rake के एक wagon (VP) में डालिए — damage और labour के साथ।",
+    howTo: [
+      "Loading Selection में schedule, wagon और LR/GRN चुनिए।",
+      "Goods Loading में कितना लोड हुआ और कोई damage हो तो वो भरिए।",
+      "Hamali और notes जोड़िए, summary देखिए, फिर Add GRN to Wagon दबाइए।",
+    ],
+    next: "सारे wagon लोड और check हो जाने पर VP schedule Loaded and Verified पर चला जाता है।",
+    tour: [
+      "यहाँ आप दर्ज करते हैं कि rake के एक wagon (VP) में असल में क्या माल लोड हुआ।",
+      "VP schedule, wagon और जिस LR/GRN का माल जा रहा है वो चुनिए।",
+      "कितना लोड हुआ और कोई damage हो तो भरिए। Wagon की capacity से ज़्यादा होने पर ERP चेतावनी देता है।",
+      "Hamali यानी लोडिंग की मज़दूरी और इस loading के notes यहाँ लिखिए।",
+      "इस तरफ़ दिखता है आपने क्या चुना और कुल कितना हुआ।",
+      "माल को wagon में जोड़ने के लिए यह दबाइए।",
+    ],
+  },
   tour: {
     key: "vp-loading",
     steps: [

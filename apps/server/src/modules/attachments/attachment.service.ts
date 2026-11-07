@@ -20,6 +20,12 @@ const DEFAULT_ALLOWED_MIME = [
   "image/webp",
   "image/gif",
   "application/pdf",
+  // Voice notes. MediaRecorder gives webm/opus on Chrome and Firefox,
+  // mp4/aac on Safari; ogg and mpeg cover older Android browsers.
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
 ];
 
 const maxSizeBytes = (): number =>
@@ -152,7 +158,11 @@ export const removeAttachment = async (id: string) => {
   const attachment = await getAttachment(id);
 
   await deleteObject(attachment.s3Key).catch((error) => {
-    console.error("[attachments] Failed to delete S3 object:", attachment.s3Key, error);
+    console.error(
+      "[attachments] Failed to delete S3 object:",
+      attachment.s3Key,
+      error,
+    );
   });
 
   await db.attachment.update({

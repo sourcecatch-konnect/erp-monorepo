@@ -79,6 +79,8 @@ export default function FeedbackSheet({
   const [byPage, setByPage] = useState<Record<string, PageAttachments>>({});
   const attachments = byPage[pathname] ?? NO_ATTACHMENTS;
   const [picking, setPicking] = useState(false);
+  /** A picture of the picked part is still rendering, with the panel open. */
+  const [capturing, setCapturing] = useState(false);
   const [delivery, setDelivery] = useState<Delivery | null>(null);
   // When My feedback was last opened before now, so new items stay marked.
   const [seenAtOnOpen, setSeenAtOnOpen] = useState(0);
@@ -119,29 +121,51 @@ export default function FeedbackSheet({
       return { voice };
     });
 
+  /*
+   * Pointing, in two halves.
+   *
+   * The panel comes back the moment the user clicks — picking what is wrong
+   * and writing about it are the same thought, and they should not have to
+   * watch a blank page while a screenshot renders. Taking the picture is the
+   * slow half (html-to-image is fetched on demand, fonts have to settle, and
+   * a large table can take seconds), so it runs after the panel is already
+   * open and drops the thumbnail in when it is ready.
+   */
   const startPick = async () => {
     setPicking(true);
     // Wait for the panel's 200ms exit animation: until it ends, Radix keeps
     // pointer-events off the page and nothing could be pointed at.
     await new Promise((resolve) => setTimeout(resolve, 350));
+
+    let picked: Awaited<ReturnType<typeof pickElement>> = null;
     try {
-      const picked = await pickElement();
-      if (!picked) return;
-      // The form is unmounted right now and reads its draft when it comes back.
-      const section = sectionFor(picked.element)?.slice(0, FEEDBACK_MAX_SECTION_CHARS);
-      if (section) {
-        saveDraft(pathname, { ...loadDraft<FeedbackFormValues>(pathname), section });
+      picked = await pickElement();
+      if (picked) {
+        // The form is unmounted right now and reads its draft when it comes
+        // back, so the section has to be stored before the panel reopens.
+        const section = sectionFor(picked.element)?.slice(0, FEEDBACK_MAX_SECTION_CHARS);
+        if (section) {
+          saveDraft(pathname, { ...loadDraft<FeedbackFormValues>(pathname), section });
+        }
+        patchPage(() => ({ element: picked!.info }));
       }
-      const room = attachments.files.length < FEEDBACK_MAX_FILES;
-      const shot = uploadsEnabled && room ? await captureElement(picked.element) : null;
-      patchPage((current) => ({
-        element: picked.info,
-        files: shot ? [...current.files, { kind: "image", id: shot.id, shot }] : current.files,
-      }));
+    } finally {
+      setPicking(false);
+    }
+    if (!picked || !uploadsEnabled) return;
+
+    setCapturing(true);
+    try {
+      const shot = await captureElement(picked.element);
+      patchPage((current) =>
+        current.files.length < FEEDBACK_MAX_FILES
+          ? { files: [...current.files, { kind: "image", id: shot.id, shot }] }
+          : {},
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "We couldn't take that picture.");
     } finally {
-      setPicking(false);
+      setCapturing(false);
     }
   };
 
@@ -188,7 +212,19 @@ export default function FeedbackSheet({
   };
 
   return (
-    <Sheet open={open && !picking} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open && !picking}
+      onOpenChange={(next) => {
+        /*
+         * Hiding the panel so the user can point at the page closes the Sheet,
+         * and Radix reports that as the user closing it. Letting that through
+         * cleared `open`, so the panel never came back and the user had to
+         * press Feedback again. While picking, the close is ours, not theirs.
+         */
+        if (picking) return;
+        onOpenChange(next);
+      }}
+    >
       <SheetContent
         side="right"
         className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl data-[side=right]:lg:max-w-2xl data-[side=right]:xl:max-w-3xl"
@@ -236,6 +272,7 @@ export default function FeedbackSheet({
             page={page}
             attachments={attachments}
             uploadsEnabled={uploadsEnabled}
+            capturing={capturing}
             onFilesChange={setFiles}
             onVoiceChange={setVoice}
             onElementChange={setElement}

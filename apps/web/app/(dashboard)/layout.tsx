@@ -1,4 +1,5 @@
 import { ProtectedRoute } from "@/features/auth";
+import { VoicePlayer } from "@/features/training";
 import { AppShell } from "@/components/layout/AppShell";
 
 /**
@@ -13,6 +14,10 @@ export default function DashboardLayout({
   return (
     <ProtectedRoute>
       <AppShell>{children}</AppShell>
+      {/* Mounted once for the whole dashboard, because read-aloud is reachable
+          from the Help panel on operational screens as well as from training.
+          It renders nothing until something plays. */}
+      <VoicePlayer />
     </ProtectedRoute>
   );
 }

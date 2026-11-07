@@ -11,8 +11,25 @@ import {
 import { trainingKeys } from "../training.keys";
 import { trainingApi } from "../training.service";
 
+/**
+ * The signed-in user's training picture: role, tracks, progress, certificates.
+ *
+ * `staleTime` is deliberately much longer than the app default (30s), because
+ * `PageHelp` reads this on every operational screen that has a Help button —
+ * LR, Orders, Trips, Billing and the rest — to know whether to offer the
+ * screen's tour. At the default it refetched on almost every navigation, and
+ * `/training/me` is seven parallel queries, which is a lot to pay for a dot
+ * on a Help button.
+ *
+ * Staleness costs nothing here: progress only changes through
+ * `useStepProgress`, which writes the new value into this cache itself.
+ */
 export const useTrainingMe = () =>
-  useQuery({ queryKey: trainingKeys.me, queryFn: trainingApi.me });
+  useQuery({
+    queryKey: trainingKeys.me,
+    queryFn: trainingApi.me,
+    staleTime: 5 * 60_000,
+  });
 
 type StepChange =
   | { stepKey: string; status: TrainingStepStatus }
@@ -35,7 +52,9 @@ export function useStepProgress() {
       await queryClient.cancelQueries({ queryKey: trainingKeys.me });
       const previous = queryClient.getQueryData<TrainingMe>(trainingKeys.me);
       if (previous) {
-        const others = previous.progress.filter((entry) => entry.stepKey !== stepKey);
+        const others = previous.progress.filter(
+          (entry) => entry.stepKey !== stepKey,
+        );
         queryClient.setQueryData<TrainingMe>(trainingKeys.me, {
           ...previous,
           progress:
@@ -60,7 +79,8 @@ export function useStepProgress() {
       }
       toast.error(`We couldn't save that: ${error.message}`);
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: trainingKeys.me }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: trainingKeys.me }),
   });
 }
 

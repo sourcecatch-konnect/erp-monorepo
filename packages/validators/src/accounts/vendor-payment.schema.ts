@@ -16,6 +16,7 @@ export const vendorPaymentSourceTypeSchema = z.enum([
   "GRN_HAMALI",
   "RAIL_BRANCH_GRN",
   "VP_LOADING",
+  "DELIVERY_CHALLAN",
   /** Claims C7: an approved transporter recovery deducted on the slip. */
   "CLAIM_RECOVERY",
 ]);
@@ -93,6 +94,26 @@ export const eligibleHamaliSourceQuerySchema = z.object({
   ...eligibleChunkParams,
 });
 
+/** LDC broker browse: page-based, since challans are one queryable table.
+ *  (The hamali stream is cursor-based only because it merges three.) */
+export const eligibleLDCSourceQuerySchema = z.object({
+  transportId: id,
+  branchId: id.optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  search: z.string().trim().min(1).max(100).optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(20),
+  /**
+   * `PAYABLE` (default) lists challans the broker can be paid for — the
+   * company-borne ones. `REVIEW` lists the complement: everything held back
+   * by that rule, so it stays visible to an operator rather than silently
+   * disappearing. Review rows are informational and can never be selected
+   * onto a slip (the server rejects them on save regardless).
+   */
+  mode: z.enum(["PAYABLE", "REVIEW"]).default("PAYABLE"),
+});
+
 /* ------------------------------------------------------------------ */
 /* Slip create / update — shared by TRANSPORTER (VP-4) and HAMALI (VP-5) */
 /* ------------------------------------------------------------------ */
@@ -112,6 +133,18 @@ export const vendorPaymentSlipLineInputSchema = z.object({
   tdsPaise: moneyPaise,
   damagePaise: moneyPaise,
   stationeryPaise: moneyPaise,
+
+  /**
+   * LDC_BROKER only — what the broker billed for detention, when they billed
+   * anything. The server pays the lower of this and the slab.
+   *
+   * Deliberately NOT `moneyPaise`: that defaults to `0n`, and an absent claim
+   * must not read as a claim of nothing. Omit the field (or send null) when no
+   * claim was filed and the slab stands; send `0` only to mean a filed claim of
+   * zero. Before this field existed the claim rode on `detentionPaise`, whose
+   * `0n` default silently paid the broker no detention at all (audit D-14).
+   */
+  claimedDetentionPaise: z.coerce.bigint().nonnegative().nullish(),
 });
 
 // Basis points (1 bps = 0.01%, 10000 bps = 100%) — same convention as
@@ -160,6 +193,28 @@ const refinePayee = (
         code: z.ZodIssueCode.custom,
         path: ["transportId"],
         message: "A hamali slip cannot also set transportId",
+      });
+    if (value.tdsRateBps === undefined)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tdsRateBps"],
+        message: "Enter a TDS percentage",
+      });
+  } else if (value.type === "LDC_BROKER") {
+    // The broker is a Transport, same as a transporter slip. TDS is always
+    // deducted (he is a contractor), and the server recomputes every amount
+    // from the challan and the detention slab.
+    if (!value.transportId)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["transportId"],
+        message: "Select a broker / transporter",
+      });
+    if (value.labourId)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["labourId"],
+        message: "An LDC broker slip cannot also set labourId",
       });
     if (value.tdsRateBps === undefined)
       ctx.addIssue({

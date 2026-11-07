@@ -3,18 +3,18 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  IconCamera,
   IconFileTypeDocx,
   IconFileTypePdf,
   IconFileTypeXls,
+  IconHandFinger,
   IconPaperclip,
   IconPencil,
   IconX,
 } from "@tabler/icons-react";
 import { FEEDBACK_MAX_FILES, type FeedbackDocumentMime } from "@skerp/validators";
 import { Button } from "@skerp/ui/components/button";
+import { Skeleton } from "@skerp/ui/components/skeleton";
 import { cn } from "@skerp/ui/lib/util";
-import { capturePage } from "../lib/capture";
 import {
   FILE_ACCEPT,
   classifyFile,
@@ -70,19 +70,25 @@ export async function toPendingFiles(files: File[], room: number): Promise<Pendi
 }
 
 /**
- * "Images & documents": choose files (camera on phones), a picture of this
- * page, drag and drop, and Ctrl+V anywhere in the form (handled by the form).
- * Pictures can be marked up before sending.
+ * "Show us": point at the part that is wrong, take a picture of the page, or
+ * add your own file. Drag and drop and Ctrl+V anywhere in the form also work
+ * (the form handles the paste). Pictures can be marked up before sending.
  */
 export function AttachmentsSection({
   files,
+  capturing = false,
   onFilesChange,
   onElementRemoved,
+  onPoint,
 }: {
   files: PendingFile[];
+  /** The picture of the pointed-at part is still rendering. */
+  capturing?: boolean;
   onFilesChange: (files: PendingFile[]) => void;
   /** The picked-element picture was removed, so forget the picked element too. */
   onElementRemoved: () => void;
+  /** Hides the panel, lets the user click the page, then reopens it. */
+  onPoint: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,22 +108,6 @@ export function AttachmentsSection({
     }
   };
 
-  const addPagePicture = async () => {
-    if (full) return;
-    setBusy(true);
-    try {
-      const shot = await capturePage();
-      onFilesChange([...files, { kind: "image", id: shot.id, shot }]);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "We couldn't take the picture. Try 'Choose files' instead.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const remove = (file: PendingFile) => {
     releaseFile(file);
@@ -128,7 +118,7 @@ export function AttachmentsSection({
   return (
     <section
       className={cn(
-        "flex flex-col gap-3 rounded-md border bg-card p-4 transition-colors duration-150",
+        "flex flex-col gap-3 rounded-lg border bg-card p-4 transition-colors duration-150",
         dragging ? "border-primary bg-primary/5" : "border-border",
       )}
       onDragOver={(event) => {
@@ -143,33 +133,46 @@ export function AttachmentsSection({
         void addFiles(Array.from(event.dataTransfer.files));
       }}
     >
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">Images &amp; documents</h3>
-        <p className="text-xs text-muted-foreground">
-          Up to {FEEDBACK_MAX_FILES} files, 12 MB each. Pictures, PDF, Word (.docx), Excel (.xlsx).
-        </p>
+      <div className="flex items-start gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <IconHandFinger className="size-[18px]" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">Show us</h3>
+          <p className="text-xs text-muted-foreground">
+            A picture helps the team see the problem straight away.
+          </p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {/*
+       * Pointing is the primary action: it needs no thought — click the thing
+       * that is wrong and the picture, the section name and the element are
+       * all filled in at once. It takes its own full-width row, and the two
+       * fallbacks share the next one. This panel sits in a half-width column
+       * beside the voice note, so three buttons abreast would not fit anyway.
+       */}
+      <div className="grid gap-2">
         <Button
           type="button"
-          variant="outline"
-          className="max-sm:h-11"
+          className="h-11 w-full"
           disabled={full || busy}
-          onClick={() => fileInput.current?.click()}
+          onClick={onPoint}
         >
-          <IconPaperclip className="size-4" aria-hidden />
-          Choose files
+          <IconHandFinger className="size-4" aria-hidden />
+          Point at the problem
         </Button>
         <Button
           type="button"
           variant="outline"
-          className="max-sm:h-11"
+          className="h-11 w-full"
           disabled={full || busy}
-          onClick={addPagePicture}
+          onClick={() => fileInput.current?.click()}
         >
-          <IconCamera className="size-4" aria-hidden />
-          {busy ? "Adding…" : "Picture of this page"}
+          <IconPaperclip className="size-4 shrink-0" aria-hidden />
+          <span className="truncate">
+            {busy ? "Adding…" : "Add a picture or file"}
+          </span>
         </Button>
         <input
           ref={fileInput}
@@ -187,12 +190,24 @@ export function AttachmentsSection({
         />
       </div>
 
-      {files.length > 0 ? (
+      {files.length > 0 || capturing ? (
         <>
           <p className="text-xs text-muted-foreground">
             {files.length} of {FEEDBACK_MAX_FILES} files
+            {capturing ? " · taking the picture…" : ""}
           </p>
           <ul className="grid gap-2 sm:grid-cols-2">
+            {/* The panel reopens the instant the user clicks; the picture of
+                what they pointed at lands here a moment later. */}
+            {capturing ? (
+              <li
+                className="space-y-1.5 rounded-md border border-border p-2"
+                aria-label="Taking the picture"
+              >
+                <Skeleton className="h-24 w-full rounded-sm" />
+                <Skeleton className="h-8 w-full" />
+              </li>
+            ) : null}
             {files.map((file, index) =>
               file.kind === "image" ? (
                 <li key={file.id} className="space-y-1.5 rounded-md border border-border p-2">
@@ -202,25 +217,25 @@ export function AttachmentsSection({
                     alt={`Picture ${index + 1}`}
                     className="h-24 w-full rounded-sm border border-border object-cover object-top"
                   />
-                  <div className="flex gap-1">
+                  <div className="flex">
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
-                      className="flex-1 max-sm:h-10"
+                      size="xs"
+                      className="flex-1 max-sm:h-8"
                       onClick={() => setAnnotating(file.shot)}
                     >
-                      <IconPencil className="size-3.5" aria-hidden />
+                      <IconPencil className="size-3" aria-hidden />
                       Mark
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
-                      className="flex-1 max-sm:h-10"
+                      size="xs"
+                      className="flex-1 max-sm:h-8"
                       onClick={() => remove(file)}
                     >
-                      <IconX className="size-3.5" aria-hidden />
+                      <IconX className="size-3" aria-hidden />
                       Remove
                     </Button>
                   </div>

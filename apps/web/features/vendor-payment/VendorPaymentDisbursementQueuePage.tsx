@@ -22,6 +22,7 @@ import {
   LoadMoreFooter,
   PageHeader,
   SkeletonTableRows,
+  VENDOR_PAYMENT_TYPE_LABELS,
   VendorPaymentStatusBadge,
   money,
 } from "./vendor-payment.ui";
@@ -111,7 +112,9 @@ export function VendorPaymentDisbursementQueuePage() {
                       onClick={() => router.push(`/accounts/vendor-payments/${slip.id}/disburse`)}
                     >
                       <TableCell className="font-medium">{slip.slipNumber}</TableCell>
-                      <TableCell className="text-sm">{slip.type}</TableCell>
+                      <TableCell className="text-sm">
+                        {VENDOR_PAYMENT_TYPE_LABELS[slip.type]}
+                      </TableCell>
                       <TableCell className="text-sm">
                         {slip.transport?.name ?? slip.labour?.name ?? "—"}
                       </TableCell>

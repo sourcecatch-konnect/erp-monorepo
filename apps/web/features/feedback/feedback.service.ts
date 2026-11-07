@@ -27,6 +27,9 @@ import {
   type ListResult,
 } from "@/features/masters/_shared/master-api";
 
+/** Items per page in the "My feedback" tab. */
+export const MY_FEEDBACK_PAGE_SIZE = 20;
+
 export type FeedbackListParams = {
   page: number;
   size: number;
@@ -69,10 +72,27 @@ export const feedbackApi = {
       await api.post<ApiResponse<FeedbackCreated>>("/feedback", body),
     ),
 
-  mine: async (): Promise<MyFeedbackItem[]> =>
-    unwrapApiResponse(
-      await api.get<ApiResponse<MyFeedbackItem[]>>("/feedback/mine"),
+  /** One page of the reporter's own feedback, newest first. */
+  mine: async (page = 0, size = MY_FEEDBACK_PAGE_SIZE): Promise<ListResult<MyFeedbackItem>> =>
+    unwrapListResponse(
+      await api.get<ApiResponse<MyFeedbackItem[]>>("/feedback/mine", {
+        params: { page, size },
+      }),
     ),
+
+  /**
+   * How many of the reporter's items changed after they were sent and since
+   * `seenAt`. Counted by the server across *all* their items — deriving it
+   * from the list would miss anything past the first page.
+   */
+  myUpdates: async (seenAt: number): Promise<number> =>
+    (
+      await unwrapApiResponse(
+        await api.get<ApiResponse<{ count: number }>>("/feedback/mine/updates", {
+          params: { since: new Date(seenAt).toISOString() },
+        }),
+      )
+    ).count,
 
   summary: async (): Promise<FeedbackSummary> =>
     unwrapApiResponse(
@@ -138,12 +158,27 @@ export const feedbackApi = {
     contentType: string,
     onProgress?: (fraction: number) => void,
   ): Promise<void> => {
-    await axios.put(uploadUrl, blob, {
-      headers: { "Content-Type": contentType },
-      onUploadProgress: (event) => {
-        if (onProgress && event.total) onProgress(event.loaded / event.total);
-      },
-    });
+    try {
+      await axios.put(uploadUrl, blob, {
+        headers: { "Content-Type": contentType },
+        onUploadProgress: (event) => {
+          if (onProgress && event.total) onProgress(event.loaded / event.total);
+        },
+      });
+    } catch (error) {
+      /*
+       * S3 answers with XML, and axios turns that into "Request failed with
+       * status code 403" — which tells the reporter nothing and reads like
+       * their feedback was rejected. A 403 here is the server's storage
+       * credentials, never anything the reporter did.
+       */
+      const status = axios.isAxiosError(error) ? error.response?.status : null;
+      throw new Error(
+        status === 403 || status === 401
+          ? "File storage rejected the upload. This is a server setting, not something you did — please tell the team."
+          : "We couldn't send this file. Your feedback was saved; you can retry the file.",
+      );
+    }
   },
 
   completeFile: async (

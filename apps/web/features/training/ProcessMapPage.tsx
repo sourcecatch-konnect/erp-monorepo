@@ -14,9 +14,10 @@ import {
 import { Skeleton } from "@skerp/ui/components/skeleton";
 import { MAIN_FLOW, SIDE_FLOWS, type MapSection } from "./content/process-map";
 import { STAGE_CONTENT, STAGE_TERMS } from "./content/stages";
+import { PlaybackNotice } from "./audio/PlayText";
 import { SectionRail, TONE_BADGE, sectionTone } from "./components/SectionRail";
 import { StageDetail } from "./components/StageDetail";
-import { TrainingNav } from "./components/TrainingNav";
+import { TrainingPageHeader } from "./components/TrainingPageHeader";
 import { useCompleteOnVisit, useTrainingMe } from "./hooks/useTraining";
 import { STAGE_BY_KEY } from "./lib/catalog-lookup";
 import { cn } from "@skerp/ui/lib/util";
@@ -161,16 +162,7 @@ export function ProcessMapPage() {
 
   return (
     <div className="w-full space-y-4">
-      <header className="space-y-0.5">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          How the business works
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Understand each step, your part in it, and who takes over next.
-        </p>
-      </header>
-
-      <TrainingNav />
+      <TrainingPageHeader caption="The numbered parts below are the order a job travels through. Pick a part, then a step, to see what happens there and who picks it up after you." />
 
       {isError ? (
         <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -188,78 +180,77 @@ export function ProcessMapPage() {
         )
       ) : (
         <>
-          <section className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
-            <p className="text-sm font-semibold text-foreground">
-              See how your work connects
-            </p>
-            <p className="text-sm text-muted-foreground">
-              The numbered parts below are the order a job travels through. Pick
-              a part, then a step, to see what happens there and who picks it up
-              after you.
-            </p>
-          </section>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-56 flex-1">
-              <IconSearch
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Find a step or a word…"
-                aria-label="Find a step"
-                className="pl-9"
-              />
+          {/* Search, the role picker and the colour key are one toolbar: all
+              three change what the map below shows, so they read as a set
+              rather than as controls floating above the page. */}
+          <section className="rounded-lg border border-border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative min-w-56 flex-1">
+                <IconSearch
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Find a step or a word…"
+                  aria-label="Find a step"
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="map-highlight"
+                  className="whitespace-nowrap text-sm text-muted-foreground"
+                >
+                  Highlight steps for
+                </label>
+                <Select value={mode} onValueChange={setMode}>
+                  <SelectTrigger id="map-highlight" className="h-10 w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={MINE}>Me ({me.role.name})</SelectItem>
+                    {roles.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {role}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={NONE}>Nobody (plain map)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <label
-              htmlFor="map-highlight"
-              className="text-sm text-muted-foreground"
-            >
-              Highlight steps for
-            </label>
-            <Select value={mode} onValueChange={setMode}>
-              <SelectTrigger id="map-highlight" className="h-10 w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={MINE}>Me ({me.role.name})</SelectItem>
-                {roles.map((role) => (
-                  <SelectItem key={role} value={role}>
-                    {role}
-                  </SelectItem>
-                ))}
-                <SelectItem value={NONE}>Nobody (plain map)</SelectItem>
-              </SelectContent>
-            </Select>
+
             {mode === MINE ? (
-              <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-2.5 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <span
                     aria-hidden
                     className="size-2.5 rounded-full bg-primary"
                   />
-                  {owned} you do
+                  <span className="tabular-nums">{owned}</span> you do
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <span
                     aria-hidden
                     className="size-2.5 rounded-full border border-muted-foreground"
                   />
-                  {canLook} you can look at
+                  <span className="tabular-nums">{canLook}</span> you can look
+                  at
                 </span>
-              </span>
+                {ownsNearlyEverything ? (
+                  <span className="basis-full text-xs text-muted-foreground">
+                    Your role can do almost every step, so &ldquo;me&rdquo;
+                    marks nearly the whole map — pick a role to see what that
+                    team does.
+                  </span>
+                ) : null}
+              </div>
             ) : null}
-          </div>
+          </section>
 
-          {ownsNearlyEverything && mode === MINE ? (
-            <p className="rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
-              Your role can do almost every step, so &ldquo;me&rdquo; marks
-              nearly the whole map. Pick a role above to see what that team
-              does.
-            </p>
-          ) : null}
+          <PlaybackNotice />
 
           {hits ? (
             <section className="rounded-lg border border-border bg-card p-4">

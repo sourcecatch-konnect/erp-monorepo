@@ -33,6 +33,7 @@ import {
   useDeliveryChallanDetail,
   useIssueDeliveryChallan,
 } from "./useDeliveryChallan";
+import { ChallanAckPanel } from "./ChallanAckPanel";
 
 const formatDate = (value?: string | null) =>
   value
@@ -348,6 +349,11 @@ export default function DeliveryChallanDetail({
           <p className="mt-1 text-sm">{row.cancelReason}</p>
         </div>
       ) : null}
+
+      {/* L5 — the two accounts and the ruling between them. Only an issued
+          challan can be acknowledged, so there is nothing to show before
+          that, and a cancelled one is no longer going anywhere. */}
+      {row.status === "ISSUED" ? <ChallanAckPanel challanId={row.id} /> : null}
     </div>
   );
 }

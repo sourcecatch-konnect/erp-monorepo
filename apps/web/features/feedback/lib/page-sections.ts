@@ -1,11 +1,11 @@
 /**
- * Options for "Page section", read from the page itself when the panel opens,
- * so no feature page has to register anything: the visible headings and card
- * titles inside the AppShell work area (<main>), in page order.
+ * Names a part of the page from the page itself, so no feature page has to
+ * register anything: the visible headings and card titles inside the AppShell
+ * work area (<main>), in page order. Used when the reporter points at the
+ * screen — there is no "Page section" field to fill in by hand.
  */
 
 const SECTION_SELECTOR = 'h1, h2, h3, [data-slot="card-title"]';
-const MAX_SECTIONS = 20;
 const MAX_SECTION_CHARS = 80;
 
 const textOf = (element: HTMLElement): string =>
@@ -23,21 +23,6 @@ const headings = (): HTMLElement[] => {
   const main = document.querySelector("main");
   return main ? Array.from(main.querySelectorAll<HTMLElement>(SECTION_SELECTOR)) : [];
 };
-
-export function listPageSections(): string[] {
-  const seen = new Set<string>();
-  const sections: string[] = [];
-  for (const heading of headings()) {
-    if (!isVisible(heading)) continue;
-    const text = textOf(heading);
-    const key = text.toLowerCase();
-    if (!text || seen.has(key)) continue;
-    seen.add(key);
-    sections.push(text);
-    if (sections.length >= MAX_SECTIONS) break;
-  }
-  return sections;
-}
 
 /** The heading the picked element sits under, else the element's own text. */
 export function sectionFor(element: HTMLElement): string | undefined {

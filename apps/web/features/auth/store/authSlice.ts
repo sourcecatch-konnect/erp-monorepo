@@ -6,6 +6,7 @@ const initialState: AuthState = {
   user: null,
   status: "idle",
   error: null,
+  refreshing: false,
 };
 
 /** Logs in via /auth/login, then hydrates permissions via /auth/me. */
@@ -36,6 +37,23 @@ export const fetchMe = createAsyncThunk<
     );
   }
 });
+
+/**
+ * Silent re-read of the session, for when our `permissions` list may be stale:
+ * the window regained focus, or the server just refused something the UI
+ * offered. Unlike `fetchMe` it never moves `status` to `loading`, so nothing
+ * on screen flickers, and a failure is ignored — the existing session stands
+ * until a real 401 tears it down.
+ */
+export const refreshMe = createAsyncThunk<AuthUser, void>(
+  "auth/refreshMe",
+  () => getMe(),
+  {
+    // One at a time, so a burst of 403s doesn't trigger a burst of requests.
+    condition: (_, { getState }) =>
+      !(getState() as { auth: AuthState }).auth.refreshing,
+  },
+);
 
 /** Logs out and clears cookies; local state is cleared regardless. */
 export const logout = createAsyncThunk("auth/logout", async () => {
@@ -80,6 +98,19 @@ const authSlice = createSlice({
       .addCase(fetchMe.rejected, (state) => {
         state.user = null;
         state.status = "unauthenticated";
+      })
+      .addCase(refreshMe.pending, (state) => {
+        state.refreshing = true;
+      })
+      .addCase(refreshMe.fulfilled, (state, action) => {
+        state.refreshing = false;
+        // Only refresh a live session — never resurrect one that's been torn
+        // down while this request was in flight.
+        if (state.status !== "authenticated") return;
+        state.user = action.payload;
+      })
+      .addCase(refreshMe.rejected, (state) => {
+        state.refreshing = false;
       })
       .addCase(logout.fulfilled, (state) => {
         state.user = null;

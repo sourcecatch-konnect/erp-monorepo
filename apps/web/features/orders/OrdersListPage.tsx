@@ -12,7 +12,7 @@ import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { IconPlus } from "@tabler/icons-react";
 
-import { useCan } from "@/features/auth";
+import { RequirePermission, useCan } from "@/features/auth";
 import { useTablePrefs } from "@/features/table-prefs";
 import { useDebouncedValue } from "../masters/_shared/hooks/useDebouncedValue";
 import getErrorMessage from "../masters/_shared/hooks/useMasterMutation";
@@ -51,7 +51,6 @@ export default function OrdersListPage() {
   const [rejectOrder, setRejectOrder] = React.useState<Order | null>(null);
   const [cancelOrder, setCancelOrder] = React.useState<Order | null>(null);
   const [deleteOrder, setDeleteOrder] = React.useState<Order | null>(null);
-  const canCreate = useCan(PERMS.ORDER.CREATE);
   const canApprove = useCan(PERMS.ORDER.APPROVE);
   const canReject = useCan(PERMS.ORDER.REJECT);
   const canCancel = useCan(PERMS.ORDER.CANCEL);
@@ -71,14 +70,10 @@ export default function OrdersListPage() {
       page,
       size,
       sort,
-      ...(debouncedSearch.trim()
-        ? { search: debouncedSearch.trim() }
-        : {}),
-      ...(statusFilter !== "ALL"
-        ? { filter: { status: statusFilter } }
-        : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+      ...(statusFilter !== "ALL" ? { filter: { status: statusFilter } } : {}),
     }),
-    [page, size, sort, debouncedSearch, statusFilter]
+    [page, size, sort, debouncedSearch, statusFilter],
   );
 
   const orders = useQuery({
@@ -151,30 +146,28 @@ export default function OrdersListPage() {
       toast.error("Could not download order PDF");
     }
   };
-const onCreateLR = (order: OrderListRow) => {
-  const hasLRGroup =
-    Boolean(order.hasLRGroup) || Number(order.lrGroupCount ?? 0) > 0;
+  const onCreateLR = (order: OrderListRow) => {
+    const hasLRGroup =
+      Boolean(order.hasLRGroup) || Number(order.lrGroupCount ?? 0) > 0;
 
-  if (hasLRGroup) {
-    toast.error("LR is already created for this order");
-    return;
-  }
+    if (hasLRGroup) {
+      toast.error("LR is already created for this order");
+      return;
+    }
 
-  router.push(
-    `/lorry-receipts/new?orderId=${encodeURIComponent(order.id)}`
-  );
-};
+    router.push(`/lorry-receipts/new?orderId=${encodeURIComponent(order.id)}`);
+  };
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Orders</h1>
         <div className="flex items-center gap-2">
           <PageHelp content={ORDERS_HELP} />
-          {canCreate ? (
+          <RequirePermission permission={PERMS.ORDER.CREATE}>
             <Button onClick={() => router.push("/orders/new")}>
               <IconPlus size={16} className="mr-1" /> New Order
             </Button>
-          ) : null}
+          </RequirePermission>
         </div>
       </div>
 
@@ -212,7 +205,6 @@ const onCreateLR = (order: OrderListRow) => {
         onDownloadPdf={handleDownloadPdf}
         canDownloadPdf={true}
       />
-
 
       <OrderQuickViewModal
         orderId={quickViewId}

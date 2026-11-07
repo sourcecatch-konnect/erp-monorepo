@@ -7,6 +7,7 @@ import type {
   AddEwayBillBody,
   EwayBill,
   LRDelivery,
+  LRDeliveryChallan,
   LRAcknowledgement,
   DeliverLRFormInput,
   AcknowledgeLRFormInput,
@@ -121,6 +122,14 @@ export const lorryReceiptApi = {
     const res = await api.patch<ApiResponse<LRDelivery>>(
       `/lorry-receipts/${id}/delivery`,
       body,
+    );
+    return unwrapApiResponse(res);
+  },
+
+  /** Live challans carrying this LR — their report dates are set on delivery. */
+  deliveryChallans: async (id: string): Promise<LRDeliveryChallan[]> => {
+    const res = await api.get<ApiResponse<LRDeliveryChallan[]>>(
+      `/lorry-receipts/${id}/delivery-challans`,
     );
     return unwrapApiResponse(res);
   },

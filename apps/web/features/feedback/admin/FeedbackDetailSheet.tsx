@@ -336,7 +336,7 @@ export function FeedbackDetailSheet({
               ) : null}
 
               {legacyDetailRows(item.details).length > 0 ? (
-                <Section title="Answers from the old form">
+                <Section title="Answers">
                   <FieldList rows={legacyDetailRows(item.details)} />
                 </Section>
               ) : null}

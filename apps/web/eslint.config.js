@@ -5,6 +5,18 @@ import unusedImports from "eslint-plugin-unused-imports";
 export default [
   ...nextJsConfig,
   {
+    /*
+     * Build-time scripts are Node, not browser: they are run by hand with
+     * `node`, never bundled. Without this they are linted with browser
+     * globals only and every `process` reads as an undefined variable.
+     */
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly" },
+      sourceType: "module",
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     plugins: { "unused-imports": unusedImports },
     rules: {

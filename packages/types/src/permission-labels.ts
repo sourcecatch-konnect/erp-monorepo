@@ -156,6 +156,12 @@ const labels = {
   "masters.cash-account.delete": "Delete cash accounts",
   "masters.cash-account.bulk_import": "Upload cash accounts from a file",
   "masters.cash-account.export": "Download cash account list",
+  "masters.detention-slab.view": "View detention slabs",
+  "masters.detention-slab.create": "Add detention slabs",
+  "masters.detention-slab.update": "Edit detention slabs",
+  "masters.detention-slab.delete": "Delete detention slabs",
+  "masters.detention-slab.bulk_import": "Upload detention slabs from a file",
+  "masters.detention-slab.export": "Download detention slab list",
   "accounts.payment.approve": "Approve vendor payments",
   "accounts.payment.view": "View vendor payments",
   "accounts.payment.create": "Create vendor payments",
@@ -269,6 +275,8 @@ const labels = {
   "delivery_challan.delete": "Delete delivery challans",
   "delivery_challan.issue": "Issue delivery challans",
   "delivery_challan.cancel": "Cancel delivery challans",
+  "delivery_challan.ack.broker": "File the broker acknowledgement on a delivery challan",
+  "delivery_challan.approve": "Approve a delivery challan (accept one acknowledgement)",
   "ewaybill.view": "View e-way bills",
   "ewaybill.create": "Create e-way bills",
   "ewaybill.update": "Edit e-way bills",
@@ -397,6 +405,7 @@ const areas: Record<string, string> = {
   "masters.rate-matrix": "Master data: Rate matrices",
   "masters.creditor": "Master data: Creditors",
   "masters.cash-account": "Master data: Cash accounts",
+  "masters.detention-slab": "Master data: Detention slabs",
 };
 const readable = (value: string): string => {
   const text = value
@@ -417,3 +426,76 @@ export const permissionAreaLabel = (moduleCode: string): string =>
   areas[moduleCode] ?? readable(moduleCode);
 export const permissionLabel = (key: string): string =>
   (labels as Record<string, string>)[key] ?? readable(key);
+
+/**
+ * Coarse grouping for the role editor's navigation rail. ~35 permission areas
+ * are too many to present as flat peers; these buckets give the admin four or
+ * five things to scan instead. Unmapped areas fall into "Other".
+ */
+const areaGroups: Record<string, string> = {
+  order: "Operations",
+  lorry_receipt: "Operations",
+  trip: "Operations",
+  vehicle_journey: "Operations",
+  logslip: "Operations",
+  delivery_challan: "Operations",
+  ewaybill: "Operations",
+  tracking: "Operations",
+  attachments: "Operations",
+
+  vp_schedule: "Rail",
+  vp_loading: "Rail",
+  mrrr: "Rail",
+  grn: "Rail",
+  rail_branch_grn: "Rail",
+  rail_rake_operation: "Rail",
+  rake_at_rail_head: "Rail",
+  rake_at_branch: "Rail",
+
+  trip_expense: "Finance",
+  trip_advance: "Finance",
+  driver_finance: "Finance",
+  accounts: "Finance",
+  cashplanning: "Finance",
+  billing: "Finance",
+  receipt: "Finance",
+  ledger: "Finance",
+
+  workshop: "Workshop",
+
+  admin: "Administration",
+  notifications: "Administration",
+  feedback: "Administration",
+};
+
+/** Display order of the groups in the rail. */
+export const PERMISSION_GROUP_ORDER = [
+  "Master data",
+  "Operations",
+  "Rail",
+  "Finance",
+  "Workshop",
+  "Administration",
+  "Other",
+] as const;
+
+export const permissionAreaGroup = (moduleCode: string): string =>
+  moduleCode.startsWith("masters.")
+    ? "Master data"
+    : (areaGroups[moduleCode] ?? "Other");
+
+/**
+ * The area label without its group prefix — "Customers" rather than
+ * "Master data: Customers" — for use where the group is already on screen.
+ */
+export const permissionAreaShortLabel = (moduleCode: string): string => {
+  const label = permissionAreaLabel(moduleCode);
+  const colon = label.indexOf(": ");
+  return colon === -1 ? label : label.slice(colon + 2);
+};
+
+/** The action segment of a key: `masters.customer.bulk_import` -> `bulk_import`. */
+export const permissionActionOf = (key: string): string => {
+  const area = permissionAreaOf(key);
+  return key.startsWith(`${area}.`) ? key.slice(area.length + 1) : key;
+};

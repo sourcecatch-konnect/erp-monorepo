@@ -12,6 +12,16 @@ export { TrainingDashboardPanel } from "./components/TrainingDashboardPanel";
 /** Inline glossary word for any screen: <Term id="tbb">TBB</Term>. */
 export { Term } from "./components/Term";
 /** "Help" button + panel + guided tour for a page header (A7/A8). */
-export { PageHelp, type PageHelpContent, type PageTour } from "./components/PageHelp";
+export {
+  PageHelp,
+  type PageHelpContent,
+  type PageTour,
+} from "./components/PageHelp";
 export { trainingApi } from "./training.service";
 export { trainingKeys } from "./training.keys";
+/** Read-aloud: the one on/off + speed control, and a button for any text. */
+export { VoiceSettings } from "./audio/VoiceSettings";
+export { PlayText, PlaybackNotice } from "./audio/PlayText";
+export { VoicePlayer } from "./audio/VoicePlayer";
+export { ListenAll } from "./audio/ListenAll";
+export { type Clip } from "./audio/player";

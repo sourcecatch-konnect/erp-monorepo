@@ -39,7 +39,7 @@ export const rupeesToPaise = (label: string, opts: MoneyOptions = {}) =>
 export const optionalRupeesToPaise = (label: string, opts: MoneyOptions = {}) =>
   z
     .union([z.string(), z.number()])
-    .optional()
+    .nullish()
     .transform((value) => {
       if (value === "" || value === undefined || value === null) {
         return undefined;

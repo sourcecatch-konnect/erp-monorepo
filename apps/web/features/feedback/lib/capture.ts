@@ -11,6 +11,57 @@ import { canvasToScreenshot, tokenColor, type Screenshot } from "./images";
 
 const loadRenderer = () => import("html-to-image");
 
+/**
+ * The renderer can return a canvas that is one flat colour — the clone came
+ * out unstyled or empty, but nothing threw. Without this check the user is
+ * handed a white rectangle and only finds out when the team opens it.
+ *
+ * Sampled on a grid rather than pixel by pixel: a full read of a 3200x1800
+ * canvas is slow, and any real screenshot varies within a few dozen samples.
+ */
+const BLANK_SAMPLE_STEP = 16;
+
+
+function looksBlank(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return false;
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  } catch {
+    // Tainted canvas (a cross-origin image got in). Not our problem to judge.
+    return false;
+  }
+  const stride = BLANK_SAMPLE_STEP * 4;
+  let first: number | null = null;
+  for (let row = 0; row < canvas.height; row += BLANK_SAMPLE_STEP) {
+    const rowStart = row * canvas.width * 4;
+    for (let i = rowStart; i < rowStart + canvas.width * 4; i += stride) {
+      // Pack RGB into one number; alpha is ignored, JPEG drops it anyway.
+      const pixel = (data[i]! << 16) | (data[i + 1]! << 8) | data[i + 2]!;
+      if (first === null) first = pixel;
+      else if (pixel !== first) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Fonts and lazy images that haven't settled render as blank boxes in the
+ * clone, so wait for them before cloning anything.
+ */
+async function settled(): Promise<void> {
+  try {
+    await document.fonts.ready;
+  } catch {
+    // Older browsers without the font loading API: nothing to wait for.
+  }
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+const BLANK_MESSAGE =
+  "The picture came out blank, so we didn't attach it. Please use 'Add a picture or file' with a screenshot instead.";
+
 const skipSensitive = (node: HTMLElement) =>
   !(node instanceof HTMLInputElement && node.type === "password");
 
@@ -21,29 +72,11 @@ const backgroundColor = () =>
 const workArea = (): HTMLElement =>
   document.querySelector<HTMLElement>("main") ?? document.body;
 
-/**
- * What the user can see of the current page. The work area scrolls inside
- * <main>, and a DOM copy always starts at the top, so the copy is shifted up
- * by the scroll position and clipped to the visible height.
- */
-export async function capturePage(): Promise<Screenshot> {
-  const { toCanvas } = await loadRenderer();
-  const area = workArea();
-  const content = (area.firstElementChild as HTMLElement | null) ?? area;
-  const canvas = await toCanvas(content, {
-    width: area.clientWidth,
-    height: area.clientHeight,
-    backgroundColor: backgroundColor(),
-    pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-    filter: skipSensitive,
-    style: { transform: `translateY(-${area.scrollTop}px)` },
-  });
-  return canvasToScreenshot(canvas, "page");
-}
 
 /** A picture of the picked part with a box around it, plus some of what's around it. */
 export async function captureElement(element: HTMLElement): Promise<Screenshot> {
   const { toCanvas } = await loadRenderer();
+  await settled();
 
   // A lone button makes a useless tiny picture — climb to a parent big enough
   // to show where on the page it is.
@@ -60,6 +93,9 @@ export async function captureElement(element: HTMLElement): Promise<Screenshot> 
     pixelRatio: ratio,
     filter: skipSensitive,
   });
+
+  // Checked before the box is drawn — the box alone would make it look fine.
+  if (looksBlank(canvas)) throw new Error(BLANK_MESSAGE);
 
   const frameRect = frame.getBoundingClientRect();
   const target = element.getBoundingClientRect();

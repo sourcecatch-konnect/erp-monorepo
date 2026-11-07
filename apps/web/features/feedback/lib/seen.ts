@@ -38,14 +38,7 @@ export const isUpdatedSince = (item: MyFeedbackItem, seenAt: number) => {
 };
 
 export function useFeedbackUpdates(enabled: boolean) {
-  const { data } = useQuery({
-    queryKey: feedbackKeys.mine,
-    queryFn: feedbackApi.mine,
-    enabled,
-    staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
-  });
-  const [seenAt, setSeenAt] = useState(0);
+  const [seenAt, setSeenAt] = useState<number | null>(null);
 
   useEffect(() => {
     setSeenAt(readSeenAt());
@@ -54,5 +47,23 @@ export function useFeedbackUpdates(enabled: boolean) {
     return () => window.removeEventListener(EVENT, onSeen);
   }, []);
 
-  return (data ?? []).filter((item) => isUpdatedSince(item, seenAt)).length;
+  /*
+   * Counted by the server, over every item the reporter has.
+   *
+   * It used to be counted here from the "My feedback" list, which is one
+   * page: a reply on anything past that page raised no dot, and nothing on
+   * screen said so. The reporter simply believed they had been ignored.
+   *
+   * `seenAt` starts null until localStorage has been read — querying with 0
+   * would count every item the reporter ever sent and flash a wrong number.
+   */
+  const { data } = useQuery({
+    queryKey: feedbackKeys.myUpdates(seenAt ?? 0),
+    queryFn: () => feedbackApi.myUpdates(seenAt ?? 0),
+    enabled: enabled && seenAt !== null,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
+  return data ?? 0;
 }

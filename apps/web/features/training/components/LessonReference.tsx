@@ -18,6 +18,7 @@ import {
 import { cn } from "@skerp/ui/lib/util";
 import { GLOSSARY } from "../content/glossary";
 import type { LessonContent } from "../content/lessons";
+import { useTranslate } from "../i18n";
 import { Term } from "./Term";
 
 const GLOSSARY_BY_ID = new Map(GLOSSARY.map((entry) => [entry.id, entry]));
@@ -85,8 +86,17 @@ function ReferenceRow({
  * first, how the status moves, the words used, the thing to watch out for.
  * Closed by default — a lesson that opens everything at once is a wall.
  */
-export function LessonReference({ content }: { content: LessonContent }) {
-  const needs = content.needs ?? [];
+export function LessonReference({
+  content,
+  stepKey,
+}: {
+  content: LessonContent;
+  /** Names the translations: `lesson.<stepKey>.needs`, `lesson.<stepKey>.warn`. */
+  stepKey: string;
+}) {
+  const { t, tList } = useTranslate();
+  const needs = tList(`lesson.${stepKey}.needs`, content.needs ?? []);
+  const warn = t(`lesson.${stepKey}.warn`, content.warn ?? "");
   const terms = (content.terms ?? [])
     .map((id) => GLOSSARY_BY_ID.get(id))
     .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
@@ -101,7 +111,10 @@ export function LessonReference({ content }: { content: LessonContent }) {
         <ReferenceRow
           icon={IconListCheck}
           tone="success"
-          title={`Before you start — ${needs.length} ${needs.length === 1 ? "thing" : "things"} needed`}
+          title={t(
+            "ui.beforeYouStartRow",
+            `Before you start — ${needs.length} ${needs.length === 1 ? "thing" : "things"} needed`,
+          )}
           preview={needs.join(" · ")}
         >
           <ul className="space-y-1.5">
@@ -124,7 +137,7 @@ export function LessonReference({ content }: { content: LessonContent }) {
         <ReferenceRow
           icon={IconRefresh}
           tone="primary"
-          title={`How the ${flow.document}'s status moves`}
+          title={t("ui.statusMoves", `How the ${flow.document}'s status moves`)}
           preview={flow.steps.join(" → ")}
         >
           <div className="flex flex-wrap items-center gap-1.5">
@@ -161,7 +174,7 @@ export function LessonReference({ content }: { content: LessonContent }) {
         <ReferenceRow
           icon={IconBook2}
           tone="primary"
-          title={`Words in this lesson (${terms.length})`}
+          title={`${t("ui.wordsInLesson", "Words in this lesson")} (${terms.length})`}
           preview={terms.map((entry) => entry.term).join(" · ")}
         >
           <div className="flex flex-wrap gap-1.5">
@@ -187,9 +200,9 @@ export function LessonReference({ content }: { content: LessonContent }) {
           icon={IconAlertTriangle}
           tone="warning"
           title="Watch out — 1 thing"
-          preview={content.warn}
+          preview={warn}
         >
-          <p className="text-sm text-muted-foreground">{content.warn}</p>
+          <p className="text-sm text-muted-foreground">{warn}</p>
         </ReferenceRow>
       ) : null}
     </div>

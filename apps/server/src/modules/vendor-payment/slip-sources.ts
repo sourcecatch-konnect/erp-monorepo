@@ -39,9 +39,11 @@ export async function resolveLineSources(
   const grnIds = idsOf(lines, "GRN_HAMALI");
   const branchGrnIds = idsOf(lines, "RAIL_BRANCH_GRN");
   const wagonIds = idsOf(lines, "VP_LOADING");
+  const challanIds = idsOf(lines, "DELIVERY_CHALLAN");
   const recoveryIds = idsOf(lines, "CLAIM_RECOVERY");
 
-  const [trucks, lrs, grns, branchGrns, wagons, recoveries] = await Promise.all([
+  const [trucks, lrs, grns, branchGrns, wagons, challans, recoveries] =
+    await Promise.all([
     truckIds.length
       ? client.lRGroup.findMany({ where: { id: { in: truckIds } }, select: truckSelect })
       : [],
@@ -79,6 +81,18 @@ export async function resolveLineSources(
           select: { id: true, gateNo: true, mrRrRow: { select: { vpNo: true } } },
         })
       : [],
+    challanIds.length
+      ? client.deliveryChallan.findMany({
+          where: { id: { in: challanIds } },
+          select: {
+            id: true,
+            challanNumber: true,
+            vehicleNumberSnapshot: true,
+            vehicle: { select: { vehicleNumber: true } },
+            items: { select: { lrNumberSnapshot: true } },
+          },
+        })
+      : [],
     // Claims C7: the damage recovery and its claim / LR.
     recoveryIds.length
       ? client.claimRecovery.findMany({
@@ -86,7 +100,9 @@ export async function resolveLineSources(
           select: {
             id: true,
             lineNo: true,
-            claim: { select: { claimNumber: true, lr: { select: { lrNumber: true } } } },
+            claim: {
+              select: { claimNumber: true, lr: { select: { lrNumber: true } } },
+            },
           },
         })
       : [],
@@ -144,6 +160,25 @@ export async function resolveLineSources(
       lrs: [],
     });
   }
+
+  for (const challan of challans) {
+    sources.set(challan.id, {
+      label: challan.challanNumber,
+      vehicleNumber:
+        challan.vehicle?.vehicleNumber ?? challan.vehicleNumberSnapshot,
+      // Detention sits on the challan as a whole, not per LR — it is computed
+      // from the window across all of them — so the per-LR amounts are zero
+      // and the LRs are listed for identification only.
+      lrs: challan.items.map((item) => ({
+        lrNumber: item.lrNumberSnapshot,
+        unloadingPoint: null,
+        deliveredAt: null,
+        detentionPaise: 0n,
+        damagePaise: 0n,
+      })),
+    });
+  }
+
   for (const recovery of recoveries) {
     sources.set(recovery.id, {
       label: `Damage claim ${recovery.claim.claimNumber} R${recovery.lineNo} (LR ${recovery.claim.lr.lrNumber})`,
@@ -151,6 +186,7 @@ export async function resolveLineSources(
       lrs: [],
     });
   }
+
   return sources;
 }
 

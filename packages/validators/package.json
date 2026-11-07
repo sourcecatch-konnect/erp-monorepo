@@ -10,6 +10,10 @@
       "types": "./src/index.ts",
       "import": "./dist/index.js"
     },
+    "./master/detention-slab": {
+      "types": "./src/master/detention-slab.schema.ts",
+      "import": "./dist/master/detention-slab.schema.js"
+    },
     "./master/state": {
       "types": "./src/master/state.schema.ts",
       "import": "./dist/master/state.schema.js"

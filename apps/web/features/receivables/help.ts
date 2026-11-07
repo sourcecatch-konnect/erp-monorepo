@@ -19,4 +19,15 @@ export const RECEIPTS_HELP: PageHelpContent = {
   ],
   terms: ["tds"],
   trainingStep: "acc.receipt",
+  hi: {
+    purpose:
+      "Customer से आया पैसा दर्ज कीजिए और उसे उनके bill से match कीजिए — उन्होंने जो TDS काटा है वो भी।",
+    howTo: [
+      "नया receipt जोड़ने के लिए button दबाइए।",
+      "Payment की amount, तारीख़ और bank details भरिए।",
+      "उसे customer के bill से match कीजिए और हर bill पर TDS भरिए।",
+      "Save कीजिए, फिर approval के लिए भेजिए।",
+    ],
+    next: "Receipt post होते ही bill paid दिखने लगते हैं और customer का ledger update हो जाता है।",
+  },
 };

@@ -71,10 +71,22 @@ export type UserRef = {
   lastName: string;
 };
 
+/** A live challan carrying the LR, for its report date in the deliver dialog. */
+export type LRDeliveryChallan = {
+  id: string;
+  challanNumber: string;
+  status: string;
+  loadingAt: string;
+  reportDate: string | null;
+  version: number;
+};
+
 export type LRDelivery = {
   id: string;
   lrId: string;
   deliveredAt: string;
+  /** Truck arrival at the consignee — start of the detention window. */
+  reportedAt: string | null;
   unloadingAt: string | null;
   receiverName: string | null;
   receiverPhone: string | null;
@@ -306,6 +318,8 @@ export type LRUnloadingReportDetail = LRUnloadingReportRow & {
     challanNumber: string;
     status: string;
     loadingAt: string;
+    /** Broker's truck reported at the station — a detention start candidate. */
+    reportDate: string | null;
     issuedAt: string | null;
     vehicleNumber: string | null;
     driverName: string | null;
