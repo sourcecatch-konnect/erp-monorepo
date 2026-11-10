@@ -49,6 +49,7 @@ import {
   headOfficeBranch,
   monthLabel,
   paySalaryRun,
+  removeRunDeduction,
   salaryRunDetail,
   updateSalaryRun,
 } from "./salary-run.service.js";
@@ -429,7 +430,12 @@ router.patch("/salary-runs/:id", can(PERMS.DRIVER_FINANCE.SALARY_MANAGE), async 
   if (input.updateMaster && !req.ctx?.permissions.has(PERMS.MASTERS.DRIVER.UPDATE))
     throw new ForbiddenError("You can change the salary in this run, but not in the Driver master");
   // The service checks branch access on the run it already reads.
-  const result = await updateSalaryRun(id, input, (branch) => assertHeadOfficeAccess(req, branch));
+  const result = await updateSalaryRun(
+    id,
+    input,
+    (branch) => assertHeadOfficeAccess(req, branch),
+    actorId(req),
+  );
   sendOk(res, await salaryRunDetail(id));
   // After the reply — the edit is committed and recordAuditEntry never throws.
   if (result.masterUpdates.length)
@@ -441,6 +447,22 @@ router.patch("/salary-runs/:id", can(PERMS.DRIVER_FINANCE.SALARY_MANAGE), async 
       after: { drivers: result.masterUpdates },
     });
 });
+
+/** Take a damage-claim recovery off a draft run — deducted from a later run instead (C6). */
+router.post(
+  "/salary-runs/:id/damage-recoveries/:recoveryId/remove",
+  can(PERMS.DRIVER_FINANCE.SALARY_MANAGE),
+  async (req, res) => {
+    const id = getParamId(req);
+    const recoveryId = req.params.recoveryId;
+    if (!recoveryId || Array.isArray(recoveryId)) throw new ValidationError({ recoveryId: ["Invalid ID"] });
+    const input = validate(driverSalaryRunVersionSchema.safeParse(req.body));
+    await removeRunDeduction(id, recoveryId, input.version, actorId(req), (branch) =>
+      assertHeadOfficeAccess(req, branch),
+    );
+    return sendOk(res, await salaryRunDetail(id));
+  },
+);
 
 router.post(
   "/salary-runs/:id/approve",

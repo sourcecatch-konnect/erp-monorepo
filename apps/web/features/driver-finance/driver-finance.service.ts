@@ -176,8 +176,19 @@ export type DriverSalaryLine = {
   logSlipBalancePaise: string;
   otherPaymentsPaise: string;
   previousBalancePaise: string;
+  /** Damage-claim recoveries deducted this month (claims C6). */
+  damageRecoveryPaise: string;
   netPaise: string;
   remarks: string | null;
+  /** The claim recoveries behind damageRecoveryPaise. `posted` once the run is approved. */
+  damageRecoveries: Array<{
+    id: string;
+    label: string;
+    claimId: string;
+    amountPaise: string;
+    status: string;
+    posted: boolean;
+  }>;
   /** Paid so far from this run. */
   paidPaise: string;
   /** Vehicle(s) the driver drove during the month. */
@@ -333,6 +344,12 @@ export const driverFinanceApi = {
     ),
   createSalaryRun: (body: { month: string }) =>
     post<DriverSalaryRun>("/driver-finance/salary-runs", body),
+  /** Take a damage-claim recovery off a draft run — it waits for a later run. */
+  removeDamageRecovery: (id: string, recoveryId: string, version: number) =>
+    post<DriverSalaryRun>(
+      `/driver-finance/salary-runs/${id}/damage-recoveries/${recoveryId}/remove`,
+      { version },
+    ),
   updateSalaryRun: async (
     id: string,
     body: { version: number; lines: SalaryRunLineEdit[]; updateMaster?: boolean },

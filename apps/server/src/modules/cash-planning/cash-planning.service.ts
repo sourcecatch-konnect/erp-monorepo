@@ -38,6 +38,8 @@ const SOURCE_LABEL: Record<string, string> = {
   VENDOR_PAYMENT: "Payment",
   DRIVER_PAYOUT: "Driver payment",
   DRIVER_SALARY_ADVANCE: "Salary advance",
+  CLAIM_SETTLEMENT: "Damage claim paid",
+  CLAIM_RECOVERY: "Damage recovery received",
   OPENING_BALANCE: "Opening balance",
   MANUAL: "Journal",
 };

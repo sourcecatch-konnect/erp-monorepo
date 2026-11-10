@@ -58,6 +58,6 @@ The full flow is explained in [ERP flow](erp-flow.md). All terms are in the [Glo
 - **Money is stored in paise** (₹1 = 100 paise) so there are no rounding errors.
 - **Every money action posts a voucher** in the books (double entry, like Tally).
 - **Nothing is deleted from the books.** A mistake is corrected with a **reversal** entry.
-- **Payments need approval** where configured, and the person who made a document may not be allowed to approve it (maker-checker).
+- **Payments need approval** where configured. Vendor-payment approval follows role permissions and branch access; salary runs retain their separate maker-checker control.
 - **You can't pay more than a cash or bank account holds** (driver payments).
 - The **local/test** ERP and the **live** ERP use **separate databases**.

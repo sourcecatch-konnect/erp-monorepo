@@ -34,6 +34,7 @@ import { branchApi } from "@/features/masters/branch/branch.service";
 import { transportApi } from "@/features/masters/transport/transport.service";
 import {
   vendorPaymentApi,
+  type EligibleTransporterClaimRecovery,
   type EligibleTransporterTruck,
 } from "./vendor-payment.service";
 import {
@@ -152,6 +153,29 @@ export function TransporterSlipWizard() {
     [eligible.data],
   );
 
+  // Claims C7: approved damage recoveries from this transporter — ticked by
+  // default, since the ticket deducts them on the transporter's next slip.
+  const claimRecoveries = useQuery({
+    queryKey: ["vendor-payment", "transporter-claim-recoveries", transportId],
+    queryFn: () => vendorPaymentApi.eligibleTransporterClaimRecoveries(transportId),
+    enabled: searched && Boolean(transportId),
+  });
+  const [skippedRecoveries, setSkippedRecoveries] = React.useState<Set<string>>(new Set());
+  const selectedRecoveries: EligibleTransporterClaimRecovery[] = (claimRecoveries.data ?? []).filter(
+    (recovery) => !skippedRecoveries.has(recovery.recoveryId),
+  );
+  const toggleRecovery = (recoveryId: string, checked: boolean) =>
+    setSkippedRecoveries((prev) => {
+      const next = new Set(prev);
+      if (checked) next.delete(recoveryId);
+      else next.add(recoveryId);
+      return next;
+    });
+  const recoveryDeductionPaise = selectedRecoveries.reduce(
+    (sum, recovery) => sum + big(recovery.damagePaise),
+    0n,
+  );
+
   const toggleTruck = (truck: EligibleTransporterTruck, checked: boolean) => {
     setDrafts((prev) => {
       if (checked) {
@@ -175,8 +199,9 @@ export function TransporterSlipWizard() {
       gross += truckGrossPaise(draft.truck);
       net += truckNetPaise(draft);
     }
+    net -= recoveryDeductionPaise;
     return { gross, deductions: gross - net, net };
-  }, [drafts]);
+  }, [drafts, recoveryDeductionPaise]);
 
   const negativeTrucks = Object.values(drafts).filter((draft) => truckNetPaise(draft) < 0n);
 
@@ -184,7 +209,8 @@ export function TransporterSlipWizard() {
     selectedIds.length > 0 &&
     Boolean(branchId) &&
     Boolean(transportId) &&
-    negativeTrucks.length === 0;
+    negativeTrucks.length === 0 &&
+    totals.net >= 0n;
 
   // Amounts other than stationery are sent as a prefill only — the server
   // re-derives every one of them from the truck and its LRs.
@@ -192,18 +218,33 @@ export function TransporterSlipWizard() {
     type: "TRANSPORTER" as const,
     branchId,
     transportId,
-    lines: Object.values(drafts).map(({ truck: t, stationery }) => ({
-      sourceType: "LR_GROUP" as const,
-      sourceId: t.groupId,
-      freightPaise: t.freightPaise,
-      detentionPaise: t.detentionPaise,
-      advancePaise: t.advancePaise,
-      commissionPaise: t.commissionPaise,
-      hamaliPaise: t.hamaliPaise,
-      tdsPaise: t.tdsPaise,
-      damagePaise: t.damagePaise,
-      stationeryPaise: rupeesToPaise(stationery || "0"),
-    })),
+    lines: [
+      ...Object.values(drafts).map(({ truck: t, stationery }) => ({
+        sourceType: "LR_GROUP" as const,
+        sourceId: t.groupId,
+        freightPaise: t.freightPaise,
+        detentionPaise: t.detentionPaise,
+        advancePaise: t.advancePaise,
+        commissionPaise: t.commissionPaise,
+        hamaliPaise: t.hamaliPaise,
+        tdsPaise: t.tdsPaise,
+        damagePaise: t.damagePaise,
+        stationeryPaise: rupeesToPaise(stationery || "0"),
+      })),
+      // Claims C7 — the server re-derives the deduction from the claim.
+      ...selectedRecoveries.map((recovery) => ({
+        sourceType: "CLAIM_RECOVERY" as const,
+        sourceId: recovery.recoveryId,
+        freightPaise: "0",
+        detentionPaise: "0",
+        advancePaise: "0",
+        commissionPaise: "0",
+        hamaliPaise: "0",
+        tdsPaise: "0",
+        damagePaise: recovery.damagePaise,
+        stationeryPaise: "0",
+      })),
+    ],
   });
 
   const saveDraft = useMutation({
@@ -480,6 +521,66 @@ export function TransporterSlipWizard() {
                 />
               </div>
             )}
+            {claimRecoveries.data?.length ? (
+              <div className="space-y-2 border-t pt-4">
+                <div>
+                  <p className="text-sm font-semibold">Damage claim recoveries</p>
+                  <p className="text-xs text-muted-foreground">
+                    Approved recoveries from this transporter, deducted on this slip. Where the
+                    claim came from an LR acknowledgement, the truck line already takes that
+                    damage — only the rest is deducted here.
+                  </p>
+                </div>
+                <div className="overflow-x-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">Deduct</TableHead>
+                        <TableHead>Claim</TableHead>
+                        <TableHead>LR</TableHead>
+                        <TableHead className="text-right">Recovery</TableHead>
+                        <TableHead className="text-right">Already on truck (ack)</TableHead>
+                        <TableHead className="text-right">Deducted here</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {claimRecoveries.data.map((recovery) => {
+                        const checked = !skippedRecoveries.has(recovery.recoveryId);
+                        return (
+                          <TableRow key={recovery.recoveryId} className={checked ? "bg-primary/5" : undefined}>
+                            <TableCell>
+                              <Checkbox
+                                checked={checked}
+                                aria-label={`Deduct ${recovery.claimNumber} R${recovery.lineNo}`}
+                                onCheckedChange={(v) => toggleRecovery(recovery.recoveryId, v === true)}
+                              />
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <p className="font-medium">
+                                {recovery.claimNumber} R{recovery.lineNo}
+                              </p>
+                              {recovery.referenceNo ? (
+                                <p className="text-xs text-muted-foreground">Ref. {recovery.referenceNo}</p>
+                              ) : null}
+                            </TableCell>
+                            <TableCell className="text-sm">{recovery.lrNumber}</TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={recovery.amountPaise} />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              <AmountCell paise={recovery.coveredByAckPaise} />
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-medium">
+                              <AmountCell paise={recovery.damagePaise} minus />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -500,6 +601,15 @@ export function TransporterSlipWizard() {
                 <p>
                   {negativeTrucks.length} selected truck{negativeTrucks.length === 1 ? " has" : "s have"}{" "}
                   deductions exceeding its freight + detention — fix before saving.
+                </p>
+              </div>
+            ) : null}
+            {totals.net < 0n ? (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
+                <p>
+                  The damage recoveries are more than this slip pays — untick one and deduct it
+                  from a later slip.
                 </p>
               </div>
             ) : null}

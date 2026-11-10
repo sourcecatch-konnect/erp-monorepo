@@ -7,6 +7,8 @@ import { ForbiddenError } from "../../lib/error.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { sendError, sendOk } from "../_shared/response.js";
 import * as widgets from "./widgets.js";
+import { branchFilter } from "../../auth/branch-scope.js";
+import { claimsDashboard } from "../claim/claim.reports.js";
 
 /**
  * Dashboard — how the business is running. Every figure is an aggregate over
@@ -63,6 +65,7 @@ router.get("/", async (req, res) => {
     lr: perms.has(PERMS.LORRY_RECEIPT.VIEW),
     rail: perms.has(PERMS.RAIL_RAKE_OPERATION.VIEW),
     vehicle: perms.has(PERMS.MASTERS.VEHICLE.VIEW),
+    claim: perms.has(PERMS.CLAIM.VIEW),
   };
 
   // Operations spans orders, LRs and billing. Showing it with a step the
@@ -93,6 +96,7 @@ router.get("/", async (req, res) => {
     branchPerformance,
     profit,
     payables,
+    claims,
     branches,
   ] = await Promise.all([
     can.billing ? widgets.revenue(scoped, window, now, can.receipt) : null,
@@ -108,6 +112,8 @@ router.get("/", async (req, res) => {
     // Journey profit comes from log slips, which belong to trips.
     can.trip ? widgets.profit(window) : null,
     canSeePayables ? widgets.payables(scoped) : null,
+    // Damage claims (claims C8): open claims and this month's net loss.
+    can.claim ? claimsDashboard(branchFilter(scoped), now) : null,
     db.branch.findMany({
       where:
         req.ctx?.branchScope === "ALL"
@@ -132,6 +138,7 @@ router.get("/", async (req, res) => {
     branchPerformance,
     profit,
     payables,
+    claims,
   };
   return sendOk(res, body);
 });

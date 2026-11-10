@@ -100,9 +100,15 @@ const CANONICAL_ROLES: {
       PERMS.BILLING.APPROVE,
       PERMS.RECEIPT.VIEW,
       PERMS.RECEIPT.APPROVE,
-      // Rules on the broker's claim. Deliberately NOT paired with
+      PERMS.CLAIM.VIEW,
+      PERMS.CLAIM.CREATE,
+      PERMS.CLAIM.UPDATE,
+      PERMS.CLAIM.SETTLE,
+      PERMS.CLAIM.RECOVERY,
+      PERMS.CLAIM.APPROVE,
+      // Rules on the broker.s claim. Deliberately NOT paired with
       // ACK_BROKER (which Operations holds): the person who types the
-      // broker's figures must not be the person who approves them. The
+      // broker.s figures must not be the person who approves them. The
       // service enforces the same rule per user.
       PERMS.DELIVERY_CHALLAN.APPROVE,
     ],
@@ -138,7 +144,10 @@ const CANONICAL_ROLES: {
       PERMS.ATTACHMENTS.VIEW,
       PERMS.ATTACHMENTS.CREATE,
       PERMS.ATTACHMENTS.DOWNLOAD,
-      // Transcribes the broker's bill and email into the challan. Approval
+      PERMS.CLAIM.VIEW,
+      PERMS.CLAIM.CREATE,
+      PERMS.CLAIM.UPDATE,
+      // Transcribes the broker.s bill and email into the challan. Approval
       // sits with Branch Manager, not here.
       PERMS.DELIVERY_CHALLAN.ACK_BROKER,
     ],
@@ -196,6 +205,9 @@ const CANONICAL_ROLES: {
       PERMS.DRIVER_FINANCE.SALARY_APPROVE,
       PERMS.DRIVER_FINANCE.ADVANCE_MANAGE,
       PERMS.DRIVER_FINANCE.PAY,
+      PERMS.CLAIM.VIEW,
+      PERMS.CLAIM.SETTLE,
+      PERMS.CLAIM.RECOVERY,
       PERMS.LEDGER.VIEW,
       PERMS.LEDGER.VOUCHER_VIEW,
       PERMS.LEDGER.MANAGE,
@@ -234,6 +246,7 @@ const CANONICAL_ROLES: {
       PERMS.BILLING.VIEW,
       PERMS.RECEIPT.VIEW,
       PERMS.DRIVER_FINANCE.SALARY_VIEW,
+      PERMS.CLAIM.VIEW,
       PERMS.LEDGER.VIEW,
       PERMS.LEDGER.VOUCHER_VIEW,
       PERMS.WORKSHOP.PO_VIEW,

@@ -6,6 +6,7 @@ import {
   createVendorPaymentSlipSchema,
   eligibleHamaliSourceQuerySchema,
   eligibleLDCSourceQuerySchema,
+  eligibleTransporterClaimRecoveryQuerySchema,
   eligibleTransporterLRQuerySchema,
   rejectVendorPaymentSlipSchema,
   submitVendorPaymentSlipSchema,
@@ -24,7 +25,6 @@ import { can } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
@@ -43,10 +43,7 @@ import {
   reverseVendorSlipAccrual,
 } from "../ledger/posting.service.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
-import {
-  decideVendorPaymentApproval,
-  vendorPaymentMakerCheckerEnabled,
-} from "./approval-decision.js";
+import { decideVendorPaymentApproval } from "./approval-decision.js";
 import {
   findEligibleTransporterLRs,
   reconcileTransporterLines,
@@ -69,6 +66,11 @@ import {
 } from "./calculators/ldc-broker.js";
 import { SLIP_LIST_ORDER_BY, buildSlipListWhere } from "./slip-list.query.js";
 import { assertFundingMatchesMode } from "../driver-finance/driver-finance.service.js";
+import {
+  findEligibleClaimRecoveries,
+  reconcileClaimRecoveryLines,
+} from "./calculators/claim-recovery.js";
+import { receiveSlipRecoveries, releaseSlipRecoveries } from "../claim/claim.slip-deduction.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -162,6 +164,13 @@ const ZERO_LINE_COMPONENTS = {
  * different number, and a stale/foreign/already-claimed sourceId fails
  * loudly instead of silently posting.
  */
+/** What a transporter slip can carry: trucks, legacy LRs, damage recoveries (C7). */
+const TRANSPORTER_SOURCE_TYPES = new Set<VendorPaymentSlipLineInput["sourceType"]>([
+  "LR_GROUP",
+  "LR",
+  "CLAIM_RECOVERY",
+]);
+
 async function buildServerLines(
   client: typeof db | Prisma.TransactionClient,
   type: VendorPaymentType,
@@ -177,25 +186,17 @@ async function buildServerLines(
     const truckIds = lines
       .filter((l) => l.sourceType === "LR_GROUP")
       .map((l) => l.sourceId);
-    const lrIds = lines
-      .filter((l) => l.sourceType === "LR")
+    const lrIds = lines.filter((l) => l.sourceType === "LR").map((l) => l.sourceId);
+    const recoveryIds = lines
+      .filter((l) => l.sourceType === "CLAIM_RECOVERY")
       .map((l) => l.sourceId);
-    if (lines.some((l) => l.sourceType !== "LR_GROUP" && l.sourceType !== "LR"))
-      throw new BadRequestError("A transporter slip takes truck lines only");
+    if (lines.some((l) => !TRANSPORTER_SOURCE_TYPES.has(l.sourceType)))
+      throw new BadRequestError("A transporter slip takes truck lines and damage recoveries only");
 
-    const [trucks, legacyLrs] = await Promise.all([
-      reconcileTransporterTrucks(
-        client,
-        payee.transportId,
-        truckIds,
-        excludeSlipId,
-      ),
-      reconcileTransporterLines(
-        client,
-        payee.transportId,
-        lrIds,
-        excludeSlipId,
-      ),
+    const [trucks, legacyLrs, recoveries] = await Promise.all([
+      reconcileTransporterTrucks(client, payee.transportId, truckIds, excludeSlipId),
+      reconcileTransporterLines(client, payee.transportId, lrIds, excludeSlipId),
+      reconcileClaimRecoveryLines(client, payee.transportId, recoveryIds, excludeSlipId),
     ]);
     // The same truck can't be on this slip both whole and LR-wise.
     const doubled = [...legacyLrs.values()].filter((lr) =>
@@ -207,6 +208,17 @@ async function buildServerLines(
       );
 
     return lines.map((line) => {
+      // Claims C7: a damage recovery deducts only what the truck line's ack
+      // damage doesn't already take — re-derived here, never the client's.
+      if (line.sourceType === "CLAIM_RECOVERY") {
+        const recovery = recoveries.get(line.sourceId)!;
+        return {
+          sourceType: line.sourceType,
+          sourceId: line.sourceId,
+          ...ZERO_LINE_COMPONENTS,
+          damagePaise: recovery.damagePaise,
+        };
+      }
       const server =
         line.sourceType === "LR_GROUP"
           ? trucks.get(line.sourceId)
@@ -388,7 +400,8 @@ function recalcSlipTotals(type: VendorPaymentType, lines: BuiltSlipLine[]) {
       );
     }
     const net = gross - deductions;
-    if (net < 0n)
+    // A damage-recovery line (C7) is all deduction; only the slip total must stay >= 0.
+    if (net < 0n && line.sourceType !== "CLAIM_RECOVERY")
       throw new BadRequestError(
         `Source ${line.sourceId}: deductions exceed the gross amount`,
       );
@@ -398,6 +411,10 @@ function recalcSlipTotals(type: VendorPaymentType, lines: BuiltSlipLine[]) {
     return { ...line, netPaise: net };
   });
 
+  if (netPayablePaise < 0n)
+    throw new BadRequestError(
+      "The damage recoveries are more than this slip pays — leave one off and deduct it from a later slip",
+    );
   return { grossPayablePaise, totalDeductionsPaise, netPayablePaise, netLines };
 }
 
@@ -509,6 +526,17 @@ router.get(
   },
 );
 
+// Claims C7: approved damage recoveries to deduct on this transporter's slip.
+router.get(
+  "/calculators/transporter-claim-recoveries",
+  can(PERMS.ACCOUNTS.PAYMENT.CREATE),
+  async (req, res) => {
+    const input = validate(eligibleTransporterClaimRecoveryQuerySchema.safeParse(req.query));
+    const rows = await findEligibleClaimRecoveries(db, input.transportId, branchFilter(req));
+    return sendOk(res, rows);
+  },
+);
+
 router.get(
   "/calculators/hamali",
   can(PERMS.ACCOUNTS.PAYMENT.CREATE),
@@ -586,7 +614,7 @@ router.post("/slips", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) => {
   assertBranchAccess(req, input.branchId);
   if (
     input.type === "TRANSPORTER" &&
-    input.lines.some((l) => l.sourceType !== "LR_GROUP")
+    input.lines.some((l) => l.sourceType !== "LR_GROUP" && l.sourceType !== "CLAIM_RECOVERY")
   )
     throw new BadRequestError(
       "Transporter slips are made per truck — select trucks, not single LRs",
@@ -807,6 +835,9 @@ async function approveAndAccrue(
     createdById: actorUserId,
   });
 
+  // Claims C7: the accrual just credited DAMAGE_RECOVERY for its recovery lines.
+  await receiveSlipRecoveries(tx, approved, actorUserId);
+
   return tx.vendorPaymentSlip.update({
     where: { id },
     data: { accrualJournalEntryId: journal.id },
@@ -917,10 +948,6 @@ router.post(
       );
 
     const me = actorId(req);
-    if (vendorPaymentMakerCheckerEnabled() && existing.createdById === me)
-      throw new ForbiddenError(
-        "Maker-checker is enabled — you cannot approve a slip you submitted yourself",
-      );
 
     const slipId = await db.$transaction(
       (tx) =>
@@ -1213,11 +1240,14 @@ router.post(
             "A partially or fully paid slip cannot be cancelled here — use the separate refund/payment-reversal flow",
           );
 
-        // Approved-and-unpaid reverses the accrual; DRAFT/PENDING_APPROVAL
-        // never touched the ledger, so there's nothing to reverse.
-        const wasApproved = slip.status === "APPROVED";
-        if (wasApproved)
-          await reverseVendorSlipAccrual(tx, slip, input.reason, me);
+      // Approved-and-unpaid reverses the accrual; DRAFT/PENDING_APPROVAL
+      // never touched the ledger, so there's nothing to reverse.
+      const wasApproved = slip.status === "APPROVED";
+      if (wasApproved) {
+        await reverseVendorSlipAccrual(tx, slip, input.reason, me);
+        // Claims C7: its damage recoveries go back to APPROVED for the next slip.
+        await releaseSlipRecoveries(tx, slip, me);
+      }
 
         // Re-guarded by version here too: nothing between the fresh read above
         // and this write takes a row lock (a plain SELECT doesn't), so a

@@ -33,6 +33,7 @@ import {
   railBranchGrnPdfInclude,
 } from "./rail-branch-grn.pdf.js";
 import { generatePdfFromHtml } from "../../templetes/pdf/pdf.genertaor..js";
+import { syncRailBranchGRNClaims } from "../claim/claim.sync.js";
 import {
   assertNotOnVendorSlip,
   sameValue,
@@ -1412,6 +1413,8 @@ router.patch("/:id", can(PERMS.RAIL_BRANCH_GRN.UPDATE), async (req, res) => {
       include: branchGrnDetailInclude,
     });
   });
+  // Only a SUBMITTED branch GRN raises claims; the sync skips drafts. Never throws.
+  await syncRailBranchGRNClaims(updated.id, actorId(req));
 
   return sendOk(res, await withDamagePhotos(updated));
 });
@@ -1622,6 +1625,7 @@ router.post(
         alreadySubmitted: false,
       };
     });
+    await syncRailBranchGRNClaims(accessible.id, userId);
 
     return sendOk(res, {
       ...result,

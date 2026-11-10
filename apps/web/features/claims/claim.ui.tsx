@@ -1,0 +1,175 @@
+import type {
+  ClaimCause,
+  ClaimDetail,
+  ClaimOrigin,
+  ClaimRecoverySource,
+  ClaimRecoveryStatus,
+  ClaimSettlementMode,
+  ClaimStatus,
+  ClaimType,
+} from "@skerp/types";
+import { cn } from "@/lib/utils";
+
+export const CLAIM_TYPE_LABELS: Record<ClaimType, string> = {
+  DAMAGE: "Damage",
+  SHORTAGE: "Shortage",
+  LOSS: "Loss",
+};
+
+export const CLAIM_CAUSE_LABELS: Record<ClaimCause, string> = {
+  TRANSPORTER: "Transporter",
+  LABOUR: "Labour",
+  RAILWAY: "Railway",
+  CUSTOMER: "Customer",
+  DRIVER: "Driver",
+  INSURED_EVENT: "Insured event",
+  UNKNOWN: "Unknown",
+};
+
+export const CLAIM_ORIGIN_LABELS: Record<ClaimOrigin, string> = {
+  LR_ACK: "LR acknowledgement",
+  GRN: "GRN at rail head",
+  RAIL_BRANCH_GRN: "GRN at branch",
+  MANUAL: "Raised by hand",
+};
+
+export const SETTLEMENT_MODE_LABELS: Record<ClaimSettlementMode, string> = {
+  RECEIPT_DEDUCTION: "Deducted on a receipt",
+  CREDIT_NOTE: "Credit note",
+  PAID_SEPARATELY: "Paid separately",
+};
+
+export const PAYMENT_MODE_LABELS: Record<
+  NonNullable<NonNullable<ClaimDetail["settlement"]>["paymentMode"]>,
+  string
+> = {
+  CASH: "Cash",
+  BANK: "Bank transfer",
+  UPI: "UPI",
+  CHEQUE: "Cheque",
+};
+
+/** Label/value pairs for SelectField. */
+export const optionsOf = (labels: Record<string, string>) =>
+  Object.entries(labels).map(([value, label]) => ({ value, label }));
+
+/** Today as yyyy-mm-dd, for <input type="date">. */
+export const todayInput = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+};
+
+/** Paise → the rupee string a money input expects ("35000.5"). */
+export const rupeesInput = (paise: number | null) =>
+  paise === null ? "" : String(paise / 100);
+
+export const RECOVERY_SOURCE_LABELS: Record<ClaimRecoverySource, string> = {
+  INSURANCE: "Insurance",
+  TRANSPORTER: "Transporter",
+  DRIVER: "Driver",
+  LABOUR: "Labour",
+  RAILWAY: "Railway",
+  OTHER: "Other",
+};
+
+type Tone = { label: string; style: string; dot: string };
+
+const WARNING = { style: "border-warning/30 bg-warning/10 text-foreground", dot: "bg-warning" };
+const PRIMARY = { style: "border-primary/30 bg-primary/10 text-primary", dot: "bg-primary" };
+const SUCCESS = { style: "border-success/30 bg-success/10 text-foreground", dot: "bg-success" };
+const DESTRUCTIVE = {
+  style: "border-destructive/30 bg-destructive/10 text-destructive",
+  dot: "bg-destructive",
+};
+const MUTED = { style: "border-border bg-muted text-muted-foreground", dot: "bg-muted-foreground" };
+
+export const CLAIM_STATUS: Record<ClaimStatus, Tone> = {
+  PENDING: { label: "Pending", ...WARNING },
+  ACTIVE: { label: "Active", ...PRIMARY },
+  SETTLED: { label: "Settled", ...SUCCESS },
+  REJECTED: { label: "Rejected", ...DESTRUCTIVE },
+  CANCELLED: { label: "Cancelled", ...MUTED },
+};
+
+const RECOVERY_STATUS: Record<ClaimRecoveryStatus, Tone> = {
+  FILED: { label: "Filed", ...WARNING },
+  APPROVED: { label: "Approved", ...PRIMARY },
+  RECEIVED: { label: "Received", ...SUCCESS },
+  REJECTED: { label: "Rejected", ...DESTRUCTIVE },
+};
+
+function ToneBadge({ tone }: { tone: Tone }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-semibold",
+        tone.style,
+      )}
+    >
+      <span className={cn("h-2 w-2 rounded-full", tone.dot)} />
+      {tone.label}
+    </span>
+  );
+}
+
+export function ClaimStatusBadge({ status }: { status: ClaimStatus }) {
+  return <ToneBadge tone={CLAIM_STATUS[status]} />;
+}
+
+export function RecoveryStatusBadge({ status }: { status: ClaimRecoveryStatus }) {
+  return <ToneBadge tone={RECOVERY_STATUS[status]} />;
+}
+
+/** The document that raised the claim, and where to open it. */
+export const claimSourceLink = (
+  claim: Pick<ClaimDetail, "origin" | "originRefId" | "sourceNumber" | "lr">,
+): { label: string; href: string | null } => {
+  switch (claim.origin) {
+    case "LR_ACK":
+      return { label: "LR acknowledgement", href: `/lorry-receipts/${claim.lr.groupId}` };
+    case "GRN":
+      return {
+        label: claim.sourceNumber ? `GRN ${claim.sourceNumber}` : "GRN at rail head",
+        href: claim.originRefId ? `/vp-management/grn/${claim.originRefId}` : null,
+      };
+    case "RAIL_BRANCH_GRN":
+      return {
+        label: "GRN at branch",
+        href: claim.originRefId ? `/vp-management/branch-grn/${claim.originRefId}` : null,
+      };
+    case "MANUAL":
+      return { label: "Raised by hand", href: null };
+  }
+};
+
+/** Damaged / short quantities in one phrase, e.g. "5 damaged · 2 short". */
+export const quantityText = (damagedQty: number, shortageQty: number) =>
+  [
+    damagedQty > 0 ? `${damagedQty} damaged` : null,
+    shortageQty > 0 ? `${shortageQty} short` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ") || "—";
+
+/**
+ * Is the claimed amount a figure somebody entered, or one the system derived?
+ *
+ * Only an LR acknowledgement carries a rupee figure from the floor; a GRN
+ * records quantities, so its claim opens with a pro-rata estimate off the
+ * LR's invoice. Assessing is what turns an estimate into a real claimed
+ * amount, and assessing moves the claim off PENDING — so a PENDING claim
+ * from a GRN is still showing the system's guess.
+ *
+ * It matters because the two read identically on screen, and an assessor who
+ * mistakes an estimate for what the customer actually asked for will settle
+ * against a number nobody requested.
+ */
+export const isEstimatedAmount = (claim: {
+  status: string;
+  origin: string;
+  claimedAmountPaise: number;
+}) =>
+  claim.status === "PENDING" &&
+  claim.claimedAmountPaise > 0 &&
+  (claim.origin === "GRN" || claim.origin === "RAIL_BRANCH_GRN");

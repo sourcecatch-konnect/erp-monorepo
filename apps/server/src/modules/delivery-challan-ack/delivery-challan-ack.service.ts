@@ -321,10 +321,8 @@ export const approveChallan = async (
       "No broker acknowledgement has been filed for this challan",
     );
 
-  // Maker-checker, matching the payment slip's rule: whoever filed the
-  // account cannot be the one who rules it trustworthy. Fail-closed — the
-  // comparison is the fraud control, and it is worth nothing if the filer
-  // signs off on their own figures.
+  // This acknowledgement comparison keeps its own maker-checker control:
+  // whoever filed the account cannot be the one who rules it trustworthy.
   if (accepted.filedById === actorId)
     throw new BadRequestError(
       "You filed this acknowledgement, so you cannot approve it. Another user with approval rights must rule on it.",

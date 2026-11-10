@@ -25,7 +25,9 @@ export type VendorPaymentSourceType =
   | "GRN_HAMALI"
   | "RAIL_BRANCH_GRN"
   | "VP_LOADING"
-  | "DELIVERY_CHALLAN";
+  | "DELIVERY_CHALLAN"
+  /** Claims C7: an approved damage recovery deducted on a transporter slip. */
+  | "CLAIM_RECOVERY";
 
 /** An issued delivery challan the LDC broker can be paid for — one slip line.
  *  Detention is computed by the server from the broker's slab. */
@@ -76,6 +78,21 @@ export type SlipLineDetention = {
   detentionDays: number | null;
   lrNumbers: string[];
   warnings: string[];
+};
+
+/** An approved damage-claim recovery from this transporter (claims C7). The
+ *  truck line already deducts its LR acknowledgement's damage, so the line
+ *  takes only `damagePaise` = amount − coveredByAck. */
+export type EligibleTransporterClaimRecovery = {
+  recoveryId: string;
+  claimId: string;
+  claimNumber: string;
+  lineNo: number;
+  lrNumber: string;
+  referenceNo: string | null;
+  amountPaise: string;
+  coveredByAckPaise: string;
+  damagePaise: string;
 };
 
 export type EligibleTransporterLR = {
@@ -349,6 +366,11 @@ export const vendorPaymentApi = {
     get<EligibleChunk<EligibleTransporterTruck>>(
       "/vendor-payment/calculators/transporter-trucks",
       { ...chunkParams(filters), transportId: filters.transportId },
+    ),
+  eligibleTransporterClaimRecoveries: (transportId: string) =>
+    get<EligibleTransporterClaimRecovery[]>(
+      "/vendor-payment/calculators/transporter-claim-recoveries",
+      { transportId },
     ),
   /** Page-based (challans are one table), unlike the cursor-chunked lists. */
   eligibleLDCSources: async (filters: {

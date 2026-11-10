@@ -40,12 +40,18 @@ describe("assertLicenceValid", () => {
       assertLicenceValid(driver, "assigning a trip", new Date("2026-09-25T06:00:00.000Z")),
     ).not.toThrow();
   });
-
   it("blocks a trip planned for after the expiry, even if valid today", () => {
     const driver = { name: "Jasim", licenseExpiryDate: day("2026-11-05") };
+
     expect(() =>
-      assertLicenceValid(driver, "assigning a trip", new Date("2026-11-10T06:00:00.000Z")),
-    ).toThrow(/expired on 2026-11-05 \(the trip date 2026-11-10 is after that\)/);
+      assertLicenceValid(
+        driver,
+        "assigning a trip",
+        new Date("2026-11-10T06:00:00.000Z"),
+      ),
+    ).toThrow(
+      /expired on 2026-11-05 \(the trip date 2026-11-10 is after that\)/,
+    );
   });
 
   it("passes a valid licence", () => {

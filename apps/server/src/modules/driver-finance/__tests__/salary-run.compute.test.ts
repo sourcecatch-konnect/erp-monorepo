@@ -260,3 +260,58 @@ describe("computeSalaryLine — input checks", () => {
     expect(() => line(7000, 32)).toThrow(/more than 31/);
   });
 });
+
+describe("computeSalaryLine — damage-claim recoveries (C6)", () => {
+  it("deducts a recovery still pending on a draft run", () => {
+    const result = computeSalaryLine({
+      baseSalaryPaise: rs(15_000),
+      absentDays: 0,
+      daysInMonth: august.daysInMonth,
+      windowStart: august.monthStart,
+      movements: [move("2026-08-10", "SALARY_ADVANCE", 2_000)],
+      outstandingEarlierRunsPaise: 0n,
+      pendingDamageRecoveryPaise: rs(3_000),
+    });
+    expect(result.damageRecoveryPaise).toBe(rs(3_000));
+    expect(result.salaryAdvancePaise).toBe(rs(2_000));
+    expect(result.previousBalancePaise).toBe(0n);
+    expect(result.netPaise).toBe(rs(10_000));
+  });
+
+  it("gives the same net once the deduction is posted on the ledger", () => {
+    const pending = line(15_000, 0, [], 0n);
+    const posted = computeSalaryLine({
+      baseSalaryPaise: rs(15_000),
+      absentDays: 0,
+      daysInMonth: august.daysInMonth,
+      windowStart: august.monthStart,
+      movements: [move("2026-08-31", "DAMAGE_RECOVERY", 3_000)],
+      outstandingEarlierRunsPaise: 0n,
+    });
+    const asPending = computeSalaryLine({
+      baseSalaryPaise: rs(15_000),
+      absentDays: 0,
+      daysInMonth: august.daysInMonth,
+      windowStart: august.monthStart,
+      movements: [],
+      outstandingEarlierRunsPaise: 0n,
+      pendingDamageRecoveryPaise: rs(3_000),
+    });
+    expect(posted.netPaise).toBe(asPending.netPaise);
+    expect(posted.damageRecoveryPaise).toBe(rs(3_000));
+    expect(pending.damageRecoveryPaise).toBe(0n);
+  });
+
+  it("counts an earlier month's deduction as previous balance, not this month's", () => {
+    const result = computeSalaryLine({
+      baseSalaryPaise: rs(15_000),
+      absentDays: 0,
+      daysInMonth: august.daysInMonth,
+      windowStart: august.monthStart,
+      movements: [move("2026-07-31", "DAMAGE_RECOVERY", 3_000)],
+      outstandingEarlierRunsPaise: 0n,
+    });
+    expect(result.damageRecoveryPaise).toBe(0n);
+    expect(result.previousBalancePaise).toBe(rs(3_000));
+  });
+});

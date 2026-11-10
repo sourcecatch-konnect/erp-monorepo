@@ -48,6 +48,18 @@ const templateBodies: Record<
     subject: "POD not received",
     body: "LR {{lrNumber}} was delivered {{days}} day(s) ago but the signed POD has not been received yet.",
   },
+  "claim.created": {
+    subject: "New damage claim",
+    body: "New claim {{claimNumber}} on LR {{lrNumber}}.",
+  },
+  "claim.stale": {
+    subject: "Damage claim waiting",
+    body: "Claim {{claimNumber}} on LR {{lrNumber}} has been {{statusLabel}} for {{days}} days.",
+  },
+  "claim.high_value": {
+    subject: "High-value damage claim",
+    body: "Claim {{claimNumber}} on LR {{lrNumber}} is for {{amount}}.",
+  },
   "trip.created": {
     subject: "Trip created",
     body: "Trip {{tripNumber}} has been created.",
@@ -150,6 +162,32 @@ const rules: RuleSeed[] = [
     recipientResolverKey: "lr.creator",
     channels: [...defaultChannels],
     templateCode: "lr.pod_uploaded",
+  },
+  {
+    eventType: "claim.created",
+    name: "New damage claim",
+    severity: NotificationSeverity.WARNING,
+    // Raised from an LR ack / GRN; the event branch is the LR's booking branch.
+    recipientResolverKey: "permission:claim.update@branch",
+    channels: [NotificationChannel.IN_APP],
+    templateCode: "claim.created",
+  },
+  {
+    eventType: "claim.stale",
+    name: "Damage claim waiting",
+    severity: NotificationSeverity.WARNING,
+    // Daily sweep (claim.alerts.ts); the event branch is the claim's branch.
+    recipientResolverKey: "role:Branch Manager@branch",
+    channels: [NotificationChannel.IN_APP],
+    templateCode: "claim.stale",
+  },
+  {
+    eventType: "claim.high_value",
+    name: "High-value damage claim",
+    severity: NotificationSeverity.WARNING,
+    recipientResolverKey: "role:Admin,Accounts@branch",
+    channels: [...defaultChannels],
+    templateCode: "claim.high_value",
   },
   {
     eventType: "trip.created",

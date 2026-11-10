@@ -51,6 +51,7 @@ const SOURCE_TYPE_LABELS: Record<VendorPaymentSlipLine["sourceType"], string> =
     RAIL_BRANCH_GRN: "GRN at Branch",
     VP_LOADING: "VP loading",
     DELIVERY_CHALLAN: "Delivery challan",
+    CLAIM_RECOVERY: "Damage recovery",
   };
 
 /** "MH19AB1234 · G-0045 · LR-1, LR-2" for a truck; the document no. otherwise. */

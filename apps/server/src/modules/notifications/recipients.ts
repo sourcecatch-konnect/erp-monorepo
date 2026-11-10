@@ -31,11 +31,13 @@ const usersForBranch = async (branchId: string) => {
   return users.map((user) => user.id);
 };
 
-const roleUsersForBranch = async (roleName: string, branchId?: string | null) => {
+/** `roleNames` is one role or several, comma-separated ("Admin,Accounts"). */
+const roleUsersForBranch = async (roleNames: string, branchId?: string | null) => {
+  const names = roleNames.split(",").map((name) => name.trim()).filter(Boolean);
   const users = await db.user.findMany({
     where: {
       status: true,
-      role: { name: roleName },
+      role: { name: { in: names } },
       ...(branchId
         ? {
             OR: [
@@ -50,6 +52,63 @@ const roleUsersForBranch = async (roleName: string, branchId?: string | null) =>
   });
   return users.map((user) => user.id);
 };
+
+/**
+ * Active users holding a permission, optionally limited to a branch. Mirrors
+ * resolvePermissions: a system role has everything; otherwise a role or user
+ * GRANT counts unless the user has a DENY.
+ */
+const permissionUsersForBranch = async (
+  permissionKey: string,
+  branchId?: string | null,
+) => {
+  const permission = { permission: { key: permissionKey } };
+  const users = await db.user.findMany({
+    where: {
+      status: true,
+      AND: [
+        ...(branchId
+          ? [
+              {
+                OR: [
+                  { branchId },
+                  { userBranches: { some: { branchId } } },
+                  { branchScope: "ALL" as const },
+                ],
+              },
+            ]
+          : []),
+        {
+          OR: [
+            { role: { isSystem: true } },
+            {
+              AND: [
+                {
+                  OR: [
+                    { role: { rolePermissions: { some: permission } } },
+                    { userPermissions: { some: { effect: "GRANT" as const, ...permission } } },
+                  ],
+                },
+                { userPermissions: { none: { effect: "DENY" as const, ...permission } } },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
+};
+
+/** Token after the @ in a resolver key: fromBranch / toBranch read the payload;
+ *  anything else (branch, eventBranch, none) is the event's branch. */
+const branchForToken = (branchToken: string | undefined, input: ResolverInput) =>
+  branchToken === "fromBranch"
+    ? payloadString(input.payload, "fromBranchId")
+    : branchToken === "toBranch"
+      ? payloadString(input.payload, "toBranchId")
+      : input.branchId;
 
 const resolvers: Record<string, RecipientResolver> = {
   actor: async ({ actorId }) => (actorId ? [actorId] : []),
@@ -82,16 +141,19 @@ export const resolveRecipients = async (
   if (resolverKey.startsWith("role:")) {
     const [, rest] = resolverKey.split("role:");
     const [roleName, branchToken] = (rest || "").split("@");
-    const branchId =
-      branchToken === "branch" || branchToken === "eventBranch"
-        ? input.branchId
-        : branchToken === "fromBranch"
-          ? payloadString(input.payload, "fromBranchId")
-          : branchToken === "toBranch"
-            ? payloadString(input.payload, "toBranchId")
-            : input.branchId;
+    const branchId = branchForToken(branchToken, input);
 
     return unique(roleName ? await roleUsersForBranch(roleName, branchId) : []);
+  }
+
+  // permission:<key>@branch — e.g. permission:claim.update@branch
+  if (resolverKey.startsWith("permission:")) {
+    const [permissionKey, branchToken] = resolverKey.slice("permission:".length).split("@");
+    return unique(
+      permissionKey
+        ? await permissionUsersForBranch(permissionKey, branchForToken(branchToken, input))
+        : [],
+    );
   }
 
   const resolver = resolvers[resolverKey];

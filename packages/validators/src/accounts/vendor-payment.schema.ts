@@ -17,6 +17,8 @@ export const vendorPaymentSourceTypeSchema = z.enum([
   "RAIL_BRANCH_GRN",
   "VP_LOADING",
   "DELIVERY_CHALLAN",
+  /** Claims C7: an approved transporter recovery deducted on the slip. */
+  "CLAIM_RECOVERY",
 ]);
 
 export const vendorPaymentStatusSchema = z.enum([
@@ -77,6 +79,11 @@ export const eligibleTransporterLRQuerySchema = z.object({
   from: isoDate.optional(),
   to: isoDate.optional(),
   ...eligibleChunkParams,
+});
+
+/** Claims C7: approved damage recoveries to deduct on this transporter's slip. */
+export const eligibleTransporterClaimRecoveryQuerySchema = z.object({
+  transportId: id,
 });
 
 export const eligibleHamaliSourceQuerySchema = z.object({

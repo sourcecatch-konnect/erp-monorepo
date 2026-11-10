@@ -30,10 +30,10 @@ export function assertLicenceValid(
 ): void {
   if (isLicenceExpired(driver.licenseExpiryDate, at)) {
     const expiry = driver.licenseExpiryDate!.toISOString().slice(0, 10);
-    const day = todayInIndia(at);
-    const onDate = day === todayInIndia(new Date()) ? "" : ` (the trip date ${day} is after that)`;
+    const tripDate = todayInIndia(at);
+
     throw new BadRequestError(
-      `${driver.name}'s driving licence expired on ${expiry}${onDate} — renew it in the Driver master before ${action}`,
+      `${driver.name}'s driving licence expired on ${expiry} (the trip date ${tripDate} is after that) — renew it in the Driver master before ${action}`,
     );
   }
 }

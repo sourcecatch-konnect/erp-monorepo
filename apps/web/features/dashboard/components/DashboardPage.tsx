@@ -28,6 +28,7 @@ import { FleetCard } from "./FleetCard";
 import { MoneyCards } from "./MoneyCards";
 import { OperationsCard } from "./OperationsCard";
 import { PayablesCard } from "./PayablesCard";
+import { ClaimsCard } from "./ClaimsCard";
 import { ProfitCard } from "./ProfitCard";
 import { QuickCreate } from "./QuickCreate";
 import { TopCustomersCard } from "./TopCustomersCard";
@@ -137,7 +138,8 @@ export function DashboardPage() {
       data.attention ??
       data.branchPerformance ??
       data.profit ??
-      data.payables,
+      data.payables ??
+      data.claims,
     )
     : false;
 
@@ -292,6 +294,7 @@ export function DashboardPage() {
             data.ageing ||
             data.profit ||
             data.payables ||
+            data.claims ||
             data.topCustomers ? (
             <section
               aria-labelledby="financial-overview-heading"
@@ -338,6 +341,8 @@ export function DashboardPage() {
                     data={data.payables}
                   />
                 ) : null}
+
+                {data.claims ? <ClaimsCard key="claims" data={data.claims} /> : null}
 
                 {data.topCustomers ? (
                   <TopCustomersCard

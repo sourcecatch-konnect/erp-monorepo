@@ -36,4 +36,4 @@ The ERP creates these roles. Admins can edit them, or create new roles, in **Set
 | Post log slips to accounts | Admin, Accounts |
 | Manual journal | Admin, Accounts |
 
-**Maker-checker:** for vendor payments and salary runs, the person who created a document may be blocked from approving it (a setting).
+**Approvals:** vendor-payment approval follows RBAC and branch access, so a creator may approve their own slip when their role includes **Approve vendor payments**. Salary runs retain their separate maker-checker setting.

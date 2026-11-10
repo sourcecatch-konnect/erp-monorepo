@@ -82,7 +82,7 @@ Rake arrival → VP Loading → Rail-head GRN → Branch GRN
 | **Amounts re-derived server-side.** A client cannot inflate freight or advance; a challan that is not this broker's, not issued, or already claimed fails loudly | `ldc-broker.ts:reconcileLDCLines` |
 | **Detention engine.** `FinalReporting = earliest(ldcDate, reportDate, every LR reportedAt)`; `FinalUnloading = latest(LR unloadingAt)`; inclusive day count (deliberate, business-confirmed 2026-11-04 deviation from spec STEP 7); stacked tiers; HOUR basis ceils part-blocks; IST day indexing | `detention.engine.ts` |
 | **Slab snapshot on the line** — `detentionDays`, `detentionSlabId`, `detentionSlabName`, `claimedDetentionPaise` persisted so a paid slip stays explainable after the slab changes (spec STEP 18) | `migrations/20261104000000_ldc_detention_audit` |
-| **Slip lifecycle.** `DRAFT → PENDING_APPROVAL → APPROVED → PARTIALLY_PAID → PAID / CANCELLED`; accrual on approve, one settlement voucher per disbursement; `pg_advisory_xact_lock` on the slip; `clientRequestId` idempotency; version guards; maker-checker (creator cannot approve, fail-closed) | `vendor-payment.route.ts:712-757, 1016-1100`; `approval-decision.ts` |
+| **Slip lifecycle.** `DRAFT → PENDING_APPROVAL → APPROVED → PARTIALLY_PAID → PAID / CANCELLED`; accrual on approve, one settlement voucher per disbursement; `pg_advisory_xact_lock` on the slip; `clientRequestId` idempotency; version guards; approval controlled by RBAC and branch access | `vendor-payment.route.ts`; `approval-decision.ts` |
 | **Accrual/settlement idempotency.** `existingAccrualJournalEntryId` / `existingSettlementJournalEntryId` short-circuit to the posted voucher rather than double-posting | `posting.service.ts:1426-1432, 1586-1592` |
 | **Detention slab master** is a correct vertical slice; its permission `masters.detention-slab` is auto-granted by the seed's `Object.values(RM)` enumeration | `permissions.ts:310`; `seed-admin.ts:38` |
 
@@ -212,8 +212,8 @@ rendered well in the **wizard browse step** (`LDCSlipWizard.tsx:491-540`). They 
 `DetentionBreakdownDialog` is wired into the wizard only (`LDCSlipWizard.tsx:699`). The
 server never blocks: `reconcileLDCLines` throws only when `advance > freight + detention`.
 
-Under maker-checker the approver is a different person by policy. **The maker sees the
-warnings; the checker who authorises the money sees none.**
+The person authorising the slip must see the same warnings that were available while the
+slip was prepared, whether or not they are also its creator.
 
 **Files:** `detention.service.ts` (quote already sufficient) · `ldc-broker.ts`
 (`reconcileLDCLines` — carry warnings, apply blocks) · `vendor-payment.route.ts` (build +
@@ -656,7 +656,7 @@ Target state. **Bold** = new or changed. Everything else is as-built and preserv
       claim absent ⇒ slab (server-side default)                           [G6]
       amounts re-derived server-side                                      [unchanged]
 
-10. Approve (maker-checker, creator ≠ approver)                           [unchanged]
+10. Approve (requires RBAC permission + branch access)                    [unchanged]
       **approver sees detention warnings + breakdown**                    [G2]
       Accrual:
         Dr FREIGHT_EXPENSE, DETENTION_EXPENSE, **PARKING**, **OTHER**, **LABOUR**

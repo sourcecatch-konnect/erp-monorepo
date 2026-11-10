@@ -60,6 +60,7 @@ import { initTrackingRealtime } from "./modules/tracking/tracking.realtime.js";
 import { startNotificationWorkers } from "./modules/notifications/worker.js";
 import { startDeliverySweeps } from "./modules/lorry-receipt/lr-delivery.sweeps.js";
 import { startDriverLicenseExpirySweep } from "./modules/driver/driver.sweeps.js";
+import { startClaimStaleSweep } from "./modules/claim/claim.alerts.js";
 import { seedNotificationDefaults } from "./modules/notifications/notification.seed.js";
 import { createQueueDashboard } from "./modules/notifications/queue-dashboard.js";
 import MRRRRoute from "./modules/mrrr/mrrr.route.js";
@@ -88,6 +89,7 @@ import trainingRoute from "./modules/training/training.route.js";
 // remove-before-prod: in-app feedback (testing phase only).
 import feedbackRoute, { isFeedbackEnabled } from "./modules/feedback/feedback.route.js";
 import driverFinanceRoute from "./modules/driver-finance/driver-finance.route.js";
+import claimRoute from "./modules/claim/claim.route.js";
 const app = express();
 
 // Reflect any origin (LAN, ngrok, etc). Wildcard "*" can't be used with
@@ -190,6 +192,7 @@ app.use("/training", trainingRoute);
 // remove-before-prod: FEEDBACK_ENABLED=false → every /feedback/* 404s.
 if (isFeedbackEnabled()) app.use("/feedback", feedbackRoute);
 app.use("/driver-finance", driverFinanceRoute);
+app.use("/claims", claimRoute);
 app.use(errorMiddleware);
 // Fix BigInt serialization
 app.set("json replacer", (_key: string, value: unknown) =>
@@ -206,6 +209,7 @@ async function bootstrap() {
   startNotificationWorkers();
   startDeliverySweeps();
   startDriverLicenseExpirySweep();
+  startClaimStaleSweep();
 
   seedNotificationDefaults().catch((error) => {
     console.error("[notifications] Failed to seed defaults:", error);

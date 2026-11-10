@@ -56,7 +56,7 @@
 | **Opening balance** | Money in a cash or bank account on the start date | Cash & Bank → Opening Balances |
 | **Cash planning** | Daily view of money available and expected | Cash & Bank → Cash Planning |
 | **TDS** | Tax deducted at source from a payment | Vendor payment slips |
-| **Maker-checker** | The person who makes a document may not approve it | Approvals |
+| **Maker-checker** | A control used by selected workflows such as salary runs; vendor payments use RBAC and branch access | Approvals |
 | **Branch scope** | A user sees all branches, or only the ones assigned | Settings → User access |
 | **FY code** | Financial year code used in document numbers | 26-27 |
 | **Paise** | ₹1 = 100 paise. All money is stored in paise | ₹90,000 = 9,000,000 paise |
