@@ -10,7 +10,7 @@
 | **Hamali (labour)** | Loading/unloading at the railhead and branch | Finance → Vendor Payments |
 | **Drivers** | Monthly salary, salary advances, log slip balance | Finance → Driver Payments |
 
-All payments follow the same safe pattern: **make → approve → pay**. The person who makes a payment may be blocked from approving it (maker-checker).
+All payments follow the same safe pattern: **make → approve → pay**. Vendor-payment approval is controlled by the user's role and branch access; a creator with **Approve vendor payments** permission may approve their own slip.
 
 ## Part 1: Vendor payments (transporters and hamali)
 
@@ -45,7 +45,7 @@ Click **Save draft**, or **Save and submit** to send it for approval.
 
 ### Step 2: Approve
 
-**Vendor Payments → Approvals.** A manager opens the slip, checks the source lines and totals, then clicks **Approve**, or **Reject** with a reason.
+**Vendor Payments → Approvals.** A user with **Approve vendor payments** permission opens the slip, checks the source lines and totals, then clicks **Approve**, or **Reject** with a reason. The same user may create and approve the slip when their role grants both permissions.
 
 ### Step 3: Pay (disburse)
 
@@ -100,11 +100,11 @@ You can't pay more than the cash or bank account holds.
 |---|---|
 | Truck not offered on the transporter slip | Check the transporter and **From** date. It may already be on another slip |
 | "Exceeds outstanding balance" | Pay only what is still outstanding |
-| Can't approve your own slip | Maker-checker: ask another approver |
+| Can't approve a slip | Check that your role has **Approve vendor payments** and that the slip's branch is in your branch access |
 | Driver missing from the salary run | Check the driver's **joining/leaving date** and branch in the Driver master |
 
 ## Try it yourself (test system only)
 
 1. Make a transporter slip for the market truck from Chapter 10 (freight 60,000, advance 30,000). Check **Net payable**.
-2. Submit it. Approve it as another user.
+2. Submit it. Approve it as a user whose role has **Approve vendor payments**.
 3. Disburse ₹10,000. Check the slip shows **Partially paid**.

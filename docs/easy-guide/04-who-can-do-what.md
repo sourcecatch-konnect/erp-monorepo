@@ -50,7 +50,7 @@ Admins can edit these roles or create new ones.
 
 **Special permissions:** an admin can **allow** or **block** one single action for one person, without changing their role. Example: Ramesh is Operations, but is also allowed to "Approve orders" while the manager is on leave.
 
-**Maker-checker:** for payments and salary runs, the person who **created** the document can be blocked from **approving** it. A second person must check it.
+**Approvals:** vendor payments follow role permissions and branch access, so the creator may also approve when their role allows it. Salary runs retain their separate maker-checker control.
 
 ## For admins: set up a new person
 

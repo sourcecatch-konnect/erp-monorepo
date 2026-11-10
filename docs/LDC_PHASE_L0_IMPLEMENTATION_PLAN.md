@@ -255,8 +255,8 @@ wizard renders it well at `LDCSlipWizard.tsx:491-540`.
 **None of it survives onto the slip.** `VendorPaymentSlipDetailPage.tsx:357-389` shows
 amount, days, slab name and the broker's claim; when no slab matched, `detentionSlabName` is
 `null` and the cell reads a bare **₹0**. `DetentionBreakdownDialog` is imported only by the
-wizard (`:699`). Under maker-checker the approver is a different person by policy, so the
-diagnostics are generated for the maker and discarded before the authorising decision.
+wizard (`:699`). The diagnostics must remain available on the saved slip so whoever makes
+the authorising decision sees them, including when the creator is also the approver.
 
 ### 4.2 Design: a separate lazy endpoint, not a fatter detail payload
 

@@ -10,10 +10,10 @@ type DbClient = typeof db | Prisma.TransactionClient;
  * The maker sees the full diagnostic set while browsing eligible challans
  * (`findEligibleLDCSources` returns `detentionWarnings`, the window dates and
  * the matched slab, and the wizard renders them). None of that survived onto
- * the slip, so under maker-checker the person who authorises the money saw a
- * bare amount — and a line whose slab did not match showed a plain "₹0" with
- * nothing to say why. This re-derives the working for a saved slip so the
- * checker sees what the maker saw.
+ * the slip, so the person authorising the money saw a bare amount — and a
+ * line whose slab did not match showed a plain "₹0" with nothing to say why.
+ * This re-derives the working for a saved slip so the approver sees the same
+ * diagnostics that were available while the slip was prepared.
  *
  * Read-only. Nothing here writes, and nothing here changes what is paid:
  * `storedDetentionPaise` — the amount the slip actually carries and the

@@ -56,7 +56,7 @@ Open a truck to see the details behind each number. A **monthly** view is also a
 | **Log slip** | Settlement of a journey: truck profit and driver balance |
 | **LR (Lorry Receipt)** | Transport document for one consignment |
 | **LR group** | All LRs on one truck |
-| **Maker-checker** | The person who makes a document may not approve it |
+| **Maker-checker** | A control retained for selected workflows such as salary runs; vendor-payment approval instead follows RBAC and branch access |
 | **Market vehicle** | A truck hired from an outside transporter |
 | **Master** | A base record set up once and used everywhere |
 | **MR / RR** | Railway Receipt details, one row per wagon |
@@ -95,7 +95,7 @@ Open a truck to see the details behind each number. A **monthly** view is also a
 | "Trip breaks journey continuity…" | KM or start city doesn't follow the last trip | Correct it, or give a reason (needs permission) |
 | LR not in LR to Bill | Signed LR not acknowledged | Acknowledge the POD |
 | "Exceeds outstanding balance" | Paying more than is due | Pay only the outstanding amount |
-| Can't approve your own document | Maker-checker | Ask another approver |
+| Can't approve a vendor-payment slip | Missing approval permission or branch access | Ask an admin to grant **Approve vendor payments** and the correct branch |
 | New permission not showing | Page is old | Refresh, or sign out and in |
 
 **Golden rule:** if something finalised is wrong, **don't create a duplicate**. Tell your manager or admin. The ERP has proper ways to correct records.

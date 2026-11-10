@@ -25,7 +25,6 @@ import { can } from "../../auth/can.middleware.js";
 import { assertBranchAccess, branchFilter } from "../../auth/branch-scope.js";
 import {
   BadRequestError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../lib/error.js";
@@ -44,10 +43,7 @@ import {
   reverseVendorSlipAccrual,
 } from "../ledger/posting.service.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
-import {
-  decideVendorPaymentApproval,
-  vendorPaymentMakerCheckerEnabled,
-} from "./approval-decision.js";
+import { decideVendorPaymentApproval } from "./approval-decision.js";
 import {
   findEligibleTransporterLRs,
   reconcileTransporterLines,
@@ -952,10 +948,6 @@ router.post(
       );
 
     const me = actorId(req);
-    if (vendorPaymentMakerCheckerEnabled() && existing.createdById === me)
-      throw new ForbiddenError(
-        "Maker-checker is enabled — you cannot approve a slip you submitted yourself",
-      );
 
     const slipId = await db.$transaction(
       (tx) =>
