@@ -69,7 +69,7 @@ export function ServiceBillListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const canManage = useCan(PERMS.WORKSHOP.SERVICEBILL_MANAGE);
-  const canPay = useCan(PERMS.WORKSHOP.SERVICEBILL_PAY);
+  const canPay = useCan(PERMS.ACCOUNTS.PAYMENT.CREATE);
 
   const [payTarget, setPayTarget] = React.useState<ServiceBillSummary | null>(
     null,

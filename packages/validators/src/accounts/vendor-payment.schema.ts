@@ -11,6 +11,7 @@ export const vendorPaymentTypeSchema = z.enum([
 ]);
 
 export const vendorPaymentSourceTypeSchema = z.enum([
+  "SERVICE_BILL",
   "LR",
   "LR_GROUP",
   "GRN_HAMALI",
@@ -265,6 +266,7 @@ export const cancelVendorPaymentSlipSchema = z.object({
 
 export const createVendorPaymentDisbursementSchema = z.object({
   paidPaise: z.coerce.bigint().positive(),
+  tdsPaise: moneyPaise,
   mode: paymentModeSchema,
   paidAt: isoDate,
   referenceNo: z.string().trim().max(120).optional(),

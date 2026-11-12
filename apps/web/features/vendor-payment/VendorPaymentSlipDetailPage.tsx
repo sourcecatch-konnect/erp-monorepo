@@ -52,6 +52,7 @@ const SOURCE_TYPE_LABELS: Record<VendorPaymentSlipLine["sourceType"], string> =
     VP_LOADING: "VP loading",
     DELIVERY_CHALLAN: "Delivery challan",
     CLAIM_RECOVERY: "Damage recovery",
+    SERVICE_BILL: "Service bill",
   };
 
 /** "MH19AB1234 · G-0045 · LR-1, LR-2" for a truck; the document no. otherwise. */
@@ -237,7 +238,10 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
   } | null>(null);
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["vendor-payment", "slip", id] });
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["vendor-payment"] }),
+      queryClient.invalidateQueries({ queryKey: ["service-bill"] }),
+    ]);
 
   const submit = useMutation({
     mutationFn: () => {
@@ -329,7 +333,10 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
       <PageHeader
         title={slip.slipNumber}
         description={`${VENDOR_PAYMENT_TYPE_LABELS[slip.type]} payment slip for ${
-          slip.transport?.name ?? slip.labour?.name ?? "—"
+          slip.transport?.name ??
+          slip.labour?.name ??
+          slip.serviceBill?.serviceProvider.name ??
+          "—"
         } — ${slip.branch?.name ?? "—"}`}
         actions={
           <>
@@ -427,6 +434,7 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
         onOpenChange={setCancelOpen}
         slipNumber={slip.slipNumber}
         status={slip.status}
+        existingBillPayable={slip.type === "JOBCARD"}
         reason={cancelReason}
         onReasonChange={setCancelReason}
         onConfirm={() => cancel.mutate()}
@@ -452,7 +460,7 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
             value: money(slip.totalDeductionsPaise),
           },
           { label: "Net payable", value: money(slip.netPayablePaise) },
-          { label: "Paid so far", value: money(slip.paidPaise) },
+          { label: "Settled so far", value: money(slip.paidPaise) },
         ].map((item) => (
           <Card key={item.label}>
             <CardContent className="p-4">
@@ -472,8 +480,7 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
           <span>
             {warnedLineCount} of {detention.data?.length ?? 0} challan
             {(detention.data?.length ?? 0) === 1 ? "" : "s"} on this slip have
-            detention warnings. Check each line&apos;s working before
-            approving.
+            detention warnings. Check each line&apos;s working before approving.
           </span>
         </div>
       ) : null}
@@ -493,7 +500,9 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Source</TableHead>
-                <TableHead className="text-right">Freight</TableHead>
+                <TableHead className="text-right">
+                  {slip.type === "JOBCARD" ? "Bill balance" : "Freight"}
+                </TableHead>
                 <TableHead className="text-right">Detention</TableHead>
                 <TableHead className="text-right">Advance</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
@@ -624,6 +633,11 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                     </TableCell>
                     <TableCell className="text-right">
                       {money(d.paidPaise)}
+                      {BigInt(d.tdsPaise ?? "0") > 0n && (
+                        <p className="text-xs text-muted-foreground">
+                          TDS {money(d.tdsPaise!)}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {d.settlementJournalEntryId ? (

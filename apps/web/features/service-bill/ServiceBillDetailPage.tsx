@@ -47,7 +47,7 @@ export function ServiceBillDetailPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const canManage = useCan(PERMS.WORKSHOP.SERVICEBILL_MANAGE);
-  const canPay = useCan(PERMS.WORKSHOP.SERVICEBILL_PAY);
+  const canPay = useCan(PERMS.ACCOUNTS.PAYMENT.CREATE);
 
   const bill = useQuery({
     queryKey: serviceBillKeys.detail(serviceBillId),
@@ -140,13 +140,21 @@ export function ServiceBillDetailPage({
               <IconFileInvoice size={15} className="mr-1" /> Voucher
             </Button>
           )}
+          {sb.paymentSlips?.[0] && (
+            <Button variant="outline" asChild>
+              <Link href={`/accounts/vendor-payments/${sb.paymentSlips[0].id}`}>
+                Payment slip ({sb.paymentSlips[0].status})
+              </Link>
+            </Button>
+          )}
           {sb.status === "POSTED" && pending > 0 && canPay && (
             <Button onClick={() => setPayOpen(true)}>
-              <IconCash size={15} className="mr-1" /> Pay
+              <IconCash size={15} className="mr-1" /> Prepare payment
             </Button>
           )}
           {sb.status === "POSTED" &&
             BigInt(sb.paidAmountPaise) === 0n &&
+            !sb.paymentSlips?.length &&
             canManage && (
               <Button
                 variant="ghost"

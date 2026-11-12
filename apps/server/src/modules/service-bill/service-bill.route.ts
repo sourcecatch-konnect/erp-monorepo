@@ -5,7 +5,6 @@ import {
   serviceBillListQuerySchema,
   unbilledServiceLinesQuerySchema,
   cancelServiceBillSchema,
-  createServiceBillPaymentSchema,
 } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 import type { Prisma } from "../../../generated/prisma/index.js";
@@ -15,17 +14,10 @@ import { branchFilter, assertBranchAccess } from "../../auth/branch-scope.js";
 import { BadRequestError, NotFoundError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
-import {
-  fyCodeFor,
-  formatDocNumber,
-  nextSequence,
-} from "../_shared/doc-number.js";
-import { postServiceBillPaymentVoucher } from "../ledger/posting.service.js";
-
+import { createJobCardPaymentSlipTx } from "../vendor-payment/job-card-payment.service.js";
 import {
   createServiceBillTx,
   cancelServiceBillTx,
-  reserveServiceBillPaymentTx,
 } from "./service-bill.service.js";
 
 const router: Router = Router();
@@ -34,6 +26,12 @@ router.use(authMiddleware);
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 const serviceBillDetailInclude = {
+  paymentSlips: {
+    where: { status: { not: "CANCELLED" as const } },
+    take: 1,
+    orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }],
+    select: { id: true, slipNumber: true, status: true },
+  },
   branch: { select: { id: true, name: true, branchCode: true } },
   serviceProvider: { select: { id: true, name: true, shopName: true } },
   createdBy: { select: { id: true, firstName: true, lastName: true } },
@@ -270,110 +268,31 @@ router.get(
   },
 );
 
-/**
- * A dedicated, quick payment path — deliberately NOT routed through the
- * Vendor Payment 3-stage primitive (per ACCOUNTS_MODULE_MAP scope: that
- * engine is a separate epic). Partial-pay aware; a bill is settled once
- * Σ payments == netAmountPaise.
- */
+// All new payments use the shared permission/approval/disbursement workflow.
 router.post(
-  "/:id/pay",
-  can(PERMS.WORKSHOP.SERVICEBILL_PAY),
+  "/:id/payment-slip",
+  can(PERMS.ACCOUNTS.PAYMENT.CREATE),
   async (req, res) => {
-    const input = createServiceBillPaymentSchema.parse(req.body);
     const bill = await db.serviceBill.findUnique({
       where: { id: getParamId(req) },
-      select: {
-        id: true,
-        branchId: true,
-        fyCode: true,
-        status: true,
-        serviceProviderId: true,
-        netAmountPaise: true,
-        paidAmountPaise: true,
-        branch: { select: { branchCode: true } },
-      },
+      select: { id: true, branchId: true },
     });
     if (!bill) throw new NotFoundError("Service bill not found");
-    if (bill.status !== "POSTED")
-      throw new BadRequestError("Only a POSTED service bill can be paid");
     assertBranchAccess(req, bill.branchId);
-
-    // "Settled" this round = cash paid + TDS withheld — both close out the
-    // bill even though only paidPaise actually leaves the bank.
-    const settledPaise = input.paidPaise + input.tdsPaise;
-    const pendingPaise = bill.netAmountPaise - bill.paidAmountPaise;
-    if (pendingPaise <= 0n)
-      throw new BadRequestError("This service bill is already fully paid");
-    if (settledPaise > pendingPaise)
-      throw new BadRequestError(
-        `Paid + TDS exceeds the pending amount (₹${pendingPaise / 100n})`,
-      );
-
-    const fyCode = fyCodeFor(input.paymentDate);
-
-    const payment = await db.$transaction(async (tx) => {
-      await reserveServiceBillPaymentTx(tx, bill.id, settledPaise);
-
-      const seq = await nextSequence(
-        tx,
-        bill.branch.branchCode,
-        fyCode,
-        "SBPAY",
-      );
-      const voucherNumber = formatDocNumber(
-        bill.branch.branchCode,
-        fyCode,
-        seq,
-        "SKT/SBPAY",
-      );
-
-      const created = await tx.serviceBillPayment.create({
-        data: {
-          serviceBillId: bill.id,
-          paidPaise: input.paidPaise,
-          tdsPaise: input.tdsPaise,
-          paymentMode: input.paymentMode,
-          paymentDate: input.paymentDate,
-          referenceNumber: input.referenceNumber,
-          fromAccountId: input.fromAccountId,
-          remarks: input.remarks,
-          createdById: actorId(req),
-        },
-      });
-
-      const voucher = await postServiceBillPaymentVoucher(tx, {
-        paymentId: created.id,
-        voucherNumber,
-        paymentDate: input.paymentDate,
-        branchId: bill.branchId,
-        fyCode,
-        serviceProviderId: bill.serviceProviderId,
-        cashAccountId: input.fromAccountId,
-        paidPaise: input.paidPaise,
-        tdsPaise: input.tdsPaise,
-        createdById: actorId(req),
-      });
-
-      await tx.serviceBillPayment.update({
-        where: { id: created.id },
-        data: { journalEntryId: voucher.id },
-      });
-
-      return created;
-    });
-
-    const result = await db.serviceBillPayment.findUnique({
-      where: { id: payment.id },
-      include: {
-        fromAccount: { select: { id: true, name: true, type: true } },
-        journalEntry: {
-          select: { id: true, voucherNumber: true, status: true },
-        },
-      },
-    });
-    sendOk(res, result, undefined, 201);
+    const slip = await db.$transaction((tx) =>
+      createJobCardPaymentSlipTx(tx, bill.id, bill.branchId, actorId(req)),
+    );
+    sendOk(res, slip, undefined, 201);
   },
 );
 
+router.post(
+  "/:id/pay",
+  can(PERMS.WORKSHOP.SERVICEBILL_PAY),
+  async (_req, _res) => {
+    throw new BadRequestError(
+      "Direct service-bill payments have been replaced by payment slips. Prepare a payment slip and submit it for approval.",
+    );
+  },
+);
 export default router;

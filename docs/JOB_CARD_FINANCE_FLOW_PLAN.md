@@ -23,6 +23,18 @@ The eligible-services picker now uses 20-row backend pages and debounced search,
 
 ## 1. Purpose and scope
 
+### Payment workflow implementation - 2026-11-12
+
+The fourth slice connects posted service bills to the common vendor-payment engine. `POST /service-bill/:id/payment-slip` prepares or opens the bill's active JOBCARD slip. This first integration uses one service bill per slip; its amount is the server-calculated remaining liability, including any historical direct settlements. The bill register remains the paginated/searchable entry point. Source reservations prevent a second active slip and block cancellation of a reserved bill. JOBCARD drafts use the bill's frozen balance; changing the request requires cancelling the unpaid slip and preparing a replacement.
+
+Submit, configured threshold/approval decisions, reject-to-draft, cancellation, approval queues, branch access, and disbursement permissions reuse the shared engine. Makers need `accounts.payment.create`; viewing/approval/disbursement use the existing corresponding shared permissions. Roles are not changed automatically. Generic slip creation does not accept JOBCARD; the service-bill entry point establishes its bill/payee/branch references.
+
+JOBCARD approval posts no accrual because service-bill posting already recognised expense and provider payable. Disbursement debits that provider payable, credits cash/bank and (when entered) TDS payable, and atomically increments the bill's settled amount. A slip's `paidPaise` represents cash plus TDS settled; each disbursement's `paidPaise` records cash and its new `tdsPaise` field records withholding separately. The approved amount is total liability settlement; the cashier records the cash/TDS split at disbursement. Partial payments retain the active reservation. Cancelled unpaid slips release it without reversing the original bill journal; partially/fully paid slips remain non-cancellable under the existing shared workflow.
+
+The direct `/service-bill/:id/pay` endpoint rejects new payments, including requests from stale clients. Historical `ServiceBillPayment` records and their legacy history endpoint remain readable; new payment history/vouchers are on the linked vendor payment slip. Idempotent disbursement uses the shared client request ID, rechecked under request/slip locks before status and amount validation, including retries of a final payment. The frontend refreshes balances and creates a new attempt ID only after success.
+
+Apply `20261112020000_job_card_payment_approval` before deploying this slice; it adds the service-bill source, slip bill FK/payee constraint, and disbursement TDS column. Prisma generation does not apply the migration. Unit coverage includes authoritative outstanding amounts, source reuse, conflicting/cancelled bills, partial cash/TDS settlement, and balanced provider/funding/TDS entries. Live PostgreSQL race/rollback/migration tests and full Finance UAT remain outstanding. Multi-bill slips, payment reversals, TDS-only disbursements, and approval policy changes beyond the existing shared configuration are outside this slice.
+
 Provide one traceable flow from a vehicle repair to spare consumption, outside service liability, payment, accounting, and vehicle repair cost reporting. Finance must be able to trace every amount back to a job card, vehicle, provider, stock movement, and voucher.
 
 Job cards already exist under Workshop. The proposed Finance entry point should reuse those records and services. A second job card model or independent stock/payment implementation would create reconciliation problems.

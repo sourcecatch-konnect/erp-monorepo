@@ -39,11 +39,13 @@ import {
 } from "../_shared/doc-number.js";
 import {
   postVendorDisbursement,
+  postJobCardDisbursement,
   postVendorSlipAccrual,
   reverseVendorSlipAccrual,
 } from "../ledger/posting.service.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
 import { decideVendorPaymentApproval } from "./approval-decision.js";
+import { assertJobCardSlipBalance, settleJobCardBillTx } from "./job-card-payment.service.js";
 import {
   findEligibleTransporterLRs,
   reconcileTransporterLines,
@@ -90,6 +92,7 @@ const validate = <T>(
 };
 
 const slipDetailInclude = {
+  serviceBill: { select: { id: true, serviceBillNumber: true, serviceProvider: { select: { id: true, name: true } } } },
   branch: { select: { id: true, name: true, branchCode: true } },
   transport: { select: { id: true, name: true } },
   labour: { select: { id: true, name: true } },
@@ -707,6 +710,7 @@ router.patch(
     const existing = await db.vendorPaymentSlip.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Vendor payment slip not found");
     assertBranchAccess(req, existing.branchId);
+    if (existing.type === "JOBCARD") throw new BadRequestError("Job card slips use the posted bill balance. Cancel this slip to prepare a replacement.");
     if (existing.status !== "DRAFT")
       throw new BadRequestError("Only a draft slip can be edited");
     if (existing.version !== input.version)
@@ -819,6 +823,12 @@ async function approveAndAccrue(
     throw err;
   }
 
+  // The service bill already posted its expense and payable. Approval only
+  // authorises settlement; a second accrual here would duplicate the cost.
+  if (approved.type === "JOBCARD") {
+    await assertJobCardSlipBalance(tx, approved);
+    return approved;
+  }
   const journal = await postVendorSlipAccrual(tx, {
     narrationDetail: await describeSlipSources(tx, approved.id),
     slipId: approved.id,
@@ -1100,7 +1110,17 @@ router.post(
       async (tx) => {
         // Lock the slip so two concurrent disbursements against it can't
         // both validate against the same stale "outstanding" figure.
+        const requestLockKey = `vendor-payment-request:${input.clientRequestId}`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestLockKey}))`;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+        // Recheck request identity after the slip lock, including retries of
+        // the final payment when the slip has already reached PAID.
+        const prior = await tx.vendorPaymentDisbursement.findUnique({ where: { clientRequestId: input.clientRequestId } });
+        if (prior) {
+          if (prior.slipId !== id) throw new BadRequestError("Request id belongs to another slip");
+          return id;
+        }
 
         const slip = await tx.vendorPaymentSlip.findUnique({ where: { id } });
         if (!slip) throw new NotFoundError("Vendor payment slip not found");
@@ -1109,18 +1129,24 @@ router.post(
             "Only an approved or partially paid slip can be disbursed",
           );
 
+        if (slip.type !== "JOBCARD" && input.tdsPaise > 0n)
+          throw new BadRequestError("Settlement TDS is only available for job card slips");
+        const settledPaise = input.paidPaise + input.tdsPaise;
         const outstandingPaise = slip.netPayablePaise - slip.paidPaise;
-        if (input.paidPaise > outstandingPaise)
+        if (settledPaise > outstandingPaise)
           throw new BadRequestError(
             `Amount exceeds outstanding (${outstandingPaise} paise)`,
           );
 
+        const serviceBill = slip.type === "JOBCARD"
+          ? await settleJobCardBillTx(tx, slip, input.paidPaise, input.tdsPaise) : null;
         let disbursement;
         try {
           disbursement = await tx.vendorPaymentDisbursement.create({
             data: {
               slipId: id,
               paidPaise: input.paidPaise,
+              tdsPaise: input.tdsPaise,
               mode: input.mode,
               paidAt: input.paidAt,
               referenceNo: input.referenceNo ?? null,
@@ -1144,7 +1170,7 @@ router.post(
           throw err;
         }
 
-        const journal = await postVendorDisbursement(tx, {
+        const postingArgs = {
           narrationDetail: await describeSlipSources(tx, slip.id),
           disbursementId: disbursement.id,
           voucherNumber,
@@ -1160,14 +1186,17 @@ router.post(
           existingSettlementJournalEntryId:
             disbursement.settlementJournalEntryId,
           createdById: me,
-        });
+        };
+        const journal = serviceBill
+          ? await postJobCardDisbursement(tx, { ...postingArgs, serviceProviderId: serviceBill.serviceProviderId, tdsPaise: input.tdsPaise })
+          : await postVendorDisbursement(tx, postingArgs);
 
         await tx.vendorPaymentDisbursement.update({
           where: { id: disbursement.id },
           data: { settlementJournalEntryId: journal.id },
         });
 
-        const newPaidPaise = slip.paidPaise + input.paidPaise;
+        const newPaidPaise = slip.paidPaise + settledPaise;
         await tx.vendorPaymentSlip.update({
           where: { id },
           data: {
@@ -1190,6 +1219,7 @@ router.post(
       entityId: id,
       after: {
         paidPaise: input.paidPaise.toString(),
+        tdsPaise: input.tdsPaise.toString(),
         clientRequestId: input.clientRequestId,
       },
     });
@@ -1243,7 +1273,7 @@ router.post(
       // Approved-and-unpaid reverses the accrual; DRAFT/PENDING_APPROVAL
       // never touched the ledger, so there's nothing to reverse.
       const wasApproved = slip.status === "APPROVED";
-      if (wasApproved) {
+      if (wasApproved && slip.type !== "JOBCARD") {
         await reverseVendorSlipAccrual(tx, slip, input.reason, me);
         // Claims C7: its damage recoveries go back to APPROVED for the next slip.
         await releaseSlipRecoveries(tx, slip, me);
@@ -1313,6 +1343,7 @@ router.get("/slips", can(PERMS.ACCOUNTS.PAYMENT.VIEW), async (req, res) => {
         branch: { select: { id: true, name: true, branchCode: true } },
         transport: { select: { id: true, name: true } },
         labour: { select: { id: true, name: true } },
+        serviceBill: slipDetailInclude.serviceBill,
         _count: { select: { lines: true, disbursements: true } },
       },
       orderBy: SLIP_LIST_ORDER_BY,

@@ -55,6 +55,7 @@ const bill = { id: "bill", version: 1, journalEntryId: "voucher" };
 
 function fixture() {
   const tx = {
+    vendorPaymentSlipLine: { findMany: vi.fn().mockResolvedValue([]) },
     jobCardServiceLine: {
       findMany: vi.fn().mockResolvedValue([line()]),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),

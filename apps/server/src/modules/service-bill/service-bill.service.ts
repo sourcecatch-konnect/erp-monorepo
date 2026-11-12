@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { createServiceBillSchema } from "@skerp/validators";
 import type { Prisma } from "../../../generated/prisma/index.js";
 import { BadRequestError, ConflictError } from "../../lib/error.js";
+import { assertNotOnVendorSlip } from "../vendor-payment/source-lock.js";
 import {
   fyCodeFor,
   formatDocNumber,
@@ -181,6 +182,7 @@ export async function cancelServiceBillTx(
     throw new ConflictError(
       "Bill changed or has payments. Refresh before cancelling.",
     );
+  await assertNotOnVendorSlip(tx, "SERVICE_BILL", [bill.id], "cancel the service bill");
   if (await tx.serviceBillPayment.count({ where: { serviceBillId: bill.id } }))
     throw new BadRequestError("A bill with payments cannot be cancelled");
   await tx.jobCardServiceLine.updateMany({

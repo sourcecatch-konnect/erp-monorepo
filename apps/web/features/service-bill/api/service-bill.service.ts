@@ -39,6 +39,7 @@ export type ServiceBillLine = {
 };
 
 export type ServiceBill = {
+  paymentSlips?: { id: string; slipNumber: string; status: string }[];
   id: string;
   serviceBillNumber: string | null;
   fyCode: string;
@@ -77,6 +78,12 @@ export type LookupOption = { value: string; label: string };
 export type ServiceBillSummary = Omit<ServiceBill, "lines">;
 
 export const serviceBillApi = {
+  preparePayment: async (id: string) => {
+    const res = await api.post<ApiResponse<{ id: string }>>(
+      `/service-bill/${id}/payment-slip`,
+    );
+    return unwrapApiResponse(res);
+  },
   list: async (
     params?: {
       branchId?: string;

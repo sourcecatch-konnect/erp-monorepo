@@ -1674,6 +1674,7 @@ model ServiceBill {
 
   lines    ServiceBillLine[]
   payments ServiceBillPayment[]
+  paymentSlips VendorPaymentSlip[]
 
   @@index([createdAt, id])
   @@index([branchId, createdAt, id])
@@ -1846,8 +1847,8 @@ model ReplacementInwardLine {
 
 /// One disbursement against a POSTED ServiceBill. Partial-pay aware — a bill
 /// accumulates payments until ServiceBill.paidAmountPaise == netAmountPaise.
-/// Independent of the Vendor Payment 3-stage engine for now (a dedicated,
-/// quick path); may later be superseded by a `type = JOBCARD` slip there.
+/// Legacy direct settlements remain readable. New settlements use JOBCARD
+/// VendorPaymentSlip disbursements and update the same settled bill balance.
 model ServiceBillPayment {
   id              String      @id @default(cuid())
   serviceBillId   String
@@ -3350,11 +3351,12 @@ model Ledger {
 }
 
 /// Vendor-payment engine: Slip -> Approval -> Disbursement. This phase covers
-/// TRANSPORTER and HAMALI; LDC_BROKER and JOBCARD reuse the same tables later.
+/// TRANSPORTER, HAMALI, LDC_BROKER and JOBCARD share these tables.
 /// DRAFT / PENDING_APPROVAL never touch the ledger. Approval posts the accrual
 /// (Dr expense/detention, Cr recoveries + party payable) atomically with the
 /// status flip. Each disbursement is a separate settlement voucher against the
-/// same party-payable reference.
+/// same party-payable reference. JOBCARD approval skips accrual because its
+/// service bill already posted expense/payable; disbursement settles that bill.
 model VendorPaymentSlip {
   id         String            @id @default(cuid())
   slipNumber String            @unique
@@ -3362,11 +3364,12 @@ model VendorPaymentSlip {
   branchId   String
   fyCode     String
 
-  // Exactly one of transportId / labourId is set for the current types
-  // (TRANSPORTER, HAMALI) — DB-enforced by VendorPaymentSlip_one_payee_chk
+  // Exactly one of transportId / labourId / serviceBillId is set.
+  // JOBCARD resolves its provider through the bill; the check is DB-enforced.
   // (see the hand-authored migration).
   transportId String?
   labourId    String?
+  serviceBillId String?
 
   grossPayablePaise    BigInt @default(0)
   totalDeductionsPaise BigInt @default(0)
@@ -3397,6 +3400,7 @@ model VendorPaymentSlip {
   branch              Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
   transport           Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
   labour              Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  serviceBill         ServiceBill?  @relation(fields: [serviceBillId], references: [id], onDelete: Restrict)
   accrualJournalEntry JournalEntry? @relation(fields: [accrualJournalEntryId], references: [id], onDelete: SetNull)
   createdBy           User          @relation("CreatedVendorPaymentSlips", fields: [createdById], references: [id], onDelete: Restrict)
   approvedBy          User?         @relation("ApprovedVendorPaymentSlips", fields: [approvedById], references: [id], onDelete: SetNull)
@@ -3411,6 +3415,7 @@ model VendorPaymentSlip {
   @@index([type, status])
   @@index([transportId])
   @@index([labourId])
+  @@index([serviceBillId])
   @@index([approvedById])
   @@index([createdById])
 }
@@ -3474,6 +3479,7 @@ model VendorPaymentDisbursement {
   slipId String
 
   paidPaise   BigInt
+  tdsPaise    BigInt @default(0)
   mode        PaymentMode
   paidAt      DateTime
   referenceNo String?
@@ -4862,6 +4868,7 @@ enum VendorPaymentStatus {
 }
 
 enum VendorPaymentSourceType {
+  SERVICE_BILL
   /// Legacy per-LR transporter line (slips made before LR_GROUP).
   LR
   /// Transporter line for one truck (LR group) and all its LRs.
