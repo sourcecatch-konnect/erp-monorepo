@@ -21,7 +21,11 @@ import {
 } from "@skerp/ui/components/dialog";
 
 import { formatPaise, rupeesToPaise } from "@/lib/money";
-import { serviceBillApi, type PaymentMode, type ServiceBill } from "./api/service-bill.service";
+import {
+  serviceBillApi,
+  type PaymentMode,
+  type ServiceBillSummary,
+} from "./api/service-bill.service";
 import { serviceBillKeys } from "./api/service-bill.keys";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -29,7 +33,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  bill: ServiceBill;
+  bill: ServiceBillSummary;
   /** Called with the posted payment's journal entry id, if any, so the
    *  caller can open the voucher dialog right after paying. */
   onPaid?: (journalEntryId: string | undefined) => void;
@@ -37,7 +41,12 @@ type Props = {
 
 /** Pay dialog for a POSTED Service Bill — shared between the Service Bill
  *  List table (pay directly from a row) and the Detail page. */
-export function PayServiceBillDialog({ open, onOpenChange, bill, onPaid }: Props) {
+export function PayServiceBillDialog({
+  open,
+  onOpenChange,
+  bill,
+  onPaid,
+}: Props) {
   const queryClient = useQueryClient();
 
   const pending = Number(bill.netAmountPaise) - Number(bill.paidAmountPaise);
@@ -67,7 +76,8 @@ export function PayServiceBillDialog({ open, onOpenChange, bill, onPaid }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const settledThisRound = rupeesToPaise(Number(payAmount) || 0) + rupeesToPaise(Number(payTds) || 0);
+  const settledThisRound =
+    rupeesToPaise(Number(payAmount) || 0) + rupeesToPaise(Number(payTds) || 0);
   const pendingAfterThisPayment = pending - settledThisRound;
 
   const pay = useMutation({
@@ -86,7 +96,8 @@ export function PayServiceBillDialog({ open, onOpenChange, bill, onPaid }: Props
       onOpenChange(false);
       onPaid?.(payment.journalEntry?.id);
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not pay"),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not pay"),
   });
 
   return (
@@ -96,22 +107,34 @@ export function PayServiceBillDialog({ open, onOpenChange, bill, onPaid }: Props
           <DialogTitle>Pay {bill.serviceBillNumber}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Bill pending: <span className="font-semibold">{formatPaise(pending)}</span>
+          Bill pending:{" "}
+          <span className="font-semibold">{formatPaise(pending)}</span>
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Paid Amount (₹)</label>
-            <Input inputMode="decimal" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+            <Input
+              inputMode="decimal"
+              value={payAmount}
+              onChange={(e) => setPayAmount(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">
               TDS (₹) <span className="text-muted-foreground">(optional)</span>
             </label>
-            <Input inputMode="decimal" value={payTds} onChange={(e) => setPayTds(e.target.value)} />
+            <Input
+              inputMode="decimal"
+              value={payTds}
+              onChange={(e) => setPayTds(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Mode</label>
-            <Select value={payMode} onValueChange={(v) => setPayMode(v as PaymentMode)}>
+            <Select
+              value={payMode}
+              onValueChange={(v) => setPayMode(v as PaymentMode)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -140,20 +163,31 @@ export function PayServiceBillDialog({ open, onOpenChange, bill, onPaid }: Props
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Payment date</label>
-            <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+            <Input
+              type="date"
+              value={payDate}
+              onChange={(e) => setPayDate(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <label className="text-sm font-medium">
-              Reference no. <span className="text-muted-foreground">(optional)</span>
+              Reference no.{" "}
+              <span className="text-muted-foreground">(optional)</span>
             </label>
-            <Input value={payReference} onChange={(e) => setPayReference(e.target.value)} />
+            <Input
+              value={payReference}
+              onChange={(e) => setPayReference(e.target.value)}
+            />
           </div>
         </div>
 
         {(Number(payAmount) > 0 || Number(payTds) > 0) && (
           <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-            {formatPaise(pending)} pending − {formatPaise(rupeesToPaise(Number(payAmount) || 0))} paid
-            {Number(payTds) > 0 && ` − ${formatPaise(rupeesToPaise(Number(payTds) || 0))} TDS`} ={" "}
+            {formatPaise(pending)} pending −{" "}
+            {formatPaise(rupeesToPaise(Number(payAmount) || 0))} paid
+            {Number(payTds) > 0 &&
+              ` − ${formatPaise(rupeesToPaise(Number(payTds) || 0))} TDS`}{" "}
+            ={" "}
             <span
               className={
                 pendingAfterThisPayment < 0

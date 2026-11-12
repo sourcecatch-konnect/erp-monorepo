@@ -12,26 +12,37 @@ export const unbilledServiceLinesQuerySchema = z.object({
   serviceProviderId: id,
   uptoDate: isoDate.optional(),
   branchId: id.optional(),
+  search: z.string().trim().max(200).optional(),
+  page: z.coerce.number().int().min(0).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export const createServiceBillSchema = z.object({
   branchId: id,
   serviceProviderId: id,
   billDate: isoDate,
-  providerInvoiceNo: z.string().trim().min(1, "Provider's bill number is required"),
+  providerInvoiceNo: z
+    .string()
+    .trim()
+    .min(1, "Provider's bill number is required"),
   providerInvoiceDate: isoDate.optional(),
   discountPaise: paise.default(0n),
   remarks: z.string().trim().max(1000).optional(),
   jobCardServiceLineIds: z
     .array(id)
-    .min(1, "Select at least one completed service to bill"),
+    .min(1, "Select at least one completed service to bill")
+    .max(500, "A bill can contain at most 500 services")
+    .refine(
+      (ids) => new Set(ids).size === ids.length,
+      "Duplicate services are not allowed",
+    ),
 });
 
 export const serviceBillListQuerySchema = z.object({
   branchId: id.optional(),
   serviceProviderId: id.optional(),
   status: serviceBillStatusSchema.optional(),
-  search: z.string().trim().optional(),
+  search: z.string().trim().max(200).optional(),
   page: z.coerce.number().int().min(0).default(0),
   size: z.coerce.number().int().min(1).max(100).default(10),
 });

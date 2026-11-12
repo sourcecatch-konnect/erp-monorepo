@@ -21,7 +21,12 @@ export type UnbilledServiceLine = {
   ratePaise: string;
   amountPaise: string;
   description: string | null;
-  jobCard: { id: string; jobCardNumber: string | null; vehicleId: string; finalisedAt: string | null };
+  jobCard: {
+    id: string;
+    jobCardNumber: string | null;
+    vehicleId: string;
+    finalisedAt: string | null;
+  };
   sparePart: { id: string; name: string };
 };
 
@@ -69,17 +74,24 @@ export type ServiceBillPayment = {
 };
 
 export type LookupOption = { value: string; label: string };
+export type ServiceBillSummary = Omit<ServiceBill, "lines">;
 
 export const serviceBillApi = {
-  list: async (params?: {
-    branchId?: string;
-    serviceProviderId?: string;
-    status?: ServiceBillStatus;
-    search?: string;
-    page?: number;
-    size?: number;
-  }): Promise<ListResult<ServiceBill>> => {
-    const res = await api.get<ApiResponse<ServiceBill[]>>("/service-bill", { params });
+  list: async (
+    params?: {
+      branchId?: string;
+      serviceProviderId?: string;
+      status?: ServiceBillStatus;
+      search?: string;
+      page?: number;
+      size?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<ListResult<ServiceBillSummary>> => {
+    const res = await api.get<ApiResponse<ServiceBillSummary[]>>(
+      "/service-bill",
+      { params, signal },
+    );
     return unwrapListResponse(res);
   },
 
@@ -88,11 +100,25 @@ export const serviceBillApi = {
     return unwrapApiResponse(res);
   },
 
-  unbilledLines: async (serviceProviderId: string, uptoDate?: string) => {
-    const res = await api.get<ApiResponse<UnbilledServiceLine[]>>("/service-bill/unbilled-lines", {
-      params: { serviceProviderId, uptoDate },
-    });
-    return unwrapListResponse(res).data;
+  unbilledLines: async (
+    params: {
+      serviceProviderId: string;
+      branchId: string;
+      uptoDate?: string;
+      search?: string;
+      page: number;
+      size: number;
+    },
+    signal?: AbortSignal,
+  ) => {
+    const res = await api.get<ApiResponse<UnbilledServiceLine[]>>(
+      "/service-bill/unbilled-lines",
+      {
+        params,
+        signal,
+      },
+    );
+    return unwrapListResponse(res);
   },
 
   create: async (body: {
@@ -110,7 +136,10 @@ export const serviceBillApi = {
   },
 
   cancel: async (id: string, reason: string) => {
-    const res = await api.post<ApiResponse<ServiceBill>>(`/service-bill/${id}/cancel`, { reason });
+    const res = await api.post<ApiResponse<ServiceBill>>(
+      `/service-bill/${id}/cancel`,
+      { reason },
+    );
     return unwrapApiResponse(res);
   },
 
@@ -144,10 +173,9 @@ export const serviceBillApi = {
    *  Head Office. Filtered to isHeadOffice=true, so at most one row
    *  regardless of page size. */
   headOfficeBranch: async (): Promise<{ id: string; name: string } | null> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>>(
-      "/branches",
-      { params: { size: 1, "filter[isHeadOffice]": "true" } },
-    );
+    const res = await api.get<
+      ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>
+    >("/branches", { params: { size: 1, "filter[isHeadOffice]": "true" } });
     const data = unwrapListResponse(res).data;
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
@@ -159,10 +187,15 @@ export const serviceBillApi = {
     size: number;
     search?: string;
   }): Promise<ListResult<LookupOption>> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
-      "/spare-part-suppliers",
-      { params: { page: params.page, size: params.size, search: params.search || undefined } },
-    );
+    const res = await api.get<
+      ApiResponse<{ id: string; name: string; shopName: string | null }[]>
+    >("/spare-part-suppliers", {
+      params: {
+        page: params.page,
+        size: params.size,
+        search: params.search || undefined,
+      },
+    });
     const result = unwrapListResponse(res);
     return {
       ...result,
@@ -174,9 +207,15 @@ export const serviceBillApi = {
   },
 
   cashAccounts: async (): Promise<LookupOption[]> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/cash-accounts", {
-      params: { size: SMALL_MASTER_SIZE },
-    });
-    return unwrapListResponse(res).data.map((a) => ({ value: a.id, label: a.name }));
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      "/cash-accounts",
+      {
+        params: { size: SMALL_MASTER_SIZE },
+      },
+    );
+    return unwrapListResponse(res).data.map((a) => ({
+      value: a.id,
+      label: a.name,
+    }));
   },
 };

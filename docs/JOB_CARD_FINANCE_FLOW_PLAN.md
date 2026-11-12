@@ -15,6 +15,12 @@ Unit coverage exercises repeated-batch demand, running balances, stale finalise 
 
 Payment approval integration, remaining lifecycle concurrency hardening, return lifecycle changes, and financial reporting remain subsequent phases. These slices do not change valuation or historical postings.
 
+The third slice hardens service billing. Bill creation revalidates branch/provider/finalised status, claims source job cards by version, and conditionally claims unbilled lines in one transaction. Cancellation transitions only an unpaid, unchanged posted bill, checks payment history, releases active source claims, reverses the journal, and retains original bill lines. Direct payment reserves cash-plus-TDS settlement using the same bill version guard before creating the payment/voucher. Undo-finalise rechecks active billing after claiming the job card.
+
+The history migration backfills immutable JSON service snapshots, changes source references to nullable with `ON DELETE SET NULL`, and permits a source service to appear on historical cancelled bills and a later replacement bill. Detail responses use snapshots, so correcting a reopened job card cannot rewrite an old bill's displayed quantities/rates/service. Existing bill lines deleted by older cancellations cannot be reconstructed by this migration. Apply `20261112010000_service_bill_history` before deploying the new server; Prisma generation alone does not update the database.
+
+The eligible-services picker now uses 20-row backend pages and debounced search, retains only explicit selections across pages (maximum 500 per bill), and resets selection when branch/provider/cutoff changes. The bill register has debounced backend search and omits line histories from list payloads. Database indexes support register ordering and provider/unbilled filtering. Unit coverage includes eligibility, conflicting claims, snapshots, discounts, unpaid cancellation, and payment reservation; live database race/rollback/migration verification remains outstanding. Shared approval workflow, duplicate provider-invoice policy, and vehicle-level discount allocation remain later work.
+
 ## 1. Purpose and scope
 
 Provide one traceable flow from a vehicle repair to spare consumption, outside service liability, payment, accounting, and vehicle repair cost reporting. Finance must be able to trace every amount back to a job card, vehicle, provider, stock movement, and voucher.

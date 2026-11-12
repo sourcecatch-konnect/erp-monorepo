@@ -472,6 +472,10 @@ router.post(
         throw new ConflictError(
           "Job card changed. Refresh before undoing finalisation.",
         );
+      // Billing claims the same parent before claiming service lines. Recheck
+      // after the claim, rather than trusting dependencies read before locking.
+      if (await tx.jobCardServiceLine.count({ where: { jobCardId: existing.id, billedInServiceBillId: { not: null } } }))
+        throw new ConflictError("This job card has billed services and cannot be reopened");
       for (const line of existing.partLines) {
         await tx.spareBatch.update({
           where: { id: line.batchId },

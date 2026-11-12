@@ -1578,8 +1578,9 @@ model JobCardServiceLine {
   serviceProvider SparePartSupplier @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
   sparePart       SparePart         @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
   mechanic        Labour?           @relation(fields: [mechanicId], references: [id], onDelete: SetNull)
-  serviceBillLine ServiceBillLine?
+  serviceBillLine ServiceBillLine[]
 
+  @@index([serviceProviderId, billedInServiceBillId])
   @@index([jobCardId])
   @@index([serviceProviderId])
   @@index([billedInServiceBillId])
@@ -1674,6 +1675,8 @@ model ServiceBill {
   lines    ServiceBillLine[]
   payments ServiceBillPayment[]
 
+  @@index([createdAt, id])
+  @@index([branchId, createdAt, id])
   @@index([branchId, status])
   @@index([serviceProviderId, status])
   @@index([fyCode])
@@ -1683,12 +1686,15 @@ model ServiceBill {
 model ServiceBillLine {
   id                   String @id @default(cuid())
   serviceBillId        String
-  jobCardServiceLineId String @unique
+  jobCardServiceLineId String?
   amountPaise          BigInt
+  serviceSnapshot      Json
 
   serviceBill        ServiceBill        @relation(fields: [serviceBillId], references: [id], onDelete: Cascade)
-  jobCardServiceLine JobCardServiceLine @relation(fields: [jobCardServiceLineId], references: [id], onDelete: Restrict)
+  jobCardServiceLine JobCardServiceLine? @relation(fields: [jobCardServiceLineId], references: [id], onDelete: SetNull)
 
+  @@unique([serviceBillId, jobCardServiceLineId])
+  @@index([jobCardServiceLineId])
   @@index([serviceBillId])
 }
 
