@@ -9,7 +9,11 @@ The first implementation slice adds Finance navigation to the shared job card re
 
 The backend list now selects only table fields, applies deterministic creation-date/ID ordering, and intersects requested filters with branch scope. Detail and batch lookup enforce branch access. A migration adds creation-date/ID and branch/creation-date/ID indexes; deployment must apply it before relying on those indexes. Substring search remains database filtering and is not accelerated by these ordering indexes; measure representative data before introducing a dedicated search index.
 
-Payment approval integration, posting concurrency hardening, return lifecycle changes, and financial reporting remain subsequent phases. This slice does not change valuation or historical postings.
+The second slice extracts finalisation into `job-card.service.ts`. Finalise claims a draft using status/version, validates completion time and aggregate batch demand, restricts batches to the job branch, and uses conditional atomic decrements for batch and branch quantities. Draft editing and cancellation also use conditional version/status guards; undo claims the finalised card and restores branch quantities with atomic increments. Services remain unposted until billing, and the batch-cost policy is unchanged.
+
+Unit coverage exercises repeated-batch demand, running balances, stale finalise attempts, invalid dates/KM, branch/part mismatches, insufficient stock, services-only completion, and propagation of posting failures. Real database concurrency/rollback verification remains required before treating this as production concurrency certification. Create-and-finalise request-key idempotency and downstream billing/removed-part coordination are still pending; the status/version guard protects repeat finalisation of an existing card, not duplicate creation requests.
+
+Payment approval integration, remaining lifecycle concurrency hardening, return lifecycle changes, and financial reporting remain subsequent phases. These slices do not change valuation or historical postings.
 
 ## 1. Purpose and scope
 
