@@ -20,6 +20,7 @@ import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
 import { postJobCardPartsVoucher, postPartReturnVoucher, reverseJournal } from "../ledger/posting.service.js";
+import { jobCardListSelect, jobCardListWhere } from "./job-card.query.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -52,17 +53,12 @@ const jobCardDetailInclude = {
 
 router.get("/", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
   const query = jobCardListQuerySchema.parse(req.query);
-  const where = {
-    ...branchFilter(req),
-    ...(query.branchId ? { branchId: query.branchId } : {}),
-    ...(query.vehicleId ? { vehicleId: query.vehicleId } : {}),
-    ...(query.status ? { status: query.status } : {}),
-  };
+  const where = jobCardListWhere(branchFilter(req), query);
   const [jobCards, total] = await Promise.all([
     db.jobCard.findMany({
       where,
-      include: jobCardDetailInclude,
-      orderBy: { createdAt: "desc" },
+      select: jobCardListSelect,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: query.page * query.size,
       take: query.size,
     }),
@@ -81,6 +77,7 @@ router.get("/lookup/batches", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res)
   const branchId = String(req.query.branchId ?? "");
   if (!sparePartId || !branchId)
     throw new BadRequestError("sparePartId and branchId are required");
+  assertBranchAccess(req, branchId);
 
   const batches = await db.spareBatch.findMany({
     where: { sparePartId, branchId, qtyRemaining: { gt: 0 } },
@@ -119,6 +116,7 @@ router.get("/:id", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
     include: jobCardDetailInclude,
   });
   if (!jobCard) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, jobCard.branchId);
   sendOk(res, jobCard);
 });
 

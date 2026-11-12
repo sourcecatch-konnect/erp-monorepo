@@ -80,7 +80,11 @@ export type JobCardRemovedPart = {
   unitCostPaise: string | null;
   remarks: string | null;
   sparePart: { id: string; name: string };
-  relatedPartLine: { id: string; unitCostPaise: string; batchId: string } | null;
+  relatedPartLine: {
+    id: string;
+    unitCostPaise: string;
+    batchId: string;
+  } | null;
   newBatch: { id: string; qtyRemaining: number } | null;
   createdBy: { id: string; firstName: string; lastName: string } | null;
   journalEntry: { id: string; voucherNumber: string; status: string } | null;
@@ -133,15 +137,33 @@ export type BatchOption = {
 
 export type LookupOption = { value: string; label: string };
 
+export type JobCardListItem = Pick<
+  JobCard,
+  | "id"
+  | "jobCardNumber"
+  | "inDateTime"
+  | "status"
+  | "totalAmountPaise"
+  | "vehicle"
+  | "driver"
+>;
+
 export const jobCardApi = {
-  list: async (params?: {
-    branchId?: string;
-    vehicleId?: string;
-    status?: JobCardStatus;
-    page?: number;
-    size?: number;
-  }): Promise<ListResult<JobCard>> => {
-    const res = await api.get<ApiResponse<JobCard[]>>("/job-card", { params });
+  list: async (
+    params?: {
+      search?: string;
+      branchId?: string;
+      vehicleId?: string;
+      status?: JobCardStatus;
+      page?: number;
+      size?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<ListResult<JobCardListItem>> => {
+    const res = await api.get<ApiResponse<JobCardListItem[]>>("/job-card", {
+      params,
+      signal,
+    });
     return unwrapListResponse(res);
   },
 
@@ -158,7 +180,10 @@ export const jobCardApi = {
   /** Create a brand-new job card and finalise it immediately — one request,
    *  one transaction, instead of a separate create() then finalise() call. */
   createAndFinalise: async (body: CreateAndFinaliseJobCardBody) => {
-    const res = await api.post<ApiResponse<JobCard>>("/job-card/create-and-finalise", body);
+    const res = await api.post<ApiResponse<JobCard>>(
+      "/job-card/create-and-finalise",
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
@@ -167,18 +192,29 @@ export const jobCardApi = {
     return unwrapApiResponse(res);
   },
 
-  finalise: async (id: string, body: { outDateTime: string; closingKm: number }) => {
-    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/finalise`, body);
+  finalise: async (
+    id: string,
+    body: { outDateTime: string; closingKm: number },
+  ) => {
+    const res = await api.post<ApiResponse<JobCard>>(
+      `/job-card/${id}/finalise`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
   cancel: async (id: string, reason: string) => {
-    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/cancel`, { reason });
+    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/cancel`, {
+      reason,
+    });
     return unwrapApiResponse(res);
   },
 
   undoFinalise: async (id: string, reason: string) => {
-    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/undo-finalise`, { reason });
+    const res = await api.post<ApiResponse<JobCard>>(
+      `/job-card/${id}/undo-finalise`,
+      { reason },
+    );
     return unwrapApiResponse(res);
   },
 
@@ -207,10 +243,16 @@ export const jobCardApi = {
     return unwrapApiResponse(res);
   },
 
-  batches: async (sparePartId: string, branchId: string): Promise<BatchOption[]> => {
-    const res = await api.get<ApiResponse<BatchOption[]>>("/job-card/lookup/batches", {
-      params: { sparePartId, branchId },
-    });
+  batches: async (
+    sparePartId: string,
+    branchId: string,
+  ): Promise<BatchOption[]> => {
+    const res = await api.get<ApiResponse<BatchOption[]>>(
+      "/job-card/lookup/batches",
+      {
+        params: { sparePartId, branchId },
+      },
+    );
     return unwrapListResponse(res).data;
   },
 
@@ -218,10 +260,9 @@ export const jobCardApi = {
    *  branch flagged Head Office. Filtered to isHeadOffice=true, so this is
    *  at most one row regardless of page size. */
   headOfficeBranch: async (): Promise<{ id: string; name: string } | null> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>>(
-      "/branches",
-      { params: { size: 1, "filter[isHeadOffice]": "true" } },
-    );
+    const res = await api.get<
+      ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>
+    >("/branches", { params: { size: 1, "filter[isHeadOffice]": "true" } });
     const data = unwrapListResponse(res).data;
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
@@ -237,7 +278,11 @@ export const jobCardApi = {
     const res = await api.get<
       ApiResponse<{ id: string; vehicleNumber: string; currentKM: number }[]>
     >("/vehicles", {
-      params: { page: params.page, size: params.size, search: params.search || undefined },
+      params: {
+        page: params.page,
+        size: params.size,
+        search: params.search || undefined,
+      },
     });
     const result = unwrapListResponse(res);
     return {
@@ -255,21 +300,37 @@ export const jobCardApi = {
     size: number;
     search?: string;
   }): Promise<ListResult<LookupOption>> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/drivers", {
-      params: { page: params.page, size: params.size, search: params.search || undefined },
-    });
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      "/drivers",
+      {
+        params: {
+          page: params.page,
+          size: params.size,
+          search: params.search || undefined,
+        },
+      },
+    );
     const result = unwrapListResponse(res);
-    return { ...result, data: result.data.map((d) => ({ value: d.id, label: d.name })) };
+    return {
+      ...result,
+      data: result.data.map((d) => ({ value: d.id, label: d.name })),
+    };
   },
 
   // Labours/categories are small, workshop-owned masters — one bounded page
   // (SMALL_MASTER_SIZE) instead of the old unconditional size:1000, but
   // still a plain cached list (no search-as-you-type UI needed for these).
   mechanics: async (): Promise<LookupOption[]> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/labours", {
-      params: { size: SMALL_MASTER_SIZE, "filter[type]": "Mechanic" },
-    });
-    return unwrapListResponse(res).data.map((l) => ({ value: l.id, label: l.name }));
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      "/labours",
+      {
+        params: { size: SMALL_MASTER_SIZE, "filter[type]": "Mechanic" },
+      },
+    );
+    return unwrapListResponse(res).data.map((l) => ({
+      value: l.id,
+      label: l.name,
+    }));
   },
 
   // Spare parts can grow into thousands of rows, so search server-side +
@@ -280,16 +341,22 @@ export const jobCardApi = {
     search?: string;
     page: number;
     size: number;
-  }): Promise<ListResult<LookupOption & { categoryId: string; ratePaise: string }>> => {
+  }): Promise<
+    ListResult<LookupOption & { categoryId: string; ratePaise: string }>
+  > => {
     const res = await api.get<
-      ApiResponse<{ id: string; name: string; categoryId: string; rate: string }[]>
+      ApiResponse<
+        { id: string; name: string; categoryId: string; rate: string }[]
+      >
     >("/spare-parts", {
       params: {
         page: params.page,
         size: params.size,
         search: params.search || undefined,
         "filter[type]": params.type,
-        ...(params.categoryId ? { "filter[categoryId]": params.categoryId } : {}),
+        ...(params.categoryId
+          ? { "filter[categoryId]": params.categoryId }
+          : {}),
       },
     });
     const result = unwrapListResponse(res);
@@ -305,10 +372,16 @@ export const jobCardApi = {
   },
 
   categories: async (type: "Item" | "Service"): Promise<LookupOption[]> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/spare-category", {
-      params: { size: SMALL_MASTER_SIZE, "filter[type]": type },
-    });
-    return unwrapListResponse(res).data.map((c) => ({ value: c.id, label: c.name }));
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      "/spare-category",
+      {
+        params: { size: SMALL_MASTER_SIZE, "filter[type]": type },
+      },
+    );
+    return unwrapListResponse(res).data.map((c) => ({
+      value: c.id,
+      label: c.name,
+    }));
   },
 
   // Suppliers can grow into a large list — paged + infinite-scrollable.
@@ -321,17 +394,16 @@ export const jobCardApi = {
     // writes "Item" or "Service" (spare-partSupplierForm.tsx's
     // supplierTypeOptions) — filter to "Service" so a pure parts supplier
     // (no labour/service capability) can't be picked as a Job Card provider.
-    const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
-      "/spare-part-suppliers",
-      {
-        params: {
-          page: params.page,
-          size: params.size,
-          search: params.search || undefined,
-          "filter[type]": "Service",
-        },
+    const res = await api.get<
+      ApiResponse<{ id: string; name: string; shopName: string | null }[]>
+    >("/spare-part-suppliers", {
+      params: {
+        page: params.page,
+        size: params.size,
+        search: params.search || undefined,
+        "filter[type]": "Service",
       },
-    );
+    });
     const result = unwrapListResponse(res);
     return {
       ...result,

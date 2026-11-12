@@ -1528,6 +1528,8 @@ model JobCard {
   serviceLines JobCardServiceLine[]
   removedParts JobCardRemovedPart[]
 
+  @@index([createdAt, id])
+  @@index([branchId, createdAt, id])
   @@index([branchId, status])
   @@index([vehicleId])
   @@index([fyCode])

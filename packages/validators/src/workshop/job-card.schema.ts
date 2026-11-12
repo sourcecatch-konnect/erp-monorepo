@@ -67,6 +67,7 @@ export const undoFinaliseJobCardSchema = z.object({
 });
 
 export const jobCardListQuerySchema = z.object({
+  search: z.string().trim().max(200).optional(),
   branchId: id.optional(),
   vehicleId: id.optional(),
   status: jobCardStatusSchema.optional(),

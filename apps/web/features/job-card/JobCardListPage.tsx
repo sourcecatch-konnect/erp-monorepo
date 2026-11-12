@@ -1,8 +1,6 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import { IconPlus } from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
@@ -15,30 +13,36 @@ import {
   TableRow,
 } from "@skerp/ui/components/table";
 import { Skeleton } from "@skerp/ui/components/skeleton";
+import { Input } from "@skerp/ui/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@skerp/ui/components/select";
 import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 
 import { useCan } from "@/features/auth";
 import { formatPaise } from "@/lib/money";
-import { jobCardApi } from "./api/job-card.service";
-import { jobCardKeys } from "./api/job-card.keys";
+import type { JobCardStatus } from "./api/job-card.service";
+import { useJobCardList } from "./useJobCardList";
 import { JobCardStatusBadge } from "./jobCardStatusBadge";
-
 
 export function JobCardListPage() {
   const canManage = useCan(PERMS.WORKSHOP.JOBCARD_MANAGE);
 
-  const [page, setPage] = React.useState(0);
-  const [size, setSize] = React.useState(10);
-
-  const handleSizeChange = (nextSize: number) => {
-    setSize(nextSize);
-    setPage(0);
-  };
-
-  const list = useQuery({
-    queryKey: jobCardKeys.list({ page, size }),
-    queryFn: () => jobCardApi.list({ page, size }),
-  });
+  const {
+    search,
+    setSearch,
+    status,
+    setStatus,
+    page,
+    setPage,
+    size,
+    setSize,
+    list,
+  } = useJobCardList();
   const jobCards = list.data?.data ?? [];
   const total = list.data?.meta?.total ?? 0;
 
@@ -48,8 +52,8 @@ export function JobCardListPage() {
         <div>
           <h1 className="text-lg font-semibold">Job Cards</h1>
           <p className="text-sm text-muted-foreground">
-            A truck&apos;s workshop visit. Save keeps it a draft — parts only leave stock and
-            post to accounts once you Finalise.
+            A truck&apos;s workshop visit. Save keeps it a draft — parts only
+            leave stock and post to accounts once you Finalise.
           </p>
         </div>
         {canManage && (
@@ -61,7 +65,50 @@ export function JobCardListPage() {
         )}
       </div>
 
-      <div className="rounded-md border">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Input
+          aria-label="Search job cards"
+          placeholder="Search job card, vehicle or driver..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          maxLength={200}
+          className="sm:max-w-sm"
+        />
+        <Select
+          value={status}
+          onValueChange={(value) => setStatus(value as JobCardStatus | "ALL")}
+        >
+          <SelectTrigger
+            aria-label="Filter job cards by status"
+            className="w-[180px]"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All statuses</SelectItem>
+            <SelectItem value="DRAFT">Draft</SelectItem>
+            <SelectItem value="FINALISED">Finalised</SelectItem>
+            <SelectItem value="CANCELLED">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {list.isError && (
+        <div
+          role="alert"
+          className="flex items-center gap-3 text-sm text-destructive"
+        >
+          Unable to load job cards.
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void list.refetch()}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+      <div className="rounded-md border" aria-busy={list.isFetching}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -84,23 +131,34 @@ export function JobCardListPage() {
                   ))}
                 </TableRow>
               ))}
-            {!list.isLoading && jobCards.length === 0 && (
+            {!list.isLoading && !list.isError && jobCards.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                  No job cards yet.
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  No job cards match your filters.
                 </TableCell>
               </TableRow>
             )}
             {jobCards.map((jc) => (
-              <TableRow key={jc.id} className="cursor-pointer hover:bg-muted/40">
+              <TableRow
+                key={jc.id}
+                className="cursor-pointer hover:bg-muted/40"
+              >
                 <TableCell className="font-medium text-primary hover:underline">
-                  <Link href={`/workshop/job-cards/${jc.id}`} className="hover:underline">
+                  <Link
+                    href={`/workshop/job-cards/${jc.id}`}
+                    className="hover:underline"
+                  >
                     {jc.jobCardNumber ?? "—"}
                   </Link>
                 </TableCell>
                 <TableCell>{jc.vehicle.vehicleNumber}</TableCell>
                 <TableCell>{jc.driver.name}</TableCell>
-                <TableCell>{new Date(jc.inDateTime).toLocaleDateString("en-IN")}</TableCell>
+                <TableCell>
+                  {new Date(jc.inDateTime).toLocaleDateString("en-IN")}
+                </TableCell>
                 <TableCell>
                   <JobCardStatusBadge status={jc.status} />
                 </TableCell>
@@ -111,13 +169,15 @@ export function JobCardListPage() {
             ))}
           </TableBody>
         </Table>
-        <TablePaginationFooter
-          total={total}
-          page={page}
-          size={size}
-          onPageChange={setPage}
-          onSizeChange={handleSizeChange}
-        />
+        {list.data && (
+          <TablePaginationFooter
+            total={total}
+            page={page}
+            size={size}
+            onPageChange={setPage}
+            onSizeChange={setSize}
+          />
+        )}
       </div>
     </div>
   );
