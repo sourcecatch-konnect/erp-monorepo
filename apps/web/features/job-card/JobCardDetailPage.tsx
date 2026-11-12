@@ -46,12 +46,11 @@ import { formatPaise, rupeesToPaise } from "@/lib/money";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
 import { DetailSection } from "@/features/masters/_shared/DetailSection";
-import {
-  jobCardApi,
-  type RemovedPartCondition,
-} from "./api/job-card.service";
+import { jobCardApi, type RemovedPartCondition } from "./api/job-card.service";
 import { jobCardKeys } from "./api/job-card.keys";
 import { JobCardStatusBadge } from "./jobCardStatusBadge";
+import { useRemovedParts } from "./useRemovedParts";
+import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 
 const CONDITION_LABELS: Record<RemovedPartCondition, string> = {
   REUSABLE: "Reusable",
@@ -85,10 +84,16 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
     queryFn: () => jobCardApi.get(jobCardId),
   });
 
-  const removedParts = useQuery({
-    queryKey: jobCardKeys.removedParts(jobCardId),
-    queryFn: () => jobCardApi.removedParts(jobCardId),
-  });
+  const {
+    query: removedParts,
+    search: returnSearch,
+    setSearch: setReturnSearch,
+    page: returnPage,
+    setPage: setReturnPage,
+    size: returnSize,
+    setSize: setReturnSize,
+  } = useRemovedParts(jobCardId);
+  const removedRequestId = React.useRef<string | null>(null);
 
   const [voucherOpen, setVoucherOpen] = React.useState(false);
   const [voucherId, setVoucherId] = React.useState<string | null>(null);
@@ -104,15 +109,16 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
   const [removedPartOpen, setRemovedPartOpen] = React.useState(false);
   const [removedPartSearch, setRemovedPartSearch] = React.useState("");
   const debouncedRemovedPartSearch = useDebouncedValue(removedPartSearch, 300);
-  const [removedPartDraft, setRemovedPartDraft] = React.useState<RemovedPartDraft>({
-    sparePartId: "",
-    sparePartLabel: "",
-    relatedPartLineId: "",
-    qty: "",
-    condition: "REUSABLE",
-    unitCost: "",
-    remarks: "",
-  });
+  const [removedPartDraft, setRemovedPartDraft] =
+    React.useState<RemovedPartDraft>({
+      sparePartId: "",
+      sparePartLabel: "",
+      relatedPartLineId: "",
+      qty: "",
+      condition: "REUSABLE",
+      unitCost: "",
+      remarks: "",
+    });
 
   const sparePartOptions = useQuery({
     queryKey: ["job-card", "spare-parts-any", debouncedRemovedPartSearch],
@@ -136,7 +142,10 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
       toast.success("Job card finalised — parts issued and posted");
       queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not finalise"),
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Could not finalise",
+      ),
   });
 
   const cancel = useMutation({
@@ -147,20 +156,26 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
       setCancelOpen(false);
       setCancelReason("");
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not cancel"),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not cancel"),
   });
 
   const undoFinalise = useMutation({
     mutationFn: (reason: string) => jobCardApi.undoFinalise(jobCardId, reason),
     onSuccess: () => {
-      toast.success("Finalise undone — stock and the voucher have been reversed");
+      toast.success(
+        "Finalise undone — stock and the voucher have been reversed",
+      );
       queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Could not undo finalise"),
+      toast.error(
+        error instanceof Error ? error.message : "Could not undo finalise",
+      ),
   });
 
   const resetRemovedPartForm = () => {
+    removedRequestId.current = null;
     setRemovedPartSearch("");
     setRemovedPartDraft({
       sparePartId: "",
@@ -176,28 +191,48 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
   const addRemovedPart = useMutation({
     mutationFn: () =>
       jobCardApi.addRemovedPart(jobCardId, {
+        clientRequestId: (removedRequestId.current ??= crypto.randomUUID()),
         sparePartId: removedPartDraft.sparePartId,
         relatedPartLineId: removedPartDraft.relatedPartLineId || undefined,
         qty: Number(removedPartDraft.qty),
         condition: removedPartDraft.condition,
         unitCostPaise:
-          removedPartDraft.condition !== "REUSABLE" && removedPartDraft.unitCost
+          removedPartDraft.condition === "REUSABLE" && removedPartDraft.unitCost
             ? rupeesToPaise(Number(removedPartDraft.unitCost))
             : undefined,
         remarks: removedPartDraft.remarks.trim() || undefined,
       }),
     onSuccess: () => {
       toast.success("Removed part logged");
-      queryClient.invalidateQueries({ queryKey: jobCardKeys.removedParts(jobCardId) });
+      setReturnPage(0);
+      queryClient.invalidateQueries({
+        queryKey: jobCardKeys.removedParts(jobCardId),
+      });
       queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
       setRemovedPartOpen(false);
       resetRemovedPartForm();
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not log part"),
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Could not log part",
+      ),
   });
 
   const canAddRemovedPart =
-    Boolean(removedPartDraft.sparePartId) && Number(removedPartDraft.qty) > 0;
+    jc.data?.status === "FINALISED" &&
+    Boolean(removedPartDraft.sparePartId) &&
+    Number.isInteger(Number(removedPartDraft.qty)) &&
+    Number(removedPartDraft.qty) > 0 &&
+    (removedPartDraft.condition !== "REUSABLE" ||
+      (removedPartDraft.unitCost.trim()
+        ? Number(removedPartDraft.unitCost) > 0
+        : Boolean(
+            jc.data.partLines.find(
+              (line) =>
+                line.id === removedPartDraft.relatedPartLineId &&
+                BigInt(line.unitCostPaise) > 0n,
+            ),
+          )));
 
   if (jc.isLoading) {
     return (
@@ -218,7 +253,10 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
   if (!jc.data) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" onClick={() => router.push("/workshop/job-cards")}>
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/workshop/job-cards")}
+        >
           <IconArrowLeft size={15} className="mr-1" /> Back
         </Button>
         <p className="text-sm text-muted-foreground">Job card not found.</p>
@@ -284,7 +322,10 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
             </Button>
           )}
           {canFinaliseNow && (
-            <Button disabled={finalise.isPending} onClick={() => finalise.mutate()}>
+            <Button
+              disabled={finalise.isPending}
+              onClick={() => finalise.mutate()}
+            >
               {finalise.isPending ? "Finalising..." : "Finalise"}
             </Button>
           )}
@@ -298,7 +339,12 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                   "This reverses the stock issued and the posted voucher for this job card. Enter a reason to continue:",
                 );
                 if (!reason || !reason.trim()) return;
-                if (!window.confirm("Undo finalise for this job card? This cannot be undone.")) return;
+                if (
+                  !window.confirm(
+                    "Undo finalise for this job card? This cannot be undone.",
+                  )
+                )
+                  return;
                 undoFinalise.mutate(reason.trim());
               }}
             >
@@ -317,11 +363,15 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
         </div>
       </div>
 
-      <DetailSection title="Job Details" contentClassName="grid gap-4 p-4 sm:grid-cols-4">
+      <DetailSection
+        title="Job Details"
+        contentClassName="grid gap-4 p-4 sm:grid-cols-4"
+      >
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Branch</p>
           <p className="text-sm">
-            {card.branch.name} <span className="text-xs text-muted-foreground">(HO — fixed)</span>
+            {card.branch.name}{" "}
+            <span className="text-xs text-muted-foreground">(HO — fixed)</span>
           </p>
         </div>
         <div className="space-y-1">
@@ -333,27 +383,45 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
           <p className="text-sm">{card.driver.name}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Truck status</p>
-          <p className="text-sm">{card.truckStatus === "AT_HO" ? "At HO" : "In Transit"}</p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">In date/time</p>
-          <p className="text-sm">{new Date(card.inDateTime).toLocaleString("en-IN")}</p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Out date/time</p>
-          <p className="text-sm text-muted-foreground">
-            {card.outDateTime ? new Date(card.outDateTime).toLocaleString("en-IN") : "—"}
+          <p className="text-xs font-medium text-muted-foreground">
+            Truck status
+          </p>
+          <p className="text-sm">
+            {card.truckStatus === "AT_HO" ? "At HO" : "In Transit"}
           </p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Opening KM</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            In date/time
+          </p>
+          <p className="text-sm">
+            {new Date(card.inDateTime).toLocaleString("en-IN")}
+          </p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">
+            Out date/time
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {card.outDateTime
+              ? new Date(card.outDateTime).toLocaleString("en-IN")
+              : "—"}
+          </p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">
+            Opening KM
+          </p>
           <p className="text-sm">{card.openingKm.toLocaleString("en-IN")}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Closing KM</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Closing KM
+          </p>
           <p className="text-sm text-muted-foreground">
-            {card.closingKm !== null ? card.closingKm.toLocaleString("en-IN") : "—"}
+            {card.closingKm !== null
+              ? card.closingKm.toLocaleString("en-IN")
+              : "—"}
           </p>
         </div>
         {card.remarks && (
@@ -384,8 +452,12 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                 <TableRow key={line.id}>
                   <TableCell>{i + 1}</TableCell>
                   <TableCell>{line.sparePart.name}</TableCell>
-                  <TableCell>{line.batch.batchNo ?? line.batch.id.slice(0, 6)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{line.qty}</TableCell>
+                  <TableCell>
+                    {line.batch.batchNo ?? line.batch.id.slice(0, 6)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {line.qty}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatPaise(line.unitCostPaise)}
                   </TableCell>
@@ -398,7 +470,10 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
               ))}
               {card.partLines.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colSpan={8}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
                     No parts on this job card.
                   </TableCell>
                 </TableRow>
@@ -439,10 +514,15 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                   <TableCell>
                     {line.sparePart.name}
                     {line.description && (
-                      <span className="text-muted-foreground"> ({line.description})</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        ({line.description})
+                      </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{line.qty}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {line.qty}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatPaise(line.ratePaise)}
                   </TableCell>
@@ -452,16 +532,23 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                   <TableCell>{line.mechanic?.name ?? "—"}</TableCell>
                   <TableCell>
                     {line.billedInServiceBillId ? (
-                      <span className="text-xs text-emerald-700 dark:text-emerald-400">Billed</span>
+                      <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                        Billed
+                      </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Not billed</span>
+                      <span className="text-xs text-muted-foreground">
+                        Not billed
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
               ))}
               {card.serviceLines.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colSpan={8}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
                     No outside services on this job card.
                   </TableCell>
                 </TableRow>
@@ -480,9 +567,26 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
       </DetailSection>
 
       <DetailSection title="Removed Parts">
+        <div className="border-b p-3">
+          <Input
+            aria-label="Search removed parts"
+            value={returnSearch}
+            maxLength={200}
+            placeholder="Search part or remarks..."
+            onChange={(event) => setReturnSearch(event.target.value)}
+            className="max-w-sm"
+          />
+        </div>
         {card.status === "FINALISED" && canManage && (
           <div className="border-b px-4 py-2.5">
-            <Button size="sm" variant="outline" onClick={() => setRemovedPartOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                resetRemovedPartForm();
+                setRemovedPartOpen(true);
+              }}
+            >
               <IconPlus size={15} className="mr-1" /> Log Removed Part
             </Button>
           </div>
@@ -495,47 +599,100 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                 <TableHead>Part</TableHead>
                 <TableHead>Condition</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Value</TableHead>
+                <TableHead className="text-right">Unit cost</TableHead>
                 <TableHead>Remarks</TableHead>
+                <TableHead>Voucher</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {removedParts.data?.map((part, i) => (
+              {removedParts.data?.data.map((part, i) => (
                 <TableRow key={part.id}>
-                  <TableCell>{i + 1}</TableCell>
+                  <TableCell>{returnPage * returnSize + i + 1}</TableCell>
                   <TableCell>{part.sparePart.name}</TableCell>
                   <TableCell>{CONDITION_LABELS[part.condition]}</TableCell>
-                  <TableCell className="text-right tabular-nums">{part.qty}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {part.qty}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {part.unitCostPaise ? formatPaise(part.unitCostPaise) : "—"}
                   </TableCell>
                   <TableCell>{part.remarks ?? "—"}</TableCell>
-                </TableRow>
-              ))}
-              {!removedParts.isLoading && (removedParts.data?.length ?? 0) === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                    No parts removed from this vehicle recorded yet.
+                  <TableCell>
+                    {part.journalEntry && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setVoucherId(part.journalEntry!.id);
+                          setVoucherOpen(true);
+                        }}
+                      >
+                        Voucher
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
-              )}
+              ))}
+              {!removedParts.isLoading &&
+                !removedParts.isError &&
+                (removedParts.data?.data.length ?? 0) === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-6 text-center text-sm text-muted-foreground"
+                    >
+                      No parts removed from this vehicle recorded yet.
+                    </TableCell>
+                  </TableRow>
+                )}
             </TableBody>
           </Table>
         </div>
+        {removedParts.isLoading && (
+          <p role="status" className="p-3 text-sm text-muted-foreground">
+            Loading removed parts...
+          </p>
+        )}
+        {removedParts.isError && (
+          <p role="alert" className="p-3 text-sm text-destructive">
+            Could not load removed parts.{" "}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void removedParts.refetch()}
+            >
+              Retry
+            </Button>
+          </p>
+        )}
+        {removedParts.data && (
+          <TablePaginationFooter
+            total={removedParts.data.meta?.total ?? 0}
+            page={returnPage}
+            size={returnSize}
+            onPageChange={setReturnPage}
+            onSizeChange={setReturnSize}
+          />
+        )}
       </DetailSection>
 
-      {card.journalEntry && (
+      {
         <VoucherDialog
           open={voucherOpen}
           onOpenChange={setVoucherOpen}
           voucher={voucher.data}
           isLoading={voucher.isLoading}
           isError={voucher.isError}
-          errorMessage={voucher.error instanceof Error ? voucher.error.message : undefined}
+          errorMessage={
+            voucher.error instanceof Error ? voucher.error.message : undefined
+          }
         />
-      )}
+      }
 
-      <Dialog open={cancelOpen} onOpenChange={(open) => !open && setCancelOpen(false)}>
+      <Dialog
+        open={cancelOpen}
+        onOpenChange={(open) => !open && setCancelOpen(false)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel {card.jobCardNumber}?</DialogTitle>
@@ -573,8 +730,9 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
             <DialogTitle>Log Removed Part</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">
-            A part taken off this vehicle during the job — reusable parts go back to stock,
-            repairable/scrap parts are logged with their value.
+            A part taken off this vehicle during the job — reusable parts go
+            back to stock, repairable/scrap parts are recorded without changing
+            usable stock or accounts.
           </p>
           <div className="grid gap-3">
             <div className="space-y-1.5">
@@ -583,18 +741,25 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                 options={sparePartOptions.data?.data ?? []}
                 value={removedPartDraft.sparePartId}
                 onChange={(v) => {
-                  const picked = sparePartOptions.data?.data.find((p) => p.value === v);
+                  const picked = sparePartOptions.data?.data.find(
+                    (p) => p.value === v,
+                  );
                   setRemovedPartDraft((prev) => ({
                     ...prev,
                     sparePartId: v,
                     sparePartLabel: picked?.label ?? "",
+                    relatedPartLineId: "",
                   }));
                 }}
                 searchValue={removedPartSearch}
                 onSearchChange={setRemovedPartSearch}
                 placeholder="Search part..."
                 searchPlaceholder="Type to search..."
-                emptyText={sparePartOptions.isLoading ? "Loading parts..." : "No parts found"}
+                emptyText={
+                  sparePartOptions.isLoading
+                    ? "Loading parts..."
+                    : "No parts found"
+                }
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -604,7 +769,10 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                   inputMode="numeric"
                   value={removedPartDraft.qty}
                   onChange={(e) =>
-                    setRemovedPartDraft((prev) => ({ ...prev, qty: e.target.value }))
+                    setRemovedPartDraft((prev) => ({
+                      ...prev,
+                      qty: e.target.value,
+                    }))
                   }
                 />
               </div>
@@ -630,35 +798,83 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                 </Select>
               </div>
             </div>
-            {removedPartDraft.condition !== "REUSABLE" && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                Original issue line (optional)
+              </label>
+              <Select
+                value={removedPartDraft.relatedPartLineId || "NONE"}
+                onValueChange={(value) =>
+                  setRemovedPartDraft((previous) => ({
+                    ...previous,
+                    relatedPartLineId: value === "NONE" ? "" : value,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No linked issue line</SelectItem>
+                  {card.partLines
+                    .filter(
+                      (line) =>
+                        line.sparePartId === removedPartDraft.sparePartId,
+                    )
+                    .map((line) => (
+                      <SelectItem key={line.id} value={line.id}>
+                        Batch {line.batch.batchNo ?? line.batchId} · Issued{" "}
+                        {line.qty}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {removedPartDraft.condition === "REUSABLE" && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">
-                  Value (₹) <span className="text-muted-foreground">(optional)</span>
+                  Return cost per unit (₹){" "}
+                  <span className="text-muted-foreground">
+                    (uses linked issue cost if blank)
+                  </span>
                 </label>
                 <Input
                   inputMode="decimal"
                   value={removedPartDraft.unitCost}
                   onChange={(e) =>
-                    setRemovedPartDraft((prev) => ({ ...prev, unitCost: e.target.value }))
+                    setRemovedPartDraft((prev) => ({
+                      ...prev,
+                      unitCost: e.target.value,
+                    }))
                   }
                 />
               </div>
             )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
-                Remarks <span className="text-muted-foreground">(optional)</span>
+                Remarks{" "}
+                <span className="text-muted-foreground">(optional)</span>
               </label>
               <Textarea
                 rows={2}
                 value={removedPartDraft.remarks}
                 onChange={(e) =>
-                  setRemovedPartDraft((prev) => ({ ...prev, remarks: e.target.value }))
+                  setRemovedPartDraft((prev) => ({
+                    ...prev,
+                    remarks: e.target.value,
+                  }))
                 }
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRemovedPartOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                resetRemovedPartForm();
+                setRemovedPartOpen(false);
+              }}
+            >
               Back
             </Button>
             <Button

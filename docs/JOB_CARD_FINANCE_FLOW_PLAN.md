@@ -23,6 +23,18 @@ The eligible-services picker now uses 20-row backend pages and debounced search,
 
 ## 1. Purpose and scope
 
+### Removed-part safety implementation - 2026-11-12
+
+The fifth slice extracts removed-part writes into `job-card-removed-part.service.ts`. New entries require a FINALISED card, a spare-part item, and a UUID request identity. A stored payload fingerprint binds retries to the original card, part, quantity, condition, issue link, entered cost, and remarks. Matching retries return the original entry; reusing a key for another payload is rejected. A conditional parent version/status claim coordinates return creation with undo-finalise, billing, and other return writes.
+
+Where an issue line is linked, the service validates its job/part and caps cumulative removed quantities across all conditions at that line's issued quantity. The optional issue link remains optional: manually valued unlinked old parts still follow the existing policy and do not acquire an invented issue-quantity limit. Finance must still define recoverable valuation/approval and provenance rules for those entries. Reusable valuation remains explicit entered positive cost, otherwise the linked issue cost; this slice does not establish that replacement-part cost equals the recoverable value of an old part.
+
+Reusable entries create a new batch, a stock return movement, and an inventory-debit/repair-expense-credit voucher in one transaction. Branch stock updates compare the read quantity and average cost before incrementing quantity and updating the average, so a changed balance causes rollback instead of an overwrite. Repairable/scrap entries remain custody records only: they do not increase usable stock or post an expense credit. Negative branch stock blocks reusable posting pending reconciliation. Cross-module stock concurrency still needs live database verification.
+
+The history endpoint now returns bounded backend pages with database search, condition filtering support, deterministic ordering, and total counts. The UI uses a 400 ms debounced history search, requests the next page only on navigation, and exposes return vouchers even on a card without an original parts voucher. The reusable cost input and optional issue-line selector now match backend validation. Request identities are retained for retry within the same submission and reset for a new dialog entry.
+
+Apply `20261112030000_job_card_return_safety` before deploying this slice. Existing rows retain null request identities and are not revalued or reposted. New clients must send `clientRequestId`; stale clients without it are rejected rather than creating non-idempotent returns. Unit tests cover guards, quantity/provenance checks, retry replay, return costs, stock conflicts, and record-only conditions. PostgreSQL race/rollback tests, return valuation approval policy, repair receipts, scrap disposal, checklists, and vehicle-status automation remain outstanding.
+
 ### Payment workflow implementation - 2026-11-12
 
 The fourth slice connects posted service bills to the common vendor-payment engine. `POST /service-bill/:id/payment-slip` prepares or opens the bill's active JOBCARD slip. This first integration uses one service bill per slip; its amount is the server-calculated remaining liability, including any historical direct settlements. The bill register remains the paginated/searchable entry point. Source reservations prevent a second active slip and block cancellation of a reserved bill. JOBCARD drafts use the bill's frozen balance; changing the request requires cancelling the unpaid slip and preparing a replacement.

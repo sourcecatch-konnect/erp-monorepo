@@ -218,16 +218,22 @@ export const jobCardApi = {
     return unwrapApiResponse(res);
   },
 
-  removedParts: async (jobCardId: string) => {
+  removedParts: async (
+    jobCardId: string,
+    params: { page: number; size: number; search?: string },
+    signal?: AbortSignal,
+  ) => {
     const res = await api.get<ApiResponse<JobCardRemovedPart[]>>(
       `/job-card/${jobCardId}/removed-parts`,
+      { params, signal },
     );
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   addRemovedPart: async (
     jobCardId: string,
     body: {
+      clientRequestId: string;
       sparePartId: string;
       relatedPartLineId?: string;
       qty: number;

@@ -1603,6 +1603,8 @@ enum TruckLocationStatus {
 /// cost with a reversing entry; REPAIRABLE/SCRAP are logged only in v1.
 model JobCardRemovedPart {
   id                String               @id @default(cuid())
+  clientRequestId   String?              @unique
+  requestFingerprint String?
   jobCardId         String
   sparePartId       String
   relatedPartLineId String?
@@ -1625,6 +1627,8 @@ model JobCardRemovedPart {
 
   @@index([jobCardId])
   @@index([sparePartId])
+  @@index([jobCardId, createdAt, id])
+  @@index([relatedPartLineId])
 }
 
 enum RemovedPartCondition {
