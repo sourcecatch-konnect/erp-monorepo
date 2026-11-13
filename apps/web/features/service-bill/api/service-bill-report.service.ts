@@ -39,6 +39,21 @@ export type OutstandingResult = {
   size: number;
 };
 export const serviceBillReportApi = {
+  unbilled: async (
+    params: {
+      page: number;
+      size: number;
+      search?: string;
+      completedTo?: string;
+    },
+    signal?: AbortSignal,
+  ) => {
+    const response = await api.get<ApiResponse<UnbilledReportResult>>(
+      "/service-bill/reports/unbilled",
+      { params, signal },
+    );
+    return unwrapApiResponse(response);
+  },
   outstanding: async (
     params: { page: number; size: number; search?: string; bucket?: AgeBucket },
     signal?: AbortSignal,
@@ -49,4 +64,25 @@ export const serviceBillReportApi = {
     );
     return unwrapApiResponse(response);
   },
+};
+
+export type UnbilledReportResult = {
+  rows: {
+    id: string;
+    jobCardId: string;
+    jobCardNumber: string | null;
+    vehicleNumber: string;
+    branchName: string;
+    providerName: string;
+    serviceProviderId: string;
+    sparePartName: string;
+    description: string | null;
+    completedAt: string | null;
+    qty: number;
+    amountPaise: string;
+  }[];
+  total: number;
+  page: number;
+  size: number;
+  summary: { amountPaise: string; jobCards: number; providers: number };
 };

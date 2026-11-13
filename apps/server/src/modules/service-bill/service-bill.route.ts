@@ -4,6 +4,7 @@ import {
   createServiceBillSchema,
   serviceBillListQuerySchema,
   serviceBillOutstandingQuerySchema,
+  unbilledServiceReportQuerySchema,
   unbilledServiceLinesQuerySchema,
   cancelServiceBillSchema,
 } from "@skerp/validators";
@@ -17,6 +18,7 @@ import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { createJobCardPaymentSlipTx } from "../vendor-payment/job-card-payment.service.js";
 import { getServiceBillOutstanding } from "./service-bill-report.service.js";
+import { getUnbilledServiceReport } from "./unbilled-service-report.service.js";
 import {
   createServiceBillTx,
   cancelServiceBillTx,
@@ -24,6 +26,18 @@ import {
 
 const router: Router = Router();
 router.use(authMiddleware);
+
+router.get(
+  "/reports/unbilled",
+  can(PERMS.WORKSHOP.SERVICEBILL_VIEW),
+  async (req, res) => {
+    const query = unbilledServiceReportQuerySchema.parse(req.query);
+    if (query.branchId) assertBranchAccess(req, query.branchId);
+    const branchIds =
+      req.ctx?.branchScope === "ALL" ? null : (req.ctx?.branchIds ?? []);
+    sendOk(res, await getUnbilledServiceReport(query, branchIds));
+  },
+);
 
 router.get(
   "/reports/outstanding",

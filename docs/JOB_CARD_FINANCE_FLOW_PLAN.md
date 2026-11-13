@@ -1,7 +1,7 @@
 # Job Card - Finance Flow and Implementation Plan
 
 Date: 2026-11-12  
-Status: Planning document; existing behaviour and proposed changes are distinguished below.
+Status: Implementation in progress; completed slices and remaining work packages are recorded below. Baseline sections describe the original inspection.
 
 ### Implementation progress - 2026-11-12
 
@@ -44,6 +44,34 @@ Search covers provider/shop, service bill number, and provider invoice. The UI u
 The report reuses the service-bill query-key prefix, so existing billing, cancellation, and shared settlement mutations invalidate it. A Refresh action updates balances/date on demand. No schema change or new migration is needed for this slice; existing service-bill branch/status and provider/status indexes remain available. Representative-volume query plans and search indexing still require measurement.
 
 Validation passed: 82 targeted service-bill, vendor-payment, and settlement-ledger tests; server/web type checks and lint; validators build and diff whitespace checks. Coverage includes bounded query validation, branch/search isolation, posted and positive-balance eligibility, calendar-age SQL boundaries, exact string amounts, and backend pagination/full-filter summary contracts. Live PostgreSQL date-boundary/query checks, historical balance reconciliation, representative-volume performance checks, and Finance UAT remain required. Next reporting work includes a cross-provider unbilled-services register and source/GL reconciliation; settlement reversals remain a separate workflow change.
+
+### Unbilled register and expense reconciliation - 2026-11-13
+
+Steps eight and nine add Finance -> Unbilled Services and Finance -> Repair Reconciliation.
+
+The cross-provider unbilled register reads FINALISED job cards whose service lines have no active bill claim. It shows provider, service/part, job card, vehicle, branch, completion date, quantity, and the pre-discount operational estimate. Search covers provider, card, vehicle, and part. An optional completion cutoff includes the entire selected India calendar day. These are currently unbilled lines, including those released by cancelled bills; the cutoff does not reconstruct historical unbilled status. Database totals count services, distinct cards/providers, and exact integer-paise estimates across all matching rows. API branch/provider filters remain optional, enabling a cross-provider view.
+
+The reconciliation report checks current finalised parts issues, POSTED service bills, and reusable returns against each source's linked journal. It compares signed repair expense using the stable REPAIR_EXPENSE ledger code, requires matching journal branch/source/voucher type, checks posting status and debit/credit balance, and reports missing return valuation or missing vouchers. Reusable returns are negative expense. Issues-only is the default; users can select all records or one source type. The summary counts structural issues even when monetary difference is zero and sums absolute differences so opposite errors do not cancel. Source links open existing documents and voucher numbers/Tally sync state support follow-up. Wrong-branch voucher details and amounts are withheld. A record displays its first applicable issue; resolving it can reveal another.
+
+Reconciliation requires job-card view, service-bill view, and ledger view permissions on the server and page. The source branch scope applies independently to every union arm. It checks current linked expense vouchers only: orphan journals, cancelled-source reversal chains, inventory balances, provider settlements, replacement credit notes, historical posting-period balances, and Tally export validation remain separate work. Neither report changes postings or repairs data automatically.
+
+Both screens use the shared 400 ms debounce hook, request cancellation, filter-driven page resets, and backend LIMIT/OFFSET pages. Full-filter totals and page rows share one repeatable-read transaction. Money is aggregated in PostgreSQL and returned as strings. They reuse the job-card query-key prefix, which existing finalise/undo, removed-part, service-bill creation and cancellation actions invalidate; Refresh also rechecks current data. No schema migration is introduced. Existing foreign-key/order/filter indexes support the source lookups; representative-volume plans and substring-search indexing still require measurement.
+
+Validation passed: 127 targeted tests across job cards, service bills, vendor payments, and settlement-ledger lines; server/web type checks and lint; validators build and diff whitespace checks. New query-contract tests cover completion cutoffs, branch/provider scope, escaped parameterised search, fail-closed empty scope, signed expense, structural reconciliation issues, exact response amounts, backend pages, and unpaged summaries. These mocked query-contract tests do not execute SQL against PostgreSQL; live query/date-boundary checks remain part of step 15.
+
+### Remaining work packages after step nine
+
+There are **seven grouped steps remaining** for the currently planned module scope. This count groups related deliverables; it is not a count of individual tasks, and unresolved policy decisions in section 8 can change scope.
+
+| Step | Remaining package | Completion condition |
+|---|---|---|
+| 10 | Create-request idempotency and duplicate provider-invoice controls | Repeated create/create-and-finalise requests cannot duplicate cards, stock or vouchers; agreed invoice uniqueness policy has migration and conflict handling. |
+| 11 | Settlement reversals and TDS-only settlement | Permissioned, reasoned reversals preserve audit/voucher links and update bill/slip balances safely; valid withholding-only settlements work. |
+| 12 | Remaining reconciliation and historical reporting | Stock issues/returns, provider settlement counters, orphan/reversed journals, historical posting periods, and Tally source/export state can be reconciled. |
+| 13 | Removed-part lifecycle and valuation approvals | Agreed recoverable valuation/provenance policy, approvals, repair receipts, scrap custody and disposal are implemented. |
+| 14 | Checklist and vehicle lifecycle integration | Agreed repair checklist/replacement intent and availability transitions coordinate safely with active trips and concurrent jobs. |
+| 15 | Live database and performance verification | Migration/backfill, rollback/concurrency, calendar-boundary queries, representative-volume query plans and indexing are verified in PostgreSQL. |
+| 16 | Finance UAT, policy sign-off and rollout | Remaining tax/internal-labour/valuation/period decisions are signed off, end-to-end scenarios reconcile, user guidance is updated, and deployment/migration checks are completed. |
 
 ## 1. Purpose and scope
 
@@ -312,4 +340,4 @@ Migration should first inventory existing drafts, finalised cards, unbilled line
 11. Branch-restricted users cannot access another branch through direct IDs, filters, batch lookups, provider selections, exports, or payment accounts. Permission boundaries apply at the server.
 12. Existing cards/bills/payments remain usable after migration; no historical voucher is reposted. Stock, provider balance, vehicle cost, and Tally status reconcile across reversals and retries.
 
-Use targeted validator/service tests for these business rules, database integration tests for atomicity/concurrency, and Finance UAT for the complete repair-to-settlement journey. This planning change does not implement or execute those checks.
+Use targeted validator/service tests for these business rules, database integration tests for atomicity/concurrency, and Finance UAT for the complete repair-to-settlement journey. The progress sections record completed automated checks; they do not certify live database behaviour or Finance acceptance.

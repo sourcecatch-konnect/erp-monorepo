@@ -26,6 +26,22 @@ export type RepairCostResult = {
   size: number;
 };
 export const jobCardReportApi = {
+  reconciliation: async (
+    params: {
+      page: number;
+      size: number;
+      search?: string;
+      kind?: ReconciliationKind;
+      view: "ISSUES" | "ALL";
+    },
+    signal?: AbortSignal,
+  ) => {
+    const response = await api.get<ApiResponse<ReconciliationResult>>(
+      "/job-card/reports/reconciliation",
+      { params, signal },
+    );
+    return unwrapApiResponse(response);
+  },
   costs: async (
     params: {
       page: number;
@@ -42,4 +58,32 @@ export const jobCardReportApi = {
     );
     return unwrapApiResponse(response);
   },
+};
+
+export type ReconciliationKind = "PARTS" | "SERVICES" | "RETURN";
+export type ReconciliationResult = {
+  rows: {
+    id: string;
+    kind: ReconciliationKind;
+    parentId: string;
+    documentNumber: string | null;
+    sourceDate: string | null;
+    branchName: string;
+    journalEntryId: string | null;
+    voucherNumber: string | null;
+    tallySyncStatus: string | null;
+    expectedPaise: string;
+    recordedPaise: string;
+    differencePaise: string;
+    issue: string;
+  }[];
+  total: number;
+  page: number;
+  size: number;
+  summary: {
+    issues: number;
+    expectedPaise: string;
+    recordedPaise: string;
+    absoluteDifferencePaise: string;
+  };
 };

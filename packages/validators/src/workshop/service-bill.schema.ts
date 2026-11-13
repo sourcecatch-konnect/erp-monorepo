@@ -56,6 +56,15 @@ export const serviceBillOutstandingQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const unbilledServiceReportQuerySchema = z.object({
+  branchId: id.optional(),
+  serviceProviderId: id.optional(),
+  search: z.string().trim().max(200).optional(),
+  completedTo: z.string().date().optional(),
+  page: z.coerce.number().int().min(0).max(1000000).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export const cancelServiceBillSchema = z.object({
   reason: z.string().trim().min(1, "Cancellation reason is required").max(500),
 });

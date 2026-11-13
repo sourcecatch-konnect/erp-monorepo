@@ -8,6 +8,7 @@ import {
   cancelJobCardSchema,
   jobCardListQuerySchema,
   jobCardRepairCostQuerySchema,
+  jobCardReconciliationQuerySchema,
   createJobCardRemovedPartSchema,
   jobCardRemovedPartListQuerySchema,
   undoFinaliseJobCardSchema,
@@ -34,9 +35,24 @@ import { jobCardListSelect, jobCardListWhere } from "./job-card.query.js";
 import { createRemovedPartTx } from "./job-card-removed-part.service.js";
 import { finaliseJobCardTx } from "./job-card.service.js";
 import { getJobCardRepairCosts } from "./job-card-report.service.js";
+import { getJobCardReconciliation } from "./job-card-reconciliation.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
+
+router.get(
+  "/reports/reconciliation",
+  can(PERMS.WORKSHOP.JOBCARD_VIEW),
+  can(PERMS.WORKSHOP.SERVICEBILL_VIEW),
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const query = jobCardReconciliationQuerySchema.parse(req.query);
+    if (query.branchId) assertBranchAccess(req, query.branchId);
+    const branchIds =
+      req.ctx?.branchScope === "ALL" ? null : (req.ctx?.branchIds ?? []);
+    sendOk(res, await getJobCardReconciliation(query, branchIds));
+  },
+);
 
 router.get(
   "/reports/repair-costs",

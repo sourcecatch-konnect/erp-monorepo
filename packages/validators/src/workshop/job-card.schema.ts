@@ -5,6 +5,14 @@ const isoDate = z.coerce.date();
 const positivePaise = z.coerce.bigint().positive();
 
 export const jobCardStatusSchema = z.enum(["DRAFT", "FINALISED", "CANCELLED"]);
+export const jobCardReconciliationQuerySchema = z.object({
+  branchId: id.optional(),
+  search: z.string().trim().max(200).optional(),
+  kind: z.enum(["PARTS", "SERVICES", "RETURN"]).optional(),
+  view: z.enum(["ISSUES", "ALL"]).default("ISSUES"),
+  page: z.coerce.number().int().min(0).max(1000000).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(20),
+});
 export const truckLocationStatusSchema = z.enum(["AT_HO", "IN_TRANSIT"]);
 
 export const jobCardPartLineInputSchema = z.object({

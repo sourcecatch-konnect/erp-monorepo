@@ -324,6 +324,18 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.WORKSHOP.SERVICEBILL_VIEW,
       },
       {
+        title: "Unbilled Services",
+        href: "/accounts/unbilled-services",
+        icon: IconChartBar,
+        permission: PERMS.WORKSHOP.SERVICEBILL_VIEW,
+      },
+      {
+        title: "Repair Reconciliation",
+        href: "/accounts/job-card-reconciliation",
+        icon: IconChartBar,
+        permission: PERMS.LEDGER.VIEW,
+      },
+      {
         title: "Repair Cost Report",
         href: "/accounts/job-card-repair-costs",
         icon: IconChartBar,
