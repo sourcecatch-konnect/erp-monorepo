@@ -21,6 +21,18 @@ The history migration backfills immutable JSON service snapshots, changes source
 
 The eligible-services picker now uses 20-row backend pages and debounced search, retains only explicit selections across pages (maximum 500 per bill), and resets selection when branch/provider/cutoff changes. The bill register has debounced backend search and omits line histories from list payloads. Database indexes support register ordering and provider/unbilled filtering. Unit coverage includes eligibility, conflicting claims, snapshots, discounts, unpaid cancellation, and payment reservation; live database race/rollback/migration verification remains outstanding. Shared approval workflow, duplicate provider-invoice policy, and vehicle-level discount allocation remain later work.
 
+### Repair cost reporting implementation - 2026-11-13
+
+The sixth slice adds Finance -> Repair Cost Report, grouped by finalised job card with vehicle and branch references. Search uses the shared 400 ms debounced hook. Page navigation requests bounded backend rows; filtering resets the page and outstanding requests consume cancellation signals. Database queries calculate the full-filter summary separately from page rows within a repeatable-read transaction. Branch scope applies to both queries, with deterministic completion-date/ID ordering.
+
+Current posted repair cost equals posted parts expense plus net posted service-bill allocations minus posted reusable-return credits. Unbilled service estimates and costs awaiting journal posting appear separately. Payments do not add expense. Date filters select job completion dates in India time, including the entire end date. Later bills and returns update a completed card's current cost; this is not a historical posting-period ledger report. The existing operational vehicle P&L remains unchanged.
+
+Service bill lines now retain integer-paise discount/net allocations and immutable job/vehicle references. Proportional allocation uses largest remainders, with source-line ID as the deterministic rounding tie-breaker. Line discounts sum exactly to the bill discount; line net amounts sum to the bill net expense. Bill detail displays gross, discount, and net values.
+
+Apply `20261112040000_job_card_cost_allocations` before deploying this slice. It backfills retained bill lines without reposting vouchers, adds reporting indexes and an allocation amount constraint, and aborts on inconsistent historical totals or posted job/vehicle attribution. Deleted historical cancellation rows cannot be reconstructed. Prisma generation does not apply this migration.
+
+Validation passed: 115 targeted tests across job cards, service bills, vendor payments, and settlement ledger lines; server/web type checks and lint; Prisma schema validation. Tests cover allocation precision/rounding, validation, India date boundaries, branch scope, parameterised search, posted-source selection, and backend pagination/summary query contracts. Live PostgreSQL migration/query execution, representative-volume query plans, ledger reconciliation and Finance UAT remain required. Provider ageing, historical posting-period reporting, payment reversals, and rollout reconciliation remain later work.
+
 ## 1. Purpose and scope
 
 ### Removed-part safety implementation - 2026-11-12

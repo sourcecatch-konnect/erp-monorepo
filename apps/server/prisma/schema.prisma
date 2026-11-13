@@ -1528,6 +1528,7 @@ model JobCard {
   serviceLines JobCardServiceLine[]
   removedParts JobCardRemovedPart[]
 
+  @@index([branchId, status, outDateTime, id])
   @@index([createdAt, id])
   @@index([branchId, createdAt, id])
   @@index([branchId, status])
@@ -1693,6 +1694,10 @@ model ServiceBillLine {
   serviceBillId        String
   jobCardServiceLineId String?
   amountPaise          BigInt
+  discountPaise        BigInt @default(0)
+  netAmountPaise       BigInt @default(0)
+  jobCardIdSnapshot    String?
+  vehicleIdSnapshot    String?
   serviceSnapshot      Json
 
   serviceBill        ServiceBill        @relation(fields: [serviceBillId], references: [id], onDelete: Cascade)
@@ -1701,6 +1706,7 @@ model ServiceBillLine {
   @@unique([serviceBillId, jobCardServiceLineId])
   @@index([jobCardServiceLineId])
   @@index([serviceBillId])
+  @@index([jobCardIdSnapshot])
 }
 
 enum ServiceBillStatus {

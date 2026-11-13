@@ -63,7 +63,11 @@ export const cancelJobCardSchema = z.object({
 });
 
 export const undoFinaliseJobCardSchema = z.object({
-  reason: z.string().trim().min(1, "A reason is required to undo a finalised job card").max(500),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "A reason is required to undo a finalised job card")
+    .max(500),
 });
 
 export const jobCardListQuerySchema = z.object({
@@ -74,3 +78,17 @@ export const jobCardListQuerySchema = z.object({
   page: z.coerce.number().int().min(0).default(0),
   size: z.coerce.number().int().min(1).max(100).default(10),
 });
+
+export const jobCardRepairCostQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(0).default(0),
+    size: z.coerce.number().int().min(1).max(100).default(20),
+    search: z.string().trim().max(200).optional(),
+    branchId: id.optional(),
+    from: z.string().date().optional(),
+    to: z.string().date().optional(),
+  })
+  .refine((value) => !value.from || !value.to || value.from <= value.to, {
+    path: ["to"],
+    message: "To date cannot be before from date",
+  });

@@ -15,6 +15,7 @@ import {
 
 type Tx = Prisma.TransactionClient;
 type CreateInput = z.infer<typeof createServiceBillSchema>;
+import { allocateServiceDiscount } from "./service-bill.allocation.js";
 
 /** Caller owns the transaction and authorises input.branchId. */
 export async function createServiceBillTx(
@@ -81,6 +82,7 @@ export async function createServiceBillTx(
   if (input.discountPaise > grossAmountPaise)
     throw new BadRequestError("Discount cannot exceed the gross amount");
   const netAmountPaise = grossAmountPaise - input.discountPaise;
+  const allocations = allocateServiceDiscount(lines, input.discountPaise);
   const fyCode = fyCodeFor(input.billDate);
   const seq = await nextSequence(tx, branchCode, fyCode, "SBILL");
   const serviceBillNumber = formatDocNumber(
@@ -122,6 +124,10 @@ export async function createServiceBillTx(
       serviceBillId: bill.id,
       jobCardServiceLineId: line.id,
       amountPaise: line.amountPaise,
+      discountPaise: allocations.get(line.id)!.discountPaise,
+      netAmountPaise: allocations.get(line.id)!.netAmountPaise,
+      jobCardIdSnapshot: line.jobCard.id,
+      vehicleIdSnapshot: line.jobCard.vehicleId,
       serviceSnapshot: {
         id: line.id,
         sparePartId: line.sparePartId,
@@ -182,7 +188,12 @@ export async function cancelServiceBillTx(
     throw new ConflictError(
       "Bill changed or has payments. Refresh before cancelling.",
     );
-  await assertNotOnVendorSlip(tx, "SERVICE_BILL", [bill.id], "cancel the service bill");
+  await assertNotOnVendorSlip(
+    tx,
+    "SERVICE_BILL",
+    [bill.id],
+    "cancel the service bill",
+  );
   if (await tx.serviceBillPayment.count({ where: { serviceBillId: bill.id } }))
     throw new BadRequestError("A bill with payments cannot be cancelled");
   await tx.jobCardServiceLine.updateMany({

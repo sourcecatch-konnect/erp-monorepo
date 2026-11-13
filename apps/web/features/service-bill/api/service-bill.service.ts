@@ -33,6 +33,8 @@ export type UnbilledServiceLine = {
 export type ServiceBillLine = {
   id: string;
   amountPaise: string;
+  discountPaise: string;
+  netAmountPaise: string;
   jobCardServiceLine: UnbilledServiceLine & {
     jobCard: { id: string; jobCardNumber: string | null; vehicleId: string };
   };

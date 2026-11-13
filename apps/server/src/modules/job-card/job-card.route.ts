@@ -7,6 +7,7 @@ import {
   createAndFinaliseJobCardSchema,
   cancelJobCardSchema,
   jobCardListQuerySchema,
+  jobCardRepairCostQuerySchema,
   createJobCardRemovedPartSchema,
   jobCardRemovedPartListQuerySchema,
   undoFinaliseJobCardSchema,
@@ -27,16 +28,27 @@ import {
   formatDocNumber,
   nextSequence,
 } from "../_shared/doc-number.js";
-import {
-  reverseJournal,
-} from "../ledger/posting.service.js";
+import { reverseJournal } from "../ledger/posting.service.js";
 import { jobCardListSelect, jobCardListWhere } from "./job-card.query.js";
 
 import { createRemovedPartTx } from "./job-card-removed-part.service.js";
 import { finaliseJobCardTx } from "./job-card.service.js";
+import { getJobCardRepairCosts } from "./job-card-report.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
+
+router.get(
+  "/reports/repair-costs",
+  can(PERMS.WORKSHOP.JOBCARD_VIEW),
+  async (req, res) => {
+    const query = jobCardRepairCostQuerySchema.parse(req.query);
+    if (query.branchId) assertBranchAccess(req, query.branchId);
+    const branchIds =
+      req.ctx?.branchScope === "ALL" ? null : (req.ctx?.branchIds ?? []);
+    sendOk(res, await getJobCardRepairCosts(query, branchIds));
+  },
+);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 

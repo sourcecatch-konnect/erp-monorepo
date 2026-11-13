@@ -174,6 +174,10 @@ describe("create service bill", () => {
       data: [
         expect.objectContaining({
           amountPaise: 1000n,
+          discountPaise: 100n,
+          netAmountPaise: 900n,
+          jobCardIdSnapshot: "card",
+          vehicleIdSnapshot: "truck",
           serviceSnapshot: expect.objectContaining({
             ratePaise: "500",
             qty: 2,

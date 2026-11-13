@@ -221,7 +221,9 @@ export function ServiceBillDetailPage({
                 <TableHead>Service</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Rate</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Gross</TableHead>
+                <TableHead className="text-right">Discount</TableHead>
+                <TableHead className="text-right">Net</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -254,12 +256,18 @@ export function ServiceBillDetailPage({
                   <TableCell className="text-right tabular-nums">
                     {formatPaise(line.amountPaise)}
                   </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPaise(line.discountPaise)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPaise(line.netAmountPaise)}
+                  </TableCell>
                 </TableRow>
               ))}
               {sb.lines.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={8}
                     className="py-6 text-center text-sm text-muted-foreground"
                   >
                     No lines on this bill.

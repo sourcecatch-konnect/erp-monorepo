@@ -318,6 +318,12 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Finance",
     items: [
       {
+        title: "Repair Cost Report",
+        href: "/accounts/job-card-repair-costs",
+        icon: IconChartBar,
+        permission: PERMS.WORKSHOP.JOBCARD_VIEW,
+      },
+      {
         title: "Job Cards",
         href: "/workshop/job-cards",
         icon: IconSettings,
