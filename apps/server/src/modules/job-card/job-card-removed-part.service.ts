@@ -28,6 +28,8 @@ export function removedPartFingerprint(jobCardId: string, input: Input) {
         condition: input.condition,
         unitCostPaise: input.unitCostPaise?.toString() ?? null,
         remarks: input.remarks ?? null,
+        custodyLocation: input.custodyLocation,
+        provenanceReference: input.provenanceReference,
       }),
     )
     .digest("hex");
@@ -132,16 +134,94 @@ export async function createRemovedPartTx(
     createdById: actorId,
     clientRequestId: input.clientRequestId,
     requestFingerprint: fingerprint,
+    custodyLocation: input.custodyLocation,
+    provenanceReference: input.provenanceReference,
   };
-  if (input.condition !== "REUSABLE") {
-    return tx.jobCardRemovedPart.create({ data: common, select: { id: true } });
-  }
   // Preserve the existing policy: explicit entered value, else linked issue
   // cost. Financial valuation policy changes need a separate agreed change.
   const unitCostPaise = input.unitCostPaise ?? relatedLine?.unitCostPaise;
-  if (unitCostPaise === undefined || unitCostPaise <= 0n)
+  if (
+    input.condition === "REUSABLE" &&
+    (unitCostPaise === undefined || unitCostPaise <= 0n)
+  )
     throw new BadRequestError(
       "A reusable part needs a positive return cost or a valued issue line",
+    );
+  const lifecycleStatus =
+    input.condition === "REUSABLE" ? "PENDING_APPROVAL" : "HELD";
+  return tx.jobCardRemovedPart.create({
+    data: {
+      ...common,
+      unitCostPaise: input.condition === "REUSABLE" ? unitCostPaise : null,
+      lifecycleStatus,
+      valuationSubmittedById: input.condition === "REUSABLE" ? actorId : null,
+      lifecycleEvents: {
+        create: {
+          clientRequestId: input.clientRequestId,
+          requestFingerprint: fingerprint,
+          action: "LOG",
+          toStatus: lifecycleStatus,
+          actorId,
+          reason: input.remarks ?? "Removed part logged",
+          details: {
+            provenanceReference: input.provenanceReference,
+            custodyLocation: input.custodyLocation,
+            unitCostPaise:
+              input.condition === "REUSABLE"
+                ? (unitCostPaise?.toString() ?? null)
+                : null,
+            qty: input.qty,
+            condition: input.condition,
+            relatedPartLineId: input.relatedPartLineId ?? null,
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+}
+
+/** Only the lifecycle approval service may call this; caller holds parent/record claims. */
+export async function postApprovedRemovedPartTx(
+  tx: Tx,
+  record: {
+    id: string;
+    jobCardId: string;
+    sparePartId: string;
+    relatedPartLineId: string | null;
+    qty: number;
+    unitCostPaise: bigint;
+    newBatchId: string | null;
+    journalEntryId: string | null;
+  },
+  branchId: string,
+  actorId: string,
+) {
+  if (record.newBatchId || record.journalEntryId)
+    throw new ConflictError("This return already has stock or a voucher");
+  if (record.unitCostPaise <= 0n)
+    throw new BadRequestError("A positive approved return value is required");
+  const input = record;
+  const unitCostPaise = record.unitCostPaise;
+  const part = await tx.sparePart.findUnique({
+    where: { id: record.sparePartId },
+    select: { supplierId: true, type: true },
+  });
+  if (!part || part.type !== "Item")
+    throw new BadRequestError("Select a spare part item, not a service");
+  const relatedLine = record.relatedPartLineId
+    ? await tx.jobCardPartLine.findUnique({
+        where: { id: record.relatedPartLineId },
+      })
+    : null;
+  if (
+    record.relatedPartLineId &&
+    (!relatedLine ||
+      relatedLine.jobCardId !== record.jobCardId ||
+      relatedLine.sparePartId !== record.sparePartId)
+  )
+    throw new BadRequestError(
+      "The original issue line must match this job card and spare part",
     );
   const originalBatch = relatedLine
     ? await tx.spareBatch.findUnique({
@@ -194,10 +274,7 @@ export async function createRemovedPartTx(
     throw new ConflictError(
       "Stock changed during the return. Refresh and try again.",
     );
-  const created = await tx.jobCardRemovedPart.create({
-    data: { ...common, unitCostPaise, newBatchId: batch.id },
-    select: { id: true },
-  });
+  const created = record;
   await tx.stockMovement.create({
     data: {
       sparePartId: input.sparePartId,
@@ -229,7 +306,7 @@ export async function createRemovedPartTx(
   });
   return tx.jobCardRemovedPart.update({
     where: { id: created.id },
-    data: { journalEntryId: voucher.id },
+    data: { journalEntryId: voucher.id, newBatchId: batch.id, unitCostPaise },
     select: { id: true },
   });
 }

@@ -47,7 +47,7 @@ export function reconciliationCte(
     SELECT r."id", 'RETURN', c."id", c."jobCardNumber", r."createdAt", c."branchId", r."journalEntryId",
       -COALESCE(r."unitCostPaise", 0)::numeric * r."qty", 'JOB_CARD', r."unitCostPaise" IS NULL
     FROM "JobCardRemovedPart" r JOIN "JobCard" c ON c."id" = r."jobCardId"
-    WHERE c."status" = 'FINALISED' AND r."condition" = 'REUSABLE' AND ${scope("c")}
+    WHERE c."status" = 'FINALISED' AND r."lifecycleStatus" = 'STOCKED' AND ${scope("c")}
   ), scoped AS (
     SELECT s.* FROM sources s JOIN "Branch" br ON br."id" = s."branchId"
     WHERE TRUE ${filters.kind ? Prisma.sql`AND s.kind = ${filters.kind}` : Prisma.empty}

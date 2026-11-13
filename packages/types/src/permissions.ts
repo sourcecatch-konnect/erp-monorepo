@@ -202,6 +202,7 @@ type WorkshopPermissionKey =
   | "workshop.jobcard.view"
   | "workshop.jobcard.manage"
   | "workshop.jobcard.finalise"
+  | "workshop.jobcard.return_approve"
   | "workshop.servicebill.view"
   | "workshop.servicebill.manage"
   | "workshop.servicebill.pay"
@@ -542,6 +543,7 @@ export const PERMS = {
     JOBCARD_VIEW: "workshop.jobcard.view",
     JOBCARD_MANAGE: "workshop.jobcard.manage",
     JOBCARD_FINALISE: "workshop.jobcard.finalise",
+    JOBCARD_RETURN_APPROVE: "workshop.jobcard.return_approve",
     SERVICEBILL_VIEW: "workshop.servicebill.view",
     SERVICEBILL_MANAGE: "workshop.servicebill.manage",
     SERVICEBILL_PAY: "workshop.servicebill.pay",

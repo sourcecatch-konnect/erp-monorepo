@@ -109,12 +109,12 @@ export function jobCardAuditCte(filters: Filters, branchIds: string[] | null) {
         UNION ALL SELECT 'card-value:' || "jobCardId" || ':' || "sparePartId", number, "branchId", date, 'PAISE', value, moved_value, 'CARD_ISSUE_VALUE' FROM card_values
         UNION ALL
         SELECT 'return-qty:' || r.id, COALESCE(c."jobCardNumber", c.id) || ' / ' || r.id, c."branchId", r."createdAt", 'QTY',
-          CASE WHEN r.condition = 'REUSABLE' THEN r.qty ELSE 0 END,
+          CASE WHEN r."lifecycleStatus" = 'STOCKED' THEN r.qty ELSE 0 END,
           COALESCE(rt.qty, 0), 'RETURN_QTY'
         FROM "JobCardRemovedPart" r JOIN cards c ON c.id = r."jobCardId" LEFT JOIN return_totals rt ON rt."refId" = r.id AND rt."sparePartId" = r."sparePartId" AND rt."branchId" = c."branchId"
         UNION ALL
         SELECT 'return-value:' || r.id, COALESCE(c."jobCardNumber", c.id) || ' / ' || r.id, c."branchId", r."createdAt", 'PAISE',
-          CASE WHEN r.condition = 'REUSABLE' THEN COALESCE(r."unitCostPaise", 0)::numeric * r.qty ELSE 0 END,
+          CASE WHEN r."lifecycleStatus" = 'STOCKED' THEN COALESCE(r."unitCostPaise", 0)::numeric * r.qty ELSE 0 END,
           COALESCE(rt.value, 0), 'RETURN_VALUE'
         FROM "JobCardRemovedPart" r JOIN cards c ON c.id = r."jobCardId" LEFT JOIN return_totals rt ON rt."refId" = r.id AND rt."sparePartId" = r."sparePartId" AND rt."branchId" = c."branchId"
       ), checks AS (SELECT *, NULL::text AS "voucherNumber", NULL::text AS "tallySyncStatus", CASE WHEN expected <> actual THEN 'STOCK_MISMATCH' ELSE 'MATCHED' END AS issue FROM raw)`;

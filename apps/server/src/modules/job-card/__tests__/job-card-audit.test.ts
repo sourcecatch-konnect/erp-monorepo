@@ -62,7 +62,7 @@ describe("job card finance audit", () => {
       "'PAISE'",
     ])
       expect(sql).toContain(marker);
-    expect(sql).toContain("CASE WHEN r.condition = 'REUSABLE'");
+    expect(sql).toContain("CASE WHEN r.\"lifecycleStatus\" = 'STOCKED'");
   });
   it("checks retained payment rows against counters and reversal links without double counting reversed settlements", () => {
     const sql = jobCardAuditCte(

@@ -1605,6 +1605,16 @@ enum TruckLocationStatus {
 /// visit). REUSABLE re-enters stock as a new batch at its original issue
 /// cost with a reversing entry; REPAIRABLE/SCRAP are logged only in v1.
 model JobCardRemovedPart {
+  lifecycleStatus RemovedPartLifecycleStatus @default(HELD)
+  version Int @default(1)
+  custodyLocation String?
+  provenanceReference String?
+  valuationSubmittedById String?
+  approvedById String?
+  approvedAt DateTime?
+  repairReference String?
+  repairReceivedAt DateTime?
+  lifecycleEvents JobCardRemovedPartEvent[]
   id                String               @id @default(cuid())
   clientRequestId   String?              @unique
   requestFingerprint String?
@@ -1632,6 +1642,32 @@ model JobCardRemovedPart {
   @@index([sparePartId])
   @@index([jobCardId, createdAt, id])
   @@index([relatedPartLineId])
+}
+
+enum RemovedPartLifecycleStatus {
+  HELD
+  IN_REPAIR
+  PENDING_APPROVAL
+  STOCKED
+  SCRAP_HELD
+  DISPOSAL_PENDING
+  DISPOSED
+}
+
+model JobCardRemovedPartEvent {
+  id String @id @default(cuid())
+  removedPartId String
+  clientRequestId String @unique
+  requestFingerprint String
+  action String
+  fromStatus String?
+  toStatus String
+  actorId String
+  reason String
+  details Json
+  createdAt DateTime @default(now())
+  removedPart JobCardRemovedPart @relation(fields: [removedPartId], references: [id], onDelete: Restrict)
+  @@index([removedPartId, createdAt, id])
 }
 
 enum RemovedPartCondition {

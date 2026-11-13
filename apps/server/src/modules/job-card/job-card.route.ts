@@ -12,6 +12,7 @@ import {
   jobCardAuditQuerySchema,
   createJobCardRemovedPartSchema,
   jobCardRemovedPartListQuerySchema,
+  removedPartActionSchema,
   undoFinaliseJobCardSchema,
 } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
@@ -34,6 +35,7 @@ import { reverseJournal } from "../ledger/posting.service.js";
 import { jobCardListSelect, jobCardListWhere } from "./job-card.query.js";
 
 import { createRemovedPartTx } from "./job-card-removed-part.service.js";
+import { actOnRemovedPartTx } from "./removed-part-lifecycle.service.js";
 import { finaliseJobCardTx } from "./job-card.service.js";
 import { getJobCardRepairCosts } from "./job-card-report.service.js";
 import { getJobCardReconciliation } from "./job-card-reconciliation.service.js";
@@ -677,6 +679,7 @@ router.get(
     const where = {
       jobCardId,
       ...(query.condition ? { condition: query.condition } : {}),
+      ...(query.lifecycleStatus ? { lifecycleStatus: query.lifecycleStatus } : {}),
       ...(query.search
         ? {
             OR: [
@@ -713,6 +716,29 @@ router.get(
 );
 
 /** Removed-part writes share one transaction and a request identity. */
+router.post("/:id/removed-parts/:removedId/actions", (req, res, next) => can(["APPROVE_STOCK", "APPROVE_DISPOSAL", "REJECT"].includes(req.body?.action) ? PERMS.WORKSHOP.JOBCARD_RETURN_APPROVE : PERMS.WORKSHOP.JOBCARD_MANAGE)(req, res, next), async (req, res) => {
+  const input = removedPartActionSchema.parse(req.body);
+  const jobCardId = getParamId(req);
+  const card = await db.jobCard.findUnique({ where: { id: jobCardId }, select: { branchId: true } });
+  if (!card) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, card.branchId);
+  const result = await db.$transaction((tx) => actOnRemovedPartTx(tx, jobCardId, String(req.params.removedId), card.branchId, input, actorId(req)), { isolationLevel: "ReadCommitted", timeout: 15000 });
+  sendOk(res, await db.jobCardRemovedPart.findUnique({ where: { id: result.id }, include: removedPartDetailInclude }));
+});
+
+router.get("/:id/removed-parts/:removedId/events", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
+  const jobCardId = getParamId(req);
+  const record = await db.jobCardRemovedPart.findFirst({ where: { id: String(req.params.removedId), jobCardId }, select: { id: true, jobCard: { select: { branchId: true } } } });
+  if (!record) throw new NotFoundError("Removed part not found");
+  assertBranchAccess(req, record.jobCard.branchId);
+  const query = jobCardRemovedPartListQuerySchema.parse(req.query);
+  const where = { removedPartId: record.id, ...(query.search ? { OR: [{ action: { contains: query.search, mode: "insensitive" as const } }, { reason: { contains: query.search, mode: "insensitive" as const } }] } : {}) };
+  const [rows, total] = await Promise.all([db.jobCardRemovedPartEvent.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: query.page * query.size, take: query.size }), db.jobCardRemovedPartEvent.count({ where })]);
+  const actors = await db.user.findMany({ where: { id: { in: [...new Set(rows.map((row) => row.actorId))] } }, select: { id: true, firstName: true, lastName: true } });
+  const names = new Map(actors.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]));
+  sendOk(res, rows.map((row) => ({ ...row, actorName: names.get(row.actorId) })), { page: query.page, size: query.size, total });
+});
+
 router.post(
   "/:id/removed-parts",
   can(PERMS.WORKSHOP.JOBCARD_MANAGE),
@@ -727,6 +753,7 @@ router.post(
     assertBranchAccess(req, card.branchId);
     const created = await db.$transaction((tx) =>
       createRemovedPartTx(tx, jobCardId, card.branchId, input, actorId(req)),
+      { isolationLevel: "ReadCommitted" },
     );
     const result = await db.jobCardRemovedPart.findUnique({
       where: { id: created.id },

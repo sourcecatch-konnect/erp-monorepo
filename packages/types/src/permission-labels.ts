@@ -317,6 +317,7 @@ const labels = {
   "workshop.jobcard.view": "View job cards",
   "workshop.jobcard.manage": "Create and edit job cards",
   "workshop.jobcard.finalise": "Complete job cards",
+  "workshop.jobcard.return_approve": "Approve removed-part valuation and disposal",
   "workshop.servicebill.view": "View service bills",
   "workshop.servicebill.manage": "Create and edit service bills",
   "workshop.servicebill.pay": "Pay service bills",

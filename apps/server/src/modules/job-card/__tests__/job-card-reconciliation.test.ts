@@ -61,7 +61,7 @@ describe("repair source-linked expense reconciliation", () => {
       null,
     ).strings.join("");
     expect(sql).toContain('-COALESCE(r."unitCostPaise", 0)::numeric * r."qty"');
-    expect(sql).toContain("r.\"condition\" = 'REUSABLE'");
+    expect(sql).toContain("r.\"lifecycleStatus\" = 'STOCKED'");
     expect(sql).toContain("gl.\"code\" = 'REPAIR_EXPENSE'");
     for (const issue of [
       "SOURCE_VALUE_MISSING",

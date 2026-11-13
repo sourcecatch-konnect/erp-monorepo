@@ -17,6 +17,8 @@ export const createJobCardRemovedPartSchema = z
     qty: z.coerce.number().int().positive(),
     condition: removedPartConditionSchema,
     unitCostPaise: paise.optional(),
+    custodyLocation: z.string().trim().min(1).max(200),
+    provenanceReference: z.string().trim().min(1).max(500),
     remarks: z.string().trim().max(500).optional(),
   })
   .refine(
@@ -36,4 +38,45 @@ export const jobCardRemovedPartListQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(100).default(10),
   search: z.string().trim().max(200).optional(),
   condition: removedPartConditionSchema.optional(),
+  lifecycleStatus: z
+    .enum([
+      "HELD",
+      "IN_REPAIR",
+      "PENDING_APPROVAL",
+      "STOCKED",
+      "SCRAP_HELD",
+      "DISPOSAL_PENDING",
+      "DISPOSED",
+    ])
+    .optional(),
 });
+
+export const removedPartActionSchema = z
+  .object({
+    clientRequestId: z.string().uuid(),
+    version: z.coerce.number().int().positive(),
+    action: z.enum([
+      "SEND_REPAIR",
+      "RECEIVE_REPAIR",
+      "SUBMIT_VALUATION",
+      "APPROVE_STOCK",
+      "REJECT",
+      "DECLARE_SCRAP",
+      "REQUEST_DISPOSAL",
+      "APPROVE_DISPOSAL",
+    ]),
+    reason: z.string().trim().min(1).max(500),
+    evidence: z.string().trim().min(1).max(500),
+    custodyLocation: z.string().trim().min(1).max(200),
+    unitCostPaise: z.coerce.bigint().positive().optional(),
+  })
+  .refine(
+    (input) =>
+      !["RECEIVE_REPAIR", "SUBMIT_VALUATION", "APPROVE_STOCK"].includes(
+        input.action,
+      ) || input.unitCostPaise !== undefined,
+    {
+      path: ["unitCostPaise"],
+      message: "A positive recoverable value is required",
+    },
+  );

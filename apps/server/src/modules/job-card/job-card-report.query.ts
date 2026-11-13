@@ -58,7 +58,7 @@ export function repairCostCte(
       SELECT r."jobCardId" AS id, SUM(r."unitCostPaise"::numeric * r."qty") AS amount
       FROM "JobCardRemovedPart" r JOIN cards c ON c."id" = r."jobCardId"
       JOIN "JournalEntry" j ON j."id" = r."journalEntryId" AND j."status" = 'POSTED'
-      WHERE r."condition" = 'REUSABLE' GROUP BY r."jobCardId"
+      WHERE r."lifecycleStatus" = 'STOCKED' GROUP BY r."jobCardId"
     ), unbilled AS (
       SELECT l."jobCardId" AS id, SUM(l."amountPaise") AS amount
       FROM "JobCardServiceLine" l JOIN cards c ON c."id" = l."jobCardId"

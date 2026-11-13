@@ -50,6 +50,7 @@ import { jobCardApi, type RemovedPartCondition } from "./api/job-card.service";
 import { jobCardKeys } from "./api/job-card.keys";
 import { JobCardStatusBadge } from "./jobCardStatusBadge";
 import { useRemovedParts } from "./useRemovedParts";
+import { RemovedPartActions } from "./components/RemovedPartActions";
 import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 
 const CONDITION_LABELS: Record<RemovedPartCondition, string> = {
@@ -59,6 +60,8 @@ const CONDITION_LABELS: Record<RemovedPartCondition, string> = {
 };
 
 type RemovedPartDraft = {
+  custodyLocation: string;
+  provenanceReference: string;
   sparePartId: string;
   sparePartLabel: string;
   relatedPartLineId: string;
@@ -111,6 +114,8 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
   const debouncedRemovedPartSearch = useDebouncedValue(removedPartSearch, 300);
   const [removedPartDraft, setRemovedPartDraft] =
     React.useState<RemovedPartDraft>({
+      custodyLocation: "",
+      provenanceReference: "",
       sparePartId: "",
       sparePartLabel: "",
       relatedPartLineId: "",
@@ -178,6 +183,8 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
     removedRequestId.current = null;
     setRemovedPartSearch("");
     setRemovedPartDraft({
+      custodyLocation: "",
+      provenanceReference: "",
       sparePartId: "",
       sparePartLabel: "",
       relatedPartLineId: "",
@@ -193,6 +200,8 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
       jobCardApi.addRemovedPart(jobCardId, {
         clientRequestId: (removedRequestId.current ??= crypto.randomUUID()),
         sparePartId: removedPartDraft.sparePartId,
+        custodyLocation: removedPartDraft.custodyLocation.trim(),
+        provenanceReference: removedPartDraft.provenanceReference.trim(),
         relatedPartLineId: removedPartDraft.relatedPartLineId || undefined,
         qty: Number(removedPartDraft.qty),
         condition: removedPartDraft.condition,
@@ -221,6 +230,7 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
   const canAddRemovedPart =
     jc.data?.status === "FINALISED" &&
     Boolean(removedPartDraft.sparePartId) &&
+    Boolean(removedPartDraft.custodyLocation.trim()) && Boolean(removedPartDraft.provenanceReference.trim()) &&
     Number.isInteger(Number(removedPartDraft.qty)) &&
     Number(removedPartDraft.qty) > 0 &&
     (removedPartDraft.condition !== "REUSABLE" ||
@@ -609,7 +619,7 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                 <TableRow key={part.id}>
                   <TableCell>{returnPage * returnSize + i + 1}</TableCell>
                   <TableCell>{part.sparePart.name}</TableCell>
-                  <TableCell>{CONDITION_LABELS[part.condition]}</TableCell>
+                  <TableCell>{CONDITION_LABELS[part.condition]}<p className="text-xs text-muted-foreground">{part.lifecycleStatus.replaceAll("_", " ")}</p><p className="text-xs text-muted-foreground">{part.custodyLocation}</p></TableCell>
                   <TableCell className="text-right tabular-nums">
                     {part.qty}
                   </TableCell>
@@ -618,6 +628,7 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                   </TableCell>
                   <TableCell>{part.remarks ?? "—"}</TableCell>
                   <TableCell>
+                    <RemovedPartActions jobCardId={jobCardId} part={part} />
                     {part.journalEntry && (
                       <Button
                         variant="ghost"
@@ -721,6 +732,7 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
       <Dialog
         open={removedPartOpen}
         onOpenChange={(open) => {
+          if (addRemovedPart.isPending) return;
           setRemovedPartOpen(open);
           if (!open) resetRemovedPartForm();
         }}
@@ -833,7 +845,7 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
             {removedPartDraft.condition === "REUSABLE" && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">
-                  Return cost per unit (₹){" "}
+                  Proposed recoverable value per unit (₹){" "}
                   <span className="text-muted-foreground">
                     (uses linked issue cost if blank)
                   </span>
@@ -850,6 +862,9 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
                 />
               </div>
             )}
+            <p className="text-xs text-muted-foreground">Logging does not add usable stock. A separate approver must confirm recoverable value before stock and the return voucher are posted.</p>
+            <label className="space-y-1.5 text-sm font-medium">Current custody location<Input maxLength={200} value={removedPartDraft.custodyLocation} onChange={(event) => setRemovedPartDraft((old) => ({ ...old, custodyLocation: event.target.value }))} /></label>
+            <label className="space-y-1.5 text-sm font-medium">Provenance / inspection reference<Input maxLength={500} value={removedPartDraft.provenanceReference} onChange={(event) => setRemovedPartDraft((old) => ({ ...old, provenanceReference: event.target.value }))} /></label>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
                 Remarks{" "}

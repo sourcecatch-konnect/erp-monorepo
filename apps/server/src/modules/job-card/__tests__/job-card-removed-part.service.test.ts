@@ -7,6 +7,7 @@ import {
 import {
   createRemovedPartTx,
   removedPartFingerprint,
+  postApprovedRemovedPartTx,
 } from "../job-card-removed-part.service.js";
 import { postPartReturnVoucher } from "../../ledger/posting.service.js";
 
@@ -24,20 +25,30 @@ const rawInput = {
   qty: 2,
   condition: "REUSABLE",
   unitCostPaise: "200",
+  custodyLocation: "Workshop quarantine",
+  provenanceReference: "Vehicle inspection 123",
 };
 const input = () => createJobCardRemovedPartSchema.parse(rawInput);
+const approvedRecord = {
+  id: "removed",
+  jobCardId: "card",
+  sparePartId: "part",
+  relatedPartLineId: null,
+  qty: 2,
+  unitCostPaise: 200n,
+  newBatchId: null,
+  journalEntryId: null,
+};
 
 function fixture() {
   const tx = {
     jobCard: {
-      findUnique: vi
-        .fn()
-        .mockResolvedValue({
-          id: "card",
-          branchId: "ho",
-          status: "FINALISED",
-          version: 2,
-        }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: "card",
+        branchId: "ho",
+        status: "FINALISED",
+        version: 2,
+      }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     jobCardRemovedPart: {
@@ -47,16 +58,14 @@ function fixture() {
       update: vi.fn().mockResolvedValue({ id: "removed" }),
     },
     jobCardPartLine: {
-      findUnique: vi
-        .fn()
-        .mockResolvedValue({
-          id: "issue",
-          jobCardId: "card",
-          sparePartId: "part",
-          qty: 3,
-          unitCostPaise: 300n,
-          batchId: "original",
-        }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: "issue",
+        jobCardId: "card",
+        sparePartId: "part",
+        qty: 3,
+        unitCostPaise: 300n,
+        batchId: "original",
+      }),
     },
     sparePart: {
       findUnique: vi
@@ -115,6 +124,34 @@ describe("removed-part input", () => {
 });
 
 describe("removed-part service", () => {
+  it("records reusable valuation as pending without posting usable stock", async () => {
+    const { tx, db } = fixture();
+    await createRemovedPartTx(db, "card", "ho", input(), "user");
+    expect(tx.jobCardRemovedPart.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lifecycleStatus: "PENDING_APPROVAL",
+          valuationSubmittedById: "user",
+          custodyLocation: rawInput.custodyLocation,
+          provenanceReference: rawInput.provenanceReference,
+        }),
+      }),
+    );
+    expect(tx.spareBatch.create).not.toHaveBeenCalled();
+    expect(postPartReturnVoucher).not.toHaveBeenCalled();
+  });
+  it("blocks stock posting when a batch or voucher already exists", async () => {
+    const { db } = fixture();
+    await expect(
+      postApprovedRemovedPartTx(
+        db,
+        { ...approvedRecord, newBatchId: "existing" },
+        "ho",
+        "approver",
+      ),
+    ).rejects.toThrow("already has stock");
+    expect(postPartReturnVoucher).not.toHaveBeenCalled();
+  });
   it("returns a matching prior result without moving stock or posting again", async () => {
     const { tx, db } = fixture();
     tx.jobCardRemovedPart.findUnique.mockResolvedValue({
@@ -220,7 +257,7 @@ describe("removed-part service", () => {
   });
   it("returns reusable stock once, recalculates average, and posts the expense credit", async () => {
     const { tx, db } = fixture();
-    await createRemovedPartTx(db, "card", "ho", input(), "user");
+    await postApprovedRemovedPartTx(db, approvedRecord, "ho", "approver");
     expect(tx.stockLedger.updateMany).toHaveBeenCalledWith({
       where: {
         sparePartId: "part",
@@ -243,7 +280,7 @@ describe("removed-part service", () => {
     );
   });
   it("uses linked issue cost only when no explicit return cost was entered", async () => {
-    const { db } = fixture();
+    const { tx, db } = fixture();
     await createRemovedPartTx(
       db,
       "card",
@@ -251,10 +288,15 @@ describe("removed-part service", () => {
       { ...input(), relatedPartLineId: "issue", unitCostPaise: undefined },
       "user",
     );
-    expect(postPartReturnVoucher).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({ amountPaise: 600n }),
+    expect(tx.jobCardRemovedPart.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          unitCostPaise: 300n,
+          lifecycleStatus: "PENDING_APPROVAL",
+        }),
+      }),
     );
+    expect(postPartReturnVoucher).not.toHaveBeenCalled();
   });
   it.each(["REPAIRABLE", "SCRAP"] as const)(
     "records %s without usable stock or GL effects",
@@ -277,14 +319,14 @@ describe("removed-part service", () => {
     const { tx, db } = fixture();
     tx.stockLedger.updateMany.mockResolvedValueOnce({ count: 0 });
     await expect(
-      createRemovedPartTx(db, "card", "ho", input(), "user"),
+      postApprovedRemovedPartTx(db, approvedRecord, "ho", "approver"),
     ).rejects.toThrow("Stock changed");
     expect(postPartReturnVoucher).not.toHaveBeenCalled();
     vi.mocked(postPartReturnVoucher).mockRejectedValueOnce(
       new Error("Posting unavailable"),
     );
     await expect(
-      createRemovedPartTx(db, "card", "ho", input(), "user"),
+      postApprovedRemovedPartTx(db, approvedRecord, "ho", "approver"),
     ).rejects.toThrow("Posting unavailable");
     expect(tx.jobCardRemovedPart.update).not.toHaveBeenCalled();
   });

@@ -15,6 +15,30 @@ const SMALL_MASTER_SIZE = 200;
 export type JobCardStatus = "DRAFT" | "FINALISED" | "CANCELLED";
 export type TruckLocationStatus = "AT_HO" | "IN_TRANSIT";
 export type RemovedPartCondition = "REUSABLE" | "REPAIRABLE" | "SCRAP";
+export type RemovedPartAction =
+  | "SEND_REPAIR"
+  | "RECEIVE_REPAIR"
+  | "SUBMIT_VALUATION"
+  | "APPROVE_STOCK"
+  | "REJECT"
+  | "DECLARE_SCRAP"
+  | "REQUEST_DISPOSAL"
+  | "APPROVE_DISPOSAL";
+export type RemovedPartEvent = {
+  id: string;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string;
+  actorId: string;
+  actorName?: string;
+  reason: string;
+  createdAt: string;
+  details: {
+    evidence?: string;
+    custodyLocation?: string;
+    unitCostPaise?: string | null;
+  };
+};
 
 export type JobCardPartLine = {
   id: string;
@@ -72,6 +96,20 @@ export type JobCard = {
 };
 
 export type JobCardRemovedPart = {
+  lifecycleStatus:
+    | "HELD"
+    | "IN_REPAIR"
+    | "PENDING_APPROVAL"
+    | "STOCKED"
+    | "SCRAP_HELD"
+    | "DISPOSAL_PENDING"
+    | "DISPOSED";
+  version: number;
+  custodyLocation: string | null;
+  provenanceReference: string | null;
+  repairReceivedAt: string | null;
+  createdById: string;
+  valuationSubmittedById: string | null;
   id: string;
   sparePartId: string;
   relatedPartLineId: string | null;
@@ -150,6 +188,37 @@ export type JobCardListItem = Pick<
 >;
 
 export const jobCardApi = {
+  removedPartAction: async (
+    jobCardId: string,
+    id: string,
+    body: {
+      clientRequestId: string;
+      version: number;
+      action: RemovedPartAction;
+      reason: string;
+      evidence: string;
+      custodyLocation: string;
+      unitCostPaise?: string;
+    },
+  ) => {
+    const response = await api.post<ApiResponse<JobCardRemovedPart>>(
+      `/job-card/${jobCardId}/removed-parts/${id}/actions`,
+      body,
+    );
+    return unwrapApiResponse(response);
+  },
+  removedPartEvents: async (
+    jobCardId: string,
+    id: string,
+    params: { page: number; size: number; search?: string },
+    signal?: AbortSignal,
+  ) => {
+    const response = await api.get<ApiResponse<RemovedPartEvent[]>>(
+      `/job-card/${jobCardId}/removed-parts/${id}/events`,
+      { params, signal },
+    );
+    return unwrapListResponse(response);
+  },
   list: async (
     params?: {
       search?: string;
@@ -236,6 +305,8 @@ export const jobCardApi = {
     body: {
       clientRequestId: string;
       sparePartId: string;
+      custodyLocation: string;
+      provenanceReference: string;
       relatedPartLineId?: string;
       qty: number;
       condition: RemovedPartCondition;
