@@ -250,6 +250,9 @@ export type VendorPaymentSlip = {
   cancelledBy?: NamedUser;
   lines?: VendorPaymentSlipLine[];
   disbursements?: Array<{
+    reversedAt?: string | null;
+    reversalReason?: string | null;
+    reversalJournalEntryId?: string | null;
     id: string;
     paidPaise: string;
     tdsPaise?: string;
@@ -432,6 +435,11 @@ export const vendorPaymentApi = {
     }),
   disburse: (id: string, body: CreateVendorPaymentDisbursementBody) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/disburse`, body),
+  reverseJobCardSettlement: (id: string, paymentId: string, reason: string) =>
+    post<VendorPaymentSlip>(
+      `/vendor-payment/slips/${id}/disbursements/${paymentId}/reverse`,
+      { reason },
+    ),
   cancelSlip: (id: string, version: number, reason: string) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/cancel`, {
       version,

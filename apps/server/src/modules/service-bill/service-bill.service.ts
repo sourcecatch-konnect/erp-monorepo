@@ -215,7 +215,11 @@ export async function cancelServiceBillTx(
     [bill.id],
     "cancel the service bill",
   );
-  if (await tx.serviceBillPayment.count({ where: { serviceBillId: bill.id } }))
+  if (
+    await tx.serviceBillPayment.count({
+      where: { serviceBillId: bill.id, reversedAt: null },
+    })
+  )
     throw new BadRequestError("A bill with payments cannot be cancelled");
   await tx.jobCardServiceLine.updateMany({
     where: { billedInServiceBillId: bill.id },

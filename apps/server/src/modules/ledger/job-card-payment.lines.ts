@@ -9,7 +9,11 @@ export function buildJobCardPaymentLines(args: {
   tdsPaise: bigint;
   narration: string;
 }) {
-  if (args.cashPaise <= 0n || args.tdsPaise < 0n)
+  if (
+    args.cashPaise < 0n ||
+    args.tdsPaise < 0n ||
+    args.cashPaise + args.tdsPaise <= 0n
+  )
     throw new BadRequestError("Invalid settlement amounts");
   const lines = [
     {
@@ -18,13 +22,14 @@ export function buildJobCardPaymentLines(args: {
       creditPaise: 0n,
       narration: args.narration,
     },
-    {
+  ];
+  if (args.cashPaise > 0n)
+    lines.push({
       ledgerId: args.fundingLedgerId,
       debitPaise: 0n,
       creditPaise: args.cashPaise,
       narration: args.narration,
-    },
-  ];
+    });
   if (args.tdsPaise > 0n) {
     if (!args.tdsLedgerId)
       throw new BadRequestError("TDS payable ledger is required");

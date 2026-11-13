@@ -1862,6 +1862,11 @@ model ReplacementInwardLine {
 /// Legacy direct settlements remain readable. New settlements use JOBCARD
 /// VendorPaymentSlip disbursements and update the same settled bill balance.
 model ServiceBillPayment {
+  reversedAt DateTime?
+  reversedById String?
+  reversalReason String?
+  reversalJournalEntryId String? @unique
+  reversalJournalEntry JournalEntry? @relation("LegacyServicePaymentReversal", fields: [reversalJournalEntryId], references: [id], onDelete: Restrict)
   id              String      @id @default(cuid())
   serviceBillId   String
   paidPaise       BigInt
@@ -3487,6 +3492,11 @@ model VendorPaymentSlipLine {
 /// One settlement voucher per payment against a slip. clientRequestId makes a
 /// retried disbursement request a no-op instead of a duplicate payment.
 model VendorPaymentDisbursement {
+  reversedAt DateTime?
+  reversedById String?
+  reversalReason String?
+  reversalJournalEntryId String? @unique
+  reversalJournalEntry JournalEntry? @relation("JobCardSettlementReversal", fields: [reversalJournalEntryId], references: [id], onDelete: Restrict)
   id     String @id @default(cuid())
   slipId String
 
@@ -3515,6 +3525,8 @@ model VendorPaymentDisbursement {
 
 /// Voucher header. A voucher is N balanced JournalLine rows sharing this row.
 model JournalEntry {
+  reversedLegacyServicePayment ServiceBillPayment? @relation("LegacyServicePaymentReversal")
+  reversedJobCardSettlement VendorPaymentDisbursement? @relation("JobCardSettlementReversal")
   id            String        @id @default(cuid())
   voucherType   VoucherType
   voucherNumber String

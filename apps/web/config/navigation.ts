@@ -336,6 +336,12 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMS.LEDGER.VIEW,
       },
       {
+        title: "Job Card Finance Audit",
+        href: "/accounts/job-card-audit",
+        icon: IconChartBar,
+        permission: PERMS.LEDGER.VIEW,
+      },
+      {
         title: "Repair Cost Report",
         href: "/accounts/job-card-repair-costs",
         icon: IconChartBar,

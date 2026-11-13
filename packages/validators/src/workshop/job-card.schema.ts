@@ -13,6 +13,29 @@ export const jobCardReconciliationQuerySchema = z.object({
   page: z.coerce.number().int().min(0).max(1000000).default(0),
   size: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+export const jobCardAuditQuerySchema = z
+  .object({
+    mode: z
+      .enum(["STOCK", "SETTLEMENTS", "POSTINGS", "TALLY"])
+      .default("SETTLEMENTS"),
+    branchId: id.optional(),
+    search: z.string().trim().max(200).optional(),
+    from: z.string().date().optional(),
+    to: z.string().date().optional(),
+    view: z.enum(["ISSUES", "ALL"]).default("ISSUES"),
+    page: z.coerce.number().int().min(0).max(1000000).default(0),
+    size: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .refine((value) => !value.from || !value.to || value.from <= value.to, {
+    path: ["to"],
+    message: "Invalid date range",
+  })
+  .refine(
+    (value) =>
+      ["POSTINGS", "TALLY"].includes(value.mode) || (!value.from && !value.to),
+    { path: ["from"], message: "Dates apply only to posting-period views" },
+  );
 export const truckLocationStatusSchema = z.enum(["AT_HO", "IN_TRANSIT"]);
 
 export const jobCardPartLineInputSchema = z.object({

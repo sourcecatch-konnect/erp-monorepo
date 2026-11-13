@@ -9,6 +9,7 @@ import {
   eligibleTransporterClaimRecoveryQuerySchema,
   eligibleTransporterLRQuerySchema,
   rejectVendorPaymentSlipSchema,
+  reverseJobCardSettlementSchema,
   submitVendorPaymentSlipSchema,
   updateVendorPaymentSlipSchema,
   vendorPaymentSlipListQuerySchema,
@@ -45,7 +46,11 @@ import {
 } from "../ledger/posting.service.js";
 import { recordAuditEntry } from "../audit/audit.service.js";
 import { decideVendorPaymentApproval } from "./approval-decision.js";
-import { assertJobCardSlipBalance, settleJobCardBillTx } from "./job-card-payment.service.js";
+import {
+  assertJobCardSlipBalance,
+  settleJobCardBillTx,
+} from "./job-card-payment.service.js";
+import { reverseJobCardSettlementTx } from "./job-card-reversal.service.js";
 import {
   findEligibleTransporterLRs,
   reconcileTransporterLines,
@@ -72,7 +77,10 @@ import {
   findEligibleClaimRecoveries,
   reconcileClaimRecoveryLines,
 } from "./calculators/claim-recovery.js";
-import { receiveSlipRecoveries, releaseSlipRecoveries } from "../claim/claim.slip-deduction.js";
+import {
+  receiveSlipRecoveries,
+  releaseSlipRecoveries,
+} from "../claim/claim.slip-deduction.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -92,7 +100,13 @@ const validate = <T>(
 };
 
 const slipDetailInclude = {
-  serviceBill: { select: { id: true, serviceBillNumber: true, serviceProvider: { select: { id: true, name: true } } } },
+  serviceBill: {
+    select: {
+      id: true,
+      serviceBillNumber: true,
+      serviceProvider: { select: { id: true, name: true } },
+    },
+  },
   branch: { select: { id: true, name: true, branchCode: true } },
   transport: { select: { id: true, name: true } },
   labour: { select: { id: true, name: true } },
@@ -168,11 +182,9 @@ const ZERO_LINE_COMPONENTS = {
  * loudly instead of silently posting.
  */
 /** What a transporter slip can carry: trucks, legacy LRs, damage recoveries (C7). */
-const TRANSPORTER_SOURCE_TYPES = new Set<VendorPaymentSlipLineInput["sourceType"]>([
-  "LR_GROUP",
-  "LR",
-  "CLAIM_RECOVERY",
-]);
+const TRANSPORTER_SOURCE_TYPES = new Set<
+  VendorPaymentSlipLineInput["sourceType"]
+>(["LR_GROUP", "LR", "CLAIM_RECOVERY"]);
 
 async function buildServerLines(
   client: typeof db | Prisma.TransactionClient,
@@ -189,17 +201,36 @@ async function buildServerLines(
     const truckIds = lines
       .filter((l) => l.sourceType === "LR_GROUP")
       .map((l) => l.sourceId);
-    const lrIds = lines.filter((l) => l.sourceType === "LR").map((l) => l.sourceId);
+    const lrIds = lines
+      .filter((l) => l.sourceType === "LR")
+      .map((l) => l.sourceId);
     const recoveryIds = lines
       .filter((l) => l.sourceType === "CLAIM_RECOVERY")
       .map((l) => l.sourceId);
     if (lines.some((l) => !TRANSPORTER_SOURCE_TYPES.has(l.sourceType)))
-      throw new BadRequestError("A transporter slip takes truck lines and damage recoveries only");
+      throw new BadRequestError(
+        "A transporter slip takes truck lines and damage recoveries only",
+      );
 
     const [trucks, legacyLrs, recoveries] = await Promise.all([
-      reconcileTransporterTrucks(client, payee.transportId, truckIds, excludeSlipId),
-      reconcileTransporterLines(client, payee.transportId, lrIds, excludeSlipId),
-      reconcileClaimRecoveryLines(client, payee.transportId, recoveryIds, excludeSlipId),
+      reconcileTransporterTrucks(
+        client,
+        payee.transportId,
+        truckIds,
+        excludeSlipId,
+      ),
+      reconcileTransporterLines(
+        client,
+        payee.transportId,
+        lrIds,
+        excludeSlipId,
+      ),
+      reconcileClaimRecoveryLines(
+        client,
+        payee.transportId,
+        recoveryIds,
+        excludeSlipId,
+      ),
     ]);
     // The same truck can't be on this slip both whole and LR-wise.
     const doubled = [...legacyLrs.values()].filter((lr) =>
@@ -534,8 +565,14 @@ router.get(
   "/calculators/transporter-claim-recoveries",
   can(PERMS.ACCOUNTS.PAYMENT.CREATE),
   async (req, res) => {
-    const input = validate(eligibleTransporterClaimRecoveryQuerySchema.safeParse(req.query));
-    const rows = await findEligibleClaimRecoveries(db, input.transportId, branchFilter(req));
+    const input = validate(
+      eligibleTransporterClaimRecoveryQuerySchema.safeParse(req.query),
+    );
+    const rows = await findEligibleClaimRecoveries(
+      db,
+      input.transportId,
+      branchFilter(req),
+    );
     return sendOk(res, rows);
   },
 );
@@ -617,7 +654,9 @@ router.post("/slips", can(PERMS.ACCOUNTS.PAYMENT.CREATE), async (req, res) => {
   assertBranchAccess(req, input.branchId);
   if (
     input.type === "TRANSPORTER" &&
-    input.lines.some((l) => l.sourceType !== "LR_GROUP" && l.sourceType !== "CLAIM_RECOVERY")
+    input.lines.some(
+      (l) => l.sourceType !== "LR_GROUP" && l.sourceType !== "CLAIM_RECOVERY",
+    )
   )
     throw new BadRequestError(
       "Transporter slips are made per truck — select trucks, not single LRs",
@@ -710,7 +749,10 @@ router.patch(
     const existing = await db.vendorPaymentSlip.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Vendor payment slip not found");
     assertBranchAccess(req, existing.branchId);
-    if (existing.type === "JOBCARD") throw new BadRequestError("Job card slips use the posted bill balance. Cancel this slip to prepare a replacement.");
+    if (existing.type === "JOBCARD")
+      throw new BadRequestError(
+        "Job card slips use the posted bill balance. Cancel this slip to prepare a replacement.",
+      );
     if (existing.status !== "DRAFT")
       throw new BadRequestError("Only a draft slip can be edited");
     if (existing.version !== input.version)
@@ -1116,9 +1158,12 @@ router.post(
 
         // Recheck request identity after the slip lock, including retries of
         // the final payment when the slip has already reached PAID.
-        const prior = await tx.vendorPaymentDisbursement.findUnique({ where: { clientRequestId: input.clientRequestId } });
+        const prior = await tx.vendorPaymentDisbursement.findUnique({
+          where: { clientRequestId: input.clientRequestId },
+        });
         if (prior) {
-          if (prior.slipId !== id) throw new BadRequestError("Request id belongs to another slip");
+          if (prior.slipId !== id)
+            throw new BadRequestError("Request id belongs to another slip");
           return id;
         }
 
@@ -1129,8 +1174,13 @@ router.post(
             "Only an approved or partially paid slip can be disbursed",
           );
 
-        if (slip.type !== "JOBCARD" && input.tdsPaise > 0n)
-          throw new BadRequestError("Settlement TDS is only available for job card slips");
+        if (
+          slip.type !== "JOBCARD" &&
+          (input.tdsPaise > 0n || input.paidPaise <= 0n)
+        )
+          throw new BadRequestError(
+            "Settlement TDS is only available for job card slips",
+          );
         const settledPaise = input.paidPaise + input.tdsPaise;
         const outstandingPaise = slip.netPayablePaise - slip.paidPaise;
         if (settledPaise > outstandingPaise)
@@ -1138,8 +1188,15 @@ router.post(
             `Amount exceeds outstanding (${outstandingPaise} paise)`,
           );
 
-        const serviceBill = slip.type === "JOBCARD"
-          ? await settleJobCardBillTx(tx, slip, input.paidPaise, input.tdsPaise) : null;
+        const serviceBill =
+          slip.type === "JOBCARD"
+            ? await settleJobCardBillTx(
+                tx,
+                slip,
+                input.paidPaise,
+                input.tdsPaise,
+              )
+            : null;
         let disbursement;
         try {
           disbursement = await tx.vendorPaymentDisbursement.create({
@@ -1188,7 +1245,11 @@ router.post(
           createdById: me,
         };
         const journal = serviceBill
-          ? await postJobCardDisbursement(tx, { ...postingArgs, serviceProviderId: serviceBill.serviceProviderId, tdsPaise: input.tdsPaise })
+          ? await postJobCardDisbursement(tx, {
+              ...postingArgs,
+              serviceProviderId: serviceBill.serviceProviderId,
+              tdsPaise: input.tdsPaise,
+            })
           : await postVendorDisbursement(tx, postingArgs);
 
         await tx.vendorPaymentDisbursement.update({
@@ -1233,6 +1294,36 @@ router.post(
 /* ------------------------------------------------------------------ */
 
 router.post(
+  "/slips/:id/disbursements/:paymentId/reverse",
+  can(PERMS.ACCOUNTS.PAYMENT.CANCEL),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = validate(reverseJobCardSettlementSchema.safeParse(req.body));
+    const slip = await db.vendorPaymentSlip.findUnique({
+      where: { id },
+      select: { branchId: true },
+    });
+    if (!slip) throw new NotFoundError("Payment slip not found");
+    assertBranchAccess(req, slip.branchId);
+    await db.$transaction(
+      (tx) =>
+        reverseJobCardSettlementTx(
+          tx,
+          {
+            ...input,
+            slipId: id,
+            paymentId: String(req.params.paymentId),
+            branchId: slip.branchId,
+          },
+          actorId(req),
+        ),
+      { isolationLevel: "ReadCommitted", timeout: 15000 },
+    );
+    return sendOk(res, await loadSlipDetail(id));
+  },
+);
+
+router.post(
   "/slips/:id/cancel",
   can(PERMS.ACCOUNTS.PAYMENT.CANCEL),
   async (req, res) => {
@@ -1270,14 +1361,14 @@ router.post(
             "A partially or fully paid slip cannot be cancelled here — use the separate refund/payment-reversal flow",
           );
 
-      // Approved-and-unpaid reverses the accrual; DRAFT/PENDING_APPROVAL
-      // never touched the ledger, so there's nothing to reverse.
-      const wasApproved = slip.status === "APPROVED";
-      if (wasApproved && slip.type !== "JOBCARD") {
-        await reverseVendorSlipAccrual(tx, slip, input.reason, me);
-        // Claims C7: its damage recoveries go back to APPROVED for the next slip.
-        await releaseSlipRecoveries(tx, slip, me);
-      }
+        // Approved-and-unpaid reverses the accrual; DRAFT/PENDING_APPROVAL
+        // never touched the ledger, so there's nothing to reverse.
+        const wasApproved = slip.status === "APPROVED";
+        if (wasApproved && slip.type !== "JOBCARD") {
+          await reverseVendorSlipAccrual(tx, slip, input.reason, me);
+          // Claims C7: its damage recoveries go back to APPROVED for the next slip.
+          await releaseSlipRecoveries(tx, slip, me);
+        }
 
         // Re-guarded by version here too: nothing between the fresh read above
         // and this write takes a row lock (a plain SELECT doesn't), so a

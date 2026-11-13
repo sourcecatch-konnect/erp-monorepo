@@ -38,6 +38,7 @@ import { serviceBillKeys } from "./api/service-bill.keys";
 import { jobCardKeys } from "@/features/job-card/api/job-card.keys";
 import { ServiceBillStatusBadge } from "./serviceBillStatusBadge";
 import { PayServiceBillDialog } from "./PayServiceBillDialog";
+import { LegacyServicePayments } from "./LegacyServicePayments";
 
 export function ServiceBillDetailPage({
   serviceBillId,
@@ -321,6 +322,14 @@ export function ServiceBillDetailPage({
             setVoucherId(journalEntryId);
             setVoucherOpen(true);
           }
+        }}
+      />
+
+      <LegacyServicePayments
+        id={serviceBillId}
+        openVoucher={(id) => {
+          setVoucherId(id);
+          setVoucherOpen(true);
         }}
       />
 

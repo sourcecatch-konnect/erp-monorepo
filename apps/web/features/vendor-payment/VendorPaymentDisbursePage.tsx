@@ -102,7 +102,8 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
   const canSubmit =
     Boolean(slip) &&
     (slip?.status === "APPROVED" || slip?.status === "PARTIALLY_PAID") &&
-    amountPaise > 0n &&
+    amountPaise >= 0n &&
+    amountPaise + tdsPaise > 0n &&
     tdsPaise >= 0n &&
     !exceedsOutstanding &&
     Boolean(fundingLedgerId);
@@ -228,7 +229,7 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
                   placeholder="0.00"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Cash plus TDS settles the bill.
+                  Cash plus TDS settles the bill. Cash may be zero for TDS-only settlement; the selected funding account then has no posting.
                 </p>
               </Field>
             )}

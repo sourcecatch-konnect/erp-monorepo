@@ -26,6 +26,13 @@ export type RepairCostResult = {
   size: number;
 };
 export const jobCardReportApi = {
+  audit: async (params: AuditParams, signal?: AbortSignal) => {
+    const response = await api.get<ApiResponse<AuditResult>>(
+      "/job-card/reports/audit",
+      { params, signal },
+    );
+    return unwrapApiResponse(response);
+  },
   reconciliation: async (
     params: {
       page: number;
@@ -58,6 +65,41 @@ export const jobCardReportApi = {
     );
     return unwrapApiResponse(response);
   },
+};
+
+export type AuditParams = {
+  mode: "STOCK" | "SETTLEMENTS" | "POSTINGS" | "TALLY";
+  view: "ISSUES" | "ALL";
+  search?: string;
+  from?: string;
+  to?: string;
+  page: number;
+  size: number;
+};
+export type AuditResult = {
+  rows: {
+    id: string;
+    documentNumber: string;
+    branchName: string;
+    date: string | null;
+    unit: "PAISE" | "QTY";
+    expected: string;
+    actual: string;
+    difference: string;
+    issue: string;
+    state: string;
+    voucherNumber: string | null;
+    tallySyncStatus: string | null;
+  }[];
+  total: number;
+  page: number;
+  size: number;
+  summary: {
+    issues: number;
+    moneyDifferencePaise: string;
+    quantityDifference: string;
+    activeExpensePaise: string;
+  };
 };
 
 export type ReconciliationKind = "PARTS" | "SERVICES" | "RETURN";

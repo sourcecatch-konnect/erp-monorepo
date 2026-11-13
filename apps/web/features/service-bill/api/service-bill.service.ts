@@ -64,6 +64,9 @@ export type ServiceBill = {
 };
 
 export type ServiceBillPayment = {
+  reversedAt: string | null;
+  reversalReason: string | null;
+  reversalJournalEntryId: string | null;
   id: string;
   paidPaise: string;
   tdsPaise: string;
@@ -80,6 +83,26 @@ export type LookupOption = { value: string; label: string };
 export type ServiceBillSummary = Omit<ServiceBill, "lines">;
 
 export const serviceBillApi = {
+  reversePayment: async (id: string, paymentId: string, reason: string) => {
+    const response = await api.post<ApiResponse<unknown>>(
+      `/service-bill/${id}/payments/${paymentId}/reverse`,
+      { reason },
+    );
+    return unwrapApiResponse(response);
+  },
+  paymentPage: async (
+    id: string,
+    page: number,
+    size: number,
+    search?: string,
+    signal?: AbortSignal,
+  ) => {
+    const response = await api.get<ApiResponse<ServiceBillPayment[]>>(
+      `/service-bill/${id}/payments`,
+      { params: { page, size, search }, signal },
+    );
+    return unwrapListResponse(response);
+  },
   preparePayment: async (id: string) => {
     const res = await api.post<ApiResponse<{ id: string }>>(
       `/service-bill/${id}/payment-slip`,

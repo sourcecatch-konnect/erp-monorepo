@@ -7,6 +7,7 @@ import {
   unbilledServiceReportQuerySchema,
   unbilledServiceLinesQuerySchema,
   cancelServiceBillSchema,
+  reverseJobCardSettlementSchema,
 } from "@skerp/validators";
 import { db } from "../../../prisma/prisma.js";
 import type { Prisma } from "../../../generated/prisma/index.js";
@@ -19,6 +20,7 @@ import { getParamId } from "../_shared/param.js";
 import { createJobCardPaymentSlipTx } from "../vendor-payment/job-card-payment.service.js";
 import { getServiceBillOutstanding } from "./service-bill-report.service.js";
 import { getUnbilledServiceReport } from "./unbilled-service-report.service.js";
+import { reverseJobCardSettlementTx } from "../vendor-payment/job-card-reversal.service.js";
 import {
   createServiceBillTx,
   cancelServiceBillTx,
@@ -26,6 +28,38 @@ import {
 
 const router: Router = Router();
 router.use(authMiddleware);
+
+router.post(
+  "/:id/payments/:paymentId/reverse",
+  can(PERMS.ACCOUNTS.PAYMENT.CANCEL),
+  async (req, res) => {
+    const id = getParamId(req);
+    const input = reverseJobCardSettlementSchema.parse(req.body);
+    const bill = await db.serviceBill.findUnique({
+      where: { id },
+      select: { branchId: true },
+    });
+    if (!bill) throw new NotFoundError("Service bill not found");
+    assertBranchAccess(req, bill.branchId);
+    sendOk(
+      res,
+      await db.$transaction(
+        (tx) =>
+          reverseJobCardSettlementTx(
+            tx,
+            {
+              ...input,
+              billId: id,
+              paymentId: String(req.params.paymentId),
+              branchId: bill.branchId,
+            },
+            req.user!.userId,
+          ),
+        { isolationLevel: "ReadCommitted", timeout: 15000 },
+      ),
+    );
+  },
+);
 
 router.get(
   "/reports/unbilled",
@@ -282,17 +316,43 @@ router.get(
     if (!bill) throw new NotFoundError("Service bill not found");
     assertBranchAccess(req, bill.branchId);
 
-    const payments = await db.serviceBillPayment.findMany({
-      where: { serviceBillId },
-      include: {
-        fromAccount: { select: { id: true, name: true, type: true } },
-        journalEntry: {
-          select: { id: true, voucherNumber: true, status: true },
+    const query = serviceBillListQuerySchema.parse(req.query);
+    const paymentWhere: Prisma.ServiceBillPaymentWhereInput = {
+      serviceBillId,
+      ...(query.search
+        ? {
+            OR: [
+              {
+                referenceNumber: {
+                  contains: query.search,
+                  mode: "insensitive",
+                },
+              },
+              {
+                fromAccount: {
+                  name: { contains: query.search, mode: "insensitive" },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+    const [payments, total] = await Promise.all([
+      db.serviceBillPayment.findMany({
+        where: paymentWhere,
+        include: {
+          fromAccount: { select: { id: true, name: true, type: true } },
+          journalEntry: {
+            select: { id: true, voucherNumber: true, status: true },
+          },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    sendOk(res, payments);
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: query.page * query.size,
+        take: query.size,
+      }),
+      db.serviceBillPayment.count({ where: paymentWhere }),
+    ]);
+    sendOk(res, payments, { page: query.page, size: query.size, total });
   },
 );
 

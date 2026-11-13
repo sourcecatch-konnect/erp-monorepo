@@ -41,10 +41,24 @@ describe("job card settlement entries", () => {
       buildJobCardPaymentLines({ ...args, tdsPaise: -1n }),
     ).toThrow();
     expect(() =>
-      buildJobCardPaymentLines({ ...args, cashPaise: 0n }),
+      buildJobCardPaymentLines({ ...args, cashPaise: 0n, tdsPaise: 0n }),
     ).toThrow();
     expect(() =>
       buildJobCardPaymentLines({ ...args, tdsLedgerId: undefined }),
     ).toThrow();
+  });
+  it("posts withholding-only settlement without any zero cash line", () => {
+    const lines = buildJobCardPaymentLines({
+      ...args,
+      cashPaise: 0n,
+      tdsPaise: 100n,
+    });
+    expect(lines.map((line) => line.ledgerId)).toEqual(["provider", "tds"]);
+    expect(
+      lines.reduce((sum, line) => sum + line.debitPaise - line.creditPaise, 0n),
+    ).toBe(0n);
+    expect(
+      lines.every((line) => line.debitPaise > 0n || line.creditPaise > 0n),
+    ).toBe(true);
   });
 });

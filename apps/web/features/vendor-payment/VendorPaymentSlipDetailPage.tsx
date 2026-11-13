@@ -23,6 +23,7 @@ import {
 } from "@skerp/ui/components/table";
 
 import { useCan } from "@/features/auth";
+import { SettlementReversalButton } from "@/features/service-bill/SettlementReversalButton";
 import { PERMS } from "@skerp/types";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
@@ -630,6 +631,11 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                     <TableCell className="text-xs">{d.mode}</TableCell>
                     <TableCell className="text-xs">
                       {d.referenceNo ?? "—"}
+                      {d.reversedAt && (
+                        <p className="text-xs text-destructive">
+                          Reversed: {d.reversalReason}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {money(d.paidPaise)}
@@ -651,6 +657,28 @@ export function VendorPaymentSlipDetailPage({ id }: { id: string }) {
                           Voucher
                         </Button>
                       ) : null}
+                      {d.reversalJournalEntryId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openVoucher(d.reversalJournalEntryId!)}
+                        >
+                          Reversal voucher
+                        </Button>
+                      )}
+                      {slip.type === "JOBCARD" &&
+                        !d.reversedAt &&
+                        canCancel && (
+                          <SettlementReversalButton
+                            reverse={(reason) =>
+                              vendorPaymentApi.reverseJobCardSettlement(
+                                slip.id,
+                                d.id,
+                                reason,
+                              )
+                            }
+                          />
+                        )}
                     </TableCell>
                   </TableRow>
                 ))}
