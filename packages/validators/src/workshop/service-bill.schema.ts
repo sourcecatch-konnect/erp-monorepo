@@ -47,6 +47,15 @@ export const serviceBillListQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(100).default(10),
 });
 
+export const serviceBillOutstandingQuerySchema = z.object({
+  branchId: id.optional(),
+  serviceProviderId: id.optional(),
+  search: z.string().trim().max(200).optional(),
+  bucket: z.enum(["FUTURE", "0_30", "31_60", "61_90", "90_PLUS"]).optional(),
+  page: z.coerce.number().int().min(0).max(1000000).default(0),
+  size: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export const cancelServiceBillSchema = z.object({
   reason: z.string().trim().min(1, "Cancellation reason is required").max(500),
 });

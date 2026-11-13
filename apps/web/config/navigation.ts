@@ -318,6 +318,12 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Finance",
     items: [
       {
+        title: "Provider Outstanding",
+        href: "/accounts/service-provider-outstanding",
+        icon: IconChartBar,
+        permission: PERMS.WORKSHOP.SERVICEBILL_VIEW,
+      },
+      {
         title: "Repair Cost Report",
         href: "/accounts/job-card-repair-costs",
         icon: IconChartBar,

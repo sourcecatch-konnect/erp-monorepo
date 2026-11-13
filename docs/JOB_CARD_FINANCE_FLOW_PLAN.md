@@ -33,6 +33,18 @@ Apply `20261112040000_job_card_cost_allocations` before deploying this slice. It
 
 Validation passed: 115 targeted tests across job cards, service bills, vendor payments, and settlement ledger lines; server/web type checks and lint; Prisma schema validation. Tests cover allocation precision/rounding, validation, India date boundaries, branch scope, parameterised search, posted-source selection, and backend pagination/summary query contracts. Live PostgreSQL migration/query execution, representative-volume query plans, ledger reconciliation and Finance UAT remain required. Provider ageing, historical posting-period reporting, payment reversals, and rollout reconciliation remain later work.
 
+### Provider outstanding implementation - 2026-11-13
+
+The seventh slice adds Finance -> Provider Outstanding and `GET /service-bill/reports/outstanding`. It lists unpaid service bills with provider/shop, invoice, branch, bill date, net billed, settled cash-plus-TDS, remaining liability, and age. Bill links open the existing detail/payment workflow. Only POSTED bills with POSTED payable journals and a positive remaining balance qualify; cancelled, fully settled, and unposted-journal bills are excluded. The authoritative cumulative bill settlement counter includes historical direct payments and shared-engine cash/TDS payments, so the query does not duplicate liability by joining payment rows.
+
+Age is the difference between the current India calendar date and bill date converted from stored UTC to India time. Buckets are future dated, 0–30, 31–60, 61–90, and over 90 days. Service bills have no due-date/payment-term field, so these are bill-age buckets rather than contractual overdue measures. Balances reflect current settlements; the report does not reconstruct an arbitrary past balance.
+
+Search covers provider/shop, service bill number, and provider invoice. The UI uses the existing 400 ms debounced hook, resets pagination on search/bucket/page-size changes, consumes request cancellation, and requests bounded backend pages without prefetching a full dataset. Both page rows and full-filter bucket totals use the same parameterised filters and branch scope within a repeatable-read transaction. Explicit branch/provider filters are supported by the API; requested branch access is checked before intersecting assigned scope. Page order is oldest bill date then ID. Amounts remain integer paise in PostgreSQL and strings in responses, preserving values beyond JavaScript's safe-integer range.
+
+The report reuses the service-bill query-key prefix, so existing billing, cancellation, and shared settlement mutations invalidate it. A Refresh action updates balances/date on demand. No schema change or new migration is needed for this slice; existing service-bill branch/status and provider/status indexes remain available. Representative-volume query plans and search indexing still require measurement.
+
+Validation passed: 82 targeted service-bill, vendor-payment, and settlement-ledger tests; server/web type checks and lint; validators build and diff whitespace checks. Coverage includes bounded query validation, branch/search isolation, posted and positive-balance eligibility, calendar-age SQL boundaries, exact string amounts, and backend pagination/full-filter summary contracts. Live PostgreSQL date-boundary/query checks, historical balance reconciliation, representative-volume performance checks, and Finance UAT remain required. Next reporting work includes a cross-provider unbilled-services register and source/GL reconciliation; settlement reversals remain a separate workflow change.
+
 ## 1. Purpose and scope
 
 ### Removed-part safety implementation - 2026-11-12

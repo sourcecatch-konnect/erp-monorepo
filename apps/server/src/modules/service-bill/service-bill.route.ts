@@ -3,6 +3,7 @@ import { PERMS } from "@skerp/types";
 import {
   createServiceBillSchema,
   serviceBillListQuerySchema,
+  serviceBillOutstandingQuerySchema,
   unbilledServiceLinesQuerySchema,
   cancelServiceBillSchema,
 } from "@skerp/validators";
@@ -15,6 +16,7 @@ import { BadRequestError, NotFoundError } from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
 import { createJobCardPaymentSlipTx } from "../vendor-payment/job-card-payment.service.js";
+import { getServiceBillOutstanding } from "./service-bill-report.service.js";
 import {
   createServiceBillTx,
   cancelServiceBillTx,
@@ -22,6 +24,18 @@ import {
 
 const router: Router = Router();
 router.use(authMiddleware);
+
+router.get(
+  "/reports/outstanding",
+  can(PERMS.WORKSHOP.SERVICEBILL_VIEW),
+  async (req, res) => {
+    const query = serviceBillOutstandingQuerySchema.parse(req.query);
+    if (query.branchId) assertBranchAccess(req, query.branchId);
+    const branchIds =
+      req.ctx?.branchScope === "ALL" ? null : (req.ctx?.branchIds ?? []);
+    sendOk(res, await getServiceBillOutstanding(query, branchIds));
+  },
+);
 
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
