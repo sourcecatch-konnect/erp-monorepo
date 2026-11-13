@@ -1486,6 +1486,8 @@ enum StockMovementType {
 /// voucher; external/sublet services are recorded here but billed later by
 /// a separate Service Bill (they carry no ledger entry of their own yet).
 model JobCard {
+  clientRequestId String? @unique
+  requestFingerprint String?
   id            String              @id @default(cuid())
   jobCardNumber String?             @unique
   fyCode        String

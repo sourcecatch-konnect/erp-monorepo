@@ -36,6 +36,7 @@ import { createRemovedPartTx } from "./job-card-removed-part.service.js";
 import { finaliseJobCardTx } from "./job-card.service.js";
 import { getJobCardRepairCosts } from "./job-card-report.service.js";
 import { getJobCardReconciliation } from "./job-card-reconciliation.service.js";
+import { createJobCardOnceTx } from "./job-card-create-request.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
@@ -182,58 +183,63 @@ router.post("/", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
 
   const fyCode = fyCodeFor(input.inDateTime);
 
-  const jobCard = await db.$transaction(async (tx) => {
-    const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
-    const jobCardNumber = formatDocNumber(
-      branch.branchCode,
-      fyCode,
-      seq,
-      "SKT/JC",
-    );
-
-    return tx.jobCard.create({
-      data: {
-        jobCardNumber,
+  const jobCard = await db.$transaction((tx) =>
+    createJobCardOnceTx(tx, input, actorId(req), "DRAFT", async (identity) => {
+      const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
+      const jobCardNumber = formatDocNumber(
+        branch.branchCode,
         fyCode,
-        branchId: input.branchId,
-        vehicleId: input.vehicleId,
-        driverId: input.driverId,
-        truckStatus: input.truckStatus,
-        inDateTime: input.inDateTime,
-        openingKm: input.openingKm,
-        remarks: input.remarks,
-        createdById: actorId(req),
-        partLines: {
-          create: input.partLines.map((line) => ({
-            sparePartId: line.sparePartId,
-            batchId: line.batchId,
-            mechanicId: line.mechanicId,
-            qty: line.qty,
-            unitCostPaise: 0n, // snapshotted from the batch at Finalise
-            amountPaise: 0n,
-            description: line.description,
-          })),
+        seq,
+        "SKT/JC",
+      );
+
+      return tx.jobCard.create({
+        data: {
+          ...identity,
+          jobCardNumber,
+          fyCode,
+          branchId: input.branchId,
+          vehicleId: input.vehicleId,
+          driverId: input.driverId,
+          truckStatus: input.truckStatus,
+          inDateTime: input.inDateTime,
+          openingKm: input.openingKm,
+          remarks: input.remarks,
+          createdById: actorId(req),
+          partLines: {
+            create: input.partLines.map((line) => ({
+              sparePartId: line.sparePartId,
+              batchId: line.batchId,
+              mechanicId: line.mechanicId,
+              qty: line.qty,
+              unitCostPaise: 0n, // snapshotted from the batch at Finalise
+              amountPaise: 0n,
+              description: line.description,
+            })),
+          },
+          serviceLines: {
+            create: input.serviceLines.map((line) => ({
+              serviceProviderId: line.serviceProviderId,
+              sparePartId: line.sparePartId,
+              mechanicId: line.mechanicId,
+              qty: line.qty,
+              ratePaise: line.ratePaise,
+              amountPaise: line.ratePaise * BigInt(line.qty),
+              description: line.description,
+            })),
+          },
         },
-        serviceLines: {
-          create: input.serviceLines.map((line) => ({
-            serviceProviderId: line.serviceProviderId,
-            sparePartId: line.sparePartId,
-            mechanicId: line.mechanicId,
-            qty: line.qty,
-            ratePaise: line.ratePaise,
-            amountPaise: line.ratePaise * BigInt(line.qty),
-            description: line.description,
-          })),
-        },
-      },
-      select: { id: true },
-    });
-  });
+        select: { id: true },
+      });
+    }),
+    { isolationLevel: "ReadCommitted" },
+  );
 
   const created = await db.jobCard.findUnique({
     where: { id: jobCard.id },
     include: jobCardDetailInclude,
   });
+  if (created) assertBranchAccess(req, created.branchId);
   sendOk(res, created, undefined, 201);
 });
 
@@ -343,82 +349,87 @@ router.post(
     const fyCode = fyCodeFor(input.inDateTime);
     const me = actorId(req);
 
-    const finalised = await db.$transaction(async (tx) => {
-      const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
-      const jobCardNumber = formatDocNumber(
-        branch.branchCode,
-        fyCode,
-        seq,
-        "SKT/JC",
-      );
-
-      // Job card row, then lines via createManyAndReturn — Prisma's nested
-      // `partLines: { create: [...] }` issues one INSERT per line instead
-      // of a single batched statement; with N+M lines that's up to N+M+1
-      // sequential round trips. createManyAndReturn does it in 2.
-      const jobCard = await tx.jobCard.create({
-        data: {
-          jobCardNumber,
+    const finalised = await db.$transaction((tx) =>
+      createJobCardOnceTx(tx, input, me, "FINALISE", async (identity) => {
+        const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
+        const jobCardNumber = formatDocNumber(
+          branch.branchCode,
           fyCode,
-          branchId: input.branchId,
-          vehicleId: input.vehicleId,
-          driverId: input.driverId,
-          truckStatus: input.truckStatus,
-          inDateTime: input.inDateTime,
-          openingKm: input.openingKm,
-          remarks: input.remarks,
-          createdById: me,
-        },
-      });
+          seq,
+          "SKT/JC",
+        );
 
-      const [createdPartLines, createdServiceLines] = await Promise.all([
-        input.partLines.length
-          ? tx.jobCardPartLine.createManyAndReturn({
-              data: input.partLines.map((line) => ({
-                jobCardId: jobCard.id,
-                sparePartId: line.sparePartId,
-                batchId: line.batchId,
-                mechanicId: line.mechanicId,
-                qty: line.qty,
-                unitCostPaise: 0n, // snapshotted below by finaliseJobCardTx
-                amountPaise: 0n,
-                description: line.description,
-              })),
-            })
-          : Promise.resolve([]),
-        input.serviceLines.length
-          ? tx.jobCardServiceLine.createManyAndReturn({
-              data: input.serviceLines.map((line) => ({
-                jobCardId: jobCard.id,
-                serviceProviderId: line.serviceProviderId,
-                sparePartId: line.sparePartId,
-                mechanicId: line.mechanicId,
-                qty: line.qty,
-                ratePaise: line.ratePaise,
-                amountPaise: line.ratePaise * BigInt(line.qty),
-                description: line.description,
-              })),
-            })
-          : Promise.resolve([]),
-      ]);
-      const created = {
-        ...jobCard,
-        partLines: createdPartLines,
-        serviceLines: createdServiceLines,
-      };
+        // Job card row, then lines via createManyAndReturn — Prisma's nested
+        // `partLines: { create: [...] }` issues one INSERT per line instead
+        // of a single batched statement; with N+M lines that's up to N+M+1
+        // sequential round trips. createManyAndReturn does it in 2.
+        const jobCard = await tx.jobCard.create({
+          data: {
+            ...identity,
+            jobCardNumber,
+            fyCode,
+            branchId: input.branchId,
+            vehicleId: input.vehicleId,
+            driverId: input.driverId,
+            truckStatus: input.truckStatus,
+            inDateTime: input.inDateTime,
+            openingKm: input.openingKm,
+            remarks: input.remarks,
+            createdById: me,
+          },
+        });
 
-      return finaliseJobCardTx(
-        tx,
-        created,
-        { outDateTime: input.outDateTime, closingKm: input.closingKm },
-        me,
-      );
-    });
+        const [createdPartLines, createdServiceLines] = await Promise.all([
+          input.partLines.length
+            ? tx.jobCardPartLine.createManyAndReturn({
+                data: input.partLines.map((line) => ({
+                  jobCardId: jobCard.id,
+                  sparePartId: line.sparePartId,
+                  batchId: line.batchId,
+                  mechanicId: line.mechanicId,
+                  qty: line.qty,
+                  unitCostPaise: 0n, // snapshotted below by finaliseJobCardTx
+                  amountPaise: 0n,
+                  description: line.description,
+                })),
+              })
+            : Promise.resolve([]),
+          input.serviceLines.length
+            ? tx.jobCardServiceLine.createManyAndReturn({
+                data: input.serviceLines.map((line) => ({
+                  jobCardId: jobCard.id,
+                  serviceProviderId: line.serviceProviderId,
+                  sparePartId: line.sparePartId,
+                  mechanicId: line.mechanicId,
+                  qty: line.qty,
+                  ratePaise: line.ratePaise,
+                  amountPaise: line.ratePaise * BigInt(line.qty),
+                  description: line.description,
+                })),
+              })
+            : Promise.resolve([]),
+        ]);
+        const created = {
+          ...jobCard,
+          partLines: createdPartLines,
+          serviceLines: createdServiceLines,
+        };
+
+        return finaliseJobCardTx(
+          tx,
+          created,
+          { outDateTime: input.outDateTime, closingKm: input.closingKm },
+          me,
+        );
+      }),
+      { isolationLevel: "ReadCommitted" },
+    );
 
     const result = await db.jobCard.findUnique({
       where: { id: finalised.id },
       include: jobCardDetailInclude,
     });
+    if (result) assertBranchAccess(req, result.branchId);
     sendOk(res, result, undefined, 201);
   },
 );

@@ -12,10 +12,10 @@ import {
   postServiceBillVoucher,
   reverseJournal,
 } from "../ledger/posting.service.js";
+import { allocateServiceDiscount } from "./service-bill.allocation.js";
 
 type Tx = Prisma.TransactionClient;
 type CreateInput = z.infer<typeof createServiceBillSchema>;
-import { allocateServiceDiscount } from "./service-bill.allocation.js";
 
 /** Caller owns the transaction and authorises input.branchId. */
 export async function createServiceBillTx(
@@ -24,6 +24,15 @@ export async function createServiceBillTx(
   branchCode: string,
   actorId: string,
 ) {
+  const fyCode = fyCodeFor(input.billDate);
+  const duplicate = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "ServiceBill" WHERE "serviceProviderId" = ${input.serviceProviderId}
+      AND "fyCode" = ${fyCode} AND "status" <> 'CANCELLED'
+      AND lower(btrim("providerInvoiceNo")) = lower(btrim(${input.providerInvoiceNo})) LIMIT 1`;
+  if (duplicate.length)
+    throw new ConflictError(
+      "This provider invoice already has an active bill in the selected financial year.",
+    );
   const ids = input.jobCardServiceLineIds;
   if (!ids.length || new Set(ids).size !== ids.length)
     throw new BadRequestError("Select unique completed service lines");
@@ -83,7 +92,6 @@ export async function createServiceBillTx(
     throw new BadRequestError("Discount cannot exceed the gross amount");
   const netAmountPaise = grossAmountPaise - input.discountPaise;
   const allocations = allocateServiceDiscount(lines, input.discountPaise);
-  const fyCode = fyCodeFor(input.billDate);
   const seq = await nextSequence(tx, branchCode, fyCode, "SBILL");
   const serviceBillNumber = formatDocNumber(
     branchCode,
@@ -91,26 +99,39 @@ export async function createServiceBillTx(
     seq,
     "SKT/SBILL",
   );
-  const bill = await tx.serviceBill.create({
-    data: {
-      serviceBillNumber,
-      fyCode,
-      branchId: input.branchId,
-      serviceProviderId: input.serviceProviderId,
-      status: "POSTED",
-      billDate: input.billDate,
-      providerInvoiceNo: input.providerInvoiceNo,
-      providerInvoiceDate: input.providerInvoiceDate,
-      grossAmountPaise,
-      discountPaise: input.discountPaise,
-      netAmountPaise,
-      remarks: input.remarks,
-      createdById: actorId,
-      postedById: actorId,
-      postedAt: new Date(),
-    },
-    select: { id: true },
-  });
+  const bill = await tx.serviceBill
+    .create({
+      data: {
+        serviceBillNumber,
+        fyCode,
+        branchId: input.branchId,
+        serviceProviderId: input.serviceProviderId,
+        status: "POSTED",
+        billDate: input.billDate,
+        providerInvoiceNo: input.providerInvoiceNo,
+        providerInvoiceDate: input.providerInvoiceDate,
+        grossAmountPaise,
+        discountPaise: input.discountPaise,
+        netAmountPaise,
+        remarks: input.remarks,
+        createdById: actorId,
+        postedById: actorId,
+        postedAt: new Date(),
+      },
+      select: { id: true },
+    })
+    .catch((error: unknown) => {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P2002"
+      )
+        throw new ConflictError(
+          "A bill with this provider invoice or document number already exists. Refresh before retrying.",
+        );
+      throw error;
+    });
   const claimed = await tx.jobCardServiceLine.updateMany({
     where: { id: { in: ids }, billedInServiceBillId: null },
     data: { billedInServiceBillId: bill.id },

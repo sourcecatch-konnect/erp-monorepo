@@ -59,13 +59,24 @@ Both screens use the shared 400 ms debounce hook, request cancellation, filter-d
 
 Validation passed: 127 targeted tests across job cards, service bills, vendor payments, and settlement-ledger lines; server/web type checks and lint; validators build and diff whitespace checks. New query-contract tests cover completion cutoffs, branch/provider scope, escaped parameterised search, fail-closed empty scope, signed expense, structural reconciliation issues, exact response amounts, backend pages, and unpaged summaries. These mocked query-contract tests do not execute SQL against PostgreSQL; live query/date-boundary checks remain part of step 15.
 
-### Remaining work packages after step nine
+### Create-request and provider-invoice safety - 2026-11-13
 
-There are **seven grouped steps remaining** for the currently planned module scope. This count groups related deliverables; it is not a count of individual tasks, and unresolved policy decisions in section 8 can change scope.
+Step ten adds a required UUID clientRequestId to job-card create and create-and-finalise. A transaction-scoped advisory lock serialises matching UUIDs before lookup; both routes explicitly use READ COMMITTED so a waiter sees the preceding committed request. New cards persist the UUID and a SHA-256 fingerprint covering the parsed payload, actor, and action, with canonical object-key ordering and exact bigint serialisation. A matching retry returns the original card's current record without repeating numbering, creation, stock issue, or voucher posting. A changed payload/action/actor or a card moved to another branch produces a conflict. Responses recheck the current branch before returning details. UUID uniqueness is also database-enforced, and request metadata commits or rolls back with the card and its effects.
+
+The form retains one lazily generated request UUID while mounted, including after failed/uncertain responses, and disables Save and Finalise while either is pending. It deliberately does not rotate the UUID merely because a user edits after an uncertain result: the server detects an already-committed changed request instead of creating a duplicate. A newly opened form creates a new identity; request recovery across browser reloads is not implemented. Draft editing does not require or modify the original create identity. Old clients without a valid UUID must be refreshed before creating cards.
+
+The invoice policy is one active service bill per provider, financial year derived from billDate, and case-insensitive provider invoice number after trimming surrounding SQL spaces, across branches. Punctuation and internal whitespace remain significant; invoice dates do not define this key. CANCELLED bills retain history and do not reserve the key, allowing a replacement. An exact normalised database lookup provides an early conflict without disclosing another branch's bill details. A partial functional unique index prevents concurrent duplicates, and a unique violation on bill header creation becomes a conflict while the enclosing transaction rolls back source claims and numbering.
+
+Apply `20261113010000_job_card_create_safety` before deploying the new server/client. Existing job cards retain null request metadata, with a constraint requiring both metadata fields together for new keyed rows. The migration aborts if active historical invoice duplicates exist; it never cancels, deletes or renumbers history automatically. No historical stock or voucher is reposted. Prisma generation alone does not apply this migration. Live PostgreSQL lock-wait/replay, uniqueness, rollback, and migration tests remain part of step 15.
+
+Validation passed: 138 targeted tests across job cards, service bills, vendor payments, and settlement-ledger lines; server/web type checks and lint; validators build, Prisma generation/schema validation, and diff whitespace checks. New unit tests cover UUID validation, canonical exact-value fingerprints, repeated draft/finalise requests, payload/action/actor/branch conflicts, callback failure propagation, normalised invoice lookup, early duplicate rejection, and concurrent uniqueness error handling. They do not substitute for live database race/rollback verification.
+
+### Remaining work packages after step ten
+
+There are **six grouped steps remaining** for the currently planned module scope. This count groups related deliverables; it is not a count of individual tasks, and unresolved policy decisions in section 8 can change scope.
 
 | Step | Remaining package | Completion condition |
 |---|---|---|
-| 10 | Create-request idempotency and duplicate provider-invoice controls | Repeated create/create-and-finalise requests cannot duplicate cards, stock or vouchers; agreed invoice uniqueness policy has migration and conflict handling. |
 | 11 | Settlement reversals and TDS-only settlement | Permissioned, reasoned reversals preserve audit/voucher links and update bill/slip balances safely; valid withholding-only settlements work. |
 | 12 | Remaining reconciliation and historical reporting | Stock issues/returns, provider settlement counters, orphan/reversed journals, historical posting periods, and Tally source/export state can be reconciled. |
 | 13 | Removed-part lifecycle and valuation approvals | Agreed recoverable valuation/provenance policy, approvals, repair receipts, scrap custody and disposal are implemented. |

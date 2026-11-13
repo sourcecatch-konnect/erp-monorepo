@@ -54,6 +54,11 @@ const toDatetimeLocal = (iso?: string | null) =>
 export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const createRequestId = React.useRef<string | null>(null);
+  const createIdentity = () => {
+    createRequestId.current ??= crypto.randomUUID();
+    return { clientRequestId: createRequestId.current };
+  };
   const canManage = useCan(PERMS.WORKSHOP.JOBCARD_MANAGE);
   const canFinalise = useCan(PERMS.WORKSHOP.JOBCARD_FINALISE);
 
@@ -224,7 +229,7 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
     Boolean(openingKm) && !hasIncompleteServiceLine;
 
   const save = useMutation({
-    mutationFn: () => (jobCardId ? jobCardApi.update(jobCardId, buildBody()) : jobCardApi.create(buildBody())),
+    mutationFn: () => (jobCardId ? jobCardApi.update(jobCardId, buildBody()) : jobCardApi.create({ ...buildBody(), ...createIdentity() })),
     onSuccess: (saved) => {
       toast.success(jobCardId ? "Job card saved" : `Job card created — ${saved.jobCardNumber}`);
       queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
@@ -247,7 +252,7 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
       };
       return jobCardId
         ? jobCardApi.finalise(jobCardId, finaliseBody)
-        : jobCardApi.createAndFinalise({ ...buildBody(), ...finaliseBody });
+        : jobCardApi.createAndFinalise({ ...buildBody(), ...finaliseBody, ...createIdentity() });
     },
     onSuccess: (result) => {
       toast.success("Job card finalised — parts issued and posted");
@@ -582,12 +587,12 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
               Save keeps it a draft — nothing moves yet. Finalise issues the parts above from
               stock and posts the voucher; needs Closing KM and Out date/time filled in above.
             </p>
-            <Button variant="outline" disabled={!canSave || save.isPending} onClick={() => save.mutate()}>
+            <Button variant="outline" disabled={!canSave || save.isPending || finalise.isPending} onClick={() => save.mutate()}>
               {save.isPending ? "Saving..." : "Save"}
             </Button>
             {canFinalise && (
               <Button
-                disabled={!canSave || !outDateTime || !closingKm || finalise.isPending}
+                disabled={!canSave || !outDateTime || !closingKm || finalise.isPending || save.isPending}
                 onClick={() => finalise.mutate()}
               >
                 {finalise.isPending ? "Finalising..." : "Finalise"}

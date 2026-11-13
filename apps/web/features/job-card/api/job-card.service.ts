@@ -121,6 +121,7 @@ export type SaveJobCardBody = {
 };
 
 export type CreateAndFinaliseJobCardBody = SaveJobCardBody & {
+  clientRequestId: string;
   outDateTime: string;
   closingKm: number;
 };
@@ -172,7 +173,7 @@ export const jobCardApi = {
     return unwrapApiResponse(res);
   },
 
-  create: async (body: SaveJobCardBody) => {
+  create: async (body: SaveJobCardBody & { clientRequestId: string }) => {
     const res = await api.post<ApiResponse<JobCard>>("/job-card", body);
     return unwrapApiResponse(res);
   },

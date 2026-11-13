@@ -55,6 +55,7 @@ const bill = { id: "bill", version: 1, journalEntryId: "voucher" };
 
 function fixture() {
   const tx = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
     vendorPaymentSlipLine: { findMany: vi.fn().mockResolvedValue([]) },
     jobCardServiceLine: {
       findMany: vi.fn().mockResolvedValue([line()]),
@@ -65,15 +66,13 @@ function fixture() {
       create: vi.fn().mockResolvedValue({ id: "bill" }),
       update: vi.fn().mockResolvedValue({ id: "bill" }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      findUniqueOrThrow: vi
-        .fn()
-        .mockResolvedValue({
-          id: "bill",
-          version: 1,
-          status: "POSTED",
-          netAmountPaise: 1000n,
-          paidAmountPaise: 0n,
-        }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "bill",
+        version: 1,
+        status: "POSTED",
+        netAmountPaise: 1000n,
+        paidAmountPaise: 0n,
+      }),
     },
     serviceBillLine: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
     serviceBillPayment: { count: vi.fn().mockResolvedValue(0) },
@@ -81,6 +80,72 @@ function fixture() {
   return { tx, db: tx as unknown as Prisma.TransactionClient };
 }
 beforeEach(() => vi.clearAllMocks());
+
+describe("provider invoice uniqueness", () => {
+  it("rejects active duplicate invoices before claiming services or posting", async () => {
+    const { tx, db } = fixture();
+    tx.$queryRaw.mockResolvedValueOnce([{ id: "existing-in-another-branch" }]);
+    await expect(
+      createServiceBillTx(
+        db,
+        createServiceBillSchema.parse(rawInput),
+        "HO",
+        "user",
+      ),
+    ).rejects.toThrow("already has an active bill");
+    expect(tx.jobCardServiceLine.findMany).not.toHaveBeenCalled();
+    expect(tx.jobCard.updateMany).not.toHaveBeenCalled();
+    expect(postServiceBillVoucher).not.toHaveBeenCalled();
+  });
+  it("uses exact database-normalised equality within provider/year across branches and excludes cancelled history", async () => {
+    const { tx, db } = fixture();
+    await createServiceBillTx(
+      db,
+      createServiceBillSchema.parse({
+        ...rawInput,
+        providerInvoiceNo: " inv%_1 ",
+      }),
+      "HO",
+      "user",
+    );
+    const query = tx.$queryRaw.mock.calls[0]!;
+    const sql = (query[0] as unknown as string[]).join("");
+    expect(sql).toContain('lower(btrim("providerInvoiceNo")) = lower(btrim(');
+    expect(sql).toContain("\"status\" <> 'CANCELLED'");
+    expect(sql).not.toContain('"branchId"');
+    expect(sql).not.toContain("ILIKE");
+    expect(query.slice(1)).toEqual(["provider", "26-27", "inv%_1"]);
+  });
+  it("converts a concurrent uniqueness violation into a conflict before claiming lines or posting", async () => {
+    const { tx, db } = fixture();
+    tx.serviceBill.create.mockRejectedValueOnce({ code: "P2002" });
+    await expect(
+      createServiceBillTx(
+        db,
+        createServiceBillSchema.parse(rawInput),
+        "HO",
+        "user",
+      ),
+    ).rejects.toThrow("already exists");
+    expect(tx.jobCardServiceLine.updateMany).not.toHaveBeenCalled();
+    expect(postServiceBillVoucher).not.toHaveBeenCalled();
+  });
+  it("propagates other header failures to roll back the transaction", async () => {
+    const { tx, db } = fixture();
+    tx.serviceBill.create.mockRejectedValueOnce(
+      new Error("Database unavailable"),
+    );
+    await expect(
+      createServiceBillTx(
+        db,
+        createServiceBillSchema.parse(rawInput),
+        "HO",
+        "user",
+      ),
+    ).rejects.toThrow("Database unavailable");
+    expect(postServiceBillVoucher).not.toHaveBeenCalled();
+  });
+});
 
 describe("service billing input", () => {
   it("rejects duplicate selections and oversized bills", () => {

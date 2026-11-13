@@ -33,6 +33,7 @@ export const jobCardServiceLineInputSchema = z.object({
 });
 
 export const createJobCardSchema = z.object({
+  clientRequestId: z.string().uuid(),
   branchId: id,
   vehicleId: id,
   driverId: id,
@@ -44,14 +45,16 @@ export const createJobCardSchema = z.object({
   serviceLines: z.array(jobCardServiceLineInputSchema).default([]),
 });
 
-export const updateJobCardSchema = createJobCardSchema.partial({
-  branchId: true,
-  vehicleId: true,
-  driverId: true,
-  truckStatus: true,
-  inDateTime: true,
-  openingKm: true,
-});
+export const updateJobCardSchema = createJobCardSchema
+  .omit({ clientRequestId: true })
+  .partial({
+    branchId: true,
+    vehicleId: true,
+    driverId: true,
+    truckStatus: true,
+    inDateTime: true,
+    openingKm: true,
+  });
 
 export const finaliseJobCardSchema = z.object({
   outDateTime: isoDate,
