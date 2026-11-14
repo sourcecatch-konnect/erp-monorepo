@@ -2,11 +2,12 @@
 
 Verified on 2026-11-14. Automated evidence supports steps 14–15; Finance acceptance and deployment remain step 16.
 
-- 185 targeted unit tests passed across job cards, service bills, vendor payments and settlement ledger lines.
+- 242 targeted tests across 25 files passed for job cards, service bills, vendor payments and settlement ledger lines, including 57 route-access/history checks using real authentication/permission/branch middleware with fixture identity and persistence boundaries.
 - Server/web type checks and lint, and Prisma schema validation passed.
 - [PostgreSQL evidence](job-card-database-verification.json): 20 checks passed, nine finance migrations exercised, generated schema removed, application data unchanged.
 - [Development cutover evidence](job-card-development-cutover.json): all nine finance migrations applied to the explicitly authorised Supabase development database; baseline counts and checked backfills preserved.
 - [Development report smoke evidence](job-card-development-smoke.json): eight report modes passed backend pagination, non-overlapping pages, empty-scope denial and no-match search against the migrated database. No browser or permission-middleware acceptance is implied.
+- [Permission catalog evidence](job-card-permission-catalog.json): existing boot sync added one missing permission definition; required keys present, role/user grant counts unchanged. Route middleware is covered separately by automated fixture tests; business-role and browser acceptance remain pending.
 - [Readiness evidence](job-card-db-readiness.json): PostgreSQL 17.6; no pending local migrations, required columns present, no checksum mismatches or unfinished migrations. The unrelated missing receivables migration source still requires review.
 
 The database verifier clones existing pre-finance-upgrade schema metadata and custom CHECK definitions into a uniquely named schema, then inserts synthetic fixtures. It does not copy business rows. Tests execute real transaction services, concurrent requests, rollback/retry cases and raw report SQL. The reporting fixture includes 10,000 cards/service lines. Three EXPLAIN ANALYZE/BUFFERS plans are retained in the JSON. Smaller payment/inventory fixtures are correctness checks, not production-load benchmarks.

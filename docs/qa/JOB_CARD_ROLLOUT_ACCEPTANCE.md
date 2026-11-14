@@ -20,6 +20,25 @@ Post-cutover readiness reports no pending local migrations, no checksum mismatch
 
 A custom-format public-schema/data backup was taken before migration and its archive index was read successfully with pg_restore. It is retained locally under `node_modules/.cache/job-card-backups/development-20261114-public.dump`, outside tracked files. It contains business data and Prisma history; do not attach or commit it. Archive readability is not a restore rehearsal; a tested recovery exercise is still required for production. Copy it to approved durable backup storage before cleaning dependencies or this workstation.
 
+### Final automated access checks - 2026-11-14
+
+The targeted suite now passes **242 tests across 25 files**, including 57 new route-access/history checks. Tests retain real authentication, permission and branch middleware while substituting token verification, permission-context storage and database fixtures. They verify unauthenticated/expired-session denial, permission gates on create/edit/finalise/undo/cancel/repair/removed-part/billing/payment actions, cross-branch direct-ID denial, combined audit permissions, maker-versus-approver boundaries, successful own-branch access, backend history pagination and page-batched actor resolution. The retired direct-pay endpoint remains blocked even with its old permission. These tests support U11/U12 but do not impersonate business-user acceptance or exercise the browser.
+
+The existing application boot permission-catalog sync ran on the authorised development database: one missing definition added, all required workshop/payment/ledger keys present, and role/user grant counts unchanged. See [catalog evidence](job-card-permission-catalog.json). This supersedes the earlier no-permission-changes cutover snapshot only for permission definitions; no user or role grants were expanded. The temporary execution script was removed.
+
+Browser inspection was attempted using the installed computer-use runtime. Initialisation failed with `failed to write kernel assets: The system cannot find the path specified. (os error 3)` and failed again after resetting the kernel. No browser actions were performed and no browser acceptance was claimed. Repair the runtime and execute U11/U12 with the approved test accounts.
+
+### What remains before the whole module can be signed off
+
+The planned implementation and authorised development database cutover are complete. The release package remains open for evidence that cannot be substituted by automated checks:
+
+- Recover the exact source of the already-applied receivables migration; the database checksum/history is retained, and the readiness warning remains intentional.
+- Execute browser acceptance with approved real roles after computer-use access is restored, and approve the actual role grants. No default all-powerful grants were created for testing.
+- Complete Finance/Operations acceptance of valuation, taxes, internal labour, period/backdating controls, physical custody/roadworthiness evidence and actual Tally reconciliation.
+- Rehearse backup restoration, agree and measure production-sized load targets, then approve and perform production rollout with monitoring owners.
+
+There is one release/acceptance package remaining, containing these external and environment-dependent gates. Do not report the module as production accepted until they are recorded.
+
 Production compilation checks passed for the server and web application (including all 95 statically generated web pages). These build checks do not execute authenticated browser UAT or demonstrate compatibility with the still-unmigrated application database. Targeted readiness-script lint and whitespace checks passed.
 
 ## Policy decision register

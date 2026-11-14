@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-11-14T10:06:41.036Z",
+  "environment": "CONFIGURED_SUPABASE_DEVELOPMENT",
+  "status": "PASSED",
+  "mechanism": "EXISTING_BOOT_PERMISSION_CATALOG_SYNC",
+  "catalogDefinitionsAdded": 1,
+  "missingRequiredKeys": [],
+  "roleGrantCountUnchanged": true,
+  "userGrantCountUnchanged": true,
+  "businessRoleApproval": "PENDING"
+}
