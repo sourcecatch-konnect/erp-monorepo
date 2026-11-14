@@ -51,6 +51,7 @@ import { jobCardKeys } from "./api/job-card.keys";
 import { JobCardStatusBadge } from "./jobCardStatusBadge";
 import { useRemovedParts } from "./useRemovedParts";
 import { RemovedPartActions } from "./components/RemovedPartActions";
+import { RepairControlPanel } from "./components/RepairControlPanel";
 import { TablePaginationFooter } from "@/components/data-table/TablePaginationFooter";
 
 const CONDITION_LABELS: Record<RemovedPartCondition, string> = {
@@ -576,6 +577,7 @@ export function JobCardDetailPage({ jobCardId }: { jobCardId: string }) {
         )}
       </DetailSection>
 
+      <RepairControlPanel card={jc.data} />
       <DetailSection title="Removed Parts">
         <div className="border-b p-3">
           <Input

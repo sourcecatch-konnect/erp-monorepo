@@ -12,6 +12,7 @@ import {
   jobCardAuditQuerySchema,
   createJobCardRemovedPartSchema,
   jobCardRemovedPartListQuerySchema,
+  repairControlActionSchema,
   removedPartActionSchema,
   undoFinaliseJobCardSchema,
 } from "@skerp/validators";
@@ -40,6 +41,7 @@ import { finaliseJobCardTx } from "./job-card.service.js";
 import { getJobCardRepairCosts } from "./job-card-report.service.js";
 import { getJobCardReconciliation } from "./job-card-reconciliation.service.js";
 import { createJobCardOnceTx } from "./job-card-create-request.service.js";
+import { actOnRepairTx, assertNoRepairInProgressTx, assertRepairIdentityUnchangedTx, recordCompletedRepairTx } from "./job-card-repair.service.js";
 import { getJobCardAudit } from "./job-card-audit.service.js";
 
 const router: Router = Router();
@@ -93,6 +95,7 @@ router.get(
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 const jobCardDetailInclude = {
+  repairControl: true,
   branch: { select: { id: true, name: true, branchCode: true } },
   vehicle: { select: { id: true, vehicleNumber: true } },
   driver: { select: { id: true, name: true } },
@@ -287,6 +290,10 @@ router.patch("/:id", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
       throw new ConflictError(
         "Job card changed. Refresh before editing again.",
       );
+    if (input.vehicleId || input.branchId || input.truckStatus) {
+      const current = await tx.jobCard.findUniqueOrThrow({ where: { id: existing.id }, select: { vehicleId: true, branchId: true, truckStatus: true } });
+      if ((input.vehicleId && input.vehicleId !== current.vehicleId) || (input.branchId && input.branchId !== current.branchId) || (input.truckStatus && input.truckStatus !== current.truckStatus)) await assertRepairIdentityUnchangedTx(tx, existing.id);
+    }
     if (input.partLines)
       await tx.jobCardPartLine.deleteMany({
         where: { jobCardId: existing.id },
@@ -437,6 +444,8 @@ router.post(
           partLines: createdPartLines,
           serviceLines: createdServiceLines,
         };
+
+        await recordCompletedRepairTx(tx, jobCard.id, input.repairCompletion, me, input.clientRequestId, input.inDateTime, input.outDateTime);
 
         return finaliseJobCardTx(
           tx,
@@ -634,7 +643,8 @@ router.post(
       );
     assertBranchAccess(req, existing.branchId);
 
-    const cancelled = await db.jobCard.updateMany({
+    const cancelled = await db.$transaction(async (tx) => {
+      const result = await tx.jobCard.updateMany({
       where: { id: existing.id, status: "DRAFT", version: existing.version },
       data: {
         version: { increment: 1 },
@@ -643,6 +653,9 @@ router.post(
         cancelledAt: new Date(),
         cancelReason: input.reason,
       },
+      });
+      if (result.count === 1) await assertNoRepairInProgressTx(tx, existing.id);
+      return result;
     });
     if (cancelled.count !== 1)
       throw new ConflictError("Job card changed. Refresh before cancelling.");
@@ -762,4 +775,25 @@ router.post(
     sendOk(res, result, undefined, 201);
   },
 );
+router.post("/:id/repair-control", (req, res, next) => can(req.body?.action === "START" ? PERMS.WORKSHOP.JOBCARD_MANAGE : PERMS.WORKSHOP.JOBCARD_FINALISE)(req, res, next), async (req, res) => {
+  const input = repairControlActionSchema.parse(req.body);
+  const id = getParamId(req);
+  const card = await db.jobCard.findUnique({ where: { id }, select: { branchId: true } });
+  if (!card) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, card.branchId);
+  await db.$transaction((tx) => actOnRepairTx(tx, id, card.branchId, input, actorId(req)), { isolationLevel: "ReadCommitted", timeout: 15000 });
+  sendOk(res, await db.jobCard.findUnique({ where: { id }, include: jobCardDetailInclude }));
+});
+router.get("/:id/repair-events", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
+  const id = getParamId(req);
+  const card = await db.jobCard.findUnique({ where: { id }, select: { branchId: true } });
+  if (!card) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, card.branchId);
+  const query = jobCardRemovedPartListQuerySchema.parse(req.query);
+  const where = { jobCardId: id, ...(query.search ? { OR: [{ action: { contains: query.search, mode: "insensitive" as const } }, { actorId: { contains: query.search, mode: "insensitive" as const } }] } : {}) };
+  const [rows, total] = await Promise.all([db.jobCardRepairEvent.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: query.page * query.size, take: query.size }), db.jobCardRepairEvent.count({ where })]);
+  const actors = await db.user.findMany({ where: { id: { in: [...new Set(rows.map((row) => row.actorId))] } }, select: { id: true, firstName: true, lastName: true } });
+  const names = new Map(actors.map((actor) => [actor.id, `${actor.firstName} ${actor.lastName}`.trim()]));
+  sendOk(res, rows.map((row) => ({ ...row, actorName: names.get(row.actorId) })), { page: query.page, size: query.size, total });
+});
 export default router;

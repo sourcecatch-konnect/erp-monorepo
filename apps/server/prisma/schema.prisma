@@ -592,6 +592,7 @@ model UserNotificationSubscription {
 }
 
 model Vehicle {
+  maintenanceHold Boolean @default(false)
   id                 String        @id @default(cuid())
   vehicleNumber      String        @unique
   createdAt          DateTime      @default(now())
@@ -1486,6 +1487,9 @@ enum StockMovementType {
 /// voucher; external/sublet services are recorded here but billed later by
 /// a separate Service Bill (they carry no ledger entry of their own yet).
 model JobCard {
+  repairControlRequired Boolean @default(true)
+  repairControl JobCardRepairControl?
+  repairEvents JobCardRepairEvent[]
   clientRequestId String? @unique
   requestFingerprint String?
   id            String              @id @default(cuid())
@@ -1538,6 +1542,35 @@ model JobCard {
   @@index([fyCode])
   @@index([createdById])
   @@index([finalisedById])
+}
+
+model JobCardRepairControl {
+  jobCardId String @id
+  status String
+  version Int @default(1)
+  maintenanceReason String
+  replacementIntent String
+  inspection Json
+  release Json?
+  startedAt DateTime @default(now())
+  startedById String
+  clearedAt DateTime?
+  clearedById String?
+  jobCard JobCard @relation(fields: [jobCardId], references: [id], onDelete: Restrict)
+  @@index([status, jobCardId])
+}
+
+model JobCardRepairEvent {
+  id String @id @default(cuid())
+  jobCardId String
+  clientRequestId String @unique
+  requestFingerprint String
+  action String
+  actorId String
+  details Json
+  createdAt DateTime @default(now())
+  jobCard JobCard @relation(fields: [jobCardId], references: [id], onDelete: Restrict)
+  @@index([jobCardId, createdAt, id])
 }
 
 model JobCardPartLine {

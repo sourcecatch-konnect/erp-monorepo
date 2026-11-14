@@ -112,14 +112,30 @@ Live PostgreSQL migration, concurrent action/rollback tests, permissions-role UA
 
 Validation passed: 174 targeted tests across job cards, service bills, vendor payments and settlement-ledger lines; server/web type checks and lint; shared types/validators builds, Prisma generation/schema validation, and diff whitespace checks. New tests verify pending reusable logging has no stock/GL effects, independent reviewers, approval values, action replay/payload conflicts, custody transition rules, repair-receipt gates, stale parent/record claims, duplicate-post guards, and propagation of stock/posting errors. These are mocked service/query tests; live database rollback/concurrency and physical evidence acceptance remain outstanding.
 
-### Remaining work packages after step thirteen
+### Repair clearance and database verification - 2026-11-14
 
-There are **three grouped steps remaining** for the currently planned module scope. This count groups related deliverables; it is not a count of individual tasks, and unresolved policy decisions in section 8 can change scope.
+Step fourteen adds inspection and replacement intent, explicit repair start, roadworthy clearance, and append-only repair history. Saving a planning draft creates no vehicle hold. Starting repair sets a separate maintenance hold; release or cancellation requires a clearance checklist. Vehicle-row locks coordinate concurrent repairs and dispatch: the hold remains until every active repair is cleared. In-transit repairs preserve the active trip and ON_TRIP status. Dispatch paths reject held vehicles without changing their trip state.
+
+Inspection records brakes, steering, tyres, lights and leaks, with evidence reference and notes for attention items. Release requires passing/not-applicable checks, evidence and roadworthy confirmation. Start requires job-card manage permission; release/cancel requires finalise permission. Branch scope, expected versions and fingerprinted UUID retries apply on the server. Repair history uses bounded backend pages and the shared 400 ms debounce hook; actors are resolved for the requested page only.
+
+New cards require repair clearance before financial finalisation. Create-and-finalise requires completed inspection/clearance snapshots and does not clear another card's hold. Existing cards retain legacy eligibility without invented inspections or holds; review active legacy drafts and explicitly start their real repairs during rollout. After repair starts or is released, vehicle/branch/repair-mode changes are blocked unless that repair control was cancelled. Financial undo does not reopen physical repair; explicitly start again when actual work resumes. Completion checks use minute precision to match the form, and local datetime fields now preserve the browser timezone.
+
+Apply `20261113040000_job_card_repair_controls` with the preceding finance migrations before deploying these changes. Old clients must refresh for the new completion contract. No separate Docker image or service is added; the existing `erp-redis` container was checked with PING/PONG.
+
+Step fifteen executed all nine pending finance migrations against an isolated schema on the existing PostgreSQL 17.6 connection, using cloned schema metadata and synthetic records only. All **20 database checks passed**: backfill/duplicate-history guards, exact discount allocation, create replay, concurrent stock issues and invoice claims, posting rollback, return approval replay, cash/TDS reversals and over-settlement, concurrent repair holds, branch isolation, backend pagination, India end-day cutoffs and every ageing boundary. The generated test schema was removed; application data and deployed migration state were unchanged.
+
+The report queries ran against 10,000 synthetic cards/service lines with EXPLAIN ANALYZE/BUFFERS evidence for repair cost, unbilled services and settlement audit. This establishes a measured synthetic baseline, not production-volume performance certification. The live application still has **nine pending finance migrations**. Production-size tuning, browser/role acceptance, physical custody evidence, actual Tally reconciliation and Finance policy approval remain rollout work. See [verification runbook](qa/JOB_CARD_VERIFICATION.md), [database evidence](qa/job-card-database-verification.json) and [read-only readiness evidence](qa/job-card-db-readiness.json).
+
+Validation: 185 targeted unit tests, server/web type checks and lint, and Prisma schema validation. Earlier progress sections retain the limitations recorded when those slices were implemented; this section records the subsequent live PostgreSQL verification.
+
+### Remaining work packages after step fifteen
+
+Step sixteen preparation - 2026-11-14: added the [operating guide](JOB_CARD_OPERATING_GUIDE.md) and [rollout/acceptance pack](qa/JOB_CARD_ROLLOUT_ACCEPTANCE.md), covering policy owners, 16 role-based UAT scenarios, migration/backup/recovery sequence and explicit sign-off records. Read-only live preflight found zero active duplicate invoice groups and zero inconsistent bill-total groups, two draft cards requiring operational review, and one cancelled bill without retained lines requiring historical reconciliation. No application data, permissions or migration state changed. Business UAT, policy decisions and deployment remain pending; preparation is not Finance acceptance.
+
+There is **one grouped step remaining** for the currently planned module scope. Unresolved policy decisions in section 8 can change scope.
 
 | Step | Remaining package | Completion condition |
 |---|---|---|
-| 14 | Checklist and vehicle lifecycle integration | Agreed repair checklist/replacement intent and availability transitions coordinate safely with active trips and concurrent jobs. |
-| 15 | Live database and performance verification | Migration/backfill, rollback/concurrency, calendar-boundary queries, representative-volume query plans and indexing are verified in PostgreSQL. |
 | 16 | Finance UAT, policy sign-off and rollout | Remaining tax/internal-labour/valuation/period decisions are signed off, end-to-end scenarios reconcile, user guidance is updated, and deployment/migration checks are completed. |
 
 ## 1. Purpose and scope

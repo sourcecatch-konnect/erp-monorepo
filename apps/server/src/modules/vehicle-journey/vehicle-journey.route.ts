@@ -1,3 +1,4 @@
+import { assertVehicleDispatchableTx } from "../job-card/job-card-repair.service.js";
 import { Router } from "express";
 import {
   startJourneySchema,
@@ -272,6 +273,7 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
         id: true,
         vehicleNumber: true,
         status: true,
+        maintenanceHold: true,
         insuranceDueDate: true,
         journeys: {
           where: {
@@ -318,7 +320,7 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
     const lastTrip = journey?.trips[0] ?? null;
     const openTrip = vehicle.VehicleTrip[0] ?? null;
 
-    const selectionState =
+    const selectionState = vehicle.maintenanceHold ? ("UNAVAILABLE" as const) :
       journey && lastTrip?.status === "Closed"
         ? ("READY_FOR_NEXT_TRIP" as const)
         : journey && lastTrip?.status === "Planned"
@@ -340,6 +342,7 @@ router.get("/trip-vehicle-options", can(PERMS.TRIP.VIEW), async (req, res) => {
     return {
       id: vehicle.id,
       vehicleNumber: vehicle.vehicleNumber,
+      maintenanceHold: vehicle.maintenanceHold,
       status: vehicle.status,
       selectionState,
       selectable:
@@ -797,6 +800,8 @@ router.post("/", can(PERMS.VEHICLE_JOURNEY.CREATE), async (req, res) => {
       select: { id: true },
     });
 
+    await assertVehicleDispatchableTx(tx, data.vehicleId);
+
     await tx.vehicle.update({
       where: { id: data.vehicleId },
       data: { status: "ON_TRIP" },
@@ -1001,6 +1006,7 @@ router.post(
         data: { updatedById: me, version: { increment: 1 } },
       });
       if (bornInTransit) {
+        await assertVehicleDispatchableTx(tx, journey.vehicleId);
         await tx.vehicle.update({
           where: { id: journey.vehicleId },
           data: { status: "ON_TRIP" },
@@ -1041,6 +1047,7 @@ router.post(
       where: { id: tripId, journeyId: id, deletedAt: null },
       select: {
         id: true,
+        vehicleId: true,
         status: true,
         sequenceNo: true,
         driver: { select: { name: true, licenseExpiryDate: true } },
@@ -1085,6 +1092,7 @@ router.post(
     }
 
     const updated = await db.$transaction(async (tx) => {
+      await assertVehicleDispatchableTx(tx, trip.vehicleId);
       const row = await tx.vehicleTrip.update({
         where: { id: tripId },
         data: {

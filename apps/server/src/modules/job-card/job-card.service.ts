@@ -1,6 +1,7 @@
 import type { Prisma } from "../../../generated/prisma/index.js";
 import { BadRequestError, ConflictError } from "../../lib/error.js";
 import { postJobCardPartsVoucher } from "../ledger/posting.service.js";
+import { assertRepairClearanceTx } from "./job-card-repair.service.js";
 
 export type FinaliseInput = { outDateTime: Date; closingKm: number };
 export type FinaliseJobCard = {
@@ -46,6 +47,7 @@ export async function finaliseJobCardTx(
     throw new ConflictError(
       "Job card changed. Refresh before finalising again.",
     );
+  await assertRepairClearanceTx(tx, existing.id, input.outDateTime);
 
   const batchDemand = new Map<string, number>();
   const linesByPart = new Map<string, FinaliseJobCard["partLines"]>();

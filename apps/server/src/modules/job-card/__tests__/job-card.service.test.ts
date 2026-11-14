@@ -39,6 +39,7 @@ function fixture(stock = 5) {
   };
   const tx = {
     jobCard: {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ repairControlRequired: false, repairControl: null }),
       updateMany: vi
         .fn()
         .mockImplementation(

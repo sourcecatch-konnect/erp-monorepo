@@ -1,5 +1,38 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
+import type { z } from "zod";
+import type {
+  completedRepairSchema,
+  repairControlActionSchema,
+} from "@skerp/validators";
+export type CompletedRepair = z.infer<typeof completedRepairSchema>;
+export type RepairControlAction = z.infer<typeof repairControlActionSchema>;
+export type RepairControl = {
+  status: string;
+  version: number;
+  maintenanceReason: string;
+  replacementIntent: string;
+  inspection: CompletedRepair["inspection"];
+  release: CompletedRepair["release"] | null;
+  startedAt: string;
+  clearedAt: string | null;
+  startedById: string;
+  clearedById: string | null;
+};
+export type RepairEvent = {
+  id: string;
+  action: string;
+  actorId: string;
+  actorName?: string;
+  createdAt: string;
+  details: {
+    reason?: string;
+    maintenanceReason?: string;
+    replacementIntent?: string;
+    inspection?: CompletedRepair["inspection"];
+    release?: CompletedRepair["release"];
+  };
+};
 import {
   unwrapApiResponse,
   unwrapListResponse,
@@ -70,6 +103,8 @@ export type JobCardServiceLine = {
 };
 
 export type JobCard = {
+  repairControlRequired: boolean;
+  repairControl: RepairControl | null;
   id: string;
   jobCardNumber: string | null;
   fyCode: string;
@@ -159,6 +194,7 @@ export type SaveJobCardBody = {
 };
 
 export type CreateAndFinaliseJobCardBody = SaveJobCardBody & {
+  repairCompletion: CompletedRepair;
   clientRequestId: string;
   outDateTime: string;
   closingKm: number;
@@ -188,6 +224,24 @@ export type JobCardListItem = Pick<
 >;
 
 export const jobCardApi = {
+  repairAction: async (id: string, body: RepairControlAction) => {
+    const response = await api.post<ApiResponse<JobCard>>(
+      `/job-card/${id}/repair-control`,
+      body,
+    );
+    return unwrapApiResponse(response);
+  },
+  repairEvents: async (
+    id: string,
+    params: { page: number; size: number; search?: string },
+    signal?: AbortSignal,
+  ) => {
+    const response = await api.get<ApiResponse<RepairEvent[]>>(
+      `/job-card/${id}/repair-events`,
+      { params, signal },
+    );
+    return unwrapListResponse(response);
+  },
   removedPartAction: async (
     jobCardId: string,
     id: string,
