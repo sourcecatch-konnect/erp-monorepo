@@ -53,6 +53,8 @@ describe("buildSlipListWhere", () => {
       { slipNumber: { contains: "speedy", mode: "insensitive" } },
       { transport: { name: { contains: "speedy", mode: "insensitive" } } },
       { labour: { name: { contains: "speedy", mode: "insensitive" } } },
+      { serviceBill: { serviceProvider: { name: { contains: "speedy", mode: "insensitive" } } } },
+      { serviceBill: { serviceBillNumber: { contains: "speedy", mode: "insensitive" } } },
     ]);
   });
 

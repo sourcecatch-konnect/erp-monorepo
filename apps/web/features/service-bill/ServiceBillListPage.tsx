@@ -9,7 +9,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconPlus, IconFileInvoice, IconEye, IconCash } from "@tabler/icons-react";
+import {
+  IconPlus,
+  IconFileInvoice,
+  IconEye,
+  IconCash,
+} from "@tabler/icons-react";
 import { PERMS } from "@skerp/types";
 import { Button } from "@skerp/ui/components/button";
 import { Input } from "@skerp/ui/components/input";
@@ -42,10 +47,12 @@ import { StatusTabs, TablePaginationFooter } from "@/components/data-table";
 import {
   serviceBillApi,
   LOOKUP_PAGE_SIZE,
-  type ServiceBill,
+  type ServiceBillSummary,
   type ServiceBillStatus,
 } from "./api/service-bill.service";
 import { serviceBillKeys } from "./api/service-bill.keys";
+import { jobCardKeys } from "@/features/job-card/api/job-card.keys";
+import { useUnbilledServices } from "./useUnbilledServices";
 import { ServiceBillStatusBadge } from "./serviceBillStatusBadge";
 import { PayServiceBillDialog } from "./PayServiceBillDialog";
 
@@ -58,14 +65,15 @@ const STATUS_TABS = [
   { key: "CANCELLED", label: "Cancelled" },
 ] as const;
 
-
 export function ServiceBillListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const canManage = useCan(PERMS.WORKSHOP.SERVICEBILL_MANAGE);
-  const canPay = useCan(PERMS.WORKSHOP.SERVICEBILL_PAY);
+  const canPay = useCan(PERMS.ACCOUNTS.PAYMENT.CREATE);
 
-  const [payTarget, setPayTarget] = React.useState<ServiceBill | null>(null);
+  const [payTarget, setPayTarget] = React.useState<ServiceBillSummary | null>(
+    null,
+  );
   const [createOpen, setCreateOpen] = React.useState(false);
   const [branchId, setBranchId] = React.useState("");
   const [serviceProviderId, setServiceProviderId] = React.useState("");
@@ -75,39 +83,62 @@ export function ServiceBillListPage() {
   const [providerInvoiceDate, setProviderInvoiceDate] = React.useState("");
   const [discount, setDiscount] = React.useState("");
   const [remarks, setRemarks] = React.useState("");
-  const [selectedLineIds, setSelectedLineIds] = React.useState<Set<string>>(new Set());
   const [providerSearch, setProviderSearch] = React.useState("");
   const debouncedProviderSearch = useDebouncedValue(providerSearch, 300);
 
   const [voucherOpen, setVoucherOpen] = React.useState(false);
   const [voucherId, setVoucherId] = React.useState<string | null>(null);
 
-  const [page, setPage] = React.useState(0);
+  const [pagination, setPagination] = React.useState({ key: "", page: 0 });
   const [size, setSize] = React.useState(10);
+  const [search, setSearch] = React.useState("");
+  const debouncedSearch = useDebouncedValue(search.trim(), 400);
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
   const [providerFilterId, setProviderFilterId] = React.useState("");
   const [providerFilterSearch, setProviderFilterSearch] = React.useState("");
-  const debouncedProviderFilterSearch = useDebouncedValue(providerFilterSearch, 300);
+  const debouncedProviderFilterSearch = useDebouncedValue(
+    providerFilterSearch,
+    300,
+  );
+  const filterKey = JSON.stringify([
+    size,
+    statusFilter,
+    providerFilterId,
+    debouncedSearch,
+  ]);
+  const page = pagination.key === filterKey ? pagination.page : 0;
+  if (pagination.key !== filterKey) setPagination({ key: filterKey, page: 0 });
+  const setPage = (next: number) =>
+    setPagination({ key: filterKey, page: next });
 
   const listQuery = React.useMemo(
     () => ({
       page,
       size,
-      status: statusFilter === "ALL" ? undefined : (statusFilter as ServiceBillStatus),
+      search: debouncedSearch || undefined,
+      status:
+        statusFilter === "ALL"
+          ? undefined
+          : (statusFilter as ServiceBillStatus),
       serviceProviderId: providerFilterId || undefined,
     }),
-    [page, size, statusFilter, providerFilterId],
+    [page, size, statusFilter, providerFilterId, debouncedSearch],
   );
 
   const list = useQuery({
     queryKey: serviceBillKeys.list(listQuery),
-    queryFn: () => serviceBillApi.list(listQuery),
+    queryFn: ({ signal }) => serviceBillApi.list(listQuery, signal),
   });
 
   // Independent of the create form's own provider picker — powers the
   // filter bar and stays available even while that dialog is closed.
   const providerFilterOptions = useInfiniteQuery({
-    queryKey: ["service-bill", "service-providers", "filter", debouncedProviderFilterSearch],
+    queryKey: [
+      "service-bill",
+      "service-providers",
+      "filter",
+      debouncedProviderFilterSearch,
+    ],
     queryFn: ({ pageParam = 0 }) =>
       serviceBillApi.serviceProviders({
         page: pageParam,
@@ -118,8 +149,11 @@ export function ServiceBillListPage() {
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.flatMap((page) => page.data).length;
       const total = lastPage.meta?.total;
-      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
-      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+      if (typeof total === "number")
+        return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE
+        ? allPages.length
+        : undefined;
     },
   });
   const providerFilterList = React.useMemo(
@@ -134,7 +168,8 @@ export function ServiceBillListPage() {
     staleTime: Infinity,
   });
   React.useEffect(() => {
-    if (headOfficeBranch.data && !branchId) setBranchId(headOfficeBranch.data.id);
+    if (headOfficeBranch.data && !branchId)
+      setBranchId(headOfficeBranch.data.id);
   }, [headOfficeBranch.data, branchId]);
   const providers = useInfiniteQuery({
     queryKey: serviceBillKeys.serviceProviders(debouncedProviderSearch),
@@ -148,8 +183,11 @@ export function ServiceBillListPage() {
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.flatMap((page) => page.data).length;
       const total = lastPage.meta?.total;
-      if (typeof total === "number") return loaded < total ? allPages.length : undefined;
-      return lastPage.data.length === LOOKUP_PAGE_SIZE ? allPages.length : undefined;
+      if (typeof total === "number")
+        return loaded < total ? allPages.length : undefined;
+      return lastPage.data.length === LOOKUP_PAGE_SIZE
+        ? allPages.length
+        : undefined;
     },
     enabled: createOpen,
   });
@@ -157,11 +195,16 @@ export function ServiceBillListPage() {
     () => providers.data?.pages.flatMap((page) => page.data) ?? [],
     [providers.data],
   );
-  const unbilled = useQuery({
-    queryKey: serviceBillKeys.unbilledLines(serviceProviderId, uptoDate),
-    queryFn: () => serviceBillApi.unbilledLines(serviceProviderId, uptoDate),
-    enabled: Boolean(serviceProviderId),
-  });
+  const {
+    query: unbilled,
+    search: lineSearch,
+    setSearch: setLineSearch,
+    page: linePage,
+    setPage: setLinePage,
+    selectedLines,
+    clearSelection,
+    toggleLine,
+  } = useUnbilledServices(serviceProviderId, branchId, uptoDate, createOpen);
   const voucher = useQuery({
     queryKey: ["ledger", "voucher", voucherId],
     queryFn: () => ledgerApi.voucher(voucherId!),
@@ -178,26 +221,23 @@ export function ServiceBillListPage() {
     setProviderInvoiceDate("");
     setDiscount("");
     setRemarks("");
-    setSelectedLineIds(new Set());
+    clearSelection();
   };
 
-  const toggleLine = (id: string) =>
-    setSelectedLineIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const grossPaise = (unbilled.data ?? [])
-    .filter((l) => selectedLineIds.has(l.id))
-    .reduce((sum, l) => sum + Number(l.amountPaise), 0);
+  const grossPaise = Array.from(selectedLines.values()).reduce(
+    (sum, line) => sum + Number(line.amountPaise),
+    0,
+  );
   const discountPaise = rupeesToPaise(Number(discount) || 0);
   const netPaise = grossPaise - discountPaise;
 
   const canSubmit =
-    Boolean(branchId) && Boolean(serviceProviderId) && Boolean(billDate) &&
-    Boolean(providerInvoiceNo.trim()) && selectedLineIds.size > 0 && discountPaise <= grossPaise;
+    Boolean(branchId) &&
+    Boolean(serviceProviderId) &&
+    Boolean(billDate) &&
+    Boolean(providerInvoiceNo.trim()) &&
+    selectedLines.size > 0 &&
+    discountPaise <= grossPaise;
 
   const create = useMutation({
     mutationFn: () =>
@@ -209,11 +249,12 @@ export function ServiceBillListPage() {
         providerInvoiceDate: providerInvoiceDate || undefined,
         discountPaise: discountPaise || undefined,
         remarks: remarks.trim() || undefined,
-        jobCardServiceLineIds: Array.from(selectedLineIds),
+        jobCardServiceLineIds: Array.from(selectedLines.keys()),
       }),
     onSuccess: (bill) => {
       toast.success(`Service Bill posted — ${bill.serviceBillNumber}`);
       queryClient.invalidateQueries({ queryKey: serviceBillKeys.all });
+      queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
       setCreateOpen(false);
       resetForm();
       if (bill.journalEntry) {
@@ -221,7 +262,10 @@ export function ServiceBillListPage() {
         setVoucherOpen(true);
       }
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not post bill"),
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Could not post bill",
+      ),
   });
 
   return (
@@ -230,8 +274,8 @@ export function ServiceBillListPage() {
         <div>
           <h1 className="text-lg font-semibold">Service Bills</h1>
           <p className="text-sm text-muted-foreground">
-            Bills a provider&apos;s completed, not-yet-billed Job Card services in one batch —
-            the only place their cost posts to accounts.
+            Bills a provider&apos;s completed, not-yet-billed Job Card services
+            in one batch — the only place their cost posts to accounts.
           </p>
         </div>
         {canManage && (
@@ -264,11 +308,18 @@ export function ServiceBillListPage() {
               onSearchChange={setProviderFilterSearch}
               placeholder="Filter by provider..."
               searchPlaceholder="Type to search..."
-              emptyText={providerFilterOptions.isLoading ? "Loading providers..." : "No providers found"}
+              emptyText={
+                providerFilterOptions.isLoading
+                  ? "Loading providers..."
+                  : "No providers found"
+              }
               hasMore={Boolean(providerFilterOptions.hasNextPage)}
               isLoadingMore={providerFilterOptions.isFetchingNextPage}
               onScrollEnd={() => {
-                if (providerFilterOptions.hasNextPage && !providerFilterOptions.isFetchingNextPage) {
+                if (
+                  providerFilterOptions.hasNextPage &&
+                  !providerFilterOptions.isFetchingNextPage
+                ) {
                   providerFilterOptions.fetchNextPage();
                 }
               }}
@@ -291,6 +342,16 @@ export function ServiceBillListPage() {
         </div>
       </div>
 
+      <Input
+        aria-label="Search service bills"
+        placeholder="Search bill, invoice or provider..."
+        value={search}
+        maxLength={200}
+        onChange={(event) => {
+          setSearch(event.target.value);
+        }}
+        className="max-w-sm"
+      />
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -318,22 +379,32 @@ export function ServiceBillListPage() {
               ))}
             {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={8}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
                   No service bills yet.
                 </TableCell>
               </TableRow>
             )}
             {list.data?.data.map((bill) => {
-              const pending = Number(bill.netAmountPaise) - Number(bill.paidAmountPaise);
+              const pending =
+                Number(bill.netAmountPaise) - Number(bill.paidAmountPaise);
               return (
                 <TableRow
                   key={bill.id}
                   className="cursor-pointer"
-                  onClick={() => router.push(`/workshop/service-bills/${bill.id}`)}
+                  onClick={() =>
+                    router.push(`/workshop/service-bills/${bill.id}`)
+                  }
                 >
-                  <TableCell className="font-medium text-primary hover:underline">{bill.serviceBillNumber ?? "—"}</TableCell>
+                  <TableCell className="font-medium text-primary hover:underline">
+                    {bill.serviceBillNumber ?? "—"}
+                  </TableCell>
                   <TableCell>{bill.serviceProvider.name}</TableCell>
-                  <TableCell>{new Date(bill.billDate).toLocaleDateString("en-IN")}</TableCell>
+                  <TableCell>
+                    {new Date(bill.billDate).toLocaleDateString("en-IN")}
+                  </TableCell>
                   <TableCell>
                     <ServiceBillStatusBadge status={bill.status} />
                   </TableCell>
@@ -343,7 +414,9 @@ export function ServiceBillListPage() {
                   <TableCell className="text-right tabular-nums">
                     {formatPaise(bill.paidAmountPaise)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatPaise(pending)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPaise(pending)}
+                  </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1.5">
                       {bill.journalEntry && (
@@ -392,11 +465,20 @@ export function ServiceBillListPage() {
           page={page}
           size={size}
           onPageChange={setPage}
-          onSizeChange={(next) => { setSize(next); setPage(0); }}
+          onSizeChange={(next) => {
+            setSize(next);
+            setPage(0);
+          }}
         />
       </div>
 
-      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) resetForm();
+        }}
+      >
         <DialogContent className="w-[95vw] sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>New Service Bill</DialogTitle>
@@ -415,82 +497,163 @@ export function ServiceBillListPage() {
               <Combobox
                 options={providerOptions}
                 value={serviceProviderId}
-                onChange={(v) => { setServiceProviderId(v); setSelectedLineIds(new Set()); }}
+                onChange={(v) => {
+                  setServiceProviderId(v);
+                  clearSelection();
+                }}
                 searchValue={providerSearch}
                 onSearchChange={setProviderSearch}
                 placeholder="Search provider..."
                 searchPlaceholder="Type to search..."
-                emptyText={providers.isLoading ? "Loading providers..." : "No providers found"}
+                emptyText={
+                  providers.isLoading
+                    ? "Loading providers..."
+                    : "No providers found"
+                }
                 hasMore={Boolean(providers.hasNextPage)}
                 isLoadingMore={providers.isFetchingNextPage}
                 onScrollEnd={() => {
-                  if (providers.hasNextPage && !providers.isFetchingNextPage) providers.fetchNextPage();
+                  if (providers.hasNextPage && !providers.isFetchingNextPage)
+                    providers.fetchNextPage();
                 }}
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Up to date</label>
-              <Input type="date" value={uptoDate} onChange={(e) => setUptoDate(e.target.value)} />
+              <Input
+                type="date"
+                value={uptoDate}
+                onChange={(e) => setUptoDate(e.target.value)}
+              />
             </div>
           </div>
 
           {serviceProviderId && (
             <div className="rounded-md border">
+              <Input
+                aria-label="Search unbilled services"
+                placeholder="Search job card or service..."
+                value={lineSearch}
+                maxLength={200}
+                onChange={(event) => setLineSearch(event.target.value)}
+              />
               <div className="border-b bg-muted/30 px-3 py-2 text-sm font-semibold">
-                Completed, unbilled services {unbilled.isLoading && <span className="text-muted-foreground">(loading...)</span>}
+                Completed, unbilled services{" "}
+                {unbilled.isLoading && (
+                  <span className="text-muted-foreground">(loading...)</span>
+                )}
               </div>
               <div className="max-h-64 divide-y overflow-y-auto">
-                {unbilled.data?.map((line) => (
-                  <label key={line.id} className="flex items-center gap-3 p-2.5 text-sm hover:bg-muted/30">
+                {unbilled.data?.data.map((line) => (
+                  <label
+                    key={line.id}
+                    className="flex items-center gap-3 p-2.5 text-sm hover:bg-muted/30"
+                  >
                     <Checkbox
-                      checked={selectedLineIds.has(line.id)}
-                      onCheckedChange={() => toggleLine(line.id)}
+                      checked={selectedLines.has(line.id)}
+                      onCheckedChange={() => toggleLine(line)}
                     />
                     <span className="flex-1">
                       {line.jobCard.jobCardNumber} — {line.sparePart.name}
-                      {line.description && <span className="text-muted-foreground"> ({line.description})</span>}
+                      {line.description && (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          ({line.description})
+                        </span>
+                      )}
                     </span>
-                    <span className="tabular-nums">{formatPaise(line.amountPaise)}</span>
+                    <span className="tabular-nums">
+                      {formatPaise(line.amountPaise)}
+                    </span>
                   </label>
                 ))}
-                {unbilled.data?.length === 0 && !unbilled.isLoading && (
+                {unbilled.data?.data.length === 0 && !unbilled.isLoading && (
                   <div className="p-4 text-center text-sm text-muted-foreground">
                     No unbilled services for this provider up to this date.
                   </div>
                 )}
               </div>
+              {unbilled.isError && (
+                <p role="alert" className="p-3 text-sm text-destructive">
+                  Could not load services.{" "}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void unbilled.refetch()}
+                  >
+                    Retry
+                  </Button>
+                </p>
+              )}
+              {unbilled.data && (
+                <TablePaginationFooter
+                  total={unbilled.data.meta?.total ?? 0}
+                  page={linePage}
+                  size={20}
+                  onPageChange={setLinePage}
+                />
+              )}
+              <p className="p-2 text-xs text-muted-foreground">
+                {selectedLines.size} selected across pages (maximum 500).
+              </p>
             </div>
           )}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Bill date</label>
-              <Input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Provider&apos;s bill no.</label>
-              <Input value={providerInvoiceNo} onChange={(e) => setProviderInvoiceNo(e.target.value)} />
+              <Input
+                type="date"
+                value={billDate}
+                onChange={(e) => setBillDate(e.target.value)}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
-                Discount (₹) <span className="text-muted-foreground">(optional)</span>
+                Provider&apos;s bill no.
               </label>
-              <Input inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+              <Input
+                value={providerInvoiceNo}
+                onChange={(e) => setProviderInvoiceNo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                Discount (₹){" "}
+                <span className="text-muted-foreground">(optional)</span>
+              </label>
+              <Input
+                inputMode="decimal"
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+              />
             </div>
             <div className="space-y-1.5 sm:col-span-3">
               <label className="text-sm font-medium">
-                Remarks <span className="text-muted-foreground">(optional)</span>
+                Remarks{" "}
+                <span className="text-muted-foreground">(optional)</span>
               </label>
-              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} className="resize-none" />
+              <Textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                rows={2}
+                className="resize-none"
+              />
             </div>
           </div>
 
           <div className="flex items-center justify-end gap-6 rounded-md border bg-muted/20 px-4 py-2.5 text-sm">
             <span>
-              Gross <span className="font-semibold tabular-nums">{formatPaise(grossPaise)}</span>
+              Gross{" "}
+              <span className="font-semibold tabular-nums">
+                {formatPaise(grossPaise)}
+              </span>
             </span>
             <span>
-              Net <span className="font-semibold tabular-nums">{formatPaise(netPaise)}</span>
+              Net{" "}
+              <span className="font-semibold tabular-nums">
+                {formatPaise(netPaise)}
+              </span>
             </span>
           </div>
 
@@ -498,7 +661,10 @@ export function ServiceBillListPage() {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={!canSubmit || create.isPending} onClick={() => create.mutate()}>
+            <Button
+              disabled={!canSubmit || create.isPending}
+              onClick={() => create.mutate()}
+            >
               {create.isPending ? "Posting..." : "Post Service Bill"}
             </Button>
           </DialogFooter>
@@ -526,7 +692,9 @@ export function ServiceBillListPage() {
         voucher={voucher.data}
         isLoading={voucher.isLoading}
         isError={voucher.isError}
-        errorMessage={voucher.error instanceof Error ? voucher.error.message : undefined}
+        errorMessage={
+          voucher.error instanceof Error ? voucher.error.message : undefined
+        }
       />
     </div>
   );

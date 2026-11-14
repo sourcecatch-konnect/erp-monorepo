@@ -109,6 +109,16 @@ export async function resolveLineSources(
   ]);
 
   const sources = new Map<string, LineSource>();
+  const billIds = idsOf(lines, "SERVICE_BILL");
+  if (billIds.length) {
+    const bills = await client.serviceBill.findMany({
+      where: { id: { in: billIds } }, select: { id: true, serviceBillNumber: true, providerInvoiceNo: true },
+    });
+    for (const bill of bills) sources.set(bill.id, {
+      label: `${bill.serviceBillNumber ?? "Service bill"} - invoice ${bill.providerInvoiceNo}`,
+      vehicleNumber: null, lrs: [],
+    });
+  }
   for (const row of trucks) {
     const truck = toTruck(row);
     sources.set(row.id, {

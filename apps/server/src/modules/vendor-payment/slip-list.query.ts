@@ -30,6 +30,8 @@ export const buildSlipListWhere = (
             { slipNumber: { contains: search, mode: "insensitive" } },
             { transport: { name: { contains: search, mode: "insensitive" } } },
             { labour: { name: { contains: search, mode: "insensitive" } } },
+            { serviceBill: { serviceProvider: { name: { contains: search, mode: "insensitive" } } } },
+            { serviceBill: { serviceBillNumber: { contains: search, mode: "insensitive" } } },
           ],
         }
       : {}),

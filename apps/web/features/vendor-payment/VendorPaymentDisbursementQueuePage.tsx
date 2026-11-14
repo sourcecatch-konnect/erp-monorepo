@@ -116,7 +116,7 @@ export function VendorPaymentDisbursementQueuePage() {
                         {VENDOR_PAYMENT_TYPE_LABELS[slip.type]}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {slip.transport?.name ?? slip.labour?.name ?? "—"}
+                        {slip.transport?.name ?? slip.labour?.name ?? slip.serviceBill?.serviceProvider.name ?? "—"}
                       </TableCell>
                       <TableCell>
                         <VendorPaymentStatusBadge status={slip.status} />

@@ -318,6 +318,42 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Finance",
     items: [
       {
+        title: "Provider Outstanding",
+        href: "/accounts/service-provider-outstanding",
+        icon: IconChartBar,
+        permission: PERMS.WORKSHOP.SERVICEBILL_VIEW,
+      },
+      {
+        title: "Unbilled Services",
+        href: "/accounts/unbilled-services",
+        icon: IconChartBar,
+        permission: PERMS.WORKSHOP.SERVICEBILL_VIEW,
+      },
+      {
+        title: "Repair Reconciliation",
+        href: "/accounts/job-card-reconciliation",
+        icon: IconChartBar,
+        permission: PERMS.LEDGER.VIEW,
+      },
+      {
+        title: "Job Card Finance Audit",
+        href: "/accounts/job-card-audit",
+        icon: IconChartBar,
+        permission: PERMS.LEDGER.VIEW,
+      },
+      {
+        title: "Repair Cost Report",
+        href: "/accounts/job-card-repair-costs",
+        icon: IconChartBar,
+        permission: PERMS.WORKSHOP.JOBCARD_VIEW,
+      },
+      {
+        title: "Job Cards",
+        href: "/workshop/job-cards",
+        icon: IconSettings,
+        permission: PERMS.WORKSHOP.JOBCARD_VIEW,
+      },
+      {
         title: "Billing & Receipts",
         icon: IconFileInvoice,
         items: [

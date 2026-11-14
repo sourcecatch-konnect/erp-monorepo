@@ -1,0 +1,90 @@
+{
+  "checkedAt": "2026-11-14T09:54:46.126Z",
+  "environment": "CONFIGURED_SUPABASE_DEVELOPMENT",
+  "mode": "SELECT_ONLY_SERVICE_SMOKE",
+  "status": "PASSED",
+  "checks": [
+    {
+      "name": "repair-cost",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 12,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    },
+    {
+      "name": "reconciliation",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 22,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    },
+    {
+      "name": "outstanding",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 4,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    },
+    {
+      "name": "unbilled",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 4,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    },
+    {
+      "name": "audit-STOCK",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 46,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    },
+    {
+      "name": "audit-SETTLEMENTS",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 12,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    },
+    {
+      "name": "audit-POSTINGS",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 31,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    },
+    {
+      "name": "audit-TALLY",
+      "status": "PASSED",
+      "pageSize": 2,
+      "total": 31,
+      "boundedPages": true,
+      "nonOverlappingPages": true,
+      "emptyBranchScopeDenied": true,
+      "searchExecuted": true
+    }
+  ],
+  "permissionMiddlewareTested": false,
+  "browserUatCompleted": false
+}

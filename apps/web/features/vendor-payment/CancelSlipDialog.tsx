@@ -19,6 +19,7 @@ export type CancelSlipDialogProps = {
   onOpenChange: (open: boolean) => void;
   slipNumber: string;
   status: VendorPaymentStatus;
+  existingBillPayable?: boolean;
   reason: string;
   onReasonChange: (value: string) => void;
   onConfirm: () => void;
@@ -33,6 +34,7 @@ export function CancelSlipDialog({
   onOpenChange,
   slipNumber,
   status,
+  existingBillPayable = false,
   reason,
   onReasonChange,
   onConfirm,
@@ -50,13 +52,18 @@ export function CancelSlipDialog({
             <DialogTitle>Cancel {slipNumber}?</DialogTitle>
           </div>
           <DialogDescription>
-            {status === "APPROVED"
-              ? "This reverses the posted accrual journal with a matching contra entry and releases its claimed sources."
-              : "No journal was posted yet — this just releases its claimed sources."}
+            {existingBillPayable
+              ? "This releases the bill for another payment slip. The posted service bill and its payable stay in place."
+              : status === "APPROVED"
+                ? "This reverses the posted accrual journal with a matching contra entry and releases its claimed sources."
+                : "No journal was posted yet — this just releases its claimed sources."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
-          <label htmlFor={`cancel-vp-reason-${slipNumber}`} className="text-sm font-medium">
+          <label
+            htmlFor={`cancel-vp-reason-${slipNumber}`}
+            className="text-sm font-medium"
+          >
             Cancellation reason
           </label>
           <Textarea
@@ -73,10 +80,18 @@ export function CancelSlipDialog({
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
             Keep slip
           </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={!canConfirm}>
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={!canConfirm}
+          >
             {pending ? "Cancelling..." : "Confirm cancellation"}
           </Button>
         </DialogFooter>

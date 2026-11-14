@@ -20,6 +20,7 @@ export type VendorPaymentStatus =
   | "PAID"
   | "CANCELLED";
 export type VendorPaymentSourceType =
+  | "SERVICE_BILL"
   | "LR"
   | "LR_GROUP"
   | "GRN_HAMALI"
@@ -223,6 +224,12 @@ export type VendorPaymentSlip = {
   fyCode: string;
   transportId: string | null;
   labourId: string | null;
+  serviceBillId?: string | null;
+  serviceBill?: {
+    id: string;
+    serviceBillNumber: string | null;
+    serviceProvider: { id: string; name: string };
+  } | null;
   grossPayablePaise: string;
   totalDeductionsPaise: string;
   netPayablePaise: string;
@@ -243,8 +250,12 @@ export type VendorPaymentSlip = {
   cancelledBy?: NamedUser;
   lines?: VendorPaymentSlipLine[];
   disbursements?: Array<{
+    reversedAt?: string | null;
+    reversalReason?: string | null;
+    reversalJournalEntryId?: string | null;
     id: string;
     paidPaise: string;
+    tdsPaise?: string;
     mode: string;
     paidAt: string;
     referenceNo: string | null;
@@ -275,6 +286,7 @@ export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE";
 
 export type CreateVendorPaymentDisbursementBody = {
   paidPaise: string;
+  tdsPaise?: string;
   mode: PaymentMode;
   paidAt: string;
   referenceNo?: string;
@@ -423,6 +435,11 @@ export const vendorPaymentApi = {
     }),
   disburse: (id: string, body: CreateVendorPaymentDisbursementBody) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/disburse`, body),
+  reverseJobCardSettlement: (id: string, paymentId: string, reason: string) =>
+    post<VendorPaymentSlip>(
+      `/vendor-payment/slips/${id}/disbursements/${paymentId}/reverse`,
+      { reason },
+    ),
   cancelSlip: (id: string, version: number, reason: string) =>
     post<VendorPaymentSlip>(`/vendor-payment/slips/${id}/cancel`, {
       version,

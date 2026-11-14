@@ -11,6 +11,7 @@ export const vendorPaymentTypeSchema = z.enum([
 ]);
 
 export const vendorPaymentSourceTypeSchema = z.enum([
+  "SERVICE_BILL",
   "LR",
   "LR_GROUP",
   "GRN_HAMALI",
@@ -263,13 +264,23 @@ export const cancelVendorPaymentSlipSchema = z.object({
 /* screens and VP-7's disburse screen share one source of truth)        */
 /* ------------------------------------------------------------------ */
 
-export const createVendorPaymentDisbursementSchema = z.object({
-  paidPaise: z.coerce.bigint().positive(),
-  mode: paymentModeSchema,
-  paidAt: isoDate,
-  referenceNo: z.string().trim().max(120).optional(),
-  fundingLedgerId: id,
-  clientRequestId: id,
+export const createVendorPaymentDisbursementSchema = z
+  .object({
+    paidPaise: z.coerce.bigint().min(0n),
+    tdsPaise: moneyPaise,
+    mode: paymentModeSchema,
+    paidAt: isoDate,
+    referenceNo: z.string().trim().max(120).optional(),
+    fundingLedgerId: id,
+    clientRequestId: id,
+  })
+  .refine((value) => value.paidPaise + value.tdsPaise > 0n, {
+    path: ["paidPaise"],
+    message: "Cash plus TDS must be positive",
+  });
+
+export const reverseJobCardSettlementSchema = z.object({
+  reason: z.string().trim().min(1).max(500),
 });
 
 export type VendorPaymentSlipLineInput = z.infer<

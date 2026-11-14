@@ -592,6 +592,7 @@ model UserNotificationSubscription {
 }
 
 model Vehicle {
+  maintenanceHold Boolean @default(false)
   id                 String        @id @default(cuid())
   vehicleNumber      String        @unique
   createdAt          DateTime      @default(now())
@@ -1486,6 +1487,11 @@ enum StockMovementType {
 /// voucher; external/sublet services are recorded here but billed later by
 /// a separate Service Bill (they carry no ledger entry of their own yet).
 model JobCard {
+  repairControlRequired Boolean @default(true)
+  repairControl JobCardRepairControl?
+  repairEvents JobCardRepairEvent[]
+  clientRequestId String? @unique
+  requestFingerprint String?
   id            String              @id @default(cuid())
   jobCardNumber String?             @unique
   fyCode        String
@@ -1528,11 +1534,43 @@ model JobCard {
   serviceLines JobCardServiceLine[]
   removedParts JobCardRemovedPart[]
 
+  @@index([branchId, status, outDateTime, id])
+  @@index([createdAt, id])
+  @@index([branchId, createdAt, id])
   @@index([branchId, status])
   @@index([vehicleId])
   @@index([fyCode])
   @@index([createdById])
   @@index([finalisedById])
+}
+
+model JobCardRepairControl {
+  jobCardId String @id
+  status String
+  version Int @default(1)
+  maintenanceReason String
+  replacementIntent String
+  inspection Json
+  release Json?
+  startedAt DateTime @default(now())
+  startedById String
+  clearedAt DateTime?
+  clearedById String?
+  jobCard JobCard @relation(fields: [jobCardId], references: [id], onDelete: Restrict)
+  @@index([status, jobCardId])
+}
+
+model JobCardRepairEvent {
+  id String @id @default(cuid())
+  jobCardId String
+  clientRequestId String @unique
+  requestFingerprint String
+  action String
+  actorId String
+  details Json
+  createdAt DateTime @default(now())
+  jobCard JobCard @relation(fields: [jobCardId], references: [id], onDelete: Restrict)
+  @@index([jobCardId, createdAt, id])
 }
 
 model JobCardPartLine {
@@ -1576,8 +1614,9 @@ model JobCardServiceLine {
   serviceProvider SparePartSupplier @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
   sparePart       SparePart         @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
   mechanic        Labour?           @relation(fields: [mechanicId], references: [id], onDelete: SetNull)
-  serviceBillLine ServiceBillLine?
+  serviceBillLine ServiceBillLine[]
 
+  @@index([serviceProviderId, billedInServiceBillId])
   @@index([jobCardId])
   @@index([serviceProviderId])
   @@index([billedInServiceBillId])
@@ -1599,7 +1638,19 @@ enum TruckLocationStatus {
 /// visit). REUSABLE re-enters stock as a new batch at its original issue
 /// cost with a reversing entry; REPAIRABLE/SCRAP are logged only in v1.
 model JobCardRemovedPart {
+  lifecycleStatus RemovedPartLifecycleStatus @default(HELD)
+  version Int @default(1)
+  custodyLocation String?
+  provenanceReference String?
+  valuationSubmittedById String?
+  approvedById String?
+  approvedAt DateTime?
+  repairReference String?
+  repairReceivedAt DateTime?
+  lifecycleEvents JobCardRemovedPartEvent[]
   id                String               @id @default(cuid())
+  clientRequestId   String?              @unique
+  requestFingerprint String?
   jobCardId         String
   sparePartId       String
   relatedPartLineId String?
@@ -1622,6 +1673,34 @@ model JobCardRemovedPart {
 
   @@index([jobCardId])
   @@index([sparePartId])
+  @@index([jobCardId, createdAt, id])
+  @@index([relatedPartLineId])
+}
+
+enum RemovedPartLifecycleStatus {
+  HELD
+  IN_REPAIR
+  PENDING_APPROVAL
+  STOCKED
+  SCRAP_HELD
+  DISPOSAL_PENDING
+  DISPOSED
+}
+
+model JobCardRemovedPartEvent {
+  id String @id @default(cuid())
+  removedPartId String
+  clientRequestId String @unique
+  requestFingerprint String
+  action String
+  fromStatus String?
+  toStatus String
+  actorId String
+  reason String
+  details Json
+  createdAt DateTime @default(now())
+  removedPart JobCardRemovedPart @relation(fields: [removedPartId], references: [id], onDelete: Restrict)
+  @@index([removedPartId, createdAt, id])
 }
 
 enum RemovedPartCondition {
@@ -1671,7 +1750,10 @@ model ServiceBill {
 
   lines    ServiceBillLine[]
   payments ServiceBillPayment[]
+  paymentSlips VendorPaymentSlip[]
 
+  @@index([createdAt, id])
+  @@index([branchId, createdAt, id])
   @@index([branchId, status])
   @@index([serviceProviderId, status])
   @@index([fyCode])
@@ -1681,13 +1763,21 @@ model ServiceBill {
 model ServiceBillLine {
   id                   String @id @default(cuid())
   serviceBillId        String
-  jobCardServiceLineId String @unique
+  jobCardServiceLineId String?
   amountPaise          BigInt
+  discountPaise        BigInt @default(0)
+  netAmountPaise       BigInt @default(0)
+  jobCardIdSnapshot    String?
+  vehicleIdSnapshot    String?
+  serviceSnapshot      Json
 
   serviceBill        ServiceBill        @relation(fields: [serviceBillId], references: [id], onDelete: Cascade)
-  jobCardServiceLine JobCardServiceLine @relation(fields: [jobCardServiceLineId], references: [id], onDelete: Restrict)
+  jobCardServiceLine JobCardServiceLine? @relation(fields: [jobCardServiceLineId], references: [id], onDelete: SetNull)
 
+  @@unique([serviceBillId, jobCardServiceLineId])
+  @@index([jobCardServiceLineId])
   @@index([serviceBillId])
+  @@index([jobCardIdSnapshot])
 }
 
 enum ServiceBillStatus {
@@ -1838,9 +1928,14 @@ model ReplacementInwardLine {
 
 /// One disbursement against a POSTED ServiceBill. Partial-pay aware — a bill
 /// accumulates payments until ServiceBill.paidAmountPaise == netAmountPaise.
-/// Independent of the Vendor Payment 3-stage engine for now (a dedicated,
-/// quick path); may later be superseded by a `type = JOBCARD` slip there.
+/// Legacy direct settlements remain readable. New settlements use JOBCARD
+/// VendorPaymentSlip disbursements and update the same settled bill balance.
 model ServiceBillPayment {
+  reversedAt DateTime?
+  reversedById String?
+  reversalReason String?
+  reversalJournalEntryId String? @unique
+  reversalJournalEntry JournalEntry? @relation("LegacyServicePaymentReversal", fields: [reversalJournalEntryId], references: [id], onDelete: Restrict)
   id              String      @id @default(cuid())
   serviceBillId   String
   paidPaise       BigInt
@@ -3342,11 +3437,12 @@ model Ledger {
 }
 
 /// Vendor-payment engine: Slip -> Approval -> Disbursement. This phase covers
-/// TRANSPORTER and HAMALI; LDC_BROKER and JOBCARD reuse the same tables later.
+/// TRANSPORTER, HAMALI, LDC_BROKER and JOBCARD share these tables.
 /// DRAFT / PENDING_APPROVAL never touch the ledger. Approval posts the accrual
 /// (Dr expense/detention, Cr recoveries + party payable) atomically with the
 /// status flip. Each disbursement is a separate settlement voucher against the
-/// same party-payable reference.
+/// same party-payable reference. JOBCARD approval skips accrual because its
+/// service bill already posted expense/payable; disbursement settles that bill.
 model VendorPaymentSlip {
   id         String            @id @default(cuid())
   slipNumber String            @unique
@@ -3354,11 +3450,12 @@ model VendorPaymentSlip {
   branchId   String
   fyCode     String
 
-  // Exactly one of transportId / labourId is set for the current types
-  // (TRANSPORTER, HAMALI) — DB-enforced by VendorPaymentSlip_one_payee_chk
+  // Exactly one of transportId / labourId / serviceBillId is set.
+  // JOBCARD resolves its provider through the bill; the check is DB-enforced.
   // (see the hand-authored migration).
   transportId String?
   labourId    String?
+  serviceBillId String?
 
   grossPayablePaise    BigInt @default(0)
   totalDeductionsPaise BigInt @default(0)
@@ -3389,6 +3486,7 @@ model VendorPaymentSlip {
   branch              Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
   transport           Transport?    @relation(fields: [transportId], references: [id], onDelete: Restrict)
   labour              Labour?       @relation(fields: [labourId], references: [id], onDelete: Restrict)
+  serviceBill         ServiceBill?  @relation(fields: [serviceBillId], references: [id], onDelete: Restrict)
   accrualJournalEntry JournalEntry? @relation(fields: [accrualJournalEntryId], references: [id], onDelete: SetNull)
   createdBy           User          @relation("CreatedVendorPaymentSlips", fields: [createdById], references: [id], onDelete: Restrict)
   approvedBy          User?         @relation("ApprovedVendorPaymentSlips", fields: [approvedById], references: [id], onDelete: SetNull)
@@ -3403,6 +3501,7 @@ model VendorPaymentSlip {
   @@index([type, status])
   @@index([transportId])
   @@index([labourId])
+  @@index([serviceBillId])
   @@index([approvedById])
   @@index([createdById])
 }
@@ -3462,10 +3561,16 @@ model VendorPaymentSlipLine {
 /// One settlement voucher per payment against a slip. clientRequestId makes a
 /// retried disbursement request a no-op instead of a duplicate payment.
 model VendorPaymentDisbursement {
+  reversedAt DateTime?
+  reversedById String?
+  reversalReason String?
+  reversalJournalEntryId String? @unique
+  reversalJournalEntry JournalEntry? @relation("JobCardSettlementReversal", fields: [reversalJournalEntryId], references: [id], onDelete: Restrict)
   id     String @id @default(cuid())
   slipId String
 
   paidPaise   BigInt
+  tdsPaise    BigInt @default(0)
   mode        PaymentMode
   paidAt      DateTime
   referenceNo String?
@@ -3489,6 +3594,8 @@ model VendorPaymentDisbursement {
 
 /// Voucher header. A voucher is N balanced JournalLine rows sharing this row.
 model JournalEntry {
+  reversedLegacyServicePayment ServiceBillPayment? @relation("LegacyServicePaymentReversal")
+  reversedJobCardSettlement VendorPaymentDisbursement? @relation("JobCardSettlementReversal")
   id            String        @id @default(cuid())
   voucherType   VoucherType
   voucherNumber String
@@ -4854,6 +4961,7 @@ enum VendorPaymentStatus {
 }
 
 enum VendorPaymentSourceType {
+  SERVICE_BILL
   /// Legacy per-LR transporter line (slips made before LR_GROUP).
   LR
   /// Transporter line for one truck (LR group) and all its LRs.

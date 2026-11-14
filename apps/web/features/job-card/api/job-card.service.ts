@@ -1,5 +1,38 @@
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@skerp/types";
+import type { z } from "zod";
+import type {
+  completedRepairSchema,
+  repairControlActionSchema,
+} from "@skerp/validators";
+export type CompletedRepair = z.infer<typeof completedRepairSchema>;
+export type RepairControlAction = z.infer<typeof repairControlActionSchema>;
+export type RepairControl = {
+  status: string;
+  version: number;
+  maintenanceReason: string;
+  replacementIntent: string;
+  inspection: CompletedRepair["inspection"];
+  release: CompletedRepair["release"] | null;
+  startedAt: string;
+  clearedAt: string | null;
+  startedById: string;
+  clearedById: string | null;
+};
+export type RepairEvent = {
+  id: string;
+  action: string;
+  actorId: string;
+  actorName?: string;
+  createdAt: string;
+  details: {
+    reason?: string;
+    maintenanceReason?: string;
+    replacementIntent?: string;
+    inspection?: CompletedRepair["inspection"];
+    release?: CompletedRepair["release"];
+  };
+};
 import {
   unwrapApiResponse,
   unwrapListResponse,
@@ -15,6 +48,30 @@ const SMALL_MASTER_SIZE = 200;
 export type JobCardStatus = "DRAFT" | "FINALISED" | "CANCELLED";
 export type TruckLocationStatus = "AT_HO" | "IN_TRANSIT";
 export type RemovedPartCondition = "REUSABLE" | "REPAIRABLE" | "SCRAP";
+export type RemovedPartAction =
+  | "SEND_REPAIR"
+  | "RECEIVE_REPAIR"
+  | "SUBMIT_VALUATION"
+  | "APPROVE_STOCK"
+  | "REJECT"
+  | "DECLARE_SCRAP"
+  | "REQUEST_DISPOSAL"
+  | "APPROVE_DISPOSAL";
+export type RemovedPartEvent = {
+  id: string;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string;
+  actorId: string;
+  actorName?: string;
+  reason: string;
+  createdAt: string;
+  details: {
+    evidence?: string;
+    custodyLocation?: string;
+    unitCostPaise?: string | null;
+  };
+};
 
 export type JobCardPartLine = {
   id: string;
@@ -46,6 +103,8 @@ export type JobCardServiceLine = {
 };
 
 export type JobCard = {
+  repairControlRequired: boolean;
+  repairControl: RepairControl | null;
   id: string;
   jobCardNumber: string | null;
   fyCode: string;
@@ -72,6 +131,20 @@ export type JobCard = {
 };
 
 export type JobCardRemovedPart = {
+  lifecycleStatus:
+    | "HELD"
+    | "IN_REPAIR"
+    | "PENDING_APPROVAL"
+    | "STOCKED"
+    | "SCRAP_HELD"
+    | "DISPOSAL_PENDING"
+    | "DISPOSED";
+  version: number;
+  custodyLocation: string | null;
+  provenanceReference: string | null;
+  repairReceivedAt: string | null;
+  createdById: string;
+  valuationSubmittedById: string | null;
   id: string;
   sparePartId: string;
   relatedPartLineId: string | null;
@@ -80,7 +153,11 @@ export type JobCardRemovedPart = {
   unitCostPaise: string | null;
   remarks: string | null;
   sparePart: { id: string; name: string };
-  relatedPartLine: { id: string; unitCostPaise: string; batchId: string } | null;
+  relatedPartLine: {
+    id: string;
+    unitCostPaise: string;
+    batchId: string;
+  } | null;
   newBatch: { id: string; qtyRemaining: number } | null;
   createdBy: { id: string; firstName: string; lastName: string } | null;
   journalEntry: { id: string; voucherNumber: string; status: string } | null;
@@ -117,6 +194,8 @@ export type SaveJobCardBody = {
 };
 
 export type CreateAndFinaliseJobCardBody = SaveJobCardBody & {
+  repairCompletion: CompletedRepair;
+  clientRequestId: string;
   outDateTime: string;
   closingKm: number;
 };
@@ -133,15 +212,82 @@ export type BatchOption = {
 
 export type LookupOption = { value: string; label: string };
 
+export type JobCardListItem = Pick<
+  JobCard,
+  | "id"
+  | "jobCardNumber"
+  | "inDateTime"
+  | "status"
+  | "totalAmountPaise"
+  | "vehicle"
+  | "driver"
+>;
+
 export const jobCardApi = {
-  list: async (params?: {
-    branchId?: string;
-    vehicleId?: string;
-    status?: JobCardStatus;
-    page?: number;
-    size?: number;
-  }): Promise<ListResult<JobCard>> => {
-    const res = await api.get<ApiResponse<JobCard[]>>("/job-card", { params });
+  repairAction: async (id: string, body: RepairControlAction) => {
+    const response = await api.post<ApiResponse<JobCard>>(
+      `/job-card/${id}/repair-control`,
+      body,
+    );
+    return unwrapApiResponse(response);
+  },
+  repairEvents: async (
+    id: string,
+    params: { page: number; size: number; search?: string },
+    signal?: AbortSignal,
+  ) => {
+    const response = await api.get<ApiResponse<RepairEvent[]>>(
+      `/job-card/${id}/repair-events`,
+      { params, signal },
+    );
+    return unwrapListResponse(response);
+  },
+  removedPartAction: async (
+    jobCardId: string,
+    id: string,
+    body: {
+      clientRequestId: string;
+      version: number;
+      action: RemovedPartAction;
+      reason: string;
+      evidence: string;
+      custodyLocation: string;
+      unitCostPaise?: string;
+    },
+  ) => {
+    const response = await api.post<ApiResponse<JobCardRemovedPart>>(
+      `/job-card/${jobCardId}/removed-parts/${id}/actions`,
+      body,
+    );
+    return unwrapApiResponse(response);
+  },
+  removedPartEvents: async (
+    jobCardId: string,
+    id: string,
+    params: { page: number; size: number; search?: string },
+    signal?: AbortSignal,
+  ) => {
+    const response = await api.get<ApiResponse<RemovedPartEvent[]>>(
+      `/job-card/${jobCardId}/removed-parts/${id}/events`,
+      { params, signal },
+    );
+    return unwrapListResponse(response);
+  },
+  list: async (
+    params?: {
+      search?: string;
+      branchId?: string;
+      vehicleId?: string;
+      status?: JobCardStatus;
+      page?: number;
+      size?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<ListResult<JobCardListItem>> => {
+    const res = await api.get<ApiResponse<JobCardListItem[]>>("/job-card", {
+      params,
+      signal,
+    });
     return unwrapListResponse(res);
   },
 
@@ -150,7 +296,7 @@ export const jobCardApi = {
     return unwrapApiResponse(res);
   },
 
-  create: async (body: SaveJobCardBody) => {
+  create: async (body: SaveJobCardBody & { clientRequestId: string }) => {
     const res = await api.post<ApiResponse<JobCard>>("/job-card", body);
     return unwrapApiResponse(res);
   },
@@ -158,7 +304,10 @@ export const jobCardApi = {
   /** Create a brand-new job card and finalise it immediately — one request,
    *  one transaction, instead of a separate create() then finalise() call. */
   createAndFinalise: async (body: CreateAndFinaliseJobCardBody) => {
-    const res = await api.post<ApiResponse<JobCard>>("/job-card/create-and-finalise", body);
+    const res = await api.post<ApiResponse<JobCard>>(
+      "/job-card/create-and-finalise",
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
@@ -167,32 +316,51 @@ export const jobCardApi = {
     return unwrapApiResponse(res);
   },
 
-  finalise: async (id: string, body: { outDateTime: string; closingKm: number }) => {
-    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/finalise`, body);
+  finalise: async (
+    id: string,
+    body: { outDateTime: string; closingKm: number },
+  ) => {
+    const res = await api.post<ApiResponse<JobCard>>(
+      `/job-card/${id}/finalise`,
+      body,
+    );
     return unwrapApiResponse(res);
   },
 
   cancel: async (id: string, reason: string) => {
-    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/cancel`, { reason });
+    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/cancel`, {
+      reason,
+    });
     return unwrapApiResponse(res);
   },
 
   undoFinalise: async (id: string, reason: string) => {
-    const res = await api.post<ApiResponse<JobCard>>(`/job-card/${id}/undo-finalise`, { reason });
+    const res = await api.post<ApiResponse<JobCard>>(
+      `/job-card/${id}/undo-finalise`,
+      { reason },
+    );
     return unwrapApiResponse(res);
   },
 
-  removedParts: async (jobCardId: string) => {
+  removedParts: async (
+    jobCardId: string,
+    params: { page: number; size: number; search?: string },
+    signal?: AbortSignal,
+  ) => {
     const res = await api.get<ApiResponse<JobCardRemovedPart[]>>(
       `/job-card/${jobCardId}/removed-parts`,
+      { params, signal },
     );
-    return unwrapListResponse(res).data;
+    return unwrapListResponse(res);
   },
 
   addRemovedPart: async (
     jobCardId: string,
     body: {
+      clientRequestId: string;
       sparePartId: string;
+      custodyLocation: string;
+      provenanceReference: string;
       relatedPartLineId?: string;
       qty: number;
       condition: RemovedPartCondition;
@@ -207,10 +375,16 @@ export const jobCardApi = {
     return unwrapApiResponse(res);
   },
 
-  batches: async (sparePartId: string, branchId: string): Promise<BatchOption[]> => {
-    const res = await api.get<ApiResponse<BatchOption[]>>("/job-card/lookup/batches", {
-      params: { sparePartId, branchId },
-    });
+  batches: async (
+    sparePartId: string,
+    branchId: string,
+  ): Promise<BatchOption[]> => {
+    const res = await api.get<ApiResponse<BatchOption[]>>(
+      "/job-card/lookup/batches",
+      {
+        params: { sparePartId, branchId },
+      },
+    );
     return unwrapListResponse(res).data;
   },
 
@@ -218,10 +392,9 @@ export const jobCardApi = {
    *  branch flagged Head Office. Filtered to isHeadOffice=true, so this is
    *  at most one row regardless of page size. */
   headOfficeBranch: async (): Promise<{ id: string; name: string } | null> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>>(
-      "/branches",
-      { params: { size: 1, "filter[isHeadOffice]": "true" } },
-    );
+    const res = await api.get<
+      ApiResponse<{ id: string; name: string; isHeadOffice: boolean }[]>
+    >("/branches", { params: { size: 1, "filter[isHeadOffice]": "true" } });
     const data = unwrapListResponse(res).data;
     return data[0] ? { id: data[0].id, name: data[0].name } : null;
   },
@@ -237,7 +410,11 @@ export const jobCardApi = {
     const res = await api.get<
       ApiResponse<{ id: string; vehicleNumber: string; currentKM: number }[]>
     >("/vehicles", {
-      params: { page: params.page, size: params.size, search: params.search || undefined },
+      params: {
+        page: params.page,
+        size: params.size,
+        search: params.search || undefined,
+      },
     });
     const result = unwrapListResponse(res);
     return {
@@ -255,21 +432,37 @@ export const jobCardApi = {
     size: number;
     search?: string;
   }): Promise<ListResult<LookupOption>> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/drivers", {
-      params: { page: params.page, size: params.size, search: params.search || undefined },
-    });
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      "/drivers",
+      {
+        params: {
+          page: params.page,
+          size: params.size,
+          search: params.search || undefined,
+        },
+      },
+    );
     const result = unwrapListResponse(res);
-    return { ...result, data: result.data.map((d) => ({ value: d.id, label: d.name })) };
+    return {
+      ...result,
+      data: result.data.map((d) => ({ value: d.id, label: d.name })),
+    };
   },
 
   // Labours/categories are small, workshop-owned masters — one bounded page
   // (SMALL_MASTER_SIZE) instead of the old unconditional size:1000, but
   // still a plain cached list (no search-as-you-type UI needed for these).
   mechanics: async (): Promise<LookupOption[]> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/labours", {
-      params: { size: SMALL_MASTER_SIZE, "filter[type]": "Mechanic" },
-    });
-    return unwrapListResponse(res).data.map((l) => ({ value: l.id, label: l.name }));
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      "/labours",
+      {
+        params: { size: SMALL_MASTER_SIZE, "filter[type]": "Mechanic" },
+      },
+    );
+    return unwrapListResponse(res).data.map((l) => ({
+      value: l.id,
+      label: l.name,
+    }));
   },
 
   // Spare parts can grow into thousands of rows, so search server-side +
@@ -280,16 +473,22 @@ export const jobCardApi = {
     search?: string;
     page: number;
     size: number;
-  }): Promise<ListResult<LookupOption & { categoryId: string; ratePaise: string }>> => {
+  }): Promise<
+    ListResult<LookupOption & { categoryId: string; ratePaise: string }>
+  > => {
     const res = await api.get<
-      ApiResponse<{ id: string; name: string; categoryId: string; rate: string }[]>
+      ApiResponse<
+        { id: string; name: string; categoryId: string; rate: string }[]
+      >
     >("/spare-parts", {
       params: {
         page: params.page,
         size: params.size,
         search: params.search || undefined,
         "filter[type]": params.type,
-        ...(params.categoryId ? { "filter[categoryId]": params.categoryId } : {}),
+        ...(params.categoryId
+          ? { "filter[categoryId]": params.categoryId }
+          : {}),
       },
     });
     const result = unwrapListResponse(res);
@@ -305,10 +504,16 @@ export const jobCardApi = {
   },
 
   categories: async (type: "Item" | "Service"): Promise<LookupOption[]> => {
-    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>("/spare-category", {
-      params: { size: SMALL_MASTER_SIZE, "filter[type]": type },
-    });
-    return unwrapListResponse(res).data.map((c) => ({ value: c.id, label: c.name }));
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      "/spare-category",
+      {
+        params: { size: SMALL_MASTER_SIZE, "filter[type]": type },
+      },
+    );
+    return unwrapListResponse(res).data.map((c) => ({
+      value: c.id,
+      label: c.name,
+    }));
   },
 
   // Suppliers can grow into a large list — paged + infinite-scrollable.
@@ -321,17 +526,16 @@ export const jobCardApi = {
     // writes "Item" or "Service" (spare-partSupplierForm.tsx's
     // supplierTypeOptions) — filter to "Service" so a pure parts supplier
     // (no labour/service capability) can't be picked as a Job Card provider.
-    const res = await api.get<ApiResponse<{ id: string; name: string; shopName: string | null }[]>>(
-      "/spare-part-suppliers",
-      {
-        params: {
-          page: params.page,
-          size: params.size,
-          search: params.search || undefined,
-          "filter[type]": "Service",
-        },
+    const res = await api.get<
+      ApiResponse<{ id: string; name: string; shopName: string | null }[]>
+    >("/spare-part-suppliers", {
+      params: {
+        page: params.page,
+        size: params.size,
+        search: params.search || undefined,
+        "filter[type]": "Service",
       },
-    );
+    });
     const result = unwrapListResponse(res);
     return {
       ...result,

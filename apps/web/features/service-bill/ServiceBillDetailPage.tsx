@@ -35,15 +35,20 @@ import { ledgerApi } from "@/features/ledger/api/ledger.service";
 import { DetailSection } from "@/features/masters/_shared/DetailSection";
 import { serviceBillApi } from "./api/service-bill.service";
 import { serviceBillKeys } from "./api/service-bill.keys";
+import { jobCardKeys } from "@/features/job-card/api/job-card.keys";
 import { ServiceBillStatusBadge } from "./serviceBillStatusBadge";
 import { PayServiceBillDialog } from "./PayServiceBillDialog";
+import { LegacyServicePayments } from "./LegacyServicePayments";
 
-
-export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string }) {
+export function ServiceBillDetailPage({
+  serviceBillId,
+}: {
+  serviceBillId: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const canManage = useCan(PERMS.WORKSHOP.SERVICEBILL_MANAGE);
-  const canPay = useCan(PERMS.WORKSHOP.SERVICEBILL_PAY);
+  const canPay = useCan(PERMS.ACCOUNTS.PAYMENT.CREATE);
 
   const bill = useQuery({
     queryKey: serviceBillKeys.detail(serviceBillId),
@@ -68,14 +73,18 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
     onSuccess: () => {
       toast.success("Service bill cancelled");
       queryClient.invalidateQueries({ queryKey: serviceBillKeys.all });
+      queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
       setCancelOpen(false);
       setCancelReason("");
       router.push("/workshop/service-bills");
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not cancel"),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not cancel"),
   });
 
-  const pending = bill.data ? Number(bill.data.netAmountPaise) - Number(bill.data.paidAmountPaise) : 0;
+  const pending = bill.data
+    ? Number(bill.data.netAmountPaise) - Number(bill.data.paidAmountPaise)
+    : 0;
 
   if (bill.isLoading) {
     return (
@@ -94,7 +103,9 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
   }
 
   if (!bill.data) {
-    return <p className="text-sm text-muted-foreground">Service bill not found.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">Service bill not found.</p>
+    );
   }
 
   const sb = bill.data;
@@ -103,9 +114,13 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Service Bill</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Service Bill
+          </p>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{sb.serviceBillNumber ?? "Service Bill"}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">
+              {sb.serviceBillNumber ?? "Service Bill"}
+            </h1>
             <ServiceBillStatusBadge status={sb.status} />
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -126,32 +141,50 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
               <IconFileInvoice size={15} className="mr-1" /> Voucher
             </Button>
           )}
+          {sb.paymentSlips?.[0] && (
+            <Button variant="outline" asChild>
+              <Link href={`/accounts/vendor-payments/${sb.paymentSlips[0].id}`}>
+                Payment slip ({sb.paymentSlips[0].status})
+              </Link>
+            </Button>
+          )}
           {sb.status === "POSTED" && pending > 0 && canPay && (
             <Button onClick={() => setPayOpen(true)}>
-              <IconCash size={15} className="mr-1" /> Pay
+              <IconCash size={15} className="mr-1" /> Prepare payment
             </Button>
           )}
-          {sb.status === "POSTED" && canManage && (
-            <Button
-              variant="ghost"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setCancelOpen(true)}
-            >
-              Cancel bill
-            </Button>
-          )}
+          {sb.status === "POSTED" &&
+            BigInt(sb.paidAmountPaise) === 0n &&
+            !sb.paymentSlips?.length &&
+            canManage && (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setCancelOpen(true)}
+              >
+                Cancel bill
+              </Button>
+            )}
         </div>
       </div>
 
-      <DetailSection title="Bill Details" contentClassName="grid gap-4 p-4 sm:grid-cols-3">
+      <DetailSection
+        title="Bill Details"
+        contentClassName="grid gap-4 p-4 sm:grid-cols-3"
+      >
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">Branch</p>
           <p className="text-sm">
-            {sb.branch.name} <span className="text-xs text-muted-foreground">(single workshop — fixed)</span>
+            {sb.branch.name}{" "}
+            <span className="text-xs text-muted-foreground">
+              (single workshop — fixed)
+            </span>
           </p>
         </div>
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">Service Provider</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Service Provider
+          </p>
           <p className="text-sm">
             {sb.serviceProvider.shopName
               ? `${sb.serviceProvider.name} (${sb.serviceProvider.shopName})`
@@ -159,7 +192,9 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
           </p>
         </div>
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">Provider&apos;s bill no.</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Provider&apos;s bill no.
+          </p>
           <p className="text-sm">
             {sb.providerInvoiceNo}
             {sb.providerInvoiceDate && (
@@ -187,7 +222,9 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
                 <TableHead>Service</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Rate</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Gross</TableHead>
+                <TableHead className="text-right">Discount</TableHead>
+                <TableHead className="text-right">Net</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -205,19 +242,35 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
                   <TableCell>
                     {line.jobCardServiceLine.sparePart.name}
                     {line.jobCardServiceLine.description && (
-                      <span className="text-muted-foreground"> ({line.jobCardServiceLine.description})</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        ({line.jobCardServiceLine.description})
+                      </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{line.jobCardServiceLine.qty}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {line.jobCardServiceLine.qty}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatPaise(line.jobCardServiceLine.ratePaise)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatPaise(line.amountPaise)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPaise(line.amountPaise)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPaise(line.discountPaise)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatPaise(line.netAmountPaise)}
+                  </TableCell>
                 </TableRow>
               ))}
               {sb.lines.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colSpan={8}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
                     No lines on this bill.
                   </TableCell>
                 </TableRow>
@@ -228,19 +281,34 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
 
         <div className="flex flex-wrap items-center justify-end gap-6 border-t bg-muted/20 px-4 py-2.5 text-sm">
           <span>
-            Gross <span className="font-semibold tabular-nums">{formatPaise(sb.grossAmountPaise)}</span>
+            Gross{" "}
+            <span className="font-semibold tabular-nums">
+              {formatPaise(sb.grossAmountPaise)}
+            </span>
           </span>
           <span>
-            Discount <span className="font-semibold tabular-nums">{formatPaise(sb.discountPaise)}</span>
+            Discount{" "}
+            <span className="font-semibold tabular-nums">
+              {formatPaise(sb.discountPaise)}
+            </span>
           </span>
           <span>
-            Net <span className="font-semibold tabular-nums">{formatPaise(sb.netAmountPaise)}</span>
+            Net{" "}
+            <span className="font-semibold tabular-nums">
+              {formatPaise(sb.netAmountPaise)}
+            </span>
           </span>
           <span>
-            Paid <span className="font-semibold tabular-nums">{formatPaise(sb.paidAmountPaise)}</span>
+            Paid{" "}
+            <span className="font-semibold tabular-nums">
+              {formatPaise(sb.paidAmountPaise)}
+            </span>
           </span>
           <span>
-            Pending <span className="font-semibold tabular-nums">{formatPaise(pending)}</span>
+            Pending{" "}
+            <span className="font-semibold tabular-nums">
+              {formatPaise(pending)}
+            </span>
           </span>
         </div>
       </DetailSection>
@@ -257,7 +325,18 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
         }}
       />
 
-      <Dialog open={cancelOpen} onOpenChange={(open) => !open && setCancelOpen(false)}>
+      <LegacyServicePayments
+        id={serviceBillId}
+        openVoucher={(id) => {
+          setVoucherId(id);
+          setVoucherOpen(true);
+        }}
+      />
+
+      <Dialog
+        open={cancelOpen}
+        onOpenChange={(open) => !open && setCancelOpen(false)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel {sb.serviceBillNumber}?</DialogTitle>
@@ -289,7 +368,9 @@ export function ServiceBillDetailPage({ serviceBillId }: { serviceBillId: string
         voucher={voucher.data}
         isLoading={voucher.isLoading}
         isError={voucher.isError}
-        errorMessage={voucher.error instanceof Error ? voucher.error.message : undefined}
+        errorMessage={
+          voucher.error instanceof Error ? voucher.error.message : undefined
+        }
       />
     </div>
   );

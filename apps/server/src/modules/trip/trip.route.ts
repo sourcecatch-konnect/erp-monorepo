@@ -1,3 +1,4 @@
+import { assertVehicleDispatchableTx } from "../job-card/job-card-repair.service.js";
 import { Router } from "express";
 import {
   createTripSchema,
@@ -548,6 +549,7 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         data: { updatedById: me, version: { increment: 1 } },
       });
       if (bornInTransit) {
+        await assertVehicleDispatchableTx(tx, data.vehicleId);
         await tx.vehicle.update({
           where: { id: data.vehicleId },
           data: { status: "ON_TRIP" },
@@ -719,6 +721,8 @@ router.post("/", can(PERMS.TRIP.CREATE), async (req, res) => {
         },
         select: { id: true },
       });
+
+      await assertVehicleDispatchableTx(tx, data.vehicleId);
 
       await tx.vehicle.update({
         where: { id: data.vehicleId },
@@ -1001,6 +1005,7 @@ router.post("/:id/dispatch", can(PERMS.TRIP.UPDATE), async (req, res) => {
         },
       });
     }
+    await assertVehicleDispatchableTx(tx, existing.vehicleId);
     await tx.vehicle.update({
       where: { id: existing.vehicleId },
       data: { status: "ON_TRIP" },

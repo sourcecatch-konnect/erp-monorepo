@@ -44,16 +44,25 @@ import {
   type TruckLocationStatus,
 } from "./api/job-card.service";
 import { jobCardKeys } from "./api/job-card.keys";
+import type { CompletedRepair } from "./api/job-card.service";
+import { RepairControlPanel } from "./components/RepairControlPanel";
 import type { PartLineDraft, ServiceLineDraft } from "./line-drafts";
 import { AddPartDialog } from "./components/AddPartDialog";
 import { AddServiceDialog } from "./components/AddServiceDialog";
 
-const toDatetimeLocal = (iso?: string | null) =>
-  iso ? new Date(iso).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16);
+const toDatetimeLocal = (iso?: string | null) => {
+  const date = iso ? new Date(iso) : new Date();
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
 
 export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const createRequestId = React.useRef<string | null>(null);
+  const createIdentity = () => {
+    createRequestId.current ??= crypto.randomUUID();
+    return { clientRequestId: createRequestId.current };
+  };
   const canManage = useCan(PERMS.WORKSHOP.JOBCARD_MANAGE);
   const canFinalise = useCan(PERMS.WORKSHOP.JOBCARD_FINALISE);
 
@@ -124,6 +133,7 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
   const [inDateTime, setInDateTime] = React.useState(toDatetimeLocal());
   const [openingKm, setOpeningKm] = React.useState("");
   const [remarks, setRemarks] = React.useState("");
+  const [repairCompletion, setRepairCompletion] = React.useState<CompletedRepair | null>(null);
   const [partLines, setPartLines] = React.useState<PartLineDraft[]>([]);
   const [addPartOpen, setAddPartOpen] = React.useState(false);
   const [addServiceOpen, setAddServiceOpen] = React.useState(false);
@@ -145,6 +155,9 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
 
   const jc: JobCard | undefined = existing.data;
   const isDraft = !jc || jc.status === "DRAFT";
+  React.useEffect(() => {
+    if (jc?.repairControl?.clearedAt) setOutDateTime(toDatetimeLocal(jc.repairControl.clearedAt));
+  }, [jc?.repairControl?.clearedAt]);
 
   React.useEffect(() => {
     if (!jc) return;
@@ -224,7 +237,7 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
     Boolean(openingKm) && !hasIncompleteServiceLine;
 
   const save = useMutation({
-    mutationFn: () => (jobCardId ? jobCardApi.update(jobCardId, buildBody()) : jobCardApi.create(buildBody())),
+    mutationFn: () => (jobCardId ? jobCardApi.update(jobCardId, buildBody()) : jobCardApi.create({ ...buildBody(), ...createIdentity() })),
     onSuccess: (saved) => {
       toast.success(jobCardId ? "Job card saved" : `Job card created — ${saved.jobCardNumber}`);
       queryClient.invalidateQueries({ queryKey: jobCardKeys.all });
@@ -247,7 +260,7 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
       };
       return jobCardId
         ? jobCardApi.finalise(jobCardId, finaliseBody)
-        : jobCardApi.createAndFinalise({ ...buildBody(), ...finaliseBody });
+        : repairCompletion ? jobCardApi.createAndFinalise({ ...buildBody(), ...finaliseBody, ...createIdentity(), repairCompletion }) : Promise.reject(new Error("Complete both repair inspections before finalising"));
     },
     onSuccess: (result) => {
       toast.success("Job card finalised — parts issued and posted");
@@ -422,6 +435,8 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
           </div>
         </div>
 
+        <RepairControlPanel card={jc} onCompletionChange={setRepairCompletion} />
+
         <div className="rounded-md border">
           <div className="border-b bg-muted/30 px-3 py-2 text-sm font-semibold">Part List</div>
 
@@ -582,12 +597,12 @@ export function JobCardFormPage({ jobCardId }: { jobCardId?: string }) {
               Save keeps it a draft — nothing moves yet. Finalise issues the parts above from
               stock and posts the voucher; needs Closing KM and Out date/time filled in above.
             </p>
-            <Button variant="outline" disabled={!canSave || save.isPending} onClick={() => save.mutate()}>
+            <Button variant="outline" disabled={!canSave || save.isPending || finalise.isPending} onClick={() => save.mutate()}>
               {save.isPending ? "Saving..." : "Save"}
             </Button>
             {canFinalise && (
               <Button
-                disabled={!canSave || !outDateTime || !closingKm || finalise.isPending}
+                disabled={!canSave || !outDateTime || !closingKm || finalise.isPending || save.isPending || (!jc ? !repairCompletion : jc.repairControl?.status !== "RELEASED" && (jc.repairControlRequired || jc.repairControl?.status === "IN_PROGRESS"))}
                 onClick={() => finalise.mutate()}
               >
                 {finalise.isPending ? "Finalising..." : "Finalise"}

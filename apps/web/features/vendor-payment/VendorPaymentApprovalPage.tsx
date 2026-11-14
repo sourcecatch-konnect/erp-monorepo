@@ -39,6 +39,7 @@ const TYPE_FILTERS: { label: string; value: VendorPaymentType | "ALL" }[] = [
   { label: "Transporter", value: "TRANSPORTER" },
   { label: "LDC broker", value: "LDC_BROKER" },
   { label: "Hamali", value: "HAMALI" },
+  { label: "Job card", value: "JOBCARD" },
 ];
 
 export function VendorPaymentApprovalPage() {
@@ -137,7 +138,7 @@ export function VendorPaymentApprovalPage() {
                       <TableCell className="font-medium">{slip.slipNumber}</TableCell>
                       <TableCell className="text-sm">{slip.type}</TableCell>
                       <TableCell className="text-sm">
-                        {slip.transport?.name ?? slip.labour?.name ?? "—"}
+                        {slip.transport?.name ?? slip.labour?.name ?? slip.serviceBill?.serviceProvider.name ?? "—"}
                       </TableCell>
                       <TableCell className="text-sm">{slip.branch?.name ?? "—"}</TableCell>
                       <TableCell className="text-xs">{formatDate(slip.createdAt)}</TableCell>

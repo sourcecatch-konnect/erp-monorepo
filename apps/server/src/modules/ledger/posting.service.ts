@@ -11,6 +11,7 @@ import {
   type VoucherType,
 } from "../../../generated/prisma/index.js";
 import { BadRequestError } from "../../lib/error.js";
+import { buildJobCardPaymentLines } from "./job-card-payment.lines.js";
 import {
   buildDriverMoneyOutLines,
   buildSalaryRunLines,
@@ -1648,6 +1649,28 @@ export type VendorDisbursementArgs = {
   narrationDetail?: string | null;
   createdById: string;
 };
+
+/** Service bills already accrued expense/payable; approval creates no accrual. */
+export async function postJobCardDisbursement(
+  tx: Tx,
+  args: VendorDisbursementArgs & { serviceProviderId: string; tdsPaise: bigint },
+) {
+  const [funding, provider] = await Promise.all([
+    requireFundingLedger(tx, args.fundingLedgerId),
+    getOrCreatePartyLedger(tx, { sparePartSupplierId: args.serviceProviderId }),
+  ]);
+  const narration = `Service bill payment ${args.voucherNumber} - slip ${args.slipNumber}`;
+  const tds = args.tdsPaise > 0n ? await getGLLedger(tx, "TDS_PAYABLE") : null;
+  const lines = buildJobCardPaymentLines({
+    providerLedgerId: provider.id, fundingLedgerId: funding.id, tdsLedgerId: tds?.id,
+    cashPaise: args.paidPaise, tdsPaise: args.tdsPaise, narration,
+  });
+  return postJournal(tx, {
+    voucherType: "PAYMENT", voucherNumber: args.voucherNumber, voucherDate: args.paidAt,
+    fyCode: args.fyCode, branchId: args.branchId, narration, sourceType: "VENDOR_PAYMENT",
+    sourceId: args.disbursementId, sourceNumber: args.voucherNumber, createdById: args.createdById, lines,
+  });
+}
 
 /**
  * Post the PAYMENT voucher for one settlement against a vendor-payment slip:

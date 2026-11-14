@@ -7,26 +7,95 @@ import {
   createAndFinaliseJobCardSchema,
   cancelJobCardSchema,
   jobCardListQuerySchema,
+  jobCardRepairCostQuerySchema,
+  jobCardReconciliationQuerySchema,
+  jobCardAuditQuerySchema,
   createJobCardRemovedPartSchema,
+  jobCardRemovedPartListQuerySchema,
+  repairControlActionSchema,
+  removedPartActionSchema,
   undoFinaliseJobCardSchema,
 } from "@skerp/validators";
-import type { Prisma } from "../../../generated/prisma/index.js";
 import { db } from "../../../prisma/prisma.js";
 import { authMiddleware } from "../../middlewares/auth.middlware.js";
 import { can } from "../../auth/can.middleware.js";
 import { branchFilter, assertBranchAccess } from "../../auth/branch-scope.js";
-import { BadRequestError, NotFoundError } from "../../lib/error.js";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} from "../../lib/error.js";
 import { sendOk } from "../_shared/response.js";
 import { getParamId } from "../_shared/param.js";
-import { fyCodeFor, formatDocNumber, nextSequence } from "../_shared/doc-number.js";
-import { postJobCardPartsVoucher, postPartReturnVoucher, reverseJournal } from "../ledger/posting.service.js";
+import {
+  fyCodeFor,
+  formatDocNumber,
+  nextSequence,
+} from "../_shared/doc-number.js";
+import { reverseJournal } from "../ledger/posting.service.js";
+import { jobCardListSelect, jobCardListWhere } from "./job-card.query.js";
+
+import { createRemovedPartTx } from "./job-card-removed-part.service.js";
+import { actOnRemovedPartTx } from "./removed-part-lifecycle.service.js";
+import { finaliseJobCardTx } from "./job-card.service.js";
+import { getJobCardRepairCosts } from "./job-card-report.service.js";
+import { getJobCardReconciliation } from "./job-card-reconciliation.service.js";
+import { createJobCardOnceTx } from "./job-card-create-request.service.js";
+import { actOnRepairTx, assertNoRepairInProgressTx, assertRepairIdentityUnchangedTx, recordCompletedRepairTx } from "./job-card-repair.service.js";
+import { getJobCardAudit } from "./job-card-audit.service.js";
 
 const router: Router = Router();
 router.use(authMiddleware);
 
+router.get(
+  "/reports/audit",
+  can(PERMS.WORKSHOP.JOBCARD_VIEW),
+  can(PERMS.WORKSHOP.SERVICEBILL_VIEW),
+  can(PERMS.LEDGER.VIEW),
+  can(PERMS.ACCOUNTS.PAYMENT.VIEW),
+  async (req, res) => {
+    const query = jobCardAuditQuerySchema.parse(req.query);
+    if (query.branchId) assertBranchAccess(req, query.branchId);
+    sendOk(
+      res,
+      await getJobCardAudit(
+        query,
+        req.ctx?.branchScope === "ALL" ? null : (req.ctx?.branchIds ?? []),
+      ),
+    );
+  },
+);
+
+router.get(
+  "/reports/reconciliation",
+  can(PERMS.WORKSHOP.JOBCARD_VIEW),
+  can(PERMS.WORKSHOP.SERVICEBILL_VIEW),
+  can(PERMS.LEDGER.VIEW),
+  async (req, res) => {
+    const query = jobCardReconciliationQuerySchema.parse(req.query);
+    if (query.branchId) assertBranchAccess(req, query.branchId);
+    const branchIds =
+      req.ctx?.branchScope === "ALL" ? null : (req.ctx?.branchIds ?? []);
+    sendOk(res, await getJobCardReconciliation(query, branchIds));
+  },
+);
+
+router.get(
+  "/reports/repair-costs",
+  can(PERMS.WORKSHOP.JOBCARD_VIEW),
+  async (req, res) => {
+    const query = jobCardRepairCostQuerySchema.parse(req.query);
+    if (query.branchId) assertBranchAccess(req, query.branchId);
+    const branchIds =
+      req.ctx?.branchScope === "ALL" ? null : (req.ctx?.branchIds ?? []);
+    sendOk(res, await getJobCardRepairCosts(query, branchIds));
+  },
+);
+
 const actorId = (req: { user?: { userId: string } }) => req.user!.userId;
 
 const jobCardDetailInclude = {
+  repairControl: true,
   branch: { select: { id: true, name: true, branchCode: true } },
   vehicle: { select: { id: true, vehicleNumber: true } },
   driver: { select: { id: true, name: true } },
@@ -46,23 +115,23 @@ const jobCardDetailInclude = {
     },
   },
   journalEntry: {
-    select: { id: true, voucherNumber: true, status: true, tallySyncStatus: true },
+    select: {
+      id: true,
+      voucherNumber: true,
+      status: true,
+      tallySyncStatus: true,
+    },
   },
 };
 
 router.get("/", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
   const query = jobCardListQuerySchema.parse(req.query);
-  const where = {
-    ...branchFilter(req),
-    ...(query.branchId ? { branchId: query.branchId } : {}),
-    ...(query.vehicleId ? { vehicleId: query.vehicleId } : {}),
-    ...(query.status ? { status: query.status } : {}),
-  };
+  const where = jobCardListWhere(branchFilter(req), query);
   const [jobCards, total] = await Promise.all([
     db.jobCard.findMany({
       where,
-      include: jobCardDetailInclude,
-      orderBy: { createdAt: "desc" },
+      select: jobCardListSelect,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: query.page * query.size,
       take: query.size,
     }),
@@ -76,42 +145,47 @@ router.get("/", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
  * batch-wise part picker (old ERP shows stock "invoice/batch-wise").
  * Oldest first, as a natural FIFO suggestion; the user still picks manually.
  */
-router.get("/lookup/batches", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
-  const sparePartId = String(req.query.sparePartId ?? "");
-  const branchId = String(req.query.branchId ?? "");
-  if (!sparePartId || !branchId)
-    throw new BadRequestError("sparePartId and branchId are required");
+router.get(
+  "/lookup/batches",
+  can(PERMS.WORKSHOP.JOBCARD_VIEW),
+  async (req, res) => {
+    const sparePartId = String(req.query.sparePartId ?? "");
+    const branchId = String(req.query.branchId ?? "");
+    if (!sparePartId || !branchId)
+      throw new BadRequestError("sparePartId and branchId are required");
+    assertBranchAccess(req, branchId);
 
-  const batches = await db.spareBatch.findMany({
-    where: { sparePartId, branchId, qtyRemaining: { gt: 0 } },
-    select: {
-      id: true,
-      batchNo: true,
-      qtyRemaining: true,
-      unitCostPaise: true,
-      warrantyExpiry: true,
-      createdAt: true,
-      inwardLine: {
-        select: { inward: { select: { inwardNumber: true } } },
+    const batches = await db.spareBatch.findMany({
+      where: { sparePartId, branchId, qtyRemaining: { gt: 0 } },
+      select: {
+        id: true,
+        batchNo: true,
+        qtyRemaining: true,
+        unitCostPaise: true,
+        warrantyExpiry: true,
+        createdAt: true,
+        inwardLine: {
+          select: { inward: { select: { inwardNumber: true } } },
+        },
       },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-  sendOk(
-    res,
-    batches.map((b) => ({
-      id: b.id,
-      batchNo: b.batchNo,
-      qtyRemaining: b.qtyRemaining,
-      unitCostPaise: b.unitCostPaise,
-      warrantyExpiry: b.warrantyExpiry,
-      // A batch with no inward line came from a Removed-Part reusable return,
-      // not a fresh purchase — surfaced so the picker can label it.
-      sourceInvoiceNumber: b.inwardLine?.inward.inwardNumber ?? null,
-      source: b.inwardLine ? "PURCHASE" : "RETURN",
-    })),
-  );
-});
+      orderBy: { createdAt: "asc" },
+    });
+    sendOk(
+      res,
+      batches.map((b) => ({
+        id: b.id,
+        batchNo: b.batchNo,
+        qtyRemaining: b.qtyRemaining,
+        unitCostPaise: b.unitCostPaise,
+        warrantyExpiry: b.warrantyExpiry,
+        // A batch with no inward line came from a Removed-Part reusable return,
+        // not a fresh purchase — surfaced so the picker can label it.
+        sourceInvoiceNumber: b.inwardLine?.inward.inwardNumber ?? null,
+        source: b.inwardLine ? "PURCHASE" : "RETURN",
+      })),
+    );
+  },
+);
 
 router.get("/:id", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
   const jobCard = await db.jobCard.findUnique({
@@ -119,6 +193,7 @@ router.get("/:id", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
     include: jobCardDetailInclude,
   });
   if (!jobCard) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, jobCard.branchId);
   sendOk(res, jobCard);
 });
 
@@ -134,53 +209,63 @@ router.post("/", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
 
   const fyCode = fyCodeFor(input.inDateTime);
 
-  const jobCard = await db.$transaction(async (tx) => {
-    const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
-    const jobCardNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/JC");
-
-    return tx.jobCard.create({
-      data: {
-        jobCardNumber,
+  const jobCard = await db.$transaction((tx) =>
+    createJobCardOnceTx(tx, input, actorId(req), "DRAFT", async (identity) => {
+      const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
+      const jobCardNumber = formatDocNumber(
+        branch.branchCode,
         fyCode,
-        branchId: input.branchId,
-        vehicleId: input.vehicleId,
-        driverId: input.driverId,
-        truckStatus: input.truckStatus,
-        inDateTime: input.inDateTime,
-        openingKm: input.openingKm,
-        remarks: input.remarks,
-        createdById: actorId(req),
-        partLines: {
-          create: input.partLines.map((line) => ({
-            sparePartId: line.sparePartId,
-            batchId: line.batchId,
-            mechanicId: line.mechanicId,
-            qty: line.qty,
-            unitCostPaise: 0n, // snapshotted from the batch at Finalise
-            amountPaise: 0n,
-            description: line.description,
-          })),
+        seq,
+        "SKT/JC",
+      );
+
+      return tx.jobCard.create({
+        data: {
+          ...identity,
+          jobCardNumber,
+          fyCode,
+          branchId: input.branchId,
+          vehicleId: input.vehicleId,
+          driverId: input.driverId,
+          truckStatus: input.truckStatus,
+          inDateTime: input.inDateTime,
+          openingKm: input.openingKm,
+          remarks: input.remarks,
+          createdById: actorId(req),
+          partLines: {
+            create: input.partLines.map((line) => ({
+              sparePartId: line.sparePartId,
+              batchId: line.batchId,
+              mechanicId: line.mechanicId,
+              qty: line.qty,
+              unitCostPaise: 0n, // snapshotted from the batch at Finalise
+              amountPaise: 0n,
+              description: line.description,
+            })),
+          },
+          serviceLines: {
+            create: input.serviceLines.map((line) => ({
+              serviceProviderId: line.serviceProviderId,
+              sparePartId: line.sparePartId,
+              mechanicId: line.mechanicId,
+              qty: line.qty,
+              ratePaise: line.ratePaise,
+              amountPaise: line.ratePaise * BigInt(line.qty),
+              description: line.description,
+            })),
+          },
         },
-        serviceLines: {
-          create: input.serviceLines.map((line) => ({
-            serviceProviderId: line.serviceProviderId,
-            sparePartId: line.sparePartId,
-            mechanicId: line.mechanicId,
-            qty: line.qty,
-            ratePaise: line.ratePaise,
-            amountPaise: line.ratePaise * BigInt(line.qty),
-            description: line.description,
-          })),
-        },
-      },
-      select: { id: true },
-    });
-  });
+        select: { id: true },
+      });
+    }),
+    { isolationLevel: "ReadCommitted" },
+  );
 
   const created = await db.jobCard.findUnique({
     where: { id: jobCard.id },
     include: jobCardDetailInclude,
   });
+  if (created) assertBranchAccess(req, created.branchId);
   sendOk(res, created, undefined, 201);
 });
 
@@ -188,17 +273,35 @@ router.patch("/:id", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
   const input = updateJobCardSchema.parse(req.body);
   const existing = await db.jobCard.findUnique({
     where: { id: getParamId(req) },
-    select: { id: true, status: true, branchId: true },
+    select: { id: true, status: true, branchId: true, version: true },
   });
   if (!existing) throw new NotFoundError("Job card not found");
   if (existing.status !== "DRAFT")
     throw new BadRequestError("Only a DRAFT job card can be edited");
+  assertBranchAccess(req, existing.branchId);
   assertBranchAccess(req, input.branchId ?? existing.branchId);
 
   await db.$transaction(async (tx) => {
-    if (input.partLines) await tx.jobCardPartLine.deleteMany({ where: { jobCardId: existing.id } });
+    const claimed = await tx.jobCard.updateMany({
+      where: { id: existing.id, status: "DRAFT", version: existing.version },
+      data: { version: { increment: 1 } },
+    });
+    if (claimed.count !== 1)
+      throw new ConflictError(
+        "Job card changed. Refresh before editing again.",
+      );
+    if (input.vehicleId || input.branchId || input.truckStatus) {
+      const current = await tx.jobCard.findUniqueOrThrow({ where: { id: existing.id }, select: { vehicleId: true, branchId: true, truckStatus: true } });
+      if ((input.vehicleId && input.vehicleId !== current.vehicleId) || (input.branchId && input.branchId !== current.branchId) || (input.truckStatus && input.truckStatus !== current.truckStatus)) await assertRepairIdentityUnchangedTx(tx, existing.id);
+    }
+    if (input.partLines)
+      await tx.jobCardPartLine.deleteMany({
+        where: { jobCardId: existing.id },
+      });
     if (input.serviceLines)
-      await tx.jobCardServiceLine.deleteMany({ where: { jobCardId: existing.id } });
+      await tx.jobCardServiceLine.deleteMany({
+        where: { jobCardId: existing.id },
+      });
 
     await tx.jobCard.update({
       where: { id: existing.id },
@@ -208,38 +311,39 @@ router.patch("/:id", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
         ...(input.driverId ? { driverId: input.driverId } : {}),
         ...(input.truckStatus ? { truckStatus: input.truckStatus } : {}),
         ...(input.inDateTime ? { inDateTime: input.inDateTime } : {}),
-        ...(input.openingKm !== undefined ? { openingKm: input.openingKm } : {}),
+        ...(input.openingKm !== undefined
+          ? { openingKm: input.openingKm }
+          : {}),
         ...(input.remarks !== undefined ? { remarks: input.remarks } : {}),
-        version: { increment: 1 },
         ...(input.partLines
           ? {
-            partLines: {
-              create: input.partLines.map((line) => ({
-                sparePartId: line.sparePartId,
-                batchId: line.batchId,
-                mechanicId: line.mechanicId,
-                qty: line.qty,
-                unitCostPaise: 0n,
-                amountPaise: 0n,
-                description: line.description,
-              })),
-            },
-          }
+              partLines: {
+                create: input.partLines.map((line) => ({
+                  sparePartId: line.sparePartId,
+                  batchId: line.batchId,
+                  mechanicId: line.mechanicId,
+                  qty: line.qty,
+                  unitCostPaise: 0n,
+                  amountPaise: 0n,
+                  description: line.description,
+                })),
+              },
+            }
           : {}),
         ...(input.serviceLines
           ? {
-            serviceLines: {
-              create: input.serviceLines.map((line) => ({
-                serviceProviderId: line.serviceProviderId,
-                sparePartId: line.sparePartId,
-                mechanicId: line.mechanicId,
-                qty: line.qty,
-                ratePaise: line.ratePaise,
-                amountPaise: line.ratePaise * BigInt(line.qty),
-                description: line.description,
-              })),
-            },
-          }
+              serviceLines: {
+                create: input.serviceLines.map((line) => ({
+                  serviceProviderId: line.serviceProviderId,
+                  sparePartId: line.sparePartId,
+                  mechanicId: line.mechanicId,
+                  qty: line.qty,
+                  ratePaise: line.ratePaise,
+                  amountPaise: line.ratePaise * BigInt(line.qty),
+                  description: line.description,
+                })),
+              },
+            }
           : {}),
       },
     });
@@ -251,168 +355,6 @@ router.patch("/:id", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
   });
   sendOk(res, updated);
 });
-
-type FinaliseInput = { outDateTime: Date; closingKm: number };
-type ExistingJobCardForFinalise = {
-  id: string;
-  jobCardNumber: string | null;
-  branchId: string;
-  fyCode: string;
-  openingKm: number;
-  partLines: { id: string; sparePartId: string; batchId: string; qty: number }[];
-  serviceLines: { amountPaise: bigint }[];
-};
-
-/**
- * Shared by `/:id/finalise` and the create+finalise merge below. Parts are
- * actually issued here (not at Save) — batch-specific cost is snapshotted,
- * stock decrements, and one expense voucher posts. Service lines are
- * recorded for total but post nothing yet (Service Bill, a later story,
- * does that). A Job Card with zero part lines posts no voucher.
- *
- * Grouped by sparePartId and batched instead of a for-loop awaiting 6
- * separate round trips per line — with N part lines that was up to 6N
- * sequential round trips one after another.
- */
-async function finaliseJobCardTx(
-  tx: Prisma.TransactionClient,
-  existing: ExistingJobCardForFinalise,
-  input: FinaliseInput,
-  actorUserId: string,
-) {
-  if (existing.partLines.length === 0 && existing.serviceLines.length === 0)
-    throw new BadRequestError("A job card needs at least one part or service line to finalise");
-  if (input.closingKm < existing.openingKm)
-    throw new BadRequestError("Closing KM cannot be less than opening KM");
-
-  const totalServiceAmountPaise = existing.serviceLines.reduce((s, l) => s + l.amountPaise, 0n);
-
-  // Re-read every batch under the transaction in one query instead of one
-  // per line, closing the same race window the original per-line reads did.
-  const batchIds = existing.partLines.map((l) => l.batchId);
-  const batches = await tx.spareBatch.findMany({ where: { id: { in: batchIds } } });
-  const batchById = new Map(batches.map((b) => [b.id, b]));
-
-  // Group by sparePartId so the stock-ledger running balance stays correct
-  // when a part is drawn from more than one batch/line in the same finalise.
-  const linesBySparePart = new Map<string, typeof existing.partLines>();
-  for (const line of existing.partLines) {
-    const list = linesBySparePart.get(line.sparePartId) ?? [];
-    list.push(line);
-    linesBySparePart.set(line.sparePartId, list);
-  }
-
-  const existingLedgers = await tx.stockLedger.findMany({
-    where: { branchId: existing.branchId, sparePartId: { in: [...linesBySparePart.keys()] } },
-  });
-  const ledgerByPart = new Map(existingLedgers.map((l) => [l.sparePartId, l]));
-
-  let totalPartsAmountPaise = 0n;
-  const partLineUpdates: ReturnType<typeof tx.jobCardPartLine.update>[] = [];
-  const batchDecrements: ReturnType<typeof tx.spareBatch.update>[] = [];
-  const ledgerUpdates: ReturnType<typeof tx.stockLedger.update>[] = [];
-  const stockMovementsData: {
-    sparePartId: string;
-    branchId: string;
-    movementType: "ISSUE";
-    qtyDelta: number;
-    unitCostPaise: bigint;
-    balanceQtyAfter: number;
-    refType: "JOB_CARD";
-    refId: string;
-    createdById: string;
-  }[] = [];
-
-  for (const [sparePartId, partLines] of linesBySparePart) {
-    let qty = ledgerByPart.get(sparePartId)?.currentQty ?? 0;
-
-    for (const line of partLines) {
-      const batch = batchById.get(line.batchId);
-      if (!batch || batch.sparePartId !== line.sparePartId)
-        throw new BadRequestError("A part line's batch is no longer valid");
-      if (batch.qtyRemaining < line.qty)
-        throw new BadRequestError(
-          `Insufficient stock in batch ${batch.batchNo ?? batch.id} for ${line.sparePartId} (available: ${batch.qtyRemaining}, needed: ${line.qty})`,
-        );
-
-      const amountPaise = batch.unitCostPaise * BigInt(line.qty);
-      totalPartsAmountPaise += amountPaise;
-
-      partLineUpdates.push(
-        tx.jobCardPartLine.update({
-          where: { id: line.id },
-          data: { unitCostPaise: batch.unitCostPaise, amountPaise },
-        }),
-      );
-      batchDecrements.push(
-        tx.spareBatch.update({
-          where: { id: batch.id },
-          data: { qtyRemaining: { decrement: line.qty } },
-        }),
-      );
-
-      qty -= line.qty;
-      stockMovementsData.push({
-        sparePartId,
-        branchId: existing.branchId,
-        movementType: "ISSUE",
-        qtyDelta: -line.qty,
-        unitCostPaise: batch.unitCostPaise,
-        balanceQtyAfter: qty,
-        refType: "JOB_CARD",
-        refId: existing.id,
-        createdById: actorUserId,
-      });
-    }
-
-    ledgerUpdates.push(
-      tx.stockLedger.update({
-        where: { sparePartId_branchId: { sparePartId, branchId: existing.branchId } },
-        data: { currentQty: qty },
-      }),
-    );
-  }
-
-  await Promise.all([
-    ...partLineUpdates,
-    ...batchDecrements,
-    ...ledgerUpdates,
-    ...(stockMovementsData.length
-      ? [tx.stockMovement.createMany({ data: stockMovementsData })]
-      : []),
-  ]);
-
-  let journalEntryId: string | null = null;
-  if (totalPartsAmountPaise > 0n) {
-    const voucher = await postJobCardPartsVoucher(tx, {
-      jobCardId: existing.id,
-      jobCardNumber: existing.jobCardNumber!,
-      finaliseDate: input.outDateTime,
-      branchId: existing.branchId,
-      fyCode: existing.fyCode,
-      totalPartsAmountPaise,
-      createdById: actorUserId,
-    });
-    journalEntryId = voucher.id;
-  }
-
-  const result = await tx.jobCard.update({
-    where: { id: existing.id },
-    data: {
-      status: "FINALISED",
-      outDateTime: input.outDateTime,
-      closingKm: input.closingKm,
-      totalPartsAmountPaise,
-      totalServiceAmountPaise,
-      totalAmountPaise: totalPartsAmountPaise + totalServiceAmountPaise,
-      journalEntryId,
-      finalisedById: actorUserId,
-      finalisedAt: new Date(),
-    },
-    select: { id: true },
-  });
-  return result;
-}
 
 /**
  * Create a brand-new job card and finalise it immediately, in one request
@@ -437,103 +379,119 @@ router.post(
     const fyCode = fyCodeFor(input.inDateTime);
     const me = actorId(req);
 
-    const finalised = await db.$transaction(async (tx) => {
-      const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
-      const jobCardNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/JC");
-
-      // Job card row, then lines via createManyAndReturn — Prisma's nested
-      // `partLines: { create: [...] }` issues one INSERT per line instead
-      // of a single batched statement; with N+M lines that's up to N+M+1
-      // sequential round trips. createManyAndReturn does it in 2.
-      const jobCard = await tx.jobCard.create({
-        data: {
-          jobCardNumber,
+    const finalised = await db.$transaction((tx) =>
+      createJobCardOnceTx(tx, input, me, "FINALISE", async (identity) => {
+        const seq = await nextSequence(tx, branch.branchCode, fyCode, "JC");
+        const jobCardNumber = formatDocNumber(
+          branch.branchCode,
           fyCode,
-          branchId: input.branchId,
-          vehicleId: input.vehicleId,
-          driverId: input.driverId,
-          truckStatus: input.truckStatus,
-          inDateTime: input.inDateTime,
-          openingKm: input.openingKm,
-          remarks: input.remarks,
-          createdById: me,
-        },
-      });
+          seq,
+          "SKT/JC",
+        );
 
-      const [createdPartLines, createdServiceLines] = await Promise.all([
-        input.partLines.length
-          ? tx.jobCardPartLine.createManyAndReturn({
-              data: input.partLines.map((line) => ({
-                jobCardId: jobCard.id,
-                sparePartId: line.sparePartId,
-                batchId: line.batchId,
-                mechanicId: line.mechanicId,
-                qty: line.qty,
-                unitCostPaise: 0n, // snapshotted below by finaliseJobCardTx
-                amountPaise: 0n,
-                description: line.description,
-              })),
-            })
-          : Promise.resolve([]),
-        input.serviceLines.length
-          ? tx.jobCardServiceLine.createManyAndReturn({
-              data: input.serviceLines.map((line) => ({
-                jobCardId: jobCard.id,
-                serviceProviderId: line.serviceProviderId,
-                sparePartId: line.sparePartId,
-                mechanicId: line.mechanicId,
-                qty: line.qty,
-                ratePaise: line.ratePaise,
-                amountPaise: line.ratePaise * BigInt(line.qty),
-                description: line.description,
-              })),
-            })
-          : Promise.resolve([]),
-      ]);
-      const created = {
-        ...jobCard,
-        partLines: createdPartLines,
-        serviceLines: createdServiceLines,
-      };
+        // Job card row, then lines via createManyAndReturn — Prisma's nested
+        // `partLines: { create: [...] }` issues one INSERT per line instead
+        // of a single batched statement; with N+M lines that's up to N+M+1
+        // sequential round trips. createManyAndReturn does it in 2.
+        const jobCard = await tx.jobCard.create({
+          data: {
+            ...identity,
+            jobCardNumber,
+            fyCode,
+            branchId: input.branchId,
+            vehicleId: input.vehicleId,
+            driverId: input.driverId,
+            truckStatus: input.truckStatus,
+            inDateTime: input.inDateTime,
+            openingKm: input.openingKm,
+            remarks: input.remarks,
+            createdById: me,
+          },
+        });
 
-      return finaliseJobCardTx(
-        tx,
-        created,
-        { outDateTime: input.outDateTime, closingKm: input.closingKm },
-        me,
-      );
-    });
+        const [createdPartLines, createdServiceLines] = await Promise.all([
+          input.partLines.length
+            ? tx.jobCardPartLine.createManyAndReturn({
+                data: input.partLines.map((line) => ({
+                  jobCardId: jobCard.id,
+                  sparePartId: line.sparePartId,
+                  batchId: line.batchId,
+                  mechanicId: line.mechanicId,
+                  qty: line.qty,
+                  unitCostPaise: 0n, // snapshotted below by finaliseJobCardTx
+                  amountPaise: 0n,
+                  description: line.description,
+                })),
+              })
+            : Promise.resolve([]),
+          input.serviceLines.length
+            ? tx.jobCardServiceLine.createManyAndReturn({
+                data: input.serviceLines.map((line) => ({
+                  jobCardId: jobCard.id,
+                  serviceProviderId: line.serviceProviderId,
+                  sparePartId: line.sparePartId,
+                  mechanicId: line.mechanicId,
+                  qty: line.qty,
+                  ratePaise: line.ratePaise,
+                  amountPaise: line.ratePaise * BigInt(line.qty),
+                  description: line.description,
+                })),
+              })
+            : Promise.resolve([]),
+        ]);
+        const created = {
+          ...jobCard,
+          partLines: createdPartLines,
+          serviceLines: createdServiceLines,
+        };
+
+        await recordCompletedRepairTx(tx, jobCard.id, input.repairCompletion, me, input.clientRequestId, input.inDateTime, input.outDateTime);
+
+        return finaliseJobCardTx(
+          tx,
+          created,
+          { outDateTime: input.outDateTime, closingKm: input.closingKm },
+          me,
+        );
+      }),
+      { isolationLevel: "ReadCommitted" },
+    );
 
     const result = await db.jobCard.findUnique({
       where: { id: finalised.id },
       include: jobCardDetailInclude,
     });
+    if (result) assertBranchAccess(req, result.branchId);
     sendOk(res, result, undefined, 201);
   },
 );
 
-router.post("/:id/finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (req, res) => {
-  const input = finaliseJobCardSchema.parse(req.body);
+router.post(
+  "/:id/finalise",
+  can(PERMS.WORKSHOP.JOBCARD_FINALISE),
+  async (req, res) => {
+    const input = finaliseJobCardSchema.parse(req.body);
 
-  const existing = await db.jobCard.findUnique({
-    where: { id: getParamId(req) },
-    include: { partLines: true, serviceLines: true },
-  });
-  if (!existing) throw new NotFoundError("Job card not found");
-  if (existing.status !== "DRAFT")
-    throw new BadRequestError("Only a DRAFT job card can be finalised");
-  assertBranchAccess(req, existing.branchId);
+    const existing = await db.jobCard.findUnique({
+      where: { id: getParamId(req) },
+      include: { partLines: true, serviceLines: true },
+    });
+    if (!existing) throw new NotFoundError("Job card not found");
+    if (existing.status !== "DRAFT")
+      throw new BadRequestError("Only a DRAFT job card can be finalised");
+    assertBranchAccess(req, existing.branchId);
 
-  const finalised = await db.$transaction((tx) =>
-    finaliseJobCardTx(tx, existing, input, actorId(req)),
-  );
+    const finalised = await db.$transaction((tx) =>
+      finaliseJobCardTx(tx, existing, input, actorId(req)),
+    );
 
-  const result = await db.jobCard.findUnique({
-    where: { id: finalised.id },
-    include: jobCardDetailInclude,
-  });
-  sendOk(res, result);
-});
+    const result = await db.jobCard.findUnique({
+      where: { id: finalised.id },
+      include: jobCardDetailInclude,
+    });
+    sendOk(res, result);
+  },
+);
 
 /**
  * Undo Finalise: only safe while nothing downstream has consumed the
@@ -543,120 +501,172 @@ router.post("/:id/finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (req, r
  * StockMovement rows, reverses the parts voucher, and drops the job card
  * back to DRAFT so it can be edited and re-finalised.
  */
-router.post("/:id/undo-finalise", can(PERMS.WORKSHOP.JOBCARD_FINALISE), async (req, res) => {
-  const input = undoFinaliseJobCardSchema.parse(req.body);
+router.post(
+  "/:id/undo-finalise",
+  can(PERMS.WORKSHOP.JOBCARD_FINALISE),
+  async (req, res) => {
+    const input = undoFinaliseJobCardSchema.parse(req.body);
 
-  const existing = await db.jobCard.findUnique({
-    where: { id: getParamId(req) },
-    include: { partLines: true, serviceLines: true, removedParts: { select: { id: true } } },
-  });
-  if (!existing) throw new NotFoundError("Job card not found");
-  if (existing.status !== "FINALISED")
-    throw new BadRequestError("Only a FINALISED job card can have its finalise undone");
-  assertBranchAccess(req, existing.branchId);
-
-  if (existing.serviceLines.some((l) => l.billedInServiceBillId !== null))
-    throw new BadRequestError(
-      "This job card has already been billed — undo is only possible before billing",
-    );
-  if (existing.removedParts.length > 0)
-    throw new BadRequestError(
-      "This job card already has removed-parts activity recorded — undo is no longer possible",
-    );
-
-  const undone = await db.$transaction(async (tx) => {
-    for (const line of existing.partLines) {
-      await tx.spareBatch.update({
-        where: { id: line.batchId },
-        data: { qtyRemaining: { increment: line.qty } },
-      });
-
-      const stockLedger = await tx.stockLedger.findUnique({
-        where: { sparePartId_branchId: { sparePartId: line.sparePartId, branchId: existing.branchId } },
-      });
-      const newQty = (stockLedger?.currentQty ?? 0) + line.qty;
-
-      await tx.stockLedger.update({
-        where: { sparePartId_branchId: { sparePartId: line.sparePartId, branchId: existing.branchId } },
-        data: { currentQty: newQty },
-      });
-
-      await tx.stockMovement.create({
-        data: {
-          sparePartId: line.sparePartId,
-          branchId: existing.branchId,
-          movementType: "ADJUSTMENT",
-          qtyDelta: line.qty,
-          unitCostPaise: line.unitCostPaise,
-          balanceQtyAfter: newQty,
-          refType: "JOBCARD_FINALISE_UNDO",
-          refId: existing.id,
-          createdById: actorId(req),
-        },
-      });
-
-      await tx.jobCardPartLine.update({
-        where: { id: line.id },
-        data: { unitCostPaise: 0n, amountPaise: 0n },
-      });
-    }
-
-    if (existing.journalEntryId)
-      await reverseJournal(tx, existing.journalEntryId, input.reason, actorId(req));
-
-    return tx.jobCard.update({
-      where: { id: existing.id },
-      data: {
-        status: "DRAFT",
-        outDateTime: null,
-        closingKm: null,
-        totalPartsAmountPaise: 0n,
-        totalServiceAmountPaise: 0n,
-        totalAmountPaise: 0n,
-        journalEntryId: null,
-        finalisedById: null,
-        finalisedAt: null,
+    const existing = await db.jobCard.findUnique({
+      where: { id: getParamId(req) },
+      include: {
+        partLines: true,
+        serviceLines: true,
+        removedParts: { select: { id: true } },
       },
-      select: { id: true },
     });
-  });
+    if (!existing) throw new NotFoundError("Job card not found");
+    if (existing.status !== "FINALISED")
+      throw new BadRequestError(
+        "Only a FINALISED job card can have its finalise undone",
+      );
+    assertBranchAccess(req, existing.branchId);
 
-  const result = await db.jobCard.findUnique({
-    where: { id: undone.id },
-    include: jobCardDetailInclude,
-  });
-  sendOk(res, result);
-});
+    if (existing.serviceLines.some((l) => l.billedInServiceBillId !== null))
+      throw new BadRequestError(
+        "This job card has already been billed — undo is only possible before billing",
+      );
+    if (existing.removedParts.length > 0)
+      throw new BadRequestError(
+        "This job card already has removed-parts activity recorded — undo is no longer possible",
+      );
 
-router.post("/:id/cancel", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
-  const input = cancelJobCardSchema.parse(req.body);
-  const existing = await db.jobCard.findUnique({
-    where: { id: getParamId(req) },
-    select: { id: true, status: true, branchId: true },
-  });
-  if (!existing) throw new NotFoundError("Job card not found");
-  if (existing.status !== "DRAFT")
-    throw new BadRequestError(
-      "Only a DRAFT job card can be cancelled — no stock has moved yet at that stage",
-    );
-  assertBranchAccess(req, existing.branchId);
+    const undone = await db.$transaction(async (tx) => {
+      const claimed = await tx.jobCard.updateMany({
+        where: {
+          id: existing.id,
+          status: "FINALISED",
+          version: existing.version,
+        },
+        data: { version: { increment: 1 } },
+      });
+      if (claimed.count !== 1)
+        throw new ConflictError(
+          "Job card changed. Refresh before undoing finalisation.",
+        );
+      // Billing claims the same parent before claiming service lines. Recheck
+      // after the claim, rather than trusting dependencies read before locking.
+      if (
+        await tx.jobCardServiceLine.count({
+          where: {
+            jobCardId: existing.id,
+            billedInServiceBillId: { not: null },
+          },
+        })
+      )
+        throw new ConflictError(
+          "This job card has billed services and cannot be reopened",
+        );
+      for (const line of existing.partLines) {
+        await tx.spareBatch.update({
+          where: { id: line.batchId },
+          data: { qtyRemaining: { increment: line.qty } },
+        });
 
-  await db.jobCard.update({
-    where: { id: existing.id },
-    data: {
-      status: "CANCELLED",
-      cancelledById: actorId(req),
-      cancelledAt: new Date(),
-      cancelReason: input.reason,
-    },
-  });
+        const stockLedger = await tx.stockLedger.update({
+          where: {
+            sparePartId_branchId: {
+              sparePartId: line.sparePartId,
+              branchId: existing.branchId,
+            },
+          },
+          data: { currentQty: { increment: line.qty } },
+        });
+        const newQty = stockLedger.currentQty;
 
-  const updated = await db.jobCard.findUnique({
-    where: { id: existing.id },
-    include: jobCardDetailInclude,
-  });
-  sendOk(res, updated);
-});
+        await tx.stockMovement.create({
+          data: {
+            sparePartId: line.sparePartId,
+            branchId: existing.branchId,
+            movementType: "ADJUSTMENT",
+            qtyDelta: line.qty,
+            unitCostPaise: line.unitCostPaise,
+            balanceQtyAfter: newQty,
+            refType: "JOBCARD_FINALISE_UNDO",
+            refId: existing.id,
+            createdById: actorId(req),
+          },
+        });
+
+        await tx.jobCardPartLine.update({
+          where: { id: line.id },
+          data: { unitCostPaise: 0n, amountPaise: 0n },
+        });
+      }
+
+      if (existing.journalEntryId)
+        await reverseJournal(
+          tx,
+          existing.journalEntryId,
+          input.reason,
+          actorId(req),
+        );
+
+      return tx.jobCard.update({
+        where: { id: existing.id },
+        data: {
+          status: "DRAFT",
+          outDateTime: null,
+          closingKm: null,
+          totalPartsAmountPaise: 0n,
+          totalServiceAmountPaise: 0n,
+          totalAmountPaise: 0n,
+          journalEntryId: null,
+          finalisedById: null,
+          finalisedAt: null,
+        },
+        select: { id: true },
+      });
+    });
+
+    const result = await db.jobCard.findUnique({
+      where: { id: undone.id },
+      include: jobCardDetailInclude,
+    });
+    sendOk(res, result);
+  },
+);
+
+router.post(
+  "/:id/cancel",
+  can(PERMS.WORKSHOP.JOBCARD_MANAGE),
+  async (req, res) => {
+    const input = cancelJobCardSchema.parse(req.body);
+    const existing = await db.jobCard.findUnique({
+      where: { id: getParamId(req) },
+      select: { id: true, status: true, branchId: true, version: true },
+    });
+    if (!existing) throw new NotFoundError("Job card not found");
+    if (existing.status !== "DRAFT")
+      throw new BadRequestError(
+        "Only a DRAFT job card can be cancelled — no stock has moved yet at that stage",
+      );
+    assertBranchAccess(req, existing.branchId);
+
+    const cancelled = await db.$transaction(async (tx) => {
+      const result = await tx.jobCard.updateMany({
+      where: { id: existing.id, status: "DRAFT", version: existing.version },
+      data: {
+        version: { increment: 1 },
+        status: "CANCELLED",
+        cancelledById: actorId(req),
+        cancelledAt: new Date(),
+        cancelReason: input.reason,
+      },
+      });
+      if (result.count === 1) await assertNoRepairInProgressTx(tx, existing.id);
+      return result;
+    });
+    if (cancelled.count !== 1)
+      throw new ConflictError("Job card changed. Refresh before cancelling.");
+
+    const updated = await db.jobCard.findUnique({
+      where: { id: existing.id },
+      include: jobCardDetailInclude,
+    });
+    sendOk(res, updated);
+  },
+);
 
 const removedPartDetailInclude = {
   sparePart: { select: { id: true, name: true, unit: true } },
@@ -666,174 +676,124 @@ const removedPartDetailInclude = {
   journalEntry: { select: { id: true, voucherNumber: true, status: true } },
 };
 
-router.get("/:id/removed-parts", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
-  const jobCardId = getParamId(req);
-  const jobCard = await db.jobCard.findUnique({
-    where: { id: jobCardId },
-    select: { id: true, branchId: true },
-  });
-  if (!jobCard) throw new NotFoundError("Job card not found");
-  assertBranchAccess(req, jobCard.branchId);
+router.get(
+  "/:id/removed-parts",
+  can(PERMS.WORKSHOP.JOBCARD_VIEW),
+  async (req, res) => {
+    const jobCardId = getParamId(req);
+    const jobCard = await db.jobCard.findUnique({
+      where: { id: jobCardId },
+      select: { id: true, branchId: true },
+    });
+    if (!jobCard) throw new NotFoundError("Job card not found");
+    assertBranchAccess(req, jobCard.branchId);
 
-  const rows = await db.jobCardRemovedPart.findMany({
-    where: { jobCardId },
-    include: removedPartDetailInclude,
-    orderBy: { createdAt: "desc" },
-  });
-  sendOk(res, rows);
+    const query = jobCardRemovedPartListQuerySchema.parse(req.query);
+    const where = {
+      jobCardId,
+      ...(query.condition ? { condition: query.condition } : {}),
+      ...(query.lifecycleStatus ? { lifecycleStatus: query.lifecycleStatus } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                sparePart: {
+                  name: {
+                    contains: query.search,
+                    mode: "insensitive" as const,
+                  },
+                },
+              },
+              {
+                remarks: {
+                  contains: query.search,
+                  mode: "insensitive" as const,
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+    const [rows, total] = await Promise.all([
+      db.jobCardRemovedPart.findMany({
+        where,
+        include: removedPartDetailInclude,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: query.page * query.size,
+        take: query.size,
+      }),
+      db.jobCardRemovedPart.count({ where }),
+    ]);
+    sendOk(res, rows, { page: query.page, size: query.size, total });
+  },
+);
+
+/** Removed-part writes share one transaction and a request identity. */
+router.post("/:id/removed-parts/:removedId/actions", (req, res, next) => can(["APPROVE_STOCK", "APPROVE_DISPOSAL", "REJECT"].includes(req.body?.action) ? PERMS.WORKSHOP.JOBCARD_RETURN_APPROVE : PERMS.WORKSHOP.JOBCARD_MANAGE)(req, res, next), async (req, res) => {
+  const input = removedPartActionSchema.parse(req.body);
+  const jobCardId = getParamId(req);
+  const card = await db.jobCard.findUnique({ where: { id: jobCardId }, select: { branchId: true } });
+  if (!card) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, card.branchId);
+  const result = await db.$transaction((tx) => actOnRemovedPartTx(tx, jobCardId, String(req.params.removedId), card.branchId, input, actorId(req)), { isolationLevel: "ReadCommitted", timeout: 15000 });
+  sendOk(res, await db.jobCardRemovedPart.findUnique({ where: { id: result.id }, include: removedPartDetailInclude }));
 });
 
-/**
- * Distinct from Supplier Replacement — this is a part physically removed
- * from the truck during this Job Card, not a defective-part return keyed
- * off a purchase bill. REUSABLE creates a fresh SpareBatch and reverses the
- * original expense (Dr Inventory / Cr Repair Expense); REPAIRABLE/SCRAP are
- * logged only in v1 — no stock or ledger effect.
- */
-router.post("/:id/removed-parts", can(PERMS.WORKSHOP.JOBCARD_MANAGE), async (req, res) => {
-  const input = createJobCardRemovedPartSchema.parse(req.body);
+router.get("/:id/removed-parts/:removedId/events", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
   const jobCardId = getParamId(req);
+  const record = await db.jobCardRemovedPart.findFirst({ where: { id: String(req.params.removedId), jobCardId }, select: { id: true, jobCard: { select: { branchId: true } } } });
+  if (!record) throw new NotFoundError("Removed part not found");
+  assertBranchAccess(req, record.jobCard.branchId);
+  const query = jobCardRemovedPartListQuerySchema.parse(req.query);
+  const where = { removedPartId: record.id, ...(query.search ? { OR: [{ action: { contains: query.search, mode: "insensitive" as const } }, { reason: { contains: query.search, mode: "insensitive" as const } }] } : {}) };
+  const [rows, total] = await Promise.all([db.jobCardRemovedPartEvent.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: query.page * query.size, take: query.size }), db.jobCardRemovedPartEvent.count({ where })]);
+  const actors = await db.user.findMany({ where: { id: { in: [...new Set(rows.map((row) => row.actorId))] } }, select: { id: true, firstName: true, lastName: true } });
+  const names = new Map(actors.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]));
+  sendOk(res, rows.map((row) => ({ ...row, actorName: names.get(row.actorId) })), { page: query.page, size: query.size, total });
+});
 
-  const jobCard = await db.jobCard.findUnique({
-    where: { id: jobCardId },
-    select: { id: true, branchId: true, fyCode: true, status: true },
-  });
-  if (!jobCard) throw new NotFoundError("Job card not found");
-  if (jobCard.status === "CANCELLED")
-    throw new BadRequestError("Cannot record a removed part on a cancelled job card");
-  assertBranchAccess(req, jobCard.branchId);
-
-  let relatedLine: { id: string; unitCostPaise: bigint; batchId: string } | null = null;
-  if (input.relatedPartLineId) {
-    const line = await db.jobCardPartLine.findUnique({
-      where: { id: input.relatedPartLineId },
-      select: { id: true, jobCardId: true, sparePartId: true, unitCostPaise: true, batchId: true },
+router.post(
+  "/:id/removed-parts",
+  can(PERMS.WORKSHOP.JOBCARD_MANAGE),
+  async (req, res) => {
+    const input = createJobCardRemovedPartSchema.parse(req.body);
+    const jobCardId = getParamId(req);
+    const card = await db.jobCard.findUnique({
+      where: { id: jobCardId },
+      select: { branchId: true },
     });
-    if (!line || line.jobCardId !== jobCardId)
-      throw new BadRequestError("relatedPartLineId does not belong to this job card");
-    if (line.sparePartId !== input.sparePartId)
-      throw new BadRequestError("relatedPartLineId is for a different spare part");
-    relatedLine = line;
-  }
-
-  if (input.condition === "REUSABLE") {
-    const unitCostPaise = input.unitCostPaise ?? relatedLine?.unitCostPaise;
-    if (unitCostPaise === undefined || unitCostPaise === 0n)
-      throw new BadRequestError(
-        "No cost available for this reusable part — the related line isn't finalised yet, or supply unitCostPaise manually",
-      );
-
-    const supplierId = relatedLine
-      ? (await db.spareBatch.findUnique({ where: { id: relatedLine.batchId }, select: { supplierId: true } }))
-        ?.supplierId
-      : (await db.sparePart.findUnique({ where: { id: input.sparePartId }, select: { supplierId: true } }))
-        ?.supplierId;
-    if (!supplierId) throw new BadRequestError("Could not determine a supplier for the returned stock");
-
-    const fyCode = fyCodeFor(new Date());
-    const branch = await db.branch.findUnique({
-      where: { id: jobCard.branchId },
-      select: { branchCode: true },
-    });
-    if (!branch) throw new BadRequestError("Branch not found");
-
-    const removedPart = await db.$transaction(async (tx) => {
-      const batch = await tx.spareBatch.create({
-        data: {
-          sparePartId: input.sparePartId,
-          supplierId,
-          branchId: jobCard.branchId,
-          qtyReceived: input.qty,
-          qtyRemaining: input.qty,
-          unitCostPaise,
-        },
-      });
-
-      const stockLedger = await tx.stockLedger.findUnique({
-        where: { sparePartId_branchId: { sparePartId: input.sparePartId, branchId: jobCard.branchId } },
-      });
-      const oldQty = stockLedger?.currentQty ?? 0;
-      const oldAvg = stockLedger?.movingAvgCostPaise ?? 0n;
-      const newQty = oldQty + input.qty;
-      const newAvg =
-        newQty === 0 ? 0n : (oldAvg * BigInt(oldQty) + unitCostPaise * BigInt(input.qty)) / BigInt(newQty);
-
-      await tx.stockLedger.upsert({
-        where: { sparePartId_branchId: { sparePartId: input.sparePartId, branchId: jobCard.branchId } },
-        create: { sparePartId: input.sparePartId, branchId: jobCard.branchId, currentQty: newQty, movingAvgCostPaise: newAvg },
-        update: { currentQty: newQty, movingAvgCostPaise: newAvg },
-      });
-
-      const created = await tx.jobCardRemovedPart.create({
-        data: {
-          jobCardId,
-          sparePartId: input.sparePartId,
-          relatedPartLineId: input.relatedPartLineId,
-          qty: input.qty,
-          condition: "REUSABLE",
-          unitCostPaise,
-          newBatchId: batch.id,
-          remarks: input.remarks,
-          createdById: actorId(req),
-        },
-      });
-
-      await tx.stockMovement.create({
-        data: {
-          sparePartId: input.sparePartId,
-          branchId: jobCard.branchId,
-          movementType: "RETURN",
-          qtyDelta: input.qty,
-          unitCostPaise,
-          balanceQtyAfter: newQty,
-          refType: "JOB_CARD_REMOVED_PART",
-          refId: created.id,
-          createdById: actorId(req),
-        },
-      });
-
-      const seq = await nextSequence(tx, branch.branchCode, fyCode, "JCRP");
-      const voucherNumber = formatDocNumber(branch.branchCode, fyCode, seq, "SKT/JCRP");
-      const amountPaise = unitCostPaise * BigInt(input.qty);
-
-      const voucher = await postPartReturnVoucher(tx, {
-        removedPartId: created.id,
-        voucherNumber,
-        voucherDate: new Date(),
-        branchId: jobCard.branchId,
-        fyCode,
-        amountPaise,
-        createdById: actorId(req),
-      });
-
-      return tx.jobCardRemovedPart.update({
-        where: { id: created.id },
-        data: { journalEntryId: voucher.id },
-        select: { id: true },
-      });
-    });
-
+    if (!card) throw new NotFoundError("Job card not found");
+    assertBranchAccess(req, card.branchId);
+    const created = await db.$transaction((tx) =>
+      createRemovedPartTx(tx, jobCardId, card.branchId, input, actorId(req)),
+      { isolationLevel: "ReadCommitted" },
+    );
     const result = await db.jobCardRemovedPart.findUnique({
-      where: { id: removedPart.id },
+      where: { id: created.id },
       include: removedPartDetailInclude,
     });
-    return sendOk(res, result, undefined, 201);
-  }
-
-  // REPAIRABLE / SCRAP — log only, no stock or ledger effect in v1.
-  const created = await db.jobCardRemovedPart.create({
-    data: {
-      jobCardId,
-      sparePartId: input.sparePartId,
-      relatedPartLineId: input.relatedPartLineId,
-      qty: input.qty,
-      condition: input.condition,
-      remarks: input.remarks,
-      createdById: actorId(req),
-    },
-    include: removedPartDetailInclude,
-  });
-  sendOk(res, created, undefined, 201);
+    sendOk(res, result, undefined, 201);
+  },
+);
+router.post("/:id/repair-control", (req, res, next) => can(req.body?.action === "START" ? PERMS.WORKSHOP.JOBCARD_MANAGE : PERMS.WORKSHOP.JOBCARD_FINALISE)(req, res, next), async (req, res) => {
+  const input = repairControlActionSchema.parse(req.body);
+  const id = getParamId(req);
+  const card = await db.jobCard.findUnique({ where: { id }, select: { branchId: true } });
+  if (!card) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, card.branchId);
+  await db.$transaction((tx) => actOnRepairTx(tx, id, card.branchId, input, actorId(req)), { isolationLevel: "ReadCommitted", timeout: 15000 });
+  sendOk(res, await db.jobCard.findUnique({ where: { id }, include: jobCardDetailInclude }));
 });
-
+router.get("/:id/repair-events", can(PERMS.WORKSHOP.JOBCARD_VIEW), async (req, res) => {
+  const id = getParamId(req);
+  const card = await db.jobCard.findUnique({ where: { id }, select: { branchId: true } });
+  if (!card) throw new NotFoundError("Job card not found");
+  assertBranchAccess(req, card.branchId);
+  const query = jobCardRemovedPartListQuerySchema.parse(req.query);
+  const where = { jobCardId: id, ...(query.search ? { OR: [{ action: { contains: query.search, mode: "insensitive" as const } }, { actorId: { contains: query.search, mode: "insensitive" as const } }] } : {}) };
+  const [rows, total] = await Promise.all([db.jobCardRepairEvent.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: query.page * query.size, take: query.size }), db.jobCardRepairEvent.count({ where })]);
+  const actors = await db.user.findMany({ where: { id: { in: [...new Set(rows.map((row) => row.actorId))] } }, select: { id: true, firstName: true, lastName: true } });
+  const names = new Map(actors.map((actor) => [actor.id, `${actor.firstName} ${actor.lastName}`.trim()]));
+  sendOk(res, rows.map((row) => ({ ...row, actorName: names.get(row.actorId) })), { page: query.page, size: query.size, total });
+});
 export default router;

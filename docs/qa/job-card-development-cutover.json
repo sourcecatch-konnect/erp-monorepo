@@ -1,0 +1,49 @@
+{
+  "checkedAt": "2026-11-14T09:52:10.901Z",
+  "environment": "CONFIGURED_SUPABASE_DEVELOPMENT",
+  "status": "PASSED_DEVELOPMENT_CUTOVER",
+  "backup": {
+    "scope": "public schema including data and Prisma history",
+    "archiveReadable": true,
+    "restoreRehearsed": false,
+    "location": "node_modules/.cache/job-card-backups/development-20261114-public.dump",
+    "containsBusinessData": true,
+    "committed": false
+  },
+  "appliedMigrations": [
+    "20261112000000_job_card_register_indexes",
+    "20261112010000_service_bill_history",
+    "20261112020000_job_card_payment_approval",
+    "20261112030000_job_card_return_safety",
+    "20261112040000_job_card_cost_allocations",
+    "20261113010000_job_card_create_safety",
+    "20261113020000_job_card_settlement_reversal",
+    "20261113030000_removed_part_lifecycle",
+    "20261113040000_job_card_repair_controls"
+  ],
+  "existingHistoryPreserved": true,
+  "beforeCounts": {
+    "jobCards": "14",
+    "serviceBills": "7",
+    "journals": "299",
+    "stockMovements": "63"
+  },
+  "afterCounts": {
+    "jobCards": "14",
+    "serviceBills": "7",
+    "journals": "299",
+    "stockMovements": "63"
+  },
+  "baselineCountsUnchanged": true,
+  "invariants": {
+    "legacyCardsIncorrectlyRequiringClearance": 0,
+    "fabricatedRepairControls": 0,
+    "unexpectedVehicleHolds": 0,
+    "invalidBillAllocations": 0,
+    "missingRetainedSnapshots": 0,
+    "missingRemovedPartBaselines": 0
+  },
+  "unresolvedMigrationSource": "20261113000000_receivable_integrity_phase1",
+  "permissionsChanged": false,
+  "financeAcceptance": "PENDING"
+}

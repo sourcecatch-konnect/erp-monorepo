@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconAlertTriangle } from "@tabler/icons-react";
 
@@ -21,7 +21,13 @@ import { Skeleton } from "@skerp/ui/components/skeleton";
 import { ledgerApi } from "@/features/ledger/api/ledger.service";
 import { VoucherDialog } from "@/features/ledger/components/VoucherDialog";
 import { vendorPaymentApi, type PaymentMode } from "./vendor-payment.service";
-import { Field, PageHeader, money, rupeesToPaise, today } from "./vendor-payment.ui";
+import {
+  Field,
+  PageHeader,
+  money,
+  rupeesToPaise,
+  today,
+} from "./vendor-payment.ui";
 
 const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
   CASH: "Cash",
@@ -32,6 +38,7 @@ const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
 
 export function VendorPaymentDisbursePage({ id }: { id: string }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const slipQuery = useQuery({
     queryKey: ["vendor-payment", "slip", id],
@@ -41,10 +48,15 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
   const fundingLedgers = useQuery({
     queryKey: ["vendor-payment", "funding-ledgers"],
     queryFn: () =>
-      ledgerApi.chartOfAccounts({ kind: "GL", groups: ["CASH", "BANK"], isActive: true }),
+      ledgerApi.chartOfAccounts({
+        kind: "GL",
+        groups: ["CASH", "BANK"],
+        isActive: true,
+      }),
   });
 
   const [amount, setAmount] = React.useState("");
+  const [tds, setTds] = React.useState("");
   const [mode, setMode] = React.useState<PaymentMode>("BANK");
   const [paidAt, setPaidAt] = React.useState(today());
   const [referenceNo, setReferenceNo] = React.useState("");
@@ -59,7 +71,9 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
   const changeMode = (next: PaymentMode) => {
     setMode(next);
     const nextGroup = next === "CASH" ? "CASH" : "BANK";
-    const current = fundingLedgers.data?.find((ledger) => ledger.id === fundingLedgerId);
+    const current = fundingLedgers.data?.find(
+      (ledger) => ledger.id === fundingLedgerId,
+    );
     if (current && current.group !== nextGroup) setFundingLedgerId("");
   };
 
@@ -77,14 +91,20 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
   });
 
   const slip = slipQuery.data;
-  const outstandingPaise = slip ? BigInt(slip.netPayablePaise) - BigInt(slip.paidPaise) : 0n;
+  const outstandingPaise = slip
+    ? BigInt(slip.netPayablePaise) - BigInt(slip.paidPaise)
+    : 0n;
   const amountPaise = amount ? BigInt(rupeesToPaise(amount)) : 0n;
-  const exceedsOutstanding = amountPaise > outstandingPaise;
+  const tdsPaise =
+    slip?.type === "JOBCARD" && tds ? BigInt(rupeesToPaise(tds)) : 0n;
+  const exceedsOutstanding = amountPaise + tdsPaise > outstandingPaise;
 
   const canSubmit =
     Boolean(slip) &&
     (slip?.status === "APPROVED" || slip?.status === "PARTIALLY_PAID") &&
-    amountPaise > 0n &&
+    amountPaise >= 0n &&
+    amountPaise + tdsPaise > 0n &&
+    tdsPaise >= 0n &&
     !exceedsOutstanding &&
     Boolean(fundingLedgerId);
 
@@ -92,6 +112,7 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
     mutationFn: () =>
       vendorPaymentApi.disburse(id, {
         paidPaise: amountPaise.toString(),
+        tdsPaise: tdsPaise.toString(),
         mode,
         paidAt,
         referenceNo: referenceNo.trim() || undefined,
@@ -99,6 +120,12 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
         clientRequestId: clientRequestIdRef.current,
       }),
     onSuccess: (updated) => {
+      queryClient.setQueryData(["vendor-payment", "slip", id], updated);
+      void queryClient.invalidateQueries({ queryKey: ["vendor-payment"] });
+      void queryClient.invalidateQueries({ queryKey: ["service-bill"] });
+      clientRequestIdRef.current = crypto.randomUUID();
+      setAmount("");
+      setTds("");
       toast.success(
         updated.status === "PAID"
           ? `${updated.slipNumber} fully settled`
@@ -113,20 +140,29 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
       }
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Could not record the payment"),
+      toast.error(
+        error instanceof Error ? error.message : "Could not record the payment",
+      ),
   });
 
   if (slipQuery.isLoading) return <Skeleton className="h-96" />;
-  if (!slip) return <p className="text-sm text-muted-foreground">Slip not found.</p>;
-  if (slip.status !== "APPROVED" && slip.status !== "PARTIALLY_PAID") {
+  if (!slip)
+    return <p className="text-sm text-muted-foreground">Slip not found.</p>;
+  if (slip.status !== "APPROVED" && slip.status !== "PARTIALLY_PAID" && slip.status !== "PAID") {
     return (
       <div className="space-y-6">
         <PageHeader title={slip.slipNumber} description="Disburse payment" />
         <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
-          <p>Only an approved or partially paid slip can be disbursed. Current status: {slip.status}.</p>
+          <p>
+            Only an approved or partially paid slip can be disbursed. Current
+            status: {slip.status}.
+          </p>
         </div>
-        <Button variant="outline" onClick={() => router.push(`/accounts/vendor-payments/${id}`)}>
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/accounts/vendor-payments/${id}`)}
+        >
           Back to slip
         </Button>
       </div>
@@ -137,9 +173,12 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
     <div className="space-y-6">
       <PageHeader
         title={`Disburse — ${slip.slipNumber}`}
-        description={`${slip.transport?.name ?? slip.labour?.name ?? "—"} · Outstanding ${money(outstandingPaise)}`}
+        description={`${slip.transport?.name ?? slip.labour?.name ?? slip.serviceBill?.serviceProvider.name ?? "—"} · Outstanding ${money(outstandingPaise)}`}
         actions={
-          <Button variant="outline" onClick={() => router.push(`/accounts/vendor-payments/${id}`)}>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/accounts/vendor-payments/${id}`)}
+          >
             Back to slip
           </Button>
         }
@@ -148,7 +187,7 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
       <div className="grid gap-4 md:grid-cols-3">
         {[
           { label: "Net payable", value: money(slip.netPayablePaise) },
-          { label: "Paid so far", value: money(slip.paidPaise) },
+          { label: "Settled so far", value: money(slip.paidPaise) },
           { label: "Outstanding", value: money(outstandingPaise) },
         ].map((item) => (
           <Card key={item.label}>
@@ -160,7 +199,8 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
         ))}
       </div>
 
-      <Card>
+      {slip.status === "PAID" && <p role="status" className="text-sm text-muted-foreground">This slip is fully settled. Payment vouchers remain available from its history.</p>}
+      {slip.status !== "PAID" && <Card>
         <CardHeader className="border-b bg-muted/20">
           <p className="text-sm font-medium">Payment details</p>
         </CardHeader>
@@ -175,11 +215,29 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
                 aria-invalid={exceedsOutstanding || undefined}
               />
               {exceedsOutstanding ? (
-                <p className="text-xs text-destructive">Exceeds outstanding balance</p>
+                <p className="text-xs text-destructive">
+                  Exceeds outstanding balance
+                </p>
               ) : null}
             </Field>
+            {slip.type === "JOBCARD" && (
+              <Field label="TDS withheld">
+                <Input
+                  inputMode="decimal"
+                  value={tds}
+                  onChange={(event) => setTds(event.target.value)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cash plus TDS settles the bill. Cash may be zero for TDS-only settlement; the selected funding account then has no posting.
+                </p>
+              </Field>
+            )}
             <Field label="Mode">
-              <Select value={mode} onValueChange={(v) => changeMode(v as PaymentMode)}>
+              <Select
+                value={mode}
+                onValueChange={(v) => changeMode(v as PaymentMode)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -193,7 +251,11 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
               </Select>
             </Field>
             <Field label="Date">
-              <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              <Input
+                type="date"
+                value={paidAt}
+                onChange={(e) => setPaidAt(e.target.value)}
+              />
             </Field>
             <Field label="Reference no.">
               <Input
@@ -226,7 +288,7 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       <VoucherDialog
         open={voucherOpen}
@@ -234,7 +296,9 @@ export function VendorPaymentDisbursePage({ id }: { id: string }) {
         voucher={voucher.data}
         isLoading={voucher.isLoading}
         isError={voucher.isError}
-        errorMessage={voucher.error instanceof Error ? voucher.error.message : undefined}
+        errorMessage={
+          voucher.error instanceof Error ? voucher.error.message : undefined
+        }
       />
     </div>
   );
