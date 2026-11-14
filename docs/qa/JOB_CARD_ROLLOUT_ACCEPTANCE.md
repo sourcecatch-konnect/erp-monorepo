@@ -1,8 +1,26 @@
 # Job card release acceptance and rollout
 
-Prepared: 2026-11-14. **Release status: NOT APPROVED.** Step 16 preparation is complete; business acceptance and deployment are pending. This document records no implicit approvals.
+Prepared: 2026-11-14. **Production release status: NOT APPROVED.** The authorised Supabase development migration cutover is complete; business acceptance, role verification and production deployment are pending. This document records no implicit business approvals.
 
 References: [flow/implementation plan](../JOB_CARD_FINANCE_FLOW_PLAN.md), [operating guide](../JOB_CARD_OPERATING_GUIDE.md), [automated verification](JOB_CARD_VERIFICATION.md), [read-only preflight](job-card-db-readiness.json).
+
+## Technical cutover preflight - 2026-11-14
+
+The user explicitly confirmed the configured hosted Supabase development database as the migration target. No production deployment was performed.
+
+The full migration-history check found `20261113000000_receivable_integrity_phase1` applied in the configured database but absent from this checkout and refreshed remote Git history. Its existing database history and schema were preserved. The nine job-card migrations had passed against an isolated clone of that schema, then were applied through Prisma migrate deploy after the user authorised the development target. The first CLI attempt returned a generic schema-engine error without applying migrations; a retry succeeded. No migration was manually marked applied or resolved.
+
+Post-cutover readiness reports no pending local migrations, no checksum mismatches, no unfinished migrations and all required finance columns present. It intentionally still returns `MIGRATION_HISTORY_REVIEW_REQUIRED` (exit 2) because the original receivables migration source remains missing. Recover that original source before declaring migration history clean; do not fabricate an empty migration, delete history or reset the database. No role grants were changed.
+
+### Development cutover evidence
+
+[Cutover checks](job-card-development-cutover.json) passed: before/after counts remain 14 job cards, 7 service bills, 299 journals and 63 stock movements. Checked bill discount/net allocations reconcile, snapshots and removed-part baseline events are retained, and no legacy card was newly forced into clearance or given a fabricated repair control/vehicle hold. Existing migration-history entries were preserved.
+
+[Post-cutover service smoke checks](job-card-development-smoke.json) passed for repair cost, reconciliation, provider outstanding, unbilled services and all four audit modes. Each executed page 0 and page 1 with size 2, checked bounded/non-overlapping results and consistent totals, denied empty branch scope and executed a no-match search. Only SELECT report services were called; no business rows were printed or written. These checks do not exercise route permission middleware, browser debounce or user acceptance.
+
+A custom-format public-schema/data backup was taken before migration and its archive index was read successfully with pg_restore. It is retained locally under `node_modules/.cache/job-card-backups/development-20261114-public.dump`, outside tracked files. It contains business data and Prisma history; do not attach or commit it. Archive readability is not a restore rehearsal; a tested recovery exercise is still required for production. Copy it to approved durable backup storage before cleaning dependencies or this workstation.
+
+Production compilation checks passed for the server and web application (including all 95 statically generated web pages). These build checks do not execute authenticated browser UAT or demonstrate compatibility with the still-unmigrated application database. Targeted readiness-script lint and whitespace checks passed.
 
 ## Policy decision register
 
@@ -46,7 +64,7 @@ The 185 unit tests and 20 isolated PostgreSQL checks are supporting evidence, no
 ## Deployment sequence
 
 1. Record release revision, environment, owners, maintenance window and signed decisions/UAT evidence. Resolve all failed/pending release gates. Confirm no unrelated pending migration will be applied unexpectedly.
-2. Run `pnpm --filter @skerp/server verify:job-card:readiness` with the intended database configuration. It uses a read-only transaction and reports aggregate counts only. Exit 2 means schema migrations pending, exit 1 means the check failed, and exit 0 means schema ready; none grants release approval. Review duplicate invoice groups and inconsistent bill totals as known migration blockers. Draft count requires operational review; missing cancelled-bill lines require historical reconciliation. These are selected checks, not a complete data audit.
+2. Run `pnpm --filter @skerp/server verify:job-card:readiness` with the intended database configuration. It uses a read-only transaction and reports aggregate counts only. Exit 2 means pending migrations, data review or migration-history review required; exit 1 means the check failed; exit 0 means schema ready. None grants release approval. Full history checks include applied migrations missing locally, checksum changes (allowing line-ending variants), unfinished migrations and all pending local migrations. Review duplicate invoice groups and inconsistent bill totals as known migration blockers. Draft count requires operational review; missing cancelled-bill lines require historical reconciliation. These are selected checks, not a complete data audit.
 3. Rehearse against a recent staging restore, retain before/after control totals, and test backup restoration. Capture stock quantities/values, source/voucher links, provider payable, pending cash/TDS and retained bill lines. Keep backups under existing retention/access policy.
 4. Pause affected writes/dispatch during the migration cutover. Use the repository's existing deployment process and shared services; **do not add a job-card image or Redis instance**. Preserve existing `erp-redis` configuration and data.
 5. Apply the reviewed pending migrations using the existing migration deployment job (`pnpm --filter @skerp/server db:deploy` for an approved direct deployment). This applies all pending repository migrations, not only job-card migrations. Do not use `migrate dev`, reset, or automatic resolve to bypass failures. Refresh Prisma/server/web from the same revision, and force old browser clients to refresh.
@@ -70,4 +88,4 @@ An application image rollback does not reverse schema or data changes. After fin
 | Recovery | Recent backup and successful restore rehearsal | Pending |
 | Release | Revision, migration status, role grants, pilot and monitoring owners | Pending |
 
-Step 16 is complete only when these records are signed and deployment checks have passed. This preparation does not apply migrations, change grants, send messages, or approve financial policy.
+Step 16 is complete only when these records are signed and production deployment checks have passed. The recorded development cutover does not approve financial policy or complete browser UAT, Tally reconciliation, role grants or production release.

@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { Client } from "pg";
 
 // This command never applies migrations or changes application data.
@@ -42,15 +43,61 @@ try {
   const migrationTable = await client.query<{ present: boolean }>(
     "SELECT to_regclass('public._prisma_migrations') IS NOT NULL AS present",
   );
-  const applied = migrationTable.rows[0]!.present
-    ? await client.query<{ migration_name: string }>(
-        'SELECT migration_name FROM "public"."_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL',
+  const history = migrationTable.rows[0]!.present
+    ? await client.query<{
+        migration_name: string;
+        checksum: string;
+        finished_at: Date | null;
+      }>(
+        'SELECT migration_name, checksum, finished_at FROM "public"."_prisma_migrations" WHERE rolled_back_at IS NULL',
       )
     : { rows: [] };
-  const expected = (await readdir(new URL("./migrations/", import.meta.url)))
-    .filter((name) => /job_card|service_bill|removed_part/.test(name))
+  const migrationRoot = new URL("./migrations/", import.meta.url);
+  const localNames = (await readdir(migrationRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
     .sort();
-  const appliedNames = new Set(applied.rows.map((row) => row.migration_name));
+  const expected = localNames.filter((name) =>
+    /job_card|service_bill|removed_part/.test(name),
+  );
+  const applied = history.rows.filter((row) => row.finished_at !== null);
+  const appliedNames = new Set(applied.map((row) => row.migration_name));
+  const localSet = new Set(localNames);
+  const unknownApplied = applied
+    .filter((row) => !localSet.has(row.migration_name))
+    .map((row) => row.migration_name);
+  const checksumMismatches: string[] = [];
+  for (const row of applied) {
+    if (!localSet.has(row.migration_name)) continue;
+    const bytes = await readFile(
+      new URL(`${row.migration_name}/migration.sql`, migrationRoot),
+    );
+    // Prisma accepts platform line-ending variants when checking migration history.
+    const sql = bytes.toString("utf8");
+    const variants = [
+      sql,
+      sql.replace(/\r\n/g, "\n"),
+      sql.replace(/\r?\n/g, "\r\n"),
+    ];
+    if (
+      !variants.some(
+        (value) =>
+          createHash("sha256").update(value).digest("hex") === row.checksum,
+      )
+    )
+      checksumMismatches.push(row.migration_name);
+  }
+  const unfinished = history.rows
+    .filter((row) => row.finished_at === null)
+    .map((row) => row.migration_name);
+  report.migrationHistory = {
+    unknownApplied,
+    checksumMismatches,
+    unfinished,
+    allPending: localNames.filter((name) => !appliedNames.has(name)),
+  };
+  const historyNeedsReview =
+    unknownApplied.length + checksumMismatches.length + unfinished.length > 0;
   report.migrations = expected.map((name) => ({
     name,
     applied: appliedNames.has(name),
@@ -116,9 +163,10 @@ try {
     preflight.rows[0]!.inconsistentBillTotals;
   report.financeSignOff = "NOT_RECORDED";
   report.rolloutApproved = false;
-  report.status =
-    required.every((column) => present.has(column)) &&
-    (report.missingMigrations as string[]).length === 0
+  report.status = historyNeedsReview
+    ? "MIGRATION_HISTORY_REVIEW_REQUIRED"
+    : required.every((column) => present.has(column)) &&
+        localNames.every((name) => appliedNames.has(name))
       ? report.knownMigrationDataBlockers === 0
         ? "SCHEMA_READY"
         : "DATA_REVIEW_REQUIRED"

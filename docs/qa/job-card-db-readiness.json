@@ -1,11 +1,19 @@
 {
-  "checkedAt": "2026-11-14T06:57:18.414Z",
+  "checkedAt": "2026-11-14T09:52:32.655Z",
   "mode": "READ_ONLY",
   "applicationDataChanged": false,
   "liveConcurrencyVerified": false,
   "representativePerformanceVerified": false,
   "postgresVersion": "17.6",
   "isolatedSchemaTestingAvailable": true,
+  "migrationHistory": {
+    "unknownApplied": [
+      "20261113000000_receivable_integrity_phase1"
+    ],
+    "checksumMismatches": [],
+    "unfinished": [],
+    "allPending": []
+  },
   "migrations": [
     {
       "name": "20260915020000_add_job_card",
@@ -29,84 +37,74 @@
     },
     {
       "name": "20261112000000_job_card_register_indexes",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261112010000_service_bill_history",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261112020000_job_card_payment_approval",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261112030000_job_card_return_safety",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261112040000_job_card_cost_allocations",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261113010000_job_card_create_safety",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261113020000_job_card_settlement_reversal",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261113030000_removed_part_lifecycle",
-      "applied": false
+      "applied": true
     },
     {
       "name": "20261113040000_job_card_repair_controls",
-      "applied": false
+      "applied": true
     }
   ],
-  "missingMigrations": [
-    "20261112000000_job_card_register_indexes",
-    "20261112010000_service_bill_history",
-    "20261112020000_job_card_payment_approval",
-    "20261112030000_job_card_return_safety",
-    "20261112040000_job_card_cost_allocations",
-    "20261113010000_job_card_create_safety",
-    "20261113020000_job_card_settlement_reversal",
-    "20261113030000_removed_part_lifecycle",
-    "20261113040000_job_card_repair_controls"
-  ],
+  "missingMigrations": [],
   "schemaChecks": [
     {
       "column": "Vehicle.maintenanceHold",
-      "present": false
+      "present": true
     },
     {
       "column": "JobCard.repairControlRequired",
-      "present": false
+      "present": true
     },
     {
       "column": "JobCardRepairControl.status",
-      "present": false
+      "present": true
     },
     {
       "column": "JobCardRepairEvent.clientRequestId",
-      "present": false
+      "present": true
     },
     {
       "column": "JobCardRemovedPart.lifecycleStatus",
-      "present": false
+      "present": true
     },
     {
       "column": "JobCardRemovedPartEvent.clientRequestId",
-      "present": false
+      "present": true
     },
     {
       "column": "ServiceBillLine.netAmountPaise",
-      "present": false
+      "present": true
     },
     {
       "column": "VendorPaymentDisbursement.reversalJournalEntryId",
-      "present": false
+      "present": true
     }
   ],
   "preflight": {
@@ -118,6 +116,6 @@
   "knownMigrationDataBlockers": 0,
   "financeSignOff": "NOT_RECORDED",
   "rolloutApproved": false,
-  "status": "MIGRATIONS_PENDING",
+  "status": "MIGRATION_HISTORY_REVIEW_REQUIRED",
   "verificationSchemasRemaining": 0
 }

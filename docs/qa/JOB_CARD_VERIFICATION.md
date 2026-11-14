@@ -5,7 +5,9 @@ Verified on 2026-11-14. Automated evidence supports steps 14–15; Finance accep
 - 185 targeted unit tests passed across job cards, service bills, vendor payments and settlement ledger lines.
 - Server/web type checks and lint, and Prisma schema validation passed.
 - [PostgreSQL evidence](job-card-database-verification.json): 20 checks passed, nine finance migrations exercised, generated schema removed, application data unchanged.
-- [Readiness evidence](job-card-db-readiness.json): PostgreSQL 17.6; nine finance migrations still pending in the application schema. A successful isolated test does not apply them.
+- [Development cutover evidence](job-card-development-cutover.json): all nine finance migrations applied to the explicitly authorised Supabase development database; baseline counts and checked backfills preserved.
+- [Development report smoke evidence](job-card-development-smoke.json): eight report modes passed backend pagination, non-overlapping pages, empty-scope denial and no-match search against the migrated database. No browser or permission-middleware acceptance is implied.
+- [Readiness evidence](job-card-db-readiness.json): PostgreSQL 17.6; no pending local migrations, required columns present, no checksum mismatches or unfinished migrations. The unrelated missing receivables migration source still requires review.
 
 The database verifier clones existing pre-finance-upgrade schema metadata and custom CHECK definitions into a uniquely named schema, then inserts synthetic fixtures. It does not copy business rows. Tests execute real transaction services, concurrent requests, rollback/retry cases and raw report SQL. The reporting fixture includes 10,000 cards/service lines. Three EXPLAIN ANALYZE/BUFFERS plans are retained in the JSON. Smaller payment/inventory fixtures are correctness checks, not production-load benchmarks.
 
@@ -33,6 +35,8 @@ This harness exercises the nine listed finance migrations on the current pre-upg
 
 ## Remaining acceptance
 
+The subsequent full-history preflight found an applied receivables migration (`20261113000000_receivable_integrity_phase1`) missing from this checkout. Readiness reports `MIGRATION_HISTORY_REVIEW_REQUIRED`, rather than schema-ready or merely migrations-pending, until the history is reconciled. It also checks checksums and unfinished migrations. The configured connection is hosted Supabase; see the [cutover findings](JOB_CARD_ROLLOUT_ACCEPTANCE.md#technical-cutover-preflight---2026-11-14) before selecting a deployment target.
+
 Use the [rollout and acceptance pack](JOB_CARD_ROLLOUT_ACCEPTANCE.md) to record actual role-based UAT, policy decisions and deployment evidence, and the [operating guide](../JOB_CARD_OPERATING_GUIDE.md) for user training. The readiness command also reports aggregate duplicate-invoice/bill-total blockers, draft review count and missing cancelled-bill histories. These selected checks do not certify complete historical reconciliation. Exit 2 includes pending migrations or DATA_REVIEW_REQUIRED; a schema-ready result does not grant business approval.
 
-Step 16 requires Finance approval of tax, internal labour, valuation and period policy; browser testing with real roles; physical inspection/custody evidence; actual Tally import reconciliation; representative production-volume measurements; permission synchronisation; legacy draft review; backups and reviewed migration deployment. The verifier does not perform these business approvals or deploy migrations.
+Step 16 still requires Finance approval of tax, internal labour, valuation and period policy; browser testing with real roles; physical inspection/custody evidence; actual Tally import reconciliation; representative production-volume measurements; permission synchronisation; legacy draft review; restore rehearsal and production deployment. Development migrations are complete; the read-only verifier does not perform business approvals or deploy migrations.
